@@ -91,7 +91,7 @@ fun DestinationContent(
                     modifier = modifier,
                 )
             } else {
-                JellytipIdentGate(preferences.appPreferences) {
+                JellytipIdentGate(preferences.appPreferences, destination.itemId) {
                     PlaybackPage(
                         preferences = preferences,
                         destination = destination,
@@ -109,7 +109,7 @@ fun DestinationContent(
                     modifier = modifier,
                 )
             } else {
-                JellytipIdentGate(preferences.appPreferences) {
+                JellytipIdentGate(preferences.appPreferences, destination.itemId) {
                     PlaybackPage(
                         preferences = preferences,
                         destination = destination,

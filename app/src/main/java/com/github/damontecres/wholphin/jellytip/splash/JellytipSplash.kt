@@ -23,6 +23,7 @@ import com.github.damontecres.wholphin.preferences.AppPreferences
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.util.UUID
 
 /**
  * Cold-start intro overlay. Drawn on top of the app (which keeps loading underneath), once per process,
@@ -100,10 +101,17 @@ fun JellytipSplashOverlay(
 @Composable
 fun JellytipIdentGate(
     prefs: AppPreferences,
+    itemId: UUID,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     var done by remember { mutableStateOf(prefs.jellytipIdentDisabled || JellytipSession.inViewingSession()) }
+    // Only a film or episode gets the ident; trailers, extras, theme videos etc. never do.
+    if (!done) {
+        LaunchedEffect(itemId) {
+            if (!JellytipIdentEligibility.eligible(context, itemId)) done = true
+        }
+    }
     DisposableEffect(Unit) {
         onDispose { JellytipSession.markPlaybackExit() }
     }
@@ -123,4 +131,39 @@ fun JellytipIdentGate(
             onFinished = { done = true },
         )
     }
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface JellytipIdentEntryPoint {
+    fun apiClient(): org.jellyfin.sdk.api.client.ApiClient
+}
+
+object JellytipIdentEligibility {
+    private val kinds =
+        setOf(
+            org.jellyfin.sdk.model.api.BaseItemKind.MOVIE,
+            org.jellyfin.sdk.model.api.BaseItemKind.EPISODE,
+            org.jellyfin.sdk.model.api.BaseItemKind.SERIES,
+            org.jellyfin.sdk.model.api.BaseItemKind.SEASON,
+        )
+
+    /** Fails closed: if the item type can't be resolved, no ident. */
+    suspend fun eligible(
+        context: android.content.Context,
+        itemId: UUID,
+    ): Boolean =
+        try {
+            val api =
+                dagger.hilt.android.EntryPointAccessors
+                    .fromApplication(context.applicationContext, JellytipIdentEntryPoint::class.java)
+                    .apiClient()
+            val item = api.userLibraryApi.getItem(itemId = itemId).content
+            item.type in kinds
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "ident eligibility lookup failed")
+            false
+        }
 }
