@@ -45,7 +45,10 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitledImage
+import com.github.damontecres.wholphin.jellytip.cards.jellytipTitledCard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
+import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.ui.AppColors
@@ -106,6 +109,7 @@ fun BannerCard(
         }
     var imageError by remember(imageUrl) { mutableStateOf(false) }
     val jellytipHome = LocalJellytipHome.current
+    val titled = jellytipHome && item != null && jellytipTitledCard(item, aspectRatio)
 
     // Stabilize callbacks to prevent AsyncImage from recomposing
     val currentOnClick by rememberUpdatedState(onClick)
@@ -135,7 +139,13 @@ fun BannerCard(
                     .fillMaxSize(),
 //                    .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (!imageError && imageUrl != null) {
+            if (titled && item != null) {
+                JellytipTitledImage(
+                    item = item,
+                    cardWidth = cardHeight * aspectRatio,
+                    cardHeight = cardHeight,
+                )
+            } else if (!imageError && imageUrl != null) {
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = null,
@@ -204,9 +214,9 @@ fun BannerCard(
                         Modifier
                             .align(Alignment.BottomStart)
                             .background(
-                                MaterialTheme.colorScheme.tertiary,
+                                if (titled) JellytipPalette.Jelly else MaterialTheme.colorScheme.tertiary,
                             ).clip(RectangleShape)
-                            .height(Cards.playedPercentHeight)
+                            .height(if (titled) 3.dp else Cards.playedPercentHeight)
                             .fillMaxWidth((playPercent / 100).toFloat()),
                 )
             }
@@ -239,6 +249,7 @@ fun BannerCardWithTitle(
     val sizes = rememberJellytipSizes()
     val aspectRationToUse = aspectRatio.coerceAtLeast(AspectRatios.MIN)
     val width = cardHeight * aspectRationToUse
+    val titled = jellytipHome && jellytipTitledCard(item, aspectRatio)
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier.width(width),
@@ -260,7 +271,7 @@ fun BannerCardWithTitle(
             imageContentScale = imageContentScale,
             useSeriesForPrimary = useSeriesForPrimary,
         )
-        SlidingCardText(focused) {
+        if (!titled) SlidingCardText(focused) {
             Text(
                 text = title ?: "",
                 style = MaterialTheme.typography.bodyLarge,

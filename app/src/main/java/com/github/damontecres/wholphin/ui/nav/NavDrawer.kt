@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -53,7 +52,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.findViewTreeViewModelStoreOwner
@@ -61,16 +59,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.DrawerState
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.Icon
-import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
-import com.github.damontecres.wholphin.preferences.AppThemeColors
+import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.MusicService
@@ -85,7 +81,6 @@ import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.preferences.PreferenceScreenOption
 import com.github.damontecres.wholphin.ui.setup.UserIconCardImage
 import com.github.damontecres.wholphin.ui.spacedByWithFooter
-import com.github.damontecres.wholphin.ui.theme.LocalTheme
 import com.github.damontecres.wholphin.ui.toServerString
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -334,7 +329,7 @@ fun NavDrawer(
             val spacedBy = 4.dp
             val searchFocusRequester = remember { FocusRequester() }
 
-            ProvideTextStyle(MaterialTheme.typography.labelMedium) {
+            ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(fontSize = rememberJellytipSizes().sp(24))) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(spacedBy),
@@ -502,12 +497,6 @@ fun NavDrawer(
                                             it,
                                         )
                                     },
-                                    containerColor =
-                                        if (isOpen) {
-                                            MaterialTheme.colorScheme.surface.copy(alpha = .5f)
-                                        } else {
-                                            Color.Unspecified
-                                        },
                                     interactionSource = interactionSource,
                                     modifier =
                                         Modifier
@@ -583,7 +572,7 @@ fun NavigationDrawerScope.ProfileIcon(
                 name = user.name,
                 imageUrl = imageUrl,
                 alpha = if (drawerOpen) 1f else .5f,
-                modifier = Modifier.size(DrawerIconSize),
+                modifier = Modifier.size(rememberJellytipSizes().px(JELLYTIP_RAIL_ICON_PX)),
             )
         },
         supportingContent = {
@@ -615,7 +604,7 @@ fun NavigationDrawerScope.IconNavItem(
 ) {
     val focused by interactionSource.collectIsFocusedAsState()
     NavigationDrawerItem(
-        modifier = modifier,
+        modifier = modifier.jellytipSelectedBar(selected),
         selected = false,
         onClick = onClick,
         leadingContent = {
@@ -624,7 +613,7 @@ fun NavigationDrawerScope.IconNavItem(
                 icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(DrawerIconSize),
+                modifier = Modifier.size(rememberJellytipSizes().px(JELLYTIP_RAIL_ICON_PX)),
             )
         },
         supportingContent =
@@ -641,6 +630,7 @@ fun NavigationDrawerScope.IconNavItem(
         Text(
             modifier = Modifier,
             text = text,
+            color = navItemColor(selected, focused, drawerOpen),
             maxLines = 1,
         )
     }
@@ -690,13 +680,9 @@ fun NavigationDrawerScope.NavItem(
         }
     val focused by interactionSource.collectIsFocusedAsState()
     NavigationDrawerItem(
-        modifier = modifier,
+        modifier = modifier.jellytipSelectedBar(selected),
         selected = false,
         onClick = onClick,
-        colors =
-            NavigationDrawerItemDefaults.colors(
-                containerColor = containerColor,
-            ),
         leadingContent = {
             val color = navItemColor(selected, focused, drawerOpen)
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -704,7 +690,7 @@ fun NavigationDrawerScope.NavItem(
                     Text(
                         text = stringResource(icon),
                         textAlign = TextAlign.Center,
-                        fontSize = 16.sp,
+                        fontSize = rememberJellytipSizes().sp(JELLYTIP_RAIL_ICON_PX),
                         fontFamily = FontAwesome,
                         color = color,
                         modifier = Modifier,
@@ -714,7 +700,7 @@ fun NavigationDrawerScope.NavItem(
                         painter = painterResource(icon),
                         contentDescription = null,
                         tint = color,
-                        modifier = Modifier.size(DrawerIconSize),
+                        modifier = Modifier.size(rememberJellytipSizes().px(JELLYTIP_RAIL_ICON_PX)),
                     )
                 }
             }
@@ -735,74 +721,26 @@ fun NavigationDrawerScope.NavItem(
         Text(
             modifier = Modifier,
             text = library.name(context),
+            color = navItemColor(selected, focused, drawerOpen),
             maxLines = 1,
         )
     }
 }
 
-@Composable
-@ReadOnlyComposable
+private const val JELLYTIP_RAIL_ICON_PX = 28
+
+/** Mubi-style: focused = white, selected = off-white, everything else quiet. */
 fun navItemColor(
     selected: Boolean,
     focused: Boolean,
     drawerOpen: Boolean,
-): Color {
-    val theme = LocalTheme.current
-    if (theme == AppThemeColors.OLED_BLACK) {
-        return when {
-            selected && focused -> Color.Black
-            selected && !drawerOpen -> Color.White.copy(alpha = .5f)
-            selected && drawerOpen -> Color.White.copy(alpha = .85f)
-            focused -> Color.Black.copy(alpha = .5f)
-            drawerOpen -> Color(0xFF707070)
-            else -> Color(0xFF505050).copy(alpha = .66f)
-        }
-    } else {
-        val alpha =
-            when {
-                drawerOpen -> .85f
-                selected && !drawerOpen -> .5f
-                else -> .2f
-            }
-        return when {
-            selected && focused -> {
-                when (theme) {
-                    AppThemeColors.UNRECOGNIZED,
-                    AppThemeColors.PURPLE,
-                    -> MaterialTheme.colorScheme.border
-
-                    AppThemeColors.BLUE,
-                    AppThemeColors.GREEN,
-                    AppThemeColors.ORANGE,
-                    AppThemeColors.RED,
-                    AppThemeColors.BROWN,
-                    -> MaterialTheme.colorScheme.border
-
-                    AppThemeColors.BOLD_BLUE,
-                    AppThemeColors.OLED_BLACK,
-                    -> MaterialTheme.colorScheme.primary
-                }
-            }
-
-            selected -> {
-                // Jellytip: the active nav item carries the jelly accent
-                if (theme == AppThemeColors.PURPLE || theme == AppThemeColors.UNRECOGNIZED) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.border
-                }
-            }
-
-            focused -> {
-                LocalContentColor.current
-            }
-
-            else -> {
-                MaterialTheme.colorScheme.onSurface
-            }
-        }.copy(alpha = alpha)
+): Color =
+    when {
+        focused -> Color.White
+        selected -> JellytipDrawerText
+        drawerOpen -> JellytipDrawerText.copy(alpha = .65f)
+        else -> JellytipDrawerText.copy(alpha = .6f)
     }
-}
 
 val DrawerState.isOpen: Boolean get() = this.currentValue.isOpen
 
