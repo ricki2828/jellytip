@@ -25,6 +25,9 @@ ENV = os.path.expanduser("~/jellytip-api/jellytip.env")
 SNIPS, SNIP_LEN, XFADE = 5, 1.4, 0.3
 CARD_LEN, CARD_XFADE = 1.8, 0.6
 FPS = 24
+# Plays in a family lounge: no war/horror/crime-thriller/documentary sources, and no very dark frames
+SKIP_GENRES = {"Documentary", "War", "Horror", "Thriller", "Crime", "War & Politics", "Suspense"}
+MIN_LUMA = 60
 CASCADE = cv2.CascadeClassifier(os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml"))
 
 
@@ -103,7 +106,7 @@ def score_frames(frames):
     x0, y0, x1, y1 = box
     mids = [g[y0:y1, x0:x1] for g in grays]
     means = [float(m.mean()) for m in mids]
-    if not all(40 <= m <= 200 for m in means):
+    if not all(MIN_LUMA <= m <= 200 for m in means):
         return None, box, None
     sharp = float(np.mean([min(1.0, np.log1p(cv2.Laplacian(m, cv2.CV_32F).var()) / np.log1p(400)) for m in mids]))
     expo = 1 - abs(float(np.mean(means)) - 115) / 100
@@ -159,7 +162,7 @@ def make_segment(path, t0, crop, out):
 def main():
     env = load_env()
     cands = jf_movies(env)
-    live = [m for m in cands if "Documentary" not in (m.get("Genres") or [])]
+    live = [m for m in cands if not set(m.get("Genres") or []) & SKIP_GENRES]
     live_action = [m for m in live if "Animation" not in (m.get("Genres") or [])]
     ordered = live_action + [m for m in live if m not in live_action]  # animation only if too few live-action films
     work = tempfile.mkdtemp(prefix="intro-", dir=HERE)
@@ -176,7 +179,7 @@ def main():
                 if trc in ("smpte2084", "arib-std-b67") or dur < 1800:  # HDR needs tonemapping: skip rather than ship washed-out frames
                     continue
                 best = best_snippet(p, w, h, dur)
-                if not best:
+                if not best or best[0] < 0.3:  # every candidate had burned-in subs / cuts / close-ups: try the next film
                     continue
                 seg = os.path.join(work, f"seg{len(picked)}.mp4")
                 make_segment(p, best[1], best[2], seg)
