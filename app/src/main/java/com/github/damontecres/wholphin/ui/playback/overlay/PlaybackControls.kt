@@ -63,7 +63,6 @@ import androidx.compose.runtime.setValue
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
-import androidx.tv.material3.ButtonDefaults
 import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -503,7 +502,7 @@ fun PlaybackButton(
     Button(
         enabled = enabled,
         onClick = onClick,
-        shape = ButtonDefaults.shape(CircleShape),
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.Transparent,
