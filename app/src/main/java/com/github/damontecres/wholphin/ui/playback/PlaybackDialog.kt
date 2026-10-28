@@ -330,7 +330,6 @@ fun SubtitleChoiceBottomDialog(
             window.setDimAmount(0f) // Remove dimmed background of ongoing playback
         }
 
-        JtMenuTheme {
         Box(
             modifier =
                 Modifier
@@ -340,8 +339,8 @@ fun SubtitleChoiceBottomDialog(
                         Color(0xF2141414),
                         shape = RoundedCornerShape(8.dp),
                     ),
-        )
-        } {
+        ) {
+            JtMenuTheme {
             LazyColumn(
                 state = listState,
                 modifier =
@@ -497,6 +496,7 @@ fun SubtitleChoiceBottomDialog(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -528,7 +528,6 @@ fun StreamChoiceBottomDialog(
             window.setDimAmount(0f) // Remove dimmed background of ongoing playback
         }
 
-        JtMenuTheme {
         Box(
             modifier =
                 Modifier
@@ -538,8 +537,8 @@ fun StreamChoiceBottomDialog(
                         Color(0xF2141414),
                         shape = RoundedCornerShape(8.dp),
                     ),
-        )
-        } {
+        ) {
+            JtMenuTheme {
             LazyColumn(
                 modifier =
                     Modifier
@@ -574,6 +573,7 @@ fun StreamChoiceBottomDialog(
                         modifier = Modifier.focusRequester(focusRequesters[index]),
                     )
                 }
+            }
             }
         }
     }
