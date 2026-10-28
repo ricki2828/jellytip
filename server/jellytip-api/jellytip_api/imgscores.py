@@ -5,7 +5,7 @@ import threading
 
 from .stills import MAX_STILLS
 
-THRESHOLD = 0.5  # calibrated on a labelled sample, see server/jellytip-imgscore/README.md
+THRESHOLD = 0.6  # calibrated on a 60-image labelled sample: 27/27 precision on photo calls, see jellytip-imgscore/README.md
 
 
 class ImgScores:
