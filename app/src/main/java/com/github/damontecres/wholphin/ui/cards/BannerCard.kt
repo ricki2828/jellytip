@@ -106,7 +106,6 @@ fun BannerCard(
         }
     var imageError by remember(imageUrl) { mutableStateOf(false) }
     val jellytipHome = LocalJellytipHome.current
-    val sizes = rememberJellytipSizes()
 
     // Stabilize callbacks to prevent AsyncImage from recomposing
     val currentOnClick by rememberUpdatedState(onClick)
@@ -236,6 +235,8 @@ fun BannerCardWithTitle(
 ) {
     val focused by interactionSource.collectIsFocusedAsState()
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
+    val jellytipHome = LocalJellytipHome.current
+    val sizes = rememberJellytipSizes()
     val aspectRationToUse = aspectRatio.coerceAtLeast(AspectRatios.MIN)
     val width = cardHeight * aspectRationToUse
     Column(
