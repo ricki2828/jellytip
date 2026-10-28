@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.episode
 
+import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -230,7 +231,9 @@ fun EpisodeDetailsContent(
     var buttonRowFocused by remember { mutableStateOf(false) }
 
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
-    Box(modifier = modifier) {
+    var pageHasFocus by remember { mutableStateOf(false) }
+    RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
+    Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         JellytipDetailsBackground(ep, emptyList(), buttonRowFocused)
         JellytipDetailsBlock(
             item = ep,

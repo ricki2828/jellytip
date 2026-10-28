@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.movie
 
+import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
@@ -336,7 +337,9 @@ fun MovieDetailsContent(
     var topFocused by remember { mutableStateOf(true) }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
-    Box(modifier = modifier) {
+    var pageHasFocus by remember { mutableStateOf(false) }
+    RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
+    Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = !topFocused)
         LazyColumn(
                 state = listState,

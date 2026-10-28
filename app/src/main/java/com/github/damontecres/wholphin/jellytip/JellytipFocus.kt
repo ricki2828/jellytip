@@ -60,3 +60,24 @@ fun JellytipRowFocusScope(content: @Composable (Modifier) -> Unit) {
         content(Modifier.onFocusChanged { rowFocused = it.hasFocus })
     }
 }
+
+/**
+ * Returning from a trailer/external activity resumes the same composition, so no one re-requests focus and it
+ * falls to the nav drawer (which then opens). On resume, if nothing on this page holds focus, put it back on [header].
+ */
+@Composable
+fun RestoreFocusOnResume(
+    header: androidx.compose.ui.focus.FocusRequester,
+    pageHasFocus: Boolean,
+) {
+    val hasFocus by androidx.compose.runtime.rememberUpdatedState(pageHasFocus)
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        if (!hasFocus) {
+            try {
+                header.requestFocus()
+            } catch (_: IllegalStateException) {
+            }
+        }
+        onPauseOrDispose { }
+    }
+}
