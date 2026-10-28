@@ -6,4 +6,23 @@
     <string name="jellytip_api_token_summary">Sent as the X-Jellytip-Token header</string>
     <string name="jellytip_trailer_autoplay">Autoplay trailers on details</string>
     <string name="jellytip_trailer_sound">Trailer sound</string>
+    <string name="jellytip_splash_title" translatable="false">Startup intro</string>
+    <string name="jellytip_splash_summary" translatable="false">VHS channel-surf and logo when the app starts</string>
+    <string name="jellytip_splash_sound_title" translatable="false">Splash sound</string>
+    <string name="jellytip_splash_sound_summary" translatable="false">Tape clunk and Rhodes chord with the intro and ident</string>
+    <string name="jellytip_ident_title" translatable="false">Play ident before content</string>
+    <string name="jellytip_ident_summary" translatable="false">Short Jelly Tip ident before a film or the first episode of a session</string>
+
+    <string name="jellytip_get_subtitles" translatable="false">Get subtitles</string>
+    <string name="jellytip_get_subtitles_summary" translatable="false">Find and apply the best match</string>
+    <string name="jellytip_more_subtitles" translatable="false">More subtitles…</string>
+    <string name="jellytip_subtitles_searching" translatable="false">Searching for %1$s subtitles…</string>
+    <string name="jellytip_subtitles_none" translatable="false">No %1$s subtitles found</string>
+    <string name="jellytip_subtitles_picked" translatable="false">Subtitles: %1$s</string>
+
+    <string name="jellytip_delete_first" translatable="false">Delete %1$s from the server? This removes the file for good.</string>
+    <string name="jellytip_delete_second_title" translatable="false">Last chance</string>
+    <string name="jellytip_delete_second" translatable="false">%1$s will be gone from the server and can\'t be brought back. Delete it for good?</string>
+    <string name="jellytip_delete_continue" translatable="false">Delete…</string>
+    <string name="jellytip_delete_forever" translatable="false">Delete for good</string>
 </resources>

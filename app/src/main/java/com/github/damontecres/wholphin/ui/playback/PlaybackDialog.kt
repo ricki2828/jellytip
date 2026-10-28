@@ -127,6 +127,10 @@ fun PlaybackDialog(
                     onDismissRequest.invoke()
                     onPlaybackActionClick.invoke(PlaybackAction.SearchCaptions)
                 },
+                onSelectQuickSearch = {
+                    onDismissRequest.invoke()
+                    onPlaybackActionClick.invoke(PlaybackAction.GetSubtitles)
+                },
                 gravity = rightGravity,
             )
         }
@@ -282,6 +286,7 @@ fun SubtitleChoiceBottomDialog(
     onSelectSearch: () -> Unit,
     gravity: Int,
     hasDownloadPermission: Boolean,
+    onSelectQuickSearch: () -> Unit = {},
     currentChoice: Int? = null,
 ) {
     val numberBefore = 2
@@ -382,6 +387,18 @@ fun SubtitleChoiceBottomDialog(
                         },
                         supportingContent = {},
                     )
+                    ListItem(
+                        selected = false,
+                        enabled = hasDownloadPermission,
+                        onClick = onSelectQuickSearch,
+                        leadingContent = {},
+                        headlineContent = {
+                            Text(text = stringResource(R.string.jellytip_get_subtitles))
+                        },
+                        supportingContent = {
+                            Text(text = stringResource(R.string.jellytip_get_subtitles_summary))
+                        },
+                    )
                     if (choices.isNotEmpty()) {
                         HorizontalDivider()
                     }
@@ -419,7 +436,7 @@ fun SubtitleChoiceBottomDialog(
                         leadingContent = {},
                         headlineContent = {
                             Text(
-                                text = stringResource(R.string.search_and_download),
+                                text = stringResource(R.string.jellytip_more_subtitles),
                             )
                         },
                         supportingContent = {},

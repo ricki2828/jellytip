@@ -24,6 +24,7 @@ import com.github.damontecres.wholphin.data.model.AudioItem
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
+import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -292,7 +293,7 @@ fun ContextMenu(
     }
     if (showDeleteDialog) {
         ConfirmDeleteDialog(
-            itemTitle = item.title ?: "",
+            itemTitle = item.jellytipDeleteLabel(),
             onCancel = { showDeleteDialog = false },
             onConfirm = {
                 actions.onDeleteItem.invoke(item)
@@ -745,7 +746,7 @@ fun ContextMenu(
     )
     if (showDeleteDialog) {
         ConfirmDeleteDialog(
-            itemTitle = item.item.title ?: "",
+            itemTitle = item.item.jellytipDeleteLabel(),
             onCancel = { showDeleteDialog = false },
             onConfirm = {
                 actions.onDeleteItem.invoke(item.item)
