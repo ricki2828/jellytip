@@ -50,6 +50,8 @@ class JellytipDetailsViewModel
 
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
+        suspend fun getAudience(item: BaseItem): JellytipAudience? = jellytipApi.getAudience(item)
+
         /** Details-page backdrop (second-best, tile-distinct) with its focal point; null for episodes (own still). */
         suspend fun detailsPick(item: BaseItem): ImagePick? {
             if (item.type == BaseItemKind.EPISODE) return null

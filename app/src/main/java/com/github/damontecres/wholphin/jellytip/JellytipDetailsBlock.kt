@@ -176,6 +176,21 @@ fun JellytipDetailsBlock(
                     )
                 }
 
+                // Admin only: who requested it and who has watched it, to help decide whether it can go
+                val isAdmin by rememberIsJellytipAdmin()
+                if (isAdmin) {
+                    val audience by produceState<JellytipAudience?>(null, item.id) { value = viewModel.getAudience(item) }
+                    audience?.summary()?.takeIf { it.isNotEmpty() }?.let {
+                        Text(
+                            text = it,
+                            style = body,
+                            color = quiet.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
                 dto.overview?.takeIf { it.isNotBlank() }?.let { overview ->
                     val source = remember { MutableInteractionSource() }
                     val focused by source.collectIsFocusedAsState()

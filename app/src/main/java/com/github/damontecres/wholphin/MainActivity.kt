@@ -35,6 +35,7 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
 import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.jellytip.splash.JellytipSplashOverlay
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.services.AppUpgradeHandler
@@ -111,6 +112,10 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var homeCache: HomeCache
+
+    /** Injected only so Hilt builds it at startup; the context menu reaches it through its `shared` reference. */
+    @Inject
+    lateinit var jellytipSeasonSubtitles: JellytipSeasonSubtitles
 
     @Inject
     lateinit var setupNavigationManager: SetupNavigationManager

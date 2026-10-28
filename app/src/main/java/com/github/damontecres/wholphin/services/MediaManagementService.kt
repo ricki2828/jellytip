@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteLog
+import com.github.damontecres.wholphin.jellytip.delete.JellytipTrailerCleanup
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.ui.combinePair
 import com.github.damontecres.wholphin.ui.launchIO
@@ -61,7 +63,8 @@ class MediaManagementService
         ): Boolean {
             Timber.v("canDelete %s: %s", item.id, item.canDelete)
             // Jellytip: on unless the user switched it off
-            val enabled = !appPreferences.jellytipDisableMediaManagement
+            // and only for Jellyfin administrators: other users never see delete
+            val enabled = !appPreferences.jellytipDisableMediaManagement && JellytipAdmin.isAdmin
             return enabled &&
                 item.canDelete &&
                 if (item.type == BaseItemKind.RECORDING) {
@@ -93,6 +96,7 @@ class MediaManagementService
                 Timber.i("Deleting %s", item.id)
                 JellytipDeleteLog.record(item)
                 api.libraryApi.deleteItem(item.id)
+                JellytipTrailerCleanup.notifyDeleted(item)
                 _deletedItemFlow.emit(DeletedItem(item))
                 return DeleteResult.Success
             } catch (ex: Exception) {

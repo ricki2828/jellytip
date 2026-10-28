@@ -14,6 +14,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.library.FILE_SIZE_SORT
 import com.github.damontecres.wholphin.data.filter.DiscoverSort
 import com.github.damontecres.wholphin.data.filter.DiscoverSortAndDirection
 import com.github.damontecres.wholphin.ui.FontAwesome
@@ -84,6 +85,8 @@ fun SortByButton(
                             val newDirection =
                                 if (currentSort == sortOption) {
                                     currentDirection.flip()
+                                } else if (sortOption == FILE_SIZE_SORT) {
+                                    SortOrder.DESCENDING // largest first
                                 } else {
                                     currentDirection
                                 }

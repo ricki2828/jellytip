@@ -11,8 +11,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
@@ -308,7 +310,10 @@ class JellytipApi
          * GET a companion API path (e.g. `/v1/home/carousels`) and return the body, or null on any failure.
          * Same auth as [getExtras]: the manual token if set, else the current Jellyfin session.
          */
-        suspend fun getJson(path: String): String? =
+        suspend fun getJson(
+            path: String,
+            timeoutMs: Long = TIMEOUT_MS,
+        ): String? =
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
@@ -326,7 +331,7 @@ class JellytipApi
                                     }
                                 }
                             }.build()
-                    client.newCall(request).execute().use { response ->
+                    client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
                             Timber.w("Jellytip API %s returned %s", path, response.code)
                             return@withContext null
@@ -339,6 +344,84 @@ class JellytipApi
                 }
             }
 
+        // The server builds its Plex history index on the first call, which can exceed the 3 s used elsewhere
+        private val audienceClient by lazy { baseClient.newBuilder().callTimeout(20, TimeUnit.SECONDS).build() }
+        private val audienceCache = ConcurrentHashMap<UUID, Pair<Long, JellytipAudience>>()
+
+        /**
+         * Admin-only: who requested / watched [item]. Always authenticates with the Jellyfin session (the shared
+         * app token is refused by the server). Null for non-admins, other item kinds, or any failure. Cached 10 min.
+         */
+        suspend fun getAudience(item: BaseItem): JellytipAudience? {
+            if (!JellytipAdmin.isAdmin) return null
+            if (item.type !in AUDIENCE_KINDS) return null
+            audienceCache[item.id]?.let { (at, value) -> if (System.currentTimeMillis() - at < AUDIENCE_TTL_MS) return value }
+            val token = api.accessToken?.takeIf { it.isNotBlank() } ?: return null
+            return withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base/v1/items/${item.id}/audience".toHttpUrlOrNull() ?: return@withContext null)
+                            .header("Authorization", "MediaBrowser Token=\"$token\"")
+                            .build()
+                    audienceClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip audience returned %s", response.code)
+                            return@withContext null
+                        }
+                        JellytipAudience.parse(response.body.string()).also {
+                            audienceCache[item.id] = System.currentTimeMillis() to it
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip audience unavailable")
+                    null
+                }
+            }
+        }
+
+        /**
+         * POST a JSON body to a companion API path and return the response body, or null on any failure.
+         * Same auth as [getJson].
+         */
+        suspend fun postJson(
+            path: String,
+            body: JSONObject,
+        ): String? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
+                            .post(body.toString().toRequestBody("application/json".toMediaType()))
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip API POST %s returned %s", path, response.code)
+                            return@withContext null
+                        }
+                        response.body.string()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip API POST %s unavailable", path)
+                    null
+                }
+            }
+
         companion object {
             /** Set when Hilt builds the singleton, so composables can reach it without plumbing. */
             @Volatile
@@ -347,6 +430,8 @@ class JellytipApi
 
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
+            private const val AUDIENCE_TTL_MS = 10 * 60_000L
+            private val AUDIENCE_KINDS = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)
         }
     }
 
