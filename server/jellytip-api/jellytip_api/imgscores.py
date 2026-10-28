@@ -5,7 +5,7 @@ import threading
 
 from .stills import MAX_STILLS
 
-HERO_MIN_DISTANCE = 12  # Hamming bits (of 64) a hero must differ from the card art by
+HERO_MIN_DISTANCE = 16  # Hamming bits (of 64) a hero must differ from the card art by
 # Titled-art quality (Thumb) below this: the card falls back to backdrop + logo. CLIP title score did NOT separate good from bad
 # on a 36-thumb eyeballed sheet (clean art scored 0.00-0.03, covers/posters 0.05-0.12 and 0.9 alike), so gating is OFF (0.0) until a better signal exists.
 TITLE_THRESHOLD = 0.0
