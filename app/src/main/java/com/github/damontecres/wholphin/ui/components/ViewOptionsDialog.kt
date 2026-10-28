@@ -288,6 +288,7 @@ val ViewOptionsPoster =
         // Jellytip: library grids open with the focused item's details and backdrop (saved per-library choices still win)
         showDetails = true,
         showBackdrop = true,
+        showTitles = false,
     )
 val ViewOptionsWide =
     ViewOptions(
