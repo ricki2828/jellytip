@@ -44,7 +44,7 @@ class MediaManagementServiceTest {
     private val mockLibraryApi = mockk<LibraryApi>()
 
     private val mediaManagementService =
-        MediaManagementService(mockContext, mockApiClient, mockServerRepository, mockUserPreferencesService)
+        MediaManagementService(mockContext, mockApiClient, mockServerRepository, mockUserPreferencesService, mockk<com.github.damontecres.wholphin.jellytip.JellytipApi>(relaxed = true))
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Before
