@@ -79,7 +79,7 @@ data class JellytipCarouselManifest(
 object JellytipCarouselRows {
     const val LETTERBOXD_PREFIX = "Letterboxd · "
     const val MAX_CAROUSEL_ROWS = 10
-    const val MAX_LETTERBOXD_ROWS = 4
+    const val MAX_LETTERBOXD_ROWS = 6
 
     fun carouselRow(carousel: JellytipCarousel): HomeRowConfig.GetItems {
         val (sortBy, sortOrder) =
@@ -140,6 +140,8 @@ object JellytipCarouselRows {
      *  - a first run (no [seen] state) adds the top rows in manifest order, after Continue Watching / Next Up;
      *  - later runs add only collections that are new to the manifest, and only while below the row cap;
      *  - rows whose collection left the manifest are dropped; Letterboxd rows get fresh film ids.
+     *  - the companion rotates Letterboxd lists daily: a list rotated out is dropped, one rotated in is added again
+     *    (`lbm:` = offered by the previous manifest), unless Ricki removed it while it was shown (`lbx:`, permanent).
      */
     fun reconcile(
         current: List<HomeRowConfig>,
@@ -173,12 +175,24 @@ object JellytipCarouselRows {
 
         val newCarousels =
             manifest.carousels.filter { it.id.toString() !in known && it.id !in presentCarousels }
+        val rotating = known.any { it.startsWith("lbm:") }
+        val removedByUser =
+            manifest.letterboxd
+                .filter {
+                    "lbadded:${it.slug}" in known && "lbm:${it.slug}" in known && LETTERBOXD_PREFIX + it.name !in presentLists
+                }.map { "lbx:${it.slug}" }
+        val blocked = known.filter { it.startsWith("lbx:") }.toSet() + removedByUser
         val newLists =
-            manifest.letterboxd.filter { "lb:${it.slug}" !in known && LETTERBOXD_PREFIX + it.name !in presentLists }
+            manifest.letterboxd.filter {
+                LETTERBOXD_PREFIX + it.name !in presentLists && "lbx:${it.slug}" !in blocked &&
+                    // old state (no lbm: markers) keeps the one-shot rule; rotating state re-adds lists new to this manifest
+                    (if (rotating) "lbm:${it.slug}" !in known else "lb:${it.slug}" !in known)
+            }
         val carouselRoom = (MAX_CAROUSEL_ROWS - presentCarousels.size).coerceAtLeast(0)
         val listRoom = (MAX_LETTERBOXD_ROWS - presentLists.size).coerceAtLeast(0)
         val addCarousels = newCarousels.take(carouselRoom).map { carouselRow(it) }
-        val addLists = newLists.take(listRoom).map { letterboxdRow(it) }
+        val addedLists = newLists.take(listRoom)
+        val addLists = addedLists.map { letterboxdRow(it) }
 
         var at = rows.indexOfLast { it.isLeading() } + 1
         rows.addAll(at, addCarousels)
@@ -186,7 +200,9 @@ object JellytipCarouselRows {
         rows.addAll(at, addLists)
 
         val nowSeen =
-            known + manifest.carousels.map { it.id.toString() } + manifest.letterboxd.map { "lb:${it.slug}" }
+            known.filterNot { it.startsWith("lbm:") }.toSet() + manifest.carousels.map { it.id.toString() } +
+                manifest.letterboxd.map { "lb:${it.slug}" } + manifest.letterboxd.map { "lbm:${it.slug}" } +
+                addedLists.map { "lbadded:${it.slug}" } + removedByUser
         if (!firstRun && rows == current && nowSeen == known) return Reconciled(current, known)
         return Reconciled(rows, nowSeen)
     }
