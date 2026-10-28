@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -33,6 +34,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -318,8 +320,10 @@ fun MovieDetailsContent(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
+    var buttonRowFocused by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
+        JellytipDetailsBackground(movie, state.trailers, buttonRowFocused)
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 8.dp),
@@ -383,6 +387,7 @@ fun MovieDetailsContent(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 16.dp)
+                                .onFocusChanged { buttonRowFocused = it.hasFocus }
                                 .focusRequester(focusRequesters[HEADER_ROW]),
                     )
                 }

@@ -1321,6 +1321,7 @@ val advancedPreferences =
                     ),
             ),
         )
+        add(com.github.damontecres.wholphin.jellytip.JellytipPreferences.group)
         add(
             PreferenceGroup(
                 title = R.string.playback,

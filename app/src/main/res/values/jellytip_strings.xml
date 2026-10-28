@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="jellytip_settings">Jellytip</string>
+    <string name="jellytip_api_url">Jellytip API URL</string>
+    <string name="jellytip_api_token">Jellytip API token</string>
+    <string name="jellytip_api_token_summary">Sent as the X-Jellytip-Token header</string>
+    <string name="jellytip_trailer_autoplay">Autoplay trailers on details</string>
+    <string name="jellytip_trailer_sound">Trailer sound</string>
+</resources>

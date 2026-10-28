@@ -45,6 +45,8 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
+import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
 import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
@@ -357,10 +359,12 @@ fun SeriesDetailsContent(
     val focusRequesters = remember { List(DISCOVER_ROW + 1) { FocusRequester() } }
     val playFocusRequester = remember { FocusRequester() }
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
+    var buttonRowFocused by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier,
     ) {
+        JellytipDetailsBackground(series, trailers, buttonRowFocused)
         Column(
             modifier =
                 Modifier
@@ -390,6 +394,7 @@ fun SeriesDetailsContent(
                                 .padding(start = HeaderUtils.startPadding)
                                 .focusRequester(focusRequesters[HEADER_ROW])
                                 .focusRestorer(playFocusRequester)
+                                .onFocusChanged { buttonRowFocused = it.hasFocus }
                                 .focusGroup()
                                 .padding(bottom = 16.dp),
                     ) {
@@ -689,6 +694,7 @@ fun SeriesDetailsHeader(
             dto.genres?.letNotEmpty {
                 GenreText(it, Modifier.padding(start = HeaderUtils.startPadding, bottom = 4.dp))
             }
+            JellytipScoreRow(series)
             dto.overview?.let { overview ->
                 OverviewText(
                     overview = overview,

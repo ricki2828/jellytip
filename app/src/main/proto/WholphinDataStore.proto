@@ -260,4 +260,11 @@ message AppPreferences {
   PhotoPreferences photo_preferences = 12;
   MusicPreferences music_preferences = 13;
   ExperimentalPreferences experimental_preferences = 14;
+
+  // Jellytip fork additions; high field numbers avoid clashing with upstream
+  string jellytip_api_url = 1001;
+  string jellytip_api_token = 1002;
+  // Inverted so the zero value means autoplay is on
+  bool jellytip_disable_trailer_autoplay = 1003;
+  bool jellytip_trailer_sound = 1004;
 }
