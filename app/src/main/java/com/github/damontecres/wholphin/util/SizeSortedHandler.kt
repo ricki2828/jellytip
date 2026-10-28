@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.util
 import kotlinx.serialization.Serializable
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.Response
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.model.api.BaseItemDtoQueryResult
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
