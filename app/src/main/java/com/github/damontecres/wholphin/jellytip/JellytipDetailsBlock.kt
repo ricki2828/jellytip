@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.jellytip
 
+import androidx.tv.material3.Border
+import androidx.tv.material3.Glow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -317,13 +320,19 @@ private fun TextButton(
         onClick = button.onClick,
         modifier = modifier,
         shape = ButtonDefaults.shape(RoundedCornerShape(sizes.px(4f))),
+        scale = ButtonDefaults.scale(focusedScale = JellytipFocus.SCALE),
+        border =
+            ButtonDefaults.border(
+                focusedBorder = Border(BorderStroke(3.dp, cream), shape = RoundedCornerShape(sizes.px(4f))),
+            ),
+        glow = ButtonDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.45f), 12.dp)),
         contentPadding = PaddingValues(horizontal = sizes.px(22f), vertical = sizes.px(8f)),
         colors =
             if (button.primary) {
                 ButtonDefaults.colors(
-                    containerColor = cream,
-                    contentColor = ink,
-                    focusedContainerColor = Color.White,
+                    containerColor = Color.White.copy(alpha = 0.22f),
+                    contentColor = Color.White,
+                    focusedContainerColor = cream,
                     focusedContentColor = ink,
                 )
             } else {

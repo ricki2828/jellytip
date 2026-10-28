@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,12 +67,13 @@ fun <T> ItemRow(
     ) {
         ItemRowTitle(title)
 
-        LazyRow(
+        JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
             state = state,
             horizontalArrangement = Arrangement.spacedBy(horizontalPadding),
             contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 8.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .fillMaxWidth()
                     .focusGroup()
                     .focusRestorer(firstFocus)
@@ -124,6 +126,7 @@ fun <T> ItemRow(
                     viewMoreCardContent.invoke(cardModifier)
                 }
             }
+        }
         }
     }
 }

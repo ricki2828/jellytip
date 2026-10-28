@@ -12,6 +12,18 @@ fun jellytipBackdropUrl(
     imageUrlService: ImageUrlService,
     item: BaseItem,
 ): String? {
+    // Episodes lead with their own still; series art is only the fallback when the episode has none.
+    item.data.imageTags
+        ?.get(ImageType.PRIMARY)
+        ?.takeIf { item.type == BaseItemKind.EPISODE }
+        ?.let { tag ->
+            return imageUrlService.getItemImageUrl(
+                itemId = item.id,
+                imageType = ImageType.PRIMARY,
+                maxWidth = HERO_BACKDROP_MAX_WIDTH,
+                tag = tag,
+            )
+        }
     val seriesId = item.data.seriesId
     return if (seriesId != null && (item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON)) {
         imageUrlService.getItemImageUrl(

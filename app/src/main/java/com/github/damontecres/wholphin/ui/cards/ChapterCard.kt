@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipFocus
+import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -59,11 +62,16 @@ fun ChapterCard(
             )
         }
     var width by remember { mutableStateOf(AspectRatios.WIDE * cardHeight) }
+    val cardSource = interactionSource ?: remember { MutableInteractionSource() }
+    val cardFocused by cardSource.collectIsFocusedAsState()
     Card(
-        modifier = modifier.height(cardHeight),
+        modifier = modifier.height(cardHeight).jellytipSiblingDim(cardFocused),
         onClick = onClick,
         onLongClick = onLongClick,
-        interactionSource = interactionSource,
+        interactionSource = cardSource,
+        scale = JellytipFocus.scale(),
+        border = JellytipFocus.border(),
+        glow = JellytipFocus.glow(),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(

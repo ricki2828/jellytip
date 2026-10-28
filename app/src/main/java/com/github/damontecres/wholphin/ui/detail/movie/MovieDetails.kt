@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +45,6 @@ import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitlesDialo
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
-import com.github.damontecres.wholphin.ui.RequestOrRestoreFocus
 import com.github.damontecres.wholphin.ui.cards.ChapterRow
 import com.github.damontecres.wholphin.ui.cards.ExtrasRow
 import com.github.damontecres.wholphin.ui.cards.ItemRow
@@ -65,6 +66,7 @@ import com.github.damontecres.wholphin.ui.discover.DiscoverRowData
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberInt
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.util.ResStringProvider
 import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.DiscoverRequestType
@@ -324,7 +326,12 @@ fun MovieDetailsContent(
 
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
-    RequestOrRestoreFocus(focusRequesters.getOrNull(position))
+    // Always open hero-first: Play focused, list scrolled to top (never restore a saved cast/extras row).
+    val listState = rememberLazyListState()
+    LaunchedEffect(Unit) {
+        listState.scrollToItem(0)
+        focusRequesters[HEADER_ROW].tryRequestFocus()
+    }
     var buttonRowFocused by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(true) }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
@@ -332,6 +339,7 @@ fun MovieDetailsContent(
     Box(modifier = modifier) {
         JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = !topFocused)
         LazyColumn(
+                state = listState,
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 8.dp),
             modifier = Modifier.fillMaxSize(),

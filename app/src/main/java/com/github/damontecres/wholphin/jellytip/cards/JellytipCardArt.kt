@@ -58,7 +58,7 @@ data class JellytipCardArt(
 /**
  * Image priority (sizes are physical px of the card so the 2 GB device decodes no more than it shows):
  * 1. Thumb (title baked into landscape art)
- * 2. episodes: series Thumb, else the episode still + series logo
+ * 2. episodes: the episode's own still + series logo, else series Thumb/backdrop
  * 3. backdrop + clearlogo, 4. backdrop + title text (caller draws it)
  */
 fun selectJellytipCardArt(
@@ -100,13 +100,13 @@ fun selectJellytipCardArt(
 
     val seriesId = d.seriesId
     if (isEpisode && seriesId != null) {
-        val thumbId = d.parentThumbItemId
-        if (thumbId != null && d.parentThumbImageTag != null) {
-            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
-        }
         val seriesLogo = logo(d.parentLogoItemId ?: seriesId, d.parentLogoImageTag)
         if (ImageType.PRIMARY in tags) {
             return JellytipCardArt(fill(item.id, ImageType.PRIMARY, tags[ImageType.PRIMARY]), false, seriesLogo)
+        }
+        val thumbId = d.parentThumbItemId
+        if (thumbId != null && d.parentThumbImageTag != null) {
+            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
         }
         val backdropId = d.parentBackdropItemId
         val backdropTag = d.parentBackdropImageTags?.firstOrNull()
