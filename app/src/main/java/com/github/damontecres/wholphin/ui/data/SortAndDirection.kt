@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.library.FILE_SIZE_SORT
 import kotlinx.serialization.Serializable
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
@@ -184,6 +185,8 @@ fun getStringRes(sort: ItemSortBy): Int =
 
         ItemSortBy.RUNTIME -> R.string.runtime_sort
 
+        FILE_SIZE_SORT -> R.string.jellytip_sort_file_size
+
         ItemSortBy.DEFAULT -> R.string.default_track
 
         ItemSortBy.ALBUM -> R.string.album
@@ -199,8 +202,8 @@ fun getStringRes(sort: ItemSortBy): Int =
 fun rememberSortOptions(collectionType: CollectionType): List<ItemSortBy> =
     remember(collectionType) {
         when (collectionType) {
-            CollectionType.MOVIES -> MovieSortOptions
-            CollectionType.TVSHOWS -> SeriesSortOptions
+            CollectionType.MOVIES -> MovieSortOptions + FILE_SIZE_SORT
+            CollectionType.TVSHOWS -> SeriesSortOptions + FILE_SIZE_SORT
             CollectionType.MUSIC -> AlbumSortOptions
             CollectionType.BOXSETS -> BoxSetSortOptions
             else -> VideoSortOptions

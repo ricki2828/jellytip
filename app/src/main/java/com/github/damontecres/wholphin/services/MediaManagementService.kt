@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteLog
+import com.github.damontecres.wholphin.jellytip.delete.JellytipTrailerCleanup
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.ui.combinePair
 import com.github.damontecres.wholphin.ui.launchIO
@@ -93,6 +94,7 @@ class MediaManagementService
                 Timber.i("Deleting %s", item.id)
                 JellytipDeleteLog.record(item)
                 api.libraryApi.deleteItem(item.id)
+                JellytipTrailerCleanup.notifyDeleted(item)
                 _deletedItemFlow.emit(DeletedItem(item))
                 return DeleteResult.Success
             } catch (ex: Exception) {

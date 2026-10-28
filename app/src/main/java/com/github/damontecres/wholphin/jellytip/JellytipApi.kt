@@ -11,8 +11,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
@@ -265,7 +267,10 @@ class JellytipApi
          * GET a companion API path (e.g. `/v1/home/carousels`) and return the body, or null on any failure.
          * Same auth as [getExtras]: the manual token if set, else the current Jellyfin session.
          */
-        suspend fun getJson(path: String): String? =
+        suspend fun getJson(
+            path: String,
+            timeoutMs: Long = TIMEOUT_MS,
+        ): String? =
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
@@ -283,7 +288,7 @@ class JellytipApi
                                     }
                                 }
                             }.build()
-                    client.newCall(request).execute().use { response ->
+                    client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
                             Timber.w("Jellytip API %s returned %s", path, response.code)
                             return@withContext null
@@ -292,6 +297,45 @@ class JellytipApi
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip API %s unavailable", path)
+                    null
+                }
+            }
+
+        /**
+         * POST a JSON body to a companion API path and return the response body, or null on any failure.
+         * Same auth as [getJson].
+         */
+        suspend fun postJson(
+            path: String,
+            body: JSONObject,
+        ): String? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
+                            .post(body.toString().toRequestBody("application/json".toMediaType()))
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip API POST %s returned %s", path, response.code)
+                            return@withContext null
+                        }
+                        response.body.string()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip API POST %s unavailable", path)
                     null
                 }
             }

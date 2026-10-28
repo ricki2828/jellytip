@@ -28,6 +28,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.WholphinApplication
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.ui.components.BasicDialog
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -135,6 +136,33 @@ fun JellytipDeleteConfirm(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * After a successful Jellyfin delete, asks the companion to remove the title's `trailers/` folder right away
+ * (Jellyfin already removes a movie's own folder; this covers series and odd layouts). The item's path is sent
+ * because it is no longer in Jellyfin. The companion re-checks that no video file is left, and a nightly sweep
+ * is the safety net, so failure here is only logged.
+ */
+object JellytipTrailerCleanup {
+    suspend fun notifyDeleted(item: BaseItem) {
+        val type =
+            when (item.type) {
+                BaseItemKind.MOVIE -> "movie"
+                BaseItemKind.SERIES -> "series"
+                else -> return
+            }
+        try {
+            val body =
+                org.json.JSONObject().apply {
+                    put("type", type)
+                    item.data.path?.let { put("path", it) }
+                }
+            JellytipApi.shared?.postJson("/v1/items/${item.id}/deleted", body)
+        } catch (ex: Exception) {
+            Timber.w(ex, "Jellytip: trailer cleanup call failed")
         }
     }
 }

@@ -67,7 +67,11 @@ import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.toServerString
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import com.github.damontecres.wholphin.jellytip.library.FILE_SIZE_SORT
+import com.github.damontecres.wholphin.jellytip.library.JellytipSizes
 import com.github.damontecres.wholphin.util.ApiRequestPager
+import com.github.damontecres.wholphin.util.SizeSortedItemsHandler
+import com.github.damontecres.wholphin.util.SizeSortedRequest
 import com.github.damontecres.wholphin.util.BlockingList
 import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.ExceptionHandler
@@ -388,7 +392,23 @@ class CollectionFolderViewModel
             }
         }
 
-        private fun createPager(
+        /** Jellytip: all ids matching [request] in name order (paged, ids only needed). */
+        private suspend fun allMatchingIds(request: GetItemsRequest): List<UUID> {
+            val ids = mutableListOf<UUID>()
+            var start = 0
+            while (true) {
+                val page =
+                    GetItemsRequestHandler
+                        .execute(api, GetItemsRequestHandler.prepare(request, start, 500, true))
+                        .content
+                ids += page.items.map { it.id }
+                start += 500
+                if (page.items.isEmpty() || start >= page.totalRecordCount) break
+            }
+            return ids
+        }
+
+        private suspend fun createPager(
             sortAndDirection: SortAndDirection,
             recursive: Boolean,
             filter: GetItemsFilter,
@@ -396,12 +416,29 @@ class CollectionFolderViewModel
         ): ApiRequestPager<out Any> =
             when (filter.override) {
                 GetItemsFilterOverride.NONE -> {
+                    val bySize = sortAndDirection.sort == FILE_SIZE_SORT
+                    JellytipSizes.setBadges(this, bySize)
                     val request =
                         createGetItemsRequest(
-                            sortAndDirection = sortAndDirection,
+                            sortAndDirection = if (bySize) SortAndDirection.DEFAULT else sortAndDirection,
                             recursive = recursive,
                             filter = filter,
                         )
+                    if (bySize) {
+                        val ordered =
+                            JellytipSizes.order(
+                                allMatchingIds(request),
+                                JellytipSizes.get(),
+                                sortAndDirection.direction == SortOrder.DESCENDING,
+                            )
+                        return ApiRequestPager(
+                            api,
+                            SizeSortedRequest(request, ordered),
+                            SizeSortedItemsHandler,
+                            viewModelScope,
+                            useSeriesForPrimary = useSeriesForPrimary,
+                        )
+                    }
                     val newPager =
                         ApiRequestPager(
                             api,
@@ -608,6 +645,11 @@ class CollectionFolderViewModel
 
         fun release() {
             themeSongPlayer.stop()
+        }
+
+        override fun onCleared() {
+            JellytipSizes.setBadges(this, false)
+            super.onCleared()
         }
 
         fun onResumePage() {

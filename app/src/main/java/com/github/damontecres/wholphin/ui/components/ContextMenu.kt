@@ -25,6 +25,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -518,6 +519,25 @@ private fun buildContextMenuItems(
                         dismissOnClick = true,
                     ) {
                         showSubtitles.invoke(item)
+                    },
+                )
+            }
+        JellytipSeasonSubtitles.shared
+            ?.takeIf { item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON || item.type == BaseItemKind.SERIES }
+            ?.let { seasonSubtitles ->
+                add(
+                    DialogItem(
+                        resources.getString(
+                            when (item.type) {
+                                BaseItemKind.EPISODE -> R.string.jellytip_subtitles_whole_season
+                                BaseItemKind.SERIES -> R.string.jellytip_subtitles_all_seasons
+                                else -> R.string.jellytip_subtitles_this_season
+                            },
+                        ),
+                        Icons.Default.Info,
+                        dismissOnClick = true,
+                    ) {
+                        seasonSubtitles.start(item)
                     },
                 )
             }
