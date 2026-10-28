@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,6 +53,8 @@ import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
+import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -378,6 +381,14 @@ fun SeriesDetailsContent(
         modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus },
     ) {
         JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = !topFocused)
+        JellytipBreadcrumb(
+            crumbs = listOf(JellytipCrumb(series.name ?: "", {})),
+            modifier =
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 64.dp, top = 24.dp)
+                    .graphicsLayer { alpha = headerAlpha },
+        )
         Column(
             modifier =
                 Modifier
