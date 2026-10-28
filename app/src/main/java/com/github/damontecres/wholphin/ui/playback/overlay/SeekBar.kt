@@ -200,14 +200,13 @@ private fun SeekBarDisplay(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val color = MaterialTheme.colorScheme.border
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val color = Color(0xFFF2F2F0)
 
     val isFocused by interactionSource.collectIsFocusedAsState()
     var leftHandledByRepeat by remember { mutableStateOf(false) }
     var rightHandledByRepeat by remember { mutableStateOf(false) }
     val animatedIndicatorHeight by animateDpAsState(
-        targetValue = 6.dp.times((if (isFocused) 2f else 1f)),
+        targetValue = 3.dp.times((if (isFocused) 2f else 1f)),
     )
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -285,14 +284,14 @@ private fun SeekBarDisplay(
             onDraw = {
                 val yOffset = size.height.div(2)
                 drawLine(
-                    color = onSurface.copy(alpha = 0.25f),
+                    color = Color(0xFFF2F2F0).copy(alpha = 0.16f),
                     start = Offset(x = 0f, y = yOffset),
                     end = Offset(x = size.width, y = yOffset),
                     strokeWidth = size.height,
                     cap = StrokeCap.Round,
                 )
                 drawLine(
-                    color = onSurface.copy(alpha = .65f),
+                    color = Color(0xFF3A3A3A),
                     start = Offset(x = 0f, y = yOffset),
                     end =
                         Offset(
@@ -314,8 +313,8 @@ private fun SeekBarDisplay(
                     cap = StrokeCap.Round,
                 )
                 drawCircle(
-                    color = Color.White,
-                    radius = size.height + 2,
+                    color = Color(0xFFF2F2F0),
+                    radius = size.height * 0.75f + 2,
                     center =
                         Offset(
                             x = size.width.times(progress),
