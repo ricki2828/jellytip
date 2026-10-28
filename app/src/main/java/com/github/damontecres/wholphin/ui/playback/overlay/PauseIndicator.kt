@@ -60,7 +60,7 @@ fun PauseIndicator(
         }
         Icon(
             modifier = Modifier.size(64.dp, 64.dp),
-            painter = painterResource(id = R.drawable.baseline_pause_24),
+            painter = painterResource(id = R.drawable.jt_pause),
             tint = MaterialTheme.colorScheme.onSurface,
             contentDescription = null,
         )

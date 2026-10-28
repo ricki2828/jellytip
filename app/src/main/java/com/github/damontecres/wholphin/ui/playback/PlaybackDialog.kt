@@ -33,17 +33,20 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.tv.material3.ListItem
+import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import androidx.tv.material3.surfaceColorAtElevation
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.ui.AppColors
-import com.github.damontecres.wholphin.ui.components.SelectedLeadingContent
 import com.github.damontecres.wholphin.ui.indexOfFirstOrNull
 import com.github.damontecres.wholphin.ui.playback.overlay.BottomDialog
 import com.github.damontecres.wholphin.ui.playback.overlay.BottomDialogItem
@@ -132,6 +135,13 @@ fun PlaybackDialog(
                     onPlaybackActionClick.invoke(PlaybackAction.GetSubtitles)
                 },
                 gravity = rightGravity,
+                onSelectTiming =
+                    if (enableSubtitleDelay) {
+                        { onClickPlaybackDialogType(PlaybackDialogType.SUBTITLE_DELAY) }
+                    } else {
+                        null
+                    },
+                timingText = formatSubtitleDelay(settings.subtitleDelay),
             )
         }
 
@@ -162,7 +172,7 @@ fun PlaybackDialog(
                             BottomDialogItem(
                                 data = PlaybackDialogType.SUBTITLE_DELAY,
                                 headline = stringResource(R.string.subtitle_delay),
-                                supporting = settings.subtitleDelay.toString(),
+                                supporting = formatSubtitleDelay(settings.subtitleDelay),
                             ),
                         )
                     }
@@ -288,6 +298,8 @@ fun SubtitleChoiceBottomDialog(
     hasDownloadPermission: Boolean,
     onSelectQuickSearch: () -> Unit = {},
     currentChoice: Int? = null,
+    onSelectTiming: (() -> Unit)? = null,
+    timingText: String = "",
 ) {
     val numberBefore = 3
     val initialChoice =
@@ -324,10 +336,11 @@ fun SubtitleChoiceBottomDialog(
                     .wrapContentSize()
                     .padding(8.dp)
                     .background(
-                        MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+                        Color(0xF2141414),
                         shape = RoundedCornerShape(8.dp),
                     ),
         ) {
+            JtMenuTheme {
             LazyColumn(
                 state = listState,
                 modifier =
@@ -340,6 +353,8 @@ fun SubtitleChoiceBottomDialog(
             ) {
                 item {
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = false,
                         onClick = onSelectQuickSearch,
                         leadingContent = {},
@@ -350,19 +365,36 @@ fun SubtitleChoiceBottomDialog(
                             Text(text = stringResource(R.string.jellytip_get_subtitles_summary))
                         },
                     )
+                    if (onSelectTiming != null) {
+                        ListItem(
+                            colors = jtListColors(),
+                            shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
+                            selected = false,
+                            onClick = onSelectTiming,
+                            leadingContent = {},
+                            headlineContent = {
+                                Text(text = stringResource(R.string.jellytip_subtitle_timing), fontSize = 14.sp)
+                            },
+                            supportingContent = {
+                                Text(text = timingText, fontSize = 12.sp)
+                            },
+                        )
+                    }
                     HorizontalDivider()
                 }
                 item {
                     val interactionSource = remember { MutableInteractionSource() }
                     val focused by interactionSource.collectIsFocusedAsState()
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = currentChoice == TrackIndex.DISABLED,
                         interactionSource = interactionSource,
                         onClick = {
                             onSelectChoice(TrackIndex.DISABLED)
                         },
                         leadingContent = {
-                            SelectedLeadingContent(currentChoice == TrackIndex.DISABLED)
+                            JtSelectedBar(currentChoice == TrackIndex.DISABLED)
                         },
                         headlineContent = {
                             Text(
@@ -387,12 +419,14 @@ fun SubtitleChoiceBottomDialog(
                 }
                 item {
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = currentChoice == TrackIndex.ONLY_FORCED,
                         onClick = {
                             onSelectChoice(TrackIndex.ONLY_FORCED)
                         },
                         leadingContent = {
-                            SelectedLeadingContent(currentChoice == TrackIndex.ONLY_FORCED)
+                            JtSelectedBar(currentChoice == TrackIndex.ONLY_FORCED)
                         },
                         headlineContent = {
                             Text(
@@ -408,12 +442,14 @@ fun SubtitleChoiceBottomDialog(
                 itemsIndexed(choices) { index, choice ->
                     val interactionSource = remember { MutableInteractionSource() }
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = choice.index == currentChoice,
                         onClick = {
                             onSelectChoice(choice.index)
                         },
                         leadingContent = {
-                            SelectedLeadingContent(choice.index == currentChoice)
+                            JtSelectedBar(choice.index == currentChoice)
                         },
                         headlineContent = {
                             Text(
@@ -432,6 +468,8 @@ fun SubtitleChoiceBottomDialog(
                     val interactionSource = remember { MutableInteractionSource() }
                     val focused by interactionSource.collectIsFocusedAsState()
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = false,
                         onClick = onSelectSearch,
                         leadingContent = {},
@@ -457,6 +495,7 @@ fun SubtitleChoiceBottomDialog(
                                 },
                     )
                 }
+            }
             }
         }
     }
@@ -495,10 +534,11 @@ fun StreamChoiceBottomDialog(
                     .wrapContentSize()
                     .padding(8.dp)
                     .background(
-                        MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+                        Color(0xF2141414),
                         shape = RoundedCornerShape(8.dp),
                     ),
         ) {
+            JtMenuTheme {
             LazyColumn(
                 modifier =
                     Modifier
@@ -511,13 +551,15 @@ fun StreamChoiceBottomDialog(
                 itemsIndexed(choices) { index, choice ->
                     val interactionSource = remember { MutableInteractionSource() }
                     ListItem(
+                        colors = jtListColors(),
+                        shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
                         selected = choice.index == currentChoice,
                         onClick = {
                             onDismissRequest()
                             onSelectChoice(index, choice)
                         },
                         leadingContent = {
-                            SelectedLeadingContent(choice.index == currentChoice)
+                            JtSelectedBar(choice.index == currentChoice)
                         },
                         headlineContent = {
                             Text(
@@ -532,6 +574,52 @@ fun StreamChoiceBottomDialog(
                     )
                 }
             }
+            }
         }
     }
+}
+
+private val JtPaper = Color(0xFFF2F2F0)
+
+@Composable
+private fun jtListColors() =
+    ListItemDefaults.colors(
+        containerColor = Color.Transparent,
+        contentColor = JtPaper,
+        focusedContainerColor = Color(0xFF1C1C1C),
+        focusedContentColor = JtPaper,
+        selectedContainerColor = Color.Transparent,
+        selectedContentColor = JtPaper,
+        focusedSelectedContainerColor = Color(0xFF1C1C1C),
+        focusedSelectedContentColor = JtPaper,
+    )
+
+/** Selected-row marker: 3 dp jelly-red bar. */
+@Composable
+private fun BoxScope.JtSelectedBar(selected: Boolean) {
+    if (selected) {
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .size(3.dp, 18.dp)
+                .background(Color(0xFFE2264D), RoundedCornerShape(1.dp)),
+        )
+    }
+}
+
+/** Small-text typography for the subtitle and audio menus. */
+@Composable
+private fun JtMenuTheme(content: @Composable () -> Unit) {
+    val t = MaterialTheme.typography
+    MaterialTheme(
+        colorScheme = MaterialTheme.colorScheme,
+        typography =
+            t.copy(
+                titleMedium = t.titleMedium.copy(fontSize = 14.sp),
+                bodyMedium = t.bodyMedium.copy(fontSize = 12.sp),
+                bodySmall = t.bodySmall.copy(fontSize = 12.sp),
+                labelMedium = t.labelMedium.copy(fontSize = 12.sp),
+            ),
+        content = content,
+    )
 }

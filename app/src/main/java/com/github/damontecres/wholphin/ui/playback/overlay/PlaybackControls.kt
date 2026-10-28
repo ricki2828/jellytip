@@ -55,7 +55,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -151,6 +158,19 @@ fun PlaybackControls(
     seekBarInteractionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val scope = rememberCoroutineScope()
+    var captionsActive by remember { mutableStateOf(false) }
+    DisposableEffect(player) {
+        fun update(tracks: Tracks) {
+            captionsActive = tracks.groups.any { it.type == C.TRACK_TYPE_TEXT && it.isSelected }
+        }
+        update(player.currentTracks)
+        val listener =
+            object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) = update(tracks)
+            }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
 
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val onControllerInteraction = {
@@ -225,6 +245,7 @@ fun PlaybackControls(
                     )
                 }
                 RightPlaybackButtons(
+                    captionsActive = captionsActive,
                     onControllerInteraction = onControllerInteraction,
                     onClickPlaybackDialogType = onClickPlaybackDialogType,
                     modifier = Modifier,
@@ -341,7 +362,7 @@ fun LeftPlaybackButtons(
         horizontalArrangement = Arrangement.spacedBy(buttonSpacing),
     ) {
         PlaybackButton(
-            iconRes = R.drawable.vector_settings,
+            iconRes = R.drawable.jt_settings,
             onClick = {
                 onControllerInteraction.invoke()
                 onClickPlaybackDialogType.invoke(PlaybackDialogType.SETTINGS)
@@ -355,6 +376,7 @@ fun LeftPlaybackButtons(
 
 @Composable
 fun RightPlaybackButtons(
+    captionsActive: Boolean,
     onControllerInteraction: () -> Unit,
     onClickPlaybackDialogType: (PlaybackDialogType) -> Unit,
     modifier: Modifier = Modifier,
@@ -366,7 +388,8 @@ fun RightPlaybackButtons(
         // Captions
         PlaybackButton(
             enabled = true,
-            iconRes = R.drawable.captions_svgrepo_com,
+            iconRes = R.drawable.jt_cc,
+            badge = captionsActive,
             onClick = {
                 onControllerInteraction.invoke()
                 onClickPlaybackDialogType.invoke(PlaybackDialogType.CAPTIONS)
@@ -375,9 +398,9 @@ fun RightPlaybackButtons(
             modifier = Modifier,
         )
         // Audio
-        PlaybackFaButton(
+        PlaybackButton(
             enabled = true,
-            iconRes = R.string.fa_volume_high,
+            iconRes = R.drawable.jt_audio,
             onClick = {
                 onControllerInteraction.invoke()
                 onClickPlaybackDialogType.invoke(PlaybackDialogType.AUDIO)
@@ -409,7 +432,7 @@ fun PlaybackButtons(
             horizontalArrangement = Arrangement.spacedBy(buttonSpacing),
         ) {
             PlaybackButton(
-                iconRes = R.drawable.baseline_skip_previous_24,
+                iconRes = R.drawable.jt_skip_previous,
                 onClick = {
                     onControllerInteraction.invoke()
                     onPlaybackActionClick.invoke(PlaybackAction.Previous)
@@ -418,7 +441,7 @@ fun PlaybackButtons(
                 onControllerInteraction = onControllerInteraction,
             )
             PlaybackButton(
-                iconRes = R.drawable.baseline_fast_rewind_24,
+                iconRes = R.drawable.jt_seek_back,
                 onClick = {
                     onControllerInteraction.invoke()
                     player.seekBack(seekBack)
@@ -427,7 +450,7 @@ fun PlaybackButtons(
             )
             PlaybackButton(
                 modifier = Modifier.focusRequester(initialFocusRequester),
-                iconRes = if (showPlay) R.drawable.baseline_play_arrow_24 else R.drawable.baseline_pause_24,
+                iconRes = if (showPlay) R.drawable.jt_play else R.drawable.jt_pause,
                 onClick = {
                     onControllerInteraction.invoke()
                     if (showPlay) {
@@ -442,7 +465,7 @@ fun PlaybackButtons(
                 onControllerInteraction = onControllerInteraction,
             )
             PlaybackButton(
-                iconRes = R.drawable.baseline_fast_forward_24,
+                iconRes = R.drawable.jt_seek_forward,
                 onClick = {
                     onControllerInteraction.invoke()
                     player.seekForward(seekForward)
@@ -450,7 +473,7 @@ fun PlaybackButtons(
                 onControllerInteraction = onControllerInteraction,
             )
             PlaybackButton(
-                iconRes = R.drawable.baseline_skip_next_24,
+                iconRes = R.drawable.jt_skip_next,
                 onClick = {
                     onControllerInteraction.invoke()
                     onPlaybackActionClick.invoke(PlaybackAction.Next)
@@ -469,36 +492,47 @@ fun PlaybackButton(
     onControllerInteraction: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    badge: Boolean = false,
     interactionSource: MutableInteractionSource? = null,
 ) {
-    val selectedColor = MaterialTheme.colorScheme.border
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val ink = Color(0xFF0A0A0A)
+    val paper = Color(0xFFF2F2F0)
     Button(
         enabled = enabled,
         onClick = onClick,
-//        shape = ButtonDefaults.shape(CircleShape),
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
         colors =
             ClickableSurfaceDefaults.colors(
-                containerColor = AppColors.TransparentBlack25,
-                focusedContainerColor = selectedColor,
+                containerColor = Color.Transparent,
+                focusedContainerColor = paper,
+                disabledContainerColor = Color.Transparent,
             ),
-        contentPadding = PaddingValues(4.dp),
-        interactionSource = interactionSource,
+        contentPadding = PaddingValues(6.dp),
+        interactionSource = source,
         modifier =
             modifier
-                .size(36.dp, 36.dp)
+                .size(40.dp, 40.dp)
                 .onFocusChanged { onControllerInteraction.invoke() },
     ) {
-        Icon(
-            modifier = Modifier.fillMaxSize(),
-            painter = painterResource(iconRes),
-            contentDescription = "",
-            tint =
-                if (LocalTheme.current == AppThemeColors.OLED_BLACK) {
-                    LocalContentColor.current
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-        )
+        Box(Modifier.fillMaxSize()) {
+            Icon(
+                modifier = Modifier.fillMaxSize(),
+                painter = painterResource(iconRes),
+                contentDescription = "",
+                tint = if (focused) ink else paper.copy(alpha = if (enabled) 1f else .35f),
+            )
+            if (badge) {
+                // Jelly-red dot: subtitles on
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(6.dp)
+                        .background(Color(0xFFE2264D), CircleShape),
+                )
+            }
+        }
     }
 }
 
@@ -647,7 +681,7 @@ private fun ButtonPreview() {
     WholphinTheme {
         Row(Modifier.background(Color.Red)) {
             PlaybackButton(
-                iconRes = R.drawable.baseline_play_arrow_24,
+                iconRes = R.drawable.jt_play,
                 onClick = {},
                 onControllerInteraction = {},
             )

@@ -883,7 +883,7 @@ class PlaybackViewModel
                         }
 
                         if (subtitleIndex != null) {
-                            viewModelScope.launchIO { loadSubtitleDelay() }
+                            viewModelScope.launchIO { loadSubtitleDelay(carry = true) }
                         }
                     }
                 }
@@ -941,7 +941,7 @@ class PlaybackViewModel
                                     ),
                             )
                         }
-                        loadSubtitleDelay()
+                        loadSubtitleDelay(carry = false)
                         return@withContext true
                     }
                 } else {
@@ -1618,8 +1618,9 @@ class PlaybackViewModel
             subtitleDelaySaveJob?.cancel()
             updateCurrentPlayback {
                 it?.let {
-                    val newDelay = it.subtitleDelay + delta
-                    val result = it.copy(subtitleDelay = it.subtitleDelay + delta)
+                    val newDelay = (it.subtitleDelay + delta).coerceIn((-60).seconds, 60.seconds)
+                    sessionDelay = it.item.data.seriesId to newDelay
+                    val result = it.copy(subtitleDelay = newDelay)
                     subtitleDelaySaveJob =
                         viewModelScope.launchIO {
                             // Debounce & save
@@ -1637,12 +1638,20 @@ class PlaybackViewModel
             }
         }
 
-        suspend fun loadSubtitleDelay() {
+        // Last timing used this session, carried to the next episode of the same series
+        private var sessionDelay: Pair<java.util.UUID?, Duration>? = null
+
+        suspend fun loadSubtitleDelay(carry: Boolean = false) {
             state.value.currentPlayback?.let {
                 if (it.subtitleIndexEnabled) {
                     val result =
                         itemPlaybackRepository.getTrackModifications(it.item.id, it.subtitleIndex)
-                    if (result != null) {
+                    if (result == null) {
+                        val carried =
+                            sessionDelay?.takeIf { s -> carry && s.first != null && s.first == it.item.data.seriesId }
+                        // A different track starts from zero; a new episode keeps the series timing
+                        updateCurrentPlayback { c -> c?.copy(subtitleDelay = carried?.second ?: Duration.ZERO) }
+                    } else {
                         Timber.v(
                             "Loading subtitle delay %s for track=%s, itemId=%s",
                             result.delayMs,
