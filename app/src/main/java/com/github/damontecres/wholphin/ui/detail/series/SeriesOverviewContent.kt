@@ -53,6 +53,9 @@ import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
+import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
+import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
+import com.github.damontecres.wholphin.jellytip.nav.JellytipSeasonChips
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.AspectRatios
@@ -74,6 +77,7 @@ import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.extensions.ticks
+import java.util.UUID
 import kotlin.time.Duration
 
 @Composable
@@ -92,6 +96,8 @@ fun SeriesOverviewContent(
     guestStarRowFocusRequester: FocusRequester,
     extrasRowFocusRequester: FocusRequester,
     onChangeSeason: (Int) -> Unit,
+    nextUpId: UUID?,
+    onOpenSeries: () -> Unit,
     onFocusEpisode: (Int) -> Unit,
     onClick: (BaseItem) -> Unit,
     onLongClick: (BaseItem) -> Unit,
@@ -189,22 +195,50 @@ fun SeriesOverviewContent(
                                 PaddingValues(start = 0.dp, end = 16.dp)
                             }
                         }
-                    TabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        tabs = tabs,
-                        onClick =
-                            remember {
-                                {
-                                    selectedTabIndex = it
-                                    currentOnChangeSeason(it)
-                                    requestFocusAfterSeason = true
+                    val seasonLabels =
+                        remember(seasons.size, seasons.map { it?.indexNumber }) {
+                            seasons.mapIndexed { i, season ->
+                                when (val n = season?.indexNumber) {
+                                    null -> "S${i + 1}"
+                                    0 -> "Specials"
+                                    else -> "S$n"
                                 }
-                            },
+                            }
+                        }
+                    val seasonCrumb =
+                        seasons.getOrNull(selectedTabIndex)?.let { s ->
+                            s.name ?: s.indexNumber?.let { formatSeasonNumber(it) }
+                        } ?: "Season"
+                    JellytipBreadcrumb(
+                        crumbs =
+                            listOfNotNull(
+                                JellytipCrumb(series.name ?: "", onOpenSeries),
+                                JellytipCrumb(seasonCrumb, { tabFocusRequesters.getOrNull(selectedTabIndex)?.tryRequestFocus() }),
+                                focusedEpisode?.let { ep ->
+                                    val code = ep.data.indexNumber?.let { "E$it" }
+                                    JellytipCrumb(
+                                        listOfNotNull(code, ep.name).joinToString(" \u00B7 "),
+                                        { episodeRowFocusRequester.tryRequestFocus() },
+                                    )
+                                },
+                            ),
+                        modifier = Modifier.padding(paddingValues).padding(start = 16.dp, top = 12.dp),
+                    )
+                    JellytipSeasonChips(
+                        labels = seasonLabels,
+                        selectedIndex = selectedTabIndex,
+                        onSelect = {
+                            if (it != selectedTabIndex) {
+                                selectedTabIndex = it
+                                currentOnChangeSeason(it)
+                            }
+                        },
+                        selectedRequester = tabFocusRequesters.getOrNull(selectedTabIndex) ?: tabRowFocusRequester,
+                        onConfirm = { requestFocusAfterSeason = true },
                         modifier =
                             Modifier
-                                .focusRequester(tabRowFocusRequester)
                                 .padding(paddingValues)
-                                .padding(bottom = 4.dp)
+                                .padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
                                 .fillMaxWidth(),
                     )
                     JellytipDetailsBlock(
@@ -321,6 +355,7 @@ fun SeriesOverviewContent(
                                                             return@onKeyEvent false
                                                         },
                                                 interactionSource = interactionSource,
+                                                cornerText = if (episode != null && episode.id == nextUpId) "Next" else null,
                                                 cardHeight = sizes.px(150f),
                                                 useSeriesForPrimary = false,
                                             )

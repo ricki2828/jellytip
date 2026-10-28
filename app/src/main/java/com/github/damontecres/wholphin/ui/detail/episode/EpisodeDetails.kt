@@ -36,6 +36,7 @@ import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
+import com.github.damontecres.wholphin.ui.detail.series.SeasonEpisodeIds
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.util.DataLoadingState
@@ -43,6 +44,11 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.extensions.ticks
 import org.jellyfin.sdk.model.serializer.toUUID
 import java.util.UUID
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
+import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
+import org.jellyfin.sdk.model.api.BaseItemKind
 import kotlin.time.Duration
 
 @Composable
@@ -161,6 +167,25 @@ fun EpisodeDetails(
                 favoriteOnClick = {
                     viewModel.setFavorite(ep.id, !ep.favorite)
                 },
+                prevId = state.prevId,
+                nextId = state.nextId,
+                onGoToEpisode = viewModel::goToEpisode,
+                onOpenSeries = {
+                    ep.data.seriesId?.let { viewModel.navigateTo(Destination.MediaItem(it, BaseItemKind.SERIES)) }
+                },
+                onOpenSeason = {
+                    val sid = ep.data.seriesId
+                    val seasonId = ep.data.seasonId
+                    if (sid != null && seasonId != null) {
+                        viewModel.navigateTo(
+                            Destination.SeriesOverview(
+                                sid,
+                                BaseItemKind.SERIES,
+                                SeasonEpisodeIds(seasonId, ep.data.parentIndexNumber, null, null),
+                            ),
+                        )
+                    }
+                },
                 canDelete = canDelete,
                 onConfirmDelete = { viewModel.deleteItem(ep) },
                 onChooseVersion = { contextActions.onChooseVersion.invoke(ep, it) },
@@ -219,6 +244,11 @@ fun EpisodeDetailsContent(
     watchOnClick: () -> Unit,
     favoriteOnClick: () -> Unit,
     moreOnClick: () -> Unit,
+    prevId: UUID?,
+    nextId: UUID?,
+    onGoToEpisode: (UUID) -> Unit,
+    onOpenSeries: () -> Unit,
+    onOpenSeason: () -> Unit,
     canDelete: Boolean,
     onConfirmDelete: () -> Unit,
     onChooseVersion: (MediaSourceInfo) -> Unit,
@@ -235,11 +265,24 @@ fun EpisodeDetailsContent(
     RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
     Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         JellytipDetailsBackground(ep, emptyList(), buttonRowFocused)
+        JellytipBreadcrumb(
+            crumbs =
+                listOfNotNull(
+                    ep.data.seriesName?.let { JellytipCrumb(it, onOpenSeries) },
+                    ep.data.seasonName?.let { JellytipCrumb(it, onOpenSeason) },
+                    JellytipCrumb(
+                        listOfNotNull(dto.indexNumber?.let { "E$it" }, ep.name).joinToString(" \u00B7 "),
+                        {},
+                    ),
+                ),
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 64.dp, top = 24.dp),
+        )
         JellytipDetailsBlock(
             item = ep,
             subtitle = ep.ui.episodeCornerText?.let { "$it \u00B7 ${ep.name ?: ""}" } ?: ep.name,
             buttons =
                 buildList {
+                    if (prevId != null) add(JellytipButton("\u2039 Prev ep", { onGoToEpisode(prevId) }))
                     add(
                         JellytipButton(
                             label = stringResource(if (resumePosition > Duration.ZERO) R.string.resume else R.string.play),
@@ -265,6 +308,7 @@ fun EpisodeDetailsContent(
                         ),
                     )
                     add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
+                    if (nextId != null) add(JellytipButton("Next ep \u203A", { onGoToEpisode(nextId) }))
                 },
             trailers = emptyList(),
             onTrailer = {},
