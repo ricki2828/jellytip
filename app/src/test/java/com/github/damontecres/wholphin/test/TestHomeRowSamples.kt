@@ -138,6 +138,7 @@ class TestHomeRowSamples {
                 displayPreferencesService = mockk(),
                 serverPluginApi = mockk(),
                 serverDao = mockk(),
+                jellytipCarousels = mockk(),
             )
 
         val str = """{

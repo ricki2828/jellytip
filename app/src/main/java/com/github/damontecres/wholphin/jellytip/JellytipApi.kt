@@ -200,6 +200,41 @@ class JellytipApi
                 }
             }
 
+        /**
+         * GET a companion API path (e.g. `/v1/home/carousels`) and return the body, or null on any failure.
+         * Same auth as [getExtras]: the manual token if set, else the current Jellyfin session.
+         */
+        suspend fun getJson(path: String): String? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip API %s returned %s", path, response.code)
+                            return@withContext null
+                        }
+                        response.body.string()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip API %s unavailable", path)
+                    null
+                }
+            }
+
         companion object {
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
