@@ -31,4 +31,9 @@
     <string name="jellytip_subtitles_searching_long" translatable="false">Searching subtitle providers… this can take up to a minute</string>
     <string name="jellytip_subtitles_menu" translatable="false">Subtitles</string>
     <string name="jellytip_best_match" translatable="false">Get best match</string>
+    <string name="jellytip_subtitle_timing" translatable="false">Subtitle timing</string>
+    <string name="jellytip_subtitle_timing_hint" translatable="false">Left / Right adjust, Up / Down 5 s, OK resets</string>
+    <string name="jellytip_subtitles_later" translatable="false">subtitles later</string>
+    <string name="jellytip_subtitles_earlier" translatable="false">subtitles earlier</string>
+    <string name="jellytip_subtitles_in_sync" translatable="false">in sync</string>
 </resources>

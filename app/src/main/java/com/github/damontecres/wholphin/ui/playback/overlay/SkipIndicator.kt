@@ -57,7 +57,7 @@ fun SkipIndicator(
                     .fillMaxSize()
                     .rotate(currentRotation)
                     .ifElse(backward, Modifier.scale(scaleX = -1f, scaleY = 1f)),
-            painter = painterResource(id = R.drawable.circular_arrow_right),
+            painter = painterResource(id = R.drawable.jt_ring_arrow),
             contentDescription = null,
         )
         Text(
