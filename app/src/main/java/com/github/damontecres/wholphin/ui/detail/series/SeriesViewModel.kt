@@ -123,6 +123,10 @@ class SeriesViewModel
         @Volatile
         private var nextUp: BaseItemDto? = null
 
+        /** Set when the series page opens an episode so Back lands on the episode row. */
+        @Volatile
+        var returnToEpisodes = false
+
         private val navPrefs by lazy { context.getSharedPreferences("jellytip_nav", Context.MODE_PRIVATE) }
 
         private fun rememberedSeason(): Int? = navPrefs.getInt("season_$seriesId", -1).takeIf { it >= 0 }
@@ -153,7 +157,7 @@ class SeriesViewModel
                 backdropService.submit(series)
 
                 val nextUpDeferred =
-                    if (seriesPageType == SeriesPageType.OVERVIEW) {
+                    run {
                         viewModelScope.async(WholphinDispatchers.IO) {
                             try {
                                 api.tvShowsApi
@@ -167,15 +171,13 @@ class SeriesViewModel
                                 null
                             }
                         }
-                    } else {
-                        null
                     }
                 val seasonsDeferred = getSeasons(series, seasonEpisodeIds?.seasonNumber)
-                nextUp = nextUpDeferred?.await()
+                nextUp = nextUpDeferred.await()
 
                 // Opened without a season: last-viewed season for this series, else the one holding the next-up episode
                 val resolvedIds =
-                    if (seasonEpisodeIds == null && seriesPageType == SeriesPageType.OVERVIEW) {
+                    if (seasonEpisodeIds == null) {
                         val all = seasonsDeferred.await().filterNotNull()
                         val remembered = rememberedSeason()
                         val target = remembered ?: nextUp?.parentIndexNumber
@@ -187,7 +189,7 @@ class SeriesViewModel
                     }
 
                 val episodeListDeferred =
-                    if (seriesPageType == SeriesPageType.OVERVIEW) {
+                    run {
                         viewModelScope.async(WholphinDispatchers.IO) {
                             if (resolvedIds != null) {
                                 loadEpisodesInternal(
@@ -200,8 +202,6 @@ class SeriesViewModel
                                 EpisodeList.Error(message = "Could not determine season")
                             }
                         }
-                    } else {
-                        CompletableDeferred(value = EpisodeList.Loading)
                     }
                 val (seasons, episodes) =
                     try {
@@ -217,7 +217,7 @@ class SeriesViewModel
                     }
                 Timber.v("Done")
 
-                if (seriesPageType == SeriesPageType.OVERVIEW && resolvedIds != null) {
+                if (resolvedIds != null) {
                     viewModelScope.launchIO {
                         val index =
                             (seasons as? ApiRequestPager<*>)?.let {
@@ -234,9 +234,11 @@ class SeriesViewModel
                             it.copy(seasonTabIndex = index.coerceAtLeast(0))
                         }
                     }
-                    viewModelScope.launchIO {
-                        val extras = extrasService.getExtras(resolvedIds.seasonId)
-                        _state.update { it.copy(extras = extras) }
+                    if (seriesPageType == SeriesPageType.OVERVIEW) {
+                        viewModelScope.launchIO {
+                            val extras = extrasService.getExtras(resolvedIds.seasonId)
+                            _state.update { it.copy(extras = extras) }
+                        }
                     }
                 }
                 val remoteTrailers = trailerService.getRemoteTrailers(series)
@@ -411,7 +413,7 @@ class SeriesViewModel
                 episodeId,
                 episodeNumber,
             )
-            if (seriesPageType == SeriesPageType.OVERVIEW && seasonNum != null) {
+            if (seasonNum != null) {
                 navPrefs.edit().putInt("season_$seriesId", seasonNum).apply()
             }
             // No explicit episode: land on the next-up one when it lives in this season
@@ -458,7 +460,7 @@ class SeriesViewModel
                     it.copy(
                         peopleInEpisode = PeopleInItem(),
                         episodes = EpisodeList.Loading,
-                        extras = emptyList(),
+                        extras = if (seriesPageType == SeriesPageType.OVERVIEW) emptyList() else it.extras,
                     )
                 }
             }
@@ -475,9 +477,11 @@ class SeriesViewModel
                     position.update { it.copy(episodeRowIndex = ok.initialEpisodeIndex) }
                 }
             }
-            viewModelScope.launchIO {
-                val extras = extrasService.getExtras(seasonId)
-                _state.update { it.copy(extras = extras) }
+            if (seriesPageType == SeriesPageType.OVERVIEW) {
+                viewModelScope.launchIO {
+                    val extras = extrasService.getExtras(seasonId)
+                    _state.update { it.copy(extras = extras) }
+                }
             }
         }
 

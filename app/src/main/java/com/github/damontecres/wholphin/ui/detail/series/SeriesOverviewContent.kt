@@ -246,6 +246,14 @@ fun SeriesOverviewContent(
                         subtitle = episodeText,
                         buttons =
                             buildList {
+                                val episodeCount = (episodes as? EpisodeList.Success)?.episodes?.size ?: 0
+                                if (episodeCount > 1) {
+                                    add(
+                                        JellytipButton("\u2039 Prev ep", {
+                                            onFocusEpisode((position.episodeRowIndex - 1).coerceAtLeast(0))
+                                        }),
+                                    )
+                                }
                                 add(
                                     JellytipButton(
                                         stringResource(if (resume > Duration.ZERO) R.string.resume else R.string.play),
@@ -266,6 +274,13 @@ fun SeriesOverviewContent(
                                     ),
                                 )
                                 add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
+                                if (episodeCount > 1) {
+                                    add(
+                                        JellytipButton("Next ep \u203A", {
+                                            onFocusEpisode((position.episodeRowIndex + 1).coerceAtMost(episodeCount - 1))
+                                        }),
+                                    )
+                                }
                             },
                         trailers = emptyList(),
                         onTrailer = {},
@@ -290,6 +305,10 @@ fun SeriesOverviewContent(
                                     }
                                     val state = rememberLazyListState(position.episodeRowIndex)
                                     var epPosition by rememberInt(position.episodeRowIndex)
+                                    LaunchedEffect(position.episodeRowIndex) {
+                                        epPosition = position.episodeRowIndex
+                                        state.animateScrollToItem(position.episodeRowIndex)
+                                    }
                                     CompositionLocalProvider(LocalJellytipRowFocused provides cardRowHasFocus) {
                                     LazyRow(
                                         state = state,
