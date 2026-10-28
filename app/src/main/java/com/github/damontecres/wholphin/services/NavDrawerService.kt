@@ -246,6 +246,12 @@ class NavDrawerService
                     }
                 }
 
+            // Never leave the drawer without items (e.g. every entry unpinned)
+            if (items.isEmpty() && moreItems.isNotEmpty()) {
+                items.addAll(moreItems)
+                moreItems.clear()
+            }
+
             _state.update {
                 it.copy(
                     items = items,

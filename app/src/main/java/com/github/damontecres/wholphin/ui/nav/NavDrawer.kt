@@ -511,10 +511,9 @@ fun NavDrawer(
                             }
                         }
                         item {
-                            JellytipStorageMeter(viewModel.jellytipApi, drawerOpen = isOpen)
-                        }
-                        item {
                             val interactionSource = remember { MutableInteractionSource() }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            JellytipStorageMeter(viewModel.jellytipApi, drawerOpen = isOpen)
                             IconNavItem(
                                 text = stringResource(R.string.settings),
                                 icon = Icons.Default.Settings,
@@ -530,6 +529,7 @@ fun NavDrawer(
                                 },
                                 modifier = Modifier,
                             )
+                            }
                         }
                     }
                 }
