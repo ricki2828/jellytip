@@ -12,23 +12,27 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
 from .cache import Cache, EMPTY_TTL, ERROR_TTL, SCORES_TTL
+from .imgscores import ImgScores
 from .letterboxd import Letterboxd
 from .scores import ScoreProvider
 from .stills import fetch_stills
 
 EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
+BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
 TOKEN_RE = re.compile(r'Token="?([^",\s]+)"?')
 AUTH_TTL = 600
 
 
 class Service:
-    def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None):
+    def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None, imgscores=None):
         self.token = env["JELLYTIP_TOKEN"]
         self.jf_url = (env.get("JELLYFIN_URL") or "").rstrip("/")
         self._auth_cache = {}  # sha256(token) -> (ok, expires); raw tokens are never stored or logged
         self.cache = cache or Cache(env.get("JELLYTIP_DB", "jellytip.db"))
         self.scores = scores or ScoreProvider(env.get("MDBLIST_KEY"), env.get("OMDB_KEY"))
+        data_dir = os.path.dirname(env.get("LB_EXPORT", "")) or "."
+        self.imgscores = imgscores or ImgScores(env.get("IMGSCORES_FILE") or os.path.join(data_dir, "imgscores.json"))
         self.stills, self.tmdb_key = stills, env.get("TMDB_KEY")
         self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env))
         self.carousels_path = env.get("CAROUSELS_FILE") or os.path.join(os.path.dirname(env.get("LB_EXPORT", "")) or ".", "carousels.json")
@@ -52,7 +56,7 @@ class Service:
         return fetch
 
     def extras(self, tmdb, imdb, kind):
-        ck = f"extras:{kind}:{tmdb or ''}:{imdb or ''}"
+        ck = f"extras2:{kind}:{tmdb or ''}:{imdb or ''}"
         cached = self.cache.get(ck)
         if cached is None:
             scores, ok1 = self.scores.lookup(tmdb, imdb, kind)
@@ -61,7 +65,7 @@ class Service:
             ttl = ERROR_TTL if not (ok1 and ok2) else SCORES_TTL if scores else EMPTY_TTL
             self.cache.put(ck, cached, ttl)
         # Letterboxd is a local file read: always fresh, never part of the 7-day cache.
-        return {"scores": cached["scores"], "letterboxd": self.lb.film(tmdb) if tmdb else None, "stills": cached["stills"]}
+        return {"scores": cached["scores"], "letterboxd": self.lb.film(tmdb) if tmdb else None, "stills": self.imgscores.rank_stills(cached["stills"])}
 
     @staticmethod
     def jellyfin_token(authorization, emby_token):
@@ -109,6 +113,10 @@ class Service:
             if (tmdb and not tmdb.isdigit()) or (imdb and not re.fullmatch(r"tt\d+", imdb)):
                 return 400, {"error": "bad tmdb/imdb id"}
             return 200, self.extras(tmdb or None, imdb or None, kind)
+        m = BACKDROPS_RE.match(path)
+        if m:
+            res = self.imgscores.backdrops(m.group(1).replace("-", "").lower())
+            return 200, res if res is not None else {"itemId": m.group(1), "animation": False, "backdrops": None}
         if path == "/v1/home/carousels":
             try:
                 with open(self.carousels_path, encoding="utf-8") as f:

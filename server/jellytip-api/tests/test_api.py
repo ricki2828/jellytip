@@ -18,7 +18,7 @@ def bd(path, w, lang=None, votes=0.0):
 def test_stills_textless_first_then_width_then_votes_and_cap():
     b = [bd("/en4k", 3840, "en"), bd("/t1080", 1920, None, 5), bd("/t4k", 3840, None, 1), bd("/t1080b", 1920, None, 7)]
     assert [s["url"].rsplit("/", 1)[1] for s in rank(b)] == ["t4k", "t1080b", "t1080", "en4k"]
-    assert len(rank([bd(f"/{i}", 1000 + i) for i in range(30)])) == 12
+    assert len(rank([bd(f"/{i}", 1000 + i) for i in range(40)])) == 30 and len(rank([bd(f"/{i}", 1000 + i) for i in range(40)], 12)) == 12
     assert rank(None) == [] and rank([{"width": 5}]) == []
 
 
@@ -181,3 +181,45 @@ def test_letterboxd_home_lists_need_enough_library_films(tmp_path):
         {"slug": "small", "name": "Small", "items": [{"tmdb": 1, "title": "t"}]}]}))
     lb = Letterboxd(str(export), lambda: [{"Id": f"j{n}", "ProviderIds": {"Tmdb": str(n)}} for n in range(1, 7)])
     assert lb.home_lists() == [{"slug": "big", "name": "Big", "itemIds": [f"j{n}" for n in range(1, 7)]}]
+
+
+def _scores_file(tmp_path):
+    p = tmp_path / "imgscores.json"
+    p.write_text(json.dumps({"stills": {"a": 0.2, "b": 0.9, "c": 0.7}, "items": {
+        "a" * 32: {"anim": False, "backdrops": [{"i": 0, "tag": "t", "s": 0.1}, {"i": 1, "tag": "t", "s": 0.95},
+                                                {"i": 2, "tag": "t", "s": None}, {"i": 3, "tag": "t", "s": 0.6}]},
+        "b" * 32: {"anim": True, "backdrops": [{"i": 0, "tag": "t", "s": None}, {"i": 1, "tag": "t", "s": None}]}}}))
+    return str(p)
+
+
+def test_stills_ranked_photo_first_unscored_next_low_last(tmp_path):
+    from jellytip_api.imgscores import ImgScores
+    r = ImgScores(_scores_file(tmp_path)).rank_stills(
+        [{"url": u} for u in ("a", "z", "b", "c")], limit=3)
+    assert [(s["url"], s["photoScore"]) for s in r] == [("b", 0.9), ("c", 0.7), ("z", None)]
+
+
+def test_stills_without_score_file_keep_input_order(tmp_path):
+    from jellytip_api.imgscores import ImgScores
+    r = ImgScores(str(tmp_path / "missing.json")).rank_stills([{"url": "x"}, {"url": "y"}])
+    assert [s["url"] for s in r] == ["x", "y"] and r[0]["photoScore"] is None
+
+
+def test_backdrops_ordered_by_photo_score_and_animation_natural(tmp_path):
+    from jellytip_api.imgscores import ImgScores
+    s = ImgScores(_scores_file(tmp_path))
+    assert [b["index"] for b in s.backdrops("a" * 32)["backdrops"]] == [1, 3, 2, 0]
+    a = s.backdrops("b" * 32)
+    assert a["animation"] and [b["index"] for b in a["backdrops"]] == [0, 1]
+    assert s.backdrops("c" * 32) is None
+
+
+def test_backdrops_route_requires_auth_and_returns_null_for_unscored(tmp_path):
+    from jellytip_api.imgscores import ImgScores
+    svc = Service({"JELLYTIP_TOKEN": "tok", "JELLYTIP_DB": str(tmp_path / "c.db")}, scores=object(),
+                  stills=lambda *a: ([], True), letterboxd=object(), cache=Cache(str(tmp_path / "c2.db")),
+                  imgscores=ImgScores(_scores_file(tmp_path)))
+    assert svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "bad")[0] == 401
+    st, body = svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "tok")
+    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95}
+    assert svc.route("/v1/items/" + "c" * 32 + "/backdrops", {}, "tok")[1]["backdrops"] is None

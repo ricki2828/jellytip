@@ -276,9 +276,9 @@ def order_items(items, order, rng):
     if order == "random":
         items = list(items)
         rng.shuffle(items)
-    elif order in ("release", "release.asc"):
+    elif order == "release.asc":
         items = sorted(items, key=lambda i: i.get("PremiereDate") or "")
-    elif order == "release.desc":
+    elif order in ("release", "release.desc"):  # Kometa: plain `release` is newest first
         items = sorted(items, key=lambda i: i.get("PremiereDate") or "", reverse=True)
     elif order == "added.desc":
         items = sorted(items, key=lambda i: i.get("DateCreated") or "", reverse=True)

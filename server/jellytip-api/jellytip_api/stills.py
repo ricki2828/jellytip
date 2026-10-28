@@ -4,11 +4,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-MAX_STILLS = 12
+MAX_STILLS = 12  # returned to the app
+CANDIDATES = 30  # fetched and cached so the realism scorer can promote photos
 IMG_BASE = "https://image.tmdb.org/t/p/original"
 
 
-def rank(backdrops, limit=MAX_STILLS):
+def rank(backdrops, limit=CANDIDATES):
     """Textless first (iso_639_1 null), then width desc, then vote_average desc."""
     def key(b):
         return (b.get("iso_639_1") is not None, -(b.get("width") or 0), -(b.get("vote_average") or 0))
@@ -17,7 +18,7 @@ def rank(backdrops, limit=MAX_STILLS):
             for b in sorted((b for b in backdrops or [] if b.get("file_path")), key=key)[:limit]]
 
 
-def fetch_stills(tmdb_key, tmdb_id, kind, fetch=None):
+def fetch_stills(tmdb_key, tmdb_id, kind, fetch=None, limit=CANDIDATES):
     """Returns (stills, complete)."""
     if not (tmdb_key and tmdb_id):
         return [], False
@@ -31,4 +32,4 @@ def fetch_stills(tmdb_key, tmdb_id, kind, fetch=None):
                 data = json.load(r)
     except (urllib.error.URLError, ValueError, OSError):
         return [], False
-    return rank(data.get("backdrops")), True
+    return rank(data.get("backdrops"), limit), True
