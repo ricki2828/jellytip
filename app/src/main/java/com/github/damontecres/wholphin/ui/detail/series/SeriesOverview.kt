@@ -210,6 +210,8 @@ fun SeriesOverview(
                 castCrewRowFocusRequester = castCrewRowFocusRequester,
                 guestStarRowFocusRequester = guestStarRowFocusRequester,
                 extrasRowFocusRequester = extrasRowFocusRequester,
+                nextUpId = state.nextUpId,
+                onOpenSeries = { viewModel.navigateTo(st.data.destination()) },
                 onChangeSeason = { index ->
                     if (index != position.seasonTabIndex) {
                         state.seasons.getOrNull(index)?.let { season ->
