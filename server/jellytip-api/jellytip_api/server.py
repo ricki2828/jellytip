@@ -47,6 +47,7 @@ class Service:
         self.token = env["JELLYTIP_TOKEN"]
         self.env = env
         self._tag_cache = {}
+        self._pid_cache = {}
         self.jf = Jellyfin(env.get("JELLYFIN_URL"), env.get("JELLYFIN_KEY"), env.get("JELLYFIN_USER", "ricki28"))
         self.subs = Jobs(self.jf)
         self.jf_url = (env.get("JELLYFIN_URL") or "").rstrip("/")
@@ -102,6 +103,24 @@ class Service:
             self.cache.put(ck, cached, ttl)
         # Letterboxd is a local file read: always fresh, never part of the 7-day cache.
         return {"scores": cached["scores"], "letterboxd": self.lb.film(tmdb) if tmdb else None, "stills": self.imgscores.rank_stills(cached["stills"])}
+
+    def _provider_ids(self, item_id):
+        """(tmdb, imdb, kind) of a Jellyfin item, cached 1 h; ('', '', None) when unknown."""
+        hit = self._pid_cache.get(item_id)
+        if hit and time.time() - hit[0] < 3600:
+            return hit[1]
+        out = ("", "", None)
+        if self.jf.ok:
+            try:
+                it = self.jf.call("GET", f"/Users/{self.jf.uid()}/Items/{item_id}", timeout=5) or {}
+                ids = it.get("ProviderIds") or {}
+                tmdb, imdb = str(ids.get("Tmdb") or ""), str(ids.get("Imdb") or "")
+                out = (tmdb if tmdb.isdigit() else "", imdb if re.fullmatch(r"tt\d+", imdb) else "",
+                       {"Movie": "movie", "Series": "series"}.get(it.get("Type")))
+            except Exception:
+                return out  # do not cache failures
+        self._pid_cache[item_id] = (time.time(), out)
+        return out
 
     def _backdrop_tags(self, item_id):
         """Current Jellyfin BackdropImageTags of the item (5 min cache), or None when unknown (then the stored set is trusted)."""
@@ -254,6 +273,9 @@ class Service:
             imdb = query.get("imdb", "")
             if (tmdb and not tmdb.isdigit()) or (imdb and not re.fullmatch(r"tt\d+", imdb)):
                 return 400, {"error": "bad tmdb/imdb id"}
+            if not tmdb and not imdb:  # home/list items carry no ProviderIds: resolve them from the Jellyfin item itself
+                tmdb, imdb, found_kind = self._provider_ids(m.group(1).replace("-", "").lower())
+                kind = found_kind or kind
             return 200, self.extras(tmdb or None, imdb or None, kind)
         m = AUDIENCE_RE.match(path)
         if m:

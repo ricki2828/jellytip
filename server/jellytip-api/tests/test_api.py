@@ -416,3 +416,21 @@ def test_intro_endpoints(tmp_path):
     assert st == 200 and body["version"] == "abc" and body["url"] == "v1/intro.mp4"
     st, fb = svc.intro(True)
     assert st == 200 and isinstance(fb, FileBody) and fb.etag == "abc"
+
+
+def test_extras_blank_ids_resolved_from_jellyfin_item(tmp_path):
+    calls = []
+    s = make_service(tmp_path, calls)
+
+    class FakeJf:
+        ok = True
+
+        def uid(self):
+            return "u"
+
+        def call(self, method, path, params=None, timeout=30):
+            assert path == "/Users/u/Items/" + "a" * 32
+            return {"Type": "Movie", "ProviderIds": {"Tmdb": "829", "Imdb": "tt0034583"}}
+    s.jf = FakeJf()
+    st, body = s.route("/v1/items/" + "a" * 32 + "/extras", {"tmdb": "", "imdb": "", "type": "movie"}, "tok")
+    assert st == 200 and calls == ["829"] and body["scores"]
