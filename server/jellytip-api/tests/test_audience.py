@@ -17,3 +17,18 @@ def test_merge_watched_one_row_per_person_latest_wins():
     got = merge_watched(rows)
     assert [r["name"] for r in got] == ["Daniel", "Nadine"]
     assert got[0]["source"] == "jellyfin" and got[0]["completed"] is True
+
+
+def test_audience_route_is_admin_only(tmp_path):
+    import types
+    from jellytip_api.cache import Cache
+    from jellytip_api.server import Service
+    svc = Service({"JELLYTIP_TOKEN": "secret", "JELLYFIN_URL": "http://jf", "JELLYFIN_KEY": "k"},
+                  scores=object(), stills=lambda *a: ([], True), letterboxd=object(), cache=Cache(str(tmp_path / "c.db")))
+    svc.jellyfin_ok = types.MethodType(lambda self, t: t in ("admin", "user"), svc)
+    svc.jellyfin_admin = types.MethodType(lambda self, t: "Ricki" if t == "admin" else None, svc)
+    svc.audience.get = lambda jid: (200, {"requestedBy": [], "watchedBy": []})
+    path = "/v1/items/" + "a" * 32 + "/audience"
+    assert svc.route(path, {}, "secret")[0] == 403  # shared app token is never admin
+    assert svc.route(path, {}, None, 'MediaBrowser Token="user"')[0] == 403
+    assert svc.route(path, {}, None, 'MediaBrowser Token="admin"') == (200, {"requestedBy": [], "watchedBy": [], "you": "Ricki"})

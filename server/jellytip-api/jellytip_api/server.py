@@ -12,7 +12,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
-from .audience import Audience, Plex
+from .audience import Audience, Plex, friendly
 from .cache import Cache, EMPTY_TTL, ERROR_TTL, SCORES_TTL
 from .imgscores import ImgScores
 from .letterboxd import Letterboxd
@@ -120,9 +120,10 @@ class Service:
         return ok
 
     def jellyfin_admin(self, jf_token):
-        """True when this Jellyfin token belongs to an administrator (/Users/Me, cached 10 min). The shared app token is never admin."""
+        """Caller's friendly name when this Jellyfin token belongs to an administrator (/Users/Me, cached 10 min), else None.
+        The shared app token is never admin."""
         if not (jf_token and self.jf_url):
-            return False
+            return None
         k = hashlib.sha256(jf_token.encode()).hexdigest()
         hit = self.admin_cache.get(k)
         now = time.time()
@@ -131,11 +132,12 @@ class Service:
         try:
             req = urllib.request.Request(f"{self.jf_url}/Users/Me", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
             with urllib.request.urlopen(req, timeout=5) as r:
-                ok = bool((json.load(r).get("Policy") or {}).get("IsAdministrator"))
+                me = json.load(r)
+                ok = friendly(me.get("Name")) if (me.get("Policy") or {}).get("IsAdministrator") else None
         except urllib.error.HTTPError:
-            ok = False
+            ok = None
         except Exception:
-            return False
+            return None
         if len(self.admin_cache) > 1000:
             self.admin_cache.clear()
         self.admin_cache[k] = (ok, now + AUTH_TTL)
@@ -162,11 +164,13 @@ class Service:
             return 200, self.extras(tmdb or None, imdb or None, kind)
         m = AUDIENCE_RE.match(path)
         if m:
-            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token)):
+            me = self.jellyfin_admin(self.jellyfin_token(authorization, emby_token))
+            if not me:
                 return 403, {"error": "admin only"}
             if not self.jf.ok:
                 return 503, {"error": "jellyfin not configured"}
-            return self.audience.get(m.group(1).replace("-", "").lower())
+            status, aud = self.audience.get(m.group(1).replace("-", "").lower())
+            return status, ({**aud, "you": me} if status == 200 else aud)
         m = BACKDROPS_RE.match(path)
         if m:
             res = self.imgscores.backdrops(m.group(1).replace("-", "").lower())
