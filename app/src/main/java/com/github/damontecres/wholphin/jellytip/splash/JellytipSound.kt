@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RawRes
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -39,7 +40,14 @@ object JellytipSound {
                         setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     }
                     prepare()
+                    // Cancelled while decoding: nobody will own this player, so release it here
+                    if (!isActive) {
+                        release()
+                        throw kotlinx.coroutines.CancellationException("prepare cancelled")
+                    }
                 }
+            } catch (ex: kotlinx.coroutines.CancellationException) {
+                throw ex
             } catch (ex: Exception) {
                 Timber.w(ex, "Jellytip: could not prepare sound %s", resId)
                 null

@@ -307,7 +307,10 @@ fun SeriesOverviewContent(
                                     var epPosition by rememberInt(position.episodeRowIndex)
                                     LaunchedEffect(position.episodeRowIndex) {
                                         epPosition = position.episodeRowIndex
-                                        state.animateScrollToItem(position.episodeRowIndex)
+                                        // D-pad moves land on an already visible card (focus scrolls it): only jump when it is off-screen (Prev/Next ep)
+                                        if (state.layoutInfo.visibleItemsInfo.none { it.index == position.episodeRowIndex }) {
+                                            state.animateScrollToItem(position.episodeRowIndex)
+                                        }
                                     }
                                     CompositionLocalProvider(LocalJellytipRowFocused provides cardRowHasFocus) {
                                     LazyRow(
@@ -323,8 +326,9 @@ fun SeriesOverviewContent(
                                     ) {
                                         itemsIndexed(eps.episodes) { episodeIndex, episode ->
                                             val interactionSource = remember { MutableInteractionSource() }
-                                            if (interactionSource.collectIsFocusedAsState().value) {
-                                                onFocusEpisode.invoke(episodeIndex)
+                                            val cardFocused by interactionSource.collectIsFocusedAsState()
+                                            LaunchedEffect(cardFocused, episodeIndex) {
+                                                if (cardFocused) onFocusEpisode.invoke(episodeIndex)
                                             }
                                             BannerCardWithTitle(
                                                 title =

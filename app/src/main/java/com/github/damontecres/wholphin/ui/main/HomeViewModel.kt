@@ -259,6 +259,7 @@ class HomeViewModel
                         if (shouldDeferRow(rowIndex, rowData)) {
                             // Would swap the item under the user's focus (e.g. Continue Watching reordered after playback)
                             deferredRows[rowIndex] = rowData
+                            scheduleIdleApply()
                             continue
                         }
                         _state.update { state ->
@@ -334,6 +335,7 @@ class HomeViewModel
             if (position.row != focusedRow) applyDeferredRows() // focus left the row: its refresh can land now
             focusedRow = position.row
             focusedColumn = position.column
+            scheduleIdleApply()
             focusedItemId = (state.value.homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(position.column)?.id
         }
 
@@ -350,6 +352,20 @@ class HomeViewModel
             val id = focusedItemId ?: return false
             if (rowIndex != focusedRow || rowData !is HomeRowLoadingState.Success) return false
             return rowData.items.getOrNull(focusedColumn)?.id != id
+        }
+
+        private var idleApplyJob: kotlinx.coroutines.Job? = null
+
+        /** Deferred rows must not stay stale forever: land them after 60 s without focus movement, but never mid-trailer. */
+        private fun scheduleIdleApply() {
+            idleApplyJob?.cancel()
+            if (deferredRows.isEmpty()) return
+            idleApplyJob =
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(IDLE_APPLY_MS)
+                    while (com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.url != null) kotlinx.coroutines.delay(5_000)
+                    applyDeferredRows()
+                }
         }
 
         private fun applyDeferredRows() {
@@ -440,3 +456,5 @@ private fun isWatchingRow(row: HomeRowConfig) =
     row is HomeRowConfig.ContinueWatching ||
         row is HomeRowConfig.NextUp ||
         row is HomeRowConfig.ContinueWatchingCombined
+
+private const val IDLE_APPLY_MS = 60_000L

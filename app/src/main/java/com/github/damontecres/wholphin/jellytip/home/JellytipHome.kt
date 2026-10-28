@@ -236,10 +236,17 @@ fun JellytipHomeHero(
                 animationSpec = tween(700),
                 modifier = Modifier.fillMaxSize(),
                 label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u, lastFocal) }
+            ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed) }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true
+            // Release the decoder after 2 min without a trailer
+            LaunchedEffect(trailerUrl, usedPlayer) {
+                if (trailerUrl == null && usedPlayer) {
+                    delay(HERO_PLAYER_IDLE_MS)
+                    usedPlayer = false
+                }
+            }
             if (usedPlayer) {
                 HeroTrailer(
                     url = trailerUrl,
@@ -321,14 +328,20 @@ fun JellytipHomeHero(
     }
 }
 
+private const val HERO_PLAYER_IDLE_MS = 120_000L
+
 @Composable
 private fun HomeKenBurns(
     url: String,
     focal: JellytipFocal?,
+    running: Boolean = true,
 ) {
     val progress = remember(url) { Animatable(0f) }
-    LaunchedEffect(url) {
-        progress.animateTo(1f, tween(KEN_BURNS_MS, easing = LinearEasing))
+    // Paused (not restarted) while a trailer plays or Home is not resumed: resume with the time left
+    LaunchedEffect(url, running) {
+        if (!running) return@LaunchedEffect
+        val left = (KEN_BURNS_MS * (1f - progress.value)).toInt()
+        if (left > 0) progress.animateTo(1f, tween(left, easing = LinearEasing))
     }
     val direction = if (abs(url.hashCode()) % 2 == 0) 1f else -1f
     AsyncImage(

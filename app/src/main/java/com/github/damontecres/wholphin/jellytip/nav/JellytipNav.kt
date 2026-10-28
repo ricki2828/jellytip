@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -99,6 +100,8 @@ fun JellytipBreadcrumb(
     }
 }
 
+private const val SEASON_DEBOUNCE_MS = 250L
+
 /**
  * Horizontal season chips ("S1 S2 ... Specials"). Focusing a chip selects it, so Left/Right switches season in place;
  * the selected season is off-white with a jelly-red underline.
@@ -116,13 +119,24 @@ fun JellytipSeasonChips(
     val textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX))
     val listState = rememberLazyListState()
     val currentOnSelect by rememberUpdatedState(onSelect)
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex in labels.indices) listState.animateScrollToItem(selectedIndex)
+    var rowFocused by remember { mutableStateOf(false) }
+    // Keep the selected chip composed: when the row is not focused, jump (instantly) so focusRestorer can always find it
+    LaunchedEffect(selectedIndex, rowFocused) {
+        if (selectedIndex !in labels.indices) return@LaunchedEffect
+        if (rowFocused) listState.animateScrollToItem(selectedIndex) else listState.scrollToItem(selectedIndex)
+    }
+    // Debounce: skimming across chips must not load every season, only the one focus settles on
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(focusedIndex) {
+        val i = focusedIndex ?: return@LaunchedEffect
+        if (i == selectedIndex) return@LaunchedEffect
+        delay(SEASON_DEBOUNCE_MS)
+        currentOnSelect(i)
     }
     LazyRow(
         state = listState,
         horizontalArrangement = Arrangement.spacedBy(sizes.px(14f)),
-        modifier = modifier.focusRestorer(selectedRequester),
+        modifier = modifier.onFocusChanged { rowFocused = it.hasFocus }.focusRestorer(selectedRequester),
     ) {
         itemsIndexed(labels) { index, label ->
             val source = remember { MutableInteractionSource() }
@@ -132,7 +146,7 @@ fun JellytipSeasonChips(
                 modifier =
                     Modifier
                         .then(if (selected) Modifier.focusRequester(selectedRequester) else Modifier)
-                        .onFocusChanged { if (it.hasFocus) currentOnSelect(index) }
+                        .onFocusChanged { if (it.hasFocus) focusedIndex = index }
                         .clip(RoundedCornerShape(sizes.px(4f)))
                         .background(if (focused) Color.White.copy(alpha = 0.16f) else Color.Transparent)
                         .clickable(interactionSource = source, indication = null, onClick = onConfirm)

@@ -170,7 +170,7 @@ fun JellytipTitledImage(
     }
     // Episode stills: which are usable (not black/blurry/non-photo) comes from the companion once per series
     val episodeArtReady by produceState(item.type != BaseItemKind.EPISODE, rankedId) {
-        JellytipApi.shared?.loadEpisodeArt(rankedId)
+        if (item.type == BaseItemKind.EPISODE) JellytipApi.shared?.loadEpisodeArt(rankedId)
         value = true
     }
     val hasTitledArt = ImageType.THUMB in item.data.imageTags.orEmpty()

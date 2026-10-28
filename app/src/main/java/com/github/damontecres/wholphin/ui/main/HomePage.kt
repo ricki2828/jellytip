@@ -161,6 +161,8 @@ fun HomePage(
                         position = clickedPosition
                         // OK while the hero trailer plays: unmute, then full screen; otherwise open the item
                         if (!JellytipTrailerControl.onOk(item)) {
+                            // Free the hero player/decoder before the main player or details page starts
+                            JellytipTrailerControl.stop()
                             viewModel.recordOpen(clickedPosition)
                             if (currentHomePrefs.clickToPlay &&
                                 homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true

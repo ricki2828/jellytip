@@ -351,9 +351,24 @@ fun MovieDetailsContent(
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
+            // Rows only exist once sectionsActive composes them: wait for that, scroll to them, then focus
             withFrameNanos { }
             withFrameNanos { }
-            for (r in listOf(PEOPLE_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
+            if (listState.layoutInfo.totalItemsCount > 1) listState.animateScrollToItem(1)
+            withFrameNanos { }
+            var focused = false
+            for (r in listOf(PEOPLE_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
+                if (focusRequesters[r].tryRequestFocus()) {
+                    focused = true
+                    break
+                }
+            }
+            // Nothing took focus: fall back to the header so Down is not swallowed forever
+            if (!focused) {
+                sectionsActive = false
+                listState.scrollToItem(0)
+                focusRequesters[HEADER_ROW].tryRequestFocus()
+            }
         }
     }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
@@ -415,8 +430,13 @@ fun MovieDetailsContent(
                             .focusRequester(focusRequesters[HEADER_ROW])
                             .onPreviewKeyEvent {
                                 if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
-                                    sectionsActive = true
-                                    true
+                                    // Already active: let the focus system move Down normally
+                                    if (sectionsActive) {
+                                        false
+                                    } else {
+                                        sectionsActive = true
+                                        true
+                                    }
                                 } else {
                                     false
                                 }

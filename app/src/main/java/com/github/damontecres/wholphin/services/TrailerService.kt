@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.net.toUri
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.BoundedCache
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.RemoteTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
@@ -68,12 +69,21 @@ class TrailerService
                 item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON } ?: item.id
             val count = if (target == item.id) item.data.localTrailerCount else null
             if (count != null && count <= 0) return emptyList()
-            return api.userLibraryApi.getLocalTrailers(target).content.map {
-                LocalTrailer(BaseItem.from(it, api))
-            }
+            val now = System.currentTimeMillis()
+            localTrailerCache[target]?.let { (at, trailers) -> if (now - at < LOCAL_TRAILER_TTL_MS) return trailers }
+            return api.userLibraryApi
+                .getLocalTrailers(target)
+                .content
+                .map { LocalTrailer(BaseItem.from(it, api)) }
+                .also { localTrailerCache[target] = now to it }
         }
 
+        // Per target id (the series for episodes/seasons); failures are not cached
+        private val localTrailerCache = BoundedCache<java.util.UUID, Pair<Long, List<Trailer>>>(500)
+
         companion object {
+            private const val LOCAL_TRAILER_TTL_MS = 10 * 60_000L
+
             /**
              * Note: This is explicitly <b>not</b> a member function because the injected Context is not an Activity.
              * We want to start the intent without a new task which requires the Activity context

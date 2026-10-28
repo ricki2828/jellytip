@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -193,11 +194,14 @@ fun PlaybackPageContent(
             player.subtitleDelay = delay
         } else if (ExoSubtitleOffset.offsetUs != delay.inWholeMicroseconds) {
             ExoSubtitleOffset.offsetUs = delay.inWholeMicroseconds
-            // Debounce, then re-seek so the text renderer re-reads cues at the shifted position
+            // Debounce, then re-seek so the text renderer re-reads cues at the shifted position.
+            // Only once READY: before that the renderer reads the new offset anyway, and a seek would rebuffer / override resume.
             kotlinx.coroutines.delay(400)
-            player.seekTo(player.currentPosition)
+            if (player.playbackState == androidx.media3.common.Player.STATE_READY) player.seekTo(player.currentPosition)
         }
     }
+    // The offset is process-global: never let the next item (or the hero trailer player) inherit it
+    DisposableEffect(Unit) { onDispose { ExoSubtitleOffset.offsetUs = 0L } }
 
     val presentationState = rememberPresentationState(player, false)
     val playbackState by rememberPlayerState(player)

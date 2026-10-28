@@ -229,6 +229,7 @@ class JellytipApi
         private val infoCache = BoundedCache<UUID, JellytipBackdropInfo>(MAX_CACHED)
         private val backdropFailedAt = BoundedCache<UUID, Long>(MAX_CACHED)
         private val episodeUsable = BoundedCache<UUID, Boolean>(MAX_CACHED)
+        private val episodeArtFailedAt = BoundedCache<UUID, Long>(MAX_CACHED)
         private val episodeParentsLoaded = BoundedCache<UUID, Boolean>(MAX_CACHED)
 
         /** Cached companion answer for [itemId], or null if not fetched (yet) / unreachable. */
@@ -254,10 +255,13 @@ class JellytipApi
 
         /** Fetch (once per series/season) the usable flags of its episode stills so [isEpisodeStillUsable] can answer. */
         suspend fun loadEpisodeArt(parentId: UUID) {
+            val failedAt = episodeArtFailedAt[parentId]
+            if (failedAt != null && System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) return
             if (!episodeParentsLoaded.add(parentId, true)) return
             val body = getJson("/v1/items/$parentId/episodes-art")
             if (body == null) {
                 episodeParentsLoaded.remove(parentId)
+                episodeArtFailedAt[parentId] = System.currentTimeMillis()
                 return
             }
             try {
@@ -274,6 +278,7 @@ class JellytipApi
             } catch (e: Exception) {
                 Timber.w(e, "episodes-art parse failed")
                 episodeParentsLoaded.remove(parentId)
+                episodeArtFailedAt[parentId] = System.currentTimeMillis()
             }
         }
 

@@ -23,6 +23,11 @@ import com.github.damontecres.wholphin.ui.util.ResStringProvider
 import com.github.damontecres.wholphin.ui.util.StringProvider
 import com.github.damontecres.wholphin.ui.util.StringStringProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -223,8 +228,13 @@ class HomeSettingsService
             Timber.v("Found settings: %s", settings != null)
             val resolvedSettings = settings ?: createDefault(user.id)
             currentSettings.update { resolvedSettings }
-            addJellytipCarousels(user, resolvedSettings)
+            // Background: the companion can take up to 3 s to answer and must not hold home back
+            jellytipJob?.cancel()
+            jellytipJob = jellytipScope.launch { addJellytipCarousels(user, resolvedSettings) }
         }
+
+        private val jellytipScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private var jellytipJob: Job? = null
 
         /**
          * Jellytip: merge the Kometa carousels and Letterboxd rows into the user's own rows (see
@@ -238,6 +248,8 @@ class HomeSettingsService
             if (resolved.source != HomePageSettingsSource.DEFAULT && resolved.source != HomePageSettingsSource.LOCAL) return
             try {
                 val updated = jellytipCarousels.reconcile(user.id, resolved.asHomePageSettings()) ?: return
+                // The user may have switched while the companion was answering
+                if (serverRepository.currentUser?.id != user.id) return
                 saveToLocal(user.id, updated)
                 updateCurrent(HomePageSettingsSource.LOCAL, updated)
             } catch (ex: CancellationException) {

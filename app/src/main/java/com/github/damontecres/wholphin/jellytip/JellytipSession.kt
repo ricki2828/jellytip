@@ -44,10 +44,17 @@ object JellytipOverlayKeys {
     @Volatile
     var onKey: (() -> Unit)? = null
 
+    /** When set, Back during the overlay calls this (cancel) instead of [onKey] (skip). */
+    @Volatile
+    var onBack: (() -> Unit)? = null
+
     /** @return true if the event was consumed by an active overlay */
     fun intercept(event: KeyEvent): Boolean {
         val handler = onKey ?: return false
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) handler.invoke()
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            val back = onBack
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && back != null) back.invoke() else handler.invoke()
+        }
         return true
     }
 }
