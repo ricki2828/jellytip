@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
+import com.github.damontecres.wholphin.jellytip.HeroScrollLock
+import com.github.damontecres.wholphin.jellytip.BoxScopeDownHint
+import androidx.compose.ui.Alignment
 import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import android.content.res.Resources
 import androidx.compose.animation.core.animateFloatAsState
@@ -366,6 +369,7 @@ fun SeriesDetailsContent(
     }
     var buttonRowFocused by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(true) }
+    HeroScrollLock(listState, topFocused)
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     var pageHasFocus by remember { mutableStateOf(false) }
@@ -584,6 +588,10 @@ fun SeriesDetailsContent(
                 }
             }
         }
+        BoxScopeDownHint(
+            visible = topFocused && listState.canScrollForward,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 
