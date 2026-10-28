@@ -21,6 +21,21 @@ NOT_PHOTO = [
 ]
 
 
+# Titled landscape art (Jellyfin Thumb): a clean film still carrying the logo is good, cover/poster/clutter is not.
+TITLE_GOOD = [
+    "a clean cinematic title card: a film still with the movie's logo",
+    "official landscape key art with title",
+]
+TITLE_BAD = [
+    "a DVD or Blu-ray cover",
+    "a poster crowded with text and credits",
+    "a low-resolution or blurry image",
+    "a collage",
+    "fan-made artwork",
+    "a screenshot with watermark",
+]
+
+
 class Scorer:
     def __init__(self, model="ViT-B-32", pretrained="laion2b_s34b_b79k", threads=8):
         torch.set_num_threads(threads)
@@ -30,9 +45,12 @@ class Scorer:
         with torch.no_grad():
             t = self.model.encode_text(tok(PHOTO + NOT_PHOTO))
             self.text = t / t.norm(dim=-1, keepdim=True)
+            t = self.model.encode_text(tok(TITLE_GOOD + TITLE_BAD))
+            self.title_text = t / t.norm(dim=-1, keepdim=True)
 
-    def score(self, images):
-        """images: list of bytes. Returns list of float|None (None = undecodable)."""
+    def score(self, images, kind="photo"):
+        """images: list of bytes. Returns list of float|None (None = undecodable). kind: "photo" or "title" (titled art quality)."""
+        text, n_pos = (self.title_text, len(TITLE_GOOD)) if kind == "title" else (self.text, len(PHOTO))
         out, batch, idx = [None] * len(images), [], []
         for i, b in enumerate(images):
             try:
@@ -45,7 +63,7 @@ class Scorer:
         with torch.no_grad():
             f = self.model.encode_image(torch.stack(batch))
             f = f / f.norm(dim=-1, keepdim=True)
-            p = (100.0 * f @ self.text.T).softmax(dim=-1)[:, :len(PHOTO)].sum(dim=-1)
+            p = (100.0 * f @ text.T).softmax(dim=-1)[:, :n_pos].sum(dim=-1)
         for i, v in zip(idx, p.tolist()):
             out[i] = round(v, 4)
         return out

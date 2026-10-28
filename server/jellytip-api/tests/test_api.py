@@ -230,7 +230,7 @@ def test_backdrops_route_requires_auth_and_returns_null_for_unscored(tmp_path):
                   imgscores=ImgScores(_scores_file(tmp_path)))
     assert svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "bad")[0] == 401
     st, body = svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "tok")
-    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None}
+    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None, "focalX": None, "focalY": None, "face": None}
     assert svc.route("/v1/items/" + "c" * 32 + "/backdrops", {}, "tok")[1]["backdrops"] is None
 
 
@@ -305,3 +305,34 @@ def test_trailer_sweep_refuses_unmounted_root(tmp_path):
     (tmp_path / "Movies").mkdir()
     with pytest.raises(RuntimeError):
         trailers.sweep([str(tmp_path / "Movies")], apply=True)
+
+
+def test_hero_and_details_differ_from_tile_and_each_other(tmp_path):
+    far = "00000000ffffffff"  # 32 bits from A and from B
+    r = _hero_scores(tmp_path, A, [(0.95, A), (0.9, B), (0.85, far), (0.8, B)])
+    assert (r["heroIndex"], r["detailsIndex"]) == (1, 2)  # 0 is the tile's photo; 3 duplicates the hero
+    r = _hero_scores(tmp_path, None, [(0.95, A), (0.9, B), (0.85, far)])  # no Thumb: tile = top-ranked backdrop
+    assert (r["heroIndex"], r["detailsIndex"]) == (1, 2)
+
+
+def test_bad_thumb_means_card_uses_backdrop_composite(tmp_path, monkeypatch):
+    monkeypatch.setattr("jellytip_api.imgscores.TITLE_THRESHOLD", 0.5)
+    p = tmp_path / "t.json"
+    p.write_text(json.dumps({"stills": {}, "items": {"d" * 32: {
+        "anim": False, "thumb": {"tag": "t", "h": B, "s": 0.1},  # poor titled art -> card falls back to rows[0]
+        "backdrops": [{"i": 0, "tag": "t", "s": 0.95, "h": A}, {"i": 1, "tag": "t", "s": 0.9, "h": B}]}}}))
+    from jellytip_api.imgscores import ImgScores
+    r = ImgScores(str(p)).backdrops("d" * 32)
+    assert r["thumb"]["good"] is False and r["heroIndex"] == 1  # tile is backdrop 0 (A); B differs, thumb ignored
+
+
+def test_episodes_art_usable_rules(tmp_path):
+    p = tmp_path / "e.json"
+    ep = lambda s, lap, lum, anim=False: {"series": "s" * 32, "season": "n" * 32, "tag": "t", "s": s, "lap": lap, "lum": lum, "anim": anim}
+    p.write_text(json.dumps({"stills": {}, "items": {}, "episodes": {
+        "e1": ep(0.9, 300, 100), "e2": ep(0.9, 5, 100), "e3": ep(0.9, 300, 3), "e4": ep(0.2, 300, 100),
+        "e5": ep(None, 300, 100, True), "e6": ep(None, None, None)}}))
+    from jellytip_api.imgscores import ImgScores
+    got = {e["episodeId"]: e["usable"] for e in ImgScores(str(p)).episodes_art("s" * 32)}
+    assert got == {"e1": True, "e2": False, "e3": False, "e4": False, "e5": True, "e6": False}
+    assert ImgScores(str(p)).episodes_art("n" * 32) == ImgScores(str(p)).episodes_art("s" * 32)

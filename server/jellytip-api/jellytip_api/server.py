@@ -29,6 +29,7 @@ BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
 AUDIENCE_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/audience$")
 DELETED_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/deleted$")
 JOB_RE = re.compile(r"^/v1/subtitles/jobs/([0-9a-f]{12})$")
+EPISODES_ART_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/episodes-art$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
 TOKEN_RE = re.compile(r'Token="?([^",\s]+)"?')
 AUTH_TTL = 600
@@ -212,6 +213,9 @@ class Service:
         if m:
             res = self.imgscores.backdrops(m.group(1).replace("-", "").lower())
             return 200, res if res is not None else {"itemId": m.group(1), "animation": False, "backdrops": None}
+        m = EPISODES_ART_RE.match(path)
+        if m:
+            return 200, self.imgscores.episodes_art(m.group(1).replace("-", "").lower())
         if path == "/v1/home/carousels":
             try:
                 with open(self.carousels_path, encoding="utf-8") as f:

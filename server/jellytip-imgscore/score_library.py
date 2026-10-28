@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "jellytip-api"))
 sys.path.insert(0, os.path.expanduser("~/jellytip-api"))
 from jellytip_api import stills as stills_mod  # noqa: E402
+from imgmeta import focal, quality  # noqa: E402
 from phash import phash  # noqa: E402
 
 UA = "Jellytip/1.0 (+https://github.com/ricki2828/jellytip)"
@@ -58,6 +59,54 @@ def save(store, path):
     os.replace(tmp, path)
 
 
+def list_episodes(base, hdr, user):
+    users = json.loads(get(f"{base}/Users", hdr))
+    uid = next((u["Id"] for u in users if u["Name"] == user), users[0]["Id"])
+    q = urllib.parse.urlencode({"Recursive": "true", "IncludeItemTypes": "Episode", "Fields": "SeriesId,SeasonId,ImageTags"})
+    return json.loads(get(f"{base}/Users/{uid}/Items?{q}", hdr, 120)).get("Items", [])
+
+
+def episodes_pass(store, a, env, base, hdr, scorer, pool, series_items):
+    """Episode Primary stills: photo score (live action only) + sharpness + brightness, keyed by episode id."""
+    anim_series = {i["Id"] for i in series_items if "Animation" in (i.get("Genres") or [])}
+    eps = list_episodes(base, hdr, env.get("JELLYFIN_USER", "ricki28"))
+    cache = store.setdefault("episodes", {})
+    todo = []
+    for e in eps:
+        tag = (e.get("ImageTags") or {}).get("Primary")
+        old = cache.get(e["Id"])
+        if old and old.get("tag") == tag and old.get("lap") is not None:
+            continue
+        todo.append((e, tag))
+    log(f"{len(eps)} episodes, {len(todo)} to measure")
+    for lo in range(0, len(todo), 40):
+        chunk = todo[lo:lo + 40]
+        def dl(t):
+            e, tag = t
+            if not tag:
+                return None
+            try:
+                return get(f"{base}/Items/{e['Id']}/Images/Primary?maxWidth=780&tag={tag}", hdr)
+            except Exception:
+                return None
+        blobs = list(pool.map(dl, chunk))
+        have = [(c, b) for c, b in zip(chunk, blobs) if b]
+        photo = scorer.score([b for _, b in have]) if have else []
+        for ((e, tag), b), ps in zip(have, photo):
+            try:
+                lap, lum = quality(b)
+            except Exception:
+                continue
+            anim = e.get("SeriesId") in anim_series
+            cache[e["Id"]] = {"series": e.get("SeriesId"), "season": e.get("SeasonId"), "tag": tag,
+                              "s": None if anim else ps, "lap": lap, "lum": lum, "anim": anim}
+        for (e, tag), b in zip(chunk, blobs):
+            if not b:  # no still: remember so it is not refetched forever, but unusable
+                cache[e["Id"]] = {"series": e.get("SeriesId"), "season": e.get("SeasonId"), "tag": tag, "s": None, "lap": None, "lum": None, "anim": False}
+        save(store, a.out)
+    log(f"episodes done: {len(cache)} known")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int)
@@ -91,18 +140,18 @@ def main():
         ttag = (it.get("ImageTags") or {}).get("Thumb")
         rec = {"name": it.get("Name"), "kind": kind, "anim": anim, "backdrops": [], "tmdb": it.get("ProviderIds", {}).get("Tmdb"),
                "thumb": {"tag": ttag, "h": None} if ttag else None}
-        if ttag and old_thumb and old_thumb.get("tag") == ttag and old_thumb.get("h"):
+        if ttag and old_thumb and old_thumb.get("tag") == ttag and old_thumb.get("h") and old_thumb.get("s") is not None:
             rec["thumb"] = old_thumb
         todo = []  # (kind, key, fetch-url)
         for i, tag in enumerate(tags):
             old = have.get(i)
-            if old and old["tag"] == tag and (old["s"] is not None or anim) and old.get("h"):
+            if old and old["tag"] == tag and (old["s"] is not None or anim) and old.get("h") and "fx" in old:
                 rec["backdrops"].append(old)
             else:
                 same = old if old and old["tag"] == tag else {}
                 rec["backdrops"].append({"i": i, "tag": tag, "s": same.get("s"), "h": same.get("h")})
                 todo.append(("b", i, f"{base}/Items/{iid}/Images/Backdrop/{i}?maxWidth=780&tag={tag}"))
-        if rec["thumb"] and not rec["thumb"].get("h"):
+        if rec["thumb"] and (not rec["thumb"].get("h") or rec["thumb"].get("s") is None):
             todo.append(("t", 0, f"{base}/Items/{iid}/Images/Thumb?maxWidth=780&tag={ttag}"))
         tmdb = rec["tmdb"]
         if tmdb and not anim and env.get("TMDB_KEY"):
@@ -120,14 +169,31 @@ def main():
             blobs = list(pool.map(dl, todo))
             ok = [(t, b) for t, b in zip(todo, blobs) if b]
             failed += len(todo) - len(ok)
-            for t, b in ok:  # hashes first: they need no model and cover animation too
-                if t[0] in "bt":
+            def meta(tb):  # hash (+ focal for backdrops); cv2 and numpy release the GIL so this threads
+                t, b = tb
+                if t[0] not in "bt":
+                    return None
+                try:
+                    h = phash(b)
+                except Exception:
+                    return "fail"
+                f = (0.5, 0.4, False)
+                if t[0] == "b":
                     try:
-                        h = phash(b)
+                        f = focal(b)
                     except Exception:
-                        failed += 1
-                        continue
-                    (rec["backdrops"][t[1]] if t[0] == "b" else rec["thumb"])["h"] = h
+                        pass
+                return h, f
+            for (t, _), m in zip(ok, pool.map(meta, ok)):  # hashes first: they need no model and cover animation too
+                if m is None:
+                    continue
+                if m == "fail":
+                    failed += 1
+                    continue
+                tgt = rec["backdrops"][t[1]] if t[0] == "b" else rec["thumb"]
+                tgt["h"] = m[0]
+                if t[0] == "b":
+                    tgt["fx"], tgt["fy"], tgt["face"] = m[1]
             need = [(t, b) for t, b in ok if t[0] == "s" or (t[0] == "b" and not anim and rec["backdrops"][t[1]]["s"] is None)]
             scores = scorer.score([b for _, b in need]) if need else []
             for (t, _), sc in zip(need, scores):
@@ -135,12 +201,17 @@ def main():
                     store["stills"][t[1]] = sc
                 else:
                     rec["backdrops"][t[1]]["s"] = sc
+            thumbs = [b for t, b in ok if t[0] == "t"]
+            if thumbs:
+                rec["thumb"]["s"] = scorer.score(thumbs, kind="title")[0]
             n_img += len(ok)
         store["items"][iid] = rec
         if n % 10 == 0 or n == len(items):
             save(store, a.out)
             el = time.time() - t0
             log(f"{n}/{len(items)} items, {n_img} images scored ({n_img / max(el, 1e-6):.1f}/s), {failed} fetch failures")
+    if not a.only:
+        episodes_pass(store, a, env, base, hdr, scorer, pool, items)
     store["updated"] = time.strftime("%FT%TZ", time.gmtime())
     save(store, a.out)
     log("done")

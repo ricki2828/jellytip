@@ -6,6 +6,11 @@ import threading
 from .stills import MAX_STILLS
 
 HERO_MIN_DISTANCE = 12  # Hamming bits (of 64) a hero must differ from the card art by
+# Titled-art quality (Thumb) below this: the card falls back to backdrop + logo. CLIP title score did NOT separate good from bad
+# on a 36-thumb eyeballed sheet (clean art scored 0.00-0.03, covers/posters 0.05-0.12 and 0.9 alike), so gating is OFF (0.0) until a better signal exists.
+TITLE_THRESHOLD = 0.0
+EP_MIN_LAPLACIAN = 40.0  # episode stills: variance of the Laplacian below this is blurry (36 eyeballed: only the lowest, 29.6, was bad)
+EP_LUM_RANGE = (10.0, 240.0)  # mean luminance outside this is a black/white frame
 THRESHOLD = 0.6  # calibrated on a 60-image labelled sample: 27/27 precision on photo calls, see jellytip-imgscore/README.md
 
 
@@ -49,29 +54,62 @@ class ImgScores:
         rec = self._load()["items"].get(item_id)
         if rec is None:
             return None
-        rows = [{"index": b["i"], "photoScore": b["s"], "phash": b.get("h")} for b in rec["backdrops"]]
+        rows = [{"index": b["i"], "photoScore": b["s"], "phash": b.get("h"), "focalX": b.get("fx"), "focalY": b.get("fy"),
+                 "face": b.get("face")} for b in rec["backdrops"]]
         if not rec.get("anim"):  # animation keeps natural order; else same tiering as stills: photos, unscored, non-photos; best score first inside photos
             ph = sorted((r for r in rows if r["photoScore"] is not None and r["photoScore"] >= self.threshold), key=lambda r: -r["photoScore"])
             un = [r for r in rows if r["photoScore"] is None]
             no = [r for r in rows if r["photoScore"] is not None and r["photoScore"] < self.threshold]
             rows = ph + sorted(un, key=lambda r: r["index"]) + sorted(no, key=lambda r: -r["photoScore"])
-        thumb = (rec.get("thumb") or {}).get("h")
+        th = rec.get("thumb")
+        thumb = (th or {}).get("h")
+        good = th is not None and (th.get("s") is None or th["s"] >= TITLE_THRESHOLD)
+        # The card shows the Thumb when it is good, else the top-ranked backdrop with the logo composited on it.
+        hero, details = self._picks(rows, thumb if good else None)
         return {"itemId": item_id, "animation": bool(rec.get("anim")), "backdrops": rows, "thumbPhash": thumb,
-                "heroIndex": self._hero(rows, thumb)}
+                "thumb": {"score": th.get("s"), "phash": thumb, "good": good} if th else None,
+                "heroIndex": hero, "detailsIndex": details}
+
+    def episodes_art(self, parent_id):
+        """Episode stills of a series or season: [{episodeId, score, usable}], usable = real photo, sharp, not black/white."""
+        out = []
+        for eid, e in self._load().get("episodes", {}).items():
+            if parent_id in (e.get("series"), e.get("season")):
+                out.append({"episodeId": eid, "score": e.get("s"), "usable": self._episode_usable(e)})
+        return out
+
+    def _episode_usable(self, e):
+        if e.get("lap") is None:
+            return False
+        if e["lap"] < EP_MIN_LAPLACIAN or not EP_LUM_RANGE[0] <= e["lum"] <= EP_LUM_RANGE[1]:
+            return False
+        return e.get("anim") or e.get("s") is None or e["s"] >= self.threshold
 
     @staticmethod
-    def _hero(rows, thumb):
-        """Best-ranked backdrop that looks different from the card art: the Thumb when there is one, else the
-        top-ranked backdrop (what the app's backdrop+logo composite uses). None when there are no backdrops."""
+    def _picks(rows, tile):
+        """(hero, details) backdrop indices. Rows are best-photo-first; hero = best that looks different from the card art
+        (tile = Thumb hash when the card uses it, else the top-ranked backdrop the card composite uses), details = the next
+        one that also differs from the hero. None when there are no backdrops."""
         if not rows:
-            return None
-        ref = thumb or rows[0]["phash"]
+            return None, None
+        ref = tile or rows[0]["phash"]
         if ref is None:  # nothing to compare against: just avoid the card's backdrop
-            return rows[1]["index"] if len(rows) > 1 else rows[0]["index"]
-        dist = [(hamming(ref, r["phash"]), n) for n, r in enumerate(rows) if r["phash"] is not None]
-        for d, n in dist:
-            if d > HERO_MIN_DISTANCE:
-                return rows[n]["index"]
-        if not dist:
-            return rows[0]["index"]
-        return rows[max(dist, key=lambda x: (x[0], -x[1]))[1]]["index"]
+            return (rows[1]["index"] if len(rows) > 1 else rows[0]["index"]), (rows[2]["index"] if len(rows) > 2 else rows[0]["index"])
+        hashed = [r for r in rows if r["phash"] is not None]
+        ok = [r for r in hashed if hamming(ref, r["phash"]) > HERO_MIN_DISTANCE]
+        if ok:
+            hero = ok[0]
+        elif hashed:
+            hero = max(hashed, key=lambda r: hamming(ref, r["phash"]))  # first of the most different (stable)
+        else:
+            return rows[0]["index"], rows[0]["index"]
+        others = [r for r in ok if r is not hero]
+        apart = [r for r in others if hamming(hero["phash"], r["phash"]) > HERO_MIN_DISTANCE]
+        if apart:
+            second = apart[0]
+        elif others:
+            second = others[0]
+        else:
+            rest = [r for r in hashed if r is not hero]
+            second = max(rest, key=lambda r: hamming(ref, r["phash"])) if rest else hero
+        return hero["index"], second["index"]
