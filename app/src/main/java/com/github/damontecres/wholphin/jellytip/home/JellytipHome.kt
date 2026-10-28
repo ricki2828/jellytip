@@ -39,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -64,6 +66,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipLogoTint
+import com.github.damontecres.wholphin.jellytip.JellytipScrim
 import com.github.damontecres.wholphin.jellytip.JellytipFocal
 import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
@@ -229,6 +232,7 @@ fun JellytipHomeHero(
     DisposableEffect(Unit) { onDispose { if (!JellytipTrailerControl.fullScreen) JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
 
+    val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), tween(400), label = "jellytip-scrim")
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
         Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
@@ -297,10 +301,11 @@ fun JellytipHomeHero(
                     .fillMaxSize()
                     .background(
                         Brush.radialGradient(
-                            0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.VIGNETTE_ALPHA),
+                            0f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(JellytipHomeTokens.VIGNETTE_ALPHA, 0.94f, scrim)),
+                            0.55f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(0.40f, 0.80f, scrim)),
                             1f to Color.Transparent,
                             center = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
-                            radius = 1400f,
+                            radius = JellytipScrim.lerp(1400f, 2100f, scrim),
                         ),
                     ),
             )
@@ -336,6 +341,7 @@ private fun HomeKenBurns(
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),
+        onSuccess = { JellytipScrim.inspect(url, it.result.image) },
         modifier =
             Modifier
                 .fillMaxSize()
@@ -455,6 +461,8 @@ fun JellytipHomeHeader(
     with(density) {
         val textSize = JellytipHomeTokens.TEXT_PX.toSp()
         val quiet = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        // Soft shadow on every hero text line so it stays legible over bright art
+        val shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.dp.toPx()), 6.dp.toPx())
         Box(
             modifier = modifier.fillMaxWidth().height((screenHeight * JellytipHomeTokens.HEADER_HEIGHT_FRACTION).dp),
             contentAlignment = Alignment.BottomStart,
@@ -488,7 +496,7 @@ fun JellytipHomeHeader(
                 } else {
                     Text(
                         text = title ?: "",
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium.copy(shadow = shadow),
                         fontSize = JellytipHomeTokens.TITLE_PX.toSp(),
                         fontWeight = FontWeight.Medium,
                         color = JellytipPalette.Vanilla,
@@ -499,7 +507,7 @@ fun JellytipHomeHeader(
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla,
                         maxLines = 1,
@@ -511,13 +519,13 @@ fun JellytipHomeHeader(
                     item?.timeRemainingOrRuntime,
                     endsAt = item?.data?.endDate,
                     showRatings = scoreLine == null, // the companion's quiet score line replaces the stock star/tomato ratings
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize, shadow = shadow),
                 )
                 val overview = item?.data?.overview
                 if (!overview.isNullOrBlank()) {
                     Text(
                         text = overview,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = quiet,
                         maxLines = 1,
@@ -528,7 +536,7 @@ fun JellytipHomeHeader(
                     Text(
                         text = scoreLine,
                         inlineContent = LetterboxdInline,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
                         maxLines = 1,

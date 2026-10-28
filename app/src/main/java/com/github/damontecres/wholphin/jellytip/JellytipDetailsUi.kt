@@ -165,18 +165,19 @@ fun JellytipDetailsBackground(
                 )
             }
         }
-        // Soft vignette from the bottom-left corner only, behind the text block
+        // Soft vignette from the bottom-left corner only, behind the text block; denser on bright or busy art
+        val scrim by animateFloatAsState(JellytipScrim.strength(stills.firstOrNull()), tween(400), label = "jellytip-scrim")
         Box(
             Modifier
                 .fillMaxSize()
                 .drawWithCache {
-                    val rx = size.width * 1.2f
-                    val ry = size.height * 0.95f
+                    val rx = size.width * JellytipScrim.lerp(1.2f, 1.6f, scrim)
+                    val ry = size.height * JellytipScrim.lerp(0.95f, 1.2f, scrim)
                     val k = ry / rx
                     val brush =
                         Brush.radialGradient(
-                            0f to NIGHT.copy(alpha = 0.88f),
-                            0.32f to NIGHT.copy(alpha = 0.55f),
+                            0f to NIGHT.copy(alpha = JellytipScrim.lerp(0.88f, 0.95f, scrim)),
+                            0.32f to NIGHT.copy(alpha = JellytipScrim.lerp(0.55f, 0.85f, scrim)),
                             0.62f to Color.Transparent,
                             center = Offset(0f, size.height),
                             radius = rx,
@@ -223,6 +224,7 @@ private fun KenBurnsImage(
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),
+        onSuccess = { JellytipScrim.inspect(url, it.result.image) },
         modifier =
             Modifier
                 .fillMaxSize()
