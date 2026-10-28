@@ -145,7 +145,7 @@ def main():
         todo = []  # (kind, key, fetch-url)
         for i, tag in enumerate(tags):
             old = have.get(i)
-            if old and old["tag"] == tag and (old["s"] is not None or anim) and old.get("h") and "fx" in old:
+            if old and old["tag"] == tag and (old["s"] is not None or anim) and old.get("h") and "fx" in old and "lum" in old:
                 rec["backdrops"].append(old)
             else:
                 same = old if old and old["tag"] == tag else {}
@@ -177,13 +177,17 @@ def main():
                     h = phash(b)
                 except Exception:
                     return "fail"
-                f = (0.5, 0.4, False)
+                f, lum = (0.5, 0.4, False), None
                 if t[0] == "b":
                     try:
                         f = focal(b)
                     except Exception:
                         pass
-                return h, f
+                    try:
+                        lum = quality(b)[1]
+                    except Exception:
+                        pass
+                return h, f, lum
             for (t, _), m in zip(ok, pool.map(meta, ok)):  # hashes first: they need no model and cover animation too
                 if m is None:
                     continue
@@ -194,6 +198,7 @@ def main():
                 tgt["h"] = m[0]
                 if t[0] == "b":
                     tgt["fx"], tgt["fy"], tgt["face"] = m[1]
+                    tgt["lum"] = m[2]
             need = [(t, b) for t, b in ok if t[0] == "s" or (t[0] == "b" and not anim and rec["backdrops"][t[1]]["s"] is None)]
             scores = scorer.score([b for _, b in need]) if need else []
             for (t, _), sc in zip(need, scores):

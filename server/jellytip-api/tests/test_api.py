@@ -230,7 +230,7 @@ def test_backdrops_route_requires_auth_and_returns_null_for_unscored(tmp_path):
                   imgscores=ImgScores(_scores_file(tmp_path)))
     assert svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "bad")[0] == 401
     st, body = svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "tok")
-    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None, "focalX": None, "focalY": None, "face": None}
+    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None, "focalX": None, "focalY": None, "face": None, "lum": None}
     assert svc.route("/v1/items/" + "c" * 32 + "/backdrops", {}, "tok")[1]["backdrops"] is None
 
 
@@ -383,3 +383,12 @@ def test_liked_lists_take_at_least_liked_weight_slots_and_are_named_by_owner(tmp
     liked = [r for r in rows if r.get("liked")]
     assert len(rows) == 4 and len(liked) == 2 and liked[0]["name"].endswith("(by bob)") and liked[0]["owner"] == "bob"
     assert not any(r.get("liked") for r in lb.home_lists({"per_day": 4, "include_liked": False}, today=datetime.date(2026, 10, 28)))
+
+
+def test_hero_skips_dark_frame_when_a_brighter_one_exists(tmp_path):
+    p = tmp_path / "l.json"
+    p.write_text(json.dumps({"stills": {}, "items": {"d" * 32: {"anim": False, "thumb": None, "backdrops": [
+        {"i": 0, "tag": "t", "s": 0.99, "h": A, "lum": 80}, {"i": 1, "tag": "t", "s": 0.95, "h": B, "lum": 12},
+        {"i": 2, "tag": "t", "s": 0.9, "h": "00000000ffffffff", "lum": 90}]}}}))
+    from jellytip_api.imgscores import ImgScores
+    assert ImgScores(str(p)).backdrops("d" * 32)["heroIndex"] == 2  # 1 is differs-from-tile but murky
