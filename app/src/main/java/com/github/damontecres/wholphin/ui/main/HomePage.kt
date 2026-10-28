@@ -141,12 +141,19 @@ fun HomePage(
             val playlistState by playlistViewModel.playlistState.collectAsState()
             var position by rememberPosition()
 
-            val onFocusPosition = remember { { it: RowColumn -> position = it } }
+            val onFocusPosition =
+                remember {
+                    { it: RowColumn ->
+                        position = it
+                        viewModel.onFocusPosition(it)
+                    }
+                }
             val currentHomePrefs by rememberUpdatedState(preferences.appPreferences.homePagePreferences)
             val onClickItem =
                 remember {
                     { clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
+                        viewModel.recordOpen(clickedPosition)
                         if (currentHomePrefs.clickToPlay &&
                             homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
                         ) {
