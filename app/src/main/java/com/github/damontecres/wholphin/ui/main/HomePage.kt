@@ -58,6 +58,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
+import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
@@ -156,20 +157,29 @@ fun HomePage(
                 remember {
                     { clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
-                        viewModel.recordOpen(clickedPosition)
-                        if (currentHomePrefs.clickToPlay &&
-                            homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
-                        ) {
-                            viewModel.navigationManager.navigateTo(Destination.Playback(item))
-                        } else {
-                            viewModel.navigationManager.navigateTo(item.destination())
+                        // OK while the hero trailer plays: unmute, then full screen; otherwise open the item
+                        if (!JellytipTrailerControl.onOk(item, viewModel.navigationManager::navigateTo)) {
+                            viewModel.recordOpen(clickedPosition)
+                            if (currentHomePrefs.clickToPlay &&
+                                homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
+                            ) {
+                                viewModel.navigationManager.navigateTo(Destination.Playback(item))
+                            } else {
+                                viewModel.navigationManager.navigateTo(item.destination())
+                            }
                         }
                     }
                 }
             val onLongClickItem =
                 remember {
-                    { clickedPosition: RowColumn, item: BaseItem ->
+                    longClick@{ clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
+                        if (JellytipTrailerControl.isPlayingFor(item)) {
+                            // Long-press OK always opens details while the hero trailer plays
+                            JellytipTrailerControl.stop()
+                            viewModel.navigationManager.navigateTo(item.destination())
+                            return@longClick
+                        }
                         val row =
                             (homeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
                         val canRemoveContinueWatching =

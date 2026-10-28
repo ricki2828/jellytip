@@ -1,5 +1,10 @@
 package com.github.damontecres.wholphin.jellytip.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -129,6 +134,9 @@ object JellytipHomeTokens {
     /** Rest time before a muted trailer replaces the still (home hero and details). */
     const val TRAILER_DELAY_MS = 6_000L
 
+    /** Rest time before the home hero starts its muted trailer (details keeps [TRAILER_DELAY_MS]). */
+    const val HOME_TRAILER_DELAY_MS = 2_500L
+
     // Details page (shares TEXT_PX / TITLE-less logo box above)
     const val BADGE_PX = 19
     const val CARD_SUBTITLE_PX = 18
@@ -202,16 +210,20 @@ fun JellytipHomeHero(
         lastFocal = pick.focal
     }
 
-    // Trailer: only after focus has rested on the same trailer-bearing card
-    var trailerUrl by remember { mutableStateOf<String?>(null) }
+    // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
-        trailerUrl = null
-        if (!trailerWanted || item == null) return@LaunchedEffect
-        if ((item.data.localTrailerCount ?: 0) <= 0) return@LaunchedEffect
-        delay(JellytipHomeTokens.TRAILER_DELAY_MS)
-        trailerUrl = viewModel.trailerUrl(item)
+        JellytipTrailerControl.stop()
+        if (item?.id != JellytipTrailerControl.dismissedFor) JellytipTrailerControl.dismissedFor = null
+        if (!trailerWanted || item == null || item.id == JellytipTrailerControl.dismissedFor) return@LaunchedEffect
+        if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return@LaunchedEffect
+        delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
+        viewModel.localTrailer(item)?.let { (url, trailerId) ->
+            JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
+        }
     }
+    DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
+    val trailerUrl = JellytipTrailerControl.url
 
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
@@ -228,9 +240,39 @@ fun JellytipHomeHero(
             if (usedPlayer) {
                 HeroTrailer(
                     url = trailerUrl,
-                    sound = settings.trailerSound,
+                    sound = JellytipTrailerControl.sound,
                     httpClient = viewModel.httpClient,
-                    onEnded = { trailerUrl = null },
+                    onEnded = { JellytipTrailerControl.stop() },
+                )
+            }
+            // "Sound on" hint, 2 s, bottom-right just above the first row
+            var hintVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(JellytipTrailerControl.hintTick) {
+                if (JellytipTrailerControl.hintTick == 0L) return@LaunchedEffect
+                hintVisible = true
+                delay(2_000)
+                hintVisible = false
+            }
+            AnimatedVisibility(
+                visible = hintVisible,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(300)),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            end = 48.dp,
+                            top = (LocalConfiguration.current.screenHeightDp * JellytipHomeTokens.HEADER_HEIGHT_FRACTION - 40).dp,
+                        ),
+            ) {
+                Text(
+                    text = "Sound on  \u00B7  OK again for full screen  \u00B7  hold OK for details",
+                    fontSize = rememberJellytipSizes().sp(JellytipHomeTokens.TEXT_PX),
+                    color = JellytipPalette.Vanilla,
+                    modifier =
+                        Modifier
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
             // Narrow left strip keeps the nav rail legible
@@ -325,6 +367,7 @@ private fun HeroTrailer(
         }
     val currentOnEnded by rememberUpdatedState(onEnded)
     DisposableEffect(player) {
+        JellytipTrailerControl.positionProvider = { player.currentPosition }
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -341,6 +384,7 @@ private fun HeroTrailer(
             }
         player.addListener(listener)
         onDispose {
+            JellytipTrailerControl.positionProvider = null
             player.removeListener(listener)
             player.release()
         }
