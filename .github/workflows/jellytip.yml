@@ -1,0 +1,40 @@
+name: Jellytip build
+
+on:
+  push:
+    branches:
+      - jellytip
+      - jellytip/*
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx12g -XX:MaxMetaspaceSize=1024m'"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # Need the tags to build
+      - name: Fetch upstream tags
+        run: git fetch --tags https://github.com/damontecres/Wholphin.git || true
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Build debug app
+        run: ./gradlew assembleDefaultDebug --no-daemon
+      - name: Upload APKs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: jellytip-debug-apk
+          path: app/build/outputs/apk/**/*.apk
+          retention-days: 14
