@@ -286,7 +286,7 @@ class HomeViewModel
                     }
                 }
                 Timber.d("Home page load complete")
-                homeCache.onLoaded(userDto.id, settings, state.value.homeRows)
+                homeCache.onLoaded(userDto.id, settings, _state.value.homeRows)
             } catch (ex: CancellationException) {
                 throw ex
             } catch (ex: Exception) {
