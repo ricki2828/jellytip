@@ -161,49 +161,16 @@ fun JellytipSeasonChips(
     }
 }
 
-/**
- * Admin-only free-space line for the nav drawer ("58 GB free of 3.7 TB" + thin bar). Refreshes whenever the drawer
- * opens; text and bar turn jelly red below [JellytipStorage.LOW_GB]. Collapsed rail shows only a red dot when low.
- */
+/** Admin-only server free space for the drawer; null for non-admins. Refreshes whenever the drawer opens. */
 @Composable
-fun JellytipStorageMeter(
+fun rememberJellytipStorage(
     api: JellytipApi,
     drawerOpen: Boolean,
-    modifier: Modifier = Modifier,
-) {
+): JellytipStorage? {
     val admin by rememberIsJellytipAdmin()
-    if (!admin) return
     var storage by remember { mutableStateOf<JellytipStorage?>(null) }
-    LaunchedEffect(drawerOpen) { if (drawerOpen || storage == null) api.getStorage()?.let { storage = it } }
-    val s = storage ?: return
-    val sizes = rememberJellytipSizes()
-    val color = if (s.low) JellytipPalette.Jelly else Cream
-    if (!drawerOpen) {
-        if (s.low) {
-            Box(
-                modifier
-                    .padding(vertical = sizes.px(8f))
-                    .size(sizes.px(10f))
-                    .background(JellytipPalette.Jelly, CircleShape),
-            )
-        }
-        return
+    LaunchedEffect(drawerOpen, admin) {
+        if (admin && (drawerOpen || storage == null)) api.getStorage()?.let { storage = it }
     }
-    Column(modifier = modifier.fillMaxWidth().padding(horizontal = sizes.px(24f), vertical = sizes.px(10f))) {
-        Text(
-            text = s.label(),
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = sizes.sp(JellytipHomeTokens.BADGE_PX)),
-            color = color.copy(alpha = if (s.low) 1f else 0.6f),
-            maxLines = 1,
-        )
-        Box(
-            Modifier
-                .padding(top = sizes.px(6f))
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(Color(0xFF2A2A2A)),
-        ) {
-            Box(Modifier.fillMaxWidth(s.fractionUsed).height(2.dp).background(color))
-        }
-    }
+    return if (admin && drawerOpen) storage else null
 }
