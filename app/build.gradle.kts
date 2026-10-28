@@ -109,6 +109,8 @@ configure<ApplicationExtension> {
                 "proguard-rules.pro",
             )
             isDebuggable = false
+            // Jellytip: install beside stock Wholphin (different signature)
+            applicationIdSuffix = ".jellytip"
             if (shouldSign.get()) {
                 signingConfig = signingConfigs.getByName("ci")
             } else {

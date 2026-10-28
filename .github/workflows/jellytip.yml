@@ -32,9 +32,22 @@ jobs:
         uses: ./.github/actions/setup
       - name: Build debug app
         run: ./gradlew assembleDefaultDebug --no-daemon
+      - name: Build release app
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: ./gradlew assembleDefaultRelease --no-daemon
+      - name: Upload release APKs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: jellytip-release-apk
+          path: app/build/outputs/apk/default/release/*.apk
+          retention-days: 14
       - name: Upload APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: jellytip-debug-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/default/debug/*.apk
           retention-days: 14

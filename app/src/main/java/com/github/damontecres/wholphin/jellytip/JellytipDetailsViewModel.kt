@@ -61,8 +61,12 @@ class JellytipDetailsViewModel
             item: BaseItem,
             extras: JellytipExtras?,
         ): List<String> {
-            // Textless stills (no language) first; sortedBy is stable so the service's ranking holds within each group
-            val companion = extras?.stills.orEmpty().sortedBy { if (it.lang == null) 0 else 1 }.map { it.url }
+            // Textless stills (no language) first; sortedBy is stable so the service's ranking holds within each group.
+            // TMDB "original" can be 4K; w1280 is plenty for a 1080p TV and much cheaper to decode on the Chromecast.
+            val companion =
+                extras?.stills.orEmpty()
+                    .sortedBy { if (it.lang == null) 0 else 1 }
+                    .map { it.url.replace("/t/p/original/", "/t/p/w1280/") }
             val tags = item.data.backdropImageTags.orEmpty()
             val jellyfin =
                 tags.mapIndexedNotNull { index, tag ->
@@ -91,6 +95,6 @@ class JellytipDetailsViewModel
             }
 
         companion object {
-            private const val MAX_WIDTH = 3840
+            private const val MAX_WIDTH = 1920
         }
     }
