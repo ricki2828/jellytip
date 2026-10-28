@@ -270,3 +270,38 @@ def test_hero_without_hashes_avoids_top_backdrop_or_single(tmp_path):
     assert _hero_scores(tmp_path, None, [(0.9, None), (0.8, None)])["heroIndex"] == 1
     assert _hero_scores(tmp_path, None, [(0.9, None)])["heroIndex"] == 0
     assert _hero_scores(tmp_path, None, [])["heroIndex"] is None
+
+
+def test_subtitle_pick_prefers_release_match_then_downloads_and_skips_hi_forced():
+    from jellytip_api.subtitles import pick
+    r = [{"Id": "a", "Name": "Show.S01E01.720p.WEB", "DownloadCount": 5},
+         {"Id": "b", "Name": "Show.S01E01.1080p.BluRay.x264-GRP", "DownloadCount": 1},
+         {"Id": "c", "Name": "Show.S01E01.1080p.BluRay.x264-GRP", "DownloadCount": 9, "HearingImpaired": True},
+         {"Id": "d", "Name": "Show.S01E01.1080p.BluRay.x264-GRP", "DownloadCount": 99, "Forced": True}]
+    assert pick(r, "Show.S01E01.1080p.BluRay.x264-GRP.mkv")["Id"] == "b"
+    assert pick([], "x.mkv") is None
+
+
+def test_trailer_sweep_removes_only_orphan_trailers_dirs(tmp_path):
+    from jellytip_api import trailers
+    movies = tmp_path / "Movies"
+    for name, has in (("Alive (2000)", True), ("Gone (2001)", False)):
+        (movies / name / "trailers").mkdir(parents=True)
+        (movies / name / "trailers" / "t-trailer.mp4").write_bytes(b"x")
+        (movies / name / "poster.jpg").write_bytes(b"x")
+        if has:
+            (movies / name / "m.mkv").write_bytes(b"x")
+    dry = trailers.sweep([str(movies)], apply=False, log=lambda m: None)
+    assert [os.path.basename(os.path.dirname(o)) for o in dry["orphans"]] == ["Gone (2001)"] and (movies / "Gone (2001)" / "trailers").exists()
+    trailers.sweep([str(movies)], apply=True, log=lambda m: None)
+    assert not (movies / "Gone (2001)" / "trailers").exists() and (movies / "Gone (2001)" / "poster.jpg").exists()
+    assert (movies / "Alive (2000)" / "trailers" / "t-trailer.mp4").exists()
+    assert trailers.remove_for_folder(str(movies / "Alive (2000)"), log=lambda m: None) == "title still has media"
+
+
+def test_trailer_sweep_refuses_unmounted_root(tmp_path):
+    import pytest
+    from jellytip_api import trailers
+    (tmp_path / "Movies").mkdir()
+    with pytest.raises(RuntimeError):
+        trailers.sweep([str(tmp_path / "Movies")], apply=True)

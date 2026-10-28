@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -16,9 +17,15 @@ from .imgscores import ImgScores
 from .letterboxd import Letterboxd
 from .scores import ScoreProvider
 from .stills import fetch_stills
+from . import sizes as sizes_mod
+from . import trailers as trailers_mod
+from .jf import Jellyfin, JfError
+from .subtitles import Jobs
 
 EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
 BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
+DELETED_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/deleted$")
+JOB_RE = re.compile(r"^/v1/subtitles/jobs/([0-9a-f]{12})$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
 TOKEN_RE = re.compile(r'Token="?([^",\s]+)"?')
 AUTH_TTL = 600
@@ -27,6 +34,9 @@ AUTH_TTL = 600
 class Service:
     def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None, imgscores=None):
         self.token = env["JELLYTIP_TOKEN"]
+        self.env = env
+        self.jf = Jellyfin(env.get("JELLYFIN_URL"), env.get("JELLYFIN_KEY"), env.get("JELLYFIN_USER", "ricki28"))
+        self.subs = Jobs(self.jf)
         self.jf_url = (env.get("JELLYFIN_URL") or "").rstrip("/")
         self._auth_cache = {}  # sha256(token) -> (ok, expires); raw tokens are never stored or logged
         self.cache = cache or Cache(env.get("JELLYTIP_DB", "jellytip.db"))
@@ -96,13 +106,15 @@ class Service:
         self._auth_cache[k] = (ok, now + AUTH_TTL)
         return ok
 
-    def route(self, path, query, token, authorization=None, emby_token=None):
+    def route(self, path, query, token, authorization=None, emby_token=None, method="GET", body=None):
         """Returns (status, body)."""
         if path == "/v1/health":
             return 200, {"ok": True, "version": __version__}
         if not (hmac.compare_digest((token or "").encode(), self.token.encode())
                 or self.jellyfin_ok(self.jellyfin_token(authorization, emby_token))):
             return 401, {"error": "unauthorized"}
+        if method == "POST":
+            return self.route_post(path, body or {})
         m = EXTRAS_RE.match(path)
         if m:
             kind = query.get("type", "movie")
@@ -126,6 +138,14 @@ class Service:
             if query.get("includeDiscover") != "1":  # discover rows carry TMDB ids, not library items: opt-in only
                 manifest = {**manifest, "carousels": [c for c in manifest.get("carousels", []) if not c.get("discover")]}
             return 200, {**manifest, "letterboxd": self.lb.home_lists()}
+        if path == "/v1/library/sizes":
+            if not self.jf.ok:
+                return 503, {"error": "jellyfin not configured"}
+            return 200, sizes_mod.get(self)
+        m = JOB_RE.match(path)
+        if m:
+            v = self.subs.view(m.group(1))
+            return (200, v) if v else (404, {"error": "no such job"})
         if path == "/v1/letterboxd/lists":
             return 200, self.lb.lists()
         m = LIST_RE.match(path)
@@ -135,15 +155,63 @@ class Service:
         return 404, {"error": "not found"}
 
 
+    def route_post(self, path, body):
+        if path == "/v1/subtitles/season":
+            sid = str(body.get("seasonId", ""))
+            if not re.fullmatch(r"[0-9a-fA-F-]{32,36}", sid):
+                return 400, {"error": "bad seasonId"}
+            if not self.jf.ok:
+                return 503, {"error": "jellyfin not configured"}
+            return 202, {"jobId": self.subs.start(sid, str(body.get("language") or "eng")[:8])}
+        m = DELETED_RE.match(path)
+        if m:
+            return 200, self.item_deleted(m.group(1).replace("-", "").lower(), str(body.get("path") or ""), str(body.get("type") or ""))
+        return 404, {"error": "not found"}
+
+    def item_deleted(self, iid, hint_path="", hint_type=""):
+        """Remove the deleted title's trailers/ folder. Path comes from the cached id->folder map (filled by /library/sizes),
+        else from Jellyfin if the item still exists. Refuses while the title folder still holds a video file."""
+        paths = self.cache.get(sizes_mod.PATHS_KEY) or {}
+        info = paths.get(iid)
+        if not info and self.jf.ok:
+            try:
+                it = self.jf.call("GET", f"/Items/{iid}", {"userId": self.jf.uid()})
+                p = it.get("Path") or ""
+                if it.get("Type") == "Movie":
+                    info = {"folder": os.path.dirname(p)}
+                elif it.get("Type") == "Series":
+                    info = {"folder": p}
+            except (JfError, OSError):
+                pass
+        if not info and hint_path:  # path the app captured before the delete; still verified against media roots + video files below
+            info = {"folder": os.path.dirname(hint_path) if hint_type.lower() == "movie" else hint_path}
+        if not info:
+            return {"removed": False, "reason": "unknown title (not a movie/series, or never indexed)"}
+        folder = os.path.normpath(info["folder"])
+        roots = [os.path.normpath(r) for r in trailers_mod.default_roots()]
+        if os.path.dirname(folder) not in roots:
+            return {"removed": False, "reason": "folder outside media roots"}
+        reason = trailers_mod.remove_for_folder(folder, log=lambda m: print(m, flush=True))
+        return {"removed": reason == "removed", "reason": reason}
+
+
 def make_handler(service, prefix="/jellytip-api"):
     class H(BaseHTTPRequestHandler):
-        def do_GET(self):
+        def do_POST(self):
+            n = min(int(self.headers.get("Content-Length") or 0), 65536)
+            try:
+                body = json.loads(self.rfile.read(n) or b"{}")
+            except ValueError:
+                body = None
+            self.do_GET("POST", body if isinstance(body, dict) else {})
+
+        def do_GET(self, method="GET", body=None):
             u = urllib.parse.urlsplit(self.path)
             path = u.path[len(prefix):] if u.path.startswith(prefix + "/") else u.path
             query = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
             try:
                 status, body = service.route(path, query, self.headers.get("X-Jellytip-Token"),
-                                             self.headers.get("Authorization"), self.headers.get("X-Emby-Token"))
+                                             self.headers.get("Authorization"), self.headers.get("X-Emby-Token"), method, body)
             except Exception as e:  # never leak internals or keys; log the type only
                 self.log_message("error %s", type(e).__name__)
                 status, body = 500, {"error": "internal error"}
@@ -161,5 +229,16 @@ def make_handler(service, prefix="/jellytip-api"):
 
 def main():
     env = dict(os.environ)
-    srv = ThreadingHTTPServer(("127.0.0.1", int(env.get("PORT", "18931"))), make_handler(Service(env)))
+    svc = Service(env)
+
+    def refresh_paths():  # keeps the id->folder map fresh so trailer cleanup still resolves titles after Jellyfin deletes them
+        while True:
+            try:
+                if svc.jf.ok:
+                    sizes_mod.refresh(svc)
+            except Exception as e:
+                print("path refresh failed", type(e).__name__, flush=True)
+            time.sleep(1800)
+    threading.Thread(target=refresh_paths, daemon=True).start()
+    srv = ThreadingHTTPServer(("127.0.0.1", int(env.get("PORT", "18931"))), make_handler(svc))
     srv.serve_forever()
