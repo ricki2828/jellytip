@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash: static Jelly Tip on the night background; the animated intro follows in-app. -->
+    <style name="Theme.Jellytip.Starting" parent="Theme.Wholphin">
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+        <item name="android:windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/jellytip_splash_icon</item>
+    </style>
+</resources>

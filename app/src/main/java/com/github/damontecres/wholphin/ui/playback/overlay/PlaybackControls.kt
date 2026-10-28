@@ -103,6 +103,8 @@ sealed interface PlaybackAction {
 
     data object SearchCaptions : PlaybackAction
 
+    data object GetSubtitles : PlaybackAction
+
     data class ToggleCaptions(
         val index: Int,
     ) : PlaybackAction

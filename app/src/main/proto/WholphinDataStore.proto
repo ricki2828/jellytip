@@ -260,4 +260,9 @@ message AppPreferences {
   PhotoPreferences photo_preferences = 12;
   MusicPreferences music_preferences = 13;
   ExperimentalPreferences experimental_preferences = 14;
+
+  // Jellytip (inverted so that the proto default of false means "on")
+  bool jellytip_splash_disabled = 100;
+  bool jellytip_splash_sound_disabled = 101;
+  bool jellytip_ident_disabled = 102;
 }

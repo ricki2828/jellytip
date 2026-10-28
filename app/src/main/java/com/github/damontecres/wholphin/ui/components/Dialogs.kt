@@ -63,6 +63,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.TrackIndex
+import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteConfirm
 import com.github.damontecres.wholphin.preferences.lazyListWrapScrolling
 import com.github.damontecres.wholphin.services.StreamChoiceResult
 import com.github.damontecres.wholphin.ui.FontAwesome
@@ -516,8 +517,17 @@ fun ConfirmDialogContent(
     }
 }
 
+/** Jellytip: permanent delete needs two deliberate confirms, see [JellytipDeleteConfirm]. */
 @Composable
 fun ConfirmDeleteDialog(
+    itemTitle: String,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+    elevation: Dp = 3.dp,
+) = JellytipDeleteConfirm(itemTitle, onCancel, onConfirm, elevation)
+
+@Composable
+fun StockConfirmDeleteDialog(
     itemTitle: String,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,

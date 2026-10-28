@@ -8,6 +8,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.filter.DefaultForGenresFilterOptions
 import com.github.damontecres.wholphin.data.filter.DefaultForStudiosFilterOptions
 import com.github.damontecres.wholphin.data.model.SeerrItemType
+import com.github.damontecres.wholphin.jellytip.splash.JellytipIdentGate
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.components.ItemGrid
@@ -90,11 +91,13 @@ fun DestinationContent(
                     modifier = modifier,
                 )
             } else {
-                PlaybackPage(
-                    preferences = preferences,
-                    destination = destination,
-                    modifier = modifier,
-                )
+                JellytipIdentGate(preferences.appPreferences) {
+                    PlaybackPage(
+                        preferences = preferences,
+                        destination = destination,
+                        modifier = modifier,
+                    )
+                }
             }
         }
 
@@ -106,11 +109,13 @@ fun DestinationContent(
                     modifier = modifier,
                 )
             } else {
-                PlaybackPage(
-                    preferences = preferences,
-                    destination = destination,
-                    modifier = modifier,
-                )
+                JellytipIdentGate(preferences.appPreferences) {
+                    PlaybackPage(
+                        preferences = preferences,
+                        destination = destination,
+                        modifier = modifier,
+                    )
+                }
             }
         }
 

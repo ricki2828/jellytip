@@ -8,6 +8,7 @@ import androidx.preference.PreferenceManager
 import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.jellytip.JellytipPreferences
 import com.github.damontecres.wholphin.services.UpdateChecker
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.preferences.ConditionalPreferences
@@ -1193,6 +1194,7 @@ val basicPreferences =
                     AppPreference.SkipBackOnResume,
                 ),
         ),
+        JellytipPreferences.group,
         PreferenceGroup(
             title = R.string.next_up,
             preferences =
