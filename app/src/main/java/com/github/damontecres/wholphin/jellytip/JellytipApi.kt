@@ -19,6 +19,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
 import timber.log.Timber
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -343,6 +344,62 @@ class JellytipApi
                     null
                 }
             }
+
+        private val introRefreshStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /**
+         * Background, once per process: fetch the newest cold-start intro (~6 MB) into [dir] for the NEXT launch.
+         * Skips the download when the cached version is current; replaces the old file only after a complete download.
+         * Fails soft; a failure just means the next launch plays the cached (or fallback) intro.
+         */
+        suspend fun refreshIntro(dir: File) {
+            if (!introRefreshStarted.compareAndSet(false, true)) return
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val meta = JSONObject(getJson("/v1/intro", 10_000) ?: return@withContext)
+                    val version = meta.optString("version").ifBlank { return@withContext }
+                    val versionFile = File(dir, "intro.version")
+                    val video = File(dir, "intro.mp4")
+                    if (video.isFile && versionFile.takeIf { it.isFile }?.readText() == version) return@withContext
+                    dir.mkdirs()
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val url = "$base/${meta.optString("url", "v1/intro.mp4").trimStart('/')}".toHttpUrlOrNull() ?: return@withContext
+                    val request =
+                        Request
+                            .Builder()
+                            .url(url)
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    val tmp = File(dir, "intro.mp4.part")
+                    client.newBuilder().callTimeout(120, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip intro download returned %s", response.code)
+                            return@withContext
+                        }
+                        response.body.byteStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                    }
+                    if (tmp.length() < 100_000 || !tmp.renameTo(video)) {
+                        tmp.delete()
+                        return@withContext
+                    }
+                    versionFile.writeText(version)
+                    Timber.i("Jellytip: intro %s cached (%d KB)", version, video.length() / 1024)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    introRefreshStarted.set(false)
+                    throw e
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip intro refresh failed")
+                }
+            }
+        }
 
         // The server builds its Plex history index on the first call, which can exceed the 3 s used elsewhere
         private val audienceClient by lazy { baseClient.newBuilder().callTimeout(20, TimeUnit.SECONDS).build() }

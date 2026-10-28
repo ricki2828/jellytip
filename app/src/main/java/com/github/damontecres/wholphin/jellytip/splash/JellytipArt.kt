@@ -52,6 +52,7 @@ private val BiteColor = Color(0xFF21163D)
 fun DrawScope.drawJellyTipUnits(
     bites: Int,
     dripT: Float,
+    biteColor: Color = BiteColor,
 ) {
     drawPath(LogoPaths.stick, Stick)
     drawPath(LogoPaths.body, Vanilla)
@@ -67,8 +68,8 @@ fun DrawScope.drawJellyTipUnits(
     drawOval(Jelly, Offset(30.8f, 37.4f + dy), Size(6.4f, 9.2f), alpha = da)
     drawPath(LogoPaths.play, Choc)
     drawOval(Color(0xFFFF8AA3), Offset(34f, 23f), Size(12f, 6f), alpha = 0.7f)
-    if (bites >= 1) drawCircle(BiteColor, 11f, Offset(80f, 30f))
-    if (bites >= 2) drawCircle(BiteColor, 10f, Offset(70f, 18f))
+    if (bites >= 1) drawCircle(biteColor, 11f, Offset(80f, 30f))
+    if (bites >= 2) drawCircle(biteColor, 10f, Offset(70f, 18f))
 }
 
 /**
@@ -80,6 +81,7 @@ fun JellyTipLogo(
     bites: Int,
     animate: Boolean,
     modifier: Modifier = Modifier,
+    biteColor: Color = BiteColor,
 ) {
     val pop = remember { Animatable(if (animate) 0f else 1f) }
     val chomp = remember { Animatable(0f) }
@@ -123,154 +125,7 @@ fun JellyTipLogo(
             scale(0.4f + 0.6f * p, 0.4f + 0.6f * p, center)
             scale(s, s, Offset.Zero)
         }) {
-            drawJellyTipUnits(bites, dripT)
-        }
-    }
-}
-
-/** One caption line of an intro scene; [key] lines are drawn in the amber "key" colour. */
-data class CaptionLine(
-    val text: String,
-    val key: Boolean = false,
-)
-
-data class IntroScene(
-    val background: Color,
-    val captions: List<CaptionLine>,
-)
-
-val IntroScenes =
-    listOf(
-        IntroScene(
-            Color(0xFFFFCF3A),
-            listOf(CaptionLine("NOW SHOWING:", true), CaptionLine("ONE BUZZY BEE, FLAT STICK. TOP SPEED 4 KM/H.")),
-        ),
-        IntroScene(
-            Color.Black,
-            listOf(CaptionLine("TELETEXT P801:", true), CaptionLine("SUBTITLES NOW ONE BUTTON. PROGRESS SINCE 1986.")),
-        ),
-        IntroScene(
-            Color(0xFF3F6B3A),
-            listOf(CaptionLine("IF IT WASN'T FOR YOUR GUMBOOTS...", true), CaptionLine("WE DON'T KNOW HOW LUCKY WE ARE.")),
-        ),
-        IntroScene(
-            Color(0xFFC15A1E),
-            listOf(CaptionLine("HOLDEN KINGSWOOD. VINYL SEATS. 38°C."), CaptionLine("DRIVE-IN SOLD OUT. STAYING IN.", true)),
-        ),
-        IntroScene(
-            Color(0xFF09122E),
-            listOf(CaptionLine("THE KIWI IS GOING TO BED."), CaptionLine("YOU ARE NOT.", true)),
-        ),
-    )
-
-private val Ink = Color(0xFF111111)
-
-private fun DrawScope.fillStroke(
-    draw: (Color, androidx.compose.ui.graphics.drawscope.DrawStyle) -> Unit,
-    fill: Color,
-    stroke: Color,
-    width: Float,
-) {
-    draw(fill, androidx.compose.ui.graphics.drawscope.Fill)
-    draw(stroke, Stroke(width))
-}
-
-/** Draw scene [index] in a 200 x 130 coordinate space (caller scales). */
-fun DrawScope.drawIntroScene(
-    index: Int,
-    textMeasurer: TextMeasurer,
-    mono: FontFamily,
-) {
-    fun text(
-        s: String,
-        x: Float,
-        baseline: Float,
-        size: Float,
-        color: Color,
-    ) {
-        drawText(
-            textMeasurer,
-            s,
-            Offset(x, baseline - size * 0.78f),
-            TextStyle(color = color, fontFamily = mono, fontSize = size.toSp()),
-        )
-    }
-    when (index) {
-        0 -> {
-            val blue = Color(0xFF1D6FD6)
-            val yellow = Color(0xFFFFD400)
-            val red = Color(0xFFE53935)
-            drawCircle(blue, 14f, Offset(55f, 112f))
-            drawCircle(blue, 14f, Offset(145f, 112f))
-            fillStroke({ c, st -> drawOval(c, Offset(38f, 34f), Size(124f, 76f), style = st) }, yellow, Ink, 4f)
-            drawRect(Ink, Offset(72f, 36f), Size(14f, 72f))
-            drawRect(Ink, Offset(104f, 36f), Size(14f, 72f))
-            fillStroke({ c, st -> drawCircle(c, 20f, Offset(152f, 58f), style = st) }, yellow, Ink, 4f)
-            drawCircle(Ink, 4f, Offset(158f, 54f))
-            rotate(-18f, Offset(80f, 26f)) {
-                fillStroke({ c, st -> drawOval(c, Offset(54f, 12f), Size(52f, 28f), style = st) }, red, Ink, 3f)
-            }
-            rotate(14f, Offset(118f, 24f)) {
-                fillStroke({ c, st -> drawOval(c, Offset(92f, 10f), Size(52f, 28f), style = st) }, red, Ink, 3f)
-            }
-            drawLine(Ink, Offset(160f, 40f), Offset(166f, 20f), 4f, StrokeCap.Round)
-            drawLine(Ink, Offset(168f, 44f), Offset(182f, 30f), 4f, StrokeCap.Round)
-        }
-
-        1 -> {
-            drawRect(Color.Black, Offset.Zero, Size(200f, 130f))
-            drawRect(Color(0xFF0000FF), Offset.Zero, Size(200f, 22f))
-            text("P801 TELETEXT 801 21:47", 6f, 17f, 20f, Color(0xFFFFFF00))
-            text("SUBTITLES", 8f, 50f, 22f, Color(0xFF00FFFF))
-            text("ENGLISH........... ON", 8f, 74f, 18f, Color.White)
-            text("TE REO MAORI...... ON", 8f, 94f, 18f, Color.White)
-            drawRect(Color(0xFFFF0000), Offset(0f, 108f), Size(50f, 22f))
-            drawRect(Color(0xFF00FF00), Offset(50f, 108f), Size(50f, 22f))
-            drawRect(Color(0xFFFFFF00), Offset(100f, 108f), Size(50f, 22f))
-            drawRect(Color(0xFF00FFFF), Offset(150f, 108f), Size(50f, 22f))
-        }
-
-        2 -> {
-            val boot1 = path("M50,10 h34 v80 h28 a16,16 0 0 1 16,16 v10 h-78 z")
-            val boot2 = path("M118,10 h34 v80 h28 a16,16 0 0 1 16,16 v10 h-78 z")
-            drawPath(boot1, Ink)
-            withTransform({ translate(-6f, 0f) }) { drawPath(boot2, Ink) }
-            drawRect(Color(0xFFE53935), Offset(50f, 10f), Size(34f, 8f))
-            drawRect(Color(0xFFE53935), Offset(112f, 10f), Size(34f, 8f))
-            drawOval(Color(0xFF5A3B1C), Offset(10f, 118f), Size(180f, 12f))
-        }
-
-        3 -> {
-            val body = path("M12,84 h176 v-18 l-30,-6 l-22,-24 h-66 l-26,26 l-32,4 z")
-            val window = path("M78,42 h52 l18,20 h-86 z")
-            drawPath(body, Color(0xFFE8DCC0))
-            drawPath(body, Ink, style = Stroke(4f))
-            drawPath(window, Color(0xFF9FD3FF))
-            drawPath(window, Ink, style = Stroke(3f))
-            drawCircle(Color(0xFF222222), 16f, Offset(52f, 90f))
-            drawCircle(Color(0xFF222222), 16f, Offset(148f, 90f))
-            drawCircle(Color(0xFFAAAAAA), 6f, Offset(52f, 90f))
-            drawCircle(Color(0xFFAAAAAA), 6f, Offset(148f, 90f))
-        }
-
-        4 -> {
-            val rail = Color(0xFF9AA6C9)
-            drawCircle(Color(0xFFFFF6C4), 12f, Offset(168f, 22f))
-            drawLine(rail, Offset(120f, 120f), Offset(140f, 20f), 4f)
-            drawLine(rail, Offset(150f, 120f), Offset(140f, 20f), 4f)
-            for (i in 0..4) {
-                drawLine(rail, Offset(124f + i * 3f, 100f - i * 18f), Offset(146f - i * 1.5f, 100f - i * 18f), 3f)
-            }
-            drawPath(path("M118,30 a26,18 -30 0 1 44,-8"), Color(0xFFC9D2EE), style = Stroke(5f))
-            val brown = Color(0xFF7A5A3A)
-            drawOval(brown, Offset(44f, 76f), Size(52f, 40f))
-            drawCircle(brown, 9f, Offset(92f, 82f))
-            val sand = Color(0xFFD9C39A)
-            drawPath(path("M100,82 q14,4 18,12"), sand, style = Stroke(3f))
-            drawLine(sand, Offset(60f, 116f), Offset(60f, 124f), 3f)
-            drawLine(sand, Offset(76f, 116f), Offset(76f, 124f), 3f)
-            drawPath(path("M48,84 q22,-30 44,-6 z"), Color(0xFF5B8FD6))
-            drawCircle(Color.White, 4f, Offset(48f, 84f))
+            drawJellyTipUnits(bites, dripT, biteColor)
         }
     }
 }

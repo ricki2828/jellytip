@@ -20,10 +20,13 @@ import androidx.datastore.core.DataStore
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
 import com.github.damontecres.wholphin.jellytip.JellytipSession
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import timber.log.Timber
+import java.io.File
 import java.util.UUID
 
 /**
@@ -60,6 +63,13 @@ fun JellytipSplashOverlay(
             }
         Log.i("Jellytip", "splash prefs ready, disabled=${prefs?.jellytipSplashDisabled}")
     }
+    var introFile by remember { mutableStateOf<File?>(null) }
+    var introReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // Video cached by the previous launch; none on first run. Reduced motion gets the still end card.
+        introFile = if (JellytipSession.reducedMotion(context)) null else withContext(Dispatchers.IO) { JellytipIntroCache.cached(context) }
+        introReady = true
+    }
     val p = prefs
     LaunchedEffect(p) {
         if (p != null && p.jellytipSplashDisabled) {
@@ -80,9 +90,9 @@ fun JellytipSplashOverlay(
     }
     // Night background while preferences load, matching the system splash, so the app never flashes through
     Box(Modifier.fillMaxSize().background(JellytipColors.Night)) {
-        if (p != null && !p.jellytipSplashDisabled) {
-            JellytipIntroTv(
-                reduced = JellytipSession.reducedMotion(context),
+        if (p != null && introReady && !p.jellytipSplashDisabled) {
+            JellytipIntroClassy(
+                file = introFile,
                 soundEnabled = !p.jellytipSplashSoundDisabled,
                 onFinished = {
                     JellytipOverlayKeys.onKey = null

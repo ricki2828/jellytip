@@ -10,7 +10,7 @@ OGG Vorbis with ffmpeg.
 
 Needs numpy + scipy; ffmpeg (libvorbis) on PATH for the OGG step.
 Outputs (48 kHz mono):
-    jellytip_intro.ogg  tape clunk/motor/hiss at 0.00 s, Rhodes sting at 3.10 s
+    jellytip_intro_card.ogg  soft Rhodes sting only (no tape clunk/hiss), under the video intro's end card
     jellytip_ident.ogg  Rhodes sting at 0.12 s
 """
 import argparse
@@ -24,7 +24,6 @@ from scipy.io import wavfile
 from scipy.signal import lfilter
 
 SR = 48000
-INTRO_STING_AT = 3.10  # seconds; keep in sync with JellytipTimings.INTRO_LOGO_MS
 IDENT_STING_AT = 0.12
 RNG = np.random.default_rng(1986)
 
@@ -187,17 +186,14 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     sting = rhodes_sting()
-    clunk = tape_clunk()
 
-    intro = np.zeros(int((INTRO_STING_AT + len(sting) / SR) * SR) + 1)
-    place(intro, clunk, 0.02)
-    place(intro, sting, INTRO_STING_AT)
+    card = 0.6 * sting  # soft: sits under the classy end card
     ident = np.zeros(int((IDENT_STING_AT + len(sting) / SR) * SR) + 1)
     place(ident, sting, IDENT_STING_AT)
 
     ffmpeg = shutil.which("ffmpeg")
     # The ident must not ring far into the film; the intro may linger a little after the logo lands.
-    for name, sig, max_len, fade in (("jellytip_intro", intro, 6.0, 1.2), ("jellytip_ident", ident, 3.4, 0.7)):
+    for name, sig, max_len, fade in (("jellytip_intro_card", card, 3.2, 1.0), ("jellytip_ident", ident, 3.4, 0.7)):
         sig, peak = finish(sig, fade=fade, max_len=max_len)
         wav = out / f"{name}.wav"
         wavfile.write(wav, SR, (np.clip(sig, -1, 1) * 32767).astype(np.int16))

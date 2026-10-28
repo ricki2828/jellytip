@@ -49,6 +49,9 @@ class JellytipHomeViewModel
 
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
+        /** Once home is up: download the newest cold-start intro for the next launch. */
+        suspend fun refreshIntro(dir: java.io.File) = jellytipApi.refreshIntro(dir)
+
         /** Single Jellyfin backdrop capped at 1920 wide; episodes and seasons use their series' backdrop. */
         fun backdropUrl(
             item: BaseItem,

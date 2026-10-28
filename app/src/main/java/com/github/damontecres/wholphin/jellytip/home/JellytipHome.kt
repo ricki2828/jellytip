@@ -180,6 +180,11 @@ fun JellytipHomeHero(
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState(JellytipSettings())
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(Unit) {
+        delay(3000) // home content first; the ~6 MB download is for the next launch
+        viewModel.refreshIntro(com.github.damontecres.wholphin.jellytip.splash.JellytipIntroCache.dir(appContext))
+    }
 
     var resumed by remember { mutableStateOf(true) }
     LifecycleResumeEffect(Unit) {
