@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,12 +42,13 @@ fun PersonRow(
         modifier = modifier,
     ) {
         ItemRowTitle(stringResource(title))
-        LazyRow(
+        JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
             state = rememberLazyListState(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(8.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .fillMaxWidth()
                     .focusRestorer(firstFocus),
         ) {
@@ -69,6 +71,7 @@ fun PersonRow(
                 )
             }
         }
+        }
     }
 }
 
@@ -86,12 +89,13 @@ fun DiscoverPersonRow(
         modifier = modifier,
     ) {
         ItemRowTitle(stringResource(title))
-        LazyRow(
+        JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
             state = rememberLazyListState(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(8.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .padding(start = 16.dp)
                     .fillMaxWidth()
                     .focusRestorer(firstFocus),
@@ -111,6 +115,7 @@ fun DiscoverPersonRow(
                             .animateItem(),
                 )
             }
+        }
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.ui.logCoilError
+import com.github.damontecres.wholphin.jellytip.JellytipFocus
+import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -115,23 +118,21 @@ fun BannerCard(
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnLongClick by rememberUpdatedState(onLongClick)
 
+    val cardSource = interactionSource ?: remember { MutableInteractionSource() }
+    val cardFocused by cardSource.collectIsFocusedAsState()
+
     Card(
-        modifier = modifier.size(cardHeight * aspectRatio, cardHeight),
+        modifier = modifier.size(cardHeight * aspectRatio, cardHeight).jellytipSiblingDim(cardFocused),
         onClick = { currentOnClick() },
         onLongClick = { currentOnLongClick() },
-        interactionSource = interactionSource,
+        interactionSource = cardSource,
         colors =
             CardDefaults.colors(
 //                containerColor = Color.Transparent,
             ),
-        scale = if (jellytipHome) CardDefaults.scale(focusedScale = 1.06f) else CardDefaults.scale(),
-        border = if (jellytipHome) CardDefaults.border(focusedBorder = Border.None) else CardDefaults.border(),
-        glow =
-            if (jellytipHome) {
-                CardDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.45f), 12.dp))
-            } else {
-                CardDefaults.glow()
-            },
+        scale = JellytipFocus.scale(),
+        border = JellytipFocus.border(),
+        glow = JellytipFocus.glow(),
     ) {
         Box(
             modifier =
@@ -150,7 +151,10 @@ fun BannerCard(
                     model = imageUrl,
                     contentDescription = null,
                     contentScale = imageContentScale,
-                    onError = remember { { imageError = true } },
+                    onError = {
+                        logCoilError(imageUrl, it.result)
+                        imageError = true
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {

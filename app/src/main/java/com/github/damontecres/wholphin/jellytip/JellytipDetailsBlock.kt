@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.jellytip
 
+import androidx.tv.material3.Border
+import androidx.tv.material3.Glow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -45,6 +48,8 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
+import com.github.damontecres.wholphin.ui.components.TrailerDialog
+import com.github.damontecres.wholphin.jellytip.home.jellytipLogoFilter
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -205,15 +210,16 @@ fun JellytipDetailsBlock(
                     )
                 }
 
-                scoreLine(extras)?.let {
-                    Text(
-                        text = it,
-                        style = body,
-                        color = quiet.copy(alpha = 0.85f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            scoreLine(extras)?.let {
+                Text(
+                    text = it,
+                    style = body,
+                    inlineContent = LetterboxdInline,
+                    color = quiet.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
                 ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
             }
@@ -235,6 +241,7 @@ private fun DetailsTitle(
             contentDescription = item.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
+            colorFilter = jellytipLogoFilter(),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->
@@ -332,13 +339,19 @@ private fun TextButton(
         onClick = button.onClick,
         modifier = modifier,
         shape = ButtonDefaults.shape(RoundedCornerShape(sizes.px(4f))),
+        scale = ButtonDefaults.scale(focusedScale = JellytipFocus.SCALE),
+        border =
+            ButtonDefaults.border(
+                focusedBorder = Border(BorderStroke(3.dp, cream), shape = RoundedCornerShape(sizes.px(4f))),
+            ),
+        glow = ButtonDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.45f), 12.dp)),
         contentPadding = PaddingValues(horizontal = sizes.px(22f), vertical = sizes.px(8f)),
         colors =
             if (button.primary) {
                 ButtonDefaults.colors(
-                    containerColor = cream,
-                    contentColor = ink,
-                    focusedContainerColor = Color.White,
+                    containerColor = Color.White.copy(alpha = 0.22f),
+                    contentColor = Color.White,
+                    focusedContainerColor = cream,
                     focusedContentColor = ink,
                 )
             } else {

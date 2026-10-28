@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
+import androidx.compose.runtime.CompositionLocalProvider
+import com.github.damontecres.wholphin.jellytip.LocalJellytipRowFocused
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -254,6 +256,7 @@ fun SeriesOverviewContent(
                                     }
                                     val state = rememberLazyListState(position.episodeRowIndex)
                                     var epPosition by rememberInt(position.episodeRowIndex)
+                                    CompositionLocalProvider(LocalJellytipRowFocused provides cardRowHasFocus) {
                                     LazyRow(
                                         state = state,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -322,6 +325,7 @@ fun SeriesOverviewContent(
                                                 useSeriesForPrimary = false,
                                             )
                                         }
+                                    }
                                     }
                                 }
                             }

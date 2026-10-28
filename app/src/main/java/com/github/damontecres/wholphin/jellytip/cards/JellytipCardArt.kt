@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.cards
 
+import com.github.damontecres.wholphin.ui.logCoilError
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -58,7 +59,7 @@ data class JellytipCardArt(
 /**
  * Image priority (sizes are physical px of the card so the 2 GB device decodes no more than it shows):
  * 1. Thumb (title baked into landscape art)
- * 2. episodes: series Thumb, else the episode still + series logo
+ * 2. episodes: the episode's own still + series logo, else series Thumb/backdrop
  * 3. backdrop + clearlogo, 4. backdrop + title text (caller draws it)
  */
 fun selectJellytipCardArt(
@@ -100,13 +101,13 @@ fun selectJellytipCardArt(
 
     val seriesId = d.seriesId
     if (isEpisode && seriesId != null) {
-        val thumbId = d.parentThumbItemId
-        if (thumbId != null && d.parentThumbImageTag != null) {
-            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
-        }
         val seriesLogo = logo(d.parentLogoItemId ?: seriesId, d.parentLogoImageTag)
-        if (ImageType.PRIMARY in tags) {
+        if (ImageType.PRIMARY in tags && JellytipApi.shared?.isEpisodeStillUsable(item.id) != false) {
             return JellytipCardArt(fill(item.id, ImageType.PRIMARY, tags[ImageType.PRIMARY]), false, seriesLogo)
+        }
+        val thumbId = d.parentThumbItemId
+        if (thumbId != null && d.parentThumbImageTag != null && JellytipApi.shared?.isThumbGood(thumbId) != false) {
+            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
         }
         val backdropId = d.parentBackdropItemId
         val backdropTag = d.parentBackdropImageTags?.firstOrNull()
@@ -117,7 +118,7 @@ fun selectJellytipCardArt(
         return JellytipCardArt(null, false, seriesLogo)
     }
 
-    if (ImageType.THUMB in tags) {
+    if (ImageType.THUMB in tags && JellytipApi.shared?.isThumbGood(item.id) != false) {
         return JellytipCardArt(fill(item.id, ImageType.THUMB, tags[ImageType.THUMB]), true, null)
     }
     val backdropTag = d.backdropImageTags?.firstOrNull()
@@ -164,10 +165,16 @@ fun JellytipTitledImage(
         value = RankState(quick, true)
         if (quick == null) api.bestBackdropIndex(rankedId)?.let { value = RankState(it, true) }
     }
+    // Episode stills: which are usable (not black/blurry/non-photo) comes from the companion once per series
+    val episodeArtReady by produceState(item.type != BaseItemKind.EPISODE, rankedId) {
+        JellytipApi.shared?.loadEpisodeArt(rankedId)
+        value = true
+    }
+    val hasTitledArt = ImageType.THUMB in item.data.imageTags.orEmpty()
     val bestIndex = ranking.index
     val art =
-        remember(item, widthPx, heightPx, bestIndex, ranking.ready) {
-            if (ranking.ready || bestIndex != null) {
+        remember(item, widthPx, heightPx, bestIndex, ranking.ready, episodeArtReady) {
+            if (ranking.ready || bestIndex != null || hasTitledArt) {
                 selectJellytipCardArt(service, item, widthPx, heightPx, bestIndex)
             } else {
                 JellytipCardArt(null, false, null)
@@ -183,7 +190,10 @@ fun JellytipTitledImage(
                 model = art.baseUrl,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
-                onError = { baseError = true },
+                onError = {
+                    logCoilError(art.baseUrl, it.result)
+                    baseError = true
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -203,7 +213,10 @@ fun JellytipTitledImage(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 alignment = Alignment.BottomStart,
-                onError = { logoError = true },
+                onError = {
+                    logCoilError(art.logoUrl, it.result)
+                    logoError = true
+                },
                 modifier =
                     Modifier
                         .align(Alignment.BottomStart)

@@ -1,5 +1,10 @@
 package com.github.damontecres.wholphin.jellytip.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -34,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -57,11 +64,16 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipFocal
+import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
+import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
+import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
-import com.github.damontecres.wholphin.jellytip.myChipText
-import com.github.damontecres.wholphin.jellytip.scoreChipText
+import com.github.damontecres.wholphin.jellytip.LetterboxdInline
+import com.github.damontecres.wholphin.jellytip.scoreLine as jellytipScoreLine
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import com.github.damontecres.wholphin.ui.AspectRatio
 import com.github.damontecres.wholphin.ui.components.QuickDetails
@@ -107,13 +119,23 @@ object JellytipHomeTokens {
     const val TEXT_BLOCK_W_PX = 900
     const val START_PAD_PX = 16
     const val BOTTOM_PAD_PX = 28
-    const val HEADER_HEIGHT_FRACTION = 0.5f
-    const val HERO_HEIGHT_FRACTION = 0.66f
+    const val HEADER_HEIGHT_FRACTION = 0.56f // rows start here; text block sits at its bottom, above the first row
+    const val HERO_HEIGHT_FRACTION = 0.70f
+
+    /** Landscape tile height in dp (~20% smaller than the previous 132) and the gap between tiles; card image requests derive from these. */
+    const val LANDSCAPE_CARD_HEIGHT_DP = 106
+    const val LANDSCAPE_CARD_SPACING_DP = 10
+    /** Hero/details clearlogo drawn as a solid off-white silhouette so it never repeats the coloured logo on the tile. Flip to false to restore. */
+    const val WHITE_LOGO = true
+    val LOGO_TINT = Color(0xFFF2F2F0)
     const val VIGNETTE_ALPHA = 0.78f
     const val RAIL_SCRIM_ALPHA = 0.55f
 
     /** Rest time before a muted trailer replaces the still (home hero and details). */
     const val TRAILER_DELAY_MS = 6_000L
+
+    /** Rest time before the home hero starts its muted trailer (details keeps [TRAILER_DELAY_MS]). */
+    const val HOME_TRAILER_DELAY_MS = 2_500L
 
     // Details page (shares TEXT_PX / TITLE-less logo box above)
     const val BADGE_PX = 19
@@ -125,7 +147,6 @@ object JellytipHomeTokens {
     const val DETAILS_WIDTH_PX = 820
 }
 
-private const val LANDSCAPE_HEIGHT_DP = 132
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
 private const val KEN_BURNS_MS = 24_000
@@ -136,8 +157,8 @@ private const val KEN_BURNS_MS = 24_000
 fun jellytipRowOptions(options: HomeRowViewOptions): HomeRowViewOptions =
     if (options == HomeRowViewOptions()) {
         options.copy(
-            heightDp = LANDSCAPE_HEIGHT_DP,
-            spacing = 12,
+            heightDp = JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP,
+            spacing = JellytipHomeTokens.LANDSCAPE_CARD_SPACING_DP,
             aspectRatio = AspectRatio.WIDE,
             contentScale = PrefContentScale.CROP,
             imageType = ViewOptionImageType.THUMB, // swapped for the backdrop in the card
@@ -175,19 +196,34 @@ fun JellytipHomeHero(
         }
     }
     var lastUrl by remember { mutableStateOf<String?>(null) }
-    val url = remember(shown?.id) { shown?.let { viewModel.backdropUrl(it) } }
-    if (url != null && url != lastUrl) lastUrl = url
+    var lastFocal by remember { mutableStateOf<JellytipFocal?>(null) }
+    // Hero photo comes from the companion (differs from the tile art); until it answers, show a non-tile backdrop and upgrade
+    val heroIndex by produceState<Int?>(null, shown?.id) {
+        val target = shown
+        value = null
+        if (target != null) value = JellytipApi.shared?.peekHeroIndex(jellytipHeroItemId(target)) ?: viewModel.heroIndex(target)
+    }
+    val pick = remember(shown?.id, heroIndex) { shown?.let { viewModel.heroPick(it, heroIndex) } }
+    val url = pick?.url
+    if (url != null && (url != lastUrl || pick.focal != lastFocal)) {
+        lastUrl = url
+        lastFocal = pick.focal
+    }
 
-    // Trailer: only after focus has rested on the same trailer-bearing card
-    var trailerUrl by remember { mutableStateOf<String?>(null) }
+    // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
-        trailerUrl = null
-        if (!trailerWanted || item == null) return@LaunchedEffect
-        if ((item.data.localTrailerCount ?: 0) <= 0) return@LaunchedEffect
-        delay(JellytipHomeTokens.TRAILER_DELAY_MS)
-        trailerUrl = viewModel.trailerUrl(item)
+        JellytipTrailerControl.stop()
+        if (item?.id != JellytipTrailerControl.dismissedFor) JellytipTrailerControl.dismissedFor = null
+        if (!trailerWanted || item == null || item.id == JellytipTrailerControl.dismissedFor) return@LaunchedEffect
+        if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return@LaunchedEffect
+        delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
+        viewModel.localTrailer(item)?.let { (url, trailerId) ->
+            JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
+        }
     }
+    DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
+    val trailerUrl = JellytipTrailerControl.url
 
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
@@ -197,16 +233,46 @@ fun JellytipHomeHero(
                 animationSpec = tween(700),
                 modifier = Modifier.fillMaxSize(),
                 label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u) }
+            ) { u -> if (u != null) HomeKenBurns(u, lastFocal) }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true
             if (usedPlayer) {
                 HeroTrailer(
                     url = trailerUrl,
-                    sound = settings.trailerSound,
+                    sound = JellytipTrailerControl.sound,
                     httpClient = viewModel.httpClient,
-                    onEnded = { trailerUrl = null },
+                    onEnded = { JellytipTrailerControl.stop() },
+                )
+            }
+            // "Sound on" hint, 2 s, bottom-right just above the first row
+            var hintVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(JellytipTrailerControl.hintTick) {
+                if (JellytipTrailerControl.hintTick == 0L) return@LaunchedEffect
+                hintVisible = true
+                delay(2_000)
+                hintVisible = false
+            }
+            AnimatedVisibility(
+                visible = hintVisible,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(300)),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            end = 48.dp,
+                            top = (LocalConfiguration.current.screenHeightDp * JellytipHomeTokens.HEADER_HEIGHT_FRACTION - 40).dp,
+                        ),
+            ) {
+                Text(
+                    text = "Sound on  \u00B7  OK again for full screen  \u00B7  hold OK for details",
+                    fontSize = rememberJellytipSizes().sp(JellytipHomeTokens.TEXT_PX),
+                    color = JellytipPalette.Vanilla,
+                    modifier =
+                        Modifier
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
             // Narrow left strip keeps the nav rail legible
@@ -252,7 +318,10 @@ fun JellytipHomeHero(
 }
 
 @Composable
-private fun HomeKenBurns(url: String) {
+private fun HomeKenBurns(
+    url: String,
+    focal: JellytipFocal?,
+) {
     val progress = remember(url) { Animatable(0f) }
     LaunchedEffect(url) {
         progress.animateTo(1f, tween(KEN_BURNS_MS, easing = LinearEasing))
@@ -262,10 +331,12 @@ private fun HomeKenBurns(url: String) {
         model = url,
         contentDescription = null,
         contentScale = ContentScale.Crop,
+        alignment = focalAlignment(focal),
         modifier =
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    transformOrigin = focalOrigin(focal)
                     val p = progress.value
                     val scale = 1.04f + 0.05f * p
                     scaleX = scale
@@ -296,6 +367,7 @@ private fun HeroTrailer(
         }
     val currentOnEnded by rememberUpdatedState(onEnded)
     DisposableEffect(player) {
+        JellytipTrailerControl.positionProvider = { player.currentPosition }
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -312,6 +384,7 @@ private fun HeroTrailer(
             }
         player.addListener(listener)
         onDispose {
+            JellytipTrailerControl.positionProvider = null
             player.removeListener(listener)
             player.release()
         }
@@ -371,13 +444,7 @@ fun JellytipHomeHeader(
         }
     }
     val scoreLine =
-        remember(extras, item?.id) {
-            val e = extras?.takeIf { it.first == item?.id }?.second
-            val parts =
-                e?.scores?.mapNotNull { scoreChipText(it) }?.take(4).orEmpty() +
-                    listOfNotNull(e?.letterboxd?.let { myChipText(it) })
-            parts.joinToString("  ·  ")
-        }
+        remember(extras, item?.id) { jellytipScoreLine(extras?.takeIf { it.first == item?.id }?.second) }
 
     with(density) {
         val textSize = JellytipHomeTokens.TEXT_PX.toSp()
@@ -403,6 +470,7 @@ fun JellytipHomeHeader(
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
+                        colorFilter = jellytipLogoFilter(),
                         onError = { logoFailed = true },
                         modifier =
                             Modifier
@@ -448,9 +516,10 @@ fun JellytipHomeHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (scoreLine.isNotEmpty()) {
+                if (scoreLine != null) {
                     Text(
                         text = scoreLine,
+                        inlineContent = LetterboxdInline,
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
@@ -462,3 +531,7 @@ fun JellytipHomeHeader(
         }
     }
 }
+
+/** Tint for hero/details clearlogos, or null when [JellytipHomeTokens.WHITE_LOGO] is off. */
+fun jellytipLogoFilter(): ColorFilter? =
+    if (JellytipHomeTokens.WHITE_LOGO) ColorFilter.tint(JellytipHomeTokens.LOGO_TINT, BlendMode.SrcIn) else null

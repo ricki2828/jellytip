@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,12 +28,13 @@ fun ChapterRow(
         modifier = modifier,
     ) {
         ItemRowTitle(stringResource(R.string.chapters))
-        LazyRow(
+        JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
             state = rememberLazyListState(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 8.dp, horizontal = 16.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .fillMaxWidth()
                     .focusRestorer(),
         ) {
@@ -44,6 +46,7 @@ fun ChapterRow(
                     onLongClick = onLongClick?.let { { it(item) } },
                 )
             }
+        }
         }
     }
 }

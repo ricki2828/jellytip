@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipFocus
+import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -101,23 +103,15 @@ fun PersonCard(
         modifier = modifier,
     ) {
         Card(
-            modifier = Modifier,
+            modifier = Modifier.jellytipSiblingDim(focused),
             onClick = onClick,
             onLongClick = onLongClick,
             interactionSource = interactionSource,
             shape = CardDefaults.shape(CircleShape),
             border =
-                CardDefaults.border(
-                    focusedBorder =
-                        Border(
-                            border =
-                                BorderStroke(
-                                    width = 3.dp,
-                                    color = MaterialTheme.colorScheme.border,
-                                ),
-                            shape = CircleShape,
-                        ),
-                ),
+                JellytipFocus.border(CircleShape),
+            scale = JellytipFocus.scale(),
+            glow = JellytipFocus.glow(),
             colors =
                 CardDefaults.colors(
                     containerColor = Color.Transparent,

@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipFocus
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -80,6 +81,9 @@ fun GridCard(
             onClick = onClick,
             onLongClick = onLongClick,
             interactionSource = interactionSource,
+            scale = JellytipFocus.scale(),
+            border = JellytipFocus.border(),
+            glow = JellytipFocus.glow(),
             colors =
                 CardDefaults.colors(
                     containerColor = Color.Transparent,

@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.jellytip.JellytipFocus
+import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -158,10 +160,14 @@ fun SeasonCard(
             modifier =
                 Modifier
                     .size(imageWidth, imageHeight)
-                    .aspectRatio(aspectRationToUse),
+                    .aspectRatio(aspectRationToUse)
+                    .jellytipSiblingDim(focused),
             onClick = onClick,
             onLongClick = onLongClick,
             interactionSource = interactionSource,
+            scale = JellytipFocus.scale(),
+            border = JellytipFocus.border(),
+            glow = JellytipFocus.glow(),
             colors =
                 CardDefaults.colors(
                     containerColor = Color.Transparent,
@@ -181,7 +187,7 @@ fun SeasonCard(
                     unwatchedCount = unplayedItemCount,
                     watchedPercent = playedPercentage,
                     numberOfVersions = numberOfVersions,
-                    useFallbackText = false,
+                    useFallbackText = true,
                     modifier =
                         Modifier
                             .fillMaxSize(),
