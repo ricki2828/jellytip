@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.cards
 
+import com.github.damontecres.wholphin.ui.logCoilError
 import com.github.damontecres.wholphin.jellytip.JellytipFocus
 import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
 import androidx.compose.foundation.background
@@ -150,7 +151,10 @@ fun BannerCard(
                     model = imageUrl,
                     contentDescription = null,
                     contentScale = imageContentScale,
-                    onError = remember { { imageError = true } },
+                    onError = {
+                        logCoilError(imageUrl, it.result)
+                        imageError = true
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {

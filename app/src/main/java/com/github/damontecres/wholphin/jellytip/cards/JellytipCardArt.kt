@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.cards
 
+import com.github.damontecres.wholphin.ui.logCoilError
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -183,7 +184,10 @@ fun JellytipTitledImage(
                 model = art.baseUrl,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
-                onError = { baseError = true },
+                onError = {
+                    logCoilError(art.baseUrl, it.result)
+                    baseError = true
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -203,7 +207,10 @@ fun JellytipTitledImage(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 alignment = Alignment.BottomStart,
-                onError = { logoError = true },
+                onError = {
+                    logCoilError(art.logoUrl, it.result)
+                    logoError = true
+                },
                 modifier =
                     Modifier
                         .align(Alignment.BottomStart)

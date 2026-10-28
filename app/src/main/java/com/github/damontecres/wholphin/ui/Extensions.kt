@@ -321,6 +321,12 @@ fun logCoilError(
     url: String?,
     errorResult: ErrorResult,
 ) {
+    // Release-visible (Timber is stripped in release): adb logcat -s JellytipImg. Token-bearing query params removed.
+    val safeUrl = url?.replace(Regex("([?&](api_key|ApiKey|X-Emby-Token)=)[^&]*", RegexOption.IGNORE_CASE), "$1***")
+    android.util.Log.w(
+        "JellytipImg",
+        "fail url=$safeUrl err=${errorResult.throwable.javaClass.simpleName}: ${errorResult.throwable.message?.take(160)}",
+    )
     if (errorResult.throwable is coil3.network.HttpException || errorResult.throwable is coil3.request.NullRequestDataException) {
         Timber.w("Error loading image: %s for %s", errorResult.throwable.localizedMessage, url)
     } else {
