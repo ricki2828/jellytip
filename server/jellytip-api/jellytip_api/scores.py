@@ -4,11 +4,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+UA = "Jellytip/1.0 (+https://github.com/ricki2828/jellytip)"  # MDBList 403s the default urllib UA
+RT_BASE = "https://www.rottentomatoes.com"
+
 ORDER = ["imdb", "rt_critic", "rt_audience", "metacritic", "letterboxd", "trakt"]
 LABELS = {"imdb": "IMDb", "rt_critic": "Rotten Tomatoes", "rt_audience": "Audience",
           "metacritic": "Metacritic", "letterboxd": "Letterboxd", "trakt": "Trakt"}
 MAXES = {"imdb": 10, "letterboxd": 5}
-MDBLIST_SOURCES = {"imdb": "imdb", "tomatoes": "rt_critic", "tomatoesaudience": "rt_audience",
+MDBLIST_SOURCES = {"imdb": "imdb", "tomatoes": "rt_critic", "popcorn": "rt_audience",
                    "metacritic": "metacritic", "letterboxd": "letterboxd", "trakt": "trakt"}
 
 
@@ -35,24 +38,33 @@ def entry(source, value, votes=None, url=None):
     return e
 
 
-def parse_mdblist(data):
-    """MDBList item JSON -> {source: entry}. Letterboxd arrives as 0-5 `value` or 0-100 `score`."""
+def _abs(base, path):
+    return base + path if isinstance(path, str) and path.startswith("/") else None
+
+
+def parse_mdblist(data, imdb=None):
+    """MDBList item JSON -> {source: entry}. Live `url` fields are junk for most sources (ints / site-relative
+    paths), so build links only where they are certain: IMDb, Letterboxd, Rotten Tomatoes."""
+    data = data or {}
+    imdb = imdb or (data.get("ids") or {}).get("imdb") or data.get("imdbid")
     out = {}
-    for r in (data or {}).get("ratings") or []:
+    for r in data.get("ratings") or []:
         src = MDBLIST_SOURCES.get(r.get("source"))
         if not src:
             continue
-        if src == "imdb":
-            e = entry(src, r.get("value"), r.get("votes"), r.get("url"))
+        v = r.get("value") if _num(r.get("value")) else r.get("score")
+        votes = r.get("votes") if src in ("imdb", "letterboxd", "trakt") else None
+        url = None
+        if src == "imdb" and imdb:
+            url = f"https://www.imdb.com/title/{imdb}/"
         elif src == "letterboxd":
-            v = _num(r.get("value"))
-            if v is not None and v > 5:  # some responses give 0-100 here
+            url = _abs("https://letterboxd.com", r.get("url"))
+            v = _num(v)
+            if v is not None and v > 5:  # defensive: 0-100 scale
                 v = v / 20
-            if v is None and _num(r.get("score")):
-                v = _num(r.get("score")) / 20
-            e = entry(src, v, r.get("votes"), r.get("url"))
-        else:
-            e = entry(src, r.get("score") if _num(r.get("score")) else r.get("value"), None, r.get("url"))
+        elif src in ("rt_critic", "rt_audience"):
+            url = _abs(RT_BASE, r.get("url"))
+        e = entry(src, v, votes, url)
         if e:
             out[src] = e
     return out
@@ -85,7 +97,7 @@ def merge(primary, fallback):
 
 
 def _get_json(url, headers=None, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": "jellytip-api", **(headers or {})})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
@@ -102,7 +114,7 @@ class ScoreProvider:
             url = (f"https://api.mdblist.com/tmdb/{mdb_type}/{tmdb}" if tmdb
                    else f"https://api.mdblist.com/imdb/{mdb_type}/{imdb}")
             try:
-                primary = parse_mdblist(self.fetch(url + "?" + urllib.parse.urlencode({"apikey": self.mdblist_key})))
+                primary = parse_mdblist(self.fetch(url + "?" + urllib.parse.urlencode({"apikey": self.mdblist_key})), imdb)
             except (urllib.error.URLError, ValueError, OSError):
                 complete = False
         else:

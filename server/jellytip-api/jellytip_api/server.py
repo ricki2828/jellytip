@@ -8,7 +8,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
-from .cache import Cache, ERROR_TTL, SCORES_TTL
+from .cache import Cache, EMPTY_TTL, ERROR_TTL, SCORES_TTL
 from .letterboxd import Letterboxd
 from .scores import ScoreProvider
 from .stills import fetch_stills
@@ -45,7 +45,8 @@ class Service:
             scores, ok1 = self.scores.lookup(tmdb, imdb, kind)
             stills, ok2 = self.stills(self.tmdb_key, tmdb, kind)
             cached = {"scores": scores, "stills": stills}
-            self.cache.put(ck, cached, SCORES_TTL if (ok1 and ok2) else ERROR_TTL)
+            ttl = ERROR_TTL if not (ok1 and ok2) else SCORES_TTL if scores else EMPTY_TTL
+            self.cache.put(ck, cached, ttl)
         # Letterboxd is a local file read: always fresh, never part of the 7-day cache.
         return {"scores": cached["scores"], "letterboxd": self.lb.film(tmdb) if tmdb else None, "stills": cached["stills"]}
 

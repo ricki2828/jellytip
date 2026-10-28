@@ -22,24 +22,35 @@ def test_stills_textless_first_then_width_then_votes_and_cap():
     assert rank(None) == [] and rank([{"width": 5}]) == []
 
 
-def test_mdblist_parse_and_missing_never_zero():
-    data = {"ratings": [
-        {"source": "imdb", "value": 7.9, "votes": 123456, "url": "https://imdb"},
-        {"source": "tomatoes", "value": 94, "score": 94},
-        {"source": "tomatoesaudience", "value": None, "score": 0},
-        {"source": "metacritic", "score": 81},
-        {"source": "letterboxd", "value": 4.1, "url": "https://letterboxd.com/film/x/"},
-        {"source": "trakt", "score": 82},
-        {"source": "rogerebert", "value": 4}]}
-    got = {s["source"]: s for s in merge(parse_mdblist(data), {})}
-    assert list(got) == ["imdb", "rt_critic", "metacritic", "letterboxd", "trakt"]
-    assert got["imdb"]["value"] == 7.9 and got["imdb"]["max"] == 10 and got["imdb"]["votes"] == 123456
-    assert got["letterboxd"]["max"] == 5 and got["letterboxd"]["value"] == 4.1
-    assert got["rt_critic"]["url"] is None
+LIVE = {"ids": {"imdb": "tt0071315"}, "ratings": [
+    {"source": "imdb", "value": 8.1, "score": 81, "votes": 381599, "url": 1253},
+    {"source": "metacritic", "value": 92, "score": 92, "votes": 23, "url": "/chinatown"},
+    {"source": "metacriticuser", "value": 8.7, "score": 87.0, "votes": 427, "url": None},
+    {"source": "trakt", "value": 79, "score": 79, "votes": 6750, "url": None},
+    {"source": "tomatoes", "value": 98, "score": 98, "votes": 144, "url": "/m/chinatown", "fresh": 1},
+    {"source": "popcorn", "value": 93, "score": 93, "votes": 5233, "url": "/m/chinatown"},
+    {"source": "tmdb", "value": 79, "score": 79, "url": None},
+    {"source": "letterboxd", "value": 4.3, "score": 86, "votes": 532339, "url": "/film/chinatown/"},
+    {"source": "rogerebert", "value": 4.0, "score": None, "votes": None, "url": "chinatown-1974"},
+    {"source": "myanimelist", "value": None, "score": None, "votes": None, "url": None}]}
 
 
-def test_letterboxd_scale_normalised():
-    assert parse_mdblist({"ratings": [{"source": "letterboxd", "value": 82}]})["letterboxd"]["value"] == 4.1
+def test_mdblist_live_shape():
+    got = {s["source"]: s for s in merge(parse_mdblist(LIVE), {})}
+    assert list(got) == ["imdb", "rt_critic", "rt_audience", "metacritic", "letterboxd", "trakt"]
+    assert got["imdb"]["value"] == 8.1 and got["imdb"]["votes"] == 381599
+    assert got["imdb"]["url"] == "https://www.imdb.com/title/tt0071315/"
+    assert got["rt_critic"]["value"] == 98 and got["rt_critic"]["url"] == "https://www.rottentomatoes.com/m/chinatown"
+    assert got["rt_audience"]["value"] == 93
+    assert got["metacritic"]["value"] == 92 and got["metacritic"]["url"] is None
+    assert got["letterboxd"]["value"] == 4.3 and got["letterboxd"]["max"] == 5
+    assert got["letterboxd"]["url"] == "https://letterboxd.com/film/chinatown/"
+
+
+def test_nulls_and_zero_dropped():
+    r = parse_mdblist({"ratings": [{"source": "tomatoes", "value": None, "score": None},
+                                   {"source": "trakt", "value": 0, "score": 0}, {"source": "popcorn", "score": 88}]})
+    assert list(r) == ["rt_audience"]
 
 
 def test_omdb_fallback_fills_gaps_only():

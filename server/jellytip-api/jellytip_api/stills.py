@@ -27,7 +27,7 @@ def fetch_stills(tmdb_key, tmdb_id, kind, fetch=None):
         if fetch:
             data = fetch(url)
         else:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "jellytip-api"}), timeout=15) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Jellytip/1.0 (+https://github.com/ricki2828/jellytip)"}), timeout=15) as r:
                 data = json.load(r)
     except (urllib.error.URLError, ValueError, OSError):
         return [], False

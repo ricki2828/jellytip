@@ -5,6 +5,7 @@ import threading
 import time
 
 SCORES_TTL = 7 * 86400
+EMPTY_TTL = 6 * 3600  # upstream answered but had nothing: recheck sooner than 7d
 ERROR_TTL = 15 * 60  # negative cache so a dead upstream is not hammered
 
 
