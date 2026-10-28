@@ -39,8 +39,6 @@ fun WatchedIcon(
 @Composable
 fun WatchedIconBackground(): Color =
     when (LocalTheme.current) {
-        AppThemeColors.UNRECOGNIZED,
-        AppThemeColors.PURPLE,
         AppThemeColors.BLUE,
         AppThemeColors.GREEN,
         AppThemeColors.ORANGE,
@@ -49,7 +47,10 @@ fun WatchedIconBackground(): Color =
         AppThemeColors.BROWN,
         -> MaterialTheme.colorScheme.border.copy(alpha = 1f)
 
-        AppThemeColors.OLED_BLACK -> MaterialTheme.colorScheme.secondaryContainer
+        AppThemeColors.UNRECOGNIZED,
+        AppThemeColors.PURPLE,
+        AppThemeColors.OLED_BLACK,
+        -> MaterialTheme.colorScheme.secondaryContainer
     }
 
 @Composable

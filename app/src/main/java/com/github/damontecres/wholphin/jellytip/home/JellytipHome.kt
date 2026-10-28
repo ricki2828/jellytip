@@ -73,9 +73,9 @@ import kotlinx.coroutines.delay
 
 /** Palette from design/splash.html */
 object JellytipPalette {
-    val Night = Color(0xFF0E0B1C)
+    val Night = Color(0xFF0A0A0A)
     val Jelly = Color(0xFFE2264D)
-    val Vanilla = Color(0xFFF7E8C4)
+    val Vanilla = Color(0xFFF2F2F0)
 }
 
 /** True inside the Jellytip home page; other screens that reuse the shared row/card code stay stock. */
@@ -87,7 +87,7 @@ fun JellytipHomeTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme =
             base.copy(
-                border = JellytipPalette.Jelly,
+                border = Color.White,
                 onSurface = JellytipPalette.Vanilla,
                 onBackground = JellytipPalette.Vanilla,
             ),

@@ -769,6 +769,8 @@ fun navItemColor(
                 when (theme) {
                     AppThemeColors.UNRECOGNIZED,
                     AppThemeColors.PURPLE,
+                    -> MaterialTheme.colorScheme.border
+
                     AppThemeColors.BLUE,
                     AppThemeColors.GREEN,
                     AppThemeColors.ORANGE,
@@ -783,7 +785,12 @@ fun navItemColor(
             }
 
             selected -> {
-                MaterialTheme.colorScheme.border
+                // Jellytip: the active nav item carries the jelly accent
+                if (theme == AppThemeColors.PURPLE || theme == AppThemeColors.UNRECOGNIZED) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.border
+                }
             }
 
             focused -> {

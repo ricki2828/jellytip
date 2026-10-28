@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -43,7 +44,6 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
-import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.AspectRatios
@@ -121,7 +121,7 @@ fun BannerCard(
         border = if (jellytipHome) CardDefaults.border(focusedBorder = Border.None) else CardDefaults.border(),
         glow =
             if (jellytipHome) {
-                CardDefaults.glow(focusedGlow = Glow(JellytipPalette.Jelly.copy(alpha = 0.6f), 14.dp))
+                CardDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.45f), 12.dp))
             } else {
                 CardDefaults.glow()
             },

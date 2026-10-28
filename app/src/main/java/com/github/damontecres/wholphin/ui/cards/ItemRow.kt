@@ -23,10 +23,9 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 
@@ -134,22 +133,11 @@ fun <T> ItemRow(
 fun ItemRowTitle(
     title: String,
     modifier: Modifier = Modifier,
-) {
-    if (LocalJellytipHome.current) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.6.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-            modifier = modifier.padding(start = 8.dp),
-        )
-    } else {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = modifier.padding(start = 8.dp),
-        )
-    }
-}
+) = Text(
+    text = title.uppercase(),
+    style = MaterialTheme.typography.labelLarge,
+    fontWeight = FontWeight.Medium,
+    letterSpacing = 0.08.em,
+    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+    modifier = modifier.padding(start = 8.dp),
+)
