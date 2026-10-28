@@ -7,6 +7,8 @@ import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
+import com.github.damontecres.wholphin.jellytip.cache.ImagePick
+import com.github.damontecres.wholphin.jellytip.cache.JellytipImagePick
 import com.github.damontecres.wholphin.jellytip.cache.jellytipBackdropUrl
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -51,6 +53,12 @@ class JellytipHomeViewModel
             item: BaseItem,
             heroIndex: Int? = null,
         ): String? = jellytipBackdropUrl(imageUrlService, item, heroIndex)
+
+        /** Home hero image + focal point; [heroIndex] is the companion answer when known. */
+        fun heroPick(
+            item: BaseItem,
+            heroIndex: Int?,
+        ): ImagePick = JellytipImagePick.forHome(imageUrlService, item, heroIndex)
 
         /** Companion `heroIndex` for [item] (cached after the first answer); null while unknown or unreachable. */
         suspend fun heroIndex(item: BaseItem): Int? = jellytipApi.heroBackdropIndex(jellytipHeroItemId(item))

@@ -60,6 +60,9 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipFocal
+import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
+import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
@@ -185,14 +188,19 @@ fun JellytipHomeHero(
         }
     }
     var lastUrl by remember { mutableStateOf<String?>(null) }
+    var lastFocal by remember { mutableStateOf<JellytipFocal?>(null) }
     // Hero photo comes from the companion (differs from the tile art); until it answers, show a non-tile backdrop and upgrade
     val heroIndex by produceState<Int?>(null, shown?.id) {
         val target = shown
         value = null
         if (target != null) value = JellytipApi.shared?.peekHeroIndex(jellytipHeroItemId(target)) ?: viewModel.heroIndex(target)
     }
-    val url = remember(shown?.id, heroIndex) { shown?.let { viewModel.backdropUrl(it, heroIndex) } }
-    if (url != null && url != lastUrl) lastUrl = url
+    val pick = remember(shown?.id, heroIndex) { shown?.let { viewModel.heroPick(it, heroIndex) } }
+    val url = pick?.url
+    if (url != null && (url != lastUrl || pick.focal != lastFocal)) {
+        lastUrl = url
+        lastFocal = pick.focal
+    }
 
     // Trailer: only after focus has rested on the same trailer-bearing card
     var trailerUrl by remember { mutableStateOf<String?>(null) }
@@ -213,7 +221,7 @@ fun JellytipHomeHero(
                 animationSpec = tween(700),
                 modifier = Modifier.fillMaxSize(),
                 label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u) }
+            ) { u -> if (u != null) HomeKenBurns(u, lastFocal) }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true
@@ -268,7 +276,10 @@ fun JellytipHomeHero(
 }
 
 @Composable
-private fun HomeKenBurns(url: String) {
+private fun HomeKenBurns(
+    url: String,
+    focal: JellytipFocal?,
+) {
     val progress = remember(url) { Animatable(0f) }
     LaunchedEffect(url) {
         progress.animateTo(1f, tween(KEN_BURNS_MS, easing = LinearEasing))
@@ -278,10 +289,12 @@ private fun HomeKenBurns(url: String) {
         model = url,
         contentDescription = null,
         contentScale = ContentScale.Crop,
+        alignment = focalAlignment(focal),
         modifier =
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    transformOrigin = focalOrigin(focal)
                     val p = progress.value
                     val scale = 1.04f + 0.05f * p
                     scaleX = scale

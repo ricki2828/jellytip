@@ -205,28 +205,68 @@ class JellytipApi
             shared = this
         }
 
-        private val backdropCache = ConcurrentHashMap<UUID, Int>() // NO_BACKDROP_PICK = no usable answer
+        private val infoCache = ConcurrentHashMap<UUID, JellytipBackdropInfo>()
         private val backdropFailedAt = ConcurrentHashMap<UUID, Long>()
-        private val heroCache = ConcurrentHashMap<UUID, Int>() // companion heroIndex: differs from the card art
+        private val episodeUsable = ConcurrentHashMap<UUID, Boolean>()
+        private val episodeParentsLoaded = ConcurrentHashMap.newKeySet<UUID>()
+
+        /** Cached companion answer for [itemId], or null if not fetched (yet) / unreachable. */
+        fun peekInfo(itemId: UUID): JellytipBackdropInfo? = infoCache[itemId]
 
         /** Cached companion `heroIndex` for [itemId], or null if unknown. */
-        fun peekHeroIndex(itemId: UUID): Int? = heroCache[itemId]
+        fun peekHeroIndex(itemId: UUID): Int? = infoCache[itemId]?.heroIndex
+
+        /** Cached companion `detailsIndex` for [itemId], or null if unknown. */
+        fun peekDetailsIndex(itemId: UUID): Int? = infoCache[itemId]?.detailsIndex
 
         /** Companion `heroIndex` (a backdrop that does not look like the item's card art); one request shared with [bestBackdropIndex]. */
-        suspend fun heroBackdropIndex(itemId: UUID): Int? {
-            bestBackdropIndex(itemId)
-            return heroCache[itemId]
-        }
+        suspend fun heroBackdropIndex(itemId: UUID): Int? = backdropInfo(itemId)?.heroIndex
 
         /** Cached photo-ranked backdrop index for [itemId], or null if unknown / animation / no ranking. */
-        fun peekBestBackdropIndex(itemId: UUID): Int? = backdropCache[itemId]?.takeIf { it >= 0 }
+        fun peekBestBackdropIndex(itemId: UUID): Int? = infoCache[itemId]?.best?.takeIf { it >= 0 }
+
+        /** True unless the companion scored the item's Thumb (titled art) as poor; unknown counts as good. */
+        fun isThumbGood(itemId: UUID): Boolean = infoCache[itemId]?.thumbGood ?: true
+
+        /** True unless the companion marked the episode's Primary still unusable (black, blurry, not a photo); unknown counts as usable. */
+        fun isEpisodeStillUsable(episodeId: UUID): Boolean = episodeUsable[episodeId] ?: true
+
+        /** Fetch (once per series/season) the usable flags of its episode stills so [isEpisodeStillUsable] can answer. */
+        suspend fun loadEpisodeArt(parentId: UUID) {
+            if (!episodeParentsLoaded.add(parentId)) return
+            val body = getJson("/v1/items/$parentId/episodes-art")
+            if (body == null) {
+                episodeParentsLoaded.remove(parentId)
+                return
+            }
+            try {
+                val arr = org.json.JSONArray(body)
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val id = parseUuid(o.getString("episodeId")) ?: continue
+                    episodeUsable[id] = o.optBoolean("usable", true)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "episodes-art parse failed")
+            }
+        }
+
+        private fun parseUuid(raw: String): UUID? =
+            try {
+                UUID.fromString(raw.replaceFirst(Regex("(\\p{XDigit}{8})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{12})"), "$1-$2-$3-$4-$5"))
+            } catch (e: Exception) {
+                null
+            }
 
         /**
          * Index of the best real-photography backdrop (companion `/backdrops`), cached per item.
          * Null when unconfigured, failing, `animation` is true or `backdrops` is null; callers keep index 0.
          */
-        suspend fun bestBackdropIndex(itemId: UUID): Int? {
-            backdropCache[itemId]?.let { return it.takeIf { i -> i >= 0 } }
+        suspend fun bestBackdropIndex(itemId: UUID): Int? = backdropInfo(itemId)?.best?.takeIf { it >= 0 }
+
+        /** Companion `/backdrops` answer for [itemId] (cached; failures are retried after a minute). */
+        suspend fun backdropInfo(itemId: UUID): JellytipBackdropInfo? {
+            infoCache[itemId]?.let { return it }
             val failed = backdropFailedAt[itemId]
             if (failed != null && System.currentTimeMillis() - failed < FAILURE_TTL_MS) return null
             return withContext(WholphinDispatchers.IO) {
@@ -252,17 +292,9 @@ class JellytipApi
                             backdropFailedAt[itemId] = System.currentTimeMillis()
                             return@withContext null
                         }
-                        val root = JSONObject(response.body.string())
-                        val arr = root.optJSONArray("backdrops")
-                        val index =
-                            if (root.optBoolean("animation", false) || arr == null || arr.length() == 0) {
-                                -1
-                            } else {
-                                arr.optJSONObject(0)?.optInt("index", -1) ?: -1
-                            }
-                        root.optInt("heroIndex", -1).takeIf { it >= 0 }?.let { heroCache[itemId] = it }
-                        backdropCache[itemId] = index
-                        index.takeIf { it >= 0 }
+                        val info = JellytipBackdropInfo.parse(response.body.string())
+                        infoCache[itemId] = info
+                        info
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip backdrops unavailable")
@@ -317,3 +349,44 @@ class JellytipApi
             private const val FAILURE_TTL_MS = 60_000L
         }
     }
+
+/** Where the subject sits in an image (0..1); [face] = from a face detector, else saliency. */
+data class JellytipFocal(
+    val x: Float,
+    val y: Float,
+    val face: Boolean,
+)
+
+/** Companion `/v1/items/{id}/backdrops` answer. [best] = photo-ranked index (-1: none/animation). */
+data class JellytipBackdropInfo(
+    val best: Int,
+    val heroIndex: Int?,
+    val detailsIndex: Int?,
+    val thumbGood: Boolean,
+    val focal: Map<Int, JellytipFocal>,
+) {
+    companion object {
+        fun parse(json: String): JellytipBackdropInfo {
+            val root = JSONObject(json)
+            val arr = root.optJSONArray("backdrops")
+            val best =
+                if (root.optBoolean("animation", false) || arr == null || arr.length() == 0) {
+                    -1
+                } else {
+                    arr.optJSONObject(0)?.optInt("index", -1) ?: -1
+                }
+            val focal = mutableMapOf<Int, JellytipFocal>()
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    if (o.isNull("focalX") || o.isNull("focalY")) continue
+                    focal[o.optInt("index", i)] =
+                        JellytipFocal(o.optDouble("focalX").toFloat(), o.optDouble("focalY").toFloat(), o.optBoolean("face", false))
+                }
+            }
+            fun idx(key: String) = if (root.isNull(key)) null else root.optInt(key, -1).takeIf { it >= 0 }
+            val thumb = root.optJSONObject("thumb")
+            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal)
+        }
+    }
+}
