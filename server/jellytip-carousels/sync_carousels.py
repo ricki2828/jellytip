@@ -585,7 +585,10 @@ def main():
                             "itemIds": [k["Id"] for k in kids][:MAX_ITEMS]})
     entries += discover_rows(tv_doc, libs["TV Shows"], tmdb, now)
     entries.sort(key=lambda e: (sort_number(e["sortKey"]), e["name"]))
-    manifest = {"version": 1, "generated": now.isoformat(), "carousels": entries}
+    lbc = tv_doc.get("letterboxd_rows") or {}  # the companion rotates the Letterboxd rows by date from this
+    manifest = {"version": 1, "generated": now.isoformat(), "carousels": entries,
+                "letterboxdConfig": {"per_day": int(lbc.get("per_day", 6)), "pinned": lbc.get("pinned") or [],
+                                     "exclude": lbc.get("exclude") or []}}
     report["manifest_count"] = len(entries)
     if not args.dry_run:
         os.makedirs(STATE, exist_ok=True)

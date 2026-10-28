@@ -48,7 +48,8 @@ class Service:
         data_dir = os.path.dirname(env.get("LB_EXPORT", "")) or "."
         self.imgscores = imgscores or ImgScores(env.get("IMGSCORES_FILE") or os.path.join(data_dir, "imgscores.json"))
         self.stills, self.tmdb_key = stills, env.get("TMDB_KEY")
-        self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env))
+        self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env),
+                                           tmdb_images=self._tmdb_movie_images, posters_path=os.path.join(data_dir, "lb_posters.json"))
         self.name_cache = {}  # sha256(token) -> (user name, expires)
         self.admin_cache = {}  # sha256(token) -> (is_admin, expires)
         plex_url, plex_tok = env.get("PLEX_URL"), env.get("PLEX_TOKEN")
@@ -122,6 +123,19 @@ class Service:
             self._auth_cache.clear()
         self._auth_cache[k] = (ok, now + AUTH_TTL)
         return ok
+
+    def _tmdb_movie_images(self, tmdb):
+        """(posterUrl, backdropUrl) from TMDB, or None when the lookup fails (so it is retried, not cached)."""
+        if not self.tmdb_key:
+            return None
+        try:
+            with urllib.request.urlopen(f"https://api.themoviedb.org/3/movie/{int(tmdb)}?api_key={self.tmdb_key}", timeout=8) as r:
+                m = json.load(r)
+        except Exception:
+            return None
+        base = "https://image.tmdb.org/t/p/"
+        return (base + "w342" + m["poster_path"] if m.get("poster_path") else "",
+                base + "w780" + m["backdrop_path"] if m.get("backdrop_path") else "")
 
     def _tmdb_season1_eps(self, tmdb):
         if not self.tmdb_key:
@@ -224,7 +238,8 @@ class Service:
                 manifest = {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
             if query.get("includeDiscover") != "1":  # discover rows carry TMDB ids, not library items: opt-in only
                 manifest = {**manifest, "carousels": [c for c in manifest.get("carousels", []) if not c.get("discover")]}
-            return 200, {**manifest, "letterboxd": self.lb.home_lists()}
+            lb = self.lb.home_lists(manifest.get("letterboxdConfig"), include_discover=query.get("includeDiscover") == "1")
+            return 200, {**manifest, "letterboxd": lb}
         if path == "/v1/library/sizes":
             if not self.jf.ok:
                 return 503, {"error": "jellyfin not configured"}

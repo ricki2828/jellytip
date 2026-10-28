@@ -189,7 +189,7 @@ def test_letterboxd_home_lists_need_enough_library_films(tmp_path):
         {"slug": "big", "name": "Big", "items": [{"tmdb": n, "title": "t"} for n in range(1, 9)]},
         {"slug": "small", "name": "Small", "items": [{"tmdb": 1, "title": "t"}]}]}))
     lb = Letterboxd(str(export), lambda: [{"Id": f"j{n}", "ProviderIds": {"Tmdb": str(n)}} for n in range(1, 7)])
-    assert lb.home_lists() == [{"slug": "big", "name": "Big", "itemIds": [f"j{n}" for n in range(1, 7)]}]
+    assert lb.home_lists() == [{"slug": "big", "name": "Big", "source": "letterboxd", "itemIds": [f"j{n}" for n in range(1, 7)]}]
 
 
 def _scores_file(tmp_path):
@@ -336,3 +336,36 @@ def test_episodes_art_usable_rules(tmp_path):
     got = {e["episodeId"]: e["usable"] for e in ImgScores(str(p)).episodes_art("s" * 32)}
     assert got == {"e1": True, "e2": False, "e3": False, "e4": False, "e5": True, "e6": False}
     assert ImgScores(str(p)).episodes_art("n" * 32) == ImgScores(str(p)).episodes_art("s" * 32)
+
+
+def _rot_lb(tmp_path, n_lists=10):
+    export = tmp_path / "lb.json"
+    export.write_text(json.dumps({"films": {}, "lists": [
+        {"slug": f"l{k:02d}", "name": f"List {k}", "items": [{"tmdb": k * 10 + m, "title": f"t{k}{m}", "year": 2000} for m in range(5)]}
+        for k in range(n_lists)]}))
+    # every list has its first 3 films in the library, except l09 which has only 1
+    jf = [{"Id": f"j{k * 10 + m}", "ProviderIds": {"Tmdb": str(k * 10 + m)}} for k in range(n_lists) for m in range(1 if k == 9 else 3)]
+    return Letterboxd(str(export), lambda: jf, tmdb_images=lambda t: (f"p{t}", f"b{t}"))
+
+
+def test_letterboxd_rotation_is_daily_stable_pins_first_and_covers_all(tmp_path):
+    import datetime
+    lb = _rot_lb(tmp_path)
+    cfg = {"per_day": 4, "pinned": ["List 5"], "exclude": ["l01"]}
+    d0 = datetime.date(2026, 10, 28)
+    day = lambda n: [r["slug"] for r in lb.home_lists(cfg, today=d0 + datetime.timedelta(days=n))]
+    assert day(0) == day(0) and day(0)[0] == "l05" and len(day(0)) == 4 and day(0) != day(1)
+    seen = {s for n in range(8) for s in day(n)}
+    assert seen == {f"l{k:02d}" for k in range(10)} - {"l01", "l09"}  # l09 lacks 3 library films, l01 excluded
+
+
+def test_letterboxd_discover_rows_only_with_flag(tmp_path):
+    import datetime
+    lb = _rot_lb(tmp_path)
+    cfg = {"per_day": 20}
+    plain = lb.home_lists(cfg, today=datetime.date(2026, 1, 1))
+    assert all("items" not in r for r in plain) and "l09" not in [r["slug"] for r in plain]
+    full = {r["slug"]: r for r in lb.home_lists(cfg, include_discover=True, today=datetime.date(2026, 1, 1))}
+    assert full["l09"]["itemIds"] == ["j90"] and [i["tmdbId"] for i in full["l09"]["items"]] == [91, 92, 93, 94]
+    assert full["l09"]["items"][0]["discover"] is True and full["l09"]["items"][0]["posterUrl"] == "p91"
+    assert all(r["source"] == "letterboxd" for r in full.values())

@@ -44,3 +44,11 @@ requested. The companion omits them unless `GET /v1/home/carousels?includeDiscov
 
 Rows under 3 items still sync as collections but stay out of the manifest (small library: "Continue a Series" and
 "Recently Ended" appear once they reach 3). Tests: `python3 -m pytest server/jellytip-carousels`.
+
+## Letterboxd rotation
+
+`letterboxd_rows:` in `config/tv.yml` (`per_day`, `pinned`, `exclude`) is copied into the manifest as `letterboxdConfig`.
+The companion picks `per_day` lists per date: pinned first, the rest rotating through every list over the days.
+Default response: only lists with >= 3 in-library films (rotation runs over those). `?includeDiscover=1`: every list,
+in-library films first, then the list's other films as `discover: true` items (TMDB id, title, year, poster/backdrop,
+cached in `data/lb_posters.json`). Every row carries `source: "letterboxd"`; the app titles them "Letterboxd · <name>".

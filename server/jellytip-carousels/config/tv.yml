@@ -100,3 +100,11 @@ discover:
       sort_title: "!20.5_TVDiscover_Trending"
       tmdb_trending_weekly: true
       limit: 20
+
+# Letterboxd list rows ("Letterboxd · <list>"): each day a different set of per_day lists, cycling through all of
+# them by date (stable within a day). Pinned lists (slug or name) always show first and count toward per_day.
+# exclude: lists to never show. Applied by the companion from the next sync.
+letterboxd_rows:
+  per_day: 6
+  pinned: []
+  exclude: []
