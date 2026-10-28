@@ -22,6 +22,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipSession
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import timber.log.Timber
 import java.util.UUID
 
