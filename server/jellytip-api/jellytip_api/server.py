@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import urllib.error
@@ -33,6 +34,12 @@ EPISODES_ART_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/episodes-art$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
 TOKEN_RE = re.compile(r'Token="?([^",\s]+)"?')
 AUTH_TTL = 600
+
+
+class FileBody:
+    """Route result streamed as a file rather than JSON."""
+    def __init__(self, path, content_type, etag):
+        self.path, self.content_type, self.etag = path, content_type, etag
 
 
 class Service:
@@ -208,6 +215,22 @@ class Service:
         self.admin_cache[k] = (ok, now + AUTH_TTL)
         return ok
 
+    def intro(self, want_file):
+        """Nightly cold-start intro built by jellytip-intro/build_intro.py (meta json + mp4 in INTRO_DIR)."""
+        d = self.env.get("INTRO_DIR") or os.path.expanduser("~/jellytip-intro/out")
+        try:
+            with open(os.path.join(d, "intro.json"), encoding="utf-8") as f:
+                meta = json.load(f)
+            mp4 = os.path.join(d, "intro.mp4")
+            if not os.path.isfile(mp4):
+                raise OSError
+        except (OSError, ValueError):
+            return 404, {"error": "no intro built yet"}
+        if want_file:
+            return 200, FileBody(mp4, "video/mp4", meta["version"])
+        return 200, {"url": "v1/intro.mp4", "version": meta["version"], "titles": meta.get("titles", []),
+                     "duration": meta.get("duration"), "bytes": meta.get("bytes")}  # url is relative to the API base
+
     def route(self, path, query, token, authorization=None, emby_token=None, method="GET", body=None):
         """Returns (status, body)."""
         if path == "/v1/health":
@@ -220,6 +243,8 @@ class Service:
         if path == "/v1/request/status":
             ids = [t for t in re.split(r"[,\s]+", query.get("tmdbIds", "")) if re.fullmatch(r"(?:(?:movie|tv):)?\d+", t)]
             return self.requests.status(ids)
+        if path in ("/v1/intro", "/v1/intro.mp4"):
+            return self.intro(path.endswith(".mp4"))
         m = EXTRAS_RE.match(path)
         if m:
             kind = query.get("type", "movie")
@@ -342,6 +367,22 @@ def make_handler(service, prefix="/jellytip-api"):
             except Exception as e:  # never leak internals or keys; log the type only
                 self.log_message("error %s", type(e).__name__)
                 status, body = 500, {"error": "internal error"}
+            if isinstance(body, FileBody):
+                if self.headers.get("If-None-Match") == f'"{body.etag}"':
+                    self.send_response(304)
+                    self.send_header("ETag", f'"{body.etag}"')
+                    self.end_headers()
+                    return
+                size = os.path.getsize(body.path)
+                self.send_response(status)
+                self.send_header("Content-Type", body.content_type)
+                self.send_header("Content-Length", str(size))
+                self.send_header("ETag", f'"{body.etag}"')
+                self.send_header("Cache-Control", "private, max-age=3600")
+                self.end_headers()
+                with open(body.path, "rb") as f:
+                    shutil.copyfileobj(f, self.wfile)
+                return
             data = json.dumps(body, ensure_ascii=False).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")

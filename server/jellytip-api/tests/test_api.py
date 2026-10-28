@@ -402,3 +402,17 @@ def test_backdrops_reindexed_by_current_tags(tmp_path):
     r = ImgScores(str(p)).backdrops("d" * 32, current_tags=["keep", "other"])
     assert [(b["tag"], b["index"]) for b in r["backdrops"]] == [("keep", 0)]  # "old"/"new?" vanished; "keep" moved 1 -> 0
     assert ImgScores(str(p)).backdrops("d" * 32)["backdrops"][0]["index"] == 0
+
+
+def test_intro_endpoints(tmp_path):
+    import json as _json
+    from jellytip_api.server import FileBody, Service
+    svc = Service.__new__(Service)
+    svc.env = {"INTRO_DIR": str(tmp_path)}
+    assert svc.intro(False)[0] == 404
+    (tmp_path / "intro.mp4").write_bytes(b"x")
+    (tmp_path / "intro.json").write_text(_json.dumps({"version": "abc", "titles": ["A (2000)"]}))
+    st, body = svc.intro(False)
+    assert st == 200 and body["version"] == "abc" and body["url"] == "v1/intro.mp4"
+    st, fb = svc.intro(True)
+    assert st == 200 and isinstance(fb, FileBody) and fb.etag == "abc"
