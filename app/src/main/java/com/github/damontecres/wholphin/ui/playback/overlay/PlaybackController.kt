@@ -122,8 +122,8 @@ fun PlaybackController(
     }
 }
 
-internal val titleTextSize = 28.sp
-internal val subtitleTextSize = 18.sp
+internal val titleTextSize = 17.sp
+internal val subtitleTextSize = 13.sp
 
 /**
  * A wrapper for the playback controls to show title and other information, plus the actual controls
@@ -218,6 +218,7 @@ fun Controller(
                     text = stringResource(R.string.ends_at, endTimeStr),
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelLarge,
+                    fontSize = 13.sp,
                     modifier =
                         Modifier
                             .padding(end = 32.dp),
