@@ -161,3 +161,14 @@ def test_jellyfin_validation_cached_and_hashed(tmp_path, monkeypatch):
     assert svc.jellyfin_ok("tok") and svc.jellyfin_ok("tok")
     assert len(n) == 1 and n[0] == "http://jf/System/Info"
     assert "tok" not in svc._auth_cache and len(next(iter(svc._auth_cache))) == 64
+
+
+def test_home_carousels_serves_manifest_or_empty(tmp_path):
+    env = {"JELLYTIP_TOKEN": "t", "JELLYTIP_DB": str(tmp_path / "c.db"), "LB_EXPORT": str(tmp_path / "lb.json")}
+    svc = Service(env)
+    status, body = svc.route("/v1/home/carousels", {}, "t")
+    assert status == 200 and body["carousels"] == []
+    (tmp_path / "carousels.json").write_text(json.dumps({"version": 1, "carousels": [{"name": "A", "itemIds": ["x"]}]}))
+    status, body = svc.route("/v1/home/carousels", {}, "t")
+    assert body["carousels"][0]["name"] == "A"
+    assert svc.route("/v1/home/carousels", {}, "bad")[0] == 401

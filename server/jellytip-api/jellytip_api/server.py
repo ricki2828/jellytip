@@ -31,6 +31,7 @@ class Service:
         self.scores = scores or ScoreProvider(env.get("MDBLIST_KEY"), env.get("OMDB_KEY"))
         self.stills, self.tmdb_key = stills, env.get("TMDB_KEY")
         self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env))
+        self.carousels_path = env.get("CAROUSELS_FILE") or os.path.join(os.path.dirname(env.get("LB_EXPORT", "")) or ".", "carousels.json")
 
     @staticmethod
     def _jellyfin_items(env):
@@ -39,8 +40,13 @@ class Service:
             return None
 
         def fetch():
+            hdr = {"Authorization": f'MediaBrowser Token="{key}"'}
+            # User-scoped listing: the admin /Items endpoint under-reports (465 of 647 films on 28-Oct).
+            with urllib.request.urlopen(urllib.request.Request(f"{base}/Users", headers=hdr), timeout=30) as r:
+                users = json.load(r)
+            uid = next((u["Id"] for u in users if u["Name"] == env.get("JELLYFIN_USER", "ricki28")), users[0]["Id"])
             q = urllib.parse.urlencode({"Recursive": "true", "IncludeItemTypes": "Movie", "Fields": "ProviderIds"})
-            req = urllib.request.Request(f"{base}/Items?{q}", headers={"Authorization": f'MediaBrowser Token="{key}"'})
+            req = urllib.request.Request(f"{base}/Users/{uid}/Items?{q}", headers=hdr)
             with urllib.request.urlopen(req, timeout=30) as r:
                 return json.load(r).get("Items", [])
         return fetch
@@ -103,6 +109,12 @@ class Service:
             if (tmdb and not tmdb.isdigit()) or (imdb and not re.fullmatch(r"tt\d+", imdb)):
                 return 400, {"error": "bad tmdb/imdb id"}
             return 200, self.extras(tmdb or None, imdb or None, kind)
+        if path == "/v1/home/carousels":
+            try:
+                with open(self.carousels_path, encoding="utf-8") as f:
+                    return 200, json.load(f)
+            except OSError:
+                return 200, {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
         if path == "/v1/letterboxd/lists":
             return 200, self.lb.lists()
         m = LIST_RE.match(path)
