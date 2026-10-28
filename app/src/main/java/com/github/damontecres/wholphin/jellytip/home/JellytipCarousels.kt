@@ -5,6 +5,7 @@ import com.github.damontecres.wholphin.data.model.HomeGetItemsFilter
 import com.github.damontecres.wholphin.data.model.HomePageSettings
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
@@ -12,6 +13,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONObject
 import timber.log.Timber
@@ -25,6 +27,8 @@ data class JellytipCarousel(
     val id: UUID,
     val title: String,
     val order: String,
+    /** "movie" or "tv": which library page (Movies or Shows) also shows this row. */
+    val mediaType: String = "movie",
 )
 
 /** One of Ricki's Letterboxd lists, already reduced to films that are in the Jellyfin library. */
@@ -49,7 +53,7 @@ data class JellytipCarouselManifest(
                             val o = arr.optJSONObject(i) ?: return@mapNotNull null
                             val id = o.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
                             val title = o.optString("title").ifBlank { o.optString("name") }
-                            JellytipCarousel(id.toUUID(), title, o.optString("order", "custom"))
+                            JellytipCarousel(id.toUUID(), title, o.optString("order", "custom"), o.optString("mediaType", "movie"))
                         }
                     }.orEmpty()
             val letterboxd =
@@ -81,34 +85,90 @@ object JellytipCarouselRows {
     const val MAX_CAROUSEL_ROWS = 10
     const val MAX_LETTERBOXD_ROWS = 6
 
-    fun carouselRow(carousel: JellytipCarousel): HomeRowConfig.GetItems {
-        val (sortBy, sortOrder) =
-            when (carousel.order) {
-                "random" -> {
-                    listOf(ItemSortBy.RANDOM) to listOf(SortOrder.ASCENDING)
-                }
-
-                "release" -> {
-                    listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
-                }
-
-                "release.desc" -> {
-                    listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to
-                        listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
-                }
-
-                "added.desc" -> {
-                    listOf(ItemSortBy.DATE_CREATED, ItemSortBy.SORT_NAME) to listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
-                }
-
-                else -> {
-                    null to null
-                }
+    private fun sortFor(order: String): Pair<List<ItemSortBy>?, List<SortOrder>?> =
+        when (order) {
+            "random" -> {
+                listOf(ItemSortBy.RANDOM) to listOf(SortOrder.ASCENDING)
             }
+
+            "release" -> {
+                listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
+            }
+
+            "release.desc" -> {
+                listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to
+                    listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
+            }
+
+            "added.desc" -> {
+                listOf(ItemSortBy.DATE_CREATED, ItemSortBy.SORT_NAME) to listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
+            }
+
+            else -> {
+                null to null
+            }
+            }
+
+    fun carouselRow(carousel: JellytipCarousel): HomeRowConfig.GetItems {
+        val (sortBy, sortOrder) = sortFor(carousel.order)
         return HomeRowConfig.GetItems(
             name = carousel.title,
             filter = HomeGetItemsFilter(parentId = carousel.id, sortBy = sortBy, sortOrder = sortOrder),
         )
+    }
+
+    /** A row for the Movies / Shows library page: title plus the request that loads its items. */
+    data class LibraryCarousel(
+        val title: String,
+        val request: GetItemsRequest,
+    )
+
+    /**
+     * Rows for the Movies ("movie") or Shows ("tv") library page, in manifest order: the matching carousels, then
+     * (Movies only) the Letterboxd lists. Rows Ricki removed from Home (`chidden:` / `lbx:` markers in [seen]) stay hidden.
+     */
+    fun libraryRows(
+        manifest: JellytipCarouselManifest,
+        mediaType: String,
+        seen: Set<String>,
+    ): List<LibraryCarousel> {
+        val carousels =
+            manifest.carousels
+                .filter { it.mediaType == mediaType && "chidden:${it.id}" !in seen }
+                .map {
+                    val (sortBy, sortOrder) = sortFor(it.order)
+                    LibraryCarousel(
+                        it.title,
+                        GetItemsRequest(
+                            parentId = it.id,
+                            fields = SlimItemFields,
+                            enableUserData = true,
+                            sortBy = sortBy,
+                            sortOrder = sortOrder,
+                            enableTotalRecordCount = false,
+                        ),
+                    )
+                }
+        val lists =
+            if (mediaType != "movie") {
+                emptyList()
+            } else {
+                manifest.letterboxd
+                    .filter { "lbx:${it.slug}" !in seen }
+                    .map {
+                        LibraryCarousel(
+                            LETTERBOXD_PREFIX + it.name,
+                            GetItemsRequest(
+                                ids = it.itemIds,
+                                includeItemTypes = listOf(BaseItemKind.MOVIE),
+                                fields = SlimItemFields,
+                                enableUserData = true,
+                                enableTotalRecordCount = false,
+                            ),
+                        )
+                    }
+            }
+        return carousels + lists
     }
 
     fun letterboxdRow(list: JellytipLetterboxdRow): HomeRowConfig.GetItems =
@@ -190,7 +250,13 @@ object JellytipCarouselRows {
             }
         val carouselRoom = (MAX_CAROUSEL_ROWS - presentCarousels.size).coerceAtLeast(0)
         val listRoom = (MAX_LETTERBOXD_ROWS - presentLists.size).coerceAtLeast(0)
-        val addCarousels = newCarousels.take(carouselRoom).map { carouselRow(it) }
+        val addedCarousels = newCarousels.take(carouselRoom)
+        val addCarousels = addedCarousels.map { carouselRow(it) }
+        // Removed from Home while shown = hidden from the library pages too (only rows the app itself added count).
+        val hiddenNow =
+            manifest.carousels
+                .filter { "cadded:${it.id}" in known && it.id !in presentCarousels }
+                .map { "chidden:${it.id}" }
         val addedLists = newLists.take(listRoom)
         val addLists = addedLists.map { letterboxdRow(it) }
 
@@ -202,7 +268,8 @@ object JellytipCarouselRows {
         val nowSeen =
             known.filterNot { it.startsWith("lbm:") }.toSet() + manifest.carousels.map { it.id.toString() } +
                 manifest.letterboxd.map { "lb:${it.slug}" } + manifest.letterboxd.map { "lbm:${it.slug}" } +
-                addedLists.map { "lbadded:${it.slug}" } + removedByUser
+                addedLists.map { "lbadded:${it.slug}" } + removedByUser +
+                addedCarousels.map { "cadded:${it.id}" } + hiddenNow
         if (!firstRun && rows == current && nowSeen == known) return Reconciled(current, known)
         return Reconciled(rows, nowSeen)
     }
@@ -259,6 +326,19 @@ class JellytipCarouselService
                 runCatching { file.writeText(result.seen.joinToString("\n")) }
                 if (result.rows == settings.rows) null else settings.copy(rows = result.rows)
             }
+        }
+
+        /** Carousels for the Movies ("movie") / Shows ("tv") library page; empty when the companion is unreachable. */
+        suspend fun libraryRows(
+            userId: UUID,
+            mediaType: String,
+        ): List<JellytipCarouselRows.LibraryCarousel> {
+            val manifest = manifest() ?: return emptyList()
+            val seen =
+                withContext(WholphinDispatchers.IO) {
+                    seenFile(userId).takeIf { it.exists() }?.readLines()?.toSet().orEmpty()
+                }
+            return JellytipCarouselRows.libraryRows(manifest, mediaType, seen)
         }
 
         companion object {
