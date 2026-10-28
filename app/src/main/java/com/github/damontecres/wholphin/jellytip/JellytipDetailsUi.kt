@@ -1,5 +1,11 @@
 package com.github.damontecres.wholphin.jellytip
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.unit.em
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
@@ -303,8 +309,8 @@ fun JellytipScoreRow(
         value = viewModel.getExtras(item)
     }
     val e = extras ?: return
-    val chips = e.scores.mapNotNull { scoreChipText(it) }
-    val mine = e.letterboxd?.let { myChipText(it) }
+    val chips = e.scores.mapNotNull { scoreChip(it) }
+    val mine = e.letterboxd?.let { myChip(it) }
     if (chips.isEmpty() && mine == null) return
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -319,7 +325,7 @@ internal val WARM = Color(0xFFFFB74D)
 
 @Composable
 internal fun JellytipChip(
-    text: String,
+    text: AnnotatedString,
     background: Color,
     content: Color,
 ) {
@@ -332,40 +338,87 @@ internal fun JellytipChip(
             text = text,
             color = content,
             style = MaterialTheme.typography.labelLarge,
+            inlineContent = LetterboxdInline,
             maxLines = 1,
         )
     }
 }
 
-internal fun scoreChipText(score: JellytipScore): String? {
+/** Letterboxd mark (three overlapping dots) as inline text content, sized to the cap height of the surrounding text. */
+internal const val LB_MARK_ID = "lb"
+private val LB_DOT_H = 0.7f // em: roughly cap height
+private val LB_STEP = 0.62f // dot spacing as a fraction of the diameter
+
+internal val LetterboxdInline: Map<String, InlineTextContent> =
+    mapOf(
+        LB_MARK_ID to
+            InlineTextContent(
+                Placeholder(
+                    width = (LB_DOT_H * (1f + 2f * LB_STEP)).em,
+                    height = LB_DOT_H.em,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
+                ),
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val d = size.height
+                    val r = d / 2f
+                    listOf(Color(0xFFFF8000), Color(0xFF00E054), Color(0xFF40BCF4)).forEachIndexed { i, c ->
+                        drawCircle(c, radius = r, center = Offset(r + i * d * LB_STEP, r))
+                    }
+                }
+            },
+    )
+
+private fun AnnotatedString.Builder.appendLbMark() {
+    appendInlineContent(LB_MARK_ID, "LB")
+    append(" ")
+}
+
+internal fun scoreChip(score: JellytipScore): AnnotatedString? {
     val v = score.value
     val whole = v.toLong().toDouble() == v
     val num = if (whole) v.toLong().toString() else String.format(Locale.ROOT, "%.1f", v)
-    return when (score.source) {
-        "imdb" -> "IMDb $num"
-        "rt_critic" -> "RT $num%"
-        "rt_audience" -> "Audience $num%"
-        "metacritic" -> "MC $num"
-        "letterboxd" -> "LB ★$num"
-        "trakt" -> "Trakt $num%"
-        else -> "${score.label} $num"
+    return buildAnnotatedString {
+        when (score.source) {
+            "imdb" -> append("IMDb $num")
+            "rt_critic" -> append("RT $num%")
+            "rt_audience" -> append("Audience $num%")
+            "metacritic" -> append("MC $num")
+            "letterboxd" -> {
+                val outOfFive = score.max?.takeIf { it > 0 }?.let { v / it * 5.0 } ?: v
+                appendLbMark()
+                append(String.format(Locale.ROOT, "%.1f/5", outOfFive))
+            }
+            "trakt" -> append("Trakt $num%")
+            else -> append("${score.label} $num")
+        }
     }
 }
 
-internal fun myChipText(lb: JellytipLetterboxd): String? {
+/** Ricki's own Letterboxd rating, e.g. "[LB] You \u26054\u00BD/5", plus liked heart and last watched date. */
+internal fun myChip(
+    lb: JellytipLetterboxd,
+    withDate: Boolean = true,
+): AnnotatedString? {
     val parts = mutableListOf<String>()
-    lb.myRating?.let { parts += "You ★${starText(it)}" }
-    if (lb.liked) parts += "♥"
-    lb.watchedDates.lastOrNull()?.let { raw ->
-        val date =
-            try {
-                LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-            } catch (e: Exception) {
-                null
-            }
-        if (date != null) parts += "watched $date"
+    lb.myRating?.let { parts += "You \u2605${starText(it)}/5" }
+    if (lb.liked) parts += "\u2665"
+    if (withDate) {
+        lb.watchedDates.lastOrNull()?.let { raw ->
+            val date =
+                try {
+                    LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                } catch (e: Exception) {
+                    null
+                }
+            if (date != null) parts += "watched $date"
+        }
     }
-    return parts.takeIf { it.isNotEmpty() }?.joinToString("  ")
+    if (parts.isEmpty()) return null
+    return buildAnnotatedString {
+        if (lb.myRating != null) appendLbMark()
+        append(parts.joinToString("  "))
+    }
 }
 
 private fun starText(rating: Double): String {
@@ -378,13 +431,16 @@ private fun starText(rating: Double): String {
     }
 }
 
-/** Quiet one-line scores, "IMDb 8.1 · RT 95% · You ★4½", with Ricki's own rating in the warm accent. */
+/** Quiet one-line scores, "IMDb 8.1 · RT 95% · [LB] 3.9/5 · [LB] You ★4½/5", with Ricki's own rating in the warm accent. */
 internal fun scoreLine(extras: JellytipExtras?): AnnotatedString? {
-    val scores = extras?.scores.orEmpty().mapNotNull { scoreChipText(it) }.take(4)
-    val mine = extras?.letterboxd?.let { myLineText(it) }
+    val scores = extras?.scores.orEmpty().mapNotNull { scoreChip(it) }.take(4)
+    val mine = extras?.letterboxd?.let { myChip(it, withDate = false) }
     if (scores.isEmpty() && mine == null) return null
     return buildAnnotatedString {
-        append(scores.joinToString("  \u00B7  "))
+        scores.forEachIndexed { i, c ->
+            if (i > 0) append("  \u00B7  ")
+            append(c)
+        }
         if (mine != null) {
             if (scores.isNotEmpty()) append("  \u00B7  ")
             pushStyle(SpanStyle(color = WARM, fontWeight = FontWeight.SemiBold))
@@ -392,11 +448,4 @@ internal fun scoreLine(extras: JellytipExtras?): AnnotatedString? {
             pop()
         }
     }
-}
-
-internal fun myLineText(lb: JellytipLetterboxd): String? {
-    val parts = mutableListOf<String>()
-    lb.myRating?.let { parts += "You \u2605${starText(it)}" }
-    if (lb.liked) parts += "\u2665"
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" ")
 }

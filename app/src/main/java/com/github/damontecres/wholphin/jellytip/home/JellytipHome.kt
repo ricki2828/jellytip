@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -62,8 +64,8 @@ import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
-import com.github.damontecres.wholphin.jellytip.myChipText
-import com.github.damontecres.wholphin.jellytip.scoreChipText
+import com.github.damontecres.wholphin.jellytip.LetterboxdInline
+import com.github.damontecres.wholphin.jellytip.scoreLine as jellytipScoreLine
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import com.github.damontecres.wholphin.ui.AspectRatio
 import com.github.damontecres.wholphin.ui.components.QuickDetails
@@ -115,6 +117,9 @@ object JellytipHomeTokens {
     /** Landscape tile height in dp (~20% smaller than the previous 132) and the gap between tiles; card image requests derive from these. */
     const val LANDSCAPE_CARD_HEIGHT_DP = 106
     const val LANDSCAPE_CARD_SPACING_DP = 10
+    /** Hero/details clearlogo drawn as a solid off-white silhouette so it never repeats the coloured logo on the tile. Flip to false to restore. */
+    const val WHITE_LOGO = true
+    val LOGO_TINT = Color(0xFFF2F2F0)
     const val VIGNETTE_ALPHA = 0.78f
     const val RAIL_SCRIM_ALPHA = 0.55f
 
@@ -382,13 +387,7 @@ fun JellytipHomeHeader(
         }
     }
     val scoreLine =
-        remember(extras, item?.id) {
-            val e = extras?.takeIf { it.first == item?.id }?.second
-            val parts =
-                e?.scores?.mapNotNull { scoreChipText(it) }?.take(4).orEmpty() +
-                    listOfNotNull(e?.letterboxd?.let { myChipText(it) })
-            parts.joinToString("  ·  ")
-        }
+        remember(extras, item?.id) { jellytipScoreLine(extras?.takeIf { it.first == item?.id }?.second) }
 
     with(density) {
         val textSize = JellytipHomeTokens.TEXT_PX.toSp()
@@ -414,6 +413,7 @@ fun JellytipHomeHeader(
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
+                        colorFilter = jellytipLogoFilter(),
                         onError = { logoFailed = true },
                         modifier =
                             Modifier
@@ -459,9 +459,10 @@ fun JellytipHomeHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (scoreLine.isNotEmpty()) {
+                if (scoreLine != null) {
                     Text(
                         text = scoreLine,
+                        inlineContent = LetterboxdInline,
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
@@ -473,3 +474,7 @@ fun JellytipHomeHeader(
         }
     }
 }
+
+/** Tint for hero/details clearlogos, or null when [JellytipHomeTokens.WHITE_LOGO] is off. */
+fun jellytipLogoFilter(): ColorFilter? =
+    if (JellytipHomeTokens.WHITE_LOGO) ColorFilter.tint(JellytipHomeTokens.LOGO_TINT, BlendMode.SrcIn) else null

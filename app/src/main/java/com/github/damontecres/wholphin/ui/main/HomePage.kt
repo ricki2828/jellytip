@@ -2,6 +2,9 @@ package com.github.damontecres.wholphin.ui.main
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -404,9 +407,13 @@ fun HomePageContent(
                             .focusRestorer(),
                 ) {
                     itemsIndexed(homeRows) { rowIndex, row ->
+                        // Jellytip: rows above the focused one fade out completely so no clipped sliver is left at the top
+                        val aboveFocus = LocalJellytipHome.current && rowIndex < position.row
+                        val rowAlpha by animateFloatAsState(if (aboveFocus) 0f else 1f, tween(150), label = "jellytip-row-above")
                         val rowModifier =
                             Modifier
                                 .animateItem(placementSpec = null)
+                                .graphicsLayer { alpha = rowAlpha }
                                 .padding(bottom = 8.dp)
                         CompositionLocalProvider(
                             LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
