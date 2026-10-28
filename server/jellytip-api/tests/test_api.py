@@ -221,5 +221,43 @@ def test_backdrops_route_requires_auth_and_returns_null_for_unscored(tmp_path):
                   imgscores=ImgScores(_scores_file(tmp_path)))
     assert svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "bad")[0] == 401
     st, body = svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "tok")
-    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95}
+    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None}
     assert svc.route("/v1/items/" + "c" * 32 + "/backdrops", {}, "tok")[1]["backdrops"] is None
+
+
+def _hero_scores(tmp_path, thumb, hashes, anim=False):
+    p = tmp_path / "h.json"
+    p.write_text(json.dumps({"stills": {}, "items": {"d" * 32: {
+        "anim": anim, "thumb": {"tag": "t", "h": thumb} if thumb else None,
+        "backdrops": [{"i": i, "tag": "t", "s": s, "h": h} for i, (s, h) in enumerate(hashes)]}}}))
+    from jellytip_api.imgscores import ImgScores
+    return ImgScores(str(p)).backdrops("d" * 32)
+
+
+A, B, C = "0" * 16, "f" * 16, "00000000ffffffff"  # A-B 64 bits apart, A-C 32, B-C 32
+
+
+def test_hero_differs_from_thumb(tmp_path):
+    r = _hero_scores(tmp_path, A, [(0.95, A), (0.9, B)])  # best backdrop is the thumb's photo
+    assert r["thumbPhash"] == A and r["heroIndex"] == 1
+
+
+def test_hero_without_thumb_avoids_top_ranked_backdrop(tmp_path):
+    r = _hero_scores(tmp_path, None, [(0.95, A), (0.9, A), (0.8, B)])  # index 1 is a near-duplicate of the card's backdrop
+    assert r["thumbPhash"] is None and r["heroIndex"] == 2
+
+
+def test_hero_near_hash_is_not_different_enough(tmp_path):
+    near = "000000000000007f"  # 7 bits from A: below the 12 threshold
+    assert _hero_scores(tmp_path, A, [(0.95, near), (0.9, C)])["heroIndex"] == 1
+
+
+def test_hero_falls_back_to_most_different(tmp_path):
+    a5, a11 = "000000000000001f", "00000000000007ff"  # 5 and 11 bits from A: none beats 12, so the farther one wins
+    assert _hero_scores(tmp_path, A, [(0.95, a5), (0.9, a11)])["heroIndex"] == 1
+
+
+def test_hero_without_hashes_avoids_top_backdrop_or_single(tmp_path):
+    assert _hero_scores(tmp_path, None, [(0.9, None), (0.8, None)])["heroIndex"] == 1
+    assert _hero_scores(tmp_path, None, [(0.9, None)])["heroIndex"] == 0
+    assert _hero_scores(tmp_path, None, [])["heroIndex"] is None

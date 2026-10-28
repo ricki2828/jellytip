@@ -1,4 +1,5 @@
-"""Score every Jellyfin movie/series' TMDB stills + Jellyfin backdrops for photo realism.
+"""Score every Jellyfin movie/series' TMDB stills + Jellyfin backdrops for photo realism, and
+pHash every backdrop + the Thumb image (the companion picks a hero that differs from the card art).
 
 Resumable (skips images already in the store), writes imgscores.json atomically.
 Usage: score_library.py [--limit N] [--only ITEMID] [--out PATH]   (env from jellytip.env)
@@ -15,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "jellytip-api"))
 sys.path.insert(0, os.path.expanduser("~/jellytip-api"))
 from jellytip_api import stills as stills_mod  # noqa: E402
+from phash import phash  # noqa: E402
 
 UA = "Jellytip/1.0 (+https://github.com/ricki2828/jellytip)"
 CANDIDATES = 30
@@ -45,7 +47,7 @@ def list_items(base, hdr, user):
     users = json.loads(get(f"{base}/Users", hdr))
     uid = next((u["Id"] for u in users if u["Name"] == user), users[0]["Id"])
     q = urllib.parse.urlencode({"Recursive": "true", "IncludeItemTypes": "Movie,Series",
-                                "Fields": "ProviderIds,Genres,BackdropImageTags"})
+                                "Fields": "ProviderIds,Genres,BackdropImageTags,ImageTags"})
     return json.loads(get(f"{base}/Users/{uid}/Items?{q}", hdr, 120)).get("Items", [])
 
 
@@ -85,16 +87,23 @@ def main():
         tags = it.get("BackdropImageTags") or []
         rec = store["items"].get(iid, {})
         have = {b["i"]: b for b in rec.get("backdrops", [])}
-        rec = {"name": it.get("Name"), "kind": kind, "anim": anim, "backdrops": [], "tmdb": it.get("ProviderIds", {}).get("Tmdb")}
+        old_thumb = rec.get("thumb")
+        ttag = (it.get("ImageTags") or {}).get("Thumb")
+        rec = {"name": it.get("Name"), "kind": kind, "anim": anim, "backdrops": [], "tmdb": it.get("ProviderIds", {}).get("Tmdb"),
+               "thumb": {"tag": ttag, "h": None} if ttag else None}
+        if ttag and old_thumb and old_thumb.get("tag") == ttag and old_thumb.get("h"):
+            rec["thumb"] = old_thumb
         todo = []  # (kind, key, fetch-url)
         for i, tag in enumerate(tags):
             old = have.get(i)
-            if old and old["tag"] == tag and (old["s"] is not None or anim):
+            if old and old["tag"] == tag and (old["s"] is not None or anim) and old.get("h"):
                 rec["backdrops"].append(old)
             else:
-                rec["backdrops"].append({"i": i, "tag": tag, "s": None})
-                if not anim:
-                    todo.append(("b", i, f"{base}/Items/{iid}/Images/Backdrop/{i}?maxWidth=780&tag={tag}"))
+                same = old if old and old["tag"] == tag else {}
+                rec["backdrops"].append({"i": i, "tag": tag, "s": same.get("s"), "h": same.get("h")})
+                todo.append(("b", i, f"{base}/Items/{iid}/Images/Backdrop/{i}?maxWidth=780&tag={tag}"))
+        if rec["thumb"] and not rec["thumb"].get("h"):
+            todo.append(("t", 0, f"{base}/Items/{iid}/Images/Thumb?maxWidth=780&tag={ttag}"))
         tmdb = rec["tmdb"]
         if tmdb and not anim and env.get("TMDB_KEY"):
             time.sleep(a.rate)
@@ -105,14 +114,23 @@ def main():
         if todo:
             def dl(t):
                 try:
-                    return get(t[2], hdr if t[0] == "b" else None)
+                    return get(t[2], hdr if t[0] in "bt" else None)
                 except Exception:
                     return None
             blobs = list(pool.map(dl, todo))
             ok = [(t, b) for t, b in zip(todo, blobs) if b]
             failed += len(todo) - len(ok)
-            scores = scorer.score([b for _, b in ok]) if ok else []
-            for (t, _), sc in zip(ok, scores):
+            for t, b in ok:  # hashes first: they need no model and cover animation too
+                if t[0] in "bt":
+                    try:
+                        h = phash(b)
+                    except Exception:
+                        failed += 1
+                        continue
+                    (rec["backdrops"][t[1]] if t[0] == "b" else rec["thumb"])["h"] = h
+            need = [(t, b) for t, b in ok if t[0] == "s" or (t[0] == "b" and not anim and rec["backdrops"][t[1]]["s"] is None)]
+            scores = scorer.score([b for _, b in need]) if need else []
+            for (t, _), sc in zip(need, scores):
                 if t[0] == "s":
                     store["stills"][t[1]] = sc
                 else:

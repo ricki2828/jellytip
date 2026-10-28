@@ -5,7 +5,12 @@ import threading
 
 from .stills import MAX_STILLS
 
+HERO_MIN_DISTANCE = 12  # Hamming bits (of 64) a hero must differ from the card art by
 THRESHOLD = 0.6  # calibrated on a 60-image labelled sample: 27/27 precision on photo calls, see jellytip-imgscore/README.md
+
+
+def hamming(a, b):
+    return bin(int(a, 16) ^ int(b, 16)).count("1")
 
 
 class ImgScores:
@@ -44,10 +49,29 @@ class ImgScores:
         rec = self._load()["items"].get(item_id)
         if rec is None:
             return None
-        rows = [{"index": b["i"], "photoScore": b["s"]} for b in rec["backdrops"]]
+        rows = [{"index": b["i"], "photoScore": b["s"], "phash": b.get("h")} for b in rec["backdrops"]]
         if not rec.get("anim"):  # animation keeps natural order; else same tiering as stills: photos, unscored, non-photos; best score first inside photos
             ph = sorted((r for r in rows if r["photoScore"] is not None and r["photoScore"] >= self.threshold), key=lambda r: -r["photoScore"])
             un = [r for r in rows if r["photoScore"] is None]
             no = [r for r in rows if r["photoScore"] is not None and r["photoScore"] < self.threshold]
             rows = ph + sorted(un, key=lambda r: r["index"]) + sorted(no, key=lambda r: -r["photoScore"])
-        return {"itemId": item_id, "animation": bool(rec.get("anim")), "backdrops": rows}
+        thumb = (rec.get("thumb") or {}).get("h")
+        return {"itemId": item_id, "animation": bool(rec.get("anim")), "backdrops": rows, "thumbPhash": thumb,
+                "heroIndex": self._hero(rows, thumb)}
+
+    @staticmethod
+    def _hero(rows, thumb):
+        """Best-ranked backdrop that looks different from the card art: the Thumb when there is one, else the
+        top-ranked backdrop (what the app's backdrop+logo composite uses). None when there are no backdrops."""
+        if not rows:
+            return None
+        ref = thumb or rows[0]["phash"]
+        if ref is None:  # nothing to compare against: just avoid the card's backdrop
+            return rows[1]["index"] if len(rows) > 1 else rows[0]["index"]
+        dist = [(hamming(ref, r["phash"]), n) for n, r in enumerate(rows) if r["phash"] is not None]
+        for d, n in dist:
+            if d > HERO_MIN_DISTANCE:
+                return rows[n]["index"]
+        if not dist:
+            return rows[0]["index"]
+        return rows[max(dist, key=lambda x: (x[0], -x[1]))[1]]["index"]
