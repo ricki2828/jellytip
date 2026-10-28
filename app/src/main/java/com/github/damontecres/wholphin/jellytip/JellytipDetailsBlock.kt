@@ -93,6 +93,7 @@ fun JellytipDetailsBlock(
         MaterialTheme.typography.bodyMedium.copy(
             fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
             lineHeight = sizes.sp(JellytipHomeTokens.TEXT_PX * 1.35f),
+            shadow = TEXT_SHADOW,
         )
     val quiet = MaterialTheme.colorScheme.onSurface
 
@@ -261,6 +262,7 @@ private fun DetailsTitle(
             fontWeight = FontWeight.Medium,
             fontSize = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX),
             lineHeight = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX * 1.05f),
+            style = MaterialTheme.typography.headlineMedium.copy(shadow = TEXT_SHADOW),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -426,3 +428,6 @@ private fun fileBadges(item: BaseItem): List<String> {
         }
     }
 }
+
+/** Soft shadow under every hero/details text line (about 0 1dp 6dp black at 60% at 1080p on a 2x TV). */
+private val TEXT_SHADOW = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(0f, 2f), 12f)
