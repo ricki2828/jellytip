@@ -1,5 +1,11 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.github.damontecres.wholphin.jellytip.HeroScrollLock
 import com.github.damontecres.wholphin.jellytip.BoxScopeDownHint
 import androidx.compose.ui.Alignment
@@ -371,7 +377,18 @@ fun SeriesDetailsContent(
     }
     var buttonRowFocused by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(true) }
-    HeroScrollLock(listState, topFocused)
+    // Sections are not composed at all until the user presses Down from the header, so moving along the
+    // buttons can never scroll to, reveal or flash them.
+    var sectionsActive by remember { mutableStateOf(false) }
+    val hasBelow = true
+    LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
+    LaunchedEffect(sectionsActive) {
+        if (sectionsActive) {
+            withFrameNanos { }
+            withFrameNanos { }
+            for (r in listOf(SEASONS_ROW, PEOPLE_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
+        }
+    }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     var pageHasFocus by remember { mutableStateOf(false) }
@@ -452,6 +469,14 @@ fun SeriesDetailsContent(
                         buttonRowModifier =
                             Modifier
                                 .focusRequester(focusRequesters[HEADER_ROW])
+                            .onPreviewKeyEvent {
+                                if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
+                                    sectionsActive = true
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                                 .onFocusChanged {
                                     buttonRowFocused = it.hasFocus
                                     if (it.hasFocus) position = HEADER_ROW
@@ -460,7 +485,7 @@ fun SeriesDetailsContent(
                     onFocusWithin = { topFocused = it },
                     )
                 }
-                item {
+                if (sectionsActive) item {
                     ItemRow(
                         title = stringResource(R.string.tv_seasons) + " (${seasons.size})",
                         items = seasons,
@@ -490,7 +515,7 @@ fun SeriesDetailsContent(
                     )
                 }
                 if (people.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         PersonRow(
                             people = people,
                             onClick = {
@@ -519,7 +544,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (extras.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         ExtrasRow(
                             extras = extras,
                             onClickItem = { index, item ->
@@ -535,7 +560,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (similar.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         ItemRow(
                             title = stringResource(R.string.more_like_this),
                             items = similar,
@@ -578,7 +603,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (discovered.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         DiscoverRow(
                             row =
                                 DiscoverRowData(
@@ -599,7 +624,7 @@ fun SeriesDetailsContent(
             }
         }
         BoxScopeDownHint(
-            visible = topFocused && listState.canScrollForward,
+            visible = topFocused && hasBelow && !sectionsActive,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

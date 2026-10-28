@@ -1,5 +1,11 @@
 package com.github.damontecres.wholphin.ui.detail.movie
 
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.github.damontecres.wholphin.jellytip.HeroScrollLock
 import com.github.damontecres.wholphin.jellytip.BoxScopeDownHint
 import androidx.compose.ui.Alignment
@@ -338,7 +344,18 @@ fun MovieDetailsContent(
     }
     var buttonRowFocused by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(true) }
-    HeroScrollLock(listState, topFocused)
+    // Sections are not composed at all until the user presses Down from the header, so moving along the
+    // buttons can never scroll to, reveal or flash them.
+    var sectionsActive by remember { mutableStateOf(false) }
+    val hasBelow = state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
+    LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
+    LaunchedEffect(sectionsActive) {
+        if (sectionsActive) {
+            withFrameNanos { }
+            withFrameNanos { }
+            for (r in listOf(PEOPLE_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
+        }
+    }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     var pageHasFocus by remember { mutableStateOf(false) }
@@ -396,6 +413,14 @@ fun MovieDetailsContent(
                     buttonRowModifier =
                         Modifier
                             .focusRequester(focusRequesters[HEADER_ROW])
+                            .onPreviewKeyEvent {
+                                if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
+                                    sectionsActive = true
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                             .onFocusChanged {
                                 buttonRowFocused = it.hasFocus
                                 if (it.hasFocus) position = HEADER_ROW
@@ -404,7 +429,7 @@ fun MovieDetailsContent(
                     onFocusWithin = { topFocused = it },
                 )
             }
-            state.people.letNotEmpty { people ->
+            (if (sectionsActive) state.people else emptyList()).letNotEmpty { people ->
                 item {
                     PersonRow(
                         people = people,
@@ -423,7 +448,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            state.chapters.letNotEmpty { chapters ->
+            (if (sectionsActive) state.chapters else emptyList()).letNotEmpty { chapters ->
                 item {
                     ChapterRow(
                         chapters = chapters,
@@ -439,7 +464,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            state.extras.letNotEmpty { extras ->
+            (if (sectionsActive) state.extras else emptyList()).letNotEmpty { extras ->
                 item {
                     ExtrasRow(
                         extras = extras,
@@ -455,7 +480,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            state.similar.letNotEmpty { similar ->
+            (if (sectionsActive) state.similar else emptyList()).letNotEmpty { similar ->
                 item {
                     val imageHeight =
                         remember(movie.type) {
@@ -494,7 +519,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            state.discovered.letNotEmpty { discovered ->
+            (if (sectionsActive) state.discovered else emptyList()).letNotEmpty { discovered ->
                 item {
                     DiscoverRow(
                         row =
@@ -515,7 +540,7 @@ fun MovieDetailsContent(
             }
         }
         BoxScopeDownHint(
-            visible = topFocused && listState.canScrollForward,
+            visible = topFocused && hasBelow && !sectionsActive,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
