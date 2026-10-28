@@ -207,6 +207,16 @@ class JellytipApi
 
         private val backdropCache = ConcurrentHashMap<UUID, Int>() // NO_BACKDROP_PICK = no usable answer
         private val backdropFailedAt = ConcurrentHashMap<UUID, Long>()
+        private val heroCache = ConcurrentHashMap<UUID, Int>() // companion heroIndex: differs from the card art
+
+        /** Cached companion `heroIndex` for [itemId], or null if unknown. */
+        fun peekHeroIndex(itemId: UUID): Int? = heroCache[itemId]
+
+        /** Companion `heroIndex` (a backdrop that does not look like the item's card art); one request shared with [bestBackdropIndex]. */
+        suspend fun heroBackdropIndex(itemId: UUID): Int? {
+            bestBackdropIndex(itemId)
+            return heroCache[itemId]
+        }
 
         /** Cached photo-ranked backdrop index for [itemId], or null if unknown / animation / no ranking. */
         fun peekBestBackdropIndex(itemId: UUID): Int? = backdropCache[itemId]?.takeIf { it >= 0 }
@@ -250,6 +260,7 @@ class JellytipApi
                             } else {
                                 arr.optJSONObject(0)?.optInt("index", -1) ?: -1
                             }
+                        root.optInt("heroIndex", -1).takeIf { it >= 0 }?.let { heroCache[itemId] = it }
                         backdropCache[itemId] = index
                         index.takeIf { it >= 0 }
                     }

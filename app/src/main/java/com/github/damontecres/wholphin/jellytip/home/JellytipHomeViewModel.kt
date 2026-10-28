@@ -8,6 +8,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipBackdropUrl
+import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.services.TrailerService
@@ -46,7 +47,13 @@ class JellytipHomeViewModel
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
         /** Single Jellyfin backdrop capped at 1920 wide; episodes and seasons use their series' backdrop. */
-        fun backdropUrl(item: BaseItem): String? = jellytipBackdropUrl(imageUrlService, item)
+        fun backdropUrl(
+            item: BaseItem,
+            heroIndex: Int? = null,
+        ): String? = jellytipBackdropUrl(imageUrlService, item, heroIndex)
+
+        /** Companion `heroIndex` for [item] (cached after the first answer); null while unknown or unreachable. */
+        suspend fun heroIndex(item: BaseItem): Int? = jellytipApi.heroBackdropIndex(jellytipHeroItemId(item))
 
         /** Stream URL of the first local trailer, or null when there is none. Cheap no-op without LocalTrailerCount. */
         suspend fun trailerUrl(item: BaseItem): String? {

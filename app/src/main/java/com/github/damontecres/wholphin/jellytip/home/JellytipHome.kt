@@ -57,8 +57,10 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
+import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
 import com.github.damontecres.wholphin.jellytip.myChipText
 import com.github.damontecres.wholphin.jellytip.scoreChipText
@@ -107,8 +109,12 @@ object JellytipHomeTokens {
     const val TEXT_BLOCK_W_PX = 900
     const val START_PAD_PX = 16
     const val BOTTOM_PAD_PX = 28
-    const val HEADER_HEIGHT_FRACTION = 0.5f
-    const val HERO_HEIGHT_FRACTION = 0.66f
+    const val HEADER_HEIGHT_FRACTION = 0.56f // rows start here; text block sits at its bottom, above the first row
+    const val HERO_HEIGHT_FRACTION = 0.70f
+
+    /** Landscape tile height in dp (~20% smaller than the previous 132) and the gap between tiles; card image requests derive from these. */
+    const val LANDSCAPE_CARD_HEIGHT_DP = 106
+    const val LANDSCAPE_CARD_SPACING_DP = 10
     const val VIGNETTE_ALPHA = 0.78f
     const val RAIL_SCRIM_ALPHA = 0.55f
 
@@ -125,7 +131,6 @@ object JellytipHomeTokens {
     const val DETAILS_WIDTH_PX = 820
 }
 
-private const val LANDSCAPE_HEIGHT_DP = 132
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
 private const val KEN_BURNS_MS = 24_000
@@ -136,8 +141,8 @@ private const val KEN_BURNS_MS = 24_000
 fun jellytipRowOptions(options: HomeRowViewOptions): HomeRowViewOptions =
     if (options == HomeRowViewOptions()) {
         options.copy(
-            heightDp = LANDSCAPE_HEIGHT_DP,
-            spacing = 12,
+            heightDp = JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP,
+            spacing = JellytipHomeTokens.LANDSCAPE_CARD_SPACING_DP,
             aspectRatio = AspectRatio.WIDE,
             contentScale = PrefContentScale.CROP,
             imageType = ViewOptionImageType.THUMB, // swapped for the backdrop in the card
@@ -175,7 +180,13 @@ fun JellytipHomeHero(
         }
     }
     var lastUrl by remember { mutableStateOf<String?>(null) }
-    val url = remember(shown?.id) { shown?.let { viewModel.backdropUrl(it) } }
+    // Hero photo comes from the companion (differs from the tile art); until it answers, show a non-tile backdrop and upgrade
+    val heroIndex by produceState<Int?>(null, shown?.id) {
+        val target = shown
+        value = null
+        if (target != null) value = JellytipApi.shared?.peekHeroIndex(jellytipHeroItemId(target)) ?: viewModel.heroIndex(target)
+    }
+    val url = remember(shown?.id, heroIndex) { shown?.let { viewModel.backdropUrl(it, heroIndex) } }
     if (url != null && url != lastUrl) lastUrl = url
 
     // Trailer: only after focus has rested on the same trailer-bearing card
