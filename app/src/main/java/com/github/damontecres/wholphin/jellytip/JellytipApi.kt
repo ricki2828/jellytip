@@ -13,6 +13,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
 import timber.log.Timber
@@ -111,6 +112,7 @@ class JellytipApi
     constructor(
         @param:StandardOkHttpClient private val baseClient: OkHttpClient,
         private val preferences: DataStore<AppPreferences>,
+        private val api: ApiClient,
     ) {
         private data class Entry(
             val value: JellytipExtras?,
@@ -178,6 +180,11 @@ class JellytipApi
                             .apply {
                                 if (prefs.jellytipApiToken.isNotBlank()) {
                                     header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    // No manual token: authenticate with the current Jellyfin session
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
                                 }
                             }.build()
                     client.newCall(request).execute().use { response ->
