@@ -79,7 +79,12 @@ def probe_h264(path):
     return r.stdout.strip().startswith("h264")
 
 
+YT_ID = re.compile(r"[A-Za-z0-9_-]{11}")
+
+
 def download(key, dest):
+    if not YT_ID.fullmatch(str(key)):
+        return None, "bad youtube id"
     TMP.mkdir(parents=True, exist_ok=True)
     for f in TMP.glob("*"):
         f.unlink()
