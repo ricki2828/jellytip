@@ -123,6 +123,8 @@ class Service:
                     manifest = json.load(f)
             except OSError:
                 manifest = {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
+            if query.get("includeDiscover") != "1":  # discover rows carry TMDB ids, not library items: opt-in only
+                manifest = {**manifest, "carousels": [c for c in manifest.get("carousels", []) if not c.get("discover")]}
             return 200, {**manifest, "letterboxd": self.lb.home_lists()}
         if path == "/v1/letterboxd/lists":
             return 200, self.lb.lists()

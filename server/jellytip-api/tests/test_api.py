@@ -174,6 +174,15 @@ def test_home_carousels_serves_manifest_or_empty(tmp_path):
     assert svc.route("/v1/home/carousels", {}, "bad")[0] == 401
 
 
+def test_home_carousels_hide_discover_rows_unless_opted_in(tmp_path):
+    env = {"JELLYTIP_TOKEN": "t", "JELLYTIP_DB": str(tmp_path / "c.db"), "LB_EXPORT": str(tmp_path / "lb.json")}
+    (tmp_path / "carousels.json").write_text(json.dumps({"version": 1, "carousels": [
+        {"name": "A", "itemIds": ["x"]}, {"name": "D", "discover": True, "itemIds": [], "items": [{"tmdbId": 1}]}]}))
+    svc = Service(env)
+    assert [c["name"] for c in svc.route("/v1/home/carousels", {}, "t")[1]["carousels"]] == ["A"]
+    assert [c["name"] for c in svc.route("/v1/home/carousels", {"includeDiscover": "1"}, "t")[1]["carousels"]] == ["A", "D"]
+
+
 def test_letterboxd_home_lists_need_enough_library_films(tmp_path):
     export = tmp_path / "lb.json"
     export.write_text(json.dumps({"films": {}, "lists": [

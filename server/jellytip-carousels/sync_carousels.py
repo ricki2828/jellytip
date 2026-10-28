@@ -27,6 +27,7 @@ HOME = os.path.expanduser("~")
 KOMETA = os.path.join(HOME, "Kometa")
 STATE = os.environ.get("JELLYTIP_CAROUSEL_STATE", os.path.join(HOME, "jellytip-api", "data"))
 ENV_FILE = os.path.join(HOME, "jellytip-api", "jellytip.env")
+TV_CONFIG = os.path.join(HOME, "jellytip-carousels", "config", "tv.yml")
 JFC_CONFIG = os.path.join(HOME, "jellyfin-collection", "config", "Movies.yml")
 UA = "Mozilla/5.0 (jellytip-carousels)"
 USER_NAME = "ricki28"
@@ -35,6 +36,10 @@ MIN_ROW_ITEMS = 3  # a 1-2 film row looks broken on a home screen; the collectio
 TMDB_PAGES = 8
 # Collections other jobs own: rewatchables_sync.py maintains this one from the IMDb list.
 EXTERNALLY_OWNED = {"The Rewatchables"}
+TMDB_TV_GENRES = {"Action & Adventure": 10759, "Animation": 16, "Comedy": 35, "Crime": 80, "Documentary": 99, "Drama": 18,
+                  "Family": 10751, "Kids": 10762, "Mystery": 9648, "News": 10763, "Reality": 10764, "Sci-Fi & Fantasy": 10765,
+                  "Soap": 10766, "Talk": 10767, "War & Politics": 10768, "Western": 37}
+DAY_ATTRS = {"added", "episodes_added", "episode_aired", "new_season", "ended", "last_played"}  # value N = within last N days
 META_KEYS = {
     "summary", "sort_title", "collection_order", "sync_mode", "visible_home", "visible_shared", "visible_library",
     "schedule", "limit", "smart_label", "label", "name_mapping", "template", "url_poster", "file_poster",
@@ -76,7 +81,7 @@ class Unsupported(Exception):
 # ---------- library index ----------
 
 class Library:
-    FIELDS = "ProviderIds,People,Genres,ProductionLocations,CommunityRating,CriticRating,Tags,DateCreated,MediaStreams,ProductionYear,PremiereDate,SortName"
+    FIELDS = "ProviderIds,People,Genres,ProductionLocations,CommunityRating,CriticRating,Tags,DateCreated,MediaStreams,ProductionYear,PremiereDate,SortName,Status,EndDate"
 
     def __init__(self, jf, uid, kind):
         self.kind, self.items = kind, []
@@ -96,6 +101,61 @@ class Library:
             if p.get("Imdb"):
                 self.by_imdb.setdefault(p["Imdb"], it)
             self.by_title.setdefault((norm(it["Name"]), it.get("ProductionYear")), it)
+
+
+def parse_dt(v):
+    return dt.datetime.fromisoformat(v[:19] + "+00:00") if v else None
+
+
+def enrich_series(jf, uid, lib, tmdb, now):
+    """Attach lib item["_x"]: per-series facts Jellyfin does not expose directly (episode recency, runtime,
+    watched state) plus TMDB rating/type/country. Smart TV filters in tv.yml read these."""
+    eps, start = [], 0
+    while True:
+        page = jf.get(f"/Users/{uid}/Items", IncludeItemTypes="Episode", Recursive="true", StartIndex=start, Limit=200,
+                      Fields="DateCreated,PremiereDate,RunTimeTicks,SeriesId,ParentIndexNumber")
+        eps += page["Items"]
+        start += 200
+        if start >= page["TotalRecordCount"]:
+            break
+    by_series = {}
+    for e in eps:
+        by_series.setdefault(e.get("SeriesId"), []).append(e)
+
+    def age(d):
+        return (now - d).days if d else None
+
+    for it in lib.items:
+        mine = by_series.get(it["Id"], [])
+        x = it["_x"] = {}
+        added = [parse_dt(e.get("DateCreated")) for e in mine]
+        x["episodes_added"] = age(max((d for d in added if d), default=None))
+        aired = [d for d in (parse_dt(e.get("PremiereDate")) for e in mine) if d and d <= now]
+        x["episode_aired"] = age(max(aired, default=None))
+        ticks = [e["RunTimeTicks"] for e in mine if e.get("RunTimeTicks")]
+        x["avg_runtime"] = round(sum(ticks) / len(ticks) / 6e8, 1) if ticks else None  # ticks are 100ns
+        seasons = sorted({e.get("ParentIndexNumber") for e in mine if (e.get("ParentIndexNumber") or 0) >= 1})
+        x["season_count"] = len(seasons)
+        if len(seasons) > 1:  # age of the newest season's first arrival; season 1 alone is "just added", not "new season"
+            first = min((d for d, e in zip(added, mine) if d and e.get("ParentIndexNumber") == seasons[-1]), default=None)
+            x["new_season"] = age(first)
+        played = [e for e in mine if (e.get("UserData") or {}).get("Played")]
+        unplayed = [e for e in mine if not (e.get("UserData") or {}).get("Played")
+                    and (parse_dt(e.get("PremiereDate")) or now) <= now]
+        x["partially_watched"] = bool(played and unplayed)
+        x["unwatched"] = not played
+        x["last_played"] = age(max((d for d in (parse_dt((e.get("UserData") or {}).get("LastPlayedDate")) for e in played) if d),
+                                   default=None))
+        x["status"] = (it.get("Status") or "").lower()
+        x["ended"] = age(parse_dt(it.get("EndDate"))) if x["status"] == "ended" else None
+        tid = (it.get("ProviderIds") or {}).get("Tmdb")
+        if tid:
+            try:
+                t = tmdb.get(f"/tv/{tid}")
+                x.update(tmdb_rating=t.get("vote_average"), tmdb_votes=t.get("vote_count"), tmdb_type=(t.get("type") or "").lower(),
+                         origin_country=[c.lower() for c in t.get("origin_country") or []])
+            except urllib.error.URLError:
+                pass
 
 
 def norm(s):
@@ -133,6 +193,10 @@ def attr_values(it, attr):
         return [it.get("CommunityRating")]
     if attr == "critic_rating":  # Plex 0-10, Jellyfin RT-style 0-100
         return [it["CriticRating"] / 10 if it.get("CriticRating") is not None else None]
+    x = it.get("_x")
+    if x is not None and attr in x:  # TV-only facts from enrich_series
+        v = x[attr]
+        return v if isinstance(v, list) else [v]
     raise Unsupported(f"filter attribute {attr}")
 
 
@@ -141,6 +205,9 @@ def cond(it, key, want, now):
     if attr == "added":
         created = dt.datetime.fromisoformat(it["DateCreated"][:19] + "+00:00")
         return (now - created).days <= int(want)
+    if attr in DAY_ATTRS:
+        days = (it.get("_x") or {}).get(attr)
+        return days is not None and days <= int(want)
     vals = attr_values(it, attr)
     if op in ("gte", "lte", "gt", "lt"):
         v = vals[0] if vals else None
@@ -165,6 +232,11 @@ def matches(it, spec, now):
     return True
 
 
+def xval(it, key, missing):
+    v = (it.get("_x") or {}).get(key)
+    return missing if v is None else v
+
+
 def sort_items(items, sort_by, rng):
     if sort_by in (None, "random"):
         items = list(items)
@@ -175,7 +247,11 @@ def sort_items(items, sort_by, rng):
             "critic_rating": lambda i: i.get("CriticRating") or 0,
             "release": lambda i: i.get("PremiereDate") or "",
             "added": lambda i: i.get("DateCreated") or "",
-            "title": lambda i: i.get("SortName") or i["Name"]}.get(field)
+            "title": lambda i: i.get("SortName") or i["Name"],
+            # TV: days-ago attrs sort on the negated age so desc = most recent first
+            **{k: (lambda k: lambda i: -xval(i, k, 10**6))(k) for k in ("episodes_added", "new_season", "ended", "last_played")},
+            "tmdb_rating": lambda i: xval(i, "tmdb_rating", 0),
+            "runtime": lambda i: xval(i, "avg_runtime", 0)}.get(field)
     if not keyf:
         raise Unsupported(f"sort_by {sort_by}")
     return sorted(items, key=keyf, reverse=direction == "desc")
@@ -310,12 +386,101 @@ def kometa_collections():
 
 def sort_number(sort_key):
     """'!001_Trending' / '!0000000010_0000001990s' -> 1 / 10; unnumbered keys sort last, alphabetically."""
-    m = re.match(r"!(\d+)", sort_key)
-    return (0, int(m.group(1)), "") if m else (1, 0, sort_key.lower())
+    m = re.match(r"!(\d+(?:\.\d+)?)", sort_key)  # TV rows use "!2.5_..." to slot between two movie rows
+    return (0, float(m.group(1)), "") if m else (1, 0, sort_key.lower())
 
 
 def strip_emoji(s):
     return re.sub(r"^[^\w'\"(]+", "", s).strip()
+
+
+# ---------- tv.yml: editable TV rows + library-derived genre rows + Discover rows ----------
+
+def load_tv_config(path=TV_CONFIG):
+    try:
+        return yaml.safe_load(open(path)) or {}
+    except OSError:
+        return {}
+
+
+def tv_collections(doc, lib):
+    """[(library, name, merged)] for tv.yml `collections:` plus one row per library genre (`genre_rows:`)."""
+    defaults = doc.get("defaults") or {}
+    out = [("TV Shows", str(n), {**defaults, **c}) for n, c in (doc.get("collections") or {}).items()]
+    g = doc.get("genre_rows")
+    if g:
+        counts = {}
+        for it in lib.items:
+            for name in it.get("Genres") or []:
+                counts[name] = counts.get(name, 0) + 1
+        skip = set(g.get("exclude") or [])
+        genres = sorted((n for n, c in counts.items() if c >= int(g.get("min_items", 3)) and n not in skip),
+                        key=lambda n: (-counts[n], n))
+        for i, name in enumerate(genres):
+            extra = dict(g.get("filter") or {})
+            out.append(("TV Shows", g.get("name", "{genre} Series").format(genre=name), {
+                **defaults, "sort_title": f"!{float(g.get('sort_from', 11.5)) + i * float(g.get('sort_step', 1)):g}_TV_{norm(name)}",
+                "smart_filter": {"all": {"genre": name, **extra}, "sort_by": g.get("sort_by", "tmdb_rating.desc"),
+                                 "limit": g.get("limit", 25)},
+                "summary": f"{name} series in your library"}))
+    return out
+
+
+def rel_date(v, now):
+    """'-60d' / '+30d' -> ISO date relative to now; anything else passes through."""
+    m = re.fullmatch(r"([+-])(\d+)d", str(v))
+    return (now + dt.timedelta(days=int(m.group(2)) * (1 if m.group(1) == "+" else -1))).strftime("%Y-%m-%d") if m else v
+
+
+def discover_rows(doc, lib, tmdb, now):
+    """Manifest rows for shows NOT in the library (`discover: true`, TMDB ids, no Jellyfin ids). Data only:
+    nothing here requests or downloads anything."""
+    cfg, rows = doc.get("discover") or {}, []
+    if not cfg:
+        return rows
+    known = set(lib.by_tmdb)
+    counts = {}
+    for it in lib.items:
+        for g in it.get("Genres") or []:
+            counts[g] = counts.get(g, 0) + 1
+    fav = [g for g in sorted(counts, key=lambda g: (-counts[g], g)) if g in TMDB_TV_GENRES][:int(cfg.get("favourite_genres", 0))]
+    specs = list(cfg.get("rows") or [])
+    for i, g in enumerate(fav):
+        t = cfg.get("favourite_template") or {}
+        specs.append({"name": t.get("name", "New {genre} Series").format(genre=g),
+                      "sort_title": f"!{float(t.get('sort_from', 21.5)) + i:g}_TVDiscover_{norm(g)}",
+                      "tmdb_discover": {"with_genres": TMDB_TV_GENRES[g], "first_air_date.gte": t.get("since", "-120d"),
+                                        "sort_by": "popularity.desc", "vote_count.gte": t.get("min_votes", 20)},
+                      "limit": t.get("limit", 20)})
+    for spec in specs:
+        if "tmdb_trending_weekly" in spec:
+            path, params = "/trending/tv/week", {}
+        elif "tmdb_discover" in spec:
+            path, params = "/discover/tv", {k: rel_date(v, now) for k, v in spec["tmdb_discover"].items()}
+        else:
+            continue
+        limit, found, seen = int(spec.get("limit", 20)), [], set()
+        for page in range(1, 4):
+            try:
+                data = tmdb.get(path, page=page, **params)
+            except urllib.error.URLError:
+                break
+            for r in data.get("results", []):
+                if str(r["id"]) in known or r["id"] in seen or not r.get("poster_path"):
+                    continue
+                seen.add(r["id"])
+                found.append({"tmdbId": r["id"], "mediaType": "tv", "title": r.get("name"),
+                              "year": int(r["first_air_date"][:4]) if r.get("first_air_date") else None,
+                              "overview": (r.get("overview") or "")[:300], "rating": round(r.get("vote_average") or 0, 1),
+                              "posterUrl": "https://image.tmdb.org/t/p/w342" + r["poster_path"],
+                              "backdropUrl": ("https://image.tmdb.org/t/p/w780" + r["backdrop_path"]) if r.get("backdrop_path") else None})
+            if len(found) >= limit or page >= data.get("total_pages", 1):
+                break
+        if len(found) >= MIN_ROW_ITEMS:
+            name = str(spec["name"])
+            rows.append({"id": "discover:" + norm(name), "name": name, "title": name, "sortKey": str(spec.get("sort_title", "~" + name)),
+                         "library": "TV Shows", "order": "custom", "discover": True, "itemIds": [], "items": found[:limit]})
+    return rows
 
 
 # ---------- Jellyfin collection writes ----------
@@ -364,6 +529,9 @@ def main():
     uid = next(u["Id"] for u in users if u["Name"] == USER_NAME)
     now = dt.datetime.now(dt.timezone.utc)
     libs = {"Movies": Library(jf, uid, "Movie"), "TV Shows": Library(jf, uid, "Series")}
+    enrich_series(jf, uid, libs["TV Shows"], tmdb, now)
+    tv_doc = load_tv_config()
+    cols = cols + tv_collections(tv_doc, libs["TV Shows"])
     existing = {b["Name"]: b for b in jf.get(f"/Users/{uid}/Items", IncludeItemTypes="BoxSet", Recursive="true",
                                               Fields="SortName,ChildCount")["Items"]}
     report = {"generated": now.isoformat(), "synced": [], "skipped": [], "errors": []}
@@ -415,6 +583,7 @@ def main():
             entries.append({"id": box["Id"], "name": name, "title": strip_emoji(name), "sortKey": box.get("SortName") or name,
                             "library": "Movies", "order": "random" if name in EXTERNALLY_OWNED else "custom",
                             "itemIds": [k["Id"] for k in kids][:MAX_ITEMS]})
+    entries += discover_rows(tv_doc, libs["TV Shows"], tmdb, now)
     entries.sort(key=lambda e: (sort_number(e["sortKey"]), e["name"]))
     manifest = {"version": 1, "generated": now.isoformat(), "carousels": entries}
     report["manifest_count"] = len(entries)

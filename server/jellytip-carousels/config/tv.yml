@@ -1,0 +1,102 @@
+# TV carousels for Jellytip. Read daily by sync_carousels.py (cron 05:15) -> Jellyfin collections + home manifest.
+# Edit freely: add a row by copying one block. Builder/filter keys are documented in README.md.
+# "Just Added TV" stays in Kometa (tv-carousels.yml) so it is not repeated here.
+#
+# sort_title "!N_name": N is the home-screen position; decimals slot a TV row between movie rows ("!2.5" sits
+# after movie row 2, before 3). Movie rows run !1 .. !14, then !101+ (rotating).
+
+defaults:                    # merged into every row below
+  visible_home: true
+  collection_order: custom   # keep the smart_filter sort_by order
+
+collections:
+
+  New Episodes This Week:
+    sort_title: "!1.5_TV_NewEpisodes"
+    summary: Series with an episode added or aired in the last 7 days
+    smart_filter:
+      any: {episodes_added: 7, episode_aired: 7}
+      sort_by: episodes_added.desc
+      limit: 20
+
+  Continue a Series:
+    sort_title: "!2.5_TV_Continue"
+    summary: Series you started and have not finished
+    smart_filter:
+      all: {partially_watched: true}
+      sort_by: last_played.desc
+      limit: 20
+
+  Prestige TV:
+    sort_title: "!5.5_TV_Prestige"
+    summary: TMDB 8.0+ with at least 500 votes
+    smart_filter:
+      all: {tmdb_rating.gte: 8, tmdb_votes.gte: 500}
+      sort_by: tmdb_rating.desc
+      limit: 25
+
+  New Seasons:
+    sort_title: "!6.5_TV_NewSeasons"
+    summary: Season 2+ that landed in the last 60 days
+    smart_filter:
+      all: {new_season: 60}
+      sort_by: new_season.desc
+      limit: 20
+
+  Limited Series:
+    sort_title: "!7.5_TV_Limited"
+    summary: One season, finished - a complete story
+    smart_filter:
+      all: {status: ended, season_count.lte: 1}
+      sort_by: tmdb_rating.desc
+      limit: 25
+
+  Short Watches:
+    sort_title: "!8.5_TV_Short"
+    summary: Episodes of 30 minutes or less
+    smart_filter:
+      all: {avg_runtime.gt: 0, avg_runtime.lte: 30}
+      sort_by: tmdb_rating.desc
+      limit: 25
+
+  British TV:
+    sort_title: "!9.5_TV_British"
+    summary: Made in the UK
+    smart_filter:
+      all: {origin_country: GB}
+      sort_by: tmdb_rating.desc
+      limit: 25
+
+  Recently Ended:
+    sort_title: "!103.5_TV_Ended"
+    summary: Finished in the last 18 months, ready to binge
+    smart_filter:
+      all: {status: ended, ended: 550}
+      sort_by: ended.desc
+      limit: 20
+
+# One row per library genre with at least min_items series (derived each run - new genres appear on their own).
+genre_rows:
+  name: "{genre} Series"
+  min_items: 3
+  exclude: []                # genre names to leave out
+  sort_from: 11.5            # first genre row position; each next row is +sort_step
+  sort_step: 1
+  sort_by: tmdb_rating.desc
+  limit: 25
+
+# Shows NOT in the library: manifest rows flagged discover: true (data only, nothing is requested).
+# The companion hides them unless the app calls /v1/home/carousels?includeDiscover=1.
+discover:
+  favourite_genres: 4        # also one "New <genre> Series" row for each of your top N library genres
+  favourite_template:
+    name: "New {genre} Series"
+    since: "-120d"           # first aired within the last 120 days
+    min_votes: 20
+    sort_from: 21.5
+    limit: 20
+  rows:
+    - name: Trending TV This Week
+      sort_title: "!20.5_TVDiscover_Trending"
+      tmdb_trending_weekly: true
+      limit: 20
