@@ -52,6 +52,11 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
+import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
+import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
@@ -70,6 +75,7 @@ import com.github.damontecres.wholphin.ui.components.FocusableItemRow
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.components.QuickDetails
+import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
@@ -91,6 +97,7 @@ import com.github.damontecres.wholphin.util.LoadingState
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.DateTime
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ImageType
 import timber.log.Timber
 import java.util.UUID
 import kotlin.time.Duration
@@ -213,21 +220,31 @@ fun HomePage(
                     }
                 }
 
-            HomePageContent(
-                homeRows = homeRows,
-                position = position,
-                onFocusPosition = onFocusPosition,
-                onClickItem = onClickItem,
-                onLongClickItem = onLongClickItem,
-                onClickPlay = onClickPlay,
-                loadingState = refreshing,
-                showClock = preferences.appPreferences.interfacePreferences.showClock,
-                onUpdateBackdrop = viewModel::updateBackdrop,
-                showLogo = preferences.appPreferences.interfacePreferences.showLogos,
-                showViewMore = true,
-                onClickViewMore = onClickViewMore,
-                modifier = modifier,
-            )
+            val noBackdropUpdate = remember { { _: BaseItem -> } }
+            val showLogos = preferences.appPreferences.interfacePreferences.showLogos
+            JellytipHomeTheme {
+                HomePageContent(
+                    homeRows = homeRows,
+                    position = position,
+                    onFocusPosition = onFocusPosition,
+                    onClickItem = onClickItem,
+                    onLongClickItem = onLongClickItem,
+                    onClickPlay = onClickPlay,
+                    loadingState = refreshing,
+                    showClock = preferences.appPreferences.interfacePreferences.showClock,
+                    onUpdateBackdrop = noBackdropUpdate,
+                    showLogo = showLogos,
+                    showViewMore = true,
+                    onClickViewMore = onClickViewMore,
+                    modifier = modifier,
+                    heroComposable = { focusedItem, hasFocus ->
+                        JellytipHomeHero(item = focusedItem, hasFocus = hasFocus)
+                    },
+                    headerComposable = { focusedItem ->
+                        JellytipHomeHeader(item = focusedItem, showLogo = showLogos)
+                    },
+                )
+            }
             overviewDialog?.let { info ->
                 ItemDetailsDialog(
                     info = info,
@@ -299,7 +316,9 @@ fun HomePageContent(
         )
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
+    heroComposable: (@Composable (focusedItem: BaseItem?, hasFocus: Boolean) -> Unit)? = null,
 ) {
+    var hasFocus by remember { mutableStateOf(false) }
     val focusedItem =
         remember(homeRows, position) {
             (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(
@@ -338,7 +357,8 @@ fun HomePageContent(
     LaunchedEffect(onUpdateBackdrop, focusedItem) {
         focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
-    Box(modifier = modifier) {
+    Box(modifier = modifier.onFocusChanged { hasFocus = it.hasFocus }) {
+        heroComposable?.invoke(focusedItem, hasFocus)
         Column(
             modifier =
                 Modifier
@@ -403,7 +423,12 @@ fun HomePageContent(
 
                                 is HomeRowLoadingState.Success -> {
                                     if (row.items.isNotEmpty()) {
-                                        val viewOptions = row.viewOptions
+                                        val viewOptions =
+                                            if (LocalJellytipHome.current) {
+                                                jellytipRowOptions(row.viewOptions)
+                                            } else {
+                                                row.viewOptions
+                                            }
                                         ItemRow(
                                             title = row.title.getString(),
                                             items = row.items,
@@ -666,10 +691,13 @@ fun HomePageCardContent(
         }
 
         else -> {
+            val jellytipHome = LocalJellytipHome.current
             val imageType =
-                remember(item, viewOptions) {
+                remember(item, viewOptions, jellytipHome) {
                     if (item?.type == BaseItemKind.EPISODE) {
                         viewOptions.episodeImageType.imageType
+                    } else if (jellytipHome && viewOptions.imageType == ViewOptionImageType.THUMB) {
+                        ImageType.BACKDROP
                     } else {
                         viewOptions.imageType.imageType
                     }

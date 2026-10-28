@@ -69,7 +69,7 @@ private const val TRAILER_DELAY_MS = 3_000L
  * @param buttonRowFocused true while focus is somewhere in the play/buttons row
  */
 /** Extends this node over the nav-drawer inset (64dp + 8dp) on the left and the 16dp end padding. */
-private fun Modifier.fillFullBleed(): Modifier =
+internal fun Modifier.fillFullBleed(): Modifier =
     layout { measurable, constraints ->
         val start = 72.dp.roundToPx()
         val end = 16.dp.roundToPx()
@@ -289,15 +289,15 @@ fun JellytipScoreRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.padding(start = HeaderUtils.startPadding, top = 6.dp, bottom = 6.dp),
     ) {
-        chips.forEach { Chip(it, Color.White.copy(alpha = 0.14f), Color.White) }
-        mine?.let { Chip(it, WARM.copy(alpha = 0.22f), WARM) }
+        chips.forEach { JellytipChip(it, Color.White.copy(alpha = 0.14f), Color.White) }
+        mine?.let { JellytipChip(it, WARM.copy(alpha = 0.22f), WARM) }
     }
 }
 
-private val WARM = Color(0xFFFFB74D)
+internal val WARM = Color(0xFFFFB74D)
 
 @Composable
-private fun Chip(
+internal fun JellytipChip(
     text: String,
     background: Color,
     content: Color,

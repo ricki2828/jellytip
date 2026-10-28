@@ -34,13 +34,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Glow
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.Cards
@@ -98,6 +102,7 @@ fun BannerCard(
             }
         }
     var imageError by remember(imageUrl) { mutableStateOf(false) }
+    val jellytipHome = LocalJellytipHome.current
 
     // Stabilize callbacks to prevent AsyncImage from recomposing
     val currentOnClick by rememberUpdatedState(onClick)
@@ -112,6 +117,14 @@ fun BannerCard(
             CardDefaults.colors(
 //                containerColor = Color.Transparent,
             ),
+        scale = if (jellytipHome) CardDefaults.scale(focusedScale = 1.06f) else CardDefaults.scale(),
+        border = if (jellytipHome) CardDefaults.border(focusedBorder = Border.None) else CardDefaults.border(),
+        glow =
+            if (jellytipHome) {
+                CardDefaults.glow(focusedGlow = Glow(JellytipPalette.Jelly.copy(alpha = 0.6f), 14.dp))
+            } else {
+                CardDefaults.glow()
+            },
     ) {
         Box(
             modifier =
