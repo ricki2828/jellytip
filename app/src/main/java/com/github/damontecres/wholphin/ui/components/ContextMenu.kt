@@ -95,6 +95,7 @@ data class ContextMenuActions(
     val onClearChosenStreams: (ChosenStreams?) -> Unit,
     val onClickGoTo: (BaseItem) -> Unit = { navigateTo(it.destination()) },
     val onChangeStill: ((BaseItem) -> Unit)? = null,
+    val onShowSubtitles: ((BaseItem) -> Unit)? = null,
     val onClickRemoveFromNextUp: (BaseItem) -> Unit = {},
     val onClickAddToQueue: (BaseItem) -> Unit = {},
     val onRemoveFromPlaylist: (Int, UUID) -> Unit = { _, _ -> },
@@ -507,6 +508,19 @@ private fun buildContextMenuItems(
                 actions.onClickAddPlaylist.invoke(item.id)
             },
         )
+        actions.onShowSubtitles
+            ?.takeIf { !contextMenu.fromLongClick && (item.type == BaseItemKind.MOVIE || item.type == BaseItemKind.EPISODE) }
+            ?.let { showSubtitles ->
+                add(
+                    DialogItem(
+                        resources.getString(R.string.jellytip_subtitles_menu),
+                        Icons.Default.Info,
+                        dismissOnClick = true,
+                    ) {
+                        showSubtitles.invoke(item)
+                    },
+                )
+            }
         actions.onChangeStill?.takeIf { !contextMenu.fromLongClick }?.let { changeStill ->
             add(
                 DialogItem(

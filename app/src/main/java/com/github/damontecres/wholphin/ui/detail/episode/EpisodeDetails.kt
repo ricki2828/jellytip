@@ -1,26 +1,17 @@
 package com.github.damontecres.wholphin.ui.detail.episode
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -28,27 +19,25 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ChosenStreams
 import com.github.damontecres.wholphin.data.model.BaseItem
-import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
+import com.github.damontecres.wholphin.jellytip.JellytipButton
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitlesDialog
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.RequestOrRestoreFocus
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
-import com.github.damontecres.wholphin.ui.components.ExpandablePlayButtons
-import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.components.Optional
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
-import com.github.damontecres.wholphin.ui.data.ChooseVersionParams
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.util.DataLoadingState
-import com.github.damontecres.wholphin.util.ExceptionHandler
-import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.extensions.ticks
 import org.jellyfin.sdk.model.serializer.toUUID
@@ -74,6 +63,7 @@ fun EpisodeDetails(
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
+    var showSubtitles by remember { mutableStateOf<BaseItem?>(null) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.collectAsState()
     val canDelete by viewModel.canDelete.collectAsState()
@@ -109,6 +99,7 @@ fun EpisodeDetails(
                     )
                 },
                 onClearChosenStreams = { viewModel.clearChosenStreams(it) },
+                onShowSubtitles = { showSubtitles = it },
             )
         }
 
@@ -176,6 +167,7 @@ fun EpisodeDetails(
             )
         }
     }
+    showSubtitles?.let { JellytipSubtitlesDialog(it) { showSubtitles = null } }
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,
@@ -231,80 +223,54 @@ fun EpisodeDetailsContent(
     onChooseVersion: (MediaSourceInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var position by rememberInt(0)
     val focusRequesters = remember { List(1) { FocusRequester() } }
     val dto = ep.data
     val resumePosition = dto.userData?.playbackPositionTicks?.ticks ?: Duration.ZERO
+    var buttonRowFocused by remember { mutableStateOf(false) }
 
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
     Box(modifier = modifier) {
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 8.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .bringIntoViewRequester(bringIntoViewRequester),
-                ) {
-                    EpisodeDetailsHeader(
-                        preferences = preferences,
-                        ep = ep,
-                        chosenStreams = chosenStreams,
-                        bringIntoViewRequester = bringIntoViewRequester,
-                        overviewOnClick = overviewOnClick,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = HeaderUtils.topPadding, bottom = 16.dp),
-                    )
-                    ExpandablePlayButtons(
-                        title = ep.jellytipDeleteLabel(),
-                        resumePosition = resumePosition,
-                        watched = dto.userData?.played ?: false,
-                        favorite = dto.userData?.isFavorite ?: false,
-                        playOnClick = {
-                            position = HEADER_ROW
-                            playOnClick.invoke(it)
-                        },
-                        moreOnClick = moreOnClick,
-                        watchOnClick = watchOnClick,
-                        favoriteOnClick = favoriteOnClick,
-                        buttonOnFocusChanged = {
-                            if (it.isFocused) {
+        JellytipDetailsBackground(ep, emptyList(), buttonRowFocused)
+        JellytipDetailsBlock(
+            item = ep,
+            subtitle = ep.ui.episodeCornerText?.let { "$it \u00B7 ${ep.name ?: ""}" } ?: ep.name,
+            buttons =
+                buildList {
+                    add(
+                        JellytipButton(
+                            label = stringResource(if (resumePosition > Duration.ZERO) R.string.resume else R.string.play),
+                            primary = true,
+                            onClick = {
                                 position = HEADER_ROW
-                                scope.launch(ExceptionHandler()) {
-                                    bringIntoViewRequester.bringIntoView()
-                                }
-                            }
-                        },
-                        trailers = null,
-                        trailerOnClick = {},
-                        canDelete = canDelete,
-                        onConfirmDelete = onConfirmDelete,
-                        chooseVersionParams =
-                            remember(chosenStreams, ep, onChooseVersion) {
-                                ChooseVersionParams(
-                                    chosenStreams = chosenStreams,
-                                    mediaSources = ep.data.mediaSources.orEmpty(),
-                                    onChooseVersion = onChooseVersion,
-                                )
+                                playOnClick.invoke(resumePosition)
                             },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                                .focusRequester(focusRequesters[HEADER_ROW]),
+                        ),
                     )
-                }
-            }
-        }
+                    if (resumePosition > Duration.ZERO) {
+                        add(
+                            JellytipButton(stringResource(R.string.restart), {
+                                position = HEADER_ROW
+                                playOnClick.invoke(Duration.ZERO)
+                            }),
+                        )
+                    }
+                    add(
+                        JellytipButton(
+                            stringResource(if (dto.userData?.isFavorite == true) R.string.remove_favorite else R.string.add_favorite),
+                            favoriteOnClick,
+                        ),
+                    )
+                    add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
+                },
+            trailers = emptyList(),
+            onTrailer = {},
+            onOverview = overviewOnClick,
+            buttonRowModifier =
+                Modifier
+                    .focusRequester(focusRequesters[HEADER_ROW])
+                    .onFocusChanged { buttonRowFocused = it.hasFocus },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }

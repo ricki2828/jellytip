@@ -28,4 +28,7 @@
     <string name="jellytip_change_still">Change still</string>
     <string name="jellytip_more">More</string>
     <string name="jellytip_trailer">Trailer</string>
+    <string name="jellytip_subtitles_searching_long" translatable="false">Searching subtitle providers… this can take up to a minute</string>
+    <string name="jellytip_subtitles_menu" translatable="false">Subtitles</string>
+    <string name="jellytip_best_match" translatable="false">Get best match</string>
 </resources>

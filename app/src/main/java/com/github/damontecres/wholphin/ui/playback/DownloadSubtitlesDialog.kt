@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.playback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,6 +31,8 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipBusy
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitleSearch
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.abbreviateNumber
@@ -51,25 +54,24 @@ fun DownloadSubtitlesContent(
         SubtitleSearchStatus.Inactive -> {}
 
         SubtitleSearchStatus.Searching -> {
-            Text(
-                text = stringResource(R.string.searching),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = modifier,
-            )
+            JellytipBusy(stringResource(R.string.jellytip_subtitles_searching_long), modifier)
         }
 
         SubtitleSearchStatus.Downloading -> {
-            Text(
-                text = stringResource(R.string.downloading),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = modifier,
-            )
+            JellytipBusy(stringResource(R.string.downloading), modifier)
         }
 
         is SubtitleSearchStatus.Error -> {
-            ErrorMessage(null, s.ex, modifier)
+            if (s.message != null) {
+                Text(
+                    text = s.message,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = modifier.padding(16.dp),
+                )
+            } else {
+                ErrorMessage(null, s.ex, modifier)
+            }
         }
 
         is SubtitleSearchStatus.Success -> {
@@ -114,8 +116,8 @@ fun DownloadSubtitlesContent(
                 }
                 if (s.options.isEmpty()) {
                     Text(
-                        text = stringResource(R.string.no_subtitles_found),
-                        style = MaterialTheme.typography.titleLarge,
+                        text = JellytipSubtitleSearch.NONE_FOUND_MESSAGE,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 } else {

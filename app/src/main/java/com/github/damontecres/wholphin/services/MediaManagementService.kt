@@ -60,7 +60,8 @@ class MediaManagementService
             appPreferences: AppPreferences,
         ): Boolean {
             Timber.v("canDelete %s: %s", item.id, item.canDelete)
-            val enabled = appPreferences.interfacePreferences.enableMediaManagement
+            // Jellytip: on unless the user switched it off
+            val enabled = !appPreferences.jellytipDisableMediaManagement
             return enabled &&
                 item.canDelete &&
                 if (item.type == BaseItemKind.RECORDING) {

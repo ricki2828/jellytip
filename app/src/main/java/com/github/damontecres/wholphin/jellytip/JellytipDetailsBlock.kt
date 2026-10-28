@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.Button
@@ -41,9 +42,9 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
-import com.github.damontecres.wholphin.ui.components.TrailerDialog
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -74,6 +75,9 @@ fun JellytipDetailsBlock(
     buttonRowModifier: Modifier,
     modifier: Modifier = Modifier,
     onFocusWithin: (Boolean) -> Unit = {},
+    subtitle: String? = null,
+    bottomPadding: Dp? = null,
+    below: @Composable () -> Unit = {},
     viewModel: JellytipDetailsViewModel = hiltViewModel(),
 ) {
     val sizes = rememberJellytipSizes()
@@ -96,93 +100,109 @@ fun JellytipDetailsBlock(
                     .onFocusChanged { onFocusWithin(it.hasFocus) }
                     .padding(
                         start = (sizes.px(JellytipHomeTokens.DETAILS_LEFT_PX) - 72.dp).coerceAtLeast(0.dp) + 16.dp,
-                        bottom = sizes.px(JellytipHomeTokens.DETAILS_BOTTOM_PX),
-                    ).width(sizes.px(JellytipHomeTokens.DETAILS_WIDTH_PX)),
+                        bottom = bottomPadding ?: sizes.px(JellytipHomeTokens.DETAILS_BOTTOM_PX),
+                    ),
         ) {
-            DetailsTitle(item, sizes)
-
-            // Info line: year · rating · runtime · genres, then quiet file-detail badges
-            val info =
-                remember(item.id) {
-                    listOfNotNull(
-                        dto.productionYear?.toString(),
-                        dto.officialRating,
-                        runtimeText(dto.runTimeTicks),
-                        dto.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
-                    ).joinToString("  ·  ")
+            Column(
+                verticalArrangement = Arrangement.spacedBy(sizes.px(JellytipHomeTokens.DETAILS_GAP_PX)),
+                modifier = Modifier.width(sizes.px(JellytipHomeTokens.DETAILS_WIDTH_PX)),
+            ) {
+                DetailsTitle(item, sizes)
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = body,
+                        fontWeight = FontWeight.SemiBold,
+                        color = quiet,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-            val badges = remember(item.id) { fileBadges(item) }
-            if (info.isNotEmpty() || badges.isNotEmpty()) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(sizes.px(8f)),
-                ) {
-                    if (info.isNotEmpty()) {
-                        Text(
-                            text = info,
-                            style = body,
-                            color = quiet.copy(alpha = 0.9f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
+
+                // Info line: year · rating · runtime · genres, then quiet file-detail badges
+                val info =
+                    remember(item.id) {
+                        listOfNotNull(
+                            dto.productionYear?.toString(),
+                            dto.officialRating,
+                            runtimeText(dto.runTimeTicks),
+                            dto.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
+                        ).joinToString("  ·  ")
                     }
-                    badges.forEach { Badge(it, sizes) }
+                val badges = remember(item.id) { fileBadges(item) }
+                if (info.isNotEmpty() || badges.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(sizes.px(8f)),
+                    ) {
+                        if (info.isNotEmpty()) {
+                            Text(
+                                text = info,
+                                style = body,
+                                color = quiet.copy(alpha = 0.9f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        }
+                        badges.forEach { Badge(it, sizes) }
+                    }
                 }
-            }
 
-            // Second dim line: director and country
-            val director =
-                remember(item.id) {
-                    dto.people
-                        ?.filter { it.type == PersonKind.DIRECTOR && !it.name.isNullOrBlank() }
-                        ?.joinToString(", ") { it.name!! }
-                        ?.takeIf { it.isNotBlank() }
+                // Second dim line: director and country
+                val director =
+                    remember(item.id) {
+                        dto.people
+                            ?.filter { it.type == PersonKind.DIRECTOR && !it.name.isNullOrBlank() }
+                            ?.joinToString(", ") { it.name!! }
+                            ?.takeIf { it.isNotBlank() }
+                    }
+                val country = dto.productionLocations?.firstOrNull()
+                val dim =
+                    listOfNotNull(director?.let { stringResource(R.string.directed_by, it) }, country)
+                        .joinToString("  ·  ")
+                if (dim.isNotEmpty()) {
+                    Text(
+                        text = dim,
+                        style = body,
+                        color = quiet.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-            val country = dto.productionLocations?.firstOrNull()
-            val dim =
-                listOfNotNull(director?.let { stringResource(R.string.directed_by, it) }, country)
-                    .joinToString("  ·  ")
-            if (dim.isNotEmpty()) {
-                Text(
-                    text = dim,
-                    style = body,
-                    color = quiet.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
 
-            dto.overview?.takeIf { it.isNotBlank() }?.let { overview ->
-                val source = remember { MutableInteractionSource() }
-                val focused by source.collectIsFocusedAsState()
-                Text(
-                    text = overview.replace('\n', ' '),
-                    style = body,
-                    color = quiet.copy(alpha = if (focused) 1f else 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (focused) Color.White.copy(alpha = 0.12f) else Color.Transparent,
-                                RoundedCornerShape(sizes.px(4f)),
-                            ).clickable(interactionSource = source, indication = null, onClick = onOverview),
-                )
-            }
+                dto.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                    val source = remember { MutableInteractionSource() }
+                    val focused by source.collectIsFocusedAsState()
+                    Text(
+                        text = overview.replace('\n', ' '),
+                        style = body,
+                        color = quiet.copy(alpha = if (focused) 1f else 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (focused) Color.White.copy(alpha = 0.12f) else Color.Transparent,
+                                    RoundedCornerShape(sizes.px(4f)),
+                                ).clickable(interactionSource = source, indication = null, onClick = onOverview),
+                    )
+                }
 
-            scoreLine(extras)?.let {
-                Text(
-                    text = it,
-                    style = body,
-                    color = quiet.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+                scoreLine(extras)?.let {
+                    Text(
+                        text = it,
+                        style = body,
+                        color = quiet.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
 
-            ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
+                ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
+            }
+            below()
         }
     }
 }
@@ -253,7 +273,8 @@ private fun ButtonsRow(
     sizes: JellytipSizes,
 ) {
     val first = remember { FocusRequester() }
-    var showTrailers by remember { mutableStateOf(false) }
+    // Trailer plays directly: the local one if there is one, else the first remote one. No chooser.
+    val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() ?: trailers.firstOrNull() }
     Row(
         horizontalArrangement = Arrangement.spacedBy(sizes.px(16f)),
         verticalAlignment = Alignment.CenterVertically,
@@ -264,27 +285,23 @@ private fun ButtonsRow(
                 .padding(top = sizes.px(6f)),
     ) {
         buttons.forEachIndexed { index, b ->
+            // Trailer sits before the last button (More)
+            if (index == buttons.lastIndex && trailer != null) {
+                TextButton(
+                    button =
+                        JellytipButton(
+                            stringResource(R.string.jellytip_trailer),
+                            onClick = { onTrailer(trailer) },
+                        ),
+                    sizes = sizes,
+                )
+            }
             TextButton(
                 button = b,
                 sizes = sizes,
                 modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
             )
         }
-        if (trailers.isNotEmpty()) {
-            TextButton(
-                button =
-                    JellytipButton(
-                        stringResource(if (trailers.size == 1) R.string.jellytip_trailer else R.string.trailers_title),
-                        onClick = {
-                            if (trailers.size == 1) onTrailer(trailers.first()) else showTrailers = true
-                        },
-                    ),
-                sizes = sizes,
-            )
-        }
-    }
-    if (showTrailers) {
-        TrailerDialog(onDismissRequest = { showTrailers = false }, trailers = trailers, onClick = onTrailer)
     }
 }
 

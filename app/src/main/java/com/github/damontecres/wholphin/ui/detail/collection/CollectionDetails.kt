@@ -206,7 +206,7 @@ fun CollectionDetails(
                 canDelete =
                     remember(
                         state.collection,
-                        preferences.appPreferences.interfacePreferences.enableMediaManagement,
+                        preferences.appPreferences.jellytipDisableMediaManagement,
                     ) {
                         state.collection?.let {
                             viewModel.canDelete(it, preferences.appPreferences)

@@ -39,6 +39,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitlesDialog
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -95,6 +96,7 @@ fun MovieDetails(
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
+    var showSubtitles by remember { mutableStateOf<BaseItem?>(null) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.collectAsState()
 
@@ -130,6 +132,7 @@ fun MovieDetails(
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
                 onClearChosenStreams = { viewModel.clearChosenStreams(it) },
                 onChangeStill = jellytipViewModel::cycleStill,
+                onShowSubtitles = { showSubtitles = it },
             )
         }
 
@@ -251,6 +254,7 @@ fun MovieDetails(
             preferredSubtitleLanguage = preferredSubtitleLanguage,
         )
     }
+    showSubtitles?.let { JellytipSubtitlesDialog(it) { showSubtitles = null } }
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,

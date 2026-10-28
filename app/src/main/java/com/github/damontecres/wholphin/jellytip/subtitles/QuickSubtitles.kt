@@ -10,7 +10,7 @@ import com.github.damontecres.wholphin.ui.playback.PlaybackViewModel
 import com.github.damontecres.wholphin.ui.playback.SubtitleSearchStatus
 import com.github.damontecres.wholphin.ui.playback.downloadAndSwitchSubtitles
 import com.github.damontecres.wholphin.ui.showToast
-import org.jellyfin.sdk.api.client.extensions.subtitleApi
+import kotlinx.coroutines.flow.update
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.RemoteSubtitleInfo
 import timber.log.Timber
@@ -66,27 +66,26 @@ object JellytipSubtitleRanker {
 
 /**
  * One-press "Get subtitles": search in the user's preferred subtitle language (English if none), auto-pick
- * the best match, download and select it using the existing download flow, and toast what was picked.
+ * the best match, download and select it using the existing download flow. The search dialog shows a spinner
+ * while the server queries its providers (25-60 s); empty results and errors say so plainly.
  */
 fun PlaybackViewModel.jellytipQuickSubtitles() {
     if (subtitleSearchState.value.status != SubtitleSearchStatus.Inactive) return
+    val playback = state.value.currentPlayback ?: return
+    val language =
+        getPreferredLanguage(
+            MediaStreamType.SUBTITLE,
+            preferences,
+            serverRepository.currentUserDto?.configuration,
+        )?.takeIf { it.isNotBlank() } ?: "eng"
+    subtitleSearchState.update { it.copy(status = SubtitleSearchStatus.Searching, language = language) }
     viewModelScope.launchIO {
-        val playback = state.value.currentPlayback ?: return@launchIO
-        val language =
-            getPreferredLanguage(
-                MediaStreamType.SUBTITLE,
-                preferences,
-                serverRepository.currentUserDto?.configuration,
-            )?.takeIf { it.isNotBlank() } ?: "eng"
         try {
-            showToast(context, context.getString(R.string.jellytip_subtitles_searching, language), Toast.LENGTH_SHORT)
-            val results =
-                api.subtitleApi
-                    .searchRemoteSubtitles(itemId = playback.itemId, language = language)
-                    .content
+            val results = JellytipSubtitleSearch.search(context, playback.itemId, language)
             val best = JellytipSubtitleRanker.pick(results, playback.mediaSourceInfo.path)
             if (best == null) {
-                showToast(context, context.getString(R.string.jellytip_subtitles_none, language), Toast.LENGTH_LONG)
+                subtitleSearchState.update { it.copy(status = SubtitleSearchStatus.Inactive) }
+                showToast(context, JellytipSubtitleSearch.NONE_FOUND_MESSAGE, Toast.LENGTH_LONG)
                 return@launchIO
             }
             val label =
@@ -101,7 +100,8 @@ fun PlaybackViewModel.jellytipQuickSubtitles() {
             downloadAndSwitchSubtitles(best.id, wasPlaying)
         } catch (ex: Exception) {
             Timber.e(ex, "Jellytip quick subtitles failed")
-            showToast(context, "Subtitle search failed: ${ex.localizedMessage}", Toast.LENGTH_LONG)
+            subtitleSearchState.update { it.copy(status = SubtitleSearchStatus.Inactive) }
+            showToast(context, JellytipSubtitleSearch.messageFor(ex), Toast.LENGTH_LONG)
         }
     }
 }

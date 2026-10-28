@@ -289,7 +289,7 @@ fun SubtitleChoiceBottomDialog(
     onSelectQuickSearch: () -> Unit = {},
     currentChoice: Int? = null,
 ) {
-    val numberBefore = 2
+    val numberBefore = 3
     val initialChoice =
         remember(choices) {
             choices.indexOfFirstOrNull { it.index == currentChoice }
@@ -339,6 +339,20 @@ fun SubtitleChoiceBottomDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 item {
+                    ListItem(
+                        selected = false,
+                        onClick = onSelectQuickSearch,
+                        leadingContent = {},
+                        headlineContent = {
+                            Text(text = stringResource(R.string.jellytip_get_subtitles))
+                        },
+                        supportingContent = {
+                            Text(text = stringResource(R.string.jellytip_get_subtitles_summary))
+                        },
+                    )
+                    HorizontalDivider()
+                }
+                item {
                     val interactionSource = remember { MutableInteractionSource() }
                     val focused by interactionSource.collectIsFocusedAsState()
                     ListItem(
@@ -387,18 +401,6 @@ fun SubtitleChoiceBottomDialog(
                         },
                         supportingContent = {},
                     )
-                    ListItem(
-                        selected = false,
-                        enabled = hasDownloadPermission,
-                        onClick = onSelectQuickSearch,
-                        leadingContent = {},
-                        headlineContent = {
-                            Text(text = stringResource(R.string.jellytip_get_subtitles))
-                        },
-                        supportingContent = {
-                            Text(text = stringResource(R.string.jellytip_get_subtitles_summary))
-                        },
-                    )
                     if (choices.isNotEmpty()) {
                         HorizontalDivider()
                     }
@@ -431,7 +433,6 @@ fun SubtitleChoiceBottomDialog(
                     val focused by interactionSource.collectIsFocusedAsState()
                     ListItem(
                         selected = false,
-                        enabled = hasDownloadPermission,
                         onClick = onSelectSearch,
                         leadingContent = {},
                         headlineContent = {

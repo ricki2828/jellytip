@@ -267,6 +267,8 @@ message AppPreferences {
   // Inverted so the zero value means autoplay is on
   bool jellytip_disable_trailer_autoplay = 1003;
   bool jellytip_trailer_sound = 1004;
+  // Inverted so media management (Delete) is ON by default; upstream's enable_media_management is no longer read
+  bool jellytip_disable_media_management = 1010;
   // Jellytip (inverted so that the proto default of false means "on")
   bool jellytip_splash_disabled = 100;
   bool jellytip_splash_sound_disabled = 101;

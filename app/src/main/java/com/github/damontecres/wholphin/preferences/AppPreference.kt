@@ -880,10 +880,10 @@ sealed interface AppPreference<Pref, T> {
         val ManageMedia =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.show_media_management,
-                defaultValue = false,
-                getter = { it.interfacePreferences.enableMediaManagement },
+                defaultValue = true,
+                getter = { !it.jellytipDisableMediaManagement },
                 setter = { prefs, value ->
-                    prefs.updateInterfacePreferences { enableMediaManagement = value }
+                    prefs.update { jellytipDisableMediaManagement = !value }
                 },
                 summaryOn = R.string.enabled,
                 summaryOff = R.string.disabled,

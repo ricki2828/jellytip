@@ -7,6 +7,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.PlaylistItem
 import com.github.damontecres.wholphin.data.model.TrackIndex
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitleSearch
 import com.github.damontecres.wholphin.services.getPreferredLanguage
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.launchIO
@@ -67,11 +68,8 @@ fun PlaybackViewModel.searchForSubtitles(language: String? = null) {
             state.value.currentPlayback?.itemId?.let { itemId ->
                 Timber.v("Searching for remote subtitles for %s", itemId)
                 val results =
-                    api.subtitleApi
-                        .searchRemoteSubtitles(
-                            itemId = itemId,
-                            language = language,
-                        ).content
+                    JellytipSubtitleSearch
+                        .search(context, itemId, language)
                         .sortedWith(
                             compareByDescending<RemoteSubtitleInfo> { it.isHashMatch }
                                 .thenByDescending { it.communityRating }
@@ -81,7 +79,9 @@ fun PlaybackViewModel.searchForSubtitles(language: String? = null) {
             }
         } catch (ex: Exception) {
             Timber.e(ex, "Exception while searching for subtitles")
-            subtitleSearchState.update { it.copy(status = SubtitleSearchStatus.Error(null, ex)) }
+            subtitleSearchState.update {
+                it.copy(status = SubtitleSearchStatus.Error(JellytipSubtitleSearch.messageFor(ex), ex))
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitlesDialog
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.RequestOrRestoreFocus
 import com.github.damontecres.wholphin.ui.components.ContextMenu
@@ -99,6 +100,7 @@ fun SeriesOverview(
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
+    var showSubtitles by remember { mutableStateOf<BaseItem?>(null) }
     var showPlaylistDialog by remember { mutableStateOf<UUID?>(null) }
     val playlistState by playlistViewModel.playlistState.collectAsState()
 
@@ -135,6 +137,7 @@ fun SeriesOverview(
                     )
                 },
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
+                onShowSubtitles = { showSubtitles = it },
                 onClearChosenStreams = {
                     val focusedEpisode =
                         (state.episodes as? EpisodeList.Success)
@@ -323,6 +326,7 @@ fun SeriesOverview(
             preferredSubtitleLanguage = preferredSubtitleLanguage,
         )
     }
+    showSubtitles?.let { JellytipSubtitlesDialog(it) { showSubtitles = null } }
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,
