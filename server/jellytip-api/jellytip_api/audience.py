@@ -13,7 +13,7 @@ import urllib.request
 TTL = 3600
 # Plex account / Jellyfin user -> the friendly name the request bot uses. Only unambiguous ones; the rest keep their own name.
 FRIENDLY = {"rickitaiaroa": "Ricki", "ricki28": "Ricki", "daniel taiaroa": "Daniel", "nadine taiaroa": "Nadine",
-            "nadine.taiaroa@gmail.com": "Nadine", "richard.c304": "Richie", "ruchie19": "Richie", "gregandvic": "Greg"}
+            "nadine.taiaroa@gmail.com": "Nadine", "richard.c304": "Richie", "ruchie19": "Richie", "gregandvic": "Greg", "dkt18": "Daniel", "gmccr7": "Greg"}
 
 
 def friendly(name):
