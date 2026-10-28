@@ -174,7 +174,7 @@ object JellytipTrailerCleanup {
                     put("type", type)
                     item.data.path?.let { put("path", it) }
                 }
-            JellytipApi.shared?.postJson("/v1/items/${item.id}/deleted", body)
+            JellytipApi.shared?.postJson("/v1/items/${item.id}/deleted", body.toString())
         } catch (ex: Exception) {
             Timber.w(ex, "Jellytip: trailer cleanup call failed")
         }

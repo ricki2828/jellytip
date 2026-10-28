@@ -81,9 +81,9 @@ class JellytipSeasonSubtitles
                             val res =
                                 companion.postJson(
                                     "/v1/subtitles/season",
-                                    JSONObject().put("seasonId", sid.toString()).put("language", language),
+                                    JSONObject().put("seasonId", sid.toString()).put("language", language).toString(),
                                 )
-                            res?.let { Job(JSONObject(it).getString("jobId")) }
+                            res?.takeIf { it.first in 200..299 }?.let { Job(JSONObject(it.second).getString("jobId")) }
                         }
                     if (jobs.isEmpty()) {
                         showToast(context, "Subtitle search is unavailable right now", Toast.LENGTH_LONG)

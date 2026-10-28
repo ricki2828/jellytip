@@ -11,6 +11,7 @@ import com.github.damontecres.wholphin.data.model.SeerrItemType
 import com.github.damontecres.wholphin.jellytip.splash.JellytipIdentGate
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.jellytip.discover.JellytipDiscoverDetails
 import com.github.damontecres.wholphin.ui.components.ItemGrid
 import com.github.damontecres.wholphin.ui.components.LicenseInfo
 import com.github.damontecres.wholphin.ui.data.MovieSortOptions
@@ -386,6 +387,10 @@ fun DestinationContent(
                 preferences = preferences,
                 modifier = modifier,
             )
+        }
+
+        is Destination.JellytipDiscover -> {
+            JellytipDiscoverDetails(title = destination.title, modifier = modifier)
         }
 
         is Destination.DiscoveredItem -> {
