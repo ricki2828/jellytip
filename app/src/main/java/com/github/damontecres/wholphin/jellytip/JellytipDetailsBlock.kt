@@ -295,6 +295,7 @@ private fun ButtonsRow(
     sizes: JellytipSizes,
 ) {
     val first = remember { FocusRequester() }
+    val firstIndex = remember(buttons) { buttons.indexOfFirst { it.primary }.coerceAtLeast(0) }
     // Trailer plays directly: the local one if there is one, else the first remote one. No chooser.
     val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() ?: trailers.firstOrNull() }
     Row(
@@ -321,7 +322,7 @@ private fun ButtonsRow(
             TextButton(
                 button = b,
                 sizes = sizes,
-                modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                modifier = if (index == firstIndex) Modifier.focusRequester(first) else Modifier,
             )
         }
     }
