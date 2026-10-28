@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -26,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.withTimeoutOrNull
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.services.ImageUrlService
@@ -63,6 +66,7 @@ fun selectJellytipCardArt(
     item: BaseItem,
     widthPx: Int,
     heightPx: Int,
+    backdropIndex: Int? = null,
 ): JellytipCardArt {
     val d = item.data
     val tags = d.imageTags.orEmpty()
@@ -84,7 +88,15 @@ fun selectJellytipCardArt(
         id: java.util.UUID,
         type: ImageType,
         tag: String?,
-    ) = service.getItemImageUrl(itemId = id, imageType = type, fillWidth = widthPx, fillHeight = heightPx, tag = tag)
+        index: Int? = null,
+    ) = service.getItemImageUrl(
+        itemId = id,
+        imageType = type,
+        fillWidth = widthPx,
+        fillHeight = heightPx,
+        tag = tag,
+        imageIndex = index,
+    )
 
     val seriesId = d.seriesId
     if (isEpisode && seriesId != null) {
@@ -99,7 +111,8 @@ fun selectJellytipCardArt(
         val backdropId = d.parentBackdropItemId
         val backdropTag = d.parentBackdropImageTags?.firstOrNull()
         if (backdropId != null && backdropTag != null) {
-            return JellytipCardArt(fill(backdropId, ImageType.BACKDROP, backdropTag), false, seriesLogo)
+            val tag = d.parentBackdropImageTags?.getOrNull(backdropIndex ?: 0) ?: backdropTag
+            return JellytipCardArt(fill(backdropId, ImageType.BACKDROP, tag, backdropIndex), false, seriesLogo)
         }
         return JellytipCardArt(null, false, seriesLogo)
     }
@@ -110,12 +123,21 @@ fun selectJellytipCardArt(
     val backdropTag = d.backdropImageTags?.firstOrNull()
     val logoUrl = if (ImageType.LOGO in tags) logo(item.id, tags[ImageType.LOGO]) else null
     return when {
-        backdropTag != null -> JellytipCardArt(fill(item.id, ImageType.BACKDROP, backdropTag), false, logoUrl)
+        backdropTag != null -> {
+            val tag = d.backdropImageTags?.getOrNull(backdropIndex ?: 0) ?: backdropTag
+            JellytipCardArt(fill(item.id, ImageType.BACKDROP, tag, backdropIndex), false, logoUrl)
+        }
         ImageType.PRIMARY in tags -> JellytipCardArt(fill(item.id, ImageType.PRIMARY, tags[ImageType.PRIMARY]), false, logoUrl)
         else -> JellytipCardArt(null, false, logoUrl)
     }
 }
 
+private data class RankState(
+    val index: Int?,
+    val ready: Boolean,
+)
+
+private const val RANK_WAIT_MS = 300L
 private const val LOGO_WIDTH_FRACTION = 0.4f
 private const val LOGO_HEIGHT_FRACTION = 0.35f
 
@@ -132,7 +154,25 @@ fun JellytipTitledImage(
     val sizes = rememberJellytipSizes()
     val widthPx = remember(cardWidth, density) { with(density) { cardWidth.roundToPx() } }
     val heightPx = remember(cardHeight, density) { with(density) { cardHeight.roundToPx() } }
-    val art = remember(item, widthPx, heightPx) { selectJellytipCardArt(service, item, widthPx, heightPx) }
+    // Photo-ranked backdrop: wait up to 300 ms for the companion before first paint, then settle on index 0 and upgrade if it arrives late
+    val rankedId = item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE } ?: item.id
+    val initial = RankState(JellytipApi.shared?.peekBestBackdropIndex(rankedId), JellytipApi.shared == null)
+    val ranking by produceState(initial, rankedId) {
+        val api = JellytipApi.shared ?: return@produceState
+        if (value.index != null) return@produceState
+        val quick = withTimeoutOrNull(RANK_WAIT_MS) { api.bestBackdropIndex(rankedId) }
+        value = RankState(quick, true)
+        if (quick == null) api.bestBackdropIndex(rankedId)?.let { value = RankState(it, true) }
+    }
+    val bestIndex = ranking.index
+    val art =
+        remember(item, widthPx, heightPx, bestIndex, ranking.ready) {
+            if (ranking.ready || bestIndex != null) {
+                selectJellytipCardArt(service, item, widthPx, heightPx, bestIndex)
+            } else {
+                JellytipCardArt(null, false, null)
+            }
+        }
     var baseError by remember(art.baseUrl) { mutableStateOf(false) }
     var logoError by remember(art.logoUrl) { mutableStateOf(false) }
     val showLogo = !art.titledAlready && art.logoUrl != null && !logoError
