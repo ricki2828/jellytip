@@ -230,8 +230,25 @@ def test_extras_miss_limit_and_blank_ids(tmp_path):
                   letterboxd=types.SimpleNamespace(film=lambda t: None), cache=Cache(str(tmp_path / "c.db")))
     svc.imgscores = types.SimpleNamespace(rank_stills=lambda s: s)
     svc.jf = types.SimpleNamespace(ok=False)
-    assert svc.route("/v1/items/x/extras", {}, "sec")[0] == 200 and calls == []  # blank ids: no upstream
+    assert svc.route("/v1/items/"+"e"*32+"/extras", {}, "sec")[0] == 200 and calls == []  # blank ids: no upstream
     for i in range(60):
-        assert svc.route("/v1/items/x/extras", {"tmdb": str(i + 1)}, "sec", ip=str(i))[0] == 200
-    assert svc.route("/v1/items/x/extras", {"tmdb": "999"}, "sec", ip="z")[0] == 429
-    assert svc.route("/v1/items/x/extras", {"tmdb": "1"}, "sec", ip="z")[0] == 200  # cache hit still served
+        assert svc.route("/v1/items/"+"e"*32+"/extras", {"tmdb": str(i + 1)}, "sec", ip=str(i))[0] == 200
+    assert svc.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "999"}, "sec", ip="z")[0] == 429
+    assert svc.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "1"}, "sec", ip="z")[0] == 200  # cache hit still served
+
+
+def test_extras_rejects_non_guid_ids_and_storage_error_is_generic(tmp_path, monkeypatch):
+    svc = make_svc(tmp_path)
+    assert svc.route("/v1/items/../../Users/extras", {}, "sec")[0] == 404
+    assert svc.route("/v1/items/abc/extras", {}, "sec")[0] == 404
+    fake_jf(monkeypatch, [])
+    from jellytip_api import storage
+    monkeypatch.setattr(storage, "get", lambda: (_ for _ in ()).throw(RuntimeError("secret /path")))
+    st, b = svc.route("/v1/storage", {}, None, None, ADMIN)
+    assert st == 503 and b == {"error": "quota unavailable"}
+
+
+def test_episodes_art_non_series_is_empty_200(tmp_path):
+    svc = make_svc(tmp_path)
+    svc.imgscores = types.SimpleNamespace(episodes_art=lambda i: [])
+    assert svc.route("/v1/items/" + "9" * 32 + "/episodes-art", {}, "sec") == (200, [])

@@ -26,7 +26,7 @@ from .jf import Jellyfin, JfError
 from .subtitles import Jobs, Busy
 from .request import Requests, arr_from_env
 
-EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
+EXTRAS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/extras$")
 BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
 AUDIENCE_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/audience$")
 DELETED_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/deleted$")
@@ -156,6 +156,8 @@ class Service:
                        {"Movie": "movie", "Series": "series"}.get(it.get("Type")))
             except Exception:
                 return out  # do not cache failures
+        if len(self._pid_cache) > 1000:
+            self._pid_cache.clear()
         self._pid_cache[item_id] = (time.time(), out)
         return out
 
@@ -164,6 +166,8 @@ class Service:
         hit = self._tag_cache.get(item_id)
         if hit and time.time() - hit[0] < 300:
             return hit[1]
+        if len(self._tag_cache) > 1000:
+            self._tag_cache.clear()
         tags = None
         if self.jf.ok:
             try:
@@ -322,7 +326,8 @@ class Service:
             try:
                 return 200, storage_mod.get()
             except Exception as ex:  # quota binary missing / unparsable
-                return 503, {"error": "quota unavailable: %s" % ex}
+                print("storage error", type(ex).__name__, ex, flush=True)
+                return 503, {"error": "quota unavailable"}
         if path in ("/v1/intro", "/v1/intro.mp4"):
             return self.intro(path.endswith(".mp4"))
         m = EXTRAS_RE.match(path)

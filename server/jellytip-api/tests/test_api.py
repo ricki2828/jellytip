@@ -109,14 +109,14 @@ def test_auth_health_and_extras_cache(tmp_path):
     calls = []
     s = make_service(tmp_path, calls)
     assert s.route("/v1/health", {}, None)[0] == 200
-    assert s.route("/v1/items/x/extras", {"tmdb": "829"}, None)[0] == 401
-    assert s.route("/v1/items/x/extras", {"tmdb": "829"}, "bad")[0] == 401
-    st, body = s.route("/v1/items/x/extras", {"tmdb": "829", "type": "movie"}, "tok")
+    assert s.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "829"}, None)[0] == 401
+    assert s.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "829"}, "bad")[0] == 401
+    st, body = s.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "829", "type": "movie"}, "tok")
     assert st == 200 and body["letterboxd"]["myRating"] == 4.5 and body["scores"][0]["source"] == "imdb"
-    s.route("/v1/items/y/extras", {"tmdb": "829", "type": "movie"}, "tok")
+    s.route("/v1/items/"+"f"*32+"/extras", {"tmdb": "829", "type": "movie"}, "tok")
     assert calls == ["829"]  # second item hit the cache, no upstream call
-    assert s.route("/v1/items/x/extras", {"tmdb": "999"}, "tok")[1]["letterboxd"] is None
-    assert s.route("/v1/items/x/extras", {"tmdb": "abc"}, "tok")[0] == 400
+    assert s.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "999"}, "tok")[1]["letterboxd"] is None
+    assert s.route("/v1/items/"+"e"*32+"/extras", {"tmdb": "abc"}, "tok")[0] == 400
 
 
 def test_lists_and_jellyfin_mapping(tmp_path):
