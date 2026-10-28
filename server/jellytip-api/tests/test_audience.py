@@ -25,8 +25,8 @@ def test_audience_route_is_admin_only(tmp_path):
     from jellytip_api.server import Service
     svc = Service({"JELLYTIP_TOKEN": "secret", "JELLYFIN_URL": "http://jf", "JELLYFIN_KEY": "k"},
                   scores=object(), stills=lambda *a: ([], True), letterboxd=object(), cache=Cache(str(tmp_path / "c.db")))
-    svc.jellyfin_ok = types.MethodType(lambda self, t: t in ("admin", "user"), svc)
-    svc.jellyfin_admin = types.MethodType(lambda self, t: "Ricki" if t == "admin" else None, svc)
+    svc.jellyfin_ok = types.MethodType(lambda self, t, ip="": t in ("admin", "user"), svc)
+    svc.jellyfin_admin = types.MethodType(lambda self, t, ip="": "Ricki" if t == "admin" else None, svc)
     svc.audience.get = lambda jid: (200, {"requestedBy": [], "watchedBy": []})
     path = "/v1/items/" + "a" * 32 + "/audience"
     assert svc.route(path, {}, "secret")[0] == 403  # shared app token is never admin

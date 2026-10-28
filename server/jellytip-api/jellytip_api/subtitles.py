@@ -2,6 +2,7 @@
 import os
 import re
 import threading
+import urllib.parse
 import time
 import uuid
 
@@ -11,6 +12,15 @@ LANG3 = {"en": "eng", "es": "spa", "fr": "fra", "de": "deu", "it": "ita", "pt": 
          "zh": "zho", "ru": "rus", "sv": "swe", "da": "dan", "no": "nor", "fi": "fin", "pl": "pol", "tr": "tur", "ar": "ara"}
 QUOTA_HINT = re.compile(r"quota|limit|too many|429|allowed", re.I)
 MAX_JOBS = 50
+MAX_RUNNING = 2
+
+
+class Busy(Exception):
+    pass
+
+
+def q(part):
+    return urllib.parse.quote(str(part), safe="")
 
 
 def lang3(code):
@@ -51,6 +61,8 @@ class Jobs:
             for j in self.jobs.values():
                 if j["seasonId"] == sid and j["language"] == lang and j["state"] in ("queued", "running"):
                     return j["id"]
+            if sum(1 for j in self.jobs.values() if j["state"] in ("queued", "running")) >= MAX_RUNNING:
+                raise Busy()
             if len(self.jobs) >= MAX_JOBS:
                 for k in sorted(self.jobs, key=lambda k: self.jobs[k]["created"])[:10]:
                     del self.jobs[k]
@@ -99,12 +111,12 @@ class Jobs:
                     continue
                 row["status"] = "working"
                 try:
-                    res = jf.call("GET", f"/Items/{row['id']}/RemoteSearch/Subtitles/{lang}", timeout=60) or []
+                    res = jf.call("GET", f"/Items/{q(row['id'])}/RemoteSearch/Subtitles/{q(lang)}", timeout=60) or []
                     best = pick(res, row["_file"])
                     if not best:
                         row["status"], row["detail"] = "none", "no subtitles found"
                         continue
-                    jf.call("POST", f"/Items/{row['id']}/RemoteSearch/Subtitles/{best['Id']}", timeout=90)
+                    jf.call("POST", f"/Items/{q(row['id'])}/RemoteSearch/Subtitles/{q(best['Id'])}", timeout=90)
                     row["status"], row["detail"] = "ok", f"{best.get('ProviderName')}: {best.get('Name')}"
                     errors = 0
                 except JfError as ex:

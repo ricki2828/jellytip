@@ -8,7 +8,7 @@ import shutil
 import sys
 import time
 
-VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".mpg", ".mpeg", ".webm", ".iso"}
+VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".mpg", ".mpeg", ".webm", ".iso", ".vob", ".mts", ".flv", ".ogm", ".rmvb"}
 MAX_REMOVE_FRACTION = 0.25  # more than this share of all trailer folders (and >20) looks like a missing mount, not deletions
 
 

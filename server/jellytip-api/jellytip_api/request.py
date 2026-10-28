@@ -19,6 +19,10 @@ MOVIE_GB = 8.0
 EP_GB = 3.0
 DEFAULT_EPS = 10
 STATUS_TTL = 20
+LEDGER_HOURS = 72  # an add counts against free space until its files land, for at most this long
+USER_DAILY_CAP = 5  # per Jellyfin user, admins exempt
+GLOBAL_DAILY_CAP = 15
+GB = 1024.0 ** 3
 UNITS = {"K": 1 / 1024 ** 2, "M": 1 / 1024, "G": 1.0, "T": 1024.0}
 
 
@@ -96,6 +100,8 @@ class Requests:
         self.free_gb, self.tmdb_eps, self.clock = free_gb, tmdb_eps, clock
         self.lock = threading.Lock()
         self._snap = (0, None)
+        self.ledger_path = os.path.splitext(log_path)[0] + "_pending.json"
+        self._ledger = None  # [{"at": epoch, "who", "type", "tmdb", "estGb"}], persisted
 
     # ---- helpers ----
     def _arr(self, kind):
@@ -127,8 +133,78 @@ class Requests:
         t = f"{item.get('title', '?')}" + (f" ({item['year']})" if item.get("year") else "")
         return t if kind == "movie" else f"Season 1 of {t}"
 
+    # ---- pending-add ledger ----
+    def _load_ledger(self):
+        if self._ledger is None:
+            try:
+                with open(self.ledger_path, encoding="utf-8") as f:
+                    self._ledger = [e for e in json.load(f) if isinstance(e, dict)]
+            except (OSError, ValueError):
+                self._ledger = []
+        cutoff = self.clock() - LEDGER_HOURS * 3600
+        self._ledger = [e for e in self._ledger if e.get("at", 0) >= cutoff]
+        return self._ledger
+
+    def _save_ledger(self):
+        os.makedirs(os.path.dirname(self.ledger_path) or ".", exist_ok=True)
+        tmp = self.ledger_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self._ledger, f)
+        os.replace(tmp, self.ledger_path)
+
+    def _queue_left(self, a, idkey):
+        """(total sizeleft GB, {arr id: sizeleft GB}) of the arr download queue."""
+        by_id, total = collections.defaultdict(float), 0.0
+        for r in (a.call("GET", "/queue", {"pageSize": 1000}) or {}).get("records", []):
+            left = (r.get("sizeleft") or 0) / GB
+            total += left
+            by_id[r.get(idkey)] += left
+        return total, by_id
+
+    def pending_gb(self):
+        """GB still to land on disk: everything in the Radarr/Sonarr queues plus the estimate of recent adds that have no
+        file yet and are not queued (so a just-added title whose grab has not started still reserves its space)."""
+        ledger = self._load_ledger()
+        qm, by_movie = self._queue_left(self.radarr, "movieId")
+        qs, by_series = self._queue_left(self.sonarr, "seriesId")
+        total, keep = qm + qs, []
+        movies = series = None
+        for e in ledger:
+            if e.get("type") == "movie":
+                movies = movies if movies is not None else {m.get("tmdbId"): m for m in self.radarr.call("GET", "/movie") or []}
+                have, queued = movies.get(e.get("tmdb")), by_movie
+            else:
+                series = series if series is not None else {m.get("tmdbId"): m for m in self.sonarr.call("GET", "/series") or []}
+                have, queued = series.get(e.get("tmdb")), by_series
+            if have is None:
+                continue  # removed from the arr again: nothing pending, drop it
+            if e.get("type") == "movie":
+                done = bool(have.get("hasFile"))
+            else:
+                st = next((x for x in have.get("seasons", []) if x.get("seasonNumber") == 1), {}).get("statistics") or {}
+                done = bool(st.get("episodeCount")) and (st.get("episodeFileCount") or 0) >= st["episodeCount"]
+            if done:
+                continue
+            keep.append(e)
+            if have.get("id") not in queued:
+                total += e.get("estGb") or 0
+        if len(keep) != len(ledger):
+            self._ledger = keep
+            self._save_ledger()
+        return total
+
+    def _caps(self, who, is_admin):
+        """Block reason when the daily caps are hit, else None."""
+        day = self.clock() - 86400
+        recent = [e for e in self._load_ledger() if e.get("at", 0) >= day]
+        if len(recent) >= GLOBAL_DAILY_CAP:
+            return f"daily request limit reached ({GLOBAL_DAILY_CAP} a day across everyone), try tomorrow"
+        if not is_admin and sum(1 for e in recent if e.get("who") == who) >= USER_DAILY_CAP:
+            return f"you have used your {USER_DAILY_CAP} requests for today"
+        return None
+
     # ---- POST /v1/request ----
-    def request(self, tmdb, kind, who, dry_run=False):
+    def request(self, tmdb, kind, who, dry_run=False, is_admin=False):
         if kind not in ("movie", "tv") or not isinstance(tmdb, int) or tmdb <= 0:
             return 400, {"error": "need tmdbId (int) and type movie|tv"}
         if not (self.radarr.ok and self.sonarr.ok):
@@ -142,17 +218,23 @@ class Requests:
                 if not item:
                     return 404, {"error": "title not found"}
                 free, est = self.free_gb(), self.estimate_gb(kind, item, tmdb)
+                pending = self.pending_gb()
                 base = {"title": item.get("title"), "year": item.get("year"), "label": self._label(kind, item),
-                        "estimateGb": round(est, 1), "freeGbNow": None if free is None else round(free, 1), "dryRun": dry_run}
+                        "estimateGb": round(est, 1), "freeGbNow": None if free is None else round(free, 1), "pendingGb": round(pending, 1), "dryRun": dry_run}
                 if free is None:
                     return 200, {**base, "status": "blocked", "reason": "could not read free space", "freeGbAfter": None}
-                after = free - est
+                capped = self._caps(who, is_admin)
+                if capped:
+                    return 200, {**base, "status": "blocked", "reason": capped, "freeGbAfter": None}
+                after = free - pending - est
                 base["freeGbAfter"] = round(after, 1)
                 if after < FLOOR_GB:
-                    return 200, {**base, "status": "blocked", "reason": f"would leave {after:.0f} GB free (minimum {FLOOR_GB:.0f} GB)"}
+                    return 200, {**base, "status": "blocked", "reason": f"would leave {after:.0f} GB free after downloads in progress (minimum {FLOOR_GB:.0f} GB)"}
                 if dry_run:
                     return 200, {**base, "status": "added", "reason": "dry run: not added"}
                 self._add(kind, item)
+                self._load_ledger().append({"at": self.clock(), "who": who, "type": kind, "tmdb": tmdb, "estGb": round(est, 2)})
+                self._save_ledger()
                 self._log(who, kind, tmdb, item)
                 self._snap = (0, None)
                 return 200, {**base, "status": "added", "reason": "added and searching"}

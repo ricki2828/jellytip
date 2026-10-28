@@ -136,7 +136,7 @@ def test_jellyfin_token_auth(tmp_path):
         calls.append(tok)
         return tok == "good"
     import types
-    svc.jellyfin_ok = types.MethodType(lambda self, t: fake(t) if t else False, svc)
+    svc.jellyfin_ok = types.MethodType(lambda self, t, ip="": fake(t) if t else False, svc)
     assert Service.jellyfin_token('MediaBrowser Client="x", Token="abc"', None) == "abc"
     assert Service.jellyfin_token(None, " e1 ") == "e1"
     assert Service.jellyfin_token("Bearer abc", None) is None
@@ -158,9 +158,10 @@ def test_jellyfin_validation_cached_and_hashed(tmp_path, monkeypatch):
         def __enter__(self): return self
         def __exit__(self, *a): pass
     monkeypatch.setattr(ur, "urlopen", lambda req, timeout: n.append(req.full_url) or R())
-    assert svc.jellyfin_ok("tok") and svc.jellyfin_ok("tok")
+    TOK = "a1" * 16
+    assert svc.jellyfin_ok(TOK) and svc.jellyfin_ok(TOK)
     assert len(n) == 1 and n[0] == "http://jf/System/Info"
-    assert "tok" not in svc._auth_cache and len(next(iter(svc._auth_cache))) == 64
+    assert TOK not in svc._auth_cache and len(next(iter(svc._auth_cache))) == 64
 
 
 def test_home_carousels_serves_manifest_or_empty(tmp_path):

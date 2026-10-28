@@ -23,7 +23,7 @@ from .stills import fetch_stills
 from . import sizes as sizes_mod
 from . import trailers as trailers_mod
 from .jf import Jellyfin, JfError
-from .subtitles import Jobs
+from .subtitles import Jobs, Busy
 from .request import Requests, arr_from_env
 
 EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
@@ -34,7 +34,34 @@ JOB_RE = re.compile(r"^/v1/subtitles/jobs/([0-9a-f]{12})$")
 EPISODES_ART_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/episodes-art$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
 TOKEN_RE = re.compile(r'Token="?([^",\s]+)"?')
-AUTH_TTL = 600
+AUTH_TTL = 120
+JF_TOKEN_RE = re.compile(r"[0-9a-fA-F]{32}")  # Jellyfin access tokens; anything else is never sent upstream
+LANG_RE = re.compile(r"[a-z]{2,3}")
+MAX_BODY = 65536
+JF_VALIDATIONS = 4  # concurrent Jellyfin token validations
+EXTRAS_MISS_PER_MIN = 60  # global cap on cache-miss upstream lookups (MDBList/TMDB quotas)
+
+
+class Bucket:
+    """Token bucket per key (e.g. client IP). allow() is thread-safe; idle keys are pruned."""
+    def __init__(self, rate, burst, clock=time.monotonic):
+        self.rate, self.burst, self.clock = rate, burst, clock
+        self.state, self.lock = {}, threading.Lock()
+
+    def allow(self, key="", cost=1.0):
+        now = self.clock()
+        with self.lock:
+            tokens, at = self.state.get(key, (self.burst, now))
+            tokens = min(self.burst, tokens + (now - at) * self.rate)
+            ok = tokens >= cost
+            self.state[key] = (tokens - cost if ok else tokens, now)
+            if len(self.state) > 2000:
+                self.state = {k: v for k, v in self.state.items() if now - v[1] < 60}
+            return ok
+
+
+class RateLimited(Exception):
+    pass
 
 
 class FileBody:
@@ -52,6 +79,10 @@ class Service:
         self.jf = Jellyfin(env.get("JELLYFIN_URL"), env.get("JELLYFIN_KEY"), env.get("JELLYFIN_USER", "ricki28"))
         self.subs = Jobs(self.jf)
         self.jf_url = (env.get("JELLYFIN_URL") or "").rstrip("/")
+        self._jf_sem = threading.BoundedSemaphore(JF_VALIDATIONS)
+        self.req_bucket = Bucket(15, 60)  # per client IP, all authenticated routes
+        self.auth_bucket = Bucket(1, 10)  # per client IP, uncached Jellyfin validations
+        self.miss_bucket = Bucket(EXTRAS_MISS_PER_MIN / 60.0, EXTRAS_MISS_PER_MIN)  # global, key ""
         self._auth_cache = {}  # sha256(token) -> (ok, expires); raw tokens are never stored or logged
         self.cache = cache or Cache(env.get("JELLYTIP_DB", "jellytip.db"))
         self.scores = scores or ScoreProvider(env.get("MDBLIST_KEY"), env.get("OMDB_KEY"))
@@ -96,6 +127,11 @@ class Service:
     def extras(self, tmdb, imdb, kind):
         ck = f"extras2:{kind}:{tmdb or ''}:{imdb or ''}"
         cached = self.cache.get(ck)
+        if cached is None:
+            if not (tmdb or imdb):
+                cached = {"scores": [], "stills": []}  # nothing to look up: no upstream call, nothing cached
+            elif not self.miss_bucket.allow():
+                raise RateLimited()
         if cached is None:
             scores, ok1 = self.scores.lookup(tmdb, imdb, kind)
             stills, ok2 = self.stills(self.tmdb_key, tmdb, kind)
@@ -145,9 +181,28 @@ class Service:
         m = TOKEN_RE.search(authorization or "") if (authorization or "").startswith("MediaBrowser") else None
         return m.group(1) if m else None
 
-    def jellyfin_ok(self, jf_token):
+    def _jf_me(self, path, jf_token, ip=""):
+        """GET path on Jellyfin as the caller's own token. Returns (status, json|None); raises OSError when denied/unreachable.
+        Only well-formed tokens ever reach Jellyfin, at most JF_VALIDATIONS at once, and per-IP rate limited."""
+        if not JF_TOKEN_RE.fullmatch(jf_token or ""):
+            return 401, None
+        if not self.auth_bucket.allow(ip):
+            raise OSError("rate limited")
+        if not self._jf_sem.acquire(timeout=2):
+            raise OSError("busy")
+        try:
+            req = urllib.request.Request(f"{self.jf_url}{path}", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return r.status, (json.load(r) if path != "/System/Info" else None)
+            except urllib.error.HTTPError as e:
+                return e.code, None
+        finally:
+            self._jf_sem.release()
+
+    def jellyfin_ok(self, jf_token, ip=""):
         """Validate a Jellyfin access token against the local server (cached 10 min)."""
-        if not (jf_token and self.jf_url):
+        if not (jf_token and self.jf_url) or not JF_TOKEN_RE.fullmatch(jf_token):
             return False
         k = hashlib.sha256(jf_token.encode()).hexdigest()
         hit = self._auth_cache.get(k)
@@ -155,13 +210,10 @@ class Service:
         if hit and hit[1] > now:
             return hit[0]
         try:
-            req = urllib.request.Request(f"{self.jf_url}/System/Info", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                ok = r.status == 200
-        except urllib.error.HTTPError:
-            ok = False  # 401/403: definitively rejected
+            code, _ = self._jf_me("/System/Info", jf_token, ip)
+            ok = code == 200  # 401/403: definitively rejected
         except Exception:
-            return False  # Jellyfin unreachable: deny but do not cache
+            return False  # Jellyfin unreachable / throttled: deny but do not cache
         if len(self._auth_cache) > 1000:
             self._auth_cache.clear()
         self._auth_cache[k] = (ok, now + AUTH_TTL)
@@ -189,9 +241,9 @@ class Service:
         except Exception:
             return None
 
-    def jellyfin_name(self, jf_token):
+    def jellyfin_name(self, jf_token, ip=""):
         """Friendly name of the Jellyfin user behind this token (None for the shared app token or on error)."""
-        if not (jf_token and self.jf_url):
+        if not (jf_token and self.jf_url) or not JF_TOKEN_RE.fullmatch(jf_token):
             return None
         k = hashlib.sha256(jf_token.encode()).hexdigest()
         hit = self.name_cache.get(k)
@@ -199,11 +251,8 @@ class Service:
         if hit and hit[1] > now:
             return hit[0]
         try:
-            req = urllib.request.Request(f"{self.jf_url}/Users/Me", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                name = (json.load(r).get("Name") or "").strip() or None
-        except urllib.error.HTTPError:
-            name = None
+            code, me = self._jf_me("/Users/Me", jf_token, ip)
+            name = ((me or {}).get("Name") or "").strip() or None if code == 200 else None
         except Exception:
             return None
         if len(self.name_cache) > 1000:
@@ -211,10 +260,10 @@ class Service:
         self.name_cache[k] = (name, now + AUTH_TTL)
         return name
 
-    def jellyfin_admin(self, jf_token):
+    def jellyfin_admin(self, jf_token, ip=""):
         """Caller's friendly name when this Jellyfin token belongs to an administrator (/Users/Me, cached 10 min), else None.
         The shared app token is never admin."""
-        if not (jf_token and self.jf_url):
+        if not (jf_token and self.jf_url) or not JF_TOKEN_RE.fullmatch(jf_token):
             return None
         k = hashlib.sha256(jf_token.encode()).hexdigest()
         hit = self.admin_cache.get(k)
@@ -222,12 +271,8 @@ class Service:
         if hit and hit[1] > now:
             return hit[0]
         try:
-            req = urllib.request.Request(f"{self.jf_url}/Users/Me", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                me = json.load(r)
-                ok = friendly(me.get("Name")) if (me.get("Policy") or {}).get("IsAdministrator") else None
-        except urllib.error.HTTPError:
-            ok = None
+            code, me = self._jf_me("/Users/Me", jf_token, ip)
+            ok = friendly(me.get("Name")) if code == 200 and (me.get("Policy") or {}).get("IsAdministrator") else None
         except Exception:
             return None
         if len(self.admin_cache) > 1000:
@@ -251,20 +296,28 @@ class Service:
         return 200, {"url": "v1/intro.mp4", "version": meta["version"], "titles": meta.get("titles", []),
                      "duration": meta.get("duration"), "bytes": meta.get("bytes")}  # url is relative to the API base
 
-    def route(self, path, query, token, authorization=None, emby_token=None, method="GET", body=None):
+    def route(self, path, query, token, authorization=None, emby_token=None, method="GET", body=None, ip=""):
         """Returns (status, body)."""
         if path == "/v1/health":
             return 200, {"ok": True, "version": __version__}
+        if not self.req_bucket.allow(ip):
+            return 429, {"error": "slow down"}
         if not (hmac.compare_digest((token or "").encode(), self.token.encode())
-                or self.jellyfin_ok(self.jellyfin_token(authorization, emby_token))):
+                or self.jellyfin_ok(self.jellyfin_token(authorization, emby_token), ip)):
             return 401, {"error": "unauthorized"}
+        try:
+            return self._route_authed(path, query, authorization, emby_token, method, body, ip)
+        except RateLimited:
+            return 429, {"error": "upstream lookups rate limited, retry shortly"}
+
+    def _route_authed(self, path, query, authorization, emby_token, method, body, ip):
         if method == "POST":
-            return self.route_post(path, body or {}, query, self.jellyfin_token(authorization, emby_token))
+            return self.route_post(path, body or {}, query, self.jellyfin_token(authorization, emby_token), ip)
         if path == "/v1/request/status":
             ids = [t for t in re.split(r"[,\s]+", query.get("tmdbIds", "")) if re.fullmatch(r"(?:(?:movie|tv):)?\d+", t)]
             return self.requests.status(ids)
         if path == "/v1/storage":
-            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token)):
+            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token), ip):
                 return 403, {"error": "admin only"}
             try:
                 return 200, storage_mod.get()
@@ -287,7 +340,7 @@ class Service:
             return 200, self.extras(tmdb or None, imdb or None, kind)
         m = AUDIENCE_RE.match(path)
         if m:
-            me = self.jellyfin_admin(self.jellyfin_token(authorization, emby_token))
+            me = self.jellyfin_admin(self.jellyfin_token(authorization, emby_token), ip)
             if not me:
                 return 403, {"error": "admin only"}
             if not self.jf.ok:
@@ -320,6 +373,8 @@ class Service:
             return 200, sizes_mod.get(self)
         m = JOB_RE.match(path)
         if m:
+            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token), ip):
+                return 403, {"error": "admin only"}
             v = self.subs.view(m.group(1))
             return (200, v) if v else (404, {"error": "no such job"})
         if path == "/v1/letterboxd/lists":
@@ -331,24 +386,34 @@ class Service:
         return 404, {"error": "not found"}
 
 
-    def route_post(self, path, body, query=None, jf_token=None):
+    def route_post(self, path, body, query=None, jf_token=None, ip=""):
         if path == "/v1/request":
-            who = friendly(self.jellyfin_name(jf_token) or "")
+            who = friendly(self.jellyfin_name(jf_token, ip) or "")
             if not who:
                 return 403, {"error": "sign in with a Jellyfin account to request"}
             tmdb = body.get("tmdbId")
             tmdb = int(tmdb) if isinstance(tmdb, str) and tmdb.isdigit() else tmdb
             return self.requests.request(tmdb if isinstance(tmdb, int) else None, str(body.get("type") or ""), who,
-                                         dry_run=(query or {}).get("dryRun") == "1")
+                                         dry_run=(query or {}).get("dryRun") == "1", is_admin=bool(self.jellyfin_admin(jf_token, ip)))
         if path == "/v1/subtitles/season":
+            if not self.jellyfin_admin(jf_token, ip):
+                return 403, {"error": "admin only"}
             sid = str(body.get("seasonId", ""))
             if not re.fullmatch(r"[0-9a-fA-F-]{32,36}", sid):
                 return 400, {"error": "bad seasonId"}
             if not self.jf.ok:
                 return 503, {"error": "jellyfin not configured"}
-            return 202, {"jobId": self.subs.start(sid, str(body.get("language") or "eng")[:8])}
+            lang = str(body.get("language") or "eng").lower()
+            if not LANG_RE.fullmatch(lang):
+                return 400, {"error": "bad language"}
+            try:
+                return 202, {"jobId": self.subs.start(sid, lang)}
+            except Busy:
+                return 429, {"error": "subtitle jobs busy, try again shortly"}
         m = DELETED_RE.match(path)
         if m:
+            if not self.jellyfin_admin(jf_token, ip):
+                return 403, {"error": "admin only"}
             return 200, self.item_deleted(m.group(1).replace("-", "").lower(), str(body.get("path") or ""), str(body.get("type") or ""))
         return 404, {"error": "not found"}
 
@@ -382,7 +447,10 @@ class Service:
 def make_handler(service, prefix="/jellytip-api"):
     class H(BaseHTTPRequestHandler):
         def do_POST(self):
-            n = min(int(self.headers.get("Content-Length") or 0), 65536)
+            try:
+                n = max(0, min(int(self.headers.get("Content-Length") or 0), MAX_BODY))
+            except ValueError:
+                n = 0
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
@@ -395,7 +463,8 @@ def make_handler(service, prefix="/jellytip-api"):
             query = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
             try:
                 status, body = service.route(path, query, self.headers.get("X-Jellytip-Token"),
-                                             self.headers.get("Authorization"), self.headers.get("X-Emby-Token"), method, body)
+                                             self.headers.get("Authorization"), self.headers.get("X-Emby-Token"), method, body,
+                                             ip=self.headers.get("X-Real-IP") or self.client_address[0])
             except Exception as e:  # never leak internals or keys; log the type only
                 self.log_message("error %s", type(e).__name__)
                 status, body = 500, {"error": "internal error"}

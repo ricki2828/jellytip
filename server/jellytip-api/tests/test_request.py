@@ -117,8 +117,8 @@ def test_route_requires_named_jellyfin_user(tmp_path):
     rq, r, s = mk(tmp_path)
     svc = Service({"JELLYTIP_TOKEN": "sec", "JELLYFIN_URL": "http://jf"}, scores=object(), stills=lambda *a: ([], True),
                   letterboxd=object(), cache=Cache(str(tmp_path / "c.db")), requests=rq)
-    svc.jellyfin_ok = types.MethodType(lambda self, t: t == "good", svc)
-    svc.jellyfin_name = types.MethodType(lambda self, t: "ricki28" if t == "good" else None, svc)
+    svc.jellyfin_ok = types.MethodType(lambda self, t, ip="": t == "good", svc)
+    svc.jellyfin_name = types.MethodType(lambda self, t, ip="": "ricki28" if t == "good" else None, svc)
     body = {"tmdbId": 603, "type": "movie"}
     assert svc.route("/v1/request", {}, None, None, None, "POST", body)[0] == 401
     assert svc.route("/v1/request", {}, "sec", None, None, "POST", body)[0] == 403  # shared token has no identity
