@@ -384,13 +384,13 @@ class JellytipApi
         }
 
         /**
-         * POST a JSON body to a companion API path and return the response body, or null on any failure.
-         * Same auth as [getJson].
+         * POST a JSON body to a companion API path. Always carries the Jellyfin session token (the server names the
+         * requester from it) in addition to the manual token if one is set. Returns (http code, body) or null if unreachable.
          */
         suspend fun postJson(
             path: String,
-            body: JSONObject,
-        ): String? =
+            body: String,
+        ): Pair<Int, String>? =
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
@@ -399,25 +399,16 @@ class JellytipApi
                         Request
                             .Builder()
                             .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
-                            .post(body.toString().toRequestBody("application/json".toMediaType()))
+                            .post(body.toRequestBody("application/json".toMediaType()))
                             .apply {
-                                if (prefs.jellytipApiToken.isNotBlank()) {
-                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
-                                } else {
-                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
-                                        header("Authorization", "MediaBrowser Token=\"$it\"")
-                                    }
+                                if (prefs.jellytipApiToken.isNotBlank()) header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                    header("Authorization", "MediaBrowser Token=\"$it\"")
                                 }
                             }.build()
-                    client.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) {
-                            Timber.w("Jellytip API POST %s returned %s", path, response.code)
-                            return@withContext null
-                        }
-                        response.body.string()
-                    }
+                    client.newCall(request).execute().use { it.code to it.body.string() }
                 } catch (e: Exception) {
-                    Timber.w(e, "Jellytip API POST %s unavailable", path)
+                    Timber.w(e, "Jellytip API %s unavailable", path)
                     null
                 }
             }
