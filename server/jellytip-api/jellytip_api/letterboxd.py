@@ -125,15 +125,28 @@ class Letterboxd:
                 rows[l["slug"]] = (l, have)
         pins = [slug for p in pinned for slug, (l, _) in rows.items() if p in (slug.lower(), l["name"].lower())]
         pins = list(dict.fromkeys(pins))[:per_day]
-        rest = [slug for slug in rows if slug not in pins]
-        slots = min(per_day - len(pins), len(rest))
         day = (today or datetime.date.today()).toordinal()
-        start = (day * slots) % len(rest) if rest else 0
-        picked = pins + [rest[(start + k) % len(rest)] for k in range(slots)]
+
+        def rotate(pool, slots):
+            slots = min(slots, len(pool))
+            start = (day * slots) % len(pool) if pool else 0
+            return [pool[(start + k) % len(pool)] for k in range(slots)]
+
+        liked_pool = [s for s in rows if s not in pins and rows[s][0].get("liked")] if cfg.get("include_liked", True) else []
+        own_pool = [s for s in rows if s not in pins and not rows[s][0].get("liked")]
+        liked_pick = rotate(liked_pool, min(int(cfg.get("liked_weight", 2)), per_day - len(pins)))
+        own_pick = rotate(own_pool, per_day - len(pins) - len(liked_pick))
+        # the "at least liked_weight" floor, then any slots own lists could not fill go to more liked lists
+        extra = per_day - len(pins) - len(liked_pick) - len(own_pick)
+        more = rotate([s for s in liked_pool if s not in liked_pick], extra) if extra > 0 else []
+        picked = pins + own_pick + liked_pick + more  # pinned first, then own lists, liked lists last
         out = []
         for slug in picked:
             l, have = rows[slug]
-            row = {"slug": slug, "name": l["name"], "source": "letterboxd", "itemIds": have[:50]}
+            row = {"slug": slug, "name": l["name"] + (f" (by {l['owner']})" if l.get("liked") else ""), "source": "letterboxd",
+                   "itemIds": have[:50]}
+            if l.get("liked"):
+                row.update(liked=True, owner=l.get("owner"))
             if include_discover:
                 missing = [i for i in l["items"] if i.get("tmdb") and i["tmdb"] not in jf][:DISCOVER_PER_ROW]
                 with concurrent.futures.ThreadPoolExecutor(8) as pool:

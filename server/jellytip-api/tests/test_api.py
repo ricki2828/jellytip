@@ -369,3 +369,17 @@ def test_letterboxd_discover_rows_only_with_flag(tmp_path):
     assert full["l09"]["itemIds"] == ["j90"] and [i["tmdbId"] for i in full["l09"]["items"]] == [91, 92, 93, 94]
     assert full["l09"]["items"][0]["discover"] is True and full["l09"]["items"][0]["posterUrl"] == "p91"
     assert all(r["source"] == "letterboxd" for r in full.values())
+
+
+def test_liked_lists_take_at_least_liked_weight_slots_and_are_named_by_owner(tmp_path):
+    import datetime
+    export = tmp_path / "lb.json"
+    mk = lambda slug, name, base, **kw: {"slug": slug, "name": name, **kw, "items": [{"tmdb": base + m, "title": "t", "year": 1} for m in range(4)]}
+    export.write_text(json.dumps({"films": {}, "lists": [mk(f"own{k}", f"Own {k}", k * 10) for k in range(6)]
+                                  + [mk(f"bob--l{k}", f"Liked {k}", 100 + k * 10, owner="bob", liked=True) for k in range(3)]}))
+    jf = [{"Id": f"j{t}", "ProviderIds": {"Tmdb": str(t)}} for k in range(9) for t in ([k * 10 + m for m in range(4)] if k < 6 else [100 + (k - 6) * 10 + m for m in range(3)])]
+    lb = Letterboxd(str(export), lambda: jf)
+    rows = lb.home_lists({"per_day": 4, "liked_weight": 2}, today=datetime.date(2026, 10, 28))
+    liked = [r for r in rows if r.get("liked")]
+    assert len(rows) == 4 and len(liked) == 2 and liked[0]["name"].endswith("(by bob)") and liked[0]["owner"] == "bob"
+    assert not any(r.get("liked") for r in lb.home_lists({"per_day": 4, "include_liked": False}, today=datetime.date(2026, 10, 28)))

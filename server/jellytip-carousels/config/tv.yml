@@ -107,4 +107,6 @@ discover:
 letterboxd_rows:
   per_day: 6
   pinned: []
-  exclude: []
+  exclude: []                # slug or name; liked lists are "<owner>--<slug>"
+  include_liked: true        # lists you have liked on Letterboxd (shown as "<name> (by <owner>)")
+  liked_weight: 2            # at least this many of the per_day rows are liked lists

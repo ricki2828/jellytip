@@ -588,7 +588,8 @@ def main():
     lbc = tv_doc.get("letterboxd_rows") or {}  # the companion rotates the Letterboxd rows by date from this
     manifest = {"version": 1, "generated": now.isoformat(), "carousels": entries,
                 "letterboxdConfig": {"per_day": int(lbc.get("per_day", 6)), "pinned": lbc.get("pinned") or [],
-                                     "exclude": lbc.get("exclude") or []}}
+                                     "exclude": lbc.get("exclude") or [], "include_liked": bool(lbc.get("include_liked", True)),
+                                     "liked_weight": int(lbc.get("liked_weight", 2))}}
     report["manifest_count"] = len(entries)
     if not args.dry_run:
         os.makedirs(STATE, exist_ok=True)
