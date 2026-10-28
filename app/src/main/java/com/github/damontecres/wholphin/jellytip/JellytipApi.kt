@@ -383,6 +383,35 @@ class JellytipApi
             }
         }
 
+        /** Admin-only: seedbox quota usage for the drawer meter. Null for non-admins or on any failure. */
+        suspend fun getStorage(): JellytipStorage? {
+            if (!JellytipAdmin.isAdmin) return null
+            val token = api.accessToken?.takeIf { it.isNotBlank() } ?: return null
+            return withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base/v1/storage".toHttpUrlOrNull() ?: return@withContext null)
+                            .header("Authorization", "MediaBrowser Token=\"$token\"")
+                            .build()
+                    audienceClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip storage returned %s", response.code)
+                            return@withContext null
+                        }
+                        val o = JSONObject(response.body.string())
+                        JellytipStorage(o.getDouble("usedGb"), o.getDouble("quotaGb"), o.getDouble("freeGb"))
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip storage unavailable")
+                    null
+                }
+            }
+        }
+
         /**
          * POST a JSON body to a companion API path. Always carries the Jellyfin session token (the server names the
          * requester from it) in addition to the manual token if one is set. Returns (http code, body) or null if unreachable.
@@ -427,6 +456,24 @@ class JellytipApi
     }
 
 /** Where the subject sits in an image (0..1); [face] = from a face detector, else saliency. */
+/** Seedbox quota in GB (the real limit; the Get-it block kicks in below 30 GB free). */
+data class JellytipStorage(
+    val usedGb: Double,
+    val quotaGb: Double,
+    val freeGb: Double,
+) {
+    val low: Boolean get() = freeGb < LOW_GB
+    val fractionUsed: Float get() = if (quotaGb > 0) (usedGb / quotaGb).toFloat().coerceIn(0f, 1f) else 0f
+
+    fun label(): String = "${fmt(freeGb)} free of ${fmt(quotaGb)}"
+
+    private fun fmt(gb: Double) = if (gb >= 1000) String.format("%.1f TB", gb / 1024) else "${gb.toInt()} GB"
+
+    companion object {
+        const val LOW_GB = 30.0
+    }
+}
+
 data class JellytipFocal(
     val x: Float,
     val y: Float,

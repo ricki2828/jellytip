@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -35,6 +39,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipStorage
+import com.github.damontecres.wholphin.jellytip.rememberIsJellytipAdmin
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 
 private val Cream = Color(0xFFF2F2F0)
@@ -150,6 +157,53 @@ fun JellytipSeasonChips(
                         .background(if (selected) JellytipPalette.Jelly else Color.Transparent),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Admin-only free-space line for the nav drawer ("58 GB free of 3.7 TB" + thin bar). Refreshes whenever the drawer
+ * opens; text and bar turn jelly red below [JellytipStorage.LOW_GB]. Collapsed rail shows only a red dot when low.
+ */
+@Composable
+fun JellytipStorageMeter(
+    api: JellytipApi,
+    drawerOpen: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val admin by rememberIsJellytipAdmin()
+    if (!admin) return
+    var storage by remember { mutableStateOf<JellytipStorage?>(null) }
+    LaunchedEffect(drawerOpen) { if (drawerOpen || storage == null) api.getStorage()?.let { storage = it } }
+    val s = storage ?: return
+    val sizes = rememberJellytipSizes()
+    val color = if (s.low) JellytipPalette.Jelly else Cream
+    if (!drawerOpen) {
+        if (s.low) {
+            Box(
+                modifier
+                    .padding(vertical = sizes.px(8f))
+                    .size(sizes.px(10f))
+                    .background(JellytipPalette.Jelly, CircleShape),
+            )
+        }
+        return
+    }
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = sizes.px(24f), vertical = sizes.px(10f))) {
+        Text(
+            text = s.label(),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = sizes.sp(JellytipHomeTokens.BADGE_PX)),
+            color = color.copy(alpha = if (s.low) 1f else 0.6f),
+            maxLines = 1,
+        )
+        Box(
+            Modifier
+                .padding(top = sizes.px(6f))
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(Color(0xFF2A2A2A)),
+        ) {
+            Box(Modifier.fillMaxWidth(s.fractionUsed).height(2.dp).background(color))
         }
     }
 }
