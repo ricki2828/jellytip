@@ -507,8 +507,8 @@
     <string name="content_scale_fill">Remplir</string>
     <string name="content_scale_fill_width">Largeur de remplissage</string>
     <string name="content_scale_fill_height">Hauteur de remplissage</string>
-    <string name="display_preset_default">Wholphin Par défaut</string>
-    <string name="display_preset_compact">Wholphin Compact</string>
+    <string name="display_preset_default">Jellytip Par défaut</string>
+    <string name="display_preset_compact">Jellytip Compact</string>
     <string name="display_preset_series_thumb">Images miniatures de la série</string>
     <string name="display_preset_episode_thumbnails">Images miniatures de l\'épisode</string>
     <string name="volume_lowest">Le plus bas</string>
@@ -599,7 +599,7 @@
     <string name="continue_string">Suivant</string>
     <string name="separate_types">Séparer par types</string>
     <string name="prefer_logos">Préférer les logos pour les titres</string>
-    <string name="updated_toast">Wholphin a été mis à jour vers la version %s</string>
+    <string name="updated_toast">Jellytip a été mis à jour vers la version %s</string>
     <string name="view_more">Voir plus</string>
     <string name="discover_tv">Parcourir les séries</string>
     <string name="discover_movies">Parcourir les films</string>

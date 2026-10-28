@@ -535,8 +535,8 @@
     <string name="content_scale_fill">Täida</string>
     <string name="content_scale_fill_width">Täida laiuses</string>
     <string name="content_scale_fill_height">Täida kõrguses</string>
-    <string name="display_preset_default">Wholphini vaikeseadistus</string>
-    <string name="display_preset_compact">Wholphini kompaktne vaade</string>
+    <string name="display_preset_default">Jellytipi vaikeseadistus</string>
+    <string name="display_preset_compact">Jellytipi kompaktne vaade</string>
     <string name="display_preset_series_thumb">Sarja pisipildid</string>
     <string name="display_preset_episode_thumbnails">Osa pisipildid</string>
     <string name="volume_lowest">Vaikseim</string>
@@ -580,7 +580,7 @@
     <string name="continue_string">Jätka</string>
     <string name="separate_types">Eraldi tüübid</string>
     <string name="prefer_logos">Pealkirjade puhul eelista logode kuvamist</string>
-    <string name="updated_toast">Wholphin on uuendatud versioonini %s</string>
+    <string name="updated_toast">Jellytip on uuendatud versioonini %s</string>
     <string name="remove_continue_watching">Eemalda „Jätka vaatamist“ valikust</string>
     <string name="remove_next_up">Eemalda sari valikust „Järgmisena esitamisel“</string>
     <string name="view_removed_next_up">Vaata sarja, mis sai eemaldatud valikust „Järgmisena esitamisel“</string>

@@ -507,8 +507,8 @@
     <string name="content_scale_fill">Preencher</string>
     <string name="content_scale_fill_width">Preencher largura</string>
     <string name="content_scale_fill_height">Preencher altura</string>
-    <string name="display_preset_default">Padrão do Wholphin</string>
-    <string name="display_preset_compact">Wholphin Compacto</string>
+    <string name="display_preset_default">Padrão do Jellytip</string>
+    <string name="display_preset_compact">Jellytip Compacto</string>
     <string name="display_preset_series_thumb">Imagens em miniatura da série</string>
     <string name="display_preset_episode_thumbnails">Imagens em miniatura do episódio</string>
     <string name="volume_lowest">Mínimo</string>
@@ -599,7 +599,7 @@
     <string name="continue_string">Continuar</string>
     <string name="separate_types">Separar por tipos</string>
     <string name="prefer_logos">Prefiro mostrar logótipos nos títulos</string>
-    <string name="updated_toast">Wholphin foi atualizado para %s</string>
+    <string name="updated_toast">Jellytip foi atualizado para %s</string>
     <string name="remove_continue_watching">Remover de «Continuar a ver»</string>
     <string name="remove_next_up">Remover série do «Continuar a ver»</string>
     <string name="view_removed_next_up">Ver séries removidas do «Continuar a ver»</string>

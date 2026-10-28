@@ -605,8 +605,8 @@
     <string name="content_scale_fill">Растянуть</string>
     <string name="content_scale_fill_width">По ширине</string>
     <string name="content_scale_fill_height">По высоте</string>
-    <string name="display_preset_default">Wholphin по умолчанию</string>
-    <string name="display_preset_compact">Wholphin компактный</string>
+    <string name="display_preset_default">Jellytip по умолчанию</string>
+    <string name="display_preset_compact">Jellytip компактный</string>
     <string name="display_preset_series_thumb">Миниатюры сериалов</string>
     <string name="display_preset_episode_thumbnails">Миниатюры эпизодов</string>
     <string name="volume_lowest">Самая низкая</string>
@@ -683,7 +683,7 @@
     <string name="continue_string">Продолжить</string>
     <string name="separate_types">Разделять по типам</string>
     <string name="prefer_logos">Показывать логотипы вместо текстовых названий</string>
-    <string name="updated_toast">Wholphin обновлён до версии %s</string>
+    <string name="updated_toast">Jellytip обновлён до версии %s</string>
     <string name="remove_continue_watching">Убрать из «Продолжить просмотр»</string>
     <string name="remove_next_up">Убрать сериал из «Далее»</string>
     <string name="view_removed_next_up">Показать сериалы, убранные из «Далее»</string>

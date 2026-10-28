@@ -465,8 +465,8 @@
     <string name="photos">Foto</string>
     <string name="include_types">Sertakan jenis</string>
     <string name="include_types_summary">Tampilkan gambar untuk jenis item</string>
-    <string name="display_preset_default">Wholphin Bawaan</string>
-    <string name="display_preset_compact">Wholphin Ringkas</string>
+    <string name="display_preset_default">Jellytip Bawaan</string>
+    <string name="display_preset_compact">Jellytip Ringkas</string>
     <string name="display_preset_series_thumb">Gambar Thumbnail Seri</string>
     <string name="display_preset_episode_thumbnails">Gambar Thumbnail Episode</string>
     <string name="volume_lowest">Terendah</string>
@@ -561,7 +561,7 @@
     <string name="separate_types">Pisahkan jenis</string>
     <string name="go_to_artist">Buka artis</string>
     <string name="go_to_album">Buka album</string>
-    <string name="updated_toast">Wholphin diperbarui ke %s</string>
+    <string name="updated_toast">Jellytip diperbarui ke %s</string>
     <string name="remove_continue_watching">Hapus dari \"Lanjutkan menonton\"</string>
     <string name="remove_next_up">Hapus seri dari \"Berikutnya\"</string>
     <string name="view_removed_next_up">Lihat seri yang dihapus dari \"Berikutnya\"</string>

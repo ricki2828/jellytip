@@ -567,7 +567,7 @@
     <string name="content_scale_fill">Заповнити</string>
     <string name="content_scale_fill_width">Заповнити по ширині</string>
     <string name="content_scale_fill_height">Заповнити по висоті</string>
-    <string name="display_preset_default">Wholphin за замовчуванням</string>
+    <string name="display_preset_default">Jellytip за замовчуванням</string>
     <string name="display_preset_series_thumb">Мініатюри серіалів</string>
     <string name="display_preset_episode_thumbnails">Мініатюри серій</string>
     <string name="volume_lowest">Найнижча</string>
@@ -655,7 +655,7 @@
     <string name="select_all">Вибрати все</string>
     <string name="separate_types">Розділяти типи</string>
     <string name="prefer_logos">Надавати перевагу логотипам для назв</string>
-    <string name="updated_toast">Wholphin оновлено до %s</string>
+    <string name="updated_toast">Jellytip оновлено до %s</string>
     <string name="remove_continue_watching">Видалити з «Продовжити перегляд»</string>
     <string name="remove_next_up">Видалити серіал з «Далі»</string>
     <string name="view_removed_next_up">Переглянути серіали, видалені з «Далі»</string>
@@ -686,5 +686,5 @@
     <string name="tomatoes">Томати</string>
     <string name="sort">Сортування</string>
     <string name="split_into_separate_rows">Розділити на окремі рядки</string>
-    <string name="display_preset_compact">Wholphin компактний</string>
+    <string name="display_preset_compact">Jellytip компактний</string>
 </resources>

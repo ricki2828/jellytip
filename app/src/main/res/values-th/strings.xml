@@ -465,8 +465,8 @@
     <string name="content_scale_fill">ยืดเต็มจอ</string>
     <string name="content_scale_fill_width">ยืดตามความกว้าง</string>
     <string name="content_scale_fill_height">ยืดตามความสูง</string>
-    <string name="display_preset_default">Wholphin ค่าเริ่มต้น</string>
-    <string name="display_preset_compact">Wholphin คอมแพค</string>
+    <string name="display_preset_default">Jellytip ค่าเริ่มต้น</string>
+    <string name="display_preset_compact">Jellytip คอมแพค</string>
     <string name="display_preset_series_thumb">ภาพขนาดย่อของซีรี่ส์</string>
     <string name="display_preset_episode_thumbnails">ภาพขนาดย่อของตอน</string>
     <string name="volume_lowest">เบาสุด</string>

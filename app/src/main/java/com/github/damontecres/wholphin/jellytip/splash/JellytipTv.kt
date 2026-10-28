@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -160,7 +161,16 @@ fun JellytipIntroTv(
 
     LaunchedEffect(Unit) {
         val player = if (soundEnabled) JellytipSound.prepare(context, R.raw.jellytip_intro) else null
+        // Let the first frames (class verification of the noise/scene drawing is slow on 32-bit devices)
+        // render before the clock starts, so the timeline isn't spent while the main thread is stalled.
+        scene = 0
+        staticOn = true
+        withFrameNanos { }
+        withFrameNanos { }
+        staticOn = false
+        scene = -1
         val start = android.os.SystemClock.uptimeMillis()
+        android.util.Log.i("Jellytip", "intro start")
 
         suspend fun at(ms: Long) {
             val d = start + ms - android.os.SystemClock.uptimeMillis()
@@ -193,6 +203,7 @@ fun JellytipIntroTv(
             at(JellytipTimings.INTRO_END_MS)
         }
         fade.animateTo(1f, tween(250))
+        android.util.Log.i("Jellytip", "intro finished")
         onFinished()
     }
     LaunchedEffect(scene == 5) {

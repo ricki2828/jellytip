@@ -593,8 +593,8 @@
     <string name="content_scale_fill">Ispuni</string>
     <string name="content_scale_fill_width">Ispuni širinu</string>
     <string name="content_scale_fill_height">Ispuni visinu</string>
-    <string name="display_preset_default">Wholphin zadani</string>
-    <string name="display_preset_compact">Wholphin zbijeni</string>
+    <string name="display_preset_default">Jellytip zadani</string>
+    <string name="display_preset_compact">Jellytip zbijeni</string>
     <string name="display_preset_series_thumb">Slike sličica serije</string>
     <string name="display_preset_episode_thumbnails">Slike sličica epizoda</string>
     <string name="volume_lowest">Najniža</string>
@@ -653,7 +653,7 @@
     <string name="select_all">Odaberi sve</string>
     <string name="separate_types">Odvojene vrste</string>
     <string name="prefer_logos">Preferiraj prikaz logotipa za naslove</string>
-    <string name="updated_toast">Wholphin ažuriran na %s</string>
+    <string name="updated_toast">Jellytip ažuriran na %s</string>
     <string name="remove_continue_watching">Ukloni iz \"Nastavi gledanje\"</string>
     <string name="remove_next_up">Ukloni seriju iz \"Slijedi\"</string>
     <string name="view_removed_next_up">Prikaži serije uklonjene iz \"Slijedi\"</string>

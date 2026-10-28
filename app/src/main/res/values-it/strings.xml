@@ -489,8 +489,8 @@
     <string name="content_scale_fill">Riempi</string>
     <string name="content_scale_fill_width">Riempi larghezza</string>
     <string name="content_scale_fill_height">Riempi altezza</string>
-    <string name="display_preset_default">Wholphin predefinito</string>
-    <string name="display_preset_compact">Wholphin Compatto</string>
+    <string name="display_preset_default">Jellytip predefinito</string>
+    <string name="display_preset_compact">Jellytip Compatto</string>
     <string name="display_preset_series_thumb">Immagini miniatura serie</string>
     <string name="display_preset_episode_thumbnails">Immagini miniatura episodio</string>
     <string name="volume_lowest">Minimo</string>
@@ -599,7 +599,7 @@
     <string name="continue_string">Continua</string>
     <string name="separate_types">Tipi separati</string>
     <string name="prefer_logos">Preferisci mostrare i loghi per i titoli</string>
-    <string name="updated_toast">Wholphin aggiornato a %s</string>
+    <string name="updated_toast">Jellytip aggiornato a %s</string>
     <string name="remove_continue_watching">Rimuovi da Continua a guardare</string>
     <string name="remove_next_up">Rimuovi serie da Prossimo</string>
     <string name="view_removed_next_up">Visualizza serie rimosse da Prossimo</string>

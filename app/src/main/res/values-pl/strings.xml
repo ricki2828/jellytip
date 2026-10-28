@@ -192,7 +192,7 @@
     <string name="installed_version">Zainstalowana wersja</string>
     <string name="ffmpeg_extension_pref">Użyj dekodera FFmpeg</string>
     <string name="edge_size">Rozmiar ramki</string>
-    <string name="about">O Wholphin</string>
+    <string name="about">O Jellytip</string>
     <string name="active_recordings">Nagrania w toku</string>
     <string name="born">Data urodzenia</string>
     <string name="cancel_series_recording">Anuluj nagrywanie serialu</string>
@@ -386,8 +386,8 @@
     <string name="content_scale_fill">Wypełnij</string>
     <string name="content_scale_fill_width">Pełna szerokość</string>
     <string name="content_scale_fill_height">Pełna wysokość</string>
-    <string name="display_preset_default">Domyślny Wholphin</string>
-    <string name="display_preset_compact">Kompaktowy Wholphin</string>
+    <string name="display_preset_default">Domyślny Jellytip</string>
+    <string name="display_preset_compact">Kompaktowy Jellytip</string>
     <string name="display_preset_series_thumb">Miniatury seriali</string>
     <string name="display_preset_episode_thumbnails">Zdjęcie odcinków</string>
     <string name="volume_lowest">Najniższa</string>
@@ -576,7 +576,7 @@
     <string name="select_all">Wybierz wszystkie</string>
     <string name="separate_types">Oddzielne typy</string>
     <string name="prefer_logos">Wyświetlanie logo zamiast tytułu</string>
-    <string name="updated_toast">Wholphin zaktualizowany do %s</string>
+    <string name="updated_toast">Jellytip zaktualizowany do %s</string>
     <string name="remove_continue_watching">Usuń z Kontynuuj oglądanie</string>
     <string name="remove_next_up">Usuń serial z Następnie</string>
     <string name="view_removed_next_up">Zobacz serię usuniętą z Następnie</string>

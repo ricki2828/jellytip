@@ -517,8 +517,8 @@
     <string name="content_scale_fill">מתיחה לתצוגה</string>
     <string name="content_scale_fill_width">מתיחה לרוחב</string>
     <string name="content_scale_fill_height">מתיחה לגובה</string>
-    <string name="display_preset_default">ברירת המחדל של Wholphin</string>
-    <string name="display_preset_compact">Wholphin קומפקטי</string>
+    <string name="display_preset_default">ברירת המחדל של Jellytip</string>
+    <string name="display_preset_compact">Jellytip קומפקטי</string>
     <string name="display_preset_series_thumb">תמונות־ממוזערות של סדרה</string>
     <string name="display_preset_episode_thumbnails">תמונות־ממוזערות של פרק</string>
     <string name="bold_blue">כחול עז</string>
@@ -594,7 +594,7 @@
     <string name="select_all">בחר הכול</string>
     <string name="separate_types">סוגים נפרדים</string>
     <string name="prefer_logos">העדף להציג לוגו על פני כותרת</string>
-    <string name="updated_toast">Wholphin עודכן ל־%s</string>
+    <string name="updated_toast">Jellytip עודכן ל־%s</string>
     <string name="remove_continue_watching">מחק מהמשך צפייה</string>
     <string name="remove_next_up">מחק סדרה מ־\"הבא בתור\"</string>
     <string name="view_removed_next_up">הצג סדרות שנמחקו מ־\"הבא בתור\"</string>

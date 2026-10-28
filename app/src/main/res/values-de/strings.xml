@@ -511,8 +511,8 @@
     <string name="animate">Animieren</string>
     <string name="content_scale_fill_width">Breite ausfüllen</string>
     <string name="content_scale_fill_height">Höhe ausfüllen</string>
-    <string name="display_preset_default">Wholphin Standard</string>
-    <string name="display_preset_compact">Wholphin Kompakt</string>
+    <string name="display_preset_default">Jellytip Standard</string>
+    <string name="display_preset_compact">Jellytip Kompakt</string>
     <string name="volume_lowest">Niedrigste</string>
     <string name="volume_low">Niedrig</string>
     <string name="volume_medium">Mittel</string>
@@ -580,7 +580,7 @@
     <string name="continue_string">Fortfahren</string>
     <string name="separate_types">Verschiedene Arten</string>
     <string name="prefer_logos">Bevorzugt Logo statt Titel anzeigen</string>
-    <string name="updated_toast">Wholphin aktualisiert auf %s</string>
+    <string name="updated_toast">Jellytip aktualisiert auf %s</string>
     <string name="remove_continue_watching">Von \"Weiterschauen\" entfernen</string>
     <string name="remove_next_up">Serie aus \"Als Nächstes anschauen\" entfernen</string>
     <string name="view_more">Mehr anzeigen</string>

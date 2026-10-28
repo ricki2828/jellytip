@@ -147,7 +147,8 @@ configure<ApplicationExtension> {
             dimension = "version"
             isDefault = true
             manifestPlaceholders += mapOf(featureLeanback to false)
-            setFeatureFlag(featureUpdate, true)
+            // Jellytip: never offer upstream Wholphin releases
+            setFeatureFlag(featureUpdate, false)
             setFeatureFlag(featureDiscover, true)
         }
         create("appstore") {
@@ -221,7 +222,7 @@ androidComponents {
                         .getFilter(FilterConfiguration.FilterType.ABI)
                         .let { if (it != null) "-${it.identifier}" else "" }
                 val outputFileName =
-                    "Wholphin-${variant.flavorName}-${variant.buildType}-${output.versionName.get()}-${output.versionCode.get()}$abi.apk"
+                    "Jellytip-${variant.flavorName}-${variant.buildType}-${output.versionName.get()}-${output.versionCode.get()}$abi.apk"
                 output.outputFileName = outputFileName
             }
     }

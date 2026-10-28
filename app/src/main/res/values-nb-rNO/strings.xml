@@ -483,8 +483,8 @@
     <string name="content_scale_fill">Fyll</string>
     <string name="content_scale_fill_width">Fyll bredde</string>
     <string name="content_scale_fill_height">Fyll høyde</string>
-    <string name="display_preset_default">Wholphin Standard</string>
-    <string name="display_preset_compact">Wholphin Kompakt</string>
+    <string name="display_preset_default">Jellytip Standard</string>
+    <string name="display_preset_compact">Jellytip Kompakt</string>
     <string name="display_preset_series_thumb">Serieminiatyrbilder</string>
     <string name="display_preset_episode_thumbnails">Episodeminiatyrbilder</string>
     <string name="volume_lowest">Lavest</string>
@@ -573,7 +573,7 @@
     <string name="select_all">Velg alle</string>
     <string name="separate_types">Seperate typer</string>
     <string name="prefer_logos">Foretrekk å vise logoer for titler</string>
-    <string name="updated_toast">Wholphin oppdatert til %s</string>
+    <string name="updated_toast">Jellytip oppdatert til %s</string>
     <string name="remove_continue_watching">Fjern fra fortsett å se</string>
     <string name="remove_next_up">Fjern serier fra neste</string>
     <string name="view_removed_next_up">Vis serier fjernet fra neste</string>

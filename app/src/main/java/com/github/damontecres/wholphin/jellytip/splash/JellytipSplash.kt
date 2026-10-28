@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.splash
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,13 +11,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.datastore.core.DataStore
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
 import com.github.damontecres.wholphin.jellytip.JellytipSession
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 
 /**
@@ -29,21 +34,29 @@ fun JellytipSplashOverlay(
     coldStart: Boolean,
 ) {
     var visible by remember { mutableStateOf(coldStart && !JellytipSession.introHandled) }
-    if (!visible) return
+    val focusManager = LocalFocusManager.current
+    if (!visible) {
+        // Intro gone: hand focus to the screen underneath (its default target), once
+        LaunchedEffect(Unit) {
+            if (coldStart) {
+                withFrameNanos { }
+                focusManager.moveFocus(FocusDirection.Enter)
+            }
+        }
+        return
+    }
     val context = LocalContext.current
     var prefs by remember { mutableStateOf<AppPreferences?>(null) }
     LaunchedEffect(Unit) {
+        // Don't let a slow datastore hold the intro back: after a short wait play with defaults (sound on)
         prefs =
             try {
-                dataStore.data.first()
+                withTimeoutOrNull(400) { dataStore.data.first() } ?: AppPreferences.getDefaultInstance()
             } catch (ex: Exception) {
                 Timber.w(ex, "Jellytip: could not read prefs for splash")
-                null
+                AppPreferences.getDefaultInstance()
             }
-        if (prefs == null) {
-            JellytipSession.introHandled = true
-            visible = false
-        }
+        Log.i("Jellytip", "splash prefs ready, disabled=${prefs?.jellytipSplashDisabled}")
     }
     val p = prefs
     LaunchedEffect(p) {
@@ -55,6 +68,7 @@ fun JellytipSplashOverlay(
     DisposableEffect(p) {
         if (p != null && !p.jellytipSplashDisabled) {
             JellytipOverlayKeys.onKey = {
+                JellytipOverlayKeys.onKey = null
                 JellytipSound.stop()
                 JellytipSession.introHandled = true
                 visible = false
@@ -69,6 +83,7 @@ fun JellytipSplashOverlay(
                 reduced = JellytipSession.reducedMotion(context),
                 soundEnabled = !p.jellytipSplashSoundDisabled,
                 onFinished = {
+                    JellytipOverlayKeys.onKey = null
                     JellytipSession.introHandled = true
                     visible = false
                 },

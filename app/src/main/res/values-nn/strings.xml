@@ -478,8 +478,8 @@
     <string name="content_scale_fill">Fyll</string>
     <string name="content_scale_fill_width">Fyll breidde</string>
     <string name="content_scale_fill_height">Fyll høgde</string>
-    <string name="display_preset_default">Wholphin-standard</string>
-    <string name="display_preset_compact">Wholphin-kompakt</string>
+    <string name="display_preset_default">Jellytip-standard</string>
+    <string name="display_preset_compact">Jellytip-kompakt</string>
     <string name="display_preset_series_thumb">Miniatyrbilete for seriar</string>
     <string name="display_preset_episode_thumbnails">Miniatyrbilete for episodar</string>
     <string name="volume_lowest">Lågast</string>

@@ -480,8 +480,8 @@
     <string name="content_scale_fill">Vullen</string>
     <string name="content_scale_fill_width">Vulbreedte</string>
     <string name="content_scale_fill_height">Vulhoogte</string>
-    <string name="display_preset_default">Wholphin standaard</string>
-    <string name="display_preset_compact">Wholphin compact</string>
+    <string name="display_preset_default">Jellytip standaard</string>
+    <string name="display_preset_compact">Jellytip compact</string>
     <string name="volume_low">Laag</string>
     <string name="volume_medium">Middel</string>
     <string name="volume_high">Hoog</string>
@@ -603,7 +603,7 @@
     <string name="confirm_enable_experimental_title">Experimentele instellingen inschakelen?</string>
     <string name="experimental_settings">Experimentele instellingen</string>
     <string name="search_and_download_subtitles"><![CDATA[Zoek &amp; download ondertiteling]]></string>
-    <string name="updated_toast">Wholphin is geüpdatet naar %s</string>
+    <string name="updated_toast">Jellytip is geüpdatet naar %s</string>
     <string name="last_played">Laatst afgespeeld</string>
     <string name="ass_subtitle_mode_exoplayer">Direct afspelen met de ingebouwde ExoPlayer</string>
     <string name="ass_subtitle_mode_transcode">Ondertitels inbranden/transcoderen op de server</string>

@@ -489,8 +489,8 @@
     <string name="content_scale_fill">Vyplnit</string>
     <string name="content_scale_fill_width">Vyplnit šířku</string>
     <string name="content_scale_fill_height">Vyplnit výšku</string>
-    <string name="display_preset_default">Výchozí předvolba Wholphin</string>
-    <string name="display_preset_compact">Wholphin kompaktní</string>
+    <string name="display_preset_default">Výchozí předvolba Jellytip</string>
+    <string name="display_preset_compact">Jellytip kompaktní</string>
     <string name="display_preset_series_thumb">Obrázky náhledů seriálů</string>
     <string name="display_preset_episode_thumbnails">Obrázky náhledů epizod</string>
     <string name="volume_lowest">Nejnižší</string>

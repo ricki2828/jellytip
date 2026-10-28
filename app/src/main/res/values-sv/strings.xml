@@ -424,8 +424,8 @@
     <string name="customize_home_summary">Välj rader och bilder på startsidan</string>
     <string name="delete_item">Är du säker på att du vill radera detta objekt?</string>
     <string name="discover">Upptäck</string>
-    <string name="display_preset_compact">Wholphin Kompakt</string>
-    <string name="display_preset_default">Wholphin Standard</string>
+    <string name="display_preset_compact">Jellytip Kompakt</string>
+    <string name="display_preset_default">Jellytip Standard</string>
     <string name="display_presets">Visningsförinställningar</string>
     <string name="display_presets_description">Inbyggda förinställningar för att snabbt styla alla rader</string>
     <string name="display_preset_episode_thumbnails">Avsnittsminiatyrer</string>
@@ -595,7 +595,7 @@
     <string name="include_types_summary">Vilka typer av objekt ska bilder visas för</string>
     <string name="song_has_lyrics">Låten har text</string>
     <string name="show_album_cover">Visa omslag till album</string>
-    <string name="updated_toast">Wholphin har uppdaterats till %s</string>
+    <string name="updated_toast">Jellytip har uppdaterats till %s</string>
     <string name="last_played">Senast visat</string>
     <string name="root_folder">Huvudkatalog</string>
     <string name="popularity">Populäritet</string>

@@ -30,7 +30,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -66,6 +68,16 @@ private const val TRAILER_DELAY_MS = 3_000L
  *
  * @param buttonRowFocused true while focus is somewhere in the play/buttons row
  */
+/** Extends this node over the nav-drawer inset (64dp + 8dp) on the left and the 16dp end padding. */
+private fun Modifier.fillFullBleed(): Modifier =
+    layout { measurable, constraints ->
+        val start = 72.dp.roundToPx()
+        val end = 16.dp.roundToPx()
+        val w = constraints.maxWidth + start + end
+        val p = measurable.measure(Constraints.fixed(w, constraints.maxHeight))
+        layout(constraints.maxWidth, constraints.maxHeight) { p.place(-start, 0) }
+    }
+
 @Composable
 fun JellytipDetailsBackground(
     item: BaseItem,
@@ -104,7 +116,9 @@ fun JellytipDetailsBackground(
 
     if (stills.isEmpty() && trailerUrl == null) return
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    // The page content is inset by the collapsed nav drawer (+ padding); bleed back out so the still covers
+    // the whole screen behind the drawer, whose icons sit on top of the left scrim.
+    Box(modifier = modifier.fillFullBleed().background(Color.Black)) {
         StillsSlideshow(stills = stills)
         AnimatedVisibility(
             visible = trailerPlaying && trailerUrl != null,
