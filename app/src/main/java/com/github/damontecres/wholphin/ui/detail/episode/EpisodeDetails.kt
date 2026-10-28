@@ -167,7 +167,7 @@ fun EpisodeDetails(
             )
         }
     }
-    showSubtitles?.let { JellytipSubtitlesDialog(it) { showSubtitles = null } }
+    showSubtitles?.let { JellytipSubtitlesDialog(it, onDismissRequest = { showSubtitles = null }) }
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,

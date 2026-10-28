@@ -326,7 +326,7 @@ fun SeriesOverview(
             preferredSubtitleLanguage = preferredSubtitleLanguage,
         )
     }
-    showSubtitles?.let { JellytipSubtitlesDialog(it) { showSubtitles = null } }
+    showSubtitles?.let { JellytipSubtitlesDialog(it, onDismissRequest = { showSubtitles = null }) }
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,
