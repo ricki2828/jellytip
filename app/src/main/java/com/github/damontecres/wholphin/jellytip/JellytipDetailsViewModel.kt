@@ -50,7 +50,8 @@ class JellytipDetailsViewModel
             item: BaseItem,
             extras: JellytipExtras?,
         ): List<String> {
-            val companion = extras?.stills.orEmpty().map { it.url }
+            val companion =
+                extras?.stills.orEmpty().map { it.url.replace("/t/p/original/", "/t/p/w1280/") }
             val tags = item.data.backdropImageTags.orEmpty()
             val jellyfin =
                 tags.mapIndexedNotNull { index, tag ->
@@ -79,6 +80,6 @@ class JellytipDetailsViewModel
             }
 
         companion object {
-            private const val MAX_WIDTH = 3840
+            private const val MAX_WIDTH = 1920
         }
     }
