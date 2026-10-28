@@ -2,11 +2,9 @@ package com.github.damontecres.wholphin.ui.detail.movie
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -34,8 +32,10 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
-import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -49,13 +49,10 @@ import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
-import com.github.damontecres.wholphin.ui.components.ExpandablePlayButtons
-import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.components.Optional
 import com.github.damontecres.wholphin.ui.components.PersonContextActions
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
-import com.github.damontecres.wholphin.ui.data.ChooseVersionParams
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
@@ -67,8 +64,6 @@ import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.util.ResStringProvider
 import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.DiscoverRequestType
-import com.github.damontecres.wholphin.util.ExceptionHandler
-import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.extensions.ticks
@@ -86,6 +81,7 @@ fun MovieDetails(
             creationCallback = { it.create(destination.itemId) },
         ),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    jellytipViewModel: JellytipDetailsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     LifecycleResumeEffect(Unit) {
@@ -130,6 +126,7 @@ fun MovieDetails(
                 },
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
                 onClearChosenStreams = { viewModel.clearChosenStreams(it) },
+                onChangeStill = jellytipViewModel::cycleStill,
             )
         }
 
@@ -331,67 +328,56 @@ fun MovieDetailsContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .bringIntoViewRequester(bringIntoViewRequester),
-                ) {
-                    MovieDetailsHeader(
-                        preferences = preferences,
-                        movie = movie,
-                        chosenStreams = state.chosenStreams,
-                        bringIntoViewRequester = bringIntoViewRequester,
-                        overviewOnClick = overviewOnClick,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = HeaderUtils.topPadding, bottom = 16.dp),
-                    )
-                    ExpandablePlayButtons(
-                        title = movie.jellytipDeleteLabel(),
-                        resumePosition = resumePosition,
-                        watched = dto.userData?.played ?: false,
-                        favorite = dto.userData?.isFavorite ?: false,
-                        playOnClick = {
-                            position = HEADER_ROW
-                            playOnClick.invoke(it)
-                        },
-                        moreOnClick = moreOnClick,
-                        watchOnClick = watchOnClick,
-                        favoriteOnClick = favoriteOnClick,
-                        buttonOnFocusChanged = {
-                            if (it.isFocused) {
-                                position = HEADER_ROW
-                                scope.launch(ExceptionHandler()) {
-                                    bringIntoViewRequester.bringIntoView()
-                                }
-                            }
-                        },
-                        trailers = state.trailers,
-                        trailerOnClick = {
-                            position = TRAILER_ROW
-                            trailerOnClick.invoke(it)
-                        },
-                        canDelete = canDelete,
-                        onConfirmDelete = onConfirmDelete,
-                        chooseVersionParams =
-                            remember(state.chosenStreams, movie, onChooseVersion) {
-                                ChooseVersionParams(
-                                    chosenStreams = state.chosenStreams,
-                                    mediaSources = movie.data.mediaSources.orEmpty(),
-                                    onChooseVersion = onChooseVersion,
+                JellytipDetailsBlock(
+                    item = movie,
+                    buttons =
+                        buildList {
+                            add(
+                                JellytipButton(
+                                    label =
+                                        stringResource(
+                                            if (resumePosition > Duration.ZERO) R.string.resume else R.string.play,
+                                        ),
+                                    primary = true,
+                                    onClick = {
+                                        position = HEADER_ROW
+                                        playOnClick.invoke(resumePosition)
+                                    },
+                                ),
+                            )
+                            if (resumePosition > Duration.ZERO) {
+                                add(
+                                    JellytipButton(stringResource(R.string.restart), {
+                                        position = HEADER_ROW
+                                        playOnClick.invoke(Duration.ZERO)
+                                    }),
                                 )
+                            }
+                            add(
+                                JellytipButton(
+                                    stringResource(
+                                        if (dto.userData?.isFavorite == true) R.string.remove_favorite else R.string.add_favorite,
+                                    ),
+                                    favoriteOnClick,
+                                ),
+                            )
+                            add(JellytipButton("\u00B7\u00B7\u00B7", moreOnClick))
+                        },
+                    trailers = state.trailers,
+                    onTrailer = {
+                        position = TRAILER_ROW
+                        trailerOnClick.invoke(it)
+                    },
+                    onOverview = overviewOnClick,
+                    buttonRowModifier =
+                        Modifier
+                            .focusRequester(focusRequesters[HEADER_ROW])
+                            .onFocusChanged {
+                                buttonRowFocused = it.hasFocus
+                                if (it.hasFocus) position = HEADER_ROW
                             },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                                .onFocusChanged { buttonRowFocused = it.hasFocus }
-                                .focusRequester(focusRequesters[HEADER_ROW]),
-                    )
-                }
+                    modifier = Modifier.fillParentMaxSize(),
+                )
             }
             state.people.letNotEmpty { people ->
                 item {

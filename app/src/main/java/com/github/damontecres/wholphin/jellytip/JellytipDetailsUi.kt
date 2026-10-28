@@ -29,13 +29,17 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -53,6 +57,7 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -114,7 +119,7 @@ fun JellytipDetailsBackground(
     }
     LaunchedEffect(buttonRowFocused, trailerUrl, settings.trailerAutoplay, trailerDone, resumed) {
         if (buttonRowFocused && resumed && trailerUrl != null && settings.trailerAutoplay && !trailerDone) {
-            delay(JellytipTokens.TRAILER_DELAY_MS)
+            delay(JellytipHomeTokens.TRAILER_DELAY_MS)
             trailerPlaying = true
         } else {
             trailerPlaying = false
@@ -369,15 +374,15 @@ private fun starText(rating: Double): String {
 }
 
 /** Quiet one-line scores, "IMDb 8.1 · RT 95% · You ★4½", with Ricki's own rating in the warm accent. */
-internal fun scoreLine(extras: JellytipExtras?): androidx.compose.ui.text.AnnotatedString? {
+internal fun scoreLine(extras: JellytipExtras?): AnnotatedString? {
     val scores = extras?.scores.orEmpty().mapNotNull { scoreChipText(it) }.take(4)
     val mine = extras?.letterboxd?.let { myLineText(it) }
     if (scores.isEmpty() && mine == null) return null
-    return androidx.compose.ui.text.buildAnnotatedString {
+    return buildAnnotatedString {
         append(scores.joinToString("  \u00B7  "))
         if (mine != null) {
             if (scores.isNotEmpty()) append("  \u00B7  ")
-            pushStyle(androidx.compose.ui.text.SpanStyle(color = WARM, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+            pushStyle(SpanStyle(color = WARM, fontWeight = FontWeight.SemiBold))
             append(mine)
             pop()
         }

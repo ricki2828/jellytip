@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +42,7 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.TrailerDialog
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -58,7 +58,7 @@ data class JellytipButton(
 /**
  * The bottom-left text block of the details page: studio logo (or typeset title), a quiet info line with
  * file-detail badges, a dim director/country line, a one-line synopsis, a quiet scores line and small
- * text buttons. Sizes come from [JellytipTokens] so home and details stay consistent.
+ * text buttons. Sizes come from [JellytipHomeTokens] so home and details stay consistent.
  *
  * @param buttonRowModifier applied to the buttons row (focus requester, focus tracking); focus group is added here
  * @param onOverview opens the full synopsis; the synopsis line is focusable (one press up from the buttons)
@@ -79,18 +79,22 @@ fun JellytipDetailsBlock(
         value = viewModel.getExtras(item)
     }
     val dto = item.data
-    val body = MaterialTheme.typography.bodyMedium.copy(fontSize = sizes.sp(JellytipTokens.BODY_PX), lineHeight = sizes.sp(JellytipTokens.BODY_PX * 1.35f))
+    val body =
+        MaterialTheme.typography.bodyMedium.copy(
+            fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+            lineHeight = sizes.sp(JellytipHomeTokens.TEXT_PX * 1.35f),
+        )
     val quiet = MaterialTheme.colorScheme.onSurface
 
     Box(modifier = modifier, contentAlignment = Alignment.BottomStart) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(sizes.px(JellytipTokens.GAP_PX)),
+            verticalArrangement = Arrangement.spacedBy(sizes.px(JellytipHomeTokens.DETAILS_GAP_PX)),
             modifier =
                 Modifier
                     .padding(
-                        start = (sizes.px(JellytipTokens.LEFT_PX) - 72.dp).coerceAtLeast(0.dp) + 16.dp,
-                        bottom = sizes.px(JellytipTokens.BOTTOM_PX),
-                    ).width(sizes.px(JellytipTokens.WIDTH_PX)),
+                        start = (sizes.px(JellytipHomeTokens.DETAILS_LEFT_PX) - 72.dp).coerceAtLeast(0.dp) + 16.dp,
+                        bottom = sizes.px(JellytipHomeTokens.DETAILS_BOTTOM_PX),
+                    ).width(sizes.px(JellytipHomeTokens.DETAILS_WIDTH_PX)),
         ) {
             DetailsTitle(item, sizes)
 
@@ -111,7 +115,14 @@ fun JellytipDetailsBlock(
                     horizontalArrangement = Arrangement.spacedBy(sizes.px(8f)),
                 ) {
                     if (info.isNotEmpty()) {
-                        Text(text = info, style = body, color = quiet.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Text(
+                            text = info,
+                            style = body,
+                            color = quiet.copy(alpha = 0.9f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
                     }
                     badges.forEach { Badge(it, sizes) }
                 }
@@ -130,7 +141,13 @@ fun JellytipDetailsBlock(
                 listOfNotNull(director?.let { stringResource(R.string.directed_by, it) }, country)
                     .joinToString("  ·  ")
             if (dim.isNotEmpty()) {
-                Text(text = dim, style = body, color = quiet.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = dim,
+                    style = body,
+                    color = quiet.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             dto.overview?.takeIf { it.isNotBlank() }?.let { overview ->
@@ -153,7 +170,13 @@ fun JellytipDetailsBlock(
             }
 
             scoreLine(extras)?.let {
-                Text(text = it, style = body, color = quiet.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = it,
+                    style = body,
+                    color = quiet.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
@@ -169,26 +192,25 @@ private fun DetailsTitle(
     val logoUrl = rememberLogoUrl(item)
     var logoFailed by remember(logoUrl) { mutableStateOf(false) }
     if (logoUrl != null && !logoFailed) {
-        Box(
-            modifier = Modifier.width(sizes.px(JellytipTokens.LOGO_W_PX)).widthIn(max = sizes.px(JellytipTokens.LOGO_W_PX)),
-        ) {
-            AsyncImage(
-                model = logoUrl,
-                contentDescription = item.title,
-                contentScale = ContentScale.Fit,
-                alignment = Alignment.BottomStart,
-                onError = { logoFailed = true },
-                modifier = Modifier.width(sizes.px(JellytipTokens.LOGO_W_PX)).heightIn(max = sizes.px(JellytipTokens.LOGO_H_PX)),
-            )
-        }
+        AsyncImage(
+            model = logoUrl,
+            contentDescription = item.title,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.BottomStart,
+            onError = { logoFailed = true },
+            modifier =
+                Modifier
+                    .width(sizes.px(JellytipHomeTokens.LOGO_MAX_W_PX))
+                    .heightIn(max = sizes.px(JellytipHomeTokens.LOGO_MAX_H_PX)),
+        )
     } else {
         Text(
             text = item.title ?: "",
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = FontFamily.Serif,
             fontWeight = FontWeight.Medium,
-            fontSize = sizes.sp(JellytipTokens.TITLE_PX),
-            lineHeight = sizes.sp(JellytipTokens.TITLE_PX * 1.05f),
+            fontSize = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX),
+            lineHeight = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX * 1.05f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -208,7 +230,7 @@ private fun Badge(
         Text(
             text = text,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-            fontSize = sizes.sp(JellytipTokens.BADGE_PX),
+            fontSize = sizes.sp(JellytipHomeTokens.BADGE_PX),
             maxLines = 1,
         )
     }
@@ -290,7 +312,7 @@ private fun TextButton(
     ) {
         Text(
             text = button.label,
-            fontSize = sizes.sp(JellytipTokens.BODY_PX),
+            fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
             fontWeight = if (button.primary) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
         )

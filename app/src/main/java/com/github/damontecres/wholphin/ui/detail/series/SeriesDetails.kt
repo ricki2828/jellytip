@@ -1,15 +1,10 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
 import android.content.res.Resources
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -45,10 +39,12 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
 import com.github.damontecres.wholphin.data.model.studioNames
-import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -61,12 +57,9 @@ import com.github.damontecres.wholphin.ui.components.ConfirmDialog
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.DeleteButton
 import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogParams
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
-import com.github.damontecres.wholphin.ui.components.ExpandableFaButton
-import com.github.damontecres.wholphin.ui.components.ExpandablePlayButton
 import com.github.damontecres.wholphin.ui.components.GenreText
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
@@ -75,7 +68,6 @@ import com.github.damontecres.wholphin.ui.components.OverviewText
 import com.github.damontecres.wholphin.ui.components.PersonContextActions
 import com.github.damontecres.wholphin.ui.components.QuickDetails
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
-import com.github.damontecres.wholphin.ui.components.TrailerButton
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
@@ -93,7 +85,6 @@ import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.serializer.toUUID
 import java.util.UUID
-import kotlin.time.Duration
 
 @Composable
 fun SeriesDetails(
@@ -107,6 +98,7 @@ fun SeriesDetails(
             },
         ),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    jellytipViewModel: JellytipDetailsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
 
@@ -156,6 +148,7 @@ fun SeriesDetails(
                 },
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
                 onClearChosenStreams = {},
+                onChangeStill = jellytipViewModel::cycleStill,
             )
         }
 
@@ -377,140 +370,64 @@ fun SeriesDetailsContent(
                 modifier = Modifier,
             ) {
                 item {
-                    SeriesDetailsHeader(
-                        series = series,
-                        showLogo = preferences.appPreferences.interfacePreferences.showLogos,
-                        overviewOnClick = overviewOnClick,
-                        bringIntoViewRequester = bringIntoViewRequester,
-                        modifier =
+                    JellytipDetailsBlock(
+                        item = series,
+                        buttons =
+                            buildList {
+                                add(
+                                    JellytipButton(stringResource(R.string.play), primary = true, onClick = {
+                                        position = HEADER_ROW
+                                        playOnClick.invoke(false)
+                                    }),
+                                )
+                                add(
+                                    JellytipButton(stringResource(R.string.shuffle), {
+                                        position = HEADER_ROW
+                                        playOnClick.invoke(true)
+                                    }),
+                                )
+                                add(
+                                    JellytipButton(
+                                        stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite),
+                                        favoriteOnClick,
+                                    ),
+                                )
+                                if (discoverSeries != null) {
+                                    add(JellytipButton(stringResource(R.string.discover), onClickDiscoverSeries))
+                                }
+                                add(
+                                    JellytipButton("\u00B7\u00B7\u00B7", {
+                                        onShowContextMenu(
+                                            ContextMenu.ForBaseItem(
+                                                fromLongClick = false,
+                                                item = series,
+                                                chosenStreams = null,
+                                                showGoTo = false,
+                                                showStreamChoices = false,
+                                                canDelete = canDelete,
+                                                canRemoveContinueWatching = false,
+                                                canRemoveNextUp = false,
+                                                actions = actions,
+                                            ),
+                                        )
+                                    }),
+                                )
+                            },
+                        trailers = trailers,
+                        onTrailer = {
+                            position = TRAILER_ROW
+                            trailerOnClick.invoke(it)
+                        },
+                        onOverview = overviewOnClick,
+                        buttonRowModifier =
                             Modifier
-                                .fillMaxWidth()
-                                .bringIntoViewRequester(bringIntoViewRequester)
-                                .padding(top = HeaderUtils.topPadding, bottom = 16.dp),
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier =
-                            Modifier
-                                .padding(start = HeaderUtils.startPadding)
                                 .focusRequester(focusRequesters[HEADER_ROW])
-                                .focusRestorer(playFocusRequester)
-                                .onFocusChanged { buttonRowFocused = it.hasFocus }
-                                .focusGroup()
-                                .padding(bottom = 16.dp),
-                    ) {
-                        ExpandablePlayButton(
-                            title = R.string.play,
-                            resume = Duration.ZERO,
-                            icon = Icons.Default.PlayArrow,
-                            onClick = {
-                                position = HEADER_ROW
-                                playOnClick.invoke(false)
-                            },
-                            modifier =
-                                Modifier
-                                    .focusRequester(playFocusRequester)
-                                    .onFocusChanged {
-                                        if (it.isFocused) {
-                                            scope.launch(ExceptionHandler()) {
-                                                bringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
-                                    },
-                        )
-                        ExpandableFaButton(
-                            title = R.string.shuffle,
-                            iconStringRes = R.string.fa_shuffle,
-                            onClick = {
-                                position = HEADER_ROW
-                                playOnClick.invoke(true)
-                            },
-                            modifier =
-                                Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        scope.launch(ExceptionHandler()) {
-                                            bringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
+                                .onFocusChanged {
+                                    buttonRowFocused = it.hasFocus
+                                    if (it.hasFocus) position = HEADER_ROW
                                 },
-                        )
-                        ExpandableFaButton(
-                            title = if (played) R.string.mark_unwatched else R.string.mark_watched,
-                            iconStringRes = if (played) R.string.fa_eye else R.string.fa_eye_slash,
-                            onClick = watchOnClick,
-                            modifier =
-                                Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        scope.launch(ExceptionHandler()) {
-                                            bringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
-                                },
-                        )
-                        ExpandableFaButton(
-                            title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                            iconStringRes = R.string.fa_heart,
-                            onClick = favoriteOnClick,
-                            iconColor = if (favorite) Color.Red else Color.Unspecified,
-                            modifier =
-                                Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        scope.launch(ExceptionHandler()) {
-                                            bringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
-                                },
-                        )
-                        TrailerButton(
-                            trailers = trailers,
-                            trailerOnClick = trailerOnClick,
-                            modifier =
-                                Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        scope.launch(ExceptionHandler()) {
-                                            bringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
-                                },
-                        )
-                        if (canDelete) {
-                            DeleteButton(
-                                title = series.jellytipDeleteLabel(),
-                                onConfirmDelete = {
-                                    position = HEADER_ROW
-                                    actions.onDeleteItem.invoke(series)
-                                },
-                                modifier =
-                                    Modifier
-                                        .onFocusChanged {
-                                            if (it.isFocused) {
-                                                scope.launch(ExceptionHandler()) {
-                                                    bringIntoViewRequester.bringIntoView()
-                                                }
-                                            }
-                                        },
-                            )
-                        }
-                        AnimatedVisibility(
-                            visible = discoverSeries != null,
-                            enter = fadeIn(),
-                            exit = fadeOut(),
-                        ) {
-                            ExpandableFaButton(
-                                title = R.string.discover,
-                                iconStringRes = R.string.fa_magnifying_glass_plus,
-                                onClick = onClickDiscoverSeries,
-                                modifier =
-                                    Modifier.onFocusChanged {
-                                        if (it.isFocused) {
-                                            scope.launch(ExceptionHandler()) {
-                                                bringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
-                                    },
-                            )
-                        }
-                    }
+                        modifier = Modifier.fillParentMaxSize(),
+                    )
                 }
                 item {
                     ItemRow(

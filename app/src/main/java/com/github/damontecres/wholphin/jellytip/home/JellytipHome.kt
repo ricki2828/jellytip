@@ -110,12 +110,22 @@ object JellytipHomeTokens {
     const val HERO_HEIGHT_FRACTION = 0.66f
     const val VIGNETTE_ALPHA = 0.78f
     const val RAIL_SCRIM_ALPHA = 0.55f
+
+    /** Rest time before a muted trailer replaces the still (home hero and details). */
+    const val TRAILER_DELAY_MS = 6_000L
+
+    // Details page (shares TEXT_PX / TITLE-less logo box above)
+    const val BADGE_PX = 19
+    const val DETAILS_TITLE_PX = 64
+    const val DETAILS_GAP_PX = 14
+    const val DETAILS_LEFT_PX = 96
+    const val DETAILS_BOTTOM_PX = 84
+    const val DETAILS_WIDTH_PX = 820
 }
 
 private const val LANDSCAPE_HEIGHT_DP = 132
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
-private const val SETTLE_TRAILER_MS = 4_000L
 private const val KEN_BURNS_MS = 24_000
 
 /**
@@ -173,7 +183,7 @@ fun JellytipHomeHero(
         trailerUrl = null
         if (!trailerWanted || item == null) return@LaunchedEffect
         if ((item.data.localTrailerCount ?: 0) <= 0) return@LaunchedEffect
-        delay(SETTLE_TRAILER_MS)
+        delay(JellytipHomeTokens.TRAILER_DELAY_MS)
         trailerUrl = viewModel.trailerUrl(item)
     }
 

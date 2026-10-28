@@ -507,7 +507,7 @@ private fun buildContextMenuItems(
                 actions.onClickAddPlaylist.invoke(item.id)
             },
         )
-        actions.onChangeStill?.let { changeStill ->
+        actions.onChangeStill?.takeIf { !contextMenu.fromLongClick }?.let { changeStill ->
             add(
                 DialogItem(
                     resources.getString(R.string.jellytip_change_still),
