@@ -125,3 +125,39 @@ def test_lists_and_jellyfin_mapping(tmp_path):
     body = s.route("/v1/letterboxd/lists/top", {}, "tok")[1]
     assert [i["jellyfinId"] for i in body["items"]] == ["jf1", None]
     assert s.route("/v1/letterboxd/lists/nope", {}, "tok")[0] == 404
+
+
+def test_jellyfin_token_auth(tmp_path):
+    svc = Service({"JELLYTIP_TOKEN": "secret", "JELLYFIN_URL": "http://jf", "JELLYFIN_DB": ""},
+                  scores=object(), stills=lambda *a: ([], True), letterboxd=object(), cache=Cache(str(tmp_path / "c.db")))
+    calls = []
+
+    def fake(tok):
+        calls.append(tok)
+        return tok == "good"
+    import types
+    svc.jellyfin_ok = types.MethodType(lambda self, t: fake(t) if t else False, svc)
+    assert Service.jellyfin_token('MediaBrowser Client="x", Token="abc"', None) == "abc"
+    assert Service.jellyfin_token(None, " e1 ") == "e1"
+    assert Service.jellyfin_token("Bearer abc", None) is None
+    assert svc.route("/v1/letterboxd/lists", {}, None)[0] == 401
+    assert svc.route("/v1/letterboxd/lists", {}, None, 'MediaBrowser Token="bad"')[0] == 401
+    assert svc.route("/v1/nope", {}, "secret")[0] == 404
+    assert svc.route("/v1/nope", {}, None, 'MediaBrowser Token="good"')[0] == 404
+    assert svc.route("/v1/nope", {}, None, None, "good")[0] == 404
+
+
+def test_jellyfin_validation_cached_and_hashed(tmp_path, monkeypatch):
+    import urllib.request as ur
+    svc = Service({"JELLYTIP_TOKEN": "s", "JELLYFIN_URL": "http://jf"},
+                  scores=object(), stills=lambda *a: ([], True), letterboxd=object(), cache=Cache(str(tmp_path / "c.db")))
+    n = []
+
+    class R:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    monkeypatch.setattr(ur, "urlopen", lambda req, timeout: n.append(req.full_url) or R())
+    assert svc.jellyfin_ok("tok") and svc.jellyfin_ok("tok")
+    assert len(n) == 1 and n[0] == "http://jf/System/Info"
+    assert "tok" not in svc._auth_cache and len(next(iter(svc._auth_cache))) == 64
