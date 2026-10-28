@@ -1,7 +1,7 @@
 package com.github.damontecres.wholphin.jellytip
 
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -20,7 +20,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -66,7 +65,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 
-private const val STILL_INTERVAL_MS = 12_000L
 private const val KEN_BURNS_MS = 20_000
 
 /**
@@ -104,7 +102,7 @@ fun JellytipDetailsBackground(
     val choice by viewModel.stillChoice(item.id).collectAsState(0)
     // 0 = automatic slideshow, k = pinned to the k-th still ("Change still" cycles through these)
     val pinned = if (allStills.isEmpty()) 0 else choice % (allStills.size + 1)
-    val stills = if (pinned > 0) listOf(allStills[pinned - 1]) else allStills
+    val stills = if (pinned > 0) listOf(allStills[pinned - 1]) else listOfNotNull(detailsImageFor(allStills))
     val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() }
     val trailerUrl = remember(trailer) { trailer?.let { viewModel.trailerUrl(it) } }
 
@@ -133,7 +131,7 @@ fun JellytipDetailsBackground(
     // The page content is inset by the collapsed nav drawer (+ padding); bleed back out so the still covers
     // the whole screen behind the drawer, whose icons sit on top of the left scrim.
     Box(modifier = modifier.fillFullBleed().background(Color.Black)) {
-        StillsSlideshow(stills = stills)
+        stills.firstOrNull()?.let { url -> KenBurnsImage(url) }
         AnimatedVisibility(
             visible = trailerPlaying && trailerUrl != null,
             enter = fadeIn(tween(800)),
@@ -186,26 +184,12 @@ fun JellytipDetailsBackground(
 
 private val NIGHT = Color(0xFF08070C)
 
-@Composable
-private fun StillsSlideshow(stills: List<String>) {
-    var index by remember(stills) { mutableIntStateOf(0) }
-    LaunchedEffect(stills) {
-        if (stills.size > 1) {
-            while (true) {
-                delay(STILL_INTERVAL_MS)
-                index = (index + 1) % stills.size
-            }
-        }
-    }
-    Crossfade(
-        targetState = stills.getOrNull(index),
-        animationSpec = tween(1500),
-        modifier = Modifier.fillMaxSize(),
-        label = "jellytip-still",
-    ) { url ->
-        if (url != null) KenBurnsImage(url)
-    }
-}
+/**
+ * The single details-page image. [ranked] is best-first (companion stills, then Jellyfin backdrops; for episodes
+ * just the episode still). The best one is reserved for the home hero, so details uses the second-best when
+ * there is one. Single swap point for the hero agent's `JellytipImagePick.forDetails`.
+ */
+internal fun detailsImageFor(ranked: List<String>): String? = ranked.getOrNull(1) ?: ranked.firstOrNull()
 
 @Composable
 private fun KenBurnsImage(url: String) {
@@ -219,6 +203,7 @@ private fun KenBurnsImage(url: String) {
         model = url,
         contentDescription = null,
         contentScale = ContentScale.Crop,
+        alignment = BiasAlignment(0f, -0.4f),
         modifier =
             Modifier
                 .fillMaxSize()
