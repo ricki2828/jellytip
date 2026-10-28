@@ -67,7 +67,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.jellytip.JellytipApi
-import com.github.damontecres.wholphin.jellytip.nav.JellytipStorageMeter
+import com.github.damontecres.wholphin.jellytip.nav.rememberJellytipStorage
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
@@ -512,9 +512,11 @@ fun NavDrawer(
                         }
                         item {
                             val interactionSource = remember { MutableInteractionSource() }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            JellytipStorageMeter(viewModel.jellytipApi, drawerOpen = isOpen)
+                            // Admin-only free space rides on the Settings row (no extra list item: the footer arrangement
+                            // pins the last visible item, so extra rows can push the list out of place)
+                            val storage = rememberJellytipStorage(viewModel.jellytipApi, isOpen)
                             IconNavItem(
+                                subtext = storage?.let { if (it.low) it.label() + " (low)" else it.label() },
                                 text = stringResource(R.string.settings),
                                 icon = Icons.Default.Settings,
                                 selected = false,
@@ -529,7 +531,6 @@ fun NavDrawer(
                                 },
                                 modifier = Modifier,
                             )
-                            }
                         }
                     }
                 }
