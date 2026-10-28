@@ -431,7 +431,7 @@ fun RecommendedContent(
                     homeRows = state.rows,
                     position = position,
                     onClickItem = { _, item ->
-                        if (!JellytipTrailerControl.onOk(item, viewModel.navigationManager::navigateTo)) {
+                        if (!JellytipTrailerControl.onOk(item)) {
                             viewModel.navigationManager.navigateTo(item.destination())
                         }
                     },

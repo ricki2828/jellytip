@@ -217,11 +217,6 @@ fun JellytipHomeHero(
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
-        if (JellytipTrailerControl.fullScreen) {
-            // Came back from the full-screen trailer: continue the hero trailer muted instead of restarting
-            if (trailerWanted && item?.id == JellytipTrailerControl.itemId) JellytipTrailerControl.returnedFromFullScreen()
-            return@LaunchedEffect
-        }
         JellytipTrailerControl.stop()
         if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
@@ -229,7 +224,7 @@ fun JellytipHomeHero(
             JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
         }
     }
-    DisposableEffect(Unit) { onDispose { if (!JellytipTrailerControl.fullScreen) JellytipTrailerControl.stop() } }
+    DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
 
     val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), tween(400), label = "jellytip-scrim")
@@ -274,7 +269,7 @@ fun JellytipHomeHero(
                         ),
             ) {
                 Text(
-                    text = "Sound on  \u00B7  OK again for full screen  \u00B7  hold OK for details",
+                    text = "Sound on  \u00B7  OK for details",
                     fontSize = rememberJellytipSizes().sp(JellytipHomeTokens.TEXT_PX),
                     color = JellytipPalette.Vanilla,
                     modifier =
@@ -376,7 +371,6 @@ private fun HeroTrailer(
         }
     val currentOnEnded by rememberUpdatedState(onEnded)
     DisposableEffect(player) {
-        JellytipTrailerControl.positionProvider = { player.currentPosition }
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -393,7 +387,6 @@ private fun HeroTrailer(
             }
         player.addListener(listener)
         onDispose {
-            JellytipTrailerControl.positionProvider = null
             player.removeListener(listener)
             player.release()
         }
@@ -401,9 +394,8 @@ private fun HeroTrailer(
     LaunchedEffect(url) {
         firstFrame = false
         if (url != null) {
-            val start = JellytipTrailerControl.resumePositionMs.also { JellytipTrailerControl.resumePositionMs = 0L }
-            player.setMediaItem(MediaItem.fromUri(url), start)
-            player.playWhenReady = !JellytipTrailerControl.fullScreen
+            player.setMediaItem(MediaItem.fromUri(url))
+            player.playWhenReady = true
             player.prepare()
         } else {
             player.stop()
@@ -411,8 +403,6 @@ private fun HeroTrailer(
         }
     }
     LaunchedEffect(sound) { player.volume = if (sound) 1f else 0f }
-    val paused = JellytipTrailerControl.fullScreen
-    LaunchedEffect(paused) { if (url != null) player.playWhenReady = !paused }
     val alpha by animateFloatAsState(
         targetValue = if (url != null && firstFrame) 1f else 0f,
         animationSpec = tween(if (url != null) 800 else 150),
