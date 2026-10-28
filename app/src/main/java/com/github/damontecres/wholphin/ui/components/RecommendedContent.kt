@@ -19,6 +19,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
+import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -413,9 +414,16 @@ fun RecommendedContent(
                     homeRows = state.rows,
                     position = position,
                     onClickItem = { _, item ->
-                        viewModel.navigationManager.navigateTo(item.destination())
+                        if (!JellytipTrailerControl.onOk(item, viewModel.navigationManager::navigateTo)) {
+                            viewModel.navigationManager.navigateTo(item.destination())
+                        }
                     },
-                    onLongClickItem = { position, item ->
+                    onLongClickItem = longClick@{ position, item ->
+                        if (JellytipTrailerControl.isPlayingFor(item)) {
+                            JellytipTrailerControl.stop()
+                            viewModel.navigationManager.navigateTo(item.destination())
+                            return@longClick
+                        }
                         showContextMenu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,

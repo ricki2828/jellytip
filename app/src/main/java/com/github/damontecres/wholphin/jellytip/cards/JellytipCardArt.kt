@@ -102,11 +102,11 @@ fun selectJellytipCardArt(
     val seriesId = d.seriesId
     if (isEpisode && seriesId != null) {
         val seriesLogo = logo(d.parentLogoItemId ?: seriesId, d.parentLogoImageTag)
-        if (ImageType.PRIMARY in tags) {
+        if (ImageType.PRIMARY in tags && JellytipApi.shared?.isEpisodeStillUsable(item.id) != false) {
             return JellytipCardArt(fill(item.id, ImageType.PRIMARY, tags[ImageType.PRIMARY]), false, seriesLogo)
         }
         val thumbId = d.parentThumbItemId
-        if (thumbId != null && d.parentThumbImageTag != null) {
+        if (thumbId != null && d.parentThumbImageTag != null && JellytipApi.shared?.isThumbGood(thumbId) != false) {
             return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
         }
         val backdropId = d.parentBackdropItemId
@@ -118,7 +118,7 @@ fun selectJellytipCardArt(
         return JellytipCardArt(null, false, seriesLogo)
     }
 
-    if (ImageType.THUMB in tags) {
+    if (ImageType.THUMB in tags && JellytipApi.shared?.isThumbGood(item.id) != false) {
         return JellytipCardArt(fill(item.id, ImageType.THUMB, tags[ImageType.THUMB]), true, null)
     }
     val backdropTag = d.backdropImageTags?.firstOrNull()
@@ -165,10 +165,16 @@ fun JellytipTitledImage(
         value = RankState(quick, true)
         if (quick == null) api.bestBackdropIndex(rankedId)?.let { value = RankState(it, true) }
     }
+    // Episode stills: which are usable (not black/blurry/non-photo) comes from the companion once per series
+    val episodeArtReady by produceState(item.type != BaseItemKind.EPISODE, rankedId) {
+        JellytipApi.shared?.loadEpisodeArt(rankedId)
+        value = true
+    }
+    val hasTitledArt = ImageType.THUMB in item.data.imageTags.orEmpty()
     val bestIndex = ranking.index
     val art =
-        remember(item, widthPx, heightPx, bestIndex, ranking.ready) {
-            if (ranking.ready || bestIndex != null) {
+        remember(item, widthPx, heightPx, bestIndex, ranking.ready, episodeArtReady) {
+            if (ranking.ready || bestIndex != null || hasTitledArt) {
                 selectJellytipCardArt(service, item, widthPx, heightPx, bestIndex)
             } else {
                 JellytipCardArt(null, false, null)

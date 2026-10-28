@@ -48,6 +48,8 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
+import com.github.damontecres.wholphin.ui.components.TrailerDialog
+import com.github.damontecres.wholphin.jellytip.home.jellytipLogoFilter
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -193,15 +195,16 @@ fun JellytipDetailsBlock(
                     )
                 }
 
-                scoreLine(extras)?.let {
-                    Text(
-                        text = it,
-                        style = body,
-                        color = quiet.copy(alpha = 0.85f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            scoreLine(extras)?.let {
+                Text(
+                    text = it,
+                    style = body,
+                    inlineContent = LetterboxdInline,
+                    color = quiet.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
                 ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
             }
@@ -223,6 +226,7 @@ private fun DetailsTitle(
             contentDescription = item.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
+            colorFilter = jellytipLogoFilter(),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->

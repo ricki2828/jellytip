@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip
 
+import com.github.damontecres.wholphin.jellytip.cache.ImagePick
+import com.github.damontecres.wholphin.jellytip.cache.JellytipImagePick
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -47,6 +49,13 @@ class JellytipDetailsViewModel
                 }.distinctUntilChanged()
 
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
+
+        /** Details-page backdrop (second-best, tile-distinct) with its focal point; null for episodes (own still). */
+        suspend fun detailsPick(item: BaseItem): ImagePick? {
+            if (item.type == BaseItemKind.EPISODE) return null
+            JellytipImagePick.load(item)
+            return JellytipImagePick.forDetails(imageUrlService, item).takeIf { it.url != null }
+        }
 
         fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
 

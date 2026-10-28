@@ -3,11 +3,13 @@ package com.github.damontecres.wholphin.jellytip.home
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import com.github.damontecres.wholphin.data.model.BaseItem
-import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
+import com.github.damontecres.wholphin.jellytip.cache.ImagePick
+import com.github.damontecres.wholphin.jellytip.cache.JellytipImagePick
 import com.github.damontecres.wholphin.jellytip.cache.jellytipBackdropUrl
+import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.services.TrailerService
@@ -18,9 +20,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.extensions.videosApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -46,18 +50,38 @@ class JellytipHomeViewModel
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
         /** Single Jellyfin backdrop capped at 1920 wide; episodes and seasons use their series' backdrop. */
-        fun backdropUrl(item: BaseItem): String? = jellytipBackdropUrl(imageUrlService, item)
+        fun backdropUrl(
+            item: BaseItem,
+            heroIndex: Int? = null,
+        ): String? = jellytipBackdropUrl(imageUrlService, item, heroIndex)
 
-        /** Stream URL of the first local trailer, or null when there is none. Cheap no-op without LocalTrailerCount. */
-        suspend fun trailerUrl(item: BaseItem): String? {
+        /** Home hero image + focal point; [heroIndex] is the companion answer when known. */
+        fun heroPick(
+            item: BaseItem,
+            heroIndex: Int?,
+        ): ImagePick = JellytipImagePick.forHome(imageUrlService, item, heroIndex)
+
+        /** Companion `heroIndex` for [item] (cached after the first answer); null while unknown or unreachable. */
+        suspend fun heroIndex(item: BaseItem): Int? = jellytipApi.heroBackdropIndex(jellytipHeroItemId(item))
+
+        private val trailerCache = java.util.concurrent.ConcurrentHashMap<UUID, List<Pair<String, UUID>>>() // empty list = checked, none
+
+        /**
+         * Stream URL + item id of the first local trailer, or null when there is none. Asks the server directly: list queries
+         * never carry LocalTrailerCount, so gating on it (as before) meant the home hero never found a trailer.
+         */
+        suspend fun localTrailer(item: BaseItem): Pair<String, UUID>? {
             if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return null
-            if ((item.data.localTrailerCount ?: 0) <= 0) return null
+            trailerCache[item.id]?.let { return it.firstOrNull() }
             return try {
-                trailerService
-                    .getLocalTrailers(item)
-                    .filterIsInstance<LocalTrailer>()
-                    .firstOrNull()
-                    ?.let { api.videosApi.getVideoStreamUrl(itemId = it.baseItem.id, static = true) }
+                val trailer =
+                    api.userLibraryApi
+                        .getLocalTrailers(item.id)
+                        .content
+                        .firstOrNull()
+                val found = trailer?.let { api.videosApi.getVideoStreamUrl(itemId = it.id, static = true) to it.id }
+                trailerCache[item.id] = listOfNotNull(found)
+                found
             } catch (e: Exception) {
                 Timber.w(e, "Home trailer lookup failed")
                 null
