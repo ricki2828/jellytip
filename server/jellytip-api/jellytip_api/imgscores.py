@@ -49,5 +49,5 @@ class ImgScores:
             ph = sorted((r for r in rows if r["photoScore"] is not None and r["photoScore"] >= self.threshold), key=lambda r: -r["photoScore"])
             un = [r for r in rows if r["photoScore"] is None]
             no = [r for r in rows if r["photoScore"] is not None and r["photoScore"] < self.threshold]
-            rows = ph + sorted(un, key=lambda r: r["index"]) + no
+            rows = ph + sorted(un, key=lambda r: r["index"]) + sorted(no, key=lambda r: -r["photoScore"])
         return {"itemId": item_id, "animation": bool(rec.get("anim")), "backdrops": rows}
