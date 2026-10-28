@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -340,6 +341,7 @@ fun HomePageContent(
     },
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
     heroComposable: (@Composable (focusedItem: BaseItem?, hasFocus: Boolean) -> Unit)? = null,
+    extraRows: (LazyListScope.() -> Unit)? = null,
 ) {
     var hasFocus by remember { mutableStateOf(false) }
     val focusedItem =
@@ -567,6 +569,7 @@ fun HomePageContent(
                             }
                         }
                     }
+                    extraRows?.invoke(this)
                 }
             }
         }

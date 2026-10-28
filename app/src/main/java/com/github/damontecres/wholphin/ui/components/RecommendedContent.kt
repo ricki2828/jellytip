@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.ui.components
 
 import android.content.Context
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,6 +18,8 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.jellytip.discover.jellytipDiscoverRows
+import com.github.damontecres.wholphin.jellytip.discover.rememberJellytipDiscover
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
@@ -356,6 +359,7 @@ fun RecommendedContent(
     modifier: Modifier = Modifier,
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
     onFocusPosition: ((RowColumn) -> Unit)? = null,
+    discoverLibrary: String? = null,
 ) {
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
@@ -409,8 +413,20 @@ fun RecommendedContent(
                     )
                 }
 
+            val discover = discoverLibrary?.let { rememberJellytipDiscover(it) }
+            val discoverRows: (LazyListScope.() -> Unit)? =
+                if (discover == null || discover.first.isEmpty()) {
+                    null
+                } else {
+                    {
+                        jellytipDiscoverRows(discover.first, discover.second) {
+                            viewModel.navigationManager.navigateTo(Destination.JellytipDiscover(it))
+                        }
+                    }
+                }
             JellytipHomeTheme {
                 HomePageContent(
+                    extraRows = discoverRows,
                     homeRows = state.rows,
                     position = position,
                     onClickItem = { _, item ->

@@ -139,5 +139,6 @@ fun RecommendedTvShow(
         viewModel = viewModel,
         onFocusPosition = onFocusPosition,
         modifier = modifier,
+        discoverLibrary = "TV Shows",
     )
 }
