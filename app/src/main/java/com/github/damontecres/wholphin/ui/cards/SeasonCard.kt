@@ -187,7 +187,7 @@ fun SeasonCard(
                     unwatchedCount = unplayedItemCount,
                     watchedPercent = playedPercentage,
                     numberOfVersions = numberOfVersions,
-                    useFallbackText = false,
+                    useFallbackText = true,
                     modifier =
                         Modifier
                             .fillMaxSize(),
