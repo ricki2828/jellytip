@@ -46,6 +46,8 @@ fun JellytipSplashOverlay(
             if (coldStart) {
                 withFrameNanos { }
                 focusManager.moveFocus(FocusDirection.Enter)
+                JellytipSession.introFocusPending = true
+                JellytipSession.introDoneTick.value++
             }
         }
         return
@@ -116,6 +118,7 @@ fun JellytipIdentGate(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
     var done by remember { mutableStateOf(prefs.jellytipIdentDisabled || JellytipSession.inViewingSession()) }
     // Only a film or episode gets the ident; trailers, extras, theme videos etc. never do.
     if (!done) {
@@ -134,7 +137,17 @@ fun JellytipIdentGate(
                 JellytipSound.stop()
                 done = true
             }
-            onDispose { JellytipOverlayKeys.onKey = null }
+            // Back during the ident cancels (leaves the page) instead of starting the film
+            JellytipOverlayKeys.onBack = {
+                JellytipSound.stop()
+                JellytipOverlayKeys.onKey = null
+                JellytipOverlayKeys.onBack = null
+                backDispatcher?.onBackPressedDispatcher?.onBackPressed()
+            }
+            onDispose {
+                JellytipOverlayKeys.onKey = null
+                JellytipOverlayKeys.onBack = null
+            }
         }
         JellytipIdentTv(
             reduced = JellytipSession.reducedMotion(context),
@@ -169,8 +182,8 @@ object JellytipIdentEligibility {
                 dagger.hilt.android.EntryPointAccessors
                     .fromApplication(context.applicationContext, JellytipIdentEntryPoint::class.java)
                     .apiClient()
-            val item = api.userLibraryApi.getItem(itemId = itemId).content
-            item.type in kinds
+            val item = kotlinx.coroutines.withTimeoutOrNull(2_000) { api.userLibraryApi.getItem(itemId = itemId).content }
+            item != null && item.type in kinds
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

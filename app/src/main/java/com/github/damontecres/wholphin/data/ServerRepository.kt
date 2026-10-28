@@ -200,6 +200,7 @@ class ServerRepository
             withContext(ioDispatcher) {
                 return@withContext if (serverId == null || userId == null) {
                     _current.value = null
+                    JellytipAdmin.set(false)
                     null
                 } else {
                     val serverAndUsers = serverDao.getServer(serverId)
@@ -279,6 +280,7 @@ class ServerRepository
                 mostRecentServerProvider.clearUser()
                 apiClient.update(accessToken = null)
                 HomeSnapshotStore.clear(context)
+                JellytipAdmin.set(false)
             }
             withContext(ioDispatcher) {
                 serverDao.deleteUser(user.serverId, user.id)
@@ -293,6 +295,7 @@ class ServerRepository
                 mostRecentServerProvider.clear()
                 apiClient.update(baseUrl = null, accessToken = null)
                 HomeSnapshotStore.clear(context)
+                JellytipAdmin.set(false)
             }
             withContext(ioDispatcher) {
                 serverDao.deleteServer(server.id)
@@ -301,6 +304,7 @@ class ServerRepository
 
         suspend fun switchServerOrUser() {
             HomeSnapshotStore.clear(context)
+            JellytipAdmin.set(false)
             mostRecentServerProvider.clear()
         }
 

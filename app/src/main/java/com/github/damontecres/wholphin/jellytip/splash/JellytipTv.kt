@@ -99,6 +99,8 @@ fun JellytipIdentTv(
     val fade = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         val player = if (soundEnabled) JellytipSound.prepare(context, R.raw.jellytip_ident) else null
+        // Cancelled before start (Back, skip): free the prepared player; a started one is already tracked/released
+        kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion { JellytipSound.discard(player) }
         val start = android.os.SystemClock.uptimeMillis()
 
         suspend fun at(ms: Long) {

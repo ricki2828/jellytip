@@ -23,6 +23,7 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.android.androidDevice
+import com.github.damontecres.wholphin.jellytip.JellytipAuthHost
 import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
 import org.jellyfin.sdk.createJellyfin
@@ -122,8 +123,11 @@ object AppModule {
         .newBuilder()
         .addInterceptor {
             val request = it.request()
+            val serverUrl = serverRepository.current.value?.server?.url
             val newRequest =
-                serverRepository.current.value?.user?.accessToken?.let { token ->
+                serverRepository.current.value?.user?.accessToken?.takeIf { _ ->
+                    JellytipAuthHost.matches(request.url.host, serverUrl)
+                }?.let { token ->
                     request
                         .newBuilder()
                         .addHeader(

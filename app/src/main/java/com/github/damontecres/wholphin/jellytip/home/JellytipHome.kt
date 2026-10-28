@@ -39,8 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -65,6 +65,8 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipLogoTint
+import com.github.damontecres.wholphin.jellytip.JellytipScrim
 import com.github.damontecres.wholphin.jellytip.JellytipFocal
 import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
@@ -149,6 +151,8 @@ object JellytipHomeTokens {
 
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
+/** Slow zoom about the focal point; capped at 5% so the hero is never heavily enlarged. */
+const val KEN_BURNS_MAX_ZOOM = 0.05f
 private const val KEN_BURNS_MS = 24_000
 
 /**
@@ -219,9 +223,7 @@ fun JellytipHomeHero(
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
         JellytipTrailerControl.stop()
-        if (item?.id != JellytipTrailerControl.dismissedFor) JellytipTrailerControl.dismissedFor = null
-        if (!trailerWanted || item == null || item.id == JellytipTrailerControl.dismissedFor) return@LaunchedEffect
-        if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return@LaunchedEffect
+        if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
             JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
@@ -230,6 +232,7 @@ fun JellytipHomeHero(
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
 
+    val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), tween(400), label = "jellytip-scrim")
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
         Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
@@ -238,10 +241,17 @@ fun JellytipHomeHero(
                 animationSpec = tween(700),
                 modifier = Modifier.fillMaxSize(),
                 label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u, lastFocal) }
+            ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed) }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true
+            // Release the decoder after 2 min without a trailer
+            LaunchedEffect(trailerUrl, usedPlayer) {
+                if (trailerUrl == null && usedPlayer) {
+                    delay(HERO_PLAYER_IDLE_MS)
+                    usedPlayer = false
+                }
+            }
             if (usedPlayer) {
                 HeroTrailer(
                     url = trailerUrl,
@@ -271,7 +281,7 @@ fun JellytipHomeHero(
                         ),
             ) {
                 Text(
-                    text = "Sound on  \u00B7  OK again for full screen  \u00B7  hold OK for details",
+                    text = "Sound on  \u00B7  OK for details",
                     fontSize = rememberJellytipSizes().sp(JellytipHomeTokens.TEXT_PX),
                     color = JellytipPalette.Vanilla,
                     modifier =
@@ -298,10 +308,11 @@ fun JellytipHomeHero(
                     .fillMaxSize()
                     .background(
                         Brush.radialGradient(
-                            0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.VIGNETTE_ALPHA),
+                            0f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(JellytipHomeTokens.VIGNETTE_ALPHA, 0.94f, scrim)),
+                            0.55f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(0.40f, 0.80f, scrim)),
                             1f to Color.Transparent,
                             center = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
-                            radius = 1400f,
+                            radius = JellytipScrim.lerp(1400f, 2100f, scrim),
                         ),
                     ),
             )
@@ -322,14 +333,20 @@ fun JellytipHomeHero(
     }
 }
 
+private const val HERO_PLAYER_IDLE_MS = 120_000L
+
 @Composable
 private fun HomeKenBurns(
     url: String,
     focal: JellytipFocal?,
+    running: Boolean = true,
 ) {
     val progress = remember(url) { Animatable(0f) }
-    LaunchedEffect(url) {
-        progress.animateTo(1f, tween(KEN_BURNS_MS, easing = LinearEasing))
+    // Paused (not restarted) while a trailer plays or Home is not resumed: resume with the time left
+    LaunchedEffect(url, running) {
+        if (!running) return@LaunchedEffect
+        val left = (KEN_BURNS_MS * (1f - progress.value)).toInt()
+        if (left > 0) progress.animateTo(1f, tween(left, easing = LinearEasing))
     }
     val direction = if (abs(url.hashCode()) % 2 == 0) 1f else -1f
     AsyncImage(
@@ -337,17 +354,17 @@ private fun HomeKenBurns(
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),
+        onSuccess = { JellytipScrim.inspect(url, it.result.image) },
         modifier =
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     transformOrigin = focalOrigin(focal)
                     val p = progress.value
-                    val scale = 1.04f + 0.05f * p
+                    val scale = 1f + KEN_BURNS_MAX_ZOOM * p
                     scaleX = scale
                     scaleY = scale
                     translationX = direction * size.width * 0.010f * (p - 0.5f)
-                    translationY = -size.height * 0.006f * p
                 },
     )
 }
@@ -372,7 +389,6 @@ private fun HeroTrailer(
         }
     val currentOnEnded by rememberUpdatedState(onEnded)
     DisposableEffect(player) {
-        JellytipTrailerControl.positionProvider = { player.currentPosition }
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
@@ -389,7 +405,6 @@ private fun HeroTrailer(
             }
         player.addListener(listener)
         onDispose {
-            JellytipTrailerControl.positionProvider = null
             player.removeListener(listener)
             player.release()
         }
@@ -454,6 +469,8 @@ fun JellytipHomeHeader(
     with(density) {
         val textSize = JellytipHomeTokens.TEXT_PX.toSp()
         val quiet = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        // Soft shadow on every hero text line so it stays legible over bright art
+        val shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.dp.toPx()), 6.dp.toPx())
         Box(
             modifier = modifier.fillMaxWidth().height((screenHeight * JellytipHomeTokens.HEADER_HEIGHT_FRACTION).dp),
             contentAlignment = Alignment.BottomStart,
@@ -475,7 +492,8 @@ fun JellytipHomeHeader(
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
-                        colorFilter = jellytipLogoFilter(),
+                        colorFilter = JellytipLogoTint.filter(logoUrl),
+                        onSuccess = { JellytipLogoTint.inspect(logoUrl, it.result.image) },
                         onError = { logoFailed = true },
                         modifier =
                             Modifier
@@ -486,7 +504,7 @@ fun JellytipHomeHeader(
                 } else {
                     Text(
                         text = title ?: "",
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium.copy(shadow = shadow),
                         fontSize = JellytipHomeTokens.TITLE_PX.toSp(),
                         fontWeight = FontWeight.Medium,
                         color = JellytipPalette.Vanilla,
@@ -497,7 +515,7 @@ fun JellytipHomeHeader(
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla,
                         maxLines = 1,
@@ -508,13 +526,14 @@ fun JellytipHomeHeader(
                     item?.ui?.quickDetails,
                     item?.timeRemainingOrRuntime,
                     endsAt = item?.data?.endDate,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize),
+                    showRatings = scoreLine == null, // the companion's quiet score line replaces the stock star/tomato ratings
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize, shadow = shadow),
                 )
                 val overview = item?.data?.overview
                 if (!overview.isNullOrBlank()) {
                     Text(
                         text = overview,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = quiet,
                         maxLines = 1,
@@ -525,7 +544,7 @@ fun JellytipHomeHeader(
                     Text(
                         text = scoreLine,
                         inlineContent = LetterboxdInline,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
                         maxLines = 1,
@@ -536,7 +555,3 @@ fun JellytipHomeHeader(
         }
     }
 }
-
-/** Tint for hero/details clearlogos, or null when [JellytipHomeTokens.WHITE_LOGO] is off. */
-fun jellytipLogoFilter(): ColorFilter? =
-    if (JellytipHomeTokens.WHITE_LOGO) ColorFilter.tint(JellytipHomeTokens.LOGO_TINT, BlendMode.SrcIn) else null

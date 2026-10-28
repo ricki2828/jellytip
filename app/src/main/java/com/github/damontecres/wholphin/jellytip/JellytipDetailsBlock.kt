@@ -49,7 +49,6 @@ import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.TrailerDialog
-import com.github.damontecres.wholphin.jellytip.home.jellytipLogoFilter
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -94,6 +93,7 @@ fun JellytipDetailsBlock(
         MaterialTheme.typography.bodyMedium.copy(
             fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
             lineHeight = sizes.sp(JellytipHomeTokens.TEXT_PX * 1.35f),
+            shadow = TEXT_SHADOW,
         )
     val quiet = MaterialTheme.colorScheme.onSurface
 
@@ -241,11 +241,12 @@ private fun DetailsTitle(
             contentDescription = item.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
-            colorFilter = jellytipLogoFilter(),
+            colorFilter = JellytipLogoTint.filter(logoUrl),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->
                 val image = state.result.image
+                JellytipLogoTint.inspect(logoUrl, image)
                 if (image.height > image.width * 0.6f) logoFailed = true
             },
             modifier =
@@ -261,6 +262,7 @@ private fun DetailsTitle(
             fontWeight = FontWeight.Medium,
             fontSize = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX),
             lineHeight = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX * 1.05f),
+            style = MaterialTheme.typography.headlineMedium.copy(shadow = TEXT_SHADOW),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -295,6 +297,7 @@ private fun ButtonsRow(
     sizes: JellytipSizes,
 ) {
     val first = remember { FocusRequester() }
+    val firstIndex = remember(buttons) { buttons.indexOfFirst { it.primary }.coerceAtLeast(0) }
     // Trailer plays directly: the local one if there is one, else the first remote one. No chooser.
     val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() ?: trailers.firstOrNull() }
     Row(
@@ -321,7 +324,7 @@ private fun ButtonsRow(
             TextButton(
                 button = b,
                 sizes = sizes,
-                modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                modifier = if (index == firstIndex) Modifier.focusRequester(first) else Modifier,
             )
         }
     }
@@ -426,3 +429,6 @@ private fun fileBadges(item: BaseItem): List<String> {
         }
     }
 }
+
+/** Soft shadow under every hero/details text line (about 0 1dp 6dp black at 60% at 1080p on a 2x TV). */
+private val TEXT_SHADOW = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.6f), androidx.compose.ui.geometry.Offset(0f, 2f), 12f)

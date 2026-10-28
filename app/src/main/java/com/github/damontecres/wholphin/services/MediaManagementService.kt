@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipAdmin
+import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteLog
 import com.github.damontecres.wholphin.jellytip.delete.JellytipTrailerCleanup
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.libraryApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
 import javax.inject.Inject
@@ -36,6 +38,7 @@ class MediaManagementService
         private val api: ApiClient,
         private val serverRepository: ServerRepository,
         private val userPreferencesService: UserPreferencesService,
+        private val jellytipApi: JellytipApi,
     ) {
         private val _deletedItemFlow =
             MutableSharedFlow<DeletedItem>(
@@ -94,9 +97,17 @@ class MediaManagementService
         suspend fun deleteItem(item: BaseItem): DeleteResult {
             try {
                 Timber.i("Deleting %s", item.id)
-                JellytipDeleteLog.record(item)
+                // List items often carry no Path; read it before the item is gone (used for trailer cleanup)
+                val path =
+                    item.data.path ?: try {
+                        api.userLibraryApi.getItem(item.id).content.path
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Jellytip: could not read path for %s", item.id)
+                        null
+                    }
                 api.libraryApi.deleteItem(item.id)
-                JellytipTrailerCleanup.notifyDeleted(item)
+                JellytipDeleteLog.record(item)
+                JellytipTrailerCleanup.notifyDeleted(jellytipApi, item, path)
                 _deletedItemFlow.emit(DeletedItem(item))
                 return DeleteResult.Success
             } catch (ex: Exception) {

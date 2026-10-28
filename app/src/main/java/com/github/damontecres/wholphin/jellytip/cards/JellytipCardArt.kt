@@ -31,6 +31,7 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.withTimeoutOrNull
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cache.jellytipResolveBackdropIndex
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.services.ImageUrlService
@@ -112,8 +113,9 @@ fun selectJellytipCardArt(
         val backdropId = d.parentBackdropItemId
         val backdropTag = d.parentBackdropImageTags?.firstOrNull()
         if (backdropId != null && backdropTag != null) {
-            val tag = d.parentBackdropImageTags?.getOrNull(backdropIndex ?: 0) ?: backdropTag
-            return JellytipCardArt(fill(backdropId, ImageType.BACKDROP, tag, backdropIndex), false, seriesLogo)
+            val tags = d.parentBackdropImageTags.orEmpty()
+            val idx = jellytipResolveBackdropIndex(tags, backdropId, backdropIndex)
+            return JellytipCardArt(fill(backdropId, ImageType.BACKDROP, tags[idx], idx), false, seriesLogo)
         }
         return JellytipCardArt(null, false, seriesLogo)
     }
@@ -125,8 +127,9 @@ fun selectJellytipCardArt(
     val logoUrl = if (ImageType.LOGO in tags) logo(item.id, tags[ImageType.LOGO]) else null
     return when {
         backdropTag != null -> {
-            val tag = d.backdropImageTags?.getOrNull(backdropIndex ?: 0) ?: backdropTag
-            JellytipCardArt(fill(item.id, ImageType.BACKDROP, tag, backdropIndex), false, logoUrl)
+            val tags = d.backdropImageTags.orEmpty()
+            val idx = jellytipResolveBackdropIndex(tags, item.id, backdropIndex)
+            JellytipCardArt(fill(item.id, ImageType.BACKDROP, tags[idx], idx), false, logoUrl)
         }
         ImageType.PRIMARY in tags -> JellytipCardArt(fill(item.id, ImageType.PRIMARY, tags[ImageType.PRIMARY]), false, logoUrl)
         else -> JellytipCardArt(null, false, logoUrl)
@@ -167,7 +170,7 @@ fun JellytipTitledImage(
     }
     // Episode stills: which are usable (not black/blurry/non-photo) comes from the companion once per series
     val episodeArtReady by produceState(item.type != BaseItemKind.EPISODE, rankedId) {
-        JellytipApi.shared?.loadEpisodeArt(rankedId)
+        if (item.type == BaseItemKind.EPISODE) JellytipApi.shared?.loadEpisodeArt(rankedId)
         value = true
     }
     val hasTitledArt = ImageType.THUMB in item.data.imageTags.orEmpty()

@@ -37,7 +37,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaStreamType
 import timber.log.Timber
 import java.util.UUID
@@ -115,6 +117,7 @@ class EpisodeViewModel
                         )
                     }
                     backdropService.submit(item)
+                    loadNeighbours(item)
                 } catch (ex: CancellationException) {
                     throw ex
                 } catch (ex: Exception) {
@@ -122,6 +125,34 @@ class EpisodeViewModel
                     _state.update { it.copy(episode = DataLoadingState.Error(ex)) }
                 }
             }
+
+        /** Previous/next episode within the same season, for the "Prev ep" / "Next ep" buttons. */
+        private suspend fun loadNeighbours(item: BaseItem) {
+            val seriesId = item.data.seriesId ?: return
+            val seasonId = item.data.seasonId ?: return
+            try {
+                val ids =
+                    api.tvShowsApi
+                        .getEpisodes(seriesId = seriesId, seasonId = seasonId)
+                        .content.items
+                        .map { it.id }
+                val i = ids.indexOf(item.id)
+                if (i >= 0) {
+                    _state.update { it.copy(prevId = ids.getOrNull(i - 1), nextId = ids.getOrNull(i + 1)) }
+                }
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.w(ex, "Could not load neighbouring episodes for %s", itemId)
+            }
+        }
+
+        /** Swap this page for a sibling episode so Back still returns to wherever the list was opened from. */
+        fun goToEpisode(id: UUID) {
+            release()
+            navigationManager.goBack()
+            navigationManager.navigateTo(Destination.MediaItem(id, BaseItemKind.EPISODE))
+        }
 
         fun setWatched(
             itemId: UUID,
@@ -216,4 +247,6 @@ class EpisodeViewModel
 data class EpisodeState(
     val episode: DataLoadingState<BaseItem> = DataLoadingState.Pending,
     val chosenStreams: ChosenStreams? = null,
+    val prevId: UUID? = null,
+    val nextId: UUID? = null,
 )

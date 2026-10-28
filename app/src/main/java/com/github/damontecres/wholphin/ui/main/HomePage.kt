@@ -28,6 +28,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
+import com.github.damontecres.wholphin.jellytip.JellytipSession
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -58,6 +60,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
@@ -159,7 +162,9 @@ fun HomePage(
                     { clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
                         // OK while the hero trailer plays: unmute, then full screen; otherwise open the item
-                        if (!JellytipTrailerControl.onOk(item, viewModel.navigationManager::navigateTo)) {
+                        if (!JellytipTrailerControl.onOk(item)) {
+                            // Free the hero player/decoder before the main player or details page starts
+                            JellytipTrailerControl.stop()
                             viewModel.recordOpen(clickedPosition)
                             if (currentHomePrefs.clickToPlay &&
                                 homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
@@ -178,7 +183,8 @@ fun HomePage(
                         if (JellytipTrailerControl.isPlayingFor(item)) {
                             // Long-press OK always opens details while the hero trailer plays
                             JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination())
+                            // Open details only after OK is released: the key-up used to click Play and start the film
+                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
                             return@longClick
                         }
                         val row =
@@ -187,7 +193,7 @@ fun HomePage(
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
                             row?.rowType is HomeRowConfig.NextUp || row?.rowType is HomeRowConfig.ContinueWatchingCombined
-                        showContextMenu =
+                        val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
@@ -227,6 +233,8 @@ fun HomePage(
                                         onClickRemoveFromNextUp = viewModel::removeFromNextUp,
                                     ),
                             )
+                        // Open only after OK is released so the key-up cannot land on the menu's first entry
+                        JellytipInputGuard.afterRelease { showContextMenu = menu }
                     }
                 }
             val onClickPlay =
@@ -376,6 +384,19 @@ fun HomePageContent(
                             listState.scrollToItem(it)
                         }
                 }
+            }
+        }
+    }
+    // After the cold-start intro, make sure the first home row (not the nav rail) holds focus
+    val introTick by JellytipSession.introDoneTick.collectAsState()
+    LaunchedEffect(introTick, homeRows) {
+        // One-shot: consumed only once a real row exists, so later visits to Home keep their restored focus
+        if (introTick > 0 && takeFocus && JellytipSession.introFocusPending) {
+            withFrameNanos { }
+            val row = homeRows.indexOfFirstOrNull { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
+            if (row != null) {
+                JellytipSession.introFocusPending = false
+                rowFocusRequesters.getOrNull(row)?.tryRequestFocus()
             }
         }
     }

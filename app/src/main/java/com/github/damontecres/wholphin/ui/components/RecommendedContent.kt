@@ -20,7 +20,9 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.discover.jellytipDiscoverRows
 import com.github.damontecres.wholphin.jellytip.discover.rememberJellytipDiscover
+import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselService
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
@@ -50,6 +52,7 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberPosition
 import com.github.damontecres.wholphin.ui.toBaseItems
 import com.github.damontecres.wholphin.ui.util.ResStringProvider
+import com.github.damontecres.wholphin.ui.util.StringStringProvider
 import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
@@ -88,6 +91,7 @@ class RecommendedViewModel
         private val mediaManagementService: MediaManagementService,
         private val suggestionService: SuggestionService,
         val serverReportService: ServerReportService,
+        private val jellytipCarousels: JellytipCarouselService,
         @Assisted private val parentId: UUID,
         @Assisted private val suggestionsType: BaseItemKind,
         @Assisted private val recommendedRows: List<RecommendedRow<*>>,
@@ -148,6 +152,7 @@ class RecommendedViewModel
                         }
                     }
                 fetchSuggestions()
+                fetchCarousels(limit)
                 jobs.forEachIndexed { index, job ->
                     job.join()
                     val row = state.value.rows[index]
@@ -177,6 +182,59 @@ class RecommendedViewModel
                     useSeriesForPrimary = true,
                 ).init()
             }
+
+        /**
+         * Jellytip: the companion's carousels for this library (Movies or Shows) as extra rows between the built-in
+         * rows and Suggestions. Empty rows are left out; any failure just leaves the page as it was.
+         */
+        private fun fetchCarousels(limit: Int) {
+            val mediaType =
+                when (suggestionsType) {
+                    BaseItemKind.MOVIE -> "movie"
+                    BaseItemKind.SERIES -> "tv"
+                    else -> return
+                }
+            viewModelScope.launchIO {
+                try {
+                    val userId = serverRepository.currentUser?.id ?: return@launchIO
+                    val loaded =
+                        jellytipCarousels.libraryRows(userId, mediaType).mapNotNull { carousel ->
+                            try {
+                                val request = GetItemsRequestHandler.prepare(carousel.request, 0, limit, false)
+                                val items = GetItemsRequestHandler.execute(api, request).toBaseItems(api, true)
+                                if (items.isEmpty()) {
+                                    null
+                                } else {
+                                    HomeRowLoadingState.Success(
+                                        StringStringProvider(carousel.title),
+                                        items,
+                                        viewOptions,
+                                        showViewMore = false,
+                                    )
+                                }
+                            } catch (ex: CancellationException) {
+                                throw ex
+                            } catch (ex: Exception) {
+                                Timber.w(ex, "Carousel %s failed", carousel.title)
+                                null
+                            }
+                        }
+                    if (loaded.isEmpty()) return@launchIO
+                    _state.update {
+                        it.copy(
+                            rows =
+                                it.rows.toMutableList().apply {
+                                    addAll((size - 1).coerceAtLeast(recommendedRows.size), loaded)
+                                },
+                        )
+                    }
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Library carousels failed")
+                }
+            }
+        }
 
         private fun fetchSuggestions() {
             viewModelScope.launch(WholphinDispatchers.IO) {
@@ -430,17 +488,17 @@ fun RecommendedContent(
                     homeRows = state.rows,
                     position = position,
                     onClickItem = { _, item ->
-                        if (!JellytipTrailerControl.onOk(item, viewModel.navigationManager::navigateTo)) {
+                        if (!JellytipTrailerControl.onOk(item)) {
                             viewModel.navigationManager.navigateTo(item.destination())
                         }
                     },
                     onLongClickItem = longClick@{ position, item ->
                         if (JellytipTrailerControl.isPlayingFor(item)) {
                             JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination())
+                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
                             return@longClick
                         }
-                        showContextMenu =
+                        val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
@@ -452,6 +510,7 @@ fun RecommendedContent(
                                 canRemoveNextUp = false,
                                 actions = contextActions,
                             )
+                        JellytipInputGuard.afterRelease { showContextMenu = menu }
                     },
                     onClickPlay = { _, item ->
                         viewModel.navigationManager.navigateTo(Destination.Playback(item))

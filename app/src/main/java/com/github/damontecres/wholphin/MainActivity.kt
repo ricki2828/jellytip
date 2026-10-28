@@ -32,7 +32,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
+import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.jellytip.splash.JellytipSplashOverlay
 import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
@@ -116,6 +118,10 @@ class MainActivity : AppCompatActivity() {
     /** Injected only so Hilt builds it at startup; the context menu reaches it through its `shared` reference. */
     @Inject
     lateinit var jellytipSeasonSubtitles: JellytipSeasonSubtitles
+
+    /** Injected so Hilt builds the companion client at startup: the composable helpers that read `JellytipApi.shared` never see null. */
+    @Inject
+    lateinit var jellytipApi: com.github.damontecres.wholphin.jellytip.JellytipApi
 
     @Inject
     lateinit var setupNavigationManager: SetupNavigationManager
@@ -301,6 +307,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        JellytipInputGuard.onKey(event)
+        if (JellytipInputGuard.shouldSwallow(event)) return true
+        if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
         if (screensaverService.state.value.run { show || showDim }) {
             screensaverService.stop(false)

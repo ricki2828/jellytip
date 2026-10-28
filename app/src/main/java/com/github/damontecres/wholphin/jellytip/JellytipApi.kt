@@ -5,9 +5,14 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.hilt.StandardOkHttpClient
 import com.github.damontecres.wholphin.util.WholphinDispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -123,8 +128,9 @@ class JellytipApi
             val at: Long,
         )
 
-        private val cache = HashMap<UUID, Entry>()
-        private val mutex = Mutex()
+        private val cache = BoundedCache<UUID, Entry>(MAX_CACHED)
+        private val inFlight = ConcurrentHashMap<UUID, Deferred<JellytipExtras?>>()
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val client by lazy {
             baseClient
@@ -144,17 +150,30 @@ class JellytipApi
                     else -> return null
                 }
             return try {
-                mutex.withLock {
-                    val now = System.currentTimeMillis()
-                    val cached = cache[item.id]
-                    // Failures are remembered briefly so a dead API doesn't cost 3s per visit
-                    if (cached != null && (cached.value != null || now - cached.at < FAILURE_TTL_MS)) {
-                        return cached.value
-                    }
-                    val result = withTimeoutOrNull(TIMEOUT_MS) { fetch(item, type) }
-                    cache[item.id] = Entry(result, now)
-                    result
+                val now = System.currentTimeMillis()
+                val cached = cache[item.id]
+                // Failures are remembered briefly so a dead API doesn't cost 3s per visit
+                if (cached != null && (cached.value != null || now - cached.at < FAILURE_TTL_MS)) {
+                    return cached.value
                 }
+                // One request per item in flight; concurrent callers share it and nothing else waits
+                var created: Deferred<JellytipExtras?>? = null
+                val deferred =
+                    inFlight.computeIfAbsent(item.id) {
+                        scope
+                            .async(start = CoroutineStart.LAZY) {
+                                val result = withTimeoutOrNull(TIMEOUT_MS) { fetch(item, type) }
+                                cache[item.id] = Entry(result, System.currentTimeMillis())
+                                result
+                            }.also { created = it }
+                    }
+                if (deferred === created) {
+                    deferred.invokeOnCompletion { inFlight.remove(item.id, deferred) }
+                    deferred.start()
+                }
+                deferred.await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.w(e, "Jellytip extras failed")
                 null
@@ -168,7 +187,7 @@ class JellytipApi
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
-                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
                     if (base.isBlank()) return@withContext null
                     val providerIds = item.data.providerIds.orEmpty()
                     val url =
@@ -208,10 +227,11 @@ class JellytipApi
             shared = this
         }
 
-        private val infoCache = ConcurrentHashMap<UUID, JellytipBackdropInfo>()
-        private val backdropFailedAt = ConcurrentHashMap<UUID, Long>()
-        private val episodeUsable = ConcurrentHashMap<UUID, Boolean>()
-        private val episodeParentsLoaded = ConcurrentHashMap.newKeySet<UUID>()
+        private val infoCache = BoundedCache<UUID, JellytipBackdropInfo>(MAX_CACHED)
+        private val backdropFailedAt = BoundedCache<UUID, Long>(MAX_CACHED)
+        private val episodeUsable = BoundedCache<UUID, Boolean>(MAX_CACHED)
+        private val episodeArtFailedAt = BoundedCache<UUID, Long>(MAX_CACHED)
+        private val episodeParentsLoaded = BoundedCache<UUID, Boolean>(MAX_CACHED)
 
         /** Cached companion answer for [itemId], or null if not fetched (yet) / unreachable. */
         fun peekInfo(itemId: UUID): JellytipBackdropInfo? = infoCache[itemId]
@@ -236,21 +256,30 @@ class JellytipApi
 
         /** Fetch (once per series/season) the usable flags of its episode stills so [isEpisodeStillUsable] can answer. */
         suspend fun loadEpisodeArt(parentId: UUID) {
-            if (!episodeParentsLoaded.add(parentId)) return
+            val failedAt = episodeArtFailedAt[parentId]
+            if (failedAt != null && System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) return
+            if (!episodeParentsLoaded.add(parentId, true)) return
             val body = getJson("/v1/items/$parentId/episodes-art")
             if (body == null) {
                 episodeParentsLoaded.remove(parentId)
+                episodeArtFailedAt[parentId] = System.currentTimeMillis()
                 return
             }
             try {
                 val arr = org.json.JSONArray(body)
                 for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    val id = parseUuid(o.getString("episodeId")) ?: continue
-                    episodeUsable[id] = o.optBoolean("usable", true)
+                    try {
+                        val o = arr.getJSONObject(i)
+                        val id = parseUuid(o.optString("episodeId")) ?: continue
+                        episodeUsable[id] = o.optBoolean("usable", true)
+                    } catch (e: Exception) {
+                        Timber.w(e, "episodes-art entry %d skipped", i)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.w(e, "episodes-art parse failed")
+                episodeParentsLoaded.remove(parentId)
+                episodeArtFailedAt[parentId] = System.currentTimeMillis()
             }
         }
 
@@ -275,7 +304,7 @@ class JellytipApi
             return withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
-                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
                     if (base.isBlank()) return@withContext null
                     val request =
                         Request
@@ -318,7 +347,7 @@ class JellytipApi
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
-                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
                     val request =
                         Request
                             .Builder()
@@ -403,7 +432,7 @@ class JellytipApi
 
         // The server builds its Plex history index on the first call, which can exceed the 3 s used elsewhere
         private val audienceClient by lazy { baseClient.newBuilder().callTimeout(20, TimeUnit.SECONDS).build() }
-        private val audienceCache = ConcurrentHashMap<UUID, Pair<Long, JellytipAudience>>()
+        private val audienceCache = BoundedCache<UUID, Pair<Long, JellytipAudience>>(MAX_CACHED)
 
         /**
          * Admin-only: who requested / watched [item]. Always authenticates with the Jellyfin session (the shared
@@ -417,7 +446,7 @@ class JellytipApi
             return withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
-                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
                     val request =
                         Request
                             .Builder()
@@ -440,6 +469,35 @@ class JellytipApi
             }
         }
 
+        /** Admin-only: seedbox quota usage for the drawer meter. Null for non-admins or on any failure. */
+        suspend fun getStorage(): JellytipStorage? {
+            if (!JellytipAdmin.isAdmin) return null
+            val token = api.accessToken?.takeIf { it.isNotBlank() } ?: return null
+            return withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base/v1/storage".toHttpUrlOrNull() ?: return@withContext null)
+                            .header("Authorization", "MediaBrowser Token=\"$token\"")
+                            .build()
+                    audienceClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip storage returned %s", response.code)
+                            return@withContext null
+                        }
+                        val o = JSONObject(response.body.string())
+                        JellytipStorage(o.getDouble("usedGb"), o.getDouble("quotaGb"), o.getDouble("freeGb"))
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip storage unavailable")
+                    null
+                }
+            }
+        }
+
         /**
          * POST a JSON body to a companion API path. Always carries the Jellyfin session token (the server names the
          * requester from it) in addition to the manual token if one is set. Returns (http code, body) or null if unreachable.
@@ -451,7 +509,7 @@ class JellytipApi
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
-                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
                     val request =
                         Request
                             .Builder()
@@ -476,6 +534,7 @@ class JellytipApi
             var shared: JellytipApi? = null
                 private set
 
+            private const val MAX_CACHED = 500
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
             private const val AUDIENCE_TTL_MS = 10 * 60_000L
@@ -484,6 +543,24 @@ class JellytipApi
     }
 
 /** Where the subject sits in an image (0..1); [face] = from a face detector, else saliency. */
+/** Seedbox quota in GB (the real limit; the Get-it block kicks in below 30 GB free). */
+data class JellytipStorage(
+    val usedGb: Double,
+    val quotaGb: Double,
+    val freeGb: Double,
+) {
+    val low: Boolean get() = freeGb < LOW_GB
+    val fractionUsed: Float get() = if (quotaGb > 0) (usedGb / quotaGb).toFloat().coerceIn(0f, 1f) else 0f
+
+    fun label(): String = "${fmt(freeGb)} free of ${fmt(quotaGb)}"
+
+    private fun fmt(gb: Double) = if (gb >= 1000) String.format("%.1f TB", gb / 1000) else "${gb.toInt()} GB"
+
+    companion object {
+        const val LOW_GB = 30.0
+    }
+}
+
 data class JellytipFocal(
     val x: Float,
     val y: Float,
@@ -497,6 +574,8 @@ data class JellytipBackdropInfo(
     val detailsIndex: Int?,
     val thumbGood: Boolean,
     val focal: Map<Int, JellytipFocal>,
+    /** Image tag the companion scored at each backdrop index; used to re-find the image when the item's set changed. */
+    val tags: Map<Int, String> = emptyMap(),
 ) {
     companion object {
         fun parse(json: String): JellytipBackdropInfo {
@@ -509,9 +588,11 @@ data class JellytipBackdropInfo(
                     arr.optJSONObject(0)?.optInt("index", -1) ?: -1
                 }
             val focal = mutableMapOf<Int, JellytipFocal>()
+            val tags = mutableMapOf<Int, String>()
             if (arr != null) {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
+                    o.optString("tag").takeIf { it.isNotBlank() && it != "null" }?.let { tags[o.optInt("index", i)] = it }
                     if (o.isNull("focalX") || o.isNull("focalY")) continue
                     focal[o.optInt("index", i)] =
                         JellytipFocal(o.optDouble("focalX").toFloat(), o.optDouble("focalY").toFloat(), o.optBoolean("face", false))
@@ -519,7 +600,40 @@ data class JellytipBackdropInfo(
             }
             fun idx(key: String) = if (root.isNull(key)) null else root.optInt(key, -1).takeIf { it >= 0 }
             val thumb = root.optJSONObject("thumb")
-            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal)
+            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal, tags)
         }
     }
+}
+
+/** Small thread-safe LRU map so per-item caches cannot grow without bound over a long session. */
+internal class BoundedCache<K : Any, V : Any>(
+    private val max: Int,
+) {
+    private val map =
+        object : LinkedHashMap<K, V>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?) = size > max
+        }
+
+    @Synchronized
+    operator fun get(key: K): V? = map[key]
+
+    @Synchronized
+    operator fun set(
+        key: K,
+        value: V,
+    ) {
+        map[key] = value
+    }
+
+    @Synchronized
+    fun remove(key: K) {
+        map.remove(key)
+    }
+
+    /** True if [key] was not present (and is now stored with [marker]). */
+    @Synchronized
+    fun add(
+        key: K,
+        marker: V,
+    ): Boolean = map.put(key, marker) == null
 }

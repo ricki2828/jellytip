@@ -1,5 +1,14 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import com.github.damontecres.wholphin.jellytip.HeroScrollLock
+import com.github.damontecres.wholphin.jellytip.BoxScopeDownHint
+import androidx.compose.ui.Alignment
 import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import android.content.res.Resources
 import androidx.compose.animation.core.animateFloatAsState
@@ -27,6 +36,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.github.damontecres.wholphin.ui.ifElse
+import kotlinx.coroutines.flow.update
+import com.github.damontecres.wholphin.jellytip.nav.JellytipSeasonChips
+import com.github.damontecres.wholphin.ui.AspectRatios
+import com.github.damontecres.wholphin.ui.cards.BannerCardWithTitle
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -49,6 +66,8 @@ import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
+import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -109,6 +128,7 @@ fun SeriesDetails(
     val context = LocalContext.current
 
     val state by viewModel.state.collectAsState()
+    val position by viewModel.position.collectAsState()
     val playlistState by playlistViewModel.playlistState.collectAsState()
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
@@ -200,6 +220,23 @@ fun SeriesDetails(
                 onClickItem = { index, item ->
                     viewModel.navigateTo(item.destination())
                 },
+                episodes = state.episodes,
+                nextUpId = state.nextUpId,
+                seasonIndex = position.seasonTabIndex,
+                initialEpisodeIndex = position.episodeRowIndex,
+                onChangeSeason = { index ->
+                    if (index != position.seasonTabIndex) {
+                        state.seasons.getOrNull(index)?.let { season ->
+                            viewModel.loadEpisodes(season.id, season.indexNumber)
+                            viewModel.position.update { SeriesOverviewPosition(index, 0) }
+                        }
+                    }
+                },
+                onClickEpisode = {
+                    viewModel.returnToEpisodes = true
+                    viewModel.navigateTo(it.destination())
+                },
+                consumeReturnToEpisodes = { viewModel.returnToEpisodes.also { viewModel.returnToEpisodes = false } },
                 onClickPerson = {
                     viewModel.navigateTo(
                         Destination.MediaItem(
@@ -336,6 +373,13 @@ fun SeriesDetailsContent(
     favorite: Boolean,
     canDelete: Boolean,
     onClickItem: (Int, BaseItem) -> Unit,
+    episodes: EpisodeList,
+    nextUpId: UUID?,
+    seasonIndex: Int,
+    initialEpisodeIndex: Int,
+    onChangeSeason: (Int) -> Unit,
+    onClickEpisode: (BaseItem) -> Unit,
+    consumeReturnToEpisodes: () -> Boolean,
     onClickPerson: (Person) -> Unit,
     onLongClickItem: (Int, BaseItem) -> Unit,
     overviewOnClick: () -> Unit,
@@ -360,12 +404,31 @@ fun SeriesDetailsContent(
     val playFocusRequester = remember { FocusRequester() }
     // Always open hero-first: Play focused, list scrolled to top (never restore a saved cast/extras row).
     val listState = rememberLazyListState()
+    val episodeRowRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        listState.scrollToItem(0)
-        focusRequesters[HEADER_ROW].tryRequestFocus()
+        if (consumeReturnToEpisodes()) {
+            // Back from an episode: land on the episode row, not the hero
+            listState.scrollToItem(1)
+            episodeRowRequester.tryRequestFocus()
+        } else {
+            listState.scrollToItem(0)
+            focusRequesters[HEADER_ROW].tryRequestFocus()
+        }
     }
     var buttonRowFocused by remember { mutableStateOf(false) }
     var topFocused by remember { mutableStateOf(true) }
+    // Sections are not composed at all until the user presses Down from the header, so moving along the
+    // buttons can never scroll to, reveal or flash them.
+    var sectionsActive by remember { mutableStateOf(false) }
+    val hasBelow = true
+    LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
+    LaunchedEffect(sectionsActive) {
+        if (sectionsActive) {
+            withFrameNanos { }
+            withFrameNanos { }
+            for (r in listOf(SEASONS_ROW, PEOPLE_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
+        }
+    }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     var pageHasFocus by remember { mutableStateOf(false) }
@@ -374,6 +437,14 @@ fun SeriesDetailsContent(
         modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus },
     ) {
         JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = !topFocused)
+        JellytipBreadcrumb(
+            crumbs = listOf(JellytipCrumb(series.name ?: "", {})),
+            modifier =
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 64.dp, top = 24.dp)
+                    .graphicsLayer { alpha = headerAlpha },
+        )
         Column(
             modifier =
                 Modifier
@@ -438,6 +509,14 @@ fun SeriesDetailsContent(
                         buttonRowModifier =
                             Modifier
                                 .focusRequester(focusRequesters[HEADER_ROW])
+                            .onPreviewKeyEvent {
+                                if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
+                                    sectionsActive = true
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                                 .onFocusChanged {
                                     buttonRowFocused = it.hasFocus
                                     if (it.hasFocus) position = HEADER_ROW
@@ -446,37 +525,74 @@ fun SeriesDetailsContent(
                     onFocusWithin = { topFocused = it },
                     )
                 }
-                item {
-                    ItemRow(
-                        title = stringResource(R.string.tv_seasons) + " (${seasons.size})",
-                        items = seasons,
-                        onClickItem = { index, item ->
-                            position = SEASONS_ROW
-                            onClickItem.invoke(index, item)
-                        },
-                        onLongClickItem = { index, item ->
-                            position = SEASONS_ROW
-                            onLongClickItem.invoke(index, item)
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[SEASONS_ROW]),
-                        cardContent = @Composable { index, item, mod, onClick, onLongClick ->
-                            SeasonCard(
-                                item = item,
-                                onClick = onClick,
-                                onLongClick = onLongClick,
-                                imageHeight = Cards.height2x3,
-                                imageWidth = Dp.Unspecified,
-                                showImageOverlay = true,
-                                modifier = mod,
-                            )
-                        },
-                    )
+                if (sectionsActive) item {
+                    val seasonLabels =
+                        remember(seasons.size, seasons.map { it?.indexNumber }) {
+                            seasons.mapIndexed { i, season ->
+                                when (val n = season?.indexNumber) {
+                                    null -> "S${i + 1}"
+                                    0 -> "Specials"
+                                    else -> "S$n"
+                                }
+                            }
+                        }
+                    val chipRequester = remember { FocusRequester() }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequesters[SEASONS_ROW]),
+                    ) {
+                        JellytipSeasonChips(
+                            labels = seasonLabels,
+                            selectedIndex = seasonIndex,
+                            onSelect = onChangeSeason,
+                            selectedRequester = chipRequester,
+                            onConfirm = { episodeRowRequester.tryRequestFocus() },
+                            modifier = Modifier.padding(start = 64.dp),
+                        )
+                        val eps = (episodes as? EpisodeList.Success)?.episodes
+                        if (eps != null) {
+                            val rowState = rememberLazyListState(initialEpisodeIndex)
+                            LazyRow(
+                                state = rowState,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(horizontal = 64.dp),
+                                modifier = Modifier.focusRestorer(episodeRowRequester),
+                            ) {
+                                itemsIndexed(eps) { episodeIndex, episode ->
+                                    BannerCardWithTitle(
+                                        title =
+                                            episode?.let {
+                                                listOfNotNull(it.data.indexNumber?.let { n -> "E$n" }, it.name)
+                                                    .joinToString(" \u00B7 ")
+                                            },
+                                        subtitle = episode?.data?.overview?.replace('\n', ' '),
+                                        item = episode,
+                                        aspectRatio =
+                                            episode?.aspectRatio?.coerceAtLeast(AspectRatios.FOUR_THREE)
+                                                ?: AspectRatios.WIDE,
+                                        played = episode?.data?.userData?.played ?: false,
+                                        playPercent = episode?.data?.userData?.playedPercentage ?: 0.0,
+                                        onClick = {
+                                            position = SEASONS_ROW
+                                            if (episode != null) onClickEpisode(episode)
+                                        },
+                                        onLongClick = {},
+                                        cornerText = if (episode != null && episode.id == nextUpId) "Next" else null,
+                                        cardHeight = 150.dp,
+                                        useSeriesForPrimary = false,
+                                        modifier =
+                                            Modifier.ifElse(
+                                                episodeIndex == initialEpisodeIndex,
+                                                Modifier.focusRequester(episodeRowRequester),
+                                            ),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 if (people.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         PersonRow(
                             people = people,
                             onClick = {
@@ -505,7 +621,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (extras.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         ExtrasRow(
                             extras = extras,
                             onClickItem = { index, item ->
@@ -521,7 +637,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (similar.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         ItemRow(
                             title = stringResource(R.string.more_like_this),
                             items = similar,
@@ -564,7 +680,7 @@ fun SeriesDetailsContent(
                     }
                 }
                 if (discovered.isNotEmpty()) {
-                    item {
+                    if (sectionsActive) item {
                         DiscoverRow(
                             row =
                                 DiscoverRowData(
@@ -584,6 +700,10 @@ fun SeriesDetailsContent(
                 }
             }
         }
+        BoxScopeDownHint(
+            visible = topFocused && hasBelow && !sectionsActive,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 

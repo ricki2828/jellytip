@@ -5,12 +5,11 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.github.damontecres.wholphin.data.model.BaseItem
-import com.github.damontecres.wholphin.ui.nav.Destination
 import java.util.UUID
 
 /**
  * State of the home hero trailer, shared between the hero (plays it) and the card click handlers (OK presses).
- * OK while a trailer plays: 1st press unmutes (hint chip), 2nd opens it full screen from the current position.
+ * OK while a trailer plays: 1st press unmutes (hint chip), the next opens details as usual.
  * One home page is on screen at a time, so a process-wide holder is enough.
  */
 object JellytipTrailerControl {
@@ -24,13 +23,25 @@ object JellytipTrailerControl {
     var sound by mutableStateOf(false)
     var hintTick by mutableLongStateOf(0L) // bumped each time the "sound on" hint should show
 
-    /** Set by the player composable: current playback position in ms. */
-    var positionProvider: (() -> Long)? = null
-
-    /** After a full-screen trailer the hero must not restart the same item's trailer until focus moves on. */
-    var dismissedFor: UUID? = null
-
     val playing get() = url != null
+
+    /**
+     * Back while the hero trailer plays with sound on = mute (trailer keeps playing, focus and drawer untouched).
+     * Consumes both key events of the press; anything else (muted, not playing, full screen) falls through.
+     */
+    fun onBackKey(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode != android.view.KeyEvent.KEYCODE_BACK) return false
+        if (!(playing && sound) && !muteOnUp) return false
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            muteOnUp = true
+        } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+            muteOnUp = false
+            sound = false
+        }
+        return true
+    }
+
+    private var muteOnUp = false
 
     fun start(
         item: BaseItem,
@@ -55,24 +66,13 @@ object JellytipTrailerControl {
     fun isPlayingFor(item: BaseItem) = url != null && itemId == item.id
 
     /**
-     * OK on [item]. Returns true when the press was consumed (unmute or full screen); false lets the normal action
-     * (open details) run.
+     * OK on [item] while its trailer plays muted = unmute (stay on home, hint chip). Returns true when consumed;
+     * false (sound already on, or no trailer) lets the normal action run: open details.
      */
-    fun onOk(
-        item: BaseItem,
-        navigateTo: (Destination) -> Unit,
-    ): Boolean {
-        if (!isPlayingFor(item)) return false
-        if (!sound) {
-            sound = true
-            hintTick = System.nanoTime()
-            return true
-        }
-        val id = trailerItemId ?: return false
-        val position = positionProvider?.invoke() ?: 0L
-        dismissedFor = item.id
-        stop()
-        navigateTo(Destination.Playback(itemId = id, positionMs = position))
+    fun onOk(item: BaseItem): Boolean {
+        if (!isPlayingFor(item) || sound) return false
+        sound = true
+        hintTick = System.nanoTime()
         return true
     }
 }

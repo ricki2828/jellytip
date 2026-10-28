@@ -39,6 +39,7 @@ fun QuickDetails(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.titleSmall,
     endsAt: DateTime? = null,
+    showRatings: Boolean = true,
 ) {
     val enabled = LocalInterfaceCustomization.current.enabledDisplayToggles
     val inlineContentMap = rememberQuickDetailsContentMap(textStyle)
@@ -48,10 +49,10 @@ fun QuickDetails(
             if (DisplayToggle.OFFICIAL_RATING in enabled) {
                 QuickDetailsText(details.officialRating, Modifier, textStyle, inlineContentMap)
             }
-            if (DisplayToggle.COMMUNITY_RATING in enabled) {
+            if (showRatings && DisplayToggle.COMMUNITY_RATING in enabled) {
                 QuickDetailsText(details.communityRating, Modifier, textStyle, inlineContentMap)
             }
-            if (DisplayToggle.CRITIC_RATING in enabled) {
+            if (showRatings && DisplayToggle.CRITIC_RATING in enabled) {
                 QuickDetailsText(details.criticRating, Modifier, textStyle, inlineContentMap)
             }
         }

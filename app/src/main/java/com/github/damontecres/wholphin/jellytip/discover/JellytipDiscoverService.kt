@@ -5,6 +5,7 @@ import com.github.damontecres.wholphin.util.WholphinDispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.json.JSONObject
@@ -158,7 +159,8 @@ class JellytipDiscoverService
             val json = api.getJson("/v1/request/status?tmdbIds=$ids") ?: return
             try {
                 val fresh = JellytipDiscoverParser.statuses(json)
-                _statuses.value = _statuses.value.filterKeys { it !in ids.split(",") } + fresh
+                val stale = ids.split(",").toSet()
+                _statuses.update { it.filterKeys { k -> k !in stale } + fresh }
             } catch (e: Exception) {
                 Timber.w(e, "Bad request status")
             }

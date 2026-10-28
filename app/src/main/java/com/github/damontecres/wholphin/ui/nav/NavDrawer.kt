@@ -66,6 +66,8 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.nav.rememberJellytipStorage
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
@@ -104,6 +106,7 @@ class NavDrawerViewModel
         val setupNavigationManager: SetupNavigationManager,
         val backdropService: BackdropService,
         private val musicService: MusicService,
+        val jellytipApi: JellytipApi,
     ) : ViewModel() {
         val serviceState = navDrawerService.state
 
@@ -509,7 +512,11 @@ fun NavDrawer(
                         }
                         item {
                             val interactionSource = remember { MutableInteractionSource() }
+                            // Admin-only free space rides on the Settings row (no extra list item: the footer arrangement
+                            // pins the last visible item, so extra rows can push the list out of place)
+                            val storage = rememberJellytipStorage(viewModel.jellytipApi, isOpen)
                             IconNavItem(
+                                subtext = storage?.let { if (it.low) it.label() + " (low)" else it.label() },
                                 text = stringResource(R.string.settings),
                                 icon = Icons.Default.Settings,
                                 selected = false,

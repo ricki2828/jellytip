@@ -165,18 +165,19 @@ fun JellytipDetailsBackground(
                 )
             }
         }
-        // Soft vignette from the bottom-left corner only, behind the text block
+        // Soft vignette from the bottom-left corner only, behind the text block; denser on bright or busy art
+        val scrim by animateFloatAsState(JellytipScrim.strength(stills.firstOrNull()), tween(400), label = "jellytip-scrim")
         Box(
             Modifier
                 .fillMaxSize()
                 .drawWithCache {
-                    val rx = size.width * 1.2f
-                    val ry = size.height * 0.95f
+                    val rx = size.width * JellytipScrim.lerp(1.2f, 1.6f, scrim)
+                    val ry = size.height * JellytipScrim.lerp(0.95f, 1.2f, scrim)
                     val k = ry / rx
                     val brush =
                         Brush.radialGradient(
-                            0f to NIGHT.copy(alpha = 0.88f),
-                            0.32f to NIGHT.copy(alpha = 0.55f),
+                            0f to NIGHT.copy(alpha = JellytipScrim.lerp(0.88f, 0.95f, scrim)),
+                            0.32f to NIGHT.copy(alpha = JellytipScrim.lerp(0.55f, 0.85f, scrim)),
                             0.62f to Color.Transparent,
                             center = Offset(0f, size.height),
                             radius = rx,
@@ -223,17 +224,17 @@ private fun KenBurnsImage(
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),
+        onSuccess = { JellytipScrim.inspect(url, it.result.image) },
         modifier =
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     val p = progress.value
-                    val scale = 1.04f + 0.035f * p
+                    val scale = 1f + com.github.damontecres.wholphin.jellytip.home.KEN_BURNS_MAX_ZOOM * p
                     transformOrigin = focalOrigin(focal)
                     scaleX = scale
                     scaleY = scale
                     translationX = direction * size.width * 0.008f * (p - 0.5f)
-                    translationY = -size.height * 0.005f * p
                 },
     )
 }
@@ -343,52 +344,34 @@ internal fun JellytipChip(
     }
 }
 
-/** Letterboxd mark (three overlapping dots) as inline text content, sized to the cap height of the surrounding text. */
-internal const val LB_MARK_ID = "lb"
-private val LB_DOT_H = 0.7f // em: roughly cap height
-private val LB_STEP = 0.62f // dot spacing as a fraction of the diameter
-
-internal val LetterboxdInline: Map<String, InlineTextContent> =
-    mapOf(
-        LB_MARK_ID to
-            InlineTextContent(
-                Placeholder(
-                    width = (LB_DOT_H * (1f + 2f * LB_STEP)).em,
-                    height = LB_DOT_H.em,
-                    placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
-                ),
-            ) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val d = size.height
-                    val r = d / 2f
-                    listOf(Color(0xFFFF8000), Color(0xFF00E054), Color(0xFF40BCF4)).forEachIndexed { i, c ->
-                        drawCircle(c, radius = r, center = Offset(r + i * d * LB_STEP, r))
-                    }
-                }
-            },
-    )
-
-private fun AnnotatedString.Builder.appendLbMark() {
-    appendInlineContent(LB_MARK_ID, "LB")
-    append(" ")
-}
-
 internal fun scoreChip(score: JellytipScore): AnnotatedString? {
     val v = score.value
     val whole = v.toLong().toDouble() == v
     val num = if (whole) v.toLong().toString() else String.format(Locale.ROOT, "%.1f", v)
     return buildAnnotatedString {
         when (score.source) {
-            "imdb" -> append("IMDb $num")
-            "rt_critic" -> append("RT $num%")
-            "rt_audience" -> append("Audience $num%")
-            "metacritic" -> append("MC $num")
+            "imdb" -> {
+                appendMark("imdb", "IMDb")
+                append(num)
+            }
+            "rt_critic" -> {
+                appendMark(if (v >= 60) "rt_fresh" else "rt_rotten", "RT")
+                append("$num%")
+            }
+            "rt_audience" -> {
+                appendMark(if (v >= 60) "aud_up" else "aud_tip", "Audience")
+                append("$num%")
+            }
+            "metacritic" -> appendMark(mcId(v.toInt()), "MC $num") // the number sits inside the coloured square
             "letterboxd" -> {
                 val outOfFive = score.max?.takeIf { it > 0 }?.let { v / it * 5.0 } ?: v
                 appendLbMark()
                 append(String.format(Locale.ROOT, "%.1f/5", outOfFive))
             }
-            "trakt" -> append("Trakt $num%")
+            "trakt" -> {
+                appendMark("trakt", "Trakt")
+                append("$num%")
+            }
             else -> append("${score.label} $num")
         }
     }

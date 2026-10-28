@@ -5,6 +5,10 @@ package com.github.damontecres.wholphin.services
 import android.content.Context
 import android.os.Build
 import android.os.Handler
+import android.os.Looper
+import androidx.media3.exoplayer.ForwardingRenderer
+import androidx.media3.exoplayer.text.TextOutput
+import androidx.media3.exoplayer.text.TextRenderer
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -264,11 +268,44 @@ data class PlayerCreation(
 )
 
 // Code is adapted from https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/DefaultRenderersFactory.java#L436
+/** Subtitle timing offset for ExoPlayer text tracks; positive = subtitles appear later. */
+object ExoSubtitleOffset {
+    @Volatile
+    var offsetUs: Long = 0L
+}
+
+@OptIn(UnstableApi::class)
+private class OffsetTextRenderer(
+    delegate: Renderer,
+) : ForwardingRenderer(delegate) {
+    override fun render(
+        positionUs: Long,
+        elapsedRealtimeUs: Long,
+    ) {
+        super.render(positionUs - ExoSubtitleOffset.offsetUs, elapsedRealtimeUs)
+    }
+}
+
 class WholphinRenderersFactory(
     context: Context,
     private val av1Enabled: Boolean,
     private val preferDolbyVisionOverHdr10Plus: Boolean = false,
 ) : DefaultRenderersFactory(context) {
+    @OptIn(UnstableApi::class)
+    override fun buildTextRenderers(
+        context: Context,
+        output: TextOutput,
+        outputLooper: Looper,
+        extensionRendererMode: Int,
+        out: ArrayList<Renderer>,
+    ) {
+        val start = out.size
+        super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
+        for (i in start until out.size) {
+            if (out[i] is TextRenderer) out[i] = OffsetTextRenderer(out[i])
+        }
+    }
+
     @OptIn(ExperimentalApi::class)
     override fun buildVideoRenderers(
         context: Context,
