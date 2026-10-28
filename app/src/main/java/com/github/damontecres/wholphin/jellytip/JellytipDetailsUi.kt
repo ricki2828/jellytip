@@ -228,12 +228,11 @@ private fun KenBurnsImage(
                 .fillMaxSize()
                 .graphicsLayer {
                     val p = progress.value
-                    val scale = 1.04f + 0.035f * p
+                    val scale = 1f + com.github.damontecres.wholphin.jellytip.home.KEN_BURNS_MAX_ZOOM * p
                     transformOrigin = focalOrigin(focal)
                     scaleX = scale
                     scaleY = scale
                     translationX = direction * size.width * 0.008f * (p - 0.5f)
-                    translationY = -size.height * 0.005f * p
                 },
     )
 }

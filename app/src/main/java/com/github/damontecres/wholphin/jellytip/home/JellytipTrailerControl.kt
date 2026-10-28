@@ -27,10 +27,38 @@ object JellytipTrailerControl {
     /** Set by the player composable: current playback position in ms. */
     var positionProvider: (() -> Long)? = null
 
-    /** After a full-screen trailer the hero must not restart the same item's trailer until focus moves on. */
-    var dismissedFor: UUID? = null
+    /** True while the trailer plays full screen on the Playback page; the hero player is paused and keeps its state. */
+    var fullScreen by mutableStateOf(false)
+        private set
+
+    /** Where the hero trailer resumes (muted) after returning from full screen. */
+    var resumePositionMs = 0L
+
+    /** Home is visible again after full screen: the hero trailer continues muted from where it left off. */
+    fun returnedFromFullScreen() {
+        fullScreen = false
+        sound = false
+    }
 
     val playing get() = url != null
+
+    /**
+     * Back while the hero trailer plays with sound on = mute (trailer keeps playing, focus and drawer untouched).
+     * Consumes both key events of the press; anything else (muted, not playing, full screen) falls through.
+     */
+    fun onBackKey(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode != android.view.KeyEvent.KEYCODE_BACK) return false
+        if (!(playing && sound && !fullScreen) && !muteOnUp) return false
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            muteOnUp = true
+        } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+            muteOnUp = false
+            sound = false
+        }
+        return true
+    }
+
+    private var muteOnUp = false
 
     fun start(
         item: BaseItem,
@@ -69,10 +97,9 @@ object JellytipTrailerControl {
             return true
         }
         val id = trailerItemId ?: return false
-        val position = positionProvider?.invoke() ?: 0L
-        dismissedFor = item.id
-        stop()
-        navigateTo(Destination.Playback(itemId = id, positionMs = position))
+        resumePositionMs = positionProvider?.invoke() ?: 0L
+        fullScreen = true // hero keeps its state, paused; on return it resumes muted at resumePositionMs
+        navigateTo(Destination.Playback(itemId = id, positionMs = resumePositionMs))
         return true
     }
 }
