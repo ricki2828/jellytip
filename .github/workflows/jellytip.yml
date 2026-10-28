@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - jellytip
-      - jellytip/*
+      - jellytip-*
   workflow_dispatch:
 
 defaults:
