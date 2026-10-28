@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.jellytip
 
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -11,10 +12,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.videosApi
 import org.jellyfin.sdk.model.api.ImageType
+import java.util.UUID
 import javax.inject.Inject
 
 data class JellytipSettings(
@@ -29,6 +32,7 @@ class JellytipDetailsViewModel
         private val api: ApiClient,
         private val jellytipApi: JellytipApi,
         private val imageUrlService: ImageUrlService,
+        private val stillStore: JellytipStillStore,
         preferences: DataStore<AppPreferences>,
         @param:AuthOkHttpClient val httpClient: OkHttpClient,
     ) : ViewModel() {
@@ -43,6 +47,13 @@ class JellytipDetailsViewModel
 
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
+        fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
+
+        /** "Change still": advance to the next still (or back to automatic) for this item, locally only. */
+        fun cycleStill(item: BaseItem) {
+            viewModelScope.launch { stillStore.cycle(item.id) }
+        }
+
         /**
          * Companion stills first, then every Jellyfin backdrop at original size, then the usual fallback
          */
@@ -50,7 +61,8 @@ class JellytipDetailsViewModel
             item: BaseItem,
             extras: JellytipExtras?,
         ): List<String> {
-            val companion = extras?.stills.orEmpty().map { it.url }
+            // Textless stills (no language) first; sortedBy is stable so the service's ranking holds within each group
+            val companion = extras?.stills.orEmpty().sortedBy { if (it.lang == null) 0 else 1 }.map { it.url }
             val tags = item.data.backdropImageTags.orEmpty()
             val jellyfin =
                 tags.mapIndexedNotNull { index, tag ->

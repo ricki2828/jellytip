@@ -26,6 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,7 +62,6 @@ import kotlin.math.abs
 
 private const val STILL_INTERVAL_MS = 12_000L
 private const val KEN_BURNS_MS = 20_000
-private const val TRAILER_DELAY_MS = 3_000L
 
 /**
  * Full-bleed backdrop for movie & series details: slow Ken Burns stills which cross-fade,
@@ -90,7 +93,11 @@ fun JellytipDetailsBackground(
     val extras by produceState<JellytipExtras?>(null, item.id) {
         value = viewModel.getExtras(item)
     }
-    val stills = remember(item.id, extras) { viewModel.stillUrls(item, extras) }
+    val allStills = remember(item.id, extras) { viewModel.stillUrls(item, extras) }
+    val choice by viewModel.stillChoice(item.id).collectAsState(0)
+    // 0 = automatic slideshow, k = pinned to the k-th still ("Change still" cycles through these)
+    val pinned = if (allStills.isEmpty()) 0 else choice % (allStills.size + 1)
+    val stills = if (pinned > 0) listOf(allStills[pinned - 1]) else allStills
     val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() }
     val trailerUrl = remember(trailer) { trailer?.let { viewModel.trailerUrl(it) } }
 
@@ -107,7 +114,7 @@ fun JellytipDetailsBackground(
     }
     LaunchedEffect(buttonRowFocused, trailerUrl, settings.trailerAutoplay, trailerDone, resumed) {
         if (buttonRowFocused && resumed && trailerUrl != null && settings.trailerAutoplay && !trailerDone) {
-            delay(TRAILER_DELAY_MS)
+            delay(JellytipTokens.TRAILER_DELAY_MS)
             trailerPlaying = true
         } else {
             trailerPlaying = false
@@ -137,33 +144,37 @@ fun JellytipDetailsBackground(
                 )
             }
         }
-        // Scrim: dark from the left and the bottom so text stays legible
+        // Soft vignette from the bottom-left corner only, behind the text block
         Box(
             Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color.Black.copy(alpha = 0.88f),
-                        0.45f to Color.Black.copy(alpha = 0.55f),
-                        0.85f to Color.Black.copy(alpha = 0.10f),
-                        1f to Color.Transparent,
-                    ),
-                ),
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.35f),
-                        0.35f to Color.Transparent,
-                        0.65f to Color.Black.copy(alpha = 0.55f),
-                        1f to Color.Black.copy(alpha = 0.95f),
-                    ),
-                ),
+                .drawWithCache {
+                    val rx = size.width * 1.2f
+                    val ry = size.height * 0.95f
+                    val k = ry / rx
+                    val brush =
+                        Brush.radialGradient(
+                            0f to NIGHT.copy(alpha = 0.88f),
+                            0.32f to NIGHT.copy(alpha = 0.55f),
+                            0.62f to Color.Transparent,
+                            center = Offset(0f, size.height),
+                            radius = rx,
+                        )
+                    onDrawBehind {
+                        withTransform({ scale(1f, k, pivot = Offset(0f, size.height)) }) {
+                            drawRect(
+                                brush,
+                                topLeft = Offset(0f, size.height - size.height / k),
+                                size = Size(size.width, size.height / k),
+                            )
+                        }
+                    }
+                },
         )
     }
 }
+
+private val NIGHT = Color(0xFF08070C)
 
 @Composable
 private fun StillsSlideshow(stills: List<String>) {
@@ -203,11 +214,11 @@ private fun KenBurnsImage(url: String) {
                 .fillMaxSize()
                 .graphicsLayer {
                     val p = progress.value
-                    val scale = 1.06f + 0.05f * p
+                    val scale = 1.04f + 0.035f * p
                     scaleX = scale
                     scaleY = scale
-                    translationX = direction * size.width * 0.012f * (p - 0.5f)
-                    translationY = -size.height * 0.008f * p
+                    translationX = direction * size.width * 0.008f * (p - 0.5f)
+                    translationY = -size.height * 0.005f * p
                 },
     )
 }
@@ -355,4 +366,27 @@ private fun starText(rating: Double): String {
         half -> "$whole½"
         else -> "$whole"
     }
+}
+
+/** Quiet one-line scores, "IMDb 8.1 · RT 95% · You ★4½", with Ricki's own rating in the warm accent. */
+internal fun scoreLine(extras: JellytipExtras?): androidx.compose.ui.text.AnnotatedString? {
+    val scores = extras?.scores.orEmpty().mapNotNull { scoreChipText(it) }.take(4)
+    val mine = extras?.letterboxd?.let { myLineText(it) }
+    if (scores.isEmpty() && mine == null) return null
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(scores.joinToString("  \u00B7  "))
+        if (mine != null) {
+            if (scores.isNotEmpty()) append("  \u00B7  ")
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = WARM, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+            append(mine)
+            pop()
+        }
+    }
+}
+
+internal fun myLineText(lb: JellytipLetterboxd): String? {
+    val parts = mutableListOf<String>()
+    lb.myRating?.let { parts += "You \u2605${starText(it)}" }
+    if (lb.liked) parts += "\u2665"
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" ")
 }

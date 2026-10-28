@@ -94,6 +94,7 @@ data class ContextMenuActions(
     val onChooseTracks: (ChosenTrackResult) -> Unit,
     val onClearChosenStreams: (ChosenStreams?) -> Unit,
     val onClickGoTo: (BaseItem) -> Unit = { navigateTo(it.destination()) },
+    val onChangeStill: ((BaseItem) -> Unit)? = null,
     val onClickRemoveFromNextUp: (BaseItem) -> Unit = {},
     val onClickAddToQueue: (BaseItem) -> Unit = {},
     val onRemoveFromPlaylist: (Int, UUID) -> Unit = { _, _ -> },
@@ -506,6 +507,17 @@ private fun buildContextMenuItems(
                 actions.onClickAddPlaylist.invoke(item.id)
             },
         )
+        actions.onChangeStill?.let { changeStill ->
+            add(
+                DialogItem(
+                    resources.getString(R.string.jellytip_change_still),
+                    Icons.Default.Refresh,
+                    dismissOnClick = true,
+                ) {
+                    changeStill.invoke(item)
+                },
+            )
+        }
         if (contextMenu.canDelete) {
             add(
                 DialogItem(
