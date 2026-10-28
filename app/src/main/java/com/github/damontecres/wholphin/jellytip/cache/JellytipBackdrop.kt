@@ -25,6 +25,24 @@ fun jellytipHeroItemId(item: BaseItem): UUID = item.data.seriesId?.takeIf { uses
 private fun backdropTags(item: BaseItem): List<String> =
     (if (usesSeriesBackdrop(item)) item.data.parentBackdropImageTags else item.data.backdropImageTags).orEmpty()
 
+/**
+ * Backdrop index to request for [item]: the companion's [index] mapped BY TAG onto the item's current backdrop tags,
+ * and always within them (else 0), so we never ask Jellyfin for an index the item no longer has.
+ */
+fun jellytipResolveBackdropIndex(
+    currentTags: List<String>,
+    itemId: UUID,
+    index: Int?,
+): Int {
+    if (currentTags.isEmpty() || index == null) return 0
+    val scored = JellytipApi.shared?.peekInfo(itemId)?.tags?.get(index)
+    return when {
+        scored != null -> currentTags.indexOf(scored).takeIf { it >= 0 } ?: 0
+        index in currentTags.indices -> index
+        else -> 0
+    }
+}
+
 /** True when the home card draws a backdrop (not a good baked-in-title Thumb), see selectJellytipCardArt. */
 private fun cardDrawsBackdrop(item: BaseItem): Boolean {
     val api = JellytipApi.shared
@@ -75,8 +93,8 @@ object JellytipImagePick {
         if (count <= 1) return 0
         val id = jellytipHeroItemId(item)
         val card =
-            if (cardDrawsBackdrop(item)) (JellytipApi.shared?.peekBestBackdropIndex(id) ?: 0).coerceIn(0, count - 1) else -1
-        val wanted = companion?.takeIf { it in 0 until count && it != card }
+            if (cardDrawsBackdrop(item)) jellytipResolveBackdropIndex(backdropTags(item), id, JellytipApi.shared?.peekBestBackdropIndex(id)) else -1
+        val wanted = companion?.let { jellytipResolveBackdropIndex(backdropTags(item), id, it) }?.takeIf { it != card }
         if (wanted != null) return wanted
         // No (usable) companion answer: first index that is not the card's, and for details not the hero's fallback either
         val avoid = mutableSetOf(card)

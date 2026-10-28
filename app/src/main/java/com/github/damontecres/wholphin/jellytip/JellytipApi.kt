@@ -364,6 +364,8 @@ data class JellytipBackdropInfo(
     val detailsIndex: Int?,
     val thumbGood: Boolean,
     val focal: Map<Int, JellytipFocal>,
+    /** Image tag the companion scored at each backdrop index; used to re-find the image when the item's set changed. */
+    val tags: Map<Int, String> = emptyMap(),
 ) {
     companion object {
         fun parse(json: String): JellytipBackdropInfo {
@@ -376,9 +378,11 @@ data class JellytipBackdropInfo(
                     arr.optJSONObject(0)?.optInt("index", -1) ?: -1
                 }
             val focal = mutableMapOf<Int, JellytipFocal>()
+            val tags = mutableMapOf<Int, String>()
             if (arr != null) {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
+                    o.optString("tag").takeIf { it.isNotBlank() && it != "null" }?.let { tags[o.optInt("index", i)] = it }
                     if (o.isNull("focalX") || o.isNull("focalY")) continue
                     focal[o.optInt("index", i)] =
                         JellytipFocal(o.optDouble("focalX").toFloat(), o.optDouble("focalY").toFloat(), o.optBoolean("face", false))
@@ -386,7 +390,7 @@ data class JellytipBackdropInfo(
             }
             fun idx(key: String) = if (root.isNull(key)) null else root.optInt(key, -1).takeIf { it >= 0 }
             val thumb = root.optJSONObject("thumb")
-            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal)
+            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal, tags)
         }
     }
 }
