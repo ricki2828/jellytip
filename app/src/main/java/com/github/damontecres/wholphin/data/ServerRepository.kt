@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.data
 
 import android.content.Context
 import com.github.damontecres.wholphin.data.model.JellyfinServer
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.jellytip.cache.HomeSnapshotStore
@@ -123,6 +124,7 @@ class ServerRepository
                 mostRecentServerProvider.save(currentUser)
                 _current.value = currentUser
                 _currentUserDto.value = ServerUserConfig(userDto)
+                JellytipAdmin.set(userDto.policy?.isAdministrator == true)
                 return@withContext currentUser
             }
 
@@ -347,6 +349,7 @@ class ServerRepository
             _currentUserDto.update {
                 if (currentUser?.id == userDto.id) ServerUserConfig(userDto) else it
             }
+            if (currentUser?.id == userDto.id) JellytipAdmin.set(userDto.policy?.isAdministrator == true)
         }
     }
 

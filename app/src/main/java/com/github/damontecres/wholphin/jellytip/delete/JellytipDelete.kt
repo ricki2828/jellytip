@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.WholphinApplication
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.ui.components.BasicDialog
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -77,8 +79,13 @@ fun JellytipDeleteConfirm(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
     elevation: Dp = 3.dp,
+    item: BaseItem? = null,
 ) {
     var step by remember { mutableStateOf(1) }
+    // Admin-only context for the decision: who requested it, who has watched it
+    val audience by produceState<String?>(null, item?.id) {
+        value = item?.let { JellytipApi.shared?.getAudience(it)?.summary() }
+    }
     BasicDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -109,6 +116,14 @@ fun JellytipDeleteConfirm(
                     text = stringResource(R.string.jellytip_delete_second, itemLabel),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            audience?.takeIf { it.isNotEmpty() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                 )
             }

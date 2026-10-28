@@ -6,6 +6,7 @@ import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.AppStringPreference
 import com.github.damontecres.wholphin.preferences.AppSwitchPreference
 import com.github.damontecres.wholphin.preferences.update
+import com.github.damontecres.wholphin.ui.preferences.ConditionalPreferences
 import com.github.damontecres.wholphin.ui.preferences.PreferenceGroup
 
 /**
@@ -89,10 +90,16 @@ object JellytipPreferences {
                     Splash,
                     SplashSound,
                     Ident,
-                    ApiUrl,
-                    ApiToken,
                     TrailerAutoplay,
                     TrailerSound,
+                ),
+            // Companion API settings are for the administrator only; hidden for everyone else
+            conditionalPreferences =
+                listOf(
+                    ConditionalPreferences(
+                        condition = { JellytipAdmin.isAdmin },
+                        preferences = listOf<AppPreference<AppPreferences, out Any?>>(ApiUrl, ApiToken),
+                    ),
                 ),
         )
 }

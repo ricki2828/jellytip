@@ -47,6 +47,8 @@ class JellytipDetailsViewModel
 
         suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
+        suspend fun getAudience(item: BaseItem): JellytipAudience? = jellytipApi.getAudience(item)
+
         fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
 
         /** "Change still": advance to the next still (or back to automatic) for this item, locally only. */

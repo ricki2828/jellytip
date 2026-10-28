@@ -8,6 +8,7 @@ import androidx.preference.PreferenceManager
 import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.jellytip.JellytipPreferences
 import com.github.damontecres.wholphin.services.UpdateChecker
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -1314,12 +1315,19 @@ val advancedPreferences =
                         AppPreference.ShowClock,
                         AppPreference.BackdropStylePref,
                         AppPreference.ShowLogos,
-                        AppPreference.ManageMedia,
                         AppPreference.DisplayTogglesPref,
                         // Temporarily disabled, see https://github.com/damontecres/Wholphin/pull/127#issuecomment-3478058418
 //                    AppPreference.NavDrawerSwitchOnFocus,
                         AppPreference.SlideshowDuration,
                         AppPreference.SlideshowPlayVideos,
+                    ),
+                // Media management is for the Jellyfin administrator only
+                conditionalPreferences =
+                    listOf(
+                        ConditionalPreferences(
+                            condition = { JellytipAdmin.isAdmin },
+                            preferences = listOf<AppPreference<AppPreferences, out Any?>>(AppPreference.ManageMedia),
+                        ),
                     ),
             ),
         )
