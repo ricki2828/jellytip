@@ -187,6 +187,7 @@ class HomeViewModel
                     )
                 }
 
+                deferredRows.clear() // a newer load supersedes anything still waiting
                 val semaphore = Semaphore(4)
 
                 // Continue Watching / Next Up change most: queue them first (the semaphore is FIFO)
@@ -255,6 +256,11 @@ class HomeViewModel
                             }
                         Timber.v("Got row data index=%s", rowIndex)
                         remaining.removeIf { it.index == rowIndex }
+                        if (shouldDeferRow(rowIndex, rowData)) {
+                            // Would swap the item under the user's focus (e.g. Continue Watching reordered after playback)
+                            deferredRows[rowIndex] = rowData
+                            continue
+                        }
                         _state.update { state ->
                             val newRows =
                                 state.homeRows.toMutableList().apply {
@@ -325,6 +331,34 @@ class HomeViewModel
         /** Focus moved: prefetch images for the rows below. */
         fun onFocusPosition(position: RowColumn) {
             homeCache.onFocus(state.value.homeRows, position.row, position.column)
+            if (position.row != focusedRow) applyDeferredRows() // focus left the row: its refresh can land now
+            focusedRow = position.row
+            focusedColumn = position.column
+            focusedItemId = (state.value.homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(position.column)?.id
+        }
+
+        // Focus-stable refresh: a refreshed row that would put a different item under the focused column waits until focus moves away
+        private var focusedRow = -1
+        private var focusedColumn = -1
+        private var focusedItemId: UUID? = null
+        private val deferredRows = java.util.concurrent.ConcurrentHashMap<Int, HomeRowLoadingState>()
+
+        private fun shouldDeferRow(
+            rowIndex: Int,
+            rowData: HomeRowLoadingState,
+        ): Boolean {
+            val id = focusedItemId ?: return false
+            if (rowIndex != focusedRow || rowData !is HomeRowLoadingState.Success) return false
+            return rowData.items.getOrNull(focusedColumn)?.id != id
+        }
+
+        private fun applyDeferredRows() {
+            if (deferredRows.isEmpty()) return
+            val pending = deferredRows.toMap()
+            deferredRows.clear()
+            _state.update { st ->
+                st.copy(homeRows = st.homeRows.toMutableList().apply { pending.forEach { (i, r) -> if (i in indices) set(i, r) } })
+            }
         }
 
         /** An item was opened: remember which row it came from. */
