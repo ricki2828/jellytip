@@ -13,6 +13,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
+from . import storage as storage_mod
 from .audience import Audience, Plex, friendly
 from .cache import Cache, EMPTY_TTL, ERROR_TTL, SCORES_TTL
 from .imgscores import ImgScores
@@ -262,6 +263,13 @@ class Service:
         if path == "/v1/request/status":
             ids = [t for t in re.split(r"[,\s]+", query.get("tmdbIds", "")) if re.fullmatch(r"(?:(?:movie|tv):)?\d+", t)]
             return self.requests.status(ids)
+        if path == "/v1/storage":
+            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token)):
+                return 403, {"error": "admin only"}
+            try:
+                return 200, storage_mod.get()
+            except Exception as ex:  # quota binary missing / unparsable
+                return 503, {"error": "quota unavailable: %s" % ex}
         if path in ("/v1/intro", "/v1/intro.mp4"):
             return self.intro(path.endswith(".mp4"))
         m = EXTRAS_RE.match(path)
