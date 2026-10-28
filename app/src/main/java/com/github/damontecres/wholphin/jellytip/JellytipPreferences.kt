@@ -16,12 +16,20 @@ import com.github.damontecres.wholphin.ui.preferences.PreferenceGroup
 object JellytipPreferences {
     const val DEFAULT_API_URL = "https://ricki28.palawan.usbx.me/jellytip-api"
 
+    /** Companion base URL for [stored]; blank or non-https values fall back to the default (the session token is sent there). */
+    fun apiBase(stored: String): String =
+        stored.trim().takeIf { it.startsWith("https://", ignoreCase = true) }?.trimEnd('/') ?: DEFAULT_API_URL
+
     val ApiUrl =
         AppStringPreference<AppPreferences>(
             title = R.string.jellytip_api_url,
             defaultValue = DEFAULT_API_URL,
             getter = { it.jellytipApiUrl.ifBlank { DEFAULT_API_URL } },
-            setter = { prefs, value -> prefs.update { jellytipApiUrl = value.trim() } },
+            setter = { prefs, value ->
+                val v = value.trim()
+                // The session token is sent here: only https (or blank = default) is accepted
+                if (v.isEmpty() || v.startsWith("https://", ignoreCase = true)) prefs.update { jellytipApiUrl = v } else prefs
+            },
             summary = null,
         )
 

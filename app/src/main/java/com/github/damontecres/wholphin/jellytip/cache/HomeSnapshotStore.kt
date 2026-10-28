@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.cache
 
 import android.content.Context
+import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
@@ -48,23 +49,24 @@ class HomeSnapshotStore
     @Inject
     constructor(
         @param:ApplicationContext private val context: Context,
+        private val serverRepository: ServerRepository,
     ) {
         private val file get() = File(context.filesDir, FILE_NAME)
         private val json = Json { ignoreUnknownKeys = true }
 
-        @Synchronized
-        fun read(): HomeSnapshot? {
-            memo?.let { return it }
-            val f = file
-            if (!f.exists()) return null
-            return try {
-                json.decodeFromString(HomeSnapshot.serializer(), f.readText()).also { memo = it }
-            } catch (ex: Exception) {
-                Timber.w(ex, "Home snapshot unreadable, discarding")
-                f.delete()
-                null
+        fun read(): HomeSnapshot? =
+            synchronized(LOCK) {
+                memo?.let { return@synchronized it }
+                val f = file
+                if (!f.exists()) return@synchronized null
+                try {
+                    json.decodeFromString(HomeSnapshot.serializer(), f.readText()).also { memo = it }
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Home snapshot unreadable, discarding")
+                    f.delete()
+                    null
+                }
             }
-        }
 
         /** Rows for [settings], or null when there is no usable snapshot for this user. */
         fun restore(
@@ -93,36 +95,41 @@ class HomeSnapshotStore
             return rows.takeIf { restored > 0 }
         }
 
-        @Synchronized
         fun save(
             userId: UUID,
             snapshot: HomeSnapshot,
         ) {
             if (snapshot.userId != userId.toString()) return
-            try {
-                val tmp = File(context.filesDir, "$FILE_NAME.tmp")
-                tmp.writeText(json.encodeToString(HomeSnapshot.serializer(), snapshot))
-                if (!tmp.renameTo(file)) {
-                    tmp.delete()
-                } else {
-                    memo = snapshot
+            synchronized(LOCK) {
+                // Re-check under the lock: a logout/user switch may have cleared the store while this snapshot was built
+                if (serverRepository.currentUser?.id != userId) return
+                try {
+                    val tmp = File(context.filesDir, "$FILE_NAME.tmp")
+                    tmp.writeText(json.encodeToString(HomeSnapshot.serializer(), snapshot))
+                    if (!tmp.renameTo(file)) {
+                        tmp.delete()
+                    } else {
+                        memo = snapshot
+                    }
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not write home snapshot")
                 }
-            } catch (ex: Exception) {
-                Timber.w(ex, "Could not write home snapshot")
             }
         }
 
         companion object {
+            private val LOCK = Any()
             private const val FILE_NAME = "jellytip_home_snapshot.json"
 
             @Volatile
             private var memo: HomeSnapshot? = null
 
             /** Forget the stored home page, e.g. on logout or user switch. */
-            @Synchronized
             fun clear(context: Context) {
-                memo = null
-                File(context.filesDir, FILE_NAME).delete()
+                synchronized(LOCK) {
+                    memo = null
+                    File(context.filesDir, FILE_NAME).delete()
+                }
             }
         }
     }

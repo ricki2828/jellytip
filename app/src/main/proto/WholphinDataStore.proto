@@ -270,7 +270,9 @@ message AppPreferences {
   // Inverted so media management (Delete) is ON by default; upstream's enable_media_management is no longer read
   bool jellytip_disable_media_management = 1010;
   // Jellytip (inverted so that the proto default of false means "on")
-  bool jellytip_splash_disabled = 100;
-  bool jellytip_splash_sound_disabled = 101;
-  bool jellytip_ident_disabled = 102;
+  // 100-102 clashed with upstream numbering; moved to 1005-1007 (those three settings reset to defaults once)
+  reserved 100, 101, 102;
+  bool jellytip_splash_disabled = 1005;
+  bool jellytip_splash_sound_disabled = 1006;
+  bool jellytip_ident_disabled = 1007;
 }

@@ -18,8 +18,14 @@ object JellytipInputGuard {
     private val handler = Handler(Looper.getMainLooper())
     private var lastCenterEvent = 0L
     private var held = false
+    private var swallowUntilUp = false
     private var pending: (() -> Unit)? = null
-    private val fallback = Runnable { runPending() }
+    private val fallback =
+        Runnable {
+            // Key-up never arrived: open now, but swallow the rest of this press
+            if (held) swallowUntilUp = true
+            runPending()
+        }
 
     private fun isCenter(code: Int) =
         code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER ||
@@ -37,6 +43,21 @@ object JellytipInputGuard {
                 if (pending != null) handler.post { runPending() }
             }
         }
+    }
+
+    /**
+     * True for center/enter/A events that must be consumed: after the fallback fired while OK was still held, the
+     * remaining repeats and the key-up are swallowed so they never reach the page that just opened.
+     */
+    fun shouldSwallow(event: KeyEvent): Boolean {
+        if (!swallowUntilUp || !isCenter(event.keyCode)) return false
+        // A fresh press (not a repeat) means the old key-up was missed: stop swallowing
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            swallowUntilUp = false
+            return false
+        }
+        if (event.action == KeyEvent.ACTION_UP) swallowUntilUp = false
+        return true
     }
 
     /** Run [action] now, or, if OK is currently held, right after it is released (at most [FALLBACK_MS] later). */
