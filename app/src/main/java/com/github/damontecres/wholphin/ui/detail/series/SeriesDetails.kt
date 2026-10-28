@@ -1,6 +1,8 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
 import android.content.res.Resources
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +28,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -39,12 +42,12 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
-import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -354,11 +357,13 @@ fun SeriesDetailsContent(
     val playFocusRequester = remember { FocusRequester() }
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
     var buttonRowFocused by remember { mutableStateOf(false) }
+    var topFocused by remember { mutableStateOf(true) }
+    val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     Box(
         modifier = modifier,
     ) {
-        JellytipDetailsBackground(series, trailers, buttonRowFocused)
+        JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = !topFocused)
         Column(
             modifier =
                 Modifier
@@ -396,7 +401,7 @@ fun SeriesDetailsContent(
                                     add(JellytipButton(stringResource(R.string.discover), onClickDiscoverSeries))
                                 }
                                 add(
-                                    JellytipButton("\u00B7\u00B7\u00B7", {
+                                    JellytipButton(stringResource(R.string.jellytip_more), {
                                         onShowContextMenu(
                                             ContextMenu.ForBaseItem(
                                                 fromLongClick = false,
@@ -426,7 +431,8 @@ fun SeriesDetailsContent(
                                     buttonRowFocused = it.hasFocus
                                     if (it.hasFocus) position = HEADER_ROW
                                 },
-                        modifier = Modifier.fillParentMaxSize(),
+                        modifier = Modifier.fillParentMaxSize().graphicsLayer { alpha = headerAlpha },
+                    onFocusWithin = { topFocused = it },
                     )
                 }
                 item {

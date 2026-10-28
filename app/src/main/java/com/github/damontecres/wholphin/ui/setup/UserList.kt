@@ -194,7 +194,7 @@ private fun UserIconCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     // Generate unique color for this user
-    val userColor = rememberIdColor(user.user.id)
+    val userColor = JellytipAvatarColor
 
     // Track image loading errors
     var imageError by remember { mutableStateOf(false) }
@@ -272,7 +272,7 @@ private fun UserIconCard(
                             MaterialTheme.typography.displayLarge.copy(
                                 fontWeight = FontWeight.Bold,
                             ),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = JellytipAvatarInk,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -296,6 +296,10 @@ private fun UserIconCard(
     }
 }
 
+/** Jellytip: neutral avatar fill and off-white initial everywhere, instead of a per-user hue. */
+private val JellytipAvatarColor = Color(0xFF2A2A2A)
+private val JellytipAvatarInk = Color(0xFFEDEDED)
+
 @Composable
 fun UserIconCardImage(
     id: UUID,
@@ -305,7 +309,7 @@ fun UserIconCardImage(
     alpha: Float = 1f,
 ) {
     var imageError by remember { mutableStateOf(false) }
-    val userColor = rememberIdColor(id, alpha)
+    val userColor = JellytipAvatarColor.copy(alpha = alpha)
     Box(
         modifier =
             modifier.background(
@@ -335,7 +339,7 @@ fun UserIconCardImage(
                 style = MaterialTheme.typography.bodyLarge,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = JellytipAvatarInk,
                 textAlign = TextAlign.Center,
             )
         }

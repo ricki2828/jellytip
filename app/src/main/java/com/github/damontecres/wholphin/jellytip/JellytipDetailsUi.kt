@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,8 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,7 @@ fun JellytipDetailsBackground(
     trailers: List<Trailer>,
     buttonRowFocused: Boolean,
     modifier: Modifier = Modifier,
+    dimmed: Boolean = false,
     viewModel: JellytipDetailsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState(JellytipSettings())
@@ -176,6 +178,9 @@ fun JellytipDetailsBackground(
                     }
                 },
         )
+        // Focus is down in the rows below the header: calm the picture right down
+        val dim by animateFloatAsState(if (dimmed) 0.75f else 0f, tween(350), label = "jellytip-dim")
+        if (dim > 0f) Box(Modifier.fillMaxSize().background(NIGHT.copy(alpha = dim)))
     }
 }
 

@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -66,10 +67,10 @@ import com.github.damontecres.wholphin.ui.AspectRatio
 import com.github.damontecres.wholphin.ui.components.QuickDetails
 import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
+import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.UUID
 import kotlin.math.abs
-import kotlinx.coroutines.delay
 
 /** Palette from design/splash.html */
 object JellytipPalette {
@@ -116,6 +117,7 @@ object JellytipHomeTokens {
 
     // Details page (shares TEXT_PX / TITLE-less logo box above)
     const val BADGE_PX = 19
+    const val CARD_SUBTITLE_PX = 18
     const val DETAILS_TITLE_PX = 64
     const val DETAILS_GAP_PX = 14
     const val DETAILS_LEFT_PX = 96
@@ -188,7 +190,8 @@ fun JellytipHomeHero(
     }
 
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
-        Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION)) {
+        // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
+        Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
             Crossfade(
                 targetState = lastUrl,
                 animationSpec = tween(700),

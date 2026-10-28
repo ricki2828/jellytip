@@ -1173,6 +1173,7 @@ sealed interface AppPreference<Pref, T> {
 
 val basicPreferences =
     listOf(
+        JellytipPreferences.group,
         PreferenceGroup(
             title = R.string.ui_interface,
             preferences =
@@ -1194,7 +1195,6 @@ val basicPreferences =
                     AppPreference.SkipBackOnResume,
                 ),
         ),
-        JellytipPreferences.group,
         PreferenceGroup(
             title = R.string.next_up,
             preferences =
@@ -1323,7 +1323,6 @@ val advancedPreferences =
                     ),
             ),
         )
-        add(com.github.damontecres.wholphin.jellytip.JellytipPreferences.apiGroup)
         add(
             PreferenceGroup(
                 title = R.string.playback,

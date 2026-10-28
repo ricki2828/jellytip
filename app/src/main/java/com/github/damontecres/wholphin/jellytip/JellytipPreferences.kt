@@ -80,17 +80,19 @@ object JellytipPreferences {
             summary = R.string.jellytip_ident_summary,
         )
 
-    /** Companion API + details-page trailer settings (Advanced) */
-    val apiGroup =
-        PreferenceGroup(
-            title = R.string.jellytip_settings,
-            preferences = listOf(ApiUrl, ApiToken, TrailerAutoplay, TrailerSound),
-        )
-
-    /** Startup intro / ident settings (basic settings screen) */
+    /** One "Jellytip" section, first on the main settings screen: intro/sound/ident, companion API, trailers */
     val group =
         PreferenceGroup<AppPreferences>(
             title = R.string.jellytip_settings,
-            preferences = listOf<AppPreference<AppPreferences, out Any?>>(Splash, SplashSound, Ident),
+            preferences =
+                listOf<AppPreference<AppPreferences, out Any?>>(
+                    Splash,
+                    SplashSound,
+                    Ident,
+                    ApiUrl,
+                    ApiToken,
+                    TrailerAutoplay,
+                    TrailerSound,
+                ),
         )
 }

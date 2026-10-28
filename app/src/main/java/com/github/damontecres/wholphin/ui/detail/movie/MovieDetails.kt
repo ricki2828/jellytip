@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.ui.detail.movie
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -319,9 +322,11 @@ fun MovieDetailsContent(
 
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
     var buttonRowFocused by remember { mutableStateOf(false) }
+    var topFocused by remember { mutableStateOf(true) }
+    val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
     Box(modifier = modifier) {
-        JellytipDetailsBackground(movie, state.trailers, buttonRowFocused)
+        JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = !topFocused)
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 8.dp),
@@ -361,7 +366,7 @@ fun MovieDetailsContent(
                                     favoriteOnClick,
                                 ),
                             )
-                            add(JellytipButton("\u00B7\u00B7\u00B7", moreOnClick))
+                            add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
                         },
                     trailers = state.trailers,
                     onTrailer = {
@@ -376,7 +381,8 @@ fun MovieDetailsContent(
                                 buttonRowFocused = it.hasFocus
                                 if (it.hasFocus) position = HEADER_ROW
                             },
-                    modifier = Modifier.fillParentMaxSize(),
+                    modifier = Modifier.fillParentMaxSize().graphicsLayer { alpha = headerAlpha },
+                    onFocusWithin = { topFocused = it },
                 )
             }
             state.people.letNotEmpty { people ->

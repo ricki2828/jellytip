@@ -26,4 +26,6 @@
     <string name="jellytip_delete_continue" translatable="false">Delete…</string>
     <string name="jellytip_delete_forever" translatable="false">Delete for good</string>
     <string name="jellytip_change_still">Change still</string>
+    <string name="jellytip_more">More</string>
+    <string name="jellytip_trailer">Trailer</string>
 </resources>

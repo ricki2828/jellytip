@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -72,6 +73,7 @@ fun JellytipDetailsBlock(
     onOverview: () -> Unit,
     buttonRowModifier: Modifier,
     modifier: Modifier = Modifier,
+    onFocusWithin: (Boolean) -> Unit = {},
     viewModel: JellytipDetailsViewModel = hiltViewModel(),
 ) {
     val sizes = rememberJellytipSizes()
@@ -91,6 +93,7 @@ fun JellytipDetailsBlock(
             verticalArrangement = Arrangement.spacedBy(sizes.px(JellytipHomeTokens.DETAILS_GAP_PX)),
             modifier =
                 Modifier
+                    .onFocusChanged { onFocusWithin(it.hasFocus) }
                     .padding(
                         start = (sizes.px(JellytipHomeTokens.DETAILS_LEFT_PX) - 72.dp).coerceAtLeast(0.dp) + 16.dp,
                         bottom = sizes.px(JellytipHomeTokens.DETAILS_BOTTOM_PX),
@@ -198,6 +201,11 @@ private fun DetailsTitle(
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
             onError = { logoFailed = true },
+            // Tall/narrow logos render tiny and unreadable; typeset the title instead
+            onSuccess = { state ->
+                val image = state.result.image
+                if (image.height > image.width * 0.6f) logoFailed = true
+            },
             modifier =
                 Modifier
                     .width(sizes.px(JellytipHomeTokens.LOGO_MAX_W_PX))
@@ -266,7 +274,7 @@ private fun ButtonsRow(
             TextButton(
                 button =
                     JellytipButton(
-                        stringResource(if (trailers.size == 1) R.string.play_trailer else R.string.trailers_title),
+                        stringResource(if (trailers.size == 1) R.string.jellytip_trailer else R.string.trailers_title),
                         onClick = {
                             if (trailers.size == 1) onTrailer(trailers.first()) else showTrailers = true
                         },

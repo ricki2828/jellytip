@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
@@ -44,7 +45,9 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
+import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.Cards
@@ -103,6 +106,7 @@ fun BannerCard(
         }
     var imageError by remember(imageUrl) { mutableStateOf(false) }
     val jellytipHome = LocalJellytipHome.current
+    val sizes = rememberJellytipSizes()
 
     // Stabilize callbacks to prevent AsyncImage from recomposing
     val currentOnClick by rememberUpdatedState(onClick)
@@ -259,6 +263,8 @@ fun BannerCardWithTitle(
             Text(
                 text = title ?: "",
                 style = MaterialTheme.typography.bodyLarge,
+                fontSize = if (jellytipHome) sizes.sp(JellytipHomeTokens.TEXT_PX) else TextUnit.Unspecified,
+                color = if (jellytipHome) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f) else Color.Unspecified,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 textAlign = TextAlign.Center,
@@ -271,6 +277,8 @@ fun BannerCardWithTitle(
             Text(
                 text = subtitle ?: "",
                 style = MaterialTheme.typography.bodyMedium,
+                fontSize = if (jellytipHome) sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX) else TextUnit.Unspecified,
+                color = if (jellytipHome) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else Color.Unspecified,
                 fontWeight = FontWeight.Normal,
                 maxLines = 1,
                 textAlign = TextAlign.Center,

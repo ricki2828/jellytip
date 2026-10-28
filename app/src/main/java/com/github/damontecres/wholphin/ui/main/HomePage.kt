@@ -7,13 +7,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -55,8 +56,10 @@ import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
+import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
@@ -75,8 +78,8 @@ import com.github.damontecres.wholphin.ui.components.FocusableItemRow
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.components.QuickDetails
-import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
+import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
@@ -617,42 +620,43 @@ fun HomePageHeader(
     logoImageUrl: String?,
     modifier: Modifier = Modifier,
 ) {
+    // Jellytip: the shared small header block (22 px text, logo within 380x150, one-line overview)
+    val sizes = rememberJellytipSizes()
+    val textSize = sizes.sp(JellytipHomeTokens.TEXT_PX)
     Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = modifier,
     ) {
         TitleOrLogo(
             title = title,
             logoImageUrl = logoImageUrl,
             showLogo = showLogo,
-            modifier = Modifier.fillMaxWidth(.75f),
-        )
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier =
                 Modifier
-                    .fillMaxWidth(.6f),
+                    .widthIn(max = sizes.px(JellytipHomeTokens.LOGO_MAX_W_PX))
+                    .heightIn(max = sizes.px(JellytipHomeTokens.LOGO_MAX_H_PX)),
+        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.width(sizes.px(JellytipHomeTokens.TEXT_BLOCK_W_PX)),
         ) {
             if (subtitle != null) {
                 EpisodeName(subtitle)
             }
-            QuickDetails(quickDetails, timeRemaining, endsAt = endsAt)
-            val overviewModifier =
-                Modifier
-                    .padding(0.dp)
-                    .height(48.dp + if (!overviewTwoLines) 12.dp else 0.dp)
-                    .width(400.dp)
+            QuickDetails(
+                quickDetails,
+                timeRemaining,
+                endsAt = endsAt,
+                textStyle = MaterialTheme.typography.titleSmall.copy(fontSize = textSize),
+            )
             if (overview.isNotNullOrBlank()) {
                 Text(
                     text = overview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = if (overviewTwoLines) 2 else 3,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = overviewModifier,
                 )
-            } else {
-                Spacer(overviewModifier)
             }
         }
     }

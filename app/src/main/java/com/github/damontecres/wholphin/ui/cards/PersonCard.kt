@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -173,7 +174,8 @@ fun PersonCard(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 4.dp)
-                        .enableMarquee(focusedAfterDelay),
+                        .then(if (focusedAfterDelay) Modifier.enableMarquee(true) else Modifier),
+                overflow = TextOverflow.Ellipsis,
             )
             role?.let {
                 Text(
@@ -186,7 +188,8 @@ fun PersonCard(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp)
-                            .enableMarquee(focusedAfterDelay),
+                            .then(if (focusedAfterDelay) Modifier.enableMarquee(true) else Modifier),
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

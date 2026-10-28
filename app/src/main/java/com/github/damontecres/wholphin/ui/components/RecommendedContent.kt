@@ -17,6 +17,9 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
+import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
@@ -405,51 +408,62 @@ fun RecommendedContent(
                     )
                 }
 
-            HomePageContent(
-                homeRows = state.rows,
-                position = position,
-                onClickItem = { _, item ->
-                    viewModel.navigationManager.navigateTo(item.destination())
-                },
-                onLongClickItem = { position, item ->
-                    showContextMenu =
-                        ContextMenu.ForBaseItem(
-                            fromLongClick = true,
-                            item = item,
-                            chosenStreams = null,
-                            showGoTo = true,
-                            showStreamChoices = false,
-                            canDelete = viewModel.canDelete(item, preferences.appPreferences),
-                            canRemoveContinueWatching = false,
-                            canRemoveNextUp = false,
-                            actions = contextActions,
+            JellytipHomeTheme {
+                HomePageContent(
+                    homeRows = state.rows,
+                    position = position,
+                    onClickItem = { _, item ->
+                        viewModel.navigationManager.navigateTo(item.destination())
+                    },
+                    onLongClickItem = { position, item ->
+                        showContextMenu =
+                            ContextMenu.ForBaseItem(
+                                fromLongClick = true,
+                                item = item,
+                                chosenStreams = null,
+                                showGoTo = true,
+                                showStreamChoices = false,
+                                canDelete = viewModel.canDelete(item, preferences.appPreferences),
+                                canRemoveContinueWatching = false,
+                                canRemoveNextUp = false,
+                                actions = contextActions,
+                            )
+                    },
+                    onClickPlay = { _, item ->
+                        viewModel.navigationManager.navigateTo(Destination.Playback(item))
+                    },
+                    onFocusPosition = {
+                        position = it
+                        val nonEmptyRowBefore =
+                            state.rows
+                                .subList(0, it.row)
+                                .count {
+                                    it is HomeRowLoadingState.Success && it.items.isEmpty()
+                                }
+                        onFocusPosition?.invoke(
+                            RowColumn(
+                                it.row - nonEmptyRowBefore,
+                                it.column,
+                            ),
                         )
-                },
-                onClickPlay = { _, item ->
-                    viewModel.navigationManager.navigateTo(Destination.Playback(item))
-                },
-                onFocusPosition = {
-                    position = it
-                    val nonEmptyRowBefore =
-                        state.rows
-                            .subList(0, it.row)
-                            .count {
-                                it is HomeRowLoadingState.Success && it.items.isEmpty()
-                            }
-                    onFocusPosition?.invoke(
-                        RowColumn(
-                            it.row - nonEmptyRowBefore,
-                            it.column,
-                        ),
-                    )
-                },
-                showClock = preferences.appPreferences.interfacePreferences.showClock,
-                onUpdateBackdrop = viewModel::updateBackdrop,
-                showLogo = preferences.appPreferences.interfacePreferences.showLogos,
-                showViewMore = true,
-                onClickViewMore = viewModel::onClickViewMore,
-                modifier = modifier,
-            )
+                    },
+                    showClock = preferences.appPreferences.interfacePreferences.showClock,
+                    onUpdateBackdrop = viewModel::updateBackdrop,
+                    showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                    showViewMore = true,
+                    onClickViewMore = viewModel::onClickViewMore,
+                    modifier = modifier,
+                    heroComposable = { focusedItem, hasFocus ->
+                        JellytipHomeHero(item = focusedItem, hasFocus = hasFocus)
+                    },
+                    headerComposable = { focusedItem ->
+                        JellytipHomeHeader(
+                            item = focusedItem,
+                            showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                        )
+                    },
+                )
+            }
         }
     }
     overviewDialog?.let { info ->
