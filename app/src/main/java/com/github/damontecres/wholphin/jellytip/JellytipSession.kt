@@ -13,6 +13,12 @@ object JellytipSession {
     @Volatile
     var introHandled = false
 
+    /** Bumped when the cold-start intro hands over, so Home can focus its first row explicitly. */
+    @Volatile
+    var introFocusPending = false
+
+    val introDoneTick = kotlinx.coroutines.flow.MutableStateFlow(0)
+
     /** Elapsed-realtime of the last time a playback page was left; 0 if none this process. */
     @Volatile
     var lastPlaybackExitMs = 0L

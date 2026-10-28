@@ -119,6 +119,10 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var jellytipSeasonSubtitles: JellytipSeasonSubtitles
 
+    /** Injected so Hilt builds the companion client at startup: the composable helpers that read `JellytipApi.shared` never see null. */
+    @Inject
+    lateinit var jellytipApi: com.github.damontecres.wholphin.jellytip.JellytipApi
+
     @Inject
     lateinit var setupNavigationManager: SetupNavigationManager
 

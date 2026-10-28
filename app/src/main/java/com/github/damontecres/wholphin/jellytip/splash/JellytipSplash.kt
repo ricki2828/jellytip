@@ -43,6 +43,8 @@ fun JellytipSplashOverlay(
             if (coldStart) {
                 withFrameNanos { }
                 focusManager.moveFocus(FocusDirection.Enter)
+                JellytipSession.introFocusPending = true
+                JellytipSession.introDoneTick.value++
             }
         }
         return

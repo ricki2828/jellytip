@@ -497,7 +497,7 @@ data class JellytipStorage(
 
     fun label(): String = "${fmt(freeGb)} free of ${fmt(quotaGb)}"
 
-    private fun fmt(gb: Double) = if (gb >= 1000) String.format("%.1f TB", gb / 1024) else "${gb.toInt()} GB"
+    private fun fmt(gb: Double) = if (gb >= 1000) String.format("%.1f TB", gb / 1000) else "${gb.toInt()} GB"
 
     companion object {
         const val LOW_GB = 30.0

@@ -28,6 +28,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
+import com.github.damontecres.wholphin.jellytip.JellytipSession
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -382,6 +384,19 @@ fun HomePageContent(
                             listState.scrollToItem(it)
                         }
                 }
+            }
+        }
+    }
+    // After the cold-start intro, make sure the first home row (not the nav rail) holds focus
+    val introTick by JellytipSession.introDoneTick.collectAsState()
+    LaunchedEffect(introTick, homeRows) {
+        // One-shot: consumed only once a real row exists, so later visits to Home keep their restored focus
+        if (introTick > 0 && takeFocus && JellytipSession.introFocusPending) {
+            withFrameNanos { }
+            val row = homeRows.indexOfFirstOrNull { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
+            if (row != null) {
+                JellytipSession.introFocusPending = false
+                rowFocusRequesters.getOrNull(row)?.tryRequestFocus()
             }
         }
     }
