@@ -11,8 +11,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
@@ -290,6 +292,36 @@ class JellytipApi
                         }
                         response.body.string()
                     }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip API %s unavailable", path)
+                    null
+                }
+            }
+
+        /**
+         * POST a JSON body to a companion API path. Always carries the Jellyfin session token (the server names the
+         * requester from it) in addition to the manual token if one is set. Returns (http code, body) or null if unreachable.
+         */
+        suspend fun postJson(
+            path: String,
+            body: String,
+        ): Pair<Int, String>? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
+                            .post(body.toRequestBody("application/json".toMediaType()))
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                    header("Authorization", "MediaBrowser Token=\"$it\"")
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { it.code to it.body.string() }
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip API %s unavailable", path)
                     null

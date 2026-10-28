@@ -115,5 +115,6 @@ fun RecommendedMovie(
         viewModel = viewModel,
         onFocusPosition = onFocusPosition,
         modifier = modifier,
+        discoverLibrary = "Movies",
     )
 }

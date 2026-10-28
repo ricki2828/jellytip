@@ -19,6 +19,7 @@ import com.github.damontecres.wholphin.util.DiscoverRequestType
 import com.github.damontecres.wholphin.util.RequestHandler
 import com.github.damontecres.wholphin.util.SEERR_PAGE_SIZE
 import kotlinx.serialization.Contextual
+import com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -161,6 +162,12 @@ sealed class Destination(
         val startIndex: Int = SEERR_PAGE_SIZE,
         val initialFilter: DiscoverFilter = DiscoverFilter(),
         val titleOverride: StringProvider? = null,
+    ) : Destination(false)
+
+    /** Jellytip: a Discover title that is not in the library yet, with a "Get it" button. */
+    @Serializable
+    data class JellytipDiscover(
+        val title: DiscoverTitle,
     ) : Destination(false)
 
     @Serializable
