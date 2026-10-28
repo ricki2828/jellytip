@@ -12,6 +12,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__
+from .audience import Audience, Plex
 from .cache import Cache, EMPTY_TTL, ERROR_TTL, SCORES_TTL
 from .imgscores import ImgScores
 from .letterboxd import Letterboxd
@@ -24,6 +25,7 @@ from .subtitles import Jobs
 
 EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
 BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
+AUDIENCE_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/audience$")
 DELETED_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/deleted$")
 JOB_RE = re.compile(r"^/v1/subtitles/jobs/([0-9a-f]{12})$")
 LIST_RE = re.compile(r"^/v1/letterboxd/lists/([^/]+)$")
@@ -45,6 +47,17 @@ class Service:
         self.imgscores = imgscores or ImgScores(env.get("IMGSCORES_FILE") or os.path.join(data_dir, "imgscores.json"))
         self.stills, self.tmdb_key = stills, env.get("TMDB_KEY")
         self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env))
+        self.admin_cache = {}  # sha256(token) -> (is_admin, expires)
+        plex_url, plex_tok = env.get("PLEX_URL"), env.get("PLEX_TOKEN")
+        if not (plex_url and plex_tok):
+            try:
+                import yaml
+                with open(env.get("KOMETA_CONFIG") or os.path.expanduser("~/Kometa/config/config.yml")) as f:
+                    c = yaml.safe_load(f)["plex"]
+                plex_url, plex_tok = c["url"], c["token"]
+            except Exception:
+                pass
+        self.audience = Audience(self, env.get("REQUESTS_EXPORT") or os.path.join(data_dir, "requests.json"), Plex(plex_url, plex_tok))
         self.carousels_path = env.get("CAROUSELS_FILE") or os.path.join(os.path.dirname(env.get("LB_EXPORT", "")) or ".", "carousels.json")
 
     @staticmethod
@@ -106,6 +119,28 @@ class Service:
         self._auth_cache[k] = (ok, now + AUTH_TTL)
         return ok
 
+    def jellyfin_admin(self, jf_token):
+        """True when this Jellyfin token belongs to an administrator (/Users/Me, cached 10 min). The shared app token is never admin."""
+        if not (jf_token and self.jf_url):
+            return False
+        k = hashlib.sha256(jf_token.encode()).hexdigest()
+        hit = self.admin_cache.get(k)
+        now = time.time()
+        if hit and hit[1] > now:
+            return hit[0]
+        try:
+            req = urllib.request.Request(f"{self.jf_url}/Users/Me", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                ok = bool((json.load(r).get("Policy") or {}).get("IsAdministrator"))
+        except urllib.error.HTTPError:
+            ok = False
+        except Exception:
+            return False
+        if len(self.admin_cache) > 1000:
+            self.admin_cache.clear()
+        self.admin_cache[k] = (ok, now + AUTH_TTL)
+        return ok
+
     def route(self, path, query, token, authorization=None, emby_token=None, method="GET", body=None):
         """Returns (status, body)."""
         if path == "/v1/health":
@@ -125,6 +160,13 @@ class Service:
             if (tmdb and not tmdb.isdigit()) or (imdb and not re.fullmatch(r"tt\d+", imdb)):
                 return 400, {"error": "bad tmdb/imdb id"}
             return 200, self.extras(tmdb or None, imdb or None, kind)
+        m = AUDIENCE_RE.match(path)
+        if m:
+            if not self.jellyfin_admin(self.jellyfin_token(authorization, emby_token)):
+                return 403, {"error": "admin only"}
+            if not self.jf.ok:
+                return 503, {"error": "jellyfin not configured"}
+            return self.audience.get(m.group(1).replace("-", "").lower())
         m = BACKDROPS_RE.match(path)
         if m:
             res = self.imgscores.backdrops(m.group(1).replace("-", "").lower())
