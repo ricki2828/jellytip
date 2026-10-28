@@ -17,6 +17,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.Options
 import coil3.request.crossfade
 import coil3.util.DebugLogger
+import com.github.damontecres.wholphin.jellytip.cache.JellytipImageGate
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import okhttp3.OkHttpClient
@@ -77,7 +78,8 @@ fun CoilConfig(
             .Builder(ctx)
             .apply {
                 if (enableCache) {
-                    memoryCache(MemoryCache.Builder().maxSizePercent(ctx).build())
+                    // Jellytip: ~18% of the app heap (default is 25%+) leaves headroom on a 2 GB device
+                    memoryCache(MemoryCache.Builder().maxSizePercent(ctx, 0.18).build())
                     diskCache(
                         DiskCache
                             .Builder()
@@ -102,6 +104,8 @@ fun CoilConfig(
                 )
             }.build()
     }
+    // The singleton loader is now configured: home image prefetching may use it
+    JellytipImageGate.open()
 }
 
 /**

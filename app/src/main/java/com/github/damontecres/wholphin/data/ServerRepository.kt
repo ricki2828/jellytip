@@ -4,6 +4,7 @@ import android.content.Context
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
+import com.github.damontecres.wholphin.jellytip.cache.HomeSnapshotStore
 import com.github.damontecres.wholphin.services.hilt.IoDispatcher
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -275,6 +276,7 @@ class ServerRepository
                 }
                 mostRecentServerProvider.clearUser()
                 apiClient.update(accessToken = null)
+                HomeSnapshotStore.clear(context)
             }
             withContext(ioDispatcher) {
                 serverDao.deleteUser(user.serverId, user.id)
@@ -288,6 +290,7 @@ class ServerRepository
                 }
                 mostRecentServerProvider.clear()
                 apiClient.update(baseUrl = null, accessToken = null)
+                HomeSnapshotStore.clear(context)
             }
             withContext(ioDispatcher) {
                 serverDao.deleteServer(server.id)
@@ -295,6 +298,7 @@ class ServerRepository
         }
 
         suspend fun switchServerOrUser() {
+            HomeSnapshotStore.clear(context)
             mostRecentServerProvider.clear()
         }
 

@@ -11,6 +11,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
+import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselService
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
 import com.github.damontecres.wholphin.ui.AspectRatio
 import com.github.damontecres.wholphin.ui.Cards
@@ -58,6 +59,7 @@ class HomeSettingsService
         private val displayPreferencesService: DisplayPreferencesService,
         private val serverPluginApi: ServerPluginApi,
         private val serverDao: JellyfinServerDao,
+        private val jellytipCarousels: JellytipCarouselService,
     ) {
         /**
          * The current home page settings
@@ -221,6 +223,28 @@ class HomeSettingsService
             Timber.v("Found settings: %s", settings != null)
             val resolvedSettings = settings ?: createDefault(user.id)
             currentSettings.update { resolvedSettings }
+            addJellytipCarousels(user, resolvedSettings)
+        }
+
+        /**
+         * Jellytip: merge the Kometa carousels and Letterboxd rows into the user's own rows (see
+         * [JellytipCarouselService]). Only for settings the app owns (default or local); a server profile or
+         * plugin layout is left alone. Fails soft, home stays as loaded.
+         */
+        private suspend fun addJellytipCarousels(
+            user: JellyfinUser,
+            resolved: HomePageResolvedSettings,
+        ) {
+            if (resolved.source != HomePageSettingsSource.DEFAULT && resolved.source != HomePageSettingsSource.LOCAL) return
+            try {
+                val updated = jellytipCarousels.reconcile(user.id, resolved.asHomePageSettings()) ?: return
+                saveToLocal(user.id, updated)
+                updateCurrent(HomePageSettingsSource.LOCAL, updated)
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.w(ex, "Jellytip carousels failed")
+            }
         }
 
         /**

@@ -18,6 +18,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
 import timber.log.Timber
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -200,7 +201,107 @@ class JellytipApi
                 }
             }
 
+        init {
+            shared = this
+        }
+
+        private val backdropCache = ConcurrentHashMap<UUID, Int>() // NO_BACKDROP_PICK = no usable answer
+        private val backdropFailedAt = ConcurrentHashMap<UUID, Long>()
+
+        /** Cached photo-ranked backdrop index for [itemId], or null if unknown / animation / no ranking. */
+        fun peekBestBackdropIndex(itemId: UUID): Int? = backdropCache[itemId]?.takeIf { it >= 0 }
+
+        /**
+         * Index of the best real-photography backdrop (companion `/backdrops`), cached per item.
+         * Null when unconfigured, failing, `animation` is true or `backdrops` is null; callers keep index 0.
+         */
+        suspend fun bestBackdropIndex(itemId: UUID): Int? {
+            backdropCache[itemId]?.let { return it.takeIf { i -> i >= 0 } }
+            val failed = backdropFailedAt[itemId]
+            if (failed != null && System.currentTimeMillis() - failed < FAILURE_TTL_MS) return null
+            return withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    if (base.isBlank()) return@withContext null
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base/v1/items/$itemId/backdrops")
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            backdropFailedAt[itemId] = System.currentTimeMillis()
+                            return@withContext null
+                        }
+                        val root = JSONObject(response.body.string())
+                        val arr = root.optJSONArray("backdrops")
+                        val index =
+                            if (root.optBoolean("animation", false) || arr == null || arr.length() == 0) {
+                                -1
+                            } else {
+                                arr.optJSONObject(0)?.optInt("index", -1) ?: -1
+                            }
+                        backdropCache[itemId] = index
+                        index.takeIf { it >= 0 }
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip backdrops unavailable")
+                    backdropFailedAt[itemId] = System.currentTimeMillis()
+                    null
+                }
+            }
+        }
+
+        /**
+         * GET a companion API path (e.g. `/v1/home/carousels`) and return the body, or null on any failure.
+         * Same auth as [getExtras]: the manual token if set, else the current Jellyfin session.
+         */
+        suspend fun getJson(path: String): String? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base$path".toHttpUrlOrNull() ?: return@withContext null)
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) {
+                                    header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                } else {
+                                    api.accessToken?.takeIf { it.isNotBlank() }?.let {
+                                        header("Authorization", "MediaBrowser Token=\"$it\"")
+                                    }
+                                }
+                            }.build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Timber.w("Jellytip API %s returned %s", path, response.code)
+                            return@withContext null
+                        }
+                        response.body.string()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip API %s unavailable", path)
+                    null
+                }
+            }
+
         companion object {
+            /** Set when Hilt builds the singleton, so composables can reach it without plumbing. */
+            @Volatile
+            var shared: JellytipApi? = null
+                private set
+
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
         }

@@ -18,6 +18,8 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.android.androidDevice
@@ -26,6 +28,7 @@ import org.jellyfin.sdk.api.okhttp.OkHttpFactory
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.DeviceInfo
+import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -96,6 +99,15 @@ object AppModule {
             .Builder()
             .apply {
                 // TODO user agent, timeouts, logging, etc
+                // Jellytip: the seedbox is one remote host. OkHttp's default of 5 concurrent calls per host
+                // (HTTP/2 included) would serialise home metadata behind image prefetches.
+                dispatcher(
+                    Dispatcher().apply {
+                        maxRequests = 64
+                        maxRequestsPerHost = 16
+                    },
+                )
+                connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
             }.build()
 
     @AuthOkHttpClient

@@ -7,6 +7,7 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
+import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.DatePlayedService
@@ -70,6 +71,7 @@ class HomeViewModel
         private val userPreferencesService: UserPreferencesService,
         private val mediaManagementService: MediaManagementService,
         private val latestNextUpService: LatestNextUpService,
+        private val homeCache: HomeCache,
     ) : ViewModel() {
         private val _state = MutableStateFlow(HomeState.EMPTY)
         val state: StateFlow<HomeState> = _state
@@ -154,9 +156,13 @@ class HomeViewModel
 
                 val state = state.value
 
+                // Cold start: show the last home page straight away and refresh it in place
+                val cached =
+                    if (state.loadingState != LoadingState.Success) homeCache.restore(userDto.id, settings) else null
+
                 // Refreshing if a load has already occurred and the rows haven't significantly changed
                 val refresh =
-                    state.loadingState == LoadingState.Success && state.settings == settings
+                    cached != null || (state.loadingState == LoadingState.Success && state.settings == settings)
                 Timber.v(
                     "refresh=%s, state.loadingState=%s, %s rows",
                     refresh,
@@ -169,7 +175,9 @@ class HomeViewModel
                         refreshState = LoadingState.Loading,
                         settings = settings,
                         homeRows =
-                            if (refresh) {
+                            if (cached != null) {
+                                cached
+                            } else if (refresh) {
                                 it.homeRows
                             } else {
                                 List(settings.rows.size) {
@@ -181,8 +189,12 @@ class HomeViewModel
 
                 val semaphore = Semaphore(4)
 
+                // Continue Watching / Next Up change most: queue them first (the semaphore is FIFO)
+                val fetchOrder =
+                    settings.rows.indices.sortedBy { if (isWatchingRow(settings.rows[it].config)) 0 else 1 }
                 val deferred =
-                    settings.rows
+                    fetchOrder
+                        .map { settings.rows[it] }
                         .map { row ->
                             viewModelScope.async(WholphinDispatchers.IO) {
                                 semaphore.withPermit {
@@ -225,7 +237,9 @@ class HomeViewModel
                                     }
                                 }
                             }
-                        }
+                        }.withIndex()
+                        .sortedBy { fetchOrder[it.index] }
+                        .map { it.value }
 
                 if (refresh) {
                     // Replace rows as they complete
@@ -244,7 +258,10 @@ class HomeViewModel
                         _state.update { state ->
                             val newRows =
                                 state.homeRows.toMutableList().apply {
-                                    set(rowIndex, rowData)
+                                    // A failed refresh must not wipe a good cached row
+                                    if (cached == null || rowData !is HomeRowLoadingState.Error || get(rowIndex) !is HomeRowLoadingState.Success) {
+                                        set(rowIndex, rowData)
+                                    }
                                 }
                             state.copy(
                                 homeRows = newRows,
@@ -269,6 +286,7 @@ class HomeViewModel
                     }
                 }
                 Timber.d("Home page load complete")
+                homeCache.onLoaded(userDto.id, settings, _state.value.homeRows)
             } catch (ex: CancellationException) {
                 throw ex
             } catch (ex: Exception) {
@@ -302,6 +320,16 @@ class HomeViewModel
             withContext(WholphinDispatchers.Main) {
                 init()
             }
+        }
+
+        /** Focus moved: prefetch images for the rows below. */
+        fun onFocusPosition(position: RowColumn) {
+            homeCache.onFocus(state.value.homeRows, position.row, position.column)
+        }
+
+        /** An item was opened: remember which row it came from. */
+        fun recordOpen(position: RowColumn) {
+            homeCache.recordOpen(state.value.homeRows.getOrNull(position.row))
         }
 
         fun updateBackdrop(item: BaseItem) {

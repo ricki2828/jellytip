@@ -33,6 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
+import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.jellytip.splash.JellytipSplashOverlay
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.PlayerBackend
@@ -107,6 +108,9 @@ class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var navigationManager: NavigationManager
+
+    @Inject
+    lateinit var homeCache: HomeCache
 
     @Inject
     lateinit var setupNavigationManager: SetupNavigationManager
@@ -230,6 +234,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.appStart(intent)
+        // Overlaps the cold-start intro: open the server connection and warm home images from the last session
+        homeCache.warmUp()
         setContent {
             MaterialTheme(colorScheme = PurpleThemeColors.darkScheme) {
                 Surface(Modifier.fillMaxSize()) {

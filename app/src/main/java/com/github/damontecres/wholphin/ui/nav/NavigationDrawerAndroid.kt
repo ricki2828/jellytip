@@ -25,6 +25,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,14 +42,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
 import androidx.tv.material3.DrawerState
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ListItem
@@ -122,7 +131,27 @@ private fun DrawerSheet(
                 }
             }.focusGroup()
 
-    Box(modifier = internalModifier) {
+    // Collapsed: soft left gradient so rail icons stay legible over imagery; open: translucent panel
+    val panelAlpha by animateFloatAsState(if (drawerState.currentValue == DrawerValue.Open) 1f else 0f, label = "panelAlpha")
+    Box(
+        modifier =
+            internalModifier.drawBehind {
+                if (panelAlpha < 1f) {
+                    drawRect(
+                        brush =
+                            Brush.horizontalGradient(
+                                listOf(JellytipDrawerNight.copy(alpha = 0.7f), Color.Transparent),
+                                startX = 0f,
+                                endX = size.width,
+                            ),
+                        alpha = 1f - panelAlpha,
+                    )
+                }
+                if (panelAlpha > 0f) {
+                    drawRect(color = JellytipDrawerNight.copy(alpha = 0.92f), alpha = panelAlpha)
+                }
+            },
+    ) {
         NavigationDrawerScopeImpl(drawerState.currentValue == DrawerValue.Open).apply {
             content(drawerState.currentValue)
         }
@@ -136,6 +165,10 @@ internal class NavigationDrawerScopeImpl(
 internal val CollapsedDrawerItemWidth = 64.dp
 internal val ExpandedDrawerItemWidth = 224.dp
 internal val DrawerIconSize = 24.dp
+internal val JellytipDrawerNight = Color(0xFF0A0A0A)
+internal val JellytipDrawerFocus = Color(0xFF1C1C1C)
+internal val JellytipDrawerText = Color(0xFFF2F2F0)
+internal val JellytipDrawerAccent = Color(0xFFE2264D)
 internal val DrawerIconPadding = (ListItemDefaults.IconSize - DrawerIconSize) / 2
 internal val DrawerAnimationStiffness = Spring.StiffnessMedium
 
@@ -150,7 +183,7 @@ internal fun NavigationDrawerScope.NavigationDrawerItem(
     supportingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     tonalElevation: Dp = NavigationDrawerItemDefaults.NavigationDrawerItemElevation,
-    colors: NavigationDrawerItemColors = NavigationDrawerItemDefaults.colors(),
+    colors: NavigationDrawerItemColors = jellytipDrawerColors(),
     interactionSource: MutableInteractionSource? = null,
     content: @Composable () -> Unit,
 ) {
@@ -205,6 +238,8 @@ internal fun NavigationDrawerScope.NavigationDrawerItem(
         tonalElevation = tonalElevation,
         colors = colors.toToggleableListItemColors(hasFocus),
         scale = ListItemDefaults.scale(1f, 1f),
+        shape = ListItemDefaults.shape(RoundedCornerShape(10.dp)),
+        border = ListItemDefaults.border(border = Border.None, focusedBorder = Border.None),
         interactionSource = interactionSource,
     )
 }
@@ -232,3 +267,37 @@ private fun NavigationDrawerItemColors.toToggleableListItemColors(doesNavigation
         pressedSelectedContainerColor = pressedSelectedContainerColor,
         pressedSelectedContentColor = pressedSelectedContentColor,
     )
+
+/** Transparent at rest, white text on a #1C1C1C rounded rect when focused. */
+@Composable
+internal fun jellytipDrawerColors(): NavigationDrawerItemColors =
+    NavigationDrawerItemDefaults.colors(
+        containerColor = Color.Transparent,
+        contentColor = JellytipDrawerText.copy(alpha = 0.7f),
+        inactiveContentColor = JellytipDrawerText.copy(alpha = 0.6f),
+        focusedContainerColor = JellytipDrawerFocus,
+        focusedContentColor = Color.White,
+        pressedContainerColor = JellytipDrawerFocus,
+        pressedContentColor = Color.White,
+        selectedContainerColor = Color.Transparent,
+        selectedContentColor = JellytipDrawerText,
+        focusedSelectedContainerColor = JellytipDrawerFocus,
+        focusedSelectedContentColor = Color.White,
+        pressedSelectedContainerColor = JellytipDrawerFocus,
+        pressedSelectedContentColor = Color.White,
+    )
+
+/** 3 px jelly-red bar on the item's left edge marks the selected destination. */
+@Composable
+internal fun Modifier.jellytipSelectedBar(selected: Boolean): Modifier {
+    if (!selected) return this
+    val barWidth = with(LocalDensity.current) { 3.dp.toPx().coerceAtLeast(3f) }
+    return drawBehind {
+        val inset = 6.dp.toPx()
+        drawRect(
+            color = JellytipDrawerAccent,
+            topLeft = Offset(0f, inset),
+            size = Size(barWidth, size.height - inset * 2),
+        )
+    }
+}
