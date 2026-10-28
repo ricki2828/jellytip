@@ -70,7 +70,7 @@ object JellytipIntroCache {
 /** The video's own end card starts fading in at about 5.2 s and is fully up by 5.8 s; the chord lands as it settles. */
 private const val CARD_SOUND_AT_MS = 5300L
 private const val HOLD_AFTER_END_MS = 400L
-private const val START_TIMEOUT_MS = 1500L
+private const val START_TIMEOUT_MS = 2500L
 private const val TAG = "JellytipIntro"
 
 /**
