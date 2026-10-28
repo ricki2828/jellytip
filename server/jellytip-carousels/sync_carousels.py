@@ -586,6 +586,8 @@ def main():
     entries += discover_rows(tv_doc, libs["TV Shows"], tmdb, now)
     entries.sort(key=lambda e: (sort_number(e["sortKey"]), e["name"]))
     lbc = tv_doc.get("letterboxd_rows") or {}  # the companion rotates the Letterboxd rows by date from this
+    for e in entries:  # the app files each row under the Movies or Shows library page by this
+        e["mediaType"] = "tv" if e["library"] == "TV Shows" else "movie"
     manifest = {"version": 1, "generated": now.isoformat(), "carousels": entries,
                 "letterboxdConfig": {"per_day": int(lbc.get("per_day", 6)), "pinned": lbc.get("pinned") or [],
                                      "exclude": lbc.get("exclude") or [], "include_liked": bool(lbc.get("include_liked", True)),

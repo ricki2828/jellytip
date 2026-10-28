@@ -310,6 +310,8 @@ class Service:
                 manifest = {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
             if query.get("includeDiscover") != "1":  # discover rows carry TMDB ids, not library items: opt-in only
                 manifest = {**manifest, "carousels": [c for c in manifest.get("carousels", []) if not c.get("discover")]}
+            for c in manifest.get("carousels", []):  # manifests written before mediaType existed
+                c.setdefault("mediaType", "tv" if c.get("library") == "TV Shows" else "movie")
             lb = self.lb.home_lists(manifest.get("letterboxdConfig"), include_discover=query.get("includeDiscover") == "1")
             return 200, {**manifest, "letterboxd": lb}
         if path == "/v1/library/sizes":

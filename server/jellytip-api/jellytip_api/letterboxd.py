@@ -143,7 +143,7 @@ class Letterboxd:
         out = []
         for slug in picked:
             l, have = rows[slug]
-            row = {"slug": slug, "name": l["name"] + (f" (by {l['owner']})" if l.get("liked") else ""), "source": "letterboxd",
+            row = {"slug": slug, "name": l["name"] + (f" (by {l['owner']})" if l.get("liked") else ""), "source": "letterboxd", "mediaType": "movie",
                    "itemIds": have[:50]}
             if l.get("liked"):
                 row.update(liked=True, owner=l.get("owner"))

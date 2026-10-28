@@ -170,7 +170,7 @@ def test_home_carousels_serves_manifest_or_empty(tmp_path):
     assert status == 200 and body["carousels"] == []
     (tmp_path / "carousels.json").write_text(json.dumps({"version": 1, "carousels": [{"name": "A", "itemIds": ["x"]}]}))
     status, body = svc.route("/v1/home/carousels", {}, "t")
-    assert body["carousels"][0]["name"] == "A" and body["letterboxd"] == []
+    assert body["carousels"][0]["name"] == "A" and body["letterboxd"] == [] and body["carousels"][0]["mediaType"] == "movie"
     assert svc.route("/v1/home/carousels", {}, "bad")[0] == 401
 
 
@@ -189,7 +189,7 @@ def test_letterboxd_home_lists_need_enough_library_films(tmp_path):
         {"slug": "big", "name": "Big", "items": [{"tmdb": n, "title": "t"} for n in range(1, 9)]},
         {"slug": "small", "name": "Small", "items": [{"tmdb": 1, "title": "t"}]}]}))
     lb = Letterboxd(str(export), lambda: [{"Id": f"j{n}", "ProviderIds": {"Tmdb": str(n)}} for n in range(1, 7)])
-    assert lb.home_lists() == [{"slug": "big", "name": "Big", "source": "letterboxd", "itemIds": [f"j{n}" for n in range(1, 7)]}]
+    assert lb.home_lists() == [{"slug": "big", "name": "Big", "source": "letterboxd", "mediaType": "movie", "itemIds": [f"j{n}" for n in range(1, 7)]}]
 
 
 def _scores_file(tmp_path):
