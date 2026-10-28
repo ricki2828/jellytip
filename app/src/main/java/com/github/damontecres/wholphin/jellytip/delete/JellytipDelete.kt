@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.delete
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -69,6 +71,8 @@ object JellytipDeleteLog {
     }
 }
 
+private const val CONFIRM_GRACE_MS = 600L
+
 /**
  * Two-step permanent-delete confirmation. Focus starts on Cancel in both dialogs so a stray OK press
  * can never delete anything.
@@ -82,6 +86,7 @@ fun JellytipDeleteConfirm(
     item: BaseItem? = null,
 ) {
     var step by remember { mutableStateOf(1) }
+    var stepChangedAt by remember { mutableStateOf(SystemClock.uptimeMillis()) }
     // Admin-only context for the decision: who requested it, who has watched it
     val audience by produceState<String?>(null, item?.id) {
         value = item?.let { JellytipApi.shared?.getAudience(it)?.summary() }
@@ -134,8 +139,18 @@ fun JellytipDeleteConfirm(
                 ) {
                     Text(text = stringResource(R.string.cancel))
                 }
+                key(step) {
                 Button(
-                    onClick = { if (step == 1) step = 2 else onConfirm() },
+                    onClick = {
+                        // A fast double OK (or a repeat) must not walk straight through both steps
+                        if (SystemClock.uptimeMillis() - stepChangedAt < CONFIRM_GRACE_MS) return@Button
+                        if (step == 1) {
+                            step = 2
+                            stepChangedAt = SystemClock.uptimeMillis()
+                        } else {
+                            onConfirm()
+                        }
+                    },
                     colors =
                         ButtonDefaults.colors(
                             containerColor = Color.Red.copy(alpha = 0.35f),
@@ -149,6 +164,7 @@ fun JellytipDeleteConfirm(
                             ),
                     )
                 }
+                }
             }
         }
     }
@@ -161,7 +177,11 @@ fun JellytipDeleteConfirm(
  * is the safety net, so failure here is only logged.
  */
 object JellytipTrailerCleanup {
-    suspend fun notifyDeleted(item: BaseItem) {
+    suspend fun notifyDeleted(
+        api: JellytipApi,
+        item: BaseItem,
+        path: String?,
+    ) {
         val type =
             when (item.type) {
                 BaseItemKind.MOVIE -> "movie"
@@ -172,9 +192,9 @@ object JellytipTrailerCleanup {
             val body =
                 org.json.JSONObject().apply {
                     put("type", type)
-                    item.data.path?.let { put("path", it) }
+                    path?.let { put("path", it) }
                 }
-            JellytipApi.shared?.postJson("/v1/items/${item.id}/deleted", body.toString())
+            api.postJson("/v1/items/${item.id}/deleted", body.toString())
         } catch (ex: Exception) {
             Timber.w(ex, "Jellytip: trailer cleanup call failed")
         }

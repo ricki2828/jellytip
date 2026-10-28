@@ -304,6 +304,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         JellytipInputGuard.onKey(event)
+        if (JellytipInputGuard.shouldSwallow(event)) return true
         if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
         if (screensaverService.state.value.run { show || showDim }) {

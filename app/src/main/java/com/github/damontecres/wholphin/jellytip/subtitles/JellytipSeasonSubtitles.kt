@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.ui.showToast
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +19,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.json.JSONObject
 import timber.log.Timber
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,6 +35,7 @@ class JellytipSeasonSubtitles
         @param:ApplicationContext private val context: Context,
         private val api: ApiClient,
         private val serverRepository: ServerRepository,
+        private val companionApi: JellytipApi,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -61,25 +64,29 @@ class JellytipSeasonSubtitles
                 else -> emptyList()
             }
 
+        private val running = ConcurrentHashMap.newKeySet<UUID>()
+
         fun start(item: BaseItem) {
+            if (!JellytipAdmin.isAdmin) return
             val language =
                 serverRepository.currentUserDto
                     ?.configuration
                     ?.subtitleLanguagePreference
                     ?.takeIf { it.isNotBlank() } ?: "eng"
             scope.launch {
+                val seasonsStarted = mutableListOf<UUID>()
                 try {
-                    val companion = JellytipApi.shared
-                    val seasons = seasonIds(item)
-                    if (companion == null || seasons.isEmpty()) {
-                        showToast(context, "Could not start the season subtitle search", Toast.LENGTH_LONG)
+                    // One job per season at a time: re-triggering a running season does nothing
+                    val seasons = seasonIds(item).filter { running.add(it) }.also { seasonsStarted += it }
+                    if (seasons.isEmpty()) {
+                        showToast(context, "Season subtitle search already running or unavailable", Toast.LENGTH_LONG)
                         return@launch
                     }
                     showToast(context, "Searching $language subtitles for ${if (seasons.size > 1) "${seasons.size} seasons" else "the season"}...")
                     val jobs =
                         seasons.mapNotNull { sid ->
                             val res =
-                                companion.postJson(
+                                companionApi.postJson(
                                     "/v1/subtitles/season",
                                     JSONObject().put("seasonId", sid.toString()).put("language", language).toString(),
                                 )
@@ -89,10 +96,12 @@ class JellytipSeasonSubtitles
                         showToast(context, "Subtitle search is unavailable right now", Toast.LENGTH_LONG)
                         return@launch
                     }
-                    track(companion, jobs)
+                    track(companionApi, jobs)
                 } catch (ex: Exception) {
                     Timber.w(ex, "Season subtitles failed")
                     showToast(context, "Season subtitle search failed", Toast.LENGTH_LONG)
+                } finally {
+                    running.removeAll(seasonsStarted.toSet())
                 }
             }
         }
@@ -101,7 +110,6 @@ class JellytipSeasonSubtitles
             companion: JellytipApi,
             jobs: List<Job>,
         ) {
-            var lastShown = ""
             var failures = 0
             repeat(MAX_POLLS) {
                 delay(POLL_MS)
@@ -126,11 +134,6 @@ class JellytipSeasonSubtitles
                 if (jobs.all { it.finished }) {
                     showToast(context, jobs.joinToString("\n") { it.summary }.ifBlank { "Subtitle search finished" }, Toast.LENGTH_LONG)
                     return
-                }
-                val progress = "Subtitles: ${jobs.sumOf { it.done }} of ${jobs.sumOf { it.total }} episodes checked..."
-                if (progress != lastShown && jobs.all { it.total > 0 }) {
-                    lastShown = progress
-                    showToast(context, progress, Toast.LENGTH_SHORT)
                 }
             }
             showToast(context, "Subtitle search is still running on the server", Toast.LENGTH_LONG)
