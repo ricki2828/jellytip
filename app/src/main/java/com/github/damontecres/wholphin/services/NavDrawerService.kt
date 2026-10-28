@@ -218,7 +218,11 @@ class NavDrawerService
                             type = it.collectionType,
                         )
                     }
-            val allItems = builtins + libraries
+            // Default order: Movies/Shows directly under Home, then Favorites etc., then other libraries.
+            // (User-customised orders are stored per item and still win in the sort below.)
+            val (mainLibraries, otherLibraries) =
+                libraries.partition { it.type == CollectionType.MOVIES || it.type == CollectionType.TVSHOWS }
+            val allItems = mainLibraries.sortedBy { if (it.type == CollectionType.MOVIES) 0 else 1 } + builtins + otherLibraries
 
             val navDrawerPins =
                 withContext(WholphinDispatchers.IO) {
