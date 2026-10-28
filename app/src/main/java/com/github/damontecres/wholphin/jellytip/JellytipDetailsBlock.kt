@@ -49,7 +49,6 @@ import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.TrailerDialog
-import com.github.damontecres.wholphin.jellytip.home.jellytipLogoFilter
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
@@ -241,11 +240,12 @@ private fun DetailsTitle(
             contentDescription = item.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
-            colorFilter = jellytipLogoFilter(),
+            colorFilter = JellytipLogoTint.filter(logoUrl),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->
                 val image = state.result.image
+                JellytipLogoTint.inspect(logoUrl, image)
                 if (image.height > image.width * 0.6f) logoFailed = true
             },
             modifier =

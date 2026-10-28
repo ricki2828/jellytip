@@ -12,6 +12,7 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.model.api.BaseItemKind
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,16 +63,14 @@ class TrailerService
                 )
 
         suspend fun getLocalTrailers(item: BaseItem): List<Trailer> {
-            val localTrailerCount = item.data.localTrailerCount ?: return emptyList()
-            val localTrailers =
-                if (localTrailerCount > 0) {
-                    api.userLibraryApi.getLocalTrailers(item.id).content.map {
-                        LocalTrailer(BaseItem.from(it, api))
-                    }
-                } else {
-                    listOf()
-                }
-            return localTrailers
+            // Episodes and seasons use their series' trailer; list-sourced items carry no LocalTrailerCount, so ask the server
+            val target =
+                item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON } ?: item.id
+            val count = if (target == item.id) item.data.localTrailerCount else null
+            if (count != null && count <= 0) return emptyList()
+            return api.userLibraryApi.getLocalTrailers(target).content.map {
+                LocalTrailer(BaseItem.from(it, api))
+            }
         }
 
         companion object {

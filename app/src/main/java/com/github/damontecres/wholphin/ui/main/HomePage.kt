@@ -57,6 +57,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
@@ -177,7 +178,8 @@ fun HomePage(
                         if (JellytipTrailerControl.isPlayingFor(item)) {
                             // Long-press OK always opens details while the hero trailer plays
                             JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination())
+                            // Open details only after OK is released: the key-up used to click Play and start the film
+                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
                             return@longClick
                         }
                         val row =
@@ -186,7 +188,7 @@ fun HomePage(
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
                             row?.rowType is HomeRowConfig.NextUp || row?.rowType is HomeRowConfig.ContinueWatchingCombined
-                        showContextMenu =
+                        val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
@@ -226,6 +228,8 @@ fun HomePage(
                                         onClickRemoveFromNextUp = viewModel::removeFromNextUp,
                                     ),
                             )
+                        // Open only after OK is released so the key-up cannot land on the menu's first entry
+                        JellytipInputGuard.afterRelease { showContextMenu = menu }
                     }
                 }
             val onClickPlay =

@@ -39,8 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -65,6 +63,7 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipLogoTint
 import com.github.damontecres.wholphin.jellytip.JellytipFocal
 import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
@@ -215,16 +214,19 @@ fun JellytipHomeHero(
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
+        if (JellytipTrailerControl.fullScreen) {
+            // Came back from the full-screen trailer: continue the hero trailer muted instead of restarting
+            if (trailerWanted && item?.id == JellytipTrailerControl.itemId) JellytipTrailerControl.returnedFromFullScreen()
+            return@LaunchedEffect
+        }
         JellytipTrailerControl.stop()
-        if (item?.id != JellytipTrailerControl.dismissedFor) JellytipTrailerControl.dismissedFor = null
-        if (!trailerWanted || item == null || item.id == JellytipTrailerControl.dismissedFor) return@LaunchedEffect
-        if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return@LaunchedEffect
+        if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
             JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
         }
     }
-    DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
+    DisposableEffect(Unit) { onDispose { if (!JellytipTrailerControl.fullScreen) JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
 
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
@@ -393,8 +395,9 @@ private fun HeroTrailer(
     LaunchedEffect(url) {
         firstFrame = false
         if (url != null) {
-            player.setMediaItem(MediaItem.fromUri(url))
-            player.playWhenReady = true
+            val start = JellytipTrailerControl.resumePositionMs.also { JellytipTrailerControl.resumePositionMs = 0L }
+            player.setMediaItem(MediaItem.fromUri(url), start)
+            player.playWhenReady = !JellytipTrailerControl.fullScreen
             player.prepare()
         } else {
             player.stop()
@@ -402,6 +405,8 @@ private fun HeroTrailer(
         }
     }
     LaunchedEffect(sound) { player.volume = if (sound) 1f else 0f }
+    val paused = JellytipTrailerControl.fullScreen
+    LaunchedEffect(paused) { if (url != null) player.playWhenReady = !paused }
     val alpha by animateFloatAsState(
         targetValue = if (url != null && firstFrame) 1f else 0f,
         animationSpec = tween(if (url != null) 800 else 150),
@@ -471,7 +476,8 @@ fun JellytipHomeHeader(
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
-                        colorFilter = jellytipLogoFilter(),
+                        colorFilter = JellytipLogoTint.filter(logoUrl),
+                        onSuccess = { JellytipLogoTint.inspect(logoUrl, it.result.image) },
                         onError = { logoFailed = true },
                         modifier =
                             Modifier
@@ -533,7 +539,3 @@ fun JellytipHomeHeader(
         }
     }
 }
-
-/** Tint for hero/details clearlogos, or null when [JellytipHomeTokens.WHITE_LOGO] is off. */
-fun jellytipLogoFilter(): ColorFilter? =
-    if (JellytipHomeTokens.WHITE_LOGO) ColorFilter.tint(JellytipHomeTokens.LOGO_TINT, BlendMode.SrcIn) else null

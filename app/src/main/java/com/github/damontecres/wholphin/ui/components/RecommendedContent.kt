@@ -18,6 +18,7 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
@@ -421,10 +422,10 @@ fun RecommendedContent(
                     onLongClickItem = longClick@{ position, item ->
                         if (JellytipTrailerControl.isPlayingFor(item)) {
                             JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination())
+                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
                             return@longClick
                         }
-                        showContextMenu =
+                        val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
@@ -436,6 +437,7 @@ fun RecommendedContent(
                                 canRemoveNextUp = false,
                                 actions = contextActions,
                             )
+                        JellytipInputGuard.afterRelease { showContextMenu = menu }
                     },
                     onClickPlay = { _, item ->
                         viewModel.navigationManager.navigateTo(Destination.Playback(item))

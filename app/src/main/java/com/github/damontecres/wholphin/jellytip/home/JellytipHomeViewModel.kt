@@ -71,16 +71,22 @@ class JellytipHomeViewModel
          * never carry LocalTrailerCount, so gating on it (as before) meant the home hero never found a trailer.
          */
         suspend fun localTrailer(item: BaseItem): Pair<String, UUID>? {
-            if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return null
-            trailerCache[item.id]?.let { return it.firstOrNull() }
+            // Episodes and seasons (Continue Watching, Next Up, episode rows) play their series' trailer
+            val target =
+                when (item.type) {
+                    BaseItemKind.MOVIE, BaseItemKind.SERIES -> item.id
+                    BaseItemKind.EPISODE, BaseItemKind.SEASON -> item.data.seriesId ?: return null
+                    else -> return null
+                }
+            trailerCache[target]?.let { return it.firstOrNull() }
             return try {
                 val trailer =
                     api.userLibraryApi
-                        .getLocalTrailers(item.id)
+                        .getLocalTrailers(target)
                         .content
                         .firstOrNull()
                 val found = trailer?.let { api.videosApi.getVideoStreamUrl(itemId = it.id, static = true) to it.id }
-                trailerCache[item.id] = listOfNotNull(found)
+                trailerCache[target] = listOfNotNull(found)
                 found
             } catch (e: Exception) {
                 Timber.w(e, "Home trailer lookup failed")

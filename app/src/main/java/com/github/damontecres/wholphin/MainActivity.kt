@@ -32,7 +32,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.JellytipOverlayKeys
+import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.jellytip.splash.JellytipSplashOverlay
 import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
@@ -301,6 +303,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        JellytipInputGuard.onKey(event)
+        if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
         if (screensaverService.state.value.run { show || showDim }) {
             screensaverService.stop(false)
