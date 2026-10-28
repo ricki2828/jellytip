@@ -310,7 +310,10 @@ class JellytipApi
          * GET a companion API path (e.g. `/v1/home/carousels`) and return the body, or null on any failure.
          * Same auth as [getExtras]: the manual token if set, else the current Jellyfin session.
          */
-        suspend fun getJson(path: String): String? =
+        suspend fun getJson(
+            path: String,
+            timeoutMs: Long = TIMEOUT_MS,
+        ): String? =
             withContext(WholphinDispatchers.IO) {
                 try {
                     val prefs = preferences.data.first()
@@ -328,7 +331,7 @@ class JellytipApi
                                     }
                                 }
                             }.build()
-                    client.newCall(request).execute().use { response ->
+                    client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
                             Timber.w("Jellytip API %s returned %s", path, response.code)
                             return@withContext null
