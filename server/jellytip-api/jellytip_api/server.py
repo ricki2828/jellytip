@@ -112,9 +112,10 @@ class Service:
         if path == "/v1/home/carousels":
             try:
                 with open(self.carousels_path, encoding="utf-8") as f:
-                    return 200, json.load(f)
+                    manifest = json.load(f)
             except OSError:
-                return 200, {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
+                manifest = {"version": 1, "generated": None, "carousels": []}  # sync not run yet: app shows no extra rows
+            return 200, {**manifest, "letterboxd": self.lb.home_lists()}
         if path == "/v1/letterboxd/lists":
             return 200, self.lb.lists()
         m = LIST_RE.match(path)

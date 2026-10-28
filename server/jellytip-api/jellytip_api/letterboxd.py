@@ -73,3 +73,16 @@ class Letterboxd:
             self._load()
             lst = next((l for l in self._data["lists"] if l["slug"] == slug), None)
         return shape_list(lst, self._jf_map()) if lst else None
+
+    def home_lists(self, min_items=6, limit=8):
+        """Lists with enough films in the library to make a home row: [{slug, name, itemIds}] in export order."""
+        with self._lock:
+            self._load()
+            lists = list(self._data["lists"])
+        jf = self._jf_map()
+        out = []
+        for l in lists:
+            ids = [jf[i["tmdb"]] for i in l["items"] if i.get("tmdb") in jf]
+            if len(ids) >= min_items:
+                out.append({"slug": l["slug"], "name": l["name"], "itemIds": ids[:50]})
+        return out[:limit]
