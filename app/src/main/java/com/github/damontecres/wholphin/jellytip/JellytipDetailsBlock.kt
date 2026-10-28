@@ -29,7 +29,6 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,6 +44,7 @@ import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.TrailerDialog
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
+import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.PersonKind
 
@@ -207,7 +207,7 @@ private fun DetailsTitle(
         Text(
             text = item.title ?: "",
             color = MaterialTheme.colorScheme.onSurface,
-            fontFamily = FontFamily.Serif,
+            fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX),
             lineHeight = sizes.sp(JellytipHomeTokens.DETAILS_TITLE_PX * 1.05f),
@@ -286,8 +286,8 @@ private fun TextButton(
     sizes: JellytipSizes,
     modifier: Modifier = Modifier,
 ) {
-    val cream = Color(0xFFF3EFE6)
-    val ink = Color(0xFF111111)
+    val cream = Color(0xFFF2F2F0)
+    val ink = Color(0xFF0A0A0A)
     Button(
         onClick = button.onClick,
         modifier = modifier,
@@ -312,6 +312,7 @@ private fun TextButton(
     ) {
         Text(
             text = button.label,
+            fontFamily = JellytipFontFamily,
             fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
             fontWeight = if (button.primary) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
