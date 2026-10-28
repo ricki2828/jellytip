@@ -117,7 +117,7 @@ fun jellytipBackdropUrl(
 ): String? = JellytipImagePick.forHome(imageUrlService, item, heroIndex).url
 
 /** Share of the container height the focal point is placed at: upper third, so heads are never cropped at the top edge. */
-const val FOCAL_TARGET_Y = 0.36f
+const val FOCAL_TARGET_Y = 0.40f
 
 /**
  * Crop alignment keeping [focal] in frame: horizontally proportional (like a bias), vertically placing the focal point
@@ -129,10 +129,24 @@ fun focalAlignment(focal: JellytipFocal?): Alignment =
     } else {
         Alignment { size: IntSize, space: IntSize, _: LayoutDirection ->
             val x = (focal.x * (space.width - size.width)).roundToInt().coerceIn(minOf(space.width - size.width, 0), 0)
-            val y = (FOCAL_TARGET_Y * space.height - focal.y * size.height).roundToInt().coerceIn(minOf(space.height - size.height, 0), 0)
+            val lowest = minOf(space.height - size.height, 0)
+            val y =
+                if (focal.y < FOCAL_TOP_ZONE) {
+                    0 // subject in the top quarter: show the top of the frame rather than crop into it
+                } else {
+                    // Focal point at the target height, but never hide the head: keep headroom above it visible
+                    val headroom = if (focal.face) FACE_HEADROOM else SALIENCY_HEADROOM
+                    val desired = (FOCAL_TARGET_Y * space.height - focal.y * size.height).roundToInt()
+                    val limit = -(maxOf(focal.y - headroom, 0f) * size.height).roundToInt()
+                    desired.coerceAtLeast(limit).coerceIn(lowest, 0)
+                }
             IntOffset(x, y)
         }
     }
+
+private const val FOCAL_TOP_ZONE = 0.25f
+private const val FACE_HEADROOM = 0.14f // of image height: a head extends about this far above the face centre
+private const val SALIENCY_HEADROOM = 0.2f
 
 /** Ken Burns zoom origin at the focal point's on-screen position, so the zoom never pushes the subject out of frame. */
 fun focalOrigin(focal: JellytipFocal?): TransformOrigin =

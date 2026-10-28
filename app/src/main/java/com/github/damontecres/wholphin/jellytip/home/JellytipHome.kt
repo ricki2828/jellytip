@@ -149,6 +149,8 @@ object JellytipHomeTokens {
 
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
+/** Slow zoom about the focal point; capped at 5% so the hero is never heavily enlarged. */
+const val KEN_BURNS_MAX_ZOOM = 0.05f
 private const val KEN_BURNS_MS = 24_000
 
 /**
@@ -338,11 +340,10 @@ private fun HomeKenBurns(
                 .graphicsLayer {
                     transformOrigin = focalOrigin(focal)
                     val p = progress.value
-                    val scale = 1.04f + 0.05f * p
+                    val scale = 1f + KEN_BURNS_MAX_ZOOM * p
                     scaleX = scale
                     scaleY = scale
                     translationX = direction * size.width * 0.010f * (p - 0.5f)
-                    translationY = -size.height * 0.006f * p
                 },
     )
 }
@@ -503,6 +504,7 @@ fun JellytipHomeHeader(
                     item?.ui?.quickDetails,
                     item?.timeRemainingOrRuntime,
                     endsAt = item?.data?.endDate,
+                    showRatings = scoreLine == null, // the companion's quiet score line replaces the stock star/tomato ratings
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize),
                 )
                 val overview = item?.data?.overview
