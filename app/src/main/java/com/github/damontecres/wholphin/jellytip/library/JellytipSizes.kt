@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.json.JSONObject
@@ -101,7 +102,7 @@ fun JellytipSizeBadge(
     item: BaseItem?,
     modifier: Modifier = Modifier,
 ) {
-    if (!JellytipSizes.badgesActive || item == null) return
+    if (!JellytipSizes.badgesActive || !JellytipAdmin.isAdmin || item == null) return
     val bytes = JellytipSizes.sizeOf(item.id) ?: return
     Text(
         text = JellytipSizes.format(bytes),

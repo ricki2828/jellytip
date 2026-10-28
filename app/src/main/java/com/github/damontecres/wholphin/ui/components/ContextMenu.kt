@@ -24,6 +24,7 @@ import com.github.damontecres.wholphin.data.model.AudioItem
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
 import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
 import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
 import com.github.damontecres.wholphin.preferences.PlayerBackend
@@ -297,6 +298,7 @@ fun ContextMenu(
     if (showDeleteDialog) {
         ConfirmDeleteDialog(
             itemTitle = item.jellytipDeleteLabel(),
+            item = item,
             onCancel = { showDeleteDialog = false },
             onConfirm = {
                 actions.onDeleteItem.invoke(item)
@@ -523,7 +525,7 @@ private fun buildContextMenuItems(
                 )
             }
         JellytipSeasonSubtitles.shared
-            ?.takeIf { item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON || item.type == BaseItemKind.SERIES }
+            ?.takeIf { JellytipAdmin.isAdmin && (item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON || item.type == BaseItemKind.SERIES) }
             ?.let { seasonSubtitles ->
                 add(
                     DialogItem(
@@ -541,7 +543,7 @@ private fun buildContextMenuItems(
                     },
                 )
             }
-        actions.onChangeStill?.takeIf { !contextMenu.fromLongClick }?.let { changeStill ->
+        actions.onChangeStill?.takeIf { !contextMenu.fromLongClick && JellytipAdmin.isAdmin }?.let { changeStill ->
             add(
                 DialogItem(
                     resources.getString(R.string.jellytip_change_still),
@@ -793,6 +795,7 @@ fun ContextMenu(
     if (showDeleteDialog) {
         ConfirmDeleteDialog(
             itemTitle = item.item.jellytipDeleteLabel(),
+            item = item.item,
             onCancel = { showDeleteDialog = false },
             onConfirm = {
                 actions.onDeleteItem.invoke(item.item)

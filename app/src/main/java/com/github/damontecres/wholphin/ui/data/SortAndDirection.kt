@@ -2,8 +2,11 @@ package com.github.damontecres.wholphin.ui.data
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.JellytipAdmin
+import com.github.damontecres.wholphin.jellytip.rememberIsJellytipAdmin
 import com.github.damontecres.wholphin.jellytip.library.FILE_SIZE_SORT
 import kotlinx.serialization.Serializable
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -199,16 +202,18 @@ fun getStringRes(sort: ItemSortBy): Int =
     }
 
 @Composable
-fun rememberSortOptions(collectionType: CollectionType): List<ItemSortBy> =
-    remember(collectionType) {
+fun rememberSortOptions(collectionType: CollectionType): List<ItemSortBy> {
+    val admin by rememberIsJellytipAdmin()
+    return remember(collectionType, admin) {
         when (collectionType) {
-            CollectionType.MOVIES -> MovieSortOptions + FILE_SIZE_SORT
-            CollectionType.TVSHOWS -> SeriesSortOptions + FILE_SIZE_SORT
+            CollectionType.MOVIES -> if (JellytipAdmin.isAdmin) MovieSortOptions + FILE_SIZE_SORT else MovieSortOptions
+            CollectionType.TVSHOWS -> if (JellytipAdmin.isAdmin) SeriesSortOptions + FILE_SIZE_SORT else SeriesSortOptions
             CollectionType.MUSIC -> AlbumSortOptions
             CollectionType.BOXSETS -> BoxSetSortOptions
             else -> VideoSortOptions
         }
     }
+}
 
 @Composable
 fun rememberSortOptions(type: BaseItemKind): List<ItemSortBy> =
