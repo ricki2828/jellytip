@@ -285,6 +285,9 @@ val ViewOptionsPoster =
         columns = 6,
         spacing = 16,
         contentScale = PrefContentScale.FILL,
+        // Jellytip: library grids open with the focused item's details and backdrop (saved per-library choices still win)
+        showDetails = true,
+        showBackdrop = true,
     )
 val ViewOptionsWide =
     ViewOptions(
