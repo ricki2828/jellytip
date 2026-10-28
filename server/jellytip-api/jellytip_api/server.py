@@ -22,6 +22,7 @@ from . import sizes as sizes_mod
 from . import trailers as trailers_mod
 from .jf import Jellyfin, JfError
 from .subtitles import Jobs
+from .request import Requests, arr_from_env
 
 EXTRAS_RE = re.compile(r"^/v1/items/([^/]+)/extras$")
 BACKDROPS_RE = re.compile(r"^/v1/items/([0-9a-fA-F-]{32,36})/backdrops$")
@@ -34,7 +35,7 @@ AUTH_TTL = 600
 
 
 class Service:
-    def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None, imgscores=None):
+    def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None, imgscores=None, requests=None):
         self.token = env["JELLYTIP_TOKEN"]
         self.env = env
         self.jf = Jellyfin(env.get("JELLYFIN_URL"), env.get("JELLYFIN_KEY"), env.get("JELLYFIN_USER", "ricki28"))
@@ -47,6 +48,7 @@ class Service:
         self.imgscores = imgscores or ImgScores(env.get("IMGSCORES_FILE") or os.path.join(data_dir, "imgscores.json"))
         self.stills, self.tmdb_key = stills, env.get("TMDB_KEY")
         self.lb = letterboxd or Letterboxd(env.get("LB_EXPORT", "letterboxd.json"), self._jellyfin_items(env))
+        self.name_cache = {}  # sha256(token) -> (user name, expires)
         self.admin_cache = {}  # sha256(token) -> (is_admin, expires)
         plex_url, plex_tok = env.get("PLEX_URL"), env.get("PLEX_TOKEN")
         if not (plex_url and plex_tok):
@@ -58,6 +60,7 @@ class Service:
             except Exception:
                 pass
         self.audience = Audience(self, env.get("REQUESTS_EXPORT") or os.path.join(data_dir, "requests.json"), Plex(plex_url, plex_tok))
+        self.requests = requests or Requests(*arr_from_env(env), os.path.join(data_dir, "jellytip_requests.jsonl"), tmdb_eps=self._tmdb_season1_eps)
         self.carousels_path = env.get("CAROUSELS_FILE") or os.path.join(os.path.dirname(env.get("LB_EXPORT", "")) or ".", "carousels.json")
 
     @staticmethod
@@ -119,6 +122,37 @@ class Service:
         self._auth_cache[k] = (ok, now + AUTH_TTL)
         return ok
 
+    def _tmdb_season1_eps(self, tmdb):
+        if not self.tmdb_key:
+            return None
+        try:
+            with urllib.request.urlopen(f"https://api.themoviedb.org/3/tv/{int(tmdb)}/season/1?api_key={self.tmdb_key}", timeout=8) as r:
+                return len(json.load(r).get("episodes") or []) or None
+        except Exception:
+            return None
+
+    def jellyfin_name(self, jf_token):
+        """Friendly name of the Jellyfin user behind this token (None for the shared app token or on error)."""
+        if not (jf_token and self.jf_url):
+            return None
+        k = hashlib.sha256(jf_token.encode()).hexdigest()
+        hit = self.name_cache.get(k)
+        now = time.time()
+        if hit and hit[1] > now:
+            return hit[0]
+        try:
+            req = urllib.request.Request(f"{self.jf_url}/Users/Me", headers={"Authorization": f'MediaBrowser Token="{jf_token}"'})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                name = (json.load(r).get("Name") or "").strip() or None
+        except urllib.error.HTTPError:
+            name = None
+        except Exception:
+            return None
+        if len(self.name_cache) > 1000:
+            self.name_cache.clear()
+        self.name_cache[k] = (name, now + AUTH_TTL)
+        return name
+
     def jellyfin_admin(self, jf_token):
         """Caller's friendly name when this Jellyfin token belongs to an administrator (/Users/Me, cached 10 min), else None.
         The shared app token is never admin."""
@@ -151,7 +185,10 @@ class Service:
                 or self.jellyfin_ok(self.jellyfin_token(authorization, emby_token))):
             return 401, {"error": "unauthorized"}
         if method == "POST":
-            return self.route_post(path, body or {})
+            return self.route_post(path, body or {}, query, self.jellyfin_token(authorization, emby_token))
+        if path == "/v1/request/status":
+            ids = [t for t in re.split(r"[,\s]+", query.get("tmdbIds", "")) if re.fullmatch(r"(?:(?:movie|tv):)?\d+", t)]
+            return self.requests.status(ids)
         m = EXTRAS_RE.match(path)
         if m:
             kind = query.get("type", "movie")
@@ -201,7 +238,15 @@ class Service:
         return 404, {"error": "not found"}
 
 
-    def route_post(self, path, body):
+    def route_post(self, path, body, query=None, jf_token=None):
+        if path == "/v1/request":
+            who = friendly(self.jellyfin_name(jf_token) or "")
+            if not who:
+                return 403, {"error": "sign in with a Jellyfin account to request"}
+            tmdb = body.get("tmdbId")
+            tmdb = int(tmdb) if isinstance(tmdb, str) and tmdb.isdigit() else tmdb
+            return self.requests.request(tmdb if isinstance(tmdb, int) else None, str(body.get("type") or ""), who,
+                                         dry_run=(query or {}).get("dryRun") == "1")
         if path == "/v1/subtitles/season":
             sid = str(body.get("seasonId", ""))
             if not re.fullmatch(r"[0-9a-fA-F-]{32,36}", sid):
