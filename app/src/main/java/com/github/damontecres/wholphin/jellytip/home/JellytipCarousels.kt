@@ -91,13 +91,8 @@ object JellytipCarouselRows {
                 listOf(ItemSortBy.RANDOM) to listOf(SortOrder.ASCENDING)
             }
 
-            "release" -> {
+            "release", "release.desc" -> {
                 listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
-            }
-
-            "release.desc" -> {
-                listOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.SORT_NAME) to
-                    listOf(SortOrder.DESCENDING, SortOrder.ASCENDING)
             }
 
             "added.desc" -> {
@@ -107,7 +102,7 @@ object JellytipCarouselRows {
             else -> {
                 null to null
             }
-            }
+        }
 
     fun carouselRow(carousel: JellytipCarousel): HomeRowConfig.GetItems {
         val (sortBy, sortOrder) = sortFor(carousel.order)
