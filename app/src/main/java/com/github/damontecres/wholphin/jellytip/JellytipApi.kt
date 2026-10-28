@@ -385,11 +385,17 @@ class JellytipApi
             if (!introRefreshStarted.compareAndSet(false, true)) return
             withContext(WholphinDispatchers.IO) {
                 try {
-                    val meta = JSONObject(getJson("/v1/intro", 10_000) ?: return@withContext)
+                    val metaJson = getJson("/v1/intro", 10_000)
+                    if (metaJson == null) android.util.Log.i("JellytipIntro", "refresh: /v1/intro unavailable (see Jellytip API warning)")
+                    val meta = JSONObject(metaJson ?: return@withContext)
                     val version = meta.optString("version").ifBlank { return@withContext }
                     val versionFile = File(dir, "intro.version")
                     val video = File(dir, "intro.mp4")
-                    if (video.isFile && versionFile.takeIf { it.isFile }?.readText() == version) return@withContext
+                    if (video.isFile && versionFile.takeIf { it.isFile }?.readText() == version) {
+                        android.util.Log.i("JellytipIntro", "refresh: version $version already cached")
+                        return@withContext
+                    }
+                    android.util.Log.i("JellytipIntro", "refresh: downloading version $version")
                     dir.mkdirs()
                     val prefs = preferences.data.first()
                     val base = prefs.jellytipApiUrl.ifBlank { JellytipPreferences.DEFAULT_API_URL }.trimEnd('/')
@@ -410,22 +416,23 @@ class JellytipApi
                     val tmp = File(dir, "intro.mp4.part")
                     client.newBuilder().callTimeout(120, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
-                            Timber.w("Jellytip intro download returned %s", response.code)
+                            android.util.Log.i("JellytipIntro", "refresh: download failed HTTP ${response.code} from $url")
                             return@withContext
                         }
                         response.body.byteStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
                     }
                     if (tmp.length() < 100_000 || !tmp.renameTo(video)) {
+                        android.util.Log.i("JellytipIntro", "refresh: bad download (${tmp.length()} bytes)")
                         tmp.delete()
                         return@withContext
                     }
                     versionFile.writeText(version)
-                    Timber.i("Jellytip: intro %s cached (%d KB)", version, video.length() / 1024)
+                    android.util.Log.i("JellytipIntro", "refresh: ok version $version, ${video.length()} bytes")
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     introRefreshStarted.set(false)
                     throw e
                 } catch (e: Exception) {
-                    Timber.w(e, "Jellytip intro refresh failed")
+                    android.util.Log.i("JellytipIntro", "refresh: failed ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
         }

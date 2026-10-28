@@ -2,8 +2,8 @@ package com.github.damontecres.wholphin.jellytip.splash
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.os.SystemClock
-import android.view.ViewGroup
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -36,19 +38,17 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
+import androidx.media3.ui.compose.PlayerSurface
+import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import com.github.damontecres.wholphin.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import timber.log.Timber
 import java.io.File
 
 private val CardBackground = Color(0xFF0A0A0A)
@@ -59,13 +59,19 @@ object JellytipIntroCache {
     fun dir(context: Context): File = File(context.filesDir, "jellytip-intro")
 
     /** The cached intro video, or null on first run / after a failed download. Do the disk check off the main thread. */
-    fun cached(context: Context): File? = File(dir(context), "intro.mp4").takeIf { it.isFile && it.length() > 100_000 }
+    fun cached(context: Context): File? {
+        val f = File(dir(context), "intro.mp4").takeIf { it.isFile && it.length() > 100_000 }
+        val version = File(dir(context), "intro.version").takeIf { it.isFile }?.readText()
+        Log.i("JellytipIntro", if (f != null) "cache hit version=$version bytes=${f.length()}" else "cache miss (dir=${dir(context)})")
+        return f
+    }
 }
 
 /** The video's own end card starts fading in at about 5.2 s and is fully up by 5.8 s; the chord lands as it settles. */
 private const val CARD_SOUND_AT_MS = 5300L
 private const val HOLD_AFTER_END_MS = 400L
-private const val START_TIMEOUT_MS = 3000L
+private const val START_TIMEOUT_MS = 1500L
+private const val TAG = "JellytipIntro"
 
 /**
  * Cold-start intro: the nightly film-snippet montage from the companion (cached by the previous launch), ending on
@@ -120,6 +126,7 @@ private fun IntroVideo(
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
+                    Log.i(TAG, "player state=$state pos=${player.currentPosition}")
                     if (state == Player.STATE_ENDED) {
                         scope.launch {
                             delay(HOLD_AFTER_END_MS)
@@ -129,7 +136,7 @@ private fun IntroVideo(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    Timber.w(error, "Jellytip: intro video failed, falling back to the end card")
+                    Log.i(TAG, "player error ${error.errorCodeName}: ${error.message}; falling back to end card")
                     failed()
                 }
             }
@@ -142,7 +149,9 @@ private fun IntroVideo(
     LaunchedEffect(player) {
         val sound = if (soundEnabled) JellytipSound.prepare(context, R.raw.jellytip_intro_card) else null
         var soundStarted = false
+        var everReady = false
         val t0 = SystemClock.uptimeMillis()
+        Log.i(TAG, "playing ${file.name} (${file.length()} bytes)")
         player.playWhenReady = true
         try {
             while (isActive) {
@@ -151,9 +160,12 @@ private fun IntroVideo(
                     JellytipSound.start(sound)
                     soundStarted = true
                 }
-                if (player.playbackState != Player.STATE_READY && player.currentPosition == 0L &&
-                    SystemClock.uptimeMillis() - t0 > START_TIMEOUT_MS
-                ) {
+                if (!everReady && player.playbackState == Player.STATE_READY) {
+                    everReady = true
+                    Log.i(TAG, "video ready after ${SystemClock.uptimeMillis() - t0} ms")
+                }
+                if (!everReady && SystemClock.uptimeMillis() - t0 > START_TIMEOUT_MS) {
+                    Log.i(TAG, "video not ready in $START_TIMEOUT_MS ms (state=${player.playbackState}); falling back to end card")
                     failed() // never started: don't hold the user on a black screen
                     break
                 }
@@ -162,19 +174,13 @@ private fun IntroVideo(
             if (!soundStarted) JellytipSound.discard(sound)
         }
     }
-    val exoPlayer = player
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = {
-            PlayerView(it).apply {
-                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                useController = false
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                setShutterBackgroundColor(android.graphics.Color.parseColor("#0A0A0A"))
-                this.player = exoPlayer
-            }
-        },
-    )
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        PlayerSurface(
+            player = player,
+            surfaceType = SURFACE_TYPE_TEXTURE_VIEW, // capturable, and no SurfaceView z-order trouble under the Compose overlay
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+        )
+    }
 }
 
 @Composable
@@ -185,6 +191,7 @@ private fun IntroEndCard(
     val context = LocalContext.current
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
+        Log.i(TAG, "end card shown (no video)")
         val sound = if (soundEnabled) JellytipSound.prepare(context, R.raw.jellytip_intro_card) else null
         withFrameNanos { }
         JellytipSound.start(sound)
