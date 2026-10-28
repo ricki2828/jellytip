@@ -230,7 +230,7 @@ def test_backdrops_route_requires_auth_and_returns_null_for_unscored(tmp_path):
                   imgscores=ImgScores(_scores_file(tmp_path)))
     assert svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "bad")[0] == 401
     st, body = svc.route("/v1/items/" + "a" * 32 + "/backdrops", {}, "tok")
-    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "phash": None, "focalX": None, "focalY": None, "face": None, "lum": None}
+    assert st == 200 and body["backdrops"][0] == {"index": 1, "photoScore": 0.95, "tag": "t", "phash": None, "focalX": None, "focalY": None, "face": None, "lum": None}
     assert svc.route("/v1/items/" + "c" * 32 + "/backdrops", {}, "tok")[1]["backdrops"] is None
 
 
@@ -392,3 +392,13 @@ def test_hero_skips_dark_frame_when_a_brighter_one_exists(tmp_path):
         {"i": 2, "tag": "t", "s": 0.9, "h": "00000000ffffffff", "lum": 90}]}}}))
     from jellytip_api.imgscores import ImgScores
     assert ImgScores(str(p)).backdrops("d" * 32)["heroIndex"] == 2  # 1 is differs-from-tile but murky
+
+
+def test_backdrops_reindexed_by_current_tags(tmp_path):
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps({"stills": {}, "items": {"d" * 32: {"anim": False, "thumb": None, "backdrops": [
+        {"i": 0, "tag": "old", "s": 0.99, "h": A}, {"i": 1, "tag": "keep", "s": 0.9, "h": B}, {"i": 2, "tag": "new?", "s": 0.8, "h": C}]}}}))
+    from jellytip_api.imgscores import ImgScores
+    r = ImgScores(str(p)).backdrops("d" * 32, current_tags=["keep", "other"])
+    assert [(b["tag"], b["index"]) for b in r["backdrops"]] == [("keep", 0)]  # "old"/"new?" vanished; "keep" moved 1 -> 0
+    assert ImgScores(str(p)).backdrops("d" * 32)["backdrops"][0]["index"] == 0

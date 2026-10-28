@@ -50,18 +50,20 @@ class ImgScores:
         out.sort(key=tier)
         return out[:limit]
 
-    def backdrops(self, item_id):
+    def backdrops(self, item_id, current_tags=None):
         """Jellyfin backdrop indices, best photo first. None when the item was never scored."""
         rec = self._load()["items"].get(item_id)
         if rec is None:
             return None
-        rows = [{"index": b["i"], "photoScore": b["s"], "phash": b.get("h"), "focalX": b.get("fx"), "focalY": b.get("fy"),
+        rows = [{"index": b["i"], "tag": b.get("tag"), "photoScore": b["s"], "phash": b.get("h"), "focalX": b.get("fx"), "focalY": b.get("fy"),
                  "face": b.get("face"), "lum": b.get("lum")} for b in rec["backdrops"]]
         if not rec.get("anim"):  # animation keeps natural order; else same tiering as stills: photos, unscored, non-photos; best score first inside photos
             ph = sorted((r for r in rows if r["photoScore"] is not None and r["photoScore"] >= self.threshold), key=lambda r: -r["photoScore"])
             un = [r for r in rows if r["photoScore"] is None]
             no = [r for r in rows if r["photoScore"] is not None and r["photoScore"] < self.threshold]
             rows = ph + sorted(un, key=lambda r: r["index"]) + sorted(no, key=lambda r: -r["photoScore"])
+        if current_tags is not None:  # Jellyfin's backdrop set changed since scoring: re-index by tag, drop vanished images
+            rows = [{**r, "index": current_tags.index(r["tag"])} for r in rows if r["tag"] in current_tags]
         th = rec.get("thumb")
         thumb = (th or {}).get("h")
         good = th is not None and (th.get("s") is None or th["s"] >= TITLE_THRESHOLD)

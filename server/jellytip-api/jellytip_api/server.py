@@ -39,6 +39,7 @@ class Service:
     def __init__(self, env, scores=None, stills=fetch_stills, letterboxd=None, cache=None, imgscores=None, requests=None):
         self.token = env["JELLYTIP_TOKEN"]
         self.env = env
+        self._tag_cache = {}
         self.jf = Jellyfin(env.get("JELLYFIN_URL"), env.get("JELLYFIN_KEY"), env.get("JELLYFIN_USER", "ricki28"))
         self.subs = Jobs(self.jf)
         self.jf_url = (env.get("JELLYFIN_URL") or "").rstrip("/")
@@ -94,6 +95,21 @@ class Service:
             self.cache.put(ck, cached, ttl)
         # Letterboxd is a local file read: always fresh, never part of the 7-day cache.
         return {"scores": cached["scores"], "letterboxd": self.lb.film(tmdb) if tmdb else None, "stills": self.imgscores.rank_stills(cached["stills"])}
+
+    def _backdrop_tags(self, item_id):
+        """Current Jellyfin BackdropImageTags of the item (5 min cache), or None when unknown (then the stored set is trusted)."""
+        hit = self._tag_cache.get(item_id)
+        if hit and time.time() - hit[0] < 300:
+            return hit[1]
+        tags = None
+        if self.jf.ok:
+            try:
+                tags = (self.jf.call("GET", f"/Users/{self.jf.uid()}/Items/{item_id}", timeout=5) or {}).get("BackdropImageTags") or []
+            except Exception:
+                tags = None
+        if tags is not None:
+            self._tag_cache[item_id] = (time.time(), tags)
+        return tags
 
     @staticmethod
     def jellyfin_token(authorization, emby_token):
@@ -225,7 +241,8 @@ class Service:
             return status, ({**aud, "you": me} if status == 200 else aud)
         m = BACKDROPS_RE.match(path)
         if m:
-            res = self.imgscores.backdrops(m.group(1).replace("-", "").lower())
+            item_id = m.group(1).replace("-", "").lower()
+            res = self.imgscores.backdrops(item_id, self._backdrop_tags(item_id))
             return 200, res if res is not None else {"itemId": m.group(1), "animation": False, "backdrops": None}
         m = EPISODES_ART_RE.match(path)
         if m:
