@@ -9,13 +9,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -36,6 +37,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -53,17 +56,14 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
-import com.github.damontecres.wholphin.jellytip.JellytipChip
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
-import com.github.damontecres.wholphin.jellytip.WARM
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
 import com.github.damontecres.wholphin.jellytip.myChipText
 import com.github.damontecres.wholphin.jellytip.scoreChipText
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import com.github.damontecres.wholphin.ui.AspectRatio
 import com.github.damontecres.wholphin.ui.components.QuickDetails
-import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -95,6 +95,21 @@ fun JellytipHomeTheme(content: @Composable () -> Unit) {
     ) {
         CompositionLocalProvider(LocalJellytipHome provides true, content = content)
     }
+}
+
+/** Design tokens for the home hero. Sizes are in physical px at 1080p; edit here only. */
+object JellytipHomeTokens {
+    const val TEXT_PX = 22
+    const val TITLE_PX = 34
+    const val LOGO_MAX_W_PX = 380
+    const val LOGO_MAX_H_PX = 150
+    const val TEXT_BLOCK_W_PX = 900
+    const val START_PAD_PX = 16
+    const val BOTTOM_PAD_PX = 28
+    const val HEADER_HEIGHT_FRACTION = 0.5f
+    const val HERO_HEIGHT_FRACTION = 0.66f
+    const val VIGNETTE_ALPHA = 0.78f
+    const val RAIL_SCRIM_ALPHA = 0.55f
 }
 
 private const val LANDSCAPE_HEIGHT_DP = 132
@@ -163,7 +178,7 @@ fun JellytipHomeHero(
     }
 
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
-        Box(Modifier.fillMaxWidth().fillMaxHeight(0.66f)) {
+        Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION)) {
             Crossfade(
                 targetState = lastUrl,
                 animationSpec = tween(700),
@@ -181,15 +196,28 @@ fun JellytipHomeHero(
                     onEnded = { trailerUrl = null },
                 )
             }
-            // Left scrim keeps the nav rail icons and text legible
+            // Narrow left strip keeps the nav rail legible
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .width(96.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.RAIL_SCRIM_ALPHA),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
+            // Soft vignette in the bottom-left corner behind the text block
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.horizontalGradient(
-                            0f to JellytipPalette.Night.copy(alpha = 0.92f),
-                            0.30f to JellytipPalette.Night.copy(alpha = 0.60f),
-                            0.65f to Color.Transparent,
+                        Brush.radialGradient(
+                            0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.VIGNETTE_ALPHA),
+                            1f to Color.Transparent,
+                            center = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
+                            radius = 1400f,
                         ),
                     ),
             )
@@ -199,9 +227,9 @@ fun JellytipHomeHero(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to JellytipPalette.Night.copy(alpha = 0.45f),
-                            0.25f to Color.Transparent,
-                            0.55f to JellytipPalette.Night.copy(alpha = 0.55f),
+                            0f to JellytipPalette.Night.copy(alpha = 0.30f),
+                            0.30f to Color.Transparent,
+                            0.60f to JellytipPalette.Night.copy(alpha = 0.40f),
                             0.9f to JellytipPalette.Night,
                         ),
                     ),
@@ -306,7 +334,7 @@ private data class HeaderChips(
     val mine: String?,
 )
 
-/** Title or clearlogo, one metadata line, two-line overview, score chips (debounced, fail-soft). */
+/** Small, quiet text block, bottom-left: logo or title, one metadata line, one-line overview, one score line. */
 @Composable
 fun JellytipHomeHeader(
     item: BaseItem?,
@@ -315,6 +343,7 @@ fun JellytipHomeHeader(
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
     val screenHeight = LocalConfiguration.current.screenHeightDp
+    val density = LocalDensity.current
     val isEpisodic = item?.type == BaseItemKind.EPISODE || item?.type == BaseItemKind.SEASON
     val title = if (isEpisodic) item?.data?.seriesName else item?.title
     val subtitle = if (isEpisodic) item?.name else null
@@ -328,53 +357,93 @@ fun JellytipHomeHeader(
             value = target.id to viewModel.getExtras(target)
         }
     }
-    val chips =
+    val scoreLine =
         remember(extras, item?.id) {
             val e = extras?.takeIf { it.first == item?.id }?.second
-            HeaderChips(
-                scores = e?.scores?.mapNotNull { scoreChipText(it) }?.take(4).orEmpty(),
-                mine = e?.letterboxd?.let { myChipText(it) },
-            )
+            val parts =
+                e?.scores?.mapNotNull { scoreChipText(it) }?.take(4).orEmpty() +
+                    listOfNotNull(e?.letterboxd?.let { myChipText(it) })
+            parts.joinToString("  ·  ")
         }
 
-    Box(
-        modifier = modifier.fillMaxWidth().height((screenHeight * 0.5f).dp),
-        contentAlignment = Alignment.BottomStart,
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(start = 8.dp, bottom = 16.dp).width(520.dp),
+    with(density) {
+        val textSize = JellytipHomeTokens.TEXT_PX.toSp()
+        val quiet = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        Box(
+            modifier = modifier.fillMaxWidth().height((screenHeight * JellytipHomeTokens.HEADER_HEIGHT_FRACTION).dp),
+            contentAlignment = Alignment.BottomStart,
         ) {
-            TitleOrLogo(
-                title = title,
-                logoImageUrl = rememberLogoUrl(item),
-                showLogo = showLogo,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = JellytipPalette.Vanilla,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier =
+                    Modifier
+                        .padding(
+                            start = JellytipHomeTokens.START_PAD_PX.toDp(),
+                            bottom = JellytipHomeTokens.BOTTOM_PAD_PX.toDp(),
+                        ).width(JellytipHomeTokens.TEXT_BLOCK_W_PX.toDp()),
+            ) {
+                val logoUrl = rememberLogoUrl(item)
+                var logoFailed by remember(logoUrl) { mutableStateOf(false) }
+                if (showLogo && logoUrl != null && !logoFailed) {
+                    AsyncImage(
+                        model = logoUrl,
+                        contentDescription = title,
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.CenterStart,
+                        onError = { logoFailed = true },
+                        modifier =
+                            Modifier
+                                .widthIn(max = JellytipHomeTokens.LOGO_MAX_W_PX.toDp())
+                                .heightIn(max = JellytipHomeTokens.LOGO_MAX_H_PX.toDp())
+                                .height(JellytipHomeTokens.LOGO_MAX_H_PX.toDp()),
+                    )
+                } else {
+                    Text(
+                        text = title ?: "",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontSize = JellytipHomeTokens.TITLE_PX.toSp(),
+                        fontWeight = FontWeight.Medium,
+                        color = JellytipPalette.Vanilla,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = textSize,
+                        color = JellytipPalette.Vanilla,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                QuickDetails(
+                    item?.ui?.quickDetails,
+                    item?.timeRemainingOrRuntime,
+                    endsAt = item?.data?.endDate,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = textSize),
                 )
-            }
-            QuickDetails(item?.ui?.quickDetails, item?.timeRemainingOrRuntime, endsAt = item?.data?.endDate)
-            val overview = item?.data?.overview
-            if (!overview.isNullOrBlank()) {
-                Text(
-                    text = overview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (chips.scores.isNotEmpty() || chips.mine != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    chips.scores.forEach { JellytipChip(it, Color.White.copy(alpha = 0.14f), Color.White) }
-                    chips.mine?.let { JellytipChip(it, WARM.copy(alpha = 0.22f), WARM) }
+                val overview = item?.data?.overview
+                if (!overview.isNullOrBlank()) {
+                    Text(
+                        text = overview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = textSize,
+                        color = quiet,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (scoreLine.isNotEmpty()) {
+                    Text(
+                        text = scoreLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = textSize,
+                        color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
