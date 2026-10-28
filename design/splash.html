@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jellytip Splash Screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=VT323&family=Barlow+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* One visual world: a late-night 1986 TVNZ broadcast melting into an ice-cream logo. TV frame on top, shot list below. */
+  --night: #0e0b1c;
+  --panel: #1a1530;
+  --jelly: #e2264d;
+  --choc: #5b3421;
+  --vanilla: #f7e8c4;
+  --neon: #2be3d2;
+  --sun: #ffb21a;
+  --ink: #efe9ff;
+  --muted: #a69fc2;
+  --display: "Bungee", "Arial Black", sans-serif;
+  --shade: "Bungee Shade", "Bungee", sans-serif;
+  --tele: "VT323", "Courier New", monospace;
+  --body: "Barlow Condensed", "Arial Narrow", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); }
+main { max-width: 1180px; margin: 0 auto; padding: 28px 16px 48px; display: grid; gap: 28px; }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+.note { color: var(--muted); font-size: 18px; margin: 4px 0 0; max-width: 65ch; }
+button {
+  font-family: var(--tele); font-size: 22px; color: var(--night); background: var(--neon);
+  border: 0; border-radius: 4px; padding: 6px 16px; cursor: pointer;
+}
+button:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
+
+/* ---------- TV ---------- */
+.tv { container-type: inline-size; position: relative; aspect-ratio: 16 / 9; border-radius: 22px; overflow: hidden; background: #000;
+  box-shadow: 0 0 0 10px #241d3a, 0 0 0 12px #3a3058, 0 30px 80px rgba(0,0,0,.6); }
+.frame { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; }
+.frame.on { opacity: 1; }
+.frame svg { width: 46%; height: auto; }
+.cap { position: absolute; left: 6%; right: 6%; bottom: 7%; font-family: var(--tele); font-size: 3.2cqw;
+  line-height: 1.05; text-transform: uppercase; }
+.cap span { background: #000; color: #fff; padding: 0 .35em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cap .k { color: var(--sun); }
+.osd { position: absolute; top: 5%; left: 5%; right: 5%; display: flex; justify-content: space-between;
+  font-family: var(--tele); font-size: 2.6cqw; color: #7dff8a; text-shadow: 0 0 6px #2bff5a; z-index: 5; pointer-events: none; }
+.scan { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, transparent 2px 4px);
+  mix-blend-mode: multiply; }
+.vignette { position: absolute; inset: 0; z-index: 7; pointer-events: none; box-shadow: inset 0 0 140px rgba(0,0,0,.85); }
+.static { position: absolute; inset: 0; z-index: 4; opacity: 0; pointer-events: none; }
+.static.on { opacity: 1; }
+.tv.jitter .frame.on { animation: jit .18s steps(2) 2; }
+@keyframes jit { 0% { transform: translate(0,0); filter: hue-rotate(0); } 50% { transform: translate(-1.4%, .6%); filter: hue-rotate(70deg) saturate(1.8); } 100% { transform: translate(0,0); } }
+
+/* ---------- Logo frame ---------- */
+.logo { background: radial-gradient(120% 90% at 50% 40%, #2a1a48 0%, var(--night) 60%); }
+.logo-wrap { display: grid; justify-items: center; gap: 1.6cqw; }
+.logo-wrap svg { width: 9cqw; }
+.word { font-family: var(--shade); font-size: 9cqw; line-height: .9; letter-spacing: .01em;
+  color: var(--vanilla); text-shadow: .06em .06em 0 var(--jelly), .12em .12em 0 var(--choc); }
+.tag { font-family: var(--tele); font-size: 2.6cqw; color: var(--neon); letter-spacing: .08em; text-transform: uppercase; }
+.bar { width: 34%; min-width: 140px; height: 8px; background: #2e2650; border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--jelly), var(--sun)); }
+.logo.on .bar i { animation: load 2.4s ease-out forwards; }
+.logo.on .stickpop { animation: pop .7s cubic-bezier(.2,1.6,.4,1) both; }
+.logo.on .word { animation: slam .5s .15s cubic-bezier(.2,1.4,.4,1) both; }
+.bite { opacity: 0; }
+.logo.bit1 .b1, .logo.bit2 .b2 { opacity: 1; }
+.logo.chomp .logo-wrap svg { animation: chomp .16s ease-out; }
+@keyframes chomp { 50% { transform: scale(.92) rotate(-4deg); } }
+.logo.on .drip { animation: drip 2.4s .5s ease-in infinite; }
+@keyframes load { to { width: 100%; } }
+@keyframes pop { from { transform: translateY(40%) rotate(-25deg) scale(.4); opacity: 0; } }
+@keyframes slam { from { transform: scale(2.4); opacity: 0; } }
+@keyframes drip { 0%,40% { transform: translateY(0); opacity: 1; } 90% { transform: translateY(26px); opacity: 0; } 100% { opacity: 0; } }
+
+/* ---------- Shot list ---------- */
+.shots h2 { font-family: var(--display); font-weight: 400; font-size: 20px; margin: 0 0 12px; }
+.strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.shot { background: var(--panel); border-radius: 8px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.shot .thumb { aspect-ratio: 16/9; display: grid; place-items: center; }
+.shot .thumb svg { width: 52%; max-height: 82%; }
+.shot p { margin: 0; padding: 8px 10px 10px; font-size: 16px; line-height: 1.25; color: var(--ink); }
+.shot b { display: block; font-family: var(--tele); font-weight: 400; font-size: 18px; color: var(--sun); }
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.spec div { background: var(--panel); border-radius: 8px; padding: 12px 14px; font-size: 17px; line-height: 1.35; color: var(--muted); }
+.spec strong { color: var(--ink); font-weight: 600; display: block; }
+
+.modes { display: flex; gap: 8px; flex-wrap: wrap; }
+.modes button { background: #2e2650; color: var(--ink); }
+.modes button[aria-pressed="true"] { background: var(--neon); color: var(--night); }
+.tv.ident .osd, .tv.ident .scan { display: none; }
+.fade { position: absolute; inset: 0; z-index: 8; background: #000; opacity: 0; pointer-events: none; display: grid; place-items: end start; padding: 5cqw; }
+.fade span { font-family: var(--body); font-size: 2.4cqw; color: #bbb; letter-spacing: .04em; opacity: 0; }
+.fade.on { animation: fadeout .7s ease-in forwards; }
+.fade.on span { animation: fadeout .5s .9s ease-out forwards; }
+@keyframes fadeout { to { opacity: 1; } }
+.tv.ident .bar, .tv.ident .roll, .tv.ident .word, .tv.ident .tag { display: none; }
+.tv.ident .logo-wrap svg { width: 16cqw; }
+@media (prefers-reduced-motion: reduce) {
+  .tv.jitter .frame.on, .logo.on .stickpop, .logo.on .word, .bite { opacity: 0; }
+.logo.bit1 .b1, .logo.bit2 .b2 { opacity: 1; }
+.logo.chomp .logo-wrap svg { animation: chomp .16s ease-out; }
+@keyframes chomp { 50% { transform: scale(.92) rotate(-4deg); } }
+.logo.on .drip { animation: none; }
+  .logo.on .bar i { animation: none; width: 100%; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1 id="h">Jellytip — cold-start splash</h1>
+      <p class="note" id="sub">A 4-second VHS channel-surf through 1980s Aotearoa that lands on the logo. Plays once per cold start, any button skips.</p>
+    </div>
+    <div class="modes">
+      <button type="button" id="m-intro" aria-pressed="true">Cold-start splash</button>
+      <button type="button" id="m-ident" aria-pressed="false">Before content</button>
+      <button id="replay" type="button">▶ REPLAY TAPE</button>
+    </div>
+  </header>
+
+  <div class="tv" id="tv" aria-label="Splash screen preview">
+    <canvas class="static" id="static" width="320" height="180"></canvas>
+    <div class="osd"><span id="osd">PLAY ▶</span><span id="tc">SP 0:00:00</span></div>
+    <div id="frames"></div>
+    <div class="fade" id="fade"><span>Chinatown (1974)</span></div>
+    <div class="scan"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <section class="shots">
+    <h2>Shot list</h2>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <section class="spec">
+    <div><strong>Logo</strong>A Jelly Tip on a stick: vanilla, chocolate dip, raspberry jelly tip with a drip. The bite mark is a play button.</div>
+    <div><strong>Before content</strong>The short ident plays when you press play on a film or the first episode of a session, not between episodes. Settings toggle to turn it off.</div>
+    <div><strong>On the TV</strong>Android's system splash only allows a static icon, so this montage is an in-app intro after it. Cold start only, skippable, about 4 seconds.</div>
+    <div><strong>Sound</strong>A tape-deck clunk and motor whir as the tape starts, then a warm Rhodes Fmaj9 rolled across the logo, with amp tremolo and a little tape echo. Browsers block sound until you click, so press Replay to hear it.</div>
+  </section>
+</main>
+
+<script>
+const logoSVG = `<svg viewBox="0 0 100 170" aria-hidden="true">
+  <g class="stickpop">
+    <rect x="43" y="112" width="14" height="54" rx="7" fill="#d9a86c"/>
+    <rect x="18" y="18" width="64" height="104" rx="30" fill="#f7e8c4"/>
+    <path d="M18 70 V48 a32 32 0 0 1 64 0 V70 q-8 8 -16 0 q-8 -8 -16 0 q-8 8 -16 0 q-8 -8 -16 0z" fill="#5b3421"/>
+    <path d="M27 36 a23 23 0 0 1 46 0 q-6 6 -12 0 q-5 -5 -11 0 q-6 6 -11 0 q-6 -5 -12 0z" fill="#e2264d"/>
+    <ellipse class="drip" cx="34" cy="42" rx="3.2" ry="4.6" fill="#e2264d"/>
+    <path d="M44 84 L62 96 L44 108 Z" fill="#5b3421"/>
+    <ellipse cx="40" cy="26" rx="6" ry="3" fill="#ff8aa3" opacity=".7"/>
+    <circle class="bite b1" cx="80" cy="30" r="11" fill="#21163d"/><circle class="bite b2" cx="70" cy="18" r="10" fill="#21163d"/>
+  </g></svg>`;
+
+const frames = [
+  { bg: "#ffcf3a", title: "Buzzy Bee",
+    cap: ['<span class="k">NOW SHOWING:</span>', '<span>ONE BUZZY BEE, FLAT STICK. TOP SPEED 4 KM/H.</span>'],
+    svg: `<svg viewBox="0 0 200 130"><circle cx="55" cy="112" r="14" fill="#1d6fd6"/><circle cx="145" cy="112" r="14" fill="#1d6fd6"/>
+      <ellipse cx="100" cy="72" rx="62" ry="38" fill="#ffd400" stroke="#111" stroke-width="4"/>
+      <rect x="72" y="36" width="14" height="72" fill="#111"/><rect x="104" y="36" width="14" height="72" fill="#111"/>
+      <circle cx="152" cy="58" r="20" fill="#ffd400" stroke="#111" stroke-width="4"/><circle cx="158" cy="54" r="4" fill="#111"/>
+      <ellipse cx="80" cy="26" rx="26" ry="14" fill="#e53935" stroke="#111" stroke-width="3" transform="rotate(-18 80 26)"/>
+      <ellipse cx="118" cy="24" rx="26" ry="14" fill="#e53935" stroke="#111" stroke-width="3" transform="rotate(14 118 24)"/>
+      <path d="M160 40 l6 -20 M168 44 l14 -14" stroke="#111" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { bg: "#000", title: "Teletext 801",
+    cap: ['<span class="k">TELETEXT P801:</span>', '<span>SUBTITLES NOW ONE BUTTON. PROGRESS SINCE 1986.</span>'],
+    svg: `<svg viewBox="0 0 200 130"><rect width="200" height="130" fill="#000"/>
+      <rect x="0" y="0" width="200" height="22" fill="#0000ff"/><text x="6" y="17" font-family="VT323" font-size="20" fill="#ffff00">P801 TELETEXT 801 21:47</text>
+      <text x="8" y="50" font-family="VT323" font-size="22" fill="#00ffff">SUBTITLES</text>
+      <text x="8" y="74" font-family="VT323" font-size="18" fill="#fff">ENGLISH........... ON</text>
+      <text x="8" y="94" font-family="VT323" font-size="18" fill="#fff">TE REO MAORI...... ON</text>
+      <rect x="0" y="108" width="50" height="22" fill="#f00"/><rect x="50" y="108" width="50" height="22" fill="#0f0"/><rect x="100" y="108" width="50" height="22" fill="#ff0"/><rect x="150" y="108" width="50" height="22" fill="#0ff"/></svg>` },
+  { bg: "#3f6b3a", title: "Gumboots",
+    cap: ['<span class="k">IF IT WASN\'T FOR YOUR GUMBOOTS...</span>', '<span>WE DON\'T KNOW HOW LUCKY WE ARE.</span>'],
+    svg: `<svg viewBox="0 0 200 130"><path d="M50 10 h34 v80 h28 a16 16 0 0 1 16 16 v10 h-78z" fill="#111"/>
+      <path d="M118 10 h34 v80 h28 a16 16 0 0 1 16 16 v10 h-78z" fill="#111" transform="translate(-6 0)"/>
+      <rect x="50" y="10" width="34" height="8" fill="#e53935"/><rect x="112" y="10" width="34" height="8" fill="#e53935"/>
+      <ellipse cx="100" cy="124" rx="90" ry="6" fill="#5a3b1c"/></svg>` },
+  { bg: "#c15a1e", title: "Holden, vinyl seats",
+    cap: ['<span>HOLDEN KINGSWOOD. VINYL SEATS. 38°C.</span>', '<span class="k">DRIVE-IN SOLD OUT. STAYING IN.</span>'],
+    svg: `<svg viewBox="0 0 200 130"><path d="M12 84 h176 v-18 l-30 -6 l-22 -24 h-66 l-26 26 l-32 4z" fill="#e8dcc0" stroke="#111" stroke-width="4"/>
+      <path d="M78 42 h52 l18 20 h-86z" fill="#9fd3ff" stroke="#111" stroke-width="3"/>
+      <circle cx="52" cy="90" r="16" fill="#222"/><circle cx="148" cy="90" r="16" fill="#222"/><circle cx="52" cy="90" r="6" fill="#aaa"/><circle cx="148" cy="90" r="6" fill="#aaa"/></svg>` },
+  { bg: "#09122e", title: "Goodnight, kiwi",
+    cap: ['<span>THE KIWI IS GOING TO BED.</span>', '<span class="k">YOU ARE NOT.</span>'],
+    svg: `<svg viewBox="0 0 200 130"><circle cx="168" cy="22" r="12" fill="#fff6c4"/>
+      <path d="M120 120 L140 20 M150 120 L140 20" stroke="#9aa6c9" stroke-width="4"/>
+      ${[0,1,2,3,4].map(i=>`<line x1="${124+i*3}" y1="${100-i*18}" x2="${146-i*1.5}" y2="${100-i*18}" stroke="#9aa6c9" stroke-width="3"/>`).join("")}
+      <path d="M118 30 a26 18 -30 0 1 44 -8" fill="none" stroke="#c9d2ee" stroke-width="5"/>
+      <ellipse cx="70" cy="96" rx="26" ry="20" fill="#7a5a3a"/><circle cx="92" cy="82" r="9" fill="#7a5a3a"/>
+      <path d="M100 82 q14 4 18 12" stroke="#d9c39a" stroke-width="3" fill="none"/>
+      <path d="M60 116 v8 M76 116 v8" stroke="#d9c39a" stroke-width="3"/>
+      <path d="M48 84 q22 -30 44 -6" fill="#5b8fd6"/><circle cx="48" cy="84" r="4" fill="#fff"/></svg>` },
+];
+
+const framesEl = document.getElementById("frames");
+const all = frames.map((f, i) => {
+  const d = document.createElement("div");
+  d.className = "frame";
+  d.style.background = f.bg;
+  d.innerHTML = f.svg + `<div class="cap">${f.cap.join("<br>")}</div>`;
+  framesEl.appendChild(d);
+  return d;
+});
+const logo = document.createElement("div");
+logo.className = "frame logo on";
+logo.innerHTML = `<div class="logo-wrap">${logoSVG}<div class="word">jellytip</div>
+  <div class="tag">World famous in your lounge</div><div class="bar"><i></i></div>
+  <div class="tag roll" style="color:var(--muted)">Ready to roll…</div></div>`;
+framesEl.appendChild(logo);
+
+// Static shot list (complete at rest)
+const strip = document.getElementById("strip");
+[...frames, { bg: "#1b1338", title: "Logo", svg: logoSVG, cap: ["", "Jellytip. World famous in your lounge."] }].forEach((f, i) => {
+  const s = document.createElement("div");
+  s.className = "shot";
+  const plain = f.cap.join(" ").replace(/<[^>]+>/g, "");
+  s.innerHTML = `<div class="thumb" style="background:${f.bg}">${f.svg}</div><p><b>${String(i + 1).padStart(2, "0")} · ${f.title}</b>${plain}</p>`;
+  strip.appendChild(s);
+});
+
+// VHS static
+const cv = document.getElementById("static"), cx = cv.getContext("2d");
+function noise() {
+  const img = cx.createImageData(cv.width, cv.height);
+  for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i+1] = img.data[i+2] = v; img.data[i+3] = 255; }
+  cx.putImageData(img, 0, 0);
+}
+cv.style.width = "100%"; cv.style.height = "100%";
+
+let ac;
+function noiseBuf(sec) {
+  const buf = ac.createBuffer(1, Math.max(1, ac.sampleRate * sec), ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function tapeClunk(t) {
+  // play-button click, transport thump, then the motor spinning up with a bed of hiss
+  const click = ac.createBufferSource(); click.buffer = noiseBuf(0.03);
+  const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2500;
+  const cg = ac.createGain(); cg.gain.setValueAtTime(0.6, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+  click.connect(hp).connect(cg).connect(ac.destination); click.start(t);
+  const th = ac.createOscillator(), tg = ac.createGain();
+  th.frequency.setValueAtTime(110, t + 0.02); th.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+  tg.gain.setValueAtTime(0.55, t + 0.02); tg.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  th.connect(tg).connect(ac.destination); th.start(t + 0.02); th.stop(t + 0.2);
+  const motor = ac.createOscillator(), mg = ac.createGain(), mlp = ac.createBiquadFilter();
+  motor.type = "sawtooth"; mlp.type = "lowpass"; mlp.frequency.value = 320;
+  motor.frequency.setValueAtTime(18, t + 0.08); motor.frequency.exponentialRampToValueAtTime(62, t + 0.5);
+  mg.gain.setValueAtTime(0, t + 0.08); mg.gain.linearRampToValueAtTime(0.06, t + 0.3); mg.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  motor.connect(mlp).connect(mg).connect(ac.destination); motor.start(t + 0.08); motor.stop(t + 0.95);
+  const hiss = ac.createBufferSource(); hiss.buffer = noiseBuf(3.4);
+  const hbp = ac.createBiquadFilter(); hbp.type = "bandpass"; hbp.frequency.value = 6000; hbp.Q.value = 0.5;
+  const hg = ac.createGain(); hg.gain.setValueAtTime(0, t + 0.1); hg.gain.linearRampToValueAtTime(0.025, t + 0.4); hg.gain.linearRampToValueAtTime(0, t + 3.3);
+  hiss.connect(hbp).connect(hg).connect(ac.destination); hiss.start(t + 0.1);
+}
+function rhodesNote(freq, t, vel) {
+  // FM electric piano: sine carrier, 1:1 modulator for the warm body, 14:1 modulator for the tine "ding"
+  const out = ac.createGain(), lp = ac.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.setValueAtTime(2600, t); lp.frequency.exponentialRampToValueAtTime(900, t + 2.5);
+  out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.18 * vel, t + 0.006);
+  out.gain.exponentialRampToValueAtTime(0.06 * vel, t + 0.6); out.gain.exponentialRampToValueAtTime(0.0008, t + 3.6);
+  const car = ac.createOscillator(); car.frequency.value = freq;
+  const m1 = ac.createOscillator(), m1g = ac.createGain(); m1.frequency.value = freq;
+  m1g.gain.setValueAtTime(freq * 1.6 * vel, t); m1g.gain.exponentialRampToValueAtTime(freq * 0.25, t + 1.2);
+  const m2 = ac.createOscillator(), m2g = ac.createGain(); m2.frequency.value = freq * 14;
+  m2g.gain.setValueAtTime(freq * 2.2 * vel, t); m2g.gain.exponentialRampToValueAtTime(1, t + 0.12);
+  m1.connect(m1g).connect(car.frequency); m2.connect(m2g).connect(car.frequency);
+  car.connect(lp).connect(out).connect(rhodesBus);
+  [car, m1, m2].forEach(o => { o.start(t); o.stop(t + 3.7); });
+}
+let rhodesBus;
+function rhodesSting(t) {
+  if (!rhodesBus) {
+    // suitcase-amp tremolo + a short tape-echo slap, shared by every note
+    rhodesBus = ac.createGain();
+    const trem = ac.createGain(), lfo = ac.createOscillator(), depth = ac.createGain();
+    lfo.frequency.value = 4.6; depth.gain.value = 0.22; trem.gain.value = 0.78;
+    lfo.connect(depth).connect(trem.gain); lfo.start();
+    const dly = ac.createDelay(), fb = ac.createGain(), wet = ac.createGain();
+    dly.delayTime.value = 0.23; fb.gain.value = 0.28; wet.gain.value = 0.22;
+    rhodesBus.connect(trem).connect(ac.destination);
+    trem.connect(dly).connect(fb).connect(dly); dly.connect(wet).connect(ac.destination);
+  }
+  // Fmaj9, rolled bottom to top like a lazy hand: F2 C3 E3 A3 G4, then a C5 on top
+  [[87.31, 0, .9], [130.81, .045, .8], [164.81, .09, .75], [220.0, .135, .75], [392.0, .19, .7], [523.25, .62, .55]]
+    .forEach(([f, d, v]) => rhodesNote(f, t + d, v));
+}
+function nomnom(withSound) {
+  logo.classList.remove("bit1", "bit2", "chomp");
+  const step = (cls, ms) => timers.push(setTimeout(() => { logo.classList.add(cls); logo.classList.remove("chomp"); void logo.offsetWidth; logo.classList.add("chomp"); }, ms));
+  step("bit1", 650); step("bit2", 1000);
+  if (withSound && ac) rhodesSting(ac.currentTime + 0.05);
+}
+const tv = document.getElementById("tv"), tc = document.getElementById("tc"), osd = document.getElementById("osd");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let timers = [], noiseTimer, t0;
+
+function show(el) {
+  [...all, logo].forEach(x => x.classList.remove("on"));
+  logo.classList.remove("bit1", "bit2", "chomp");
+  void el.offsetWidth; // restart CSS animations
+  el.classList.add("on");
+  tv.classList.remove("jitter"); void tv.offsetWidth; if (mode === "intro") tv.classList.add("jitter");
+}
+function burst(ms) {
+  cv.classList.add("on"); noiseTimer = setInterval(noise, 40);
+  timers.push(setTimeout(() => { cv.classList.remove("on"); clearInterval(noiseTimer); }, ms));
+}
+let mode = "intro";
+const fade = document.getElementById("fade");
+function playIdent() {
+  // Before content: logo + Rhodes only, then fade to black into the film. About 3 seconds.
+  t0 = 0;
+  show(logo); nomnom(false);
+  if (ac) rhodesSting(ac.currentTime + 0.12);
+  timers.push(setTimeout(() => fade.classList.add("on"), reduce ? 2000 : 2300));
+}
+function play() {
+  timers.forEach(clearTimeout); timers = []; clearInterval(noiseTimer);
+  fade.classList.remove("on");
+  if (mode === "ident") { playIdent(); return; }
+  if (reduce) { show(logo); nomnom(true); return; }
+  osd.textContent = "PLAY ▶"; t0 = performance.now();
+  if (ac) tapeClunk(ac.currentTime + 0.02);
+  burst(400);
+  frames.forEach((_, i) => timers.push(setTimeout(() => show(all[i]), 400 + i * 560)));
+  const end = 400 + frames.length * 560;
+  timers.push(setTimeout(() => burst(260), end - 120));
+  timers.push(setTimeout(() => { show(logo); osd.textContent = "STOP ■"; nomnom(true); }, end + 140));
+}
+(function clock() {
+  if (t0) { const s = Math.floor((performance.now() - t0) / 1000); tc.textContent = `SP 0:00:${String(Math.min(s, 59)).padStart(2, "0")}`; }
+  requestAnimationFrame(clock);
+})();
+const copy = {
+  intro: ["Jellytip — cold-start splash", "A 4-second VHS channel-surf through 1980s Aotearoa that lands on the logo. Plays once per cold start, any button skips.", "▶ REPLAY TAPE"],
+  ident: ["Jellytip — before content", "Just the Jelly Tip, no name or slogan, with the Rhodes chord, then fade to black and the film starts. About 3 seconds, before every film or first episode; any button skips.", "▶ REPLAY IDENT"],
+};
+function setMode(m, autoplay) {
+  mode = m; tv.classList.toggle("ident", m === "ident");
+  document.getElementById("m-intro").setAttribute("aria-pressed", m === "intro");
+  document.getElementById("m-ident").setAttribute("aria-pressed", m === "ident");
+  const [h, sub, btn] = copy[m];
+  document.getElementById("h").textContent = h; document.getElementById("sub").textContent = sub;
+  document.getElementById("replay").textContent = btn;
+  if (location.hash.slice(1) !== m) history.replaceState(null, "", "#" + m);
+  if (autoplay) play();
+}
+function unlock() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) {} }
+document.getElementById("m-intro").addEventListener("click", () => { unlock(); setMode("intro", true); });
+document.getElementById("m-ident").addEventListener("click", () => { unlock(); setMode("ident", true); });
+addEventListener("hashchange", () => { const h = location.hash.slice(1); if (copy[h] && h !== mode) setMode(h, true); });
+document.getElementById("replay").addEventListener("click", () => {
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) {}
+  play();
+});
+setMode(copy[location.hash.slice(1)] ? location.hash.slice(1) : "intro", false);
+setTimeout(play, 900);
+</script>
+</body>
+</html>

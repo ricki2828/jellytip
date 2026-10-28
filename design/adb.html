@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chromecast ADB Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Jellytip palette, checklist layout: three numbered stages, one card each. */
+  --bg: #fbf6ec; --card: #ffffff; --ink: #1d1530; --muted: #6b6380; --jelly: #d81f47; --choc: #5b3421; --line: #e9e0cf;
+  --display: "Bungee", "Arial Black", sans-serif; --body: "Barlow", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #120e20; --card: #1c1630; --ink: #f1ecff; --muted: #a69fc2; --jelly: #ff4d6d; --choc: #d9a86c; --line: #2e2650; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #120e20; --card: #1c1630; --ink: #f1ecff; --muted: #a69fc2; --jelly: #ff4d6d; --choc: #d9a86c; --line: #2e2650; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.5 var(--body); }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; display: grid; gap: 20px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 30px; margin: 0; text-wrap: balance; }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 10px; }
+h2 { margin: 0; font-size: 20px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+h2 .n { font-family: var(--display); color: var(--jelly); font-weight: 400; }
+ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.path { font-weight: 600; }
+.why { color: var(--muted); font-size: 16px; margin: 0; }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font: 15px/1.5 var(--mono); }
+.row { display: flex; gap: 8px; align-items: start; }
+.row pre { flex: 1; }
+button { font: 600 14px var(--body); border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--jelly); outline-offset: 2px; }
+.send { border-left: 4px solid var(--jelly); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Chromecast ADB setup</h1>
+    <p class="lede">Lets Claude install Jellytip builds straight onto the Chromecast with Google TV 4K. About five minutes with the remote.</p>
+  </header>
+
+  <section>
+    <h2><span class="n">1</span>Unlock developer options</h2>
+    <ol>
+      <li>Open <span class="path">Settings → System → About</span>.</li>
+      <li>Scroll to <span class="path">Android TV OS build</span> and press OK on it 7 times, until it says you are a developer.</li>
+      <li>Go back to <span class="path">Settings → System → Developer options</span>.</li>
+      <li>Turn on <span class="path">USB debugging</span>. Despite the name, this also turns on network debugging.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>Put the Chromecast on Tailscale</h2>
+    <p class="why">The build server isn't on your home Wi-Fi, so it reaches the TV through Tailscale.</p>
+    <ol>
+      <li>On the Chromecast, open the Google Play Store, search <span class="path">Tailscale</span>, install it.</li>
+      <li>Open Tailscale and sign in with the same account as the server. It shows a code to approve on your phone.</li>
+      <li>Leave Tailscale switched on. Note the TV's address, which starts with <span class="path">100.</span></li>
+    </ol>
+  </section>
+
+  <section class="send">
+    <h2><span class="n">3</span>Send Claude the address</h2>
+    <p class="why">Claude then runs the commands below from the server.</p>
+    <div class="row"><pre id="c1">adb connect 100.x.y.z:5555
+adb install -r Jellytip-debug.apk</pre><button type="button" data-copy="c1">Copy</button></div>
+    <ol>
+      <li>The first time, the TV shows <span class="path">Allow USB debugging?</span></li>
+      <li>Tick <span class="path">Always allow from this computer</span> and press OK.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="n">Or</span>Install from your laptop instead</h2>
+    <p class="why">No Tailscale on the TV. The laptop must be on the same Wi-Fi as the Chromecast; use the Wi-Fi address from Settings → Network &amp; Internet.</p>
+    <div class="row"><pre id="c2">brew install android-platform-tools
+adb connect &lt;tv-wifi-ip&gt;:5555
+adb install -r Jellytip-debug.apk</pre><button type="button" data-copy="c2">Copy</button></div>
+  </section>
+
+  <section>
+    <h2><span class="n">?</span>If it doesn't connect</h2>
+    <ol>
+      <li><span class="path">unauthorized</span>: the TV prompt was missed. Run the connect again and accept it on the TV.</li>
+      <li><span class="path">connection refused</span>: USB debugging turned itself off after a reboot. Switch it back on.</li>
+      <li>Times out: check Tailscale is still connected on the TV.</li>
+    </ol>
+  </section>
+</main>
+<script>
+document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent); b.textContent = "Copied"; }
+  catch (e) { b.textContent = "Select and copy"; }
+  setTimeout(() => b.textContent = "Copy", 1600);
+}));
+</script>
+</body>
+</html>
