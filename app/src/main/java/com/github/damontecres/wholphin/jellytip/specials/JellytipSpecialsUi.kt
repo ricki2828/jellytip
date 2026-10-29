@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip.specials
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -94,15 +95,24 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /**
- * "Play both" hand-off from a Double Feature tile to the details page of film A: that page adds a Play both button that
- * plays A and queues B. Set when the pair is opened, cleared when Home opens anything else.
+ * "Play both" hand-off from a Double Feature half to that film's details page: it adds "Play both" (this film, then the
+ * other) and "Double feature with <other>". Set when a half is opened, cleared when Home opens anything else.
  */
 object JellytipDoubleBill {
-    @Volatile
-    var pair: Pair<UUID, UUID>? = null
+    data class Bill(
+        val first: UUID,
+        val second: UUID,
+        val secondTitle: String,
+    )
 
-    /** B, when [a] was opened from a double feature. */
-    fun nextAfter(a: UUID): UUID? = pair?.takeIf { it.first == a }?.second
+    @Volatile
+    var pair: Bill? = null
+
+    /** The other film, when [first] was opened from a double feature. */
+    fun nextAfter(first: UUID): UUID? = pair?.takeIf { it.first == first }?.second
+
+    /** Title of the other film, when [first] was opened from a double feature. */
+    fun partnerTitle(first: UUID): String? = pair?.takeIf { it.first == first }?.secondTitle
 }
 
 /** Sizes in dp; every special fits the ~230 dp the home leaves below the hero text. Shared with the image prefetcher. */
@@ -492,42 +502,72 @@ private fun DoubleFeatureRow(
     focusModifier: Modifier,
     actions: SpecialActions,
 ) {
+    val sizes = rememberJellytipSizes()
+    // Each half opens its own film; the details page then offers Play both (that film first, then the other)
+    val openHalf: (BaseItem, BaseItem) -> Unit = { film, other ->
+        JellytipTrailerControl.stop()
+        JellytipDoubleBill.pair = JellytipDoubleBill.Bill(film.id, other.id, other.title ?: other.name ?: "")
+        actions.navigate(film.destination())
+    }
     ItemRow(
         title = special.title,
         items = special.pairs,
-        onClickItem = { _, pair ->
-            items[pair.a]?.let { a ->
-                JellytipDoubleBill.pair = pair.a to pair.b
-                actions.navigate(a.destination())
-            }
-        },
-        onLongClickItem = { _, pair -> items[pair.a]?.let(actions.open) },
+        // Clicks are handled per half below; ItemRow's own callback only remembers the position
+        onClickItem = { _, _ -> },
+        onLongClickItem = { _, _ -> },
         horizontalPadding = SpecialTokens.SPACING,
         modifier = focusModifier,
         cardContent = { _, pair, cardModifier, onClick, onLongClick ->
             val a = pair?.let { items[it.a] }
             val b = pair?.let { items[it.b] }
             if (pair != null && a != null && b != null) {
-                val width = SpecialTokens.PAIR_W * 2 + 3.dp
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SpecialCard(
-                        width = width,
-                        height = SpecialTokens.PAIR_H,
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(a, true) },
+                // One framed unit, two focusable halves (Right goes A -> B -> next pair's A)
+                var unitFocused by remember { mutableStateOf(false) }
+                val unitWidth = SpecialTokens.PAIR_W * 2 + PAIR_GAP + PAIR_FRAME * 2
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.width(unitWidth)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(PAIR_GAP),
+                        modifier =
+                            Modifier
+                                .onFocusChanged { unitFocused = it.hasFocus }
+                                .border(1.dp, JellytipPalette.Vanilla.copy(alpha = if (unitFocused) 0.35f else 0.15f), RoundedCornerShape(8.dp))
+                                .padding(PAIR_FRAME),
                     ) {
-                        Row(Modifier.fillMaxSize().background(JellytipPalette.Night)) {
-                            Box(Modifier.width(SpecialTokens.PAIR_W).fillMaxHeight()) {
-                                JellytipTitledImage(a, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H, fetchRanking = false)
-                            }
-                            Spacer(Modifier.width(3.dp))
-                            Box(Modifier.width(SpecialTokens.PAIR_W).fillMaxHeight()) {
-                                JellytipTitledImage(b, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H, fetchRanking = false)
+                        listOf(a to b, b to a).forEachIndexed { half, (film, other) ->
+                            SpecialCard(
+                                width = SpecialTokens.PAIR_W,
+                                height = SpecialTokens.PAIR_H,
+                                onClick = {
+                                    onClick()
+                                    openHalf(film, other)
+                                },
+                                onLongClick = {
+                                    onLongClick()
+                                    actions.open(film)
+                                },
+                                modifier = (if (half == 0) cardModifier else Modifier).onFocusChanged { if (it.isFocused) onFocusItem(film, true) },
+                                focusScale = PAIR_HALF_SCALE,
+                                // The partner half stays at full brightness so the pair still reads as a pair
+                                dimWhenRowFocused = !unitFocused,
+                            ) {
+                                JellytipTitledImage(film, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H, fetchRanking = false)
+                                Text(
+                                    text = (half + 1).toString(),
+                                    color = Color.White,
+                                    fontFamily = JellytipFontFamily,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = sizes.sp(16),
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.TopStart)
+                                            .padding(5.dp)
+                                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
                             }
                         }
                     }
-                    Column(Modifier.width(width).padding(start = 2.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(start = 2.dp)) {
                         if (pair.reason.isNotBlank()) Caption(pair.reason, alpha = 0.8f)
                         pair.totalRuntimeMin?.let { Caption("${runtime(it)} together", alpha = 0.55f) }
                     }
@@ -536,6 +576,12 @@ private fun DoubleFeatureRow(
         },
     )
 }
+
+private val PAIR_GAP = 8.dp
+private val PAIR_FRAME = 4.dp
+
+/** 1.04x on a 171 dp half = ~3.5 dp per side: inside the 8 dp gap, so the halves never overlap. */
+private const val PAIR_HALF_SCALE = 1.04f
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Because you loved: Letterboxd quote card for the anchor film, then similar unwatched films
@@ -1042,6 +1088,8 @@ internal fun SpecialCard(
      * card grows past the 10 dp row gap and draws over its neighbours (double features) or is clipped at the row edge.
      */
     focusScale: Float? = null,
+    /** False keeps the card at full brightness while another card in the row has focus. */
+    dimWhenRowFocused: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -1050,7 +1098,7 @@ internal fun SpecialCard(
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.size(width, height).jellytipSiblingDim(focused),
+        modifier = modifier.size(width, height).jellytipSiblingDim(focused || !dimWhenRowFocused),
         interactionSource = source,
         shape = if (shape != null) CardDefaults.shape(shape) else CardDefaults.shape(),
         colors = CardDefaults.colors(containerColor = Color(0xFF141414)),

@@ -51,6 +51,7 @@ import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsPullQuote
 import com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipApi
@@ -197,6 +198,7 @@ fun MovieDetails(
                         ),
                     )
                 },
+                doubleFeatureWith = JellytipDoubleBill.partnerTitle(movie.id),
                 // Opened from a Home double feature: "Play both" plays this film, then the other one
                 onPlayBoth =
                     JellytipDoubleBill.nextAfter(movie.id)?.let { next ->
@@ -342,6 +344,8 @@ fun MovieDetailsContent(
     onChooseVersion: (MediaSourceInfo) -> Unit,
     modifier: Modifier = Modifier,
     onPlayBoth: (() -> Unit)? = null,
+    /** Opened from a double feature: the other film's title, shown as "Double feature with …". */
+    doubleFeatureWith: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -396,6 +400,8 @@ fun MovieDetailsContent(
     RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
     Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = !topFocused)
+        // One review, bottom right, balancing the info block (loaded with the page, fades in once)
+        JellytipDetailsPullQuote(reviews) { headerAlpha }
         LazyColumn(
                 state = listState,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -405,6 +411,7 @@ fun MovieDetailsContent(
             item {
                 JellytipDetailsBlock(
                     item = movie,
+                    subtitle = doubleFeatureWith?.let { "Double feature with $it" },
                     buttons =
                         buildList {
                             add(
@@ -430,7 +437,7 @@ fun MovieDetailsContent(
                             }
                             if (onPlayBoth != null) {
                                 add(
-                                    JellytipButton("Play both", {
+                                    JellytipButton("\u25B6 Play both", {
                                         position = HEADER_ROW
                                         onPlayBoth()
                                     }),
