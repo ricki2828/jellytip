@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { iptvPart, parseVodDetail, parseVodItems, qualityLabel } from "../src/lib/iptvVod.ts";
+import { iptvPart, parseVodDetail, parseVodItems, vodTech } from "../src/lib/iptvVod.ts";
 import { parseRows } from "../src/lib/rows.ts";
 
 const vod = { id: "3:m:991", source: "iptv", kind: "movie", tmdbId: 27205, title: "Inception", year: 2010, quality: ["4k", "hdr"], poster: "https://image.tmdb.org/t/p/w342/x.jpg" };
@@ -45,8 +45,9 @@ test("franchise part: only source iptv with a valid copy counts", () => {
   assert.equal(iptvPart(null), null);
 });
 
-test("quality label", () => {
-  assert.equal(qualityLabel(["4k", "hdr"]), "4K HDR");
-  assert.equal(qualityLabel(["1080p"]), "HD");
-  assert.equal(qualityLabel(["720p"]), null);
+test("badge formats: server tech first, else the quality tokens", () => {
+  assert.deepEqual(parseVodItems([{ ...vod, tech: ["4k", "dv", "ATMOS", "junk"] }])[0].tech, ["4K", "DV", "ATMOS"]);
+  assert.deepEqual(vodTech({ tech: ["DV"], quality: ["4k"] }), ["DV"]);
+  assert.deepEqual(vodTech({ quality: ["4k", "hdr"] }), ["4K", "HDR"]);
+  assert.deepEqual(vodTech({ quality: ["1080p"] }), []);
 });

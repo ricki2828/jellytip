@@ -5,6 +5,7 @@ import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
 import { registerLogoStyles } from "../lib/logoStyle";
+import { registerTechs } from "../lib/techBadges";
 import { parseGenres, parseTitles, type DiscoverSection, type DiscoverTitle, type Genre, type MediaType } from "../lib/discover";
 export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
@@ -238,9 +239,11 @@ const backdrops = cached<BackdropInfo>(async (id, job) => {
     thumb?: { good?: boolean; titled?: boolean | null } | null;
     thumbTitled?: boolean | null;
     logoStyle?: string | null;
+    tech?: unknown;
   }>(`/v1/items/${id}/backdrops`, job);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   if (raw.logoStyle) registerLogoStyles({ [id]: raw.logoStyle });
+  if (raw.tech !== undefined) registerTechs({ [id]: raw.tech });
   const arr = raw.backdrops ?? [];
   const focal = new Map<number, Focal>();
   const tags = new Map<number, string>();
@@ -293,11 +296,15 @@ resetters.push(() => (manifestPromise = null));
 export function manifest(): Promise<Manifest | null> {
   if (!manifestPromise) {
     const gen = generation;
-    const p: Promise<Manifest | null> = getJson<{ carousels?: Partial<Carousel>[]; letterboxd?: Partial<LetterboxdRow>[] }>("/v1/home/carousels").then((raw) => {
+    const p: Promise<Manifest | null> = getJson<{ carousels?: (Partial<Carousel> & { techs?: unknown })[]; letterboxd?: Partial<LetterboxdRow>[]; techs?: unknown }>(
+      "/v1/home/carousels",
+    ).then((raw) => {
       if (!raw || raw === CANCELLED || gen !== generation) {
         if (manifestPromise === p) manifestPromise = null; // retry on the next visit
         return null;
       }
+      registerTechs(raw.techs);
+      raw.carousels?.forEach((c) => registerTechs(c?.techs));
       return {
         carousels: (raw.carousels ?? [])
           .filter((c) => c.id && (c.title || (c as { name?: string }).name))
@@ -450,10 +457,15 @@ const today = () => new Date().toISOString().slice(0, 10);
 // One call per page per day (the server picks the same specials all day); 404 / failure = page as before
 const specialsCache = cached<Special[]>(async (key, job) => {
   const page = key.split("|")[0];
-  const raw = await getJson<{ specials?: (Partial<Special> & { logoStyles?: unknown })[]; logoStyles?: unknown }>(`/v1/home/specials?page=${page}`, job);
+  const raw = await getJson<{ specials?: (Partial<Special> & { logoStyles?: unknown; techs?: unknown })[]; logoStyles?: unknown; techs?: unknown }>(
+    `/v1/home/specials?page=${page}`,
+    job,
+  );
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   registerLogoStyles(raw.logoStyles);
   raw.specials?.forEach((s) => registerLogoStyles(s?.logoStyles));
+  registerTechs(raw.techs);
+  raw.specials?.forEach((s) => registerTechs(s?.techs));
   return (raw.specials ?? []).filter((s): s is Special => !!s && typeof s.id === "string" && SPECIAL_LAYOUTS.includes(s.layout ?? "")).map((s) => ({
       ...s,
       position: Math.max(0, Number(s.position) || 0),
@@ -527,10 +539,12 @@ export async function requestTitle(
 // One call per page per day; null (404, old server, no `rows` field) = the page builds its rows as before
 const rowsCache = cached<ServerRow[]>(async (key, job) => {
   const page = key.split("|")[0];
-  const raw = await getJson<{ rowsVersion?: number; rows?: unknown; logoStyles?: unknown }>(`/v1/home/carousels?rows=1&page=${page}`, job, 12000);
+  const raw = await getJson<{ rowsVersion?: number; rows?: unknown; logoStyles?: unknown; techs?: unknown }>(`/v1/home/carousels?rows=1&page=${page}`, job, 12000);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   registerLogoStyles(raw.logoStyles);
   if (Array.isArray(raw.rows)) raw.rows.forEach((r) => registerLogoStyles((r as { logoStyles?: unknown } | null)?.logoStyles));
+  registerTechs(raw.techs);
+  if (Array.isArray(raw.rows)) raw.rows.forEach((r) => registerTechs((r as { techs?: unknown } | null)?.techs));
   return parseRows(raw.rows);
 });
 

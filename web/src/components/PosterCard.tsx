@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { imageUrl, type Item } from "../api/jellyfin";
+import { TechBadges } from "./TechBadges";
+import { techOf, tileBadges } from "../lib/techBadges";
 import "./PosterCard.css";
 
 /**
@@ -7,7 +9,7 @@ import "./PosterCard.css";
  * dark tile until the picture loads (never blank), stays when there is no picture, and is drawn over art known to have
  * no title in it (`untitled`).
  */
-export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip }: {
+export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip, tech: techProp }: {
   item?: Item;
   width?: number;
   onOpen?: () => void;
@@ -24,6 +26,8 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   untitled?: boolean;
   /** Small corner chip (franchise part number). */
   tag?: string;
+  /** Premium formats (defaults to what the server said for `item`). */
+  tech?: readonly string[];
 }) {
   const tag = item?.ImageTags?.Primary;
   const w = width || 160; // 0 = fluid (grid cell sets the size)
@@ -33,13 +37,16 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   const name = nameProp ?? item?.Name ?? label ?? "";
   const hasImg = !!url && !failed;
   const overlay = hasImg && loaded && untitled;
-  const cls = `poster${faded ? " faded" : ""}${lit ? " lit" : ""}`;
+  const tech = techProp ?? (item && item.Type !== "Episode" ? techOf(item.Id) : []);
+  const techShown = tileBadges(tech).length > 0;
+  const cls = `poster${faded ? " faded" : ""}${lit ? " lit" : ""}${techShown ? " has-tech" : ""}`;
   const inner = (
     <>
       {hasImg && <img className={loaded ? "in" : undefined} src={url} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
       {overlay && <span className="poster-fade" />}
       {(!hasImg || !loaded || overlay) && <span className={`poster-title${hasImg && !loaded ? " pending" : ""}`}>{name}</span>}
       {chip && <span className="card-tag">{chip}</span>}
+      {techShown && <TechBadges tech={tech} />}
       {item?.UserData?.Played && <span className="card-watched">✓</span>}
     </>
   );

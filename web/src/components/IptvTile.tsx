@@ -2,14 +2,16 @@
 // dot, the one cue that it comes from the person's IPTV provider. Opens the IPTV details (#/iptv/item?id=…).
 import { useState } from "react";
 import { logoSrc } from "../api/iptv";
-import { qualityLabel, vodPath, type IptvPart, type VodItem } from "../lib/iptvVod";
+import { vodPath, vodTech, type IptvPart, type VodItem } from "../lib/iptvVod";
+import { tileBadges } from "../lib/techBadges";
+import { TechBadges } from "./TechBadges";
 import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
 import { CARD_W, PHONE_CARD_W } from "./Card";
 import { PosterCard } from "./PosterCard";
 import { tmdbSized } from "./FranchiseRow";
 
-type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { progress?: VodItem["progress"] };
+type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { tech?: string[]; progress?: VodItem["progress"] };
 
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
@@ -29,6 +31,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
         name={item.title}
         label={label(item as Tile)}
         tag={tag}
+        tech={vodTech(item)}
         autoFocus={autoFocus}
         onOpen={() => go(vodPath(item.id))}
       />
@@ -43,12 +46,12 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus }: { item: Til
   const art = tmdbSized(safeArt(item.backdrop), "w780");
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const q = qualityLabel(item.quality);
+  const tech = vodTech(item);
   const p = item.progress;
   const pct = p && !p.played && p.duration ? Math.min(100, (p.position / p.duration) * 100) : 0;
   return (
     <button
-      className="card iptv-card"
+      className={`card iptv-card${tileBadges(tech).length ? " has-tech" : ""}`}
       data-nav
       data-autofocus={autoFocus || undefined}
       style={{ width, height: Math.round((width * 9) / 16) }}
@@ -60,7 +63,7 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus }: { item: Til
       <div className="card-fade" />
       <span className="card-title">{item.title}</span>
       {tag && <span className="card-tag">{tag}</span>}
-      {q && <span className="iptv-quality">{q}</span>}
+      <TechBadges tech={tech} />
       {p?.played && (
         <span className="card-watched" aria-label="Watched">
           ✓

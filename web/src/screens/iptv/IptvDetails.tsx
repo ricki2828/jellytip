@@ -7,8 +7,9 @@ import { IptvDot } from "../../components/IptvTile";
 import { tmdbSized } from "../../components/FranchiseRow";
 import { useIsPhone } from "../../lib/device";
 import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
-import { qualityLabel, type VodDetail, type VodEpisode, type VodProgress } from "../../lib/iptvVod";
+import { vodTech, type VodDetail, type VodEpisode, type VodProgress } from "../../lib/iptvVod";
 import { go } from "../../lib/router";
+import { detailBadges } from "../../lib/techBadges";
 import "./iptv.css";
 
 const mins = (s?: number | null) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`) : null);
@@ -58,7 +59,7 @@ export function IptvDetails({ id }: { id: string }) {
     for (const s of d.seasons ?? []) for (const e of s.episodes) if (!e.progress?.played) return { s: s.season, e };
     return null;
   })();
-  const q = qualityLabel(d.quality);
+  const formats = detailBadges(vodTech(d));
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
   const playEp = (s: number, e: VodEpisode, from = resumeAt(e.progress)) => go(playPath({ series: d.id, episode: e.id }, `${d.title} · S${s} E${e.episode}`, from));
@@ -73,7 +74,11 @@ export function IptvDetails({ id }: { id: string }) {
           <h1 className="title-text big">{d.title}</h1>
           <div className="line info">
             {facts && <span>{facts}</span>}
-            {q && <span className="badge">{q}</span>}
+            {formats.map((b) => (
+              <span key={b} className="badge">
+                {b}
+              </span>
+            ))}
           </div>
           <div className="line dim iptv-via">
             <IptvDot />

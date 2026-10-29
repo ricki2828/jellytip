@@ -7,6 +7,8 @@ import { cardLayers, heroItemId } from "../lib/art";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
 import { logoClass, logoOwner } from "../lib/logoStyle";
+import { TechBadges } from "./TechBadges";
+import { techOf, tileBadges } from "../lib/techBadges";
 
 export const CARD_W = 264;
 /** Phone rows: big enough to hit, with the next tile peeking in to show the row swipes. */
@@ -100,10 +102,14 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
   // Text shows until the picture is up (so a tile is never blank), and stays wherever nothing else names the title
   const showText = !titledShown && !(logoOk && (layer?.kind === "logo" || baseReady)) && !(layer?.kind === "poster" && baseReady);
 
+  // Premium formats, bottom-right; episodes keep that corner for "S1 E2"
+  const tech = item.Type === "Episode" ? [] : techOf(item.Id);
+  const techShown = tileBadges(tech).length > 0;
+
   return (
     <button
       ref={ref}
-      className={fluid ? "card fluid" : "card"}
+      className={`card${fluid ? " fluid" : ""}${techShown ? " has-tech" : ""}`}
       data-nav
       data-autofocus={autoFocus || undefined}
       style={fluid ? undefined : { width, height: Math.round((width * 9) / 16) }}
@@ -144,6 +150,7 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
         </span>
       )}
       {tag && <span className="card-tag">{tag}</span>}
+      {techShown && <TechBadges tech={tech} />}
       {ud?.Played && <span className="card-watched" aria-label="Watched">✓</span>}
       {progress > 0 && (
         <span className="card-progress">

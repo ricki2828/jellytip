@@ -27,6 +27,7 @@ import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButt
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
 import { DetailsQuote, ReviewsRow } from "../components/Reviews";
 import { runtimeText } from "../api/jellyfin";
+import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -159,7 +160,10 @@ export function Details({ id }: { id: string }) {
   const director = item.People?.filter((p) => p.Type === "Director").map((p) => p.Name).join(", ");
   const dim = [director ? `Directed by ${director}` : null, item.ProductionLocations?.[0]].filter(Boolean).join("  ·  ");
   const cast = (item.People ?? []).filter((p) => p.Type === "Actor").slice(0, 18);
-  const badges = fileBadges(item);
+  // Premium formats from the companion (contract "Tech badges"); then the file's own facts minus what they cover
+  const tech = techOf(item.Id);
+  const techBadges = detailBadges(tech);
+  const badges = [...techBadges, ...fileBadges(item).filter((b) => !(hasVideoTech(tech) && (b === "4K" || b === "HDR" || b === "Dolby Vision")))];
   const epIdx = siblings.findIndex((e) => e.Id === item.Id);
   const prev = epIdx > 0 ? siblings[epIdx - 1] : null;
   const next = epIdx >= 0 && epIdx < siblings.length - 1 ? siblings[epIdx + 1] : null;

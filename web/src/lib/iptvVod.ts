@@ -1,5 +1,6 @@
 // IPTV films / series in the normal pages (pure; tested in web/test/iptvVod.test.ts). Contract: ~/ai/plans/jellytip-iptv.md
 // "IPTV movies / series" and "Rows + franchises". Anything with source "iptv" gets the corner dot + "via IPTV".
+import { parseTech } from "./techBadges.ts";
 
 export interface VodProgress {
   position: number;
@@ -16,6 +17,8 @@ export interface VodItem {
   year?: number | null;
   releaseDate?: string | null;
   quality: string[];
+  /** Premium formats from the provider's title tokens (contract "Tech badges"); [] when not said. */
+  tech: string[];
   poster?: string | null;
   backdrop?: string | null;
   overview?: string | null;
@@ -51,6 +54,7 @@ export interface IptvPart {
   title: string;
   year?: number | null;
   quality?: string[];
+  tech?: string[];
   poster?: string | null;
   backdrop?: string | null;
   providerName?: string;
@@ -86,6 +90,7 @@ export function parseVodItem(raw: unknown): VodItem | null {
     year: num(r.year),
     releaseDate: str(r.releaseDate),
     quality: strs(r.quality),
+    tech: parseTech(r.tech),
     poster: str(r.poster),
     backdrop: str(r.backdrop),
     overview: str(r.overview),
@@ -145,15 +150,14 @@ export function iptvPart(p: { source?: unknown; iptv?: unknown } | null | undefi
   const i = p.iptv as Record<string, unknown> | null;
   const id = str(i?.id);
   if (!i || !id || !VOD_ID_RE.test(id)) return null;
-  return { id, title: str(i.title) ?? "", year: num(i.year), quality: strs(i.quality), poster: str(i.poster), backdrop: str(i.backdrop), providerName: str(i.providerName) ?? undefined, rating: num(i.rating) };
+  return { id, title: str(i.title) ?? "", year: num(i.year), quality: strs(i.quality), tech: parseTech(i.tech), poster: str(i.poster), backdrop: str(i.backdrop), providerName: str(i.providerName) ?? undefined, rating: num(i.rating) };
 }
 
-/** Short quality label for a tile (best first). */
-export function qualityLabel(q: string[] | undefined): string | null {
-  if (!q?.length) return null;
-  if (q.includes("4k")) return q.includes("hdr") ? "4K HDR" : "4K";
-  if (q.includes("1080p")) return "HD";
-  return null;
+/** Formats for badges: the server's `tech`, else what the quality tokens say (older servers). */
+export function vodTech(v: { tech?: string[]; quality?: string[] }): string[] {
+  if (v.tech?.length) return v.tech;
+  const q = v.quality ?? [];
+  return [...(q.includes("4k") ? ["4K"] : []), ...(q.includes("hdr") ? ["HDR"] : [])];
 }
 
 /** Route to an IPTV title's details. */
