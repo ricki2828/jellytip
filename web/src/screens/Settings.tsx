@@ -198,7 +198,7 @@ function Personal({ prefs }: { prefs: Prefs }) {
             />
           </li>
         )}
-        <li className="settings-block settings-pad">
+        <li className="settings-block">
           <strong>Highest rating</strong>
           <div className="chips">
             {KIDS_RATINGS.map((r) => (

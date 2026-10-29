@@ -80,9 +80,13 @@ export function TileMenuHost() {
       window.clearTimeout(t);
       t = window.setTimeout(() => setNote(null), 2600);
     };
+    // Any navigation closes the menu
+    const onNav = () => setAt(null);
     window.addEventListener("jellytip-tile-menu", onMenu);
     window.addEventListener("jellytip-note", onNote);
+    window.addEventListener("hashchange", onNav);
     return () => {
+      window.removeEventListener("hashchange", onNav);
       window.removeEventListener("jellytip-tile-menu", onMenu);
       window.removeEventListener("jellytip-note", onNote);
     };

@@ -1968,3 +1968,76 @@ button.overview.open {
   font-size: 13px;
   margin: 0;
 }
+
+/* ---------- your taste ---------- */
+.taste-page {
+  padding: 76px 0 48px;
+}
+.taste-stats {
+  margin: -8px var(--pad) 18px;
+  color: var(--dim);
+  font-size: 14px;
+}
+.taste-stats strong {
+  color: var(--vanilla);
+  font-size: 20px;
+  font-weight: 600;
+}
+.taste-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 0 var(--pad) 18px;
+}
+.taste-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #121212;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.taste-card h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.taste-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.taste-card li {
+  display: grid;
+  grid-template-columns: minmax(0, 9em) 1fr 3em;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.taste-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.taste-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.taste-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--jelly);
+}
+.taste-pct {
+  text-align: right;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}

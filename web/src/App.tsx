@@ -14,6 +14,7 @@ import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
 import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
+import { Taste } from "./screens/Taste";
 import { TileMenuHost } from "./components/TasteButtons";
 import { parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
@@ -82,6 +83,7 @@ export function App() {
         {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
         {route.name === "settings" && <Settings />}
+        {route.name === "taste" && <Taste />}
         {route.name === "list" && <ListPage key={route.params.id} slug={route.params.id} />}
         <Suspense fallback={null}>
           {route.name === "iptv" && <IptvSettings />}
