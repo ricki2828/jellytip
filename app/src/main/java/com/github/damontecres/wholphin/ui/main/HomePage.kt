@@ -394,10 +394,11 @@ fun HomePageContent(
     var serverRows by remember { mutableStateOf(liveServerRows) }
     val hiddenRows =
         remember(serverRows, rowConfigs) {
-            if (serverRows == null || rowConfigs == null) {
+            val shown = serverRows
+            if (shown == null || rowConfigs == null) {
                 emptySet()
             } else {
-                rowConfigs.indices.filter { JellytipCarouselRows.isAppRow(rowConfigs[it], serverRows.carouselIds) }.toSet()
+                rowConfigs.indices.filter { JellytipCarouselRows.isAppRow(rowConfigs[it], shown.carouselIds) }.toSet()
             }
         }
     val leadingRows =
