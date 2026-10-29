@@ -1,0 +1,77 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { chunks, layoutRow, ticks, visibleRows, windowStart } from "../src/lib/epg.ts";
+import { engineFor, linkFailure, parseTarget, playQuery, targetPath } from "../src/lib/iptvPlay.ts";
+
+const H = 3600;
+
+test("window starts on the half hour at least 30 min before now", () => {
+  assert.equal(windowStart(10 * H + 50 * 60), 10 * H);
+  assert.equal(windowStart(10 * H + 10 * 60), 9 * H + 1800);
+});
+
+test("blocks clip to the window, trim overlaps, drop slivers", () => {
+  const from = 10 * H;
+  const to = 13 * H;
+  const rows = layoutRow(
+    [
+      { start: 11 * H, stop: 12 * H, title: "B" },
+      { start: 9 * H, stop: 10 * H + 1800, title: "A" },
+      { start: 11 * H + 1800, stop: 12 * H + 1800, title: "overlap" },
+      { start: 12 * H + 1800, stop: 12 * H + 1830, title: "sliver" },
+      { start: 13 * H, stop: 14 * H, title: "after" },
+    ],
+    from,
+    to,
+    0.1,
+    11 * H + 600,
+  );
+  assert.deepEqual(rows.map((b) => [b.prog.title, b.left, b.width, b.clipped, b.live, b.past]), [
+    ["A", 0, 180, true, false, true],
+    ["B", 360, 360, false, true, false],
+    ["overlap", 720, 180, false, false, false],
+  ]);
+});
+
+test("ticks every half hour inside the window", () => {
+  assert.deepEqual(ticks(10 * H + 600, 11 * H + 1), [10 * H + 1800, 11 * H]);
+});
+
+test("visible rows include overscan and stay in range", () => {
+  assert.deepEqual(visibleRows(0, 500, 64, 3), [0, 3]);
+  assert.deepEqual(visibleRows(640, 320, 64, 100, 2), [8, 17]);
+});
+
+test("chunks split ids for the 300-channel guide limit", () => {
+  assert.deepEqual(chunks([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+});
+
+test("route query ↔ target; nothing playable → null", () => {
+  assert.equal(parseTarget(new URLSearchParams("series=1:s:2")), null);
+  assert.equal(parseTarget(new URLSearchParams("")), null);
+  const t = parseTarget(new URLSearchParams("channel=3:77&start=1700000000&stop=x"))!;
+  assert.deepEqual(t, { channel: "3:77", start: 1700000000 });
+  assert.deepEqual(parseTarget(new URLSearchParams(targetPath({ recording: "9" }).split("?")[1])), { recording: "9" });
+});
+
+test("play query: live gets a format, catch-up and recordings don't; device always", () => {
+  assert.equal(playQuery({ channel: "3:77" }, "web-ab"), "v1/iptv/play?channel=3%3A77&format=ts&device=web-ab");
+  assert.equal(playQuery({ channel: "3:77", start: 5, stop: 9 }, "d"), "v1/iptv/play?channel=3%3A77&start=5&stop=9&device=d");
+  assert.equal(playQuery({ recording: "4" }, "d"), "v1/iptv/play?recording=4&device=d");
+});
+
+test("engine by link extension or mime", () => {
+  assert.equal(engineFor("v1/iptv/s/abc.ts"), "mpegts");
+  assert.equal(engineFor("v1/iptv/s/abc.m3u8"), "hls");
+  assert.equal(engineFor("v1/iptv/s/abc.mkv", "video/x-matroska"), "native");
+  assert.equal(engineFor("v1/iptv/s/abc", "application/vnd.apple.mpegurl"), "hls");
+});
+
+test("410 stale and 403 expired renew; 409 is full; other 403s are final", () => {
+  assert.equal(linkFailure(410, "stale"), "renew");
+  assert.equal(linkFailure(403, "expired"), "renew");
+  assert.equal(linkFailure(403, "bad_token"), "fatal");
+  assert.equal(linkFailure(403, "provider_auth"), "fatal");
+  assert.equal(linkFailure(409, "max_connections"), "full");
+  assert.equal(linkFailure(502, "provider_error"), "fatal");
+});
