@@ -36,7 +36,7 @@ function fmtClock(ticks: number) {
 }
 
 /** How long the details page waits (dark) for the companion's backdrop ranking before choosing without it. */
-const RANK_WAIT_MS = 500;
+const RANK_WAIT_MS = 800;
 
 export function Details({ id }: { id: string }) {
   const [item, setItem] = useState<Item | null>(null);
