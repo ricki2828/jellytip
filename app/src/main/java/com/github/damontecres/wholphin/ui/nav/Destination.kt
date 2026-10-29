@@ -172,6 +172,13 @@ sealed class Destination(
         val title: DiscoverTitle,
     ) : Destination(false)
 
+    /** Jellytip: a franchise (TMDB collection) page: series hero, blurb, progress, films in series order. */
+    @Serializable
+    data class JellytipCollection(
+        val tmdbId: Int,
+        val name: String,
+    ) : Destination(false)
+
     @Serializable
     data object NowPlaying : Destination(true)
 

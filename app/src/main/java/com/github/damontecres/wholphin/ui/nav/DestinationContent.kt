@@ -393,6 +393,14 @@ fun DestinationContent(
             JellytipDiscoverDetails(title = destination.title, modifier = modifier)
         }
 
+        is Destination.JellytipCollection -> {
+            com.github.damontecres.wholphin.jellytip.rows.JellytipCollectionPage(
+                tmdbId = destination.tmdbId,
+                name = destination.name,
+                modifier = modifier,
+            )
+        }
+
         is Destination.DiscoveredItem -> {
             when (destination.item.type) {
                 SeerrItemType.MOVIE -> {

@@ -962,10 +962,10 @@ private fun SoundHint(
 // ---------------------------------------------------------------------------------------------------------------------
 // Shared pieces
 
-private val SoftShadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)
+internal val SoftShadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)
 
 @Composable
-private fun SpecialCard(
+internal fun SpecialCard(
     width: Dp,
     height: Dp,
     onClick: () -> Unit,
@@ -991,7 +991,7 @@ private fun SpecialCard(
 
 /** 2:3 Primary poster (posters carry their own title, so no overlay). */
 @Composable
-private fun PosterCard(
+internal fun PosterCard(
     item: BaseItem,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -1072,7 +1072,7 @@ private fun LogoOrTitle(
 }
 
 @Composable
-private fun Kicker(text: String) {
+internal fun Kicker(text: String) {
     val sizes = rememberJellytipSizes()
     Text(
         text = text.uppercase(),
@@ -1086,7 +1086,7 @@ private fun Kicker(text: String) {
 }
 
 @Composable
-private fun Caption(
+internal fun Caption(
     text: String,
     modifier: Modifier = Modifier,
     alpha: Float = 0.75f,
@@ -1125,7 +1125,7 @@ private fun BoxScope.LeftScrim() {
 }
 
 @Composable
-private fun BoxScope.BottomScrim(strength: Float) {
+internal fun BoxScope.BottomScrim(strength: Float) {
     Box(
         Modifier
             .align(Alignment.BottomStart)
