@@ -72,10 +72,13 @@ configure<ApplicationExtension> {
     compileSdk = libs.versions.compileSdk.getInt()
 
     defaultConfig {
-        applicationId = "com.github.damontecres.wholphin"
+        // Jellytip: own Play-lockable package; `namespace` stays upstream's so rebases stay cheap
+        applicationId = "xyz.taiaroa.jellytip"
         minSdk = libs.versions.minSdk.getInt()
         targetSdk = libs.versions.targetSdk.getInt()
-        versionCode = gitTags.trim().lines().size
+        // Jellytip: Play needs a strictly increasing code independent of upstream tags.
+        // CI passes -PjellytipVersionCode=<offset + run number>; local builds fall back to 1.
+        versionCode = (project.findProperty("jellytipVersionCode") as String?)?.toInt() ?: 1
         versionName = gitDescribe.trim().removePrefix("v").ifBlank { "0.0.0" }
         testInstrumentationRunner = "com.github.damontecres.wholphin.test.WholphinTestRunner"
 
@@ -109,8 +112,6 @@ configure<ApplicationExtension> {
                 "proguard-rules.pro",
             )
             isDebuggable = false
-            // Jellytip: install beside stock Wholphin (different signature)
-            applicationIdSuffix = ".jellytip"
             if (shouldSign.get()) {
                 signingConfig = signingConfigs.getByName("ci")
             } else {

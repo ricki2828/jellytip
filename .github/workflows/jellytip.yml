@@ -38,7 +38,20 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: ./gradlew assembleDefaultRelease --no-daemon
+        run: ./gradlew assembleDefaultRelease -PjellytipVersionCode=$((1000 + GITHUB_RUN_NUMBER)) --no-daemon
+      - name: Build release AAB (Play)
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: ./gradlew bundleAppstoreRelease -PjellytipVersionCode=$((1000 + GITHUB_RUN_NUMBER)) --no-daemon
+      - name: Upload release AAB
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: jellytip-release-aab
+          path: app/build/outputs/bundle/appstoreRelease/*.aab
+          retention-days: 14
       - name: Upload release APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
