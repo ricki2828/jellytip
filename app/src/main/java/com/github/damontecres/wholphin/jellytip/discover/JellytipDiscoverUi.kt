@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -192,6 +194,23 @@ fun JellytipDiscoverDetails(
     val state = statuses[title.key]
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf<RequestOutcome?>(null) }
+    // Series: which seasons the confirmed request is for (first | latest | all)
+    var confirmSeasons by remember { mutableStateOf<String?>(null) }
+    // Series: the season choice that has focus; its estimate / refusal shows under the buttons
+    var focusedChoice by remember { mutableStateOf(SEASON_CHOICES.first().first) }
+    // Bumped after a request so the estimates are asked again ("have it" for what was just requested)
+    var requests by remember { mutableStateOf(0) }
+    // Series: the server's dry-run answer for each choice, asked when the page opens (dry runs add nothing)
+    val estimates by produceState<Map<String, RequestOutcome>>(emptyMap(), title.key, requests) {
+        if (title.isTv) {
+            // Start from the last answers so a re-ask never blanks a choice while it runs
+            val out = value.toMutableMap()
+            for (choice in SEASON_CHOICES.map { it.first }) {
+                out[choice] = service.preview(title, choice)
+                value = out.toMap()
+            }
+        }
+    }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -250,8 +269,46 @@ fun JellytipDiscoverDetails(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                val label = state?.label
+            val label = state?.label
+            if (title.isTv) {
+                // Ricki: "In get, we need options - first season or latest season or all seasons". The buttons stay
+                // after a request (asking for more seasons extends it), so focus never loses its button.
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SEASON_CHOICES.forEachIndexed { i, (choice, name) ->
+                        val e = estimates[choice]
+                        Button(
+                            onClick = {
+                                if (busy) return@Button
+                                busy = true
+                                message = null
+                                scope.launch {
+                                    val p = e ?: service.preview(title, choice)
+                                    busy = false
+                                    if (p.status == "added") {
+                                        confirmSeasons = choice
+                                        confirm = p
+                                    } else {
+                                        message = blockedText(p)
+                                    }
+                                }
+                            },
+                            modifier =
+                                (if (i == 0) Modifier.focusRequester(focus) else Modifier)
+                                    .onFocusChanged { if (it.isFocused) focusedChoice = choice },
+                        ) {
+                            Text(text = if (e?.status == "exists") "$name ✓" else name)
+                        }
+                    }
+                }
+                Text(
+                    text = seasonLine(estimates[focusedChoice]),
+                    fontSize = 14.sp,
+                    color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                (message ?: label)?.let { Text(text = it, fontSize = 14.sp, color = JellytipPalette.Vanilla) }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
                     onClick = {
                         if (busy || label != null) return@Button
@@ -276,14 +333,16 @@ fun JellytipDiscoverDetails(
         val what = p.label ?: title.title
         ConfirmDialog(
             title = "Download $what?",
-            body = "About ${gb(p.estimateGb)}; ${gb(p.freeGbNow)} free now.",
+            body = "About ${gb(p.estimateGb)}; ${gb(p.freeGbNow)} free now" + (p.freeGbAfter?.let { ", ${gb(it)} after." } ?: "."),
             onCancel = { confirm = null },
             onConfirm = {
                 confirm = null
                 busy = true
+                val seasons = confirmSeasons
                 scope.launch {
-                    val r = service.request(title)
+                    val r = service.request(title, seasons)
                     busy = false
+                    requests++
                     message =
                         when (r.status) {
                             "added" -> "Requested. It will appear here once downloaded."
@@ -295,6 +354,23 @@ fun JellytipDiscoverDetails(
         )
     }
 }
+
+private val SEASON_CHOICES = listOf("first" to "First season", "latest" to "Latest season", "all" to "All seasons")
+
+/** The server's dry run for one season choice: what it covers and its size, or why it would be refused. */
+private fun seasonLine(e: RequestOutcome?): String =
+    when {
+        e == null -> "Checking size…"
+        e.status == "exists" -> (e.label?.let { "$it: " } ?: "") + "already requested or in the library."
+        e.status == "added" ->
+            listOfNotNull(
+                e.label,
+                e.episodes?.let { if (it == 1) "1 episode" else "$it episodes" },
+                "≈${gb(e.estimateGb)}",
+                e.freeGbAfter?.let { "${gb(it)} free after" },
+            ).joinToString("  ·  ")
+        else -> blockedText(e)
+    }
 
 private fun blockedText(r: RequestOutcome): String =
     when (r.status) {
