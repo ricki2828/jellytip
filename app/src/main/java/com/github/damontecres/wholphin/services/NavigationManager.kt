@@ -48,6 +48,7 @@ class NavigationManager
         private fun isBrowsePage(d: Destination?): Boolean =
             d is Destination.Home ||
                 d is Destination.Favorites ||
+                d is Destination.Discover ||
                 (d is Destination.MediaItem && d.type in BROWSE_KINDS)
 
         private fun opensTitle(d: Destination): Boolean =

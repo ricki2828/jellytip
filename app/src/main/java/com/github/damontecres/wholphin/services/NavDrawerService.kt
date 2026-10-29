@@ -195,7 +195,8 @@ class NavDrawerService
             val builtins =
                 buildList {
                     add(NavDrawerItem.Favorites)
-                    if (discoverActive) add(NavDrawerItem.Discover)
+                    // Jellytip: Discover is the companion's TMDB browse + Get it, admin only (never shown to anyone else)
+                    if (userDto.policy?.isAdministrator == true) add(NavDrawerItem.Discover)
                 }
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =

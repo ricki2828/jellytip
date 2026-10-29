@@ -41,7 +41,6 @@ import com.github.damontecres.wholphin.ui.detail.music.NowPlayingPage
 import com.github.damontecres.wholphin.ui.detail.music.SongDetailsPage
 import com.github.damontecres.wholphin.ui.detail.series.SeriesDetails
 import com.github.damontecres.wholphin.ui.detail.series.SeriesOverview
-import com.github.damontecres.wholphin.ui.discover.DiscoverPage
 import com.github.damontecres.wholphin.ui.discover.DiscoverRequestGrid
 import com.github.damontecres.wholphin.ui.main.HomePage
 import com.github.damontecres.wholphin.ui.main.settings.HomeSettingsPage
@@ -386,10 +385,8 @@ fun DestinationContent(
 
         Destination.Discover -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            DiscoverPage(
-                preferences = preferences,
-                modifier = modifier,
-            )
+            // Jellytip: admin-only companion Discover (the sidebar item is admin only; the server refuses anyone else)
+            com.github.damontecres.wholphin.jellytip.discover.JellytipDiscoverBrowsePage(modifier = modifier)
         }
 
         is Destination.JellytipDiscover -> {
