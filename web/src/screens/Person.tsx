@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getItems, imageUrl, jf, uid, type Item } from "../api/jellyfin";
 import { go } from "../lib/router";
 import { PosterCard } from "../components/PosterCard";
+import { FollowButton } from "../components/FollowButton";
 
 export function Person({ id, name }: { id: string; name: string | null }) {
   const [items, setItems] = useState<Item[] | null>(null);
@@ -35,6 +36,11 @@ export function Person({ id, name }: { id: string; name: string | null }) {
             </p>
           )}
           {person?.Overview && <p className="overview two">{person.Overview}</p>}
+          {title && (
+            <div className="buttons">
+              <FollowButton personId={id} name={title} />
+            </div>
+          )}
         </div>
       </div>
       {failed && <p className="empty">Couldn't load this filmography.</p>}
