@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.BaseItemKind
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
@@ -372,6 +373,8 @@ private fun FranchiseRow(
                 model = collection.backdrop,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                // TMDB collection art has no focal data: lean to the top, where heads are
+                alignment = focalAlignment(null),
                 modifier = Modifier.matchParentSize().alpha(RowTokens.BACKDROP_ALPHA),
             )
         }
@@ -522,7 +525,13 @@ fun JellytipCollectionPage(
     }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         collection?.backdrop?.let {
-            AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = it,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = focalAlignment(null),
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         Box(
             Modifier

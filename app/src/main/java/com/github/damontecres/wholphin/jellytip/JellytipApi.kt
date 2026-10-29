@@ -640,6 +640,8 @@ data class JellytipFocal(
     val x: Float,
     val y: Float,
     val face: Boolean,
+    /** Top of the highest face incl. hair room (0-1 of image height), the line that must stay visible; null = no face. */
+    val headTop: Float? = null,
 )
 
 /** Companion `/v1/items/{id}/backdrops` answer. [best] = photo-ranked index (-1: none/animation). */
@@ -674,7 +676,12 @@ data class JellytipBackdropInfo(
                     o.optString("tag").takeIf { it.isNotBlank() && it != "null" }?.let { tags[o.optInt("index", i)] = it }
                     if (o.isNull("focalX") || o.isNull("focalY")) continue
                     focal[o.optInt("index", i)] =
-                        JellytipFocal(o.optDouble("focalX").toFloat(), o.optDouble("focalY").toFloat(), o.optBoolean("face", false))
+                        JellytipFocal(
+                            o.optDouble("focalX").toFloat(),
+                            o.optDouble("focalY").toFloat(),
+                            o.optBoolean("face", false),
+                            if (!o.has("headTop") || o.isNull("headTop")) null else o.optDouble("headTop").toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f),
+                        )
                 }
             }
             fun idx(key: String) = if (root.isNull(key)) null else root.optInt(key, -1).takeIf { it >= 0 }

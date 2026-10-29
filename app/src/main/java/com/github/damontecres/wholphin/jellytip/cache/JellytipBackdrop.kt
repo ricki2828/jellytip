@@ -148,7 +148,7 @@ fun focalAlignment(focal: JellytipFocal?): Alignment =
         Alignment { size: IntSize, space: IntSize, _: LayoutDirection ->
             val x = (focal.x * (space.width - size.width)).roundToInt().coerceIn(minOf(space.width - size.width, 0), 0)
             val lowest = minOf(space.height - size.height, 0)
-            val y =
+            val computed =
                 if (focal.y < FOCAL_TOP_ZONE) {
                     0 // subject in the top quarter: show the top of the frame rather than crop into it
                 } else {
@@ -158,6 +158,11 @@ fun focalAlignment(focal: JellytipFocal?): Alignment =
                     val limit = -(maxOf(focal.y - headroom, 0f) * size.height).roundToInt()
                     desired.coerceAtLeast(limit).coerceIn(lowest, 0)
                 }
+            // Face v2: never shift the image up past the top of the highest head (y is <= 0 at the scaled size)
+            val y =
+                focal.headTop
+                    ?.let { head -> maxOf(computed, -(head * size.height).roundToInt()).coerceIn(lowest, 0) }
+                    ?: computed
             IntOffset(x, y)
         }
     }
@@ -168,4 +173,9 @@ private const val SALIENCY_HEADROOM = 0.2f
 
 /** Ken Burns zoom origin at the focal point's on-screen position, so the zoom never pushes the subject out of frame. */
 fun focalOrigin(focal: JellytipFocal?): TransformOrigin =
-    if (focal == null) TransformOrigin(0.5f, 0.3f) else TransformOrigin(focal.x.coerceIn(0.2f, 0.8f), FOCAL_TARGET_Y)
+    when {
+        focal == null -> TransformOrigin(0.5f, 0.3f)
+        // A known head: zoom from the top edge, so the 5% zoom only pushes picture down and out, never the head up
+        focal.headTop != null -> TransformOrigin(focal.x.coerceIn(0.2f, 0.8f), 0f)
+        else -> TransformOrigin(focal.x.coerceIn(0.2f, 0.8f), FOCAL_TARGET_Y)
+    }
