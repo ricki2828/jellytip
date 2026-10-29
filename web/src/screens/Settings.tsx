@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
 import { savePrefs, setKidsPin, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
-import { KIDS_RATINGS, type Prefs } from "../lib/prefs";
+import { KIDS_AGES, type Prefs } from "../lib/prefs";
 import { go } from "../lib/router";
 
 const LANGS: [string, string][] = [
@@ -22,6 +22,8 @@ const LANGS: [string, string][] = [
   ["zh", "Chinese"],
   ["hi", "Hindi"],
 ];
+
+const ageLabel = (age: number) => KIDS_AGES.find(([a]) => a === age)?.[1] ?? `${age}+`;
 
 function Toggle({ label, sub, on, onChange, disabled }: { label: string; sub?: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -162,7 +164,11 @@ function Personal({ prefs }: { prefs: Prefs }) {
         <li>
           <Toggle
             label="Kids profile"
-            sub={prefs.kids.enabled ? `On: only ${prefs.kids.maxRating} and below, a simpler Home. The PIN turns it off.` : "Only titles up to a rating, a simpler Home; a PIN to leave it"}
+            sub={
+              prefs.kids.enabled
+                ? `On: ${ageLabel(prefs.kids.maxAge)} titles only, a simpler Home. The PIN turns it off.`
+                : "Only titles for an age, a simpler Home; a PIN to leave it"
+            }
             on={prefs.kids.enabled}
             onChange={(v) => {
               if (v && !prefs.kids.pinSet) setPinFor("set");
@@ -190,20 +196,20 @@ function Personal({ prefs }: { prefs: Prefs }) {
               title="PIN to leave the kids profile"
               onCancel={() => setPinFor(null)}
               onPin={async (pin) => {
-                // Contract gap: no PIN-check route yet; the PIN goes with the change and the server refuses a wrong one
+                // The server checks the PIN with the change (403 {"error":"pin"} when wrong, 429 after 5 tries)
                 const e = await save({ kids: { enabled: false, pin } }, true);
                 if (!e) setPinFor(null);
-                return e ? (/403|pin/i.test(e) ? "That PIN isn't right." : e) : null;
+                return e;
               }}
             />
           </li>
         )}
         <li className="settings-block">
-          <strong>Highest rating</strong>
+          <strong>Suitable for</strong>
           <div className="chips">
-            {KIDS_RATINGS.map((r) => (
-              <button key={r} className={`chip${prefs.kids.maxRating === r ? " on" : ""}`} data-nav aria-pressed={prefs.kids.maxRating === r} disabled={prefs.kids.enabled} onClick={() => void save({ kids: { maxRating: r } }, true)}>
-                {r}
+            {KIDS_AGES.map(([age, label]) => (
+              <button key={age} className={`chip${prefs.kids.maxAge === age ? " on" : ""}`} data-nav aria-pressed={prefs.kids.maxAge === age} disabled={prefs.kids.enabled} onClick={() => void save({ kids: { maxAge: age } }, true)}>
+                {label}
               </button>
             ))}
           </div>

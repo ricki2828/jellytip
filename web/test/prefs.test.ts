@@ -1,13 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editRows, homeFrom, move, parseFollows, parsePrefs, parseTaste, rowLabel } from "../src/lib/prefs.ts";
+import { editRows, homeFrom, move, parseFollows, parsePrefs, parseReactions, parseTaste, rowLabel } from "../src/lib/prefs.ts";
 
 const J = "0123456789abcdef0123456789abcdef";
 
 test("prefs: defaults fill gaps, junk ignored, specials clamped", () => {
   const p = parsePrefs({ home: { pinned: ["a", "a", 3], specialsPerDay: 99 }, kids: { enabled: true }, playback: { trailerSound: true }, letterboxd: { status: "weird" }, version: 3 });
   assert.deepEqual(p.home, { pinned: ["a"], hidden: [], order: [], specialsPerDay: 6 });
-  assert.deepEqual(p.kids, { enabled: true, maxRating: "PG", pinSet: false });
+  assert.deepEqual(p.kids, { enabled: true, maxAge: 7, pinSet: false });
+  assert.equal(parsePrefs({ kids: { maxAge: 13 } }).kids.maxAge, 13);
+  assert.equal(parsePrefs({ kids: { maxAge: 12 } }).kids.maxAge, 7);
   assert.equal(p.playback.intro, true);
   assert.equal(p.playback.trailerSound, true);
   assert.equal(p.letterboxd.status, "none");
@@ -49,4 +51,9 @@ test("follows: any of the plausible shapes", () => {
   assert.deepEqual(parseFollows([J, "bad"]), [J]);
   assert.deepEqual(parseFollows({ follows: [{ personId: J }, { personId: J }] }), [J]);
   assert.deepEqual(parseFollows(null), []);
+});
+
+test("reactions: only ±1 thumbs, strings for not interested", () => {
+  assert.deepEqual(parseReactions({ thumbs: { a: 1, b: -1, c: 2, d: "1" }, notInterested: ["x", "tmdb:5", 3] }), { thumbs: { a: 1, b: -1 }, notInterested: ["x", "tmdb:5"] });
+  assert.deepEqual(parseReactions(null), { thumbs: {}, notInterested: [] });
 });

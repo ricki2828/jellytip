@@ -3,7 +3,7 @@
 // leaves `available` false and every personalisation control stays hidden.
 import { useEffect, useState } from "react";
 import { companionCall } from "./companionCall";
-import { parseFollows, parsePrefs, parseTaste, type Prefs, type Taste } from "../lib/prefs";
+import { parseFollows, parsePrefs, parseReactions, parseTaste, type Prefs, type Taste } from "../lib/prefs";
 
 export interface PrefsState {
   /** undefined = still asking; false = no personalisation on this server (or signed out). */
@@ -22,7 +22,10 @@ function set(s: PrefsState) {
 
 function load(): Promise<void> {
   return (loading ??= companionCall("GET", "v1/me/prefs").then((a) => {
-    if (a.status === 200) set({ available: true, prefs: parsePrefs(a.data) });
+    if (a.status === 200) {
+      set({ available: true, prefs: parsePrefs(a.data) });
+      void loadReactions();
+    }
     else set({ available: a.status === 0 ? undefined : false, prefs: null });
     if (a.status === 0) loading = null; // offline: ask again next time
   }));
@@ -72,6 +75,8 @@ export async function savePrefs(patch: Record<string, unknown>): Promise<string 
 
 function errText(status: number, data: unknown): string {
   const e = data && typeof data === "object" ? (data as { error?: unknown }).error : null;
+  if (status === 403 && e === "pin") return "That PIN isn't right.";
+  if (status === 429) return "Too many tries: wait 5 minutes.";
   if (typeof e === "string" && e) return e;
   return status === 0 ? "The server can't be reached." : `Server said ${status}`;
 }
@@ -95,6 +100,17 @@ const keepSignals = () => {
   window.dispatchEvent(new Event("jellytip-signals"));
 };
 export const signalOf = (itemId: string): Signal => signals[itemId] ?? {};
+
+/** The person's reactions from the server (they follow the person); this device's cache stays as the fallback. */
+async function loadReactions() {
+  const a = await companionCall("GET", "v1/me/reactions");
+  if (a.status !== 200) return;
+  const r = parseReactions(a.data);
+  for (const k of Object.keys(signals)) delete signals[k];
+  for (const [id, v] of Object.entries(r.thumbs)) signals[id] = { thumb: v };
+  for (const id of r.notInterested) signals[id] = { ...signals[id], notInterested: true };
+  keepSignals();
+}
 
 export function useSignal(itemId: string): Signal {
   const [, bump] = useState(0);

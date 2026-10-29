@@ -4,13 +4,20 @@
 export interface Prefs {
   home: { pinned: string[]; hidden: string[]; order: string[]; specialsPerDay: number };
   hideWatched: boolean;
-  kids: { enabled: boolean; maxRating: string; pinSet: boolean };
+  kids: { enabled: boolean; maxAge: number; pinSet: boolean };
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   version: number | null;
 }
 
-export const KIDS_RATINGS = ["G", "PG", "PG-13", "M"];
+/** Kids profile ceilings (the server maps every rating scheme to an age; unknown ratings count as 18). */
+export const KIDS_AGES: [number, string][] = [
+  [0, "All ages"],
+  [7, "7+"],
+  [10, "10+"],
+  [13, "13+"],
+  [16, "16+"],
+];
 export const SPECIALS_MAX = 6;
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -29,7 +36,7 @@ export function parsePrefs(raw: unknown): Prefs {
   return {
     home: { pinned: strs(h.pinned), hidden: strs(h.hidden), order: strs(h.order), specialsPerDay: spd },
     hideWatched: bool(r.hideWatched, false),
-    kids: { enabled: bool(k.enabled, false), maxRating: typeof k.maxRating === "string" && k.maxRating ? k.maxRating : "PG", pinSet: bool(k.pinSet, false) },
+    kids: { enabled: bool(k.enabled, false), maxAge: KIDS_AGES.some(([a]) => a === k.maxAge) ? (k.maxAge as number) : 7, pinSet: bool(k.pinSet, false) },
     playback: {
       intro: bool(p.intro, true),
       trailerAutoplay: bool(p.trailerAutoplay, true),
@@ -135,4 +142,12 @@ export function parseTaste(raw: unknown): Taste | null {
 export function parseFollows(raw: unknown): string[] {
   const list = Array.isArray(raw) ? raw : Array.isArray(obj(raw).follows) ? (obj(raw).follows as unknown[]) : [];
   return [...new Set(list.map((x) => (typeof x === "string" ? x : obj(x).personId)).filter((x): x is string => typeof x === "string" && /^[0-9a-f]{32}$/i.test(x)))];
+}
+
+/** GET /v1/me/reactions → thumbs per item id and the not-interested ids (library ids only; tmdb:… keys are kept). */
+export function parseReactions(raw: unknown): { thumbs: Record<string, 1 | -1>; notInterested: string[] } {
+  const r = obj(raw);
+  const thumbs: Record<string, 1 | -1> = {};
+  for (const [id, v] of Object.entries(obj(r.thumbs))) if (v === 1 || v === -1) thumbs[id] = v;
+  return { thumbs, notInterested: strs(r.notInterested) };
 }
