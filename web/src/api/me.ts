@@ -50,6 +50,9 @@ export function usePrefs(): PrefsState {
 }
 
 export const prefsNow = () => state.prefs;
+/** Prefs, waiting at most `ms` for the first answer (the player must not stall on a slow server). */
+export const prefsSoon = (ms = 1500): Promise<Prefs | null> =>
+  Promise.race([load(), new Promise((r) => setTimeout(r, ms))]).then(() => state.prefs);
 /** Personalisation is on (sync; for many tiles at once without a hook each). Asks the server the first time. */
 export const personalOn = () => {
   void load();

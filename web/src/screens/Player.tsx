@@ -6,6 +6,8 @@ import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
+import { prefsSoon } from "../api/me";
+import { pickAudio, pickSubtitle } from "../lib/tracks";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
@@ -281,13 +283,21 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         setItem(it);
         const saved = it.UserData?.Played ? 0 : it.UserData?.PlaybackPositionTicks ?? 0;
         const startTicks = startParam != null ? Number(startParam) * TICKS_PER_SECOND : saved;
-        const p = await negotiate(id, startTicks);
+        // The person's language prefs pick the first tracks (a choice made in the player menu wins after that)
+        const pb = (await prefsSoon())?.playback;
+        if (!alive) return;
+        const fileSrc = it.MediaSources?.[0];
+        const wantAudio = pb?.audioLangs.length ? pickAudio(fileSrc?.MediaStreams ?? [], pb.audioLangs, null) : null;
+        const otherAudio = wantAudio != null && wantAudio !== fileSrc?.DefaultAudioStreamIndex;
+        // A non-default audio track can't be switched in-file by browsers: same renegotiation as the audio menu
+        const p = await negotiate(id, startTicks, otherAudio ? { audioStreamIndex: wantAudio!, allowDirectPlay: false } : {});
         if (!alive) return;
         const src = p.source;
         const subs = (src.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
         const def = subs.find((s) => s.Index === src.DefaultSubtitleStreamIndex && s.IsTextSubtitleStream) ?? subs.find((s) => s.IsForced && s.IsTextSubtitleStream);
-        setSubIndex(def ? def.Index : -1);
-        setAudioIndex(src.DefaultAudioStreamIndex ?? null);
+        const audio = otherAudio ? wantAudio : src.DefaultAudioStreamIndex ?? null;
+        setSubIndex(pb ? pickSubtitle(src.MediaStreams ?? [], audio, pb, def ? def.Index : -1) : def ? def.Index : -1);
+        setAudioIndex(audio);
         attach(p, startTicks / TICKS_PER_SECOND);
         if (it.Type === "Episode" && it.SeriesId) {
           episodes(it.SeriesId).then((all) => {
