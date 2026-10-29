@@ -5,6 +5,7 @@ import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
 import { registerLogoStyles } from "../lib/logoStyle";
+import { parseGenres, parseTitles, type DiscoverSection, type DiscoverTitle, type Genre, type MediaType } from "../lib/discover";
 export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
@@ -481,20 +482,32 @@ export function companionMediaUrl(u: string): string {
 }
 
 export interface RequestResult {
-  status?: "exists" | "blocked" | "added";
+  /** added | exists | blocked | error (a dry run says "added" when it would add). */
+  status?: string;
   reason?: string;
+  label?: string;
   title?: string;
+  estimateGb?: number | null;
+  freeGbNow?: number | null;
   freeGbAfter?: number | null;
   error?: string;
 }
 
-/** "Get it" (admins): POST /v1/request {tmdbId, type}; dryRun first to show what would happen. */
-export async function requestTitle(tmdbId: number, type: "movie" | "tv", dryRun: boolean): Promise<{ code: number; body: RequestResult }> {
+/** Which seasons of a series to get. */
+export type SeasonChoice = "first" | "latest" | "all";
+
+/** "Get it" (admins): POST /v1/request {tmdbId, type[, seasons]}; dryRun first to show what would happen. */
+export async function requestTitle(
+  tmdbId: number,
+  type: "movie" | "tv",
+  dryRun: boolean,
+  seasons?: SeasonChoice,
+): Promise<{ code: number; body: RequestResult }> {
   const token = getSession()?.token;
   if (!token) return { code: 401, body: { error: "signed out" } };
   const url = `${BASE}/v1/request${dryRun ? "?dryRun=1" : ""}`;
   const headers = { Authorization: `MediaBrowser Token="${token}"` };
-  const body = { tmdbId, type };
+  const body = type === "tv" && seasons ? { tmdbId, type, seasons } : { tmdbId, type };
   try {
     if (isNative) {
       const r = await nativePostJson<RequestResult>(url, headers, body);
@@ -545,3 +558,44 @@ const collections = cached<CollectionPage>(async (id, job) => {
 
 /** Franchise page data; null when the server has no such collection (404: fewer than 2 parts in the library). */
 export const collectionPage = (tmdbId: number) => collections.get(String(tmdbId), { priority: "high" });
+
+// ---------- discover (admin; the server answers 403 to anyone else). Contract: "Discover + seasons" in
+// ~/ai/plans/jellytip-specials.md; shapes parsed in lib/discover.ts ----------
+
+const genresCache = cached<unknown>(async (path, job) => {
+  const raw = await getJson<unknown>(path, job, 12000);
+  return raw === CANCELLED ? CANCELLED : raw ?? null;
+});
+
+export const DISCOVER_PATHS = {
+  section: (section: DiscoverSection, media: MediaType, genre?: number | null, page = 1) =>
+    `/v1/discover?section=${section}&media=${media}${genre ? `&genre=${genre}` : ""}&page=${page}`,
+  genres: (media: MediaType) => `/v1/discover/genres?media=${media}`,
+  search: (q: string, page = 1) => `/v1/discover/search?q=${encodeURIComponent(q)}&page=${page}`,
+};
+
+export interface DiscoverPage {
+  items: DiscoverTitle[];
+  page: number;
+  totalPages: number;
+}
+
+function parsePage(raw: unknown, media: MediaType): DiscoverPage {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return { items: parseTitles(raw, media), page: Number(o.page) || 1, totalPages: Number(o.totalPages) || 1 };
+}
+
+/** A Discover list. Not cached here: the server caches TMDB, and the request states in it are live. Null = unavailable. */
+export async function discoverList(path: string, media: MediaType): Promise<DiscoverPage | null> {
+  const raw = await getJson<unknown>(path, undefined, 12000);
+  return raw === CANCELLED || raw == null ? null : parsePage(raw, media);
+}
+
+export async function discoverGenres(media: MediaType): Promise<Genre[]> {
+  return parseGenres(await genresCache.get(DISCOVER_PATHS.genres(media), { priority: "high" }));
+}
+
+/** Movies and series together; typed letter by letter, so never cached. */
+export async function discoverSearch(q: string, page = 1): Promise<DiscoverPage | null> {
+  return discoverList(DISCOVER_PATHS.search(q, page), "movie");
+}

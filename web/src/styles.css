@@ -73,6 +73,9 @@ img {
   background: rgba(10, 10, 10, 0.94);
   transition: background 0.2s;
 }
+.nav-discover {
+  display: none;
+}
 .nav-back {
   flex: none;
   display: grid;
@@ -1153,6 +1156,27 @@ button.overview.open {
   }
   .nav.has-back .nav-logo {
     display: none;
+  }
+  /* admins: Discover as a compass in the top bar, so the bottom tab bar keeps its 4-5 tabs */
+  .nav-discover {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: -6px 0;
+    border-radius: 50%;
+    color: var(--dim);
+  }
+  .nav-discover.active {
+    color: var(--jelly);
+  }
+  .nav-discover svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
   }
   .nav-user .link {
     font-size: 12px;

@@ -59,6 +59,8 @@ const LINKS: [string, string][] = [
 
 export function Nav({ current }: { current: string }) {
   const s = getSession();
+  // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
+  const links: [string, string][] = s?.isAdmin ? [...LINKS, ["discover", "Discover"]] : LINKS;
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -81,13 +83,21 @@ export function Nav({ current }: { current: string }) {
         <Logo />
       </button>
       <div className="nav-links">
-        {LINKS.map(([k, label]) => (
+        {links.map(([k, label]) => (
           <a key={k} href={`#/${k}`} data-nav className={current === k ? "active" : ""}>
             {label}
           </a>
         ))}
       </div>
       <div className="nav-user">
+        {s?.isAdmin && (
+          <a href="#/discover" className={`nav-discover${current === "discover" ? " active" : ""}`} aria-label="Discover" title="Discover">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="m15.5 8.5-2 5-5 2 2-5z" />
+            </svg>
+          </a>
+        )}
         <span>{s?.userName}</span>
         <button data-nav className="link" onClick={() => logout()}>
           Sign out

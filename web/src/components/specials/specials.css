@@ -316,28 +316,6 @@
   gap: 10px;
   align-content: flex-start;
 }
-.getit-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.6);
-}
-.getit {
-  width: min(380px, 90vw);
-  padding: 18px;
-  border-radius: 12px;
-  background: #171717;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.getit-note {
-  font-size: 13px;
-  color: var(--dim);
-}
-
 /* filmography page */
 .person-page {
   padding-top: 76px;

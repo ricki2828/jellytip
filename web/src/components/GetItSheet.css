@@ -1,0 +1,84 @@
+/* "Get it" / Discover details sheet */
+.getit-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.getit {
+  width: min(400px, 92vw);
+  padding: 18px;
+  border-radius: 12px;
+  background: #171717;
+  display: flex;
+  gap: 16px;
+}
+.getit.rich {
+  width: min(620px, 94vw);
+}
+.getit-poster {
+  flex: none;
+  width: 150px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  align-self: flex-start;
+}
+.getit-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.getit-title {
+  font-size: 17px;
+}
+.getit-meta {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.getit-overview {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(242, 242, 240, 0.85);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+.getit-seasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.getit-note {
+  font-size: 13px;
+  color: var(--dim);
+}
+.getit-note.warn {
+  color: var(--warm);
+}
+.getit .buttons {
+  margin-top: 4px;
+}
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) and (max-height: 520px) {
+  .getit-scrim {
+    place-items: end stretch;
+  }
+  .getit,
+  .getit.rich {
+    width: auto;
+    max-height: 88vh;
+    overflow-y: auto;
+    border-radius: 14px 14px 0 0;
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+  .getit-poster {
+    width: 96px;
+  }
+}

@@ -6,7 +6,7 @@ import { collectionPage, type CollectionPage } from "../api/companion";
 import { Backdrop } from "../components/Backdrop";
 import { PosterCard } from "../components/PosterCard";
 import { ProgressBar, progressText, tmdbSized } from "../components/FranchiseRow";
-import { GetItSheet } from "../components/specials/Specials";
+import { GetItSheet } from "../components/GetItSheet";
 import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
 import "../components/FranchiseRow.css";

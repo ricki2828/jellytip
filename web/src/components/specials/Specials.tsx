@@ -8,7 +8,6 @@ import {
   companionMediaUrl,
   extras,
   type Extras,
-  requestTitle,
   type AroundHouse,
   type BecauseLoved,
   type ClosetPick,
@@ -32,6 +31,7 @@ import { Card } from "../Card";
 import { ScoreLine } from "../ScoreLine";
 import { infoLine, TitleLogo } from "../TitleBlock";
 import { PosterCard } from "../PosterCard";
+import { GetItSheet } from "../GetItSheet";
 import { filmCount, PersonTile } from "../PersonTile";
 import "./specials.css";
 
@@ -448,71 +448,6 @@ function AroundHouseBlock({ s }: { s: AroundHouse }) {
 }
 
 // ---------- closet_picks ----------
-
-/** Admin "Get it" for a title not in the library: dry run first, then POST /v1/request (type movie). */
-export function GetItSheet({ pick, onClose }: { pick: { title: string; year?: number | null; tmdbId?: number | null }; onClose: () => void }) {
-  const [check, setCheck] = useState<{ code: number; body: { status?: string; reason?: string; error?: string } } | null>(null);
-  const [done, setDone] = useState<{ code: number; body: { status?: string; reason?: string; error?: string } } | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (pick.tmdbId) requestTitle(pick.tmdbId, "movie", true).then(setCheck);
-  }, [pick.tmdbId]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  const can = check?.code === 200 && check.body.status === "added";
-  const msg = (r: typeof check) => (r ? r.body.reason ?? r.body.error ?? (r.code ? `Server said ${r.code}` : "Server unreachable") : "Checking…");
-  return (
-    <div className="getit-scrim" onClick={onClose}>
-      <div className="getit" role="dialog" aria-label={`Get ${pick.title}`} onClick={(e) => e.stopPropagation()}>
-        <strong>
-          {pick.title}
-          {pick.year ? ` (${pick.year})` : ""}
-        </strong>
-        <span className="getit-note">Not in the library yet.</span>
-        {!done ? (
-          <>
-            <span className="getit-note">{can ? "It can be added: Radarr will search for it." : msg(check)}</span>
-            <div className="buttons">
-              <button
-                className="btn primary"
-                data-nav
-                data-autofocus
-                disabled={!can || busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setDone(await requestTitle(pick.tmdbId!, "movie", false));
-                  setBusy(false);
-                }}
-              >
-                {busy ? "Adding…" : "Get it"}
-              </button>
-              <button className="btn" data-nav onClick={onClose}>
-                Close
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="getit-note">{done.body.status === "added" ? "Added. It's searching now." : msg(done)}</span>
-            <div className="buttons">
-              <button className="btn" data-nav data-autofocus onClick={onClose}>
-                Close
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
   const libIds = s.picks.map((p) => p.itemId).filter((x): x is string => !!x);
