@@ -442,7 +442,7 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
       </p>
       {holders.length > 0 && (
         <p className="iptv-hint">
-          In use: {holders.map((h) => `${h.kind === "recording" ? "recording" : "watching"}${h.label ? ` ${h.label}` : ""}${h.user ? ` (${h.user})` : ""}`).join(", ")}
+          In use: {holders.map((h) => `${h.kind === "recording" ? "recording" : "watching"}${h.label ? ` ${h.label}` : ""}${h.userName || h.user ? ` (${h.userName ?? h.user})` : ""}`).join(", ")}
         </p>
       )}
       {p.owner && (

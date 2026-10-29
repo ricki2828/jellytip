@@ -19,6 +19,14 @@ const clock = (t: number) => new Date(t * 1000).toLocaleTimeString(undefined, { 
 const short = (t: number) => clock(t).replace(/\s?[ap]\.?m\.?$/i, "");
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+/** Companion-proxied logo; initials when there is none or it fails (404 = no image at the panel). */
+function ChannelLogo({ ch }: { ch: Channel }) {
+  const src = logoSrc(ch.logo);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <span className="livetv-logo-blank">{ch.name.replace(/^[A-Z]{2,3}\s*[|:-]\s*/, "").slice(0, 2)}</span>;
+  return <img src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+}
+
 interface Sheet {
   ch: Channel;
   prog: Prog;
@@ -205,7 +213,7 @@ export function LiveTv() {
                 return (
                   <div key={ch.id} className="livetv-row" style={{ top: idx * ROW_H }}>
                     <button className="livetv-chan" data-nav onClick={() => playChannel(ch)} onContextMenu={(e) => (e.preventDefault(), void fav(ch))} title={`${ch.name} · play`}>
-                      {logoSrc(ch.logo) ? <img src={logoSrc(ch.logo)!} alt="" loading="lazy" /> : <span className="livetv-logo-blank">{ch.name.slice(0, 2)}</span>}
+                      <ChannelLogo ch={ch} />
                       {!phone && (
                         <span className="livetv-chan-text">
                           {ch.num != null && <span className="livetv-num">{ch.num}</span>}

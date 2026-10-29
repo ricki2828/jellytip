@@ -253,7 +253,7 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
               {state.connection.active.map((h, i) => (
                 <li key={i}>
                   {h.kind === "recording" ? "Recording" : "Watching"} {h.label ?? ""}
-                  {h.user ? ` · ${h.user}` : ""}
+                  {h.userName || h.user ? ` · ${h.userName ?? h.user}` : ""}
                 </li>
               ))}
             </ul>

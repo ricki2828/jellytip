@@ -51,6 +51,7 @@ export function errorText(a: Answer<unknown>): string {
 export interface Holder {
   kind: "watch" | "recording";
   user?: string;
+  userName?: string;
   label?: string;
   since?: number;
 }
@@ -241,7 +242,8 @@ export function iptvChanged() {
   window.dispatchEvent(new Event("jellytip-iptv"));
 }
 
-/** Channel logo the page may load: only companion-proxied (relative) paths; raw provider URLs are refused by the CSP. */
+/** Channel logo / provider poster the page may load: only companion-proxied (relative `v1/iptv/img/…`) paths; raw
+ * provider URLs are refused by the CSP and would hand the viewer's address to the panel. */
 export const logoSrc = (logo?: string | null) => (logo && !/^[a-z][a-z0-9+.-]*:/i.test(logo) && !logo.startsWith("//") ? streamUrl(logo) : null);
 
 // ---------- IPTV films / series ----------

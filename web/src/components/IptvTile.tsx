@@ -1,6 +1,7 @@
 // An IPTV film / series tile: same shapes as the library tiles (16:9 backdrop card or 2:3 poster) plus a small corner
 // dot, the one cue that it comes from the person's IPTV provider. Opens the IPTV details (#/iptv/item?id=…).
 import { useState } from "react";
+import { logoSrc } from "../api/iptv";
 import { qualityLabel, vodPath, type IptvPart, type VodItem } from "../lib/iptvVod";
 import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
@@ -12,8 +13,8 @@ type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "back
 
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
-/** TMDB art only: provider-hosted art is blocked by the CSP and would hand the viewer's address to the panel. */
-const safeArt = (u: string | null | undefined) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : null);
+/** TMDB art, or provider art through the companion's image proxy; raw provider URLs never load (CSP, privacy). */
+const safeArt = (u: string | null | undefined) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u));
 
 export function IptvDot() {
   return <span className="iptv-corner-dot" aria-hidden title="via IPTV" />;
