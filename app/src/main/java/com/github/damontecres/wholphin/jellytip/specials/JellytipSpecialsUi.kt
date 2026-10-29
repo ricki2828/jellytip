@@ -258,7 +258,7 @@ private fun TrailerBreakRow(
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier.weight(1f).padding(start = sizes.px(16), end = sizes.px(40), bottom = sizes.px(6)),
                     ) {
-                        Kicker("Trailer break")
+                        KickerUnlessTitled("Trailer break", special.title)
                         LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 120)
                         if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
                         if (meta.isNotBlank()) Caption(meta, alpha = 0.6f)
@@ -431,7 +431,7 @@ private fun TonightsPickRow(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.align(Alignment.BottomStart).padding(sizes.px(26)).widthIn(max = SpecialTokens.FEATURE_W * 0.8f),
                 ) {
-                    if (special.kicker.isNotBlank() && special.kicker != special.title) Kicker(special.kicker)
+                    KickerUnlessTitled(special.kicker, special.title)
                     LogoOrTitle(item, maxWidthPx = 340, maxHeightPx = 110)
                     if (special.reason.isNotBlank()) {
                         Caption(special.reason, alpha = 0.9f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 2)
@@ -820,7 +820,7 @@ private fun ClosetPicksRow(
                         SpecialVideoSurface(owner, Modifier.fillMaxSize())
                         BottomScrim(0.7f)
                         Column(Modifier.align(Alignment.BottomStart).padding(sizes.px(18))) {
-                            Kicker("Closet picks")
+                            KickerUnlessTitled("Closet picks", special.title)
                             Text(
                                 text = special.guest,
                                 color = Color.White,
@@ -1190,6 +1190,19 @@ private fun LogoOrTitle(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/** A short category label, left out when the row title above already says it (never the title twice). */
+@Composable
+private fun KickerUnlessTitled(
+    kicker: String,
+    title: String,
+) {
+    if (kicker.isBlank()) return
+    val k = kicker.trim().lowercase()
+    val t = title.trim().lowercase()
+    if (t.isNotEmpty() && (t.contains(k) || k.contains(t))) return
+    Kicker(kicker)
 }
 
 @Composable
