@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { getItems, getSession, imageUrl, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
 import {
   companionMediaUrl,
+  extras,
+  type Extras,
   requestTitle,
   type AroundHouse,
   type BecauseLoved,
@@ -25,6 +27,7 @@ import { useSoundBack } from "../../lib/soundBack";
 import { placeSpecials } from "../../lib/specialsPlacement";
 import { Backdrop } from "../Backdrop";
 import { Card } from "../Card";
+import { ScoreLine } from "../ScoreLine";
 import { infoLine, TitleLogo } from "../TitleBlock";
 import { PosterCard } from "../PosterCard";
 import "./specials.css";
@@ -113,6 +116,18 @@ function TrailerBreakBlock({ s }: { s: TrailerBreak }) {
   const [sound, setSound] = useState(false);
   const blocked = useVideoBlocked(s.id);
   const { soundOn, mute } = useSoundBack(s.id, sound, () => setSound(false));
+  const [ext, setExt] = useState<Extras | null>(null);
+  // The still stays up until the trailer has a picture (a black panel while it buffers looks broken)
+  const [framed, setFramed] = useState(false);
+
+  useEffect(() => {
+    if (!item || (item.Type !== "Movie" && item.Type !== "Series")) return;
+    let alive = true;
+    extras(item.Id, item.Type === "Movie" ? "movie" : "series").then((e) => alive && setExt(e));
+    return () => {
+      alive = false;
+    };
+  }, [item]);
 
   useEffect(() => {
     let alive = true;
@@ -150,12 +165,7 @@ function TrailerBreakBlock({ s }: { s: TrailerBreak }) {
   const pick = heroPick(item, false);
   const playing = wantPlay && !blocked;
   return (
-    <section className="special trailer-break" ref={box}>
-      <div className="tb-media">
-        <Backdrop url={pick.url} focal={pick.focal} />
-        {trailer && <video ref={video} className={`tb-video${playing ? " on" : ""}`} src={trailer} muted playsInline loop preload="none" />}
-        <div className="tb-scrim" />
-      </div>
+    <section className={`special trailer-break${playing ? " playing" : ""}`} ref={box}>
       <button
         className="tb-hit"
         data-nav
@@ -176,10 +186,28 @@ function TrailerBreakBlock({ s }: { s: TrailerBreak }) {
         <TitleLogo item={item} />
         {s.reason && <span className="reason">{s.reason}</span>}
         <span className="line">{infoLine(item)}</span>
+        <ScoreLine extras={ext} />
+        <span className="tb-hint">{!trailer ? "Open for details" : sound ? "Sound on · again for details" : "Select for sound · again for details"}</span>
         {sound && (
           <button className="btn small" data-nav onClick={mute}>
             Mute
           </button>
+        )}
+      </div>
+      {/* Fixed 16:9 panel: the still until the trailer plays, the trailer letterboxed (never stretched) */}
+      <div className="tb-panel">
+        <Backdrop url={pick.url} focal={pick.focal} />
+        {trailer && (
+          <video
+            ref={video}
+            className={`tb-video${playing && framed ? " on" : ""}`}
+            src={trailer}
+            muted
+            playsInline
+            loop
+            preload="none"
+            onPlaying={() => setFramed(true)}
+          />
         )}
       </div>
     </section>
