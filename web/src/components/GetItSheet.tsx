@@ -37,7 +37,7 @@ export function dryRunText(a: Answer | null): string {
   if (!a) return "Checking…";
   const b = a.body;
   if (a.code === 200 && b.status === "added") {
-    const parts = [b.label ?? null, b.estimateGb != null ? `≈ ${gb(b.estimateGb)} GB` : "Size unknown", b.freeGbAfter != null ? `${gb(b.freeGbAfter)} GB free after` : null];
+    const parts = [b.label ?? null, b.extends ? "adds to the series already here" : null, b.estimateGb != null ? `≈ ${gb(b.estimateGb)} GB` : "Size unknown", b.freeGbAfter != null ? `${gb(b.freeGbAfter)} GB free after` : null];
     return parts.filter(Boolean).join(" · ");
   }
   if (b.status === "exists") return b.reason ?? "Already in the library or requested.";

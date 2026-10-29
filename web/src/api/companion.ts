@@ -490,6 +490,8 @@ export interface RequestResult {
   estimateGb?: number | null;
   freeGbNow?: number | null;
   freeGbAfter?: number | null;
+  /** tv: adds seasons to a series Sonarr already has. */
+  extends?: boolean;
   error?: string;
 }
 
