@@ -31,6 +31,7 @@ export function Backdrop({ url, focal, kenBurns = false }: { url: string | null;
     let alive = true;
     const img = new Image();
     img.decoding = "async";
+    img.fetchPriority = "high"; // ahead of the tile images queued at the same moment
     img.onload = () => {
       if (!alive) return;
       setLayers((prev) => {

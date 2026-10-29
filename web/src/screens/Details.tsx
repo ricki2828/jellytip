@@ -64,7 +64,7 @@ export function Details({ id }: { id: string }) {
           return;
         }
         setItem(it);
-        const quick = setTimeout(() => alive && setPick(heroPick(it, true)), 400);
+        const quick = setTimeout(() => alive && setPick(heroPick(it, true)), 1200);
         backdropInfo(heroItemId(it)).then(() => {
           clearTimeout(quick);
           if (alive) setPick(heroPick(it, true));

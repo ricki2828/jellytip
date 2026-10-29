@@ -24,6 +24,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-padding-top: 64px;
+}
+
 html,
 body {
   margin: 0;
@@ -64,6 +68,10 @@ img {
   gap: 28px;
   padding: 14px var(--pad);
   background: linear-gradient(rgba(10, 10, 10, 0.85), rgba(10, 10, 10, 0));
+}
+.nav.solid {
+  background: rgba(10, 10, 10, 0.94);
+  transition: background 0.2s;
 }
 .nav-logo {
   background: none;
@@ -696,7 +704,7 @@ button.overview.open {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: radial-gradient(ellipse at 30% 20%, rgba(226, 38, 77, 0.08), transparent 55%), var(--night);
+  background: var(--night);
 }
 .login-box {
   width: min(340px, 88vw);

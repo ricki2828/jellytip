@@ -127,7 +127,8 @@ export function heroPick(item: Item, details: boolean): ImagePick {
   const id = heroItemId(item);
   const info = peekBackdropInfo(id);
   const i = pickIndex(item, (details ? info?.detailsIndex : info?.heroIndex) ?? null, details);
-  return { url: imageUrl(id, "Backdrop", { tag: tags[i], index: i, maxWidth: HERO_MAX_WIDTH, quality: 90 }), focal: info?.focal.get(i) ?? null };
+  const width = Math.min(HERO_MAX_WIDTH, Math.round((window.innerWidth * Math.min(window.devicePixelRatio || 1, 2)) / 160) * 160 || HERO_MAX_WIDTH);
+  return { url: imageUrl(id, "Backdrop", { tag: tags[i], index: i, maxWidth: width, quality: 85 }), focal: info?.focal.get(i) ?? null };
 }
 
 /**

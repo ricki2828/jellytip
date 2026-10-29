@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
 import { go } from "../lib/router";
 
@@ -27,8 +28,15 @@ const LINKS: [string, string][] = [
 
 export function Nav({ current }: { current: string }) {
   const s = getSession();
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 40);
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
+  }, []);
   return (
-    <nav className="nav">
+    <nav className={scrolled ? "nav solid" : "nav"}>
       <button className="nav-logo" onClick={() => go("/home")} tabIndex={-1} aria-label="Home">
         <Logo />
       </button>

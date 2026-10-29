@@ -13,7 +13,7 @@ import { infoLine, TitleLogo } from "./TitleBlock";
 
 const DEBOUNCE_MS = 250;
 const TRAILER_DELAY_MS = 2500;
-const RANK_WAIT_MS = 400;
+const RANK_WAIT_MS = 1200; // the companion usually answers well inside this; a premature guess costs a second full-size image
 const trailerCache = new Map<string, string | null>();
 
 async function trailerFor(item: Item): Promise<string | null> {
