@@ -21,7 +21,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 
 /** Companion-proxied logo; initials when there is none or it fails (404 = no image at the panel). */
 function ChannelLogo({ ch }: { ch: Channel }) {
-  const src = logoSrc(ch.logo);
+  const src = logoSrc(ch.logo, 96);
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <span className="livetv-logo-blank">{ch.name.replace(/^[A-Z]{2,3}\s*[|:-]\s*/, "").slice(0, 2)}</span>;
   return <img src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
@@ -55,9 +55,11 @@ export function LiveTv() {
   useEffect(() => {
     liveGroups().then((a) => {
       if (a.status !== 200 || !a.data) return setErr(errorText(a));
-      const gs = a.data.groups.filter((g) => g.count > 0);
-      setGroups(gs);
-      setGroup((cur) => (cur && gs.some((g) => g.id === cur) ? cur : gs[0]?.id ?? null));
+      // "Guide" (the server's default view) always stays; other groups only with channels in them
+      const gs = a.data.groups.filter((g) => g.default || (g.count ?? 0) > 0);
+      setGroups(gs.some((g) => !g.default) ? gs : []);
+      const def = a.data.defaultGroup ?? gs.find((g) => g.default)?.id;
+      setGroup((cur) => (cur && gs.some((g) => g.id === cur) ? cur : def ?? gs[0]?.id ?? null));
     });
   }, []);
 
@@ -178,7 +180,7 @@ export function LiveTv() {
           {groups.map((g) => (
             <button key={g.id} className={`chip${g.id === group ? " on" : ""}`} data-nav role="tab" aria-selected={g.id === group} onClick={() => setGroup(g.id)}>
               {g.name}
-              <span className="livetv-count">{g.count}</span>
+              {g.count != null && !g.default && <span className="livetv-count">{g.count}</span>}
             </button>
           ))}
         </div>
@@ -223,7 +225,7 @@ export function LiveTv() {
                       {ch.favourite && <span className="livetv-fav" aria-label="favourite">★</span>}
                     </button>
                     <div className="livetv-track" style={{ width: trackW }}>
-                      {progs && blocks.length === 0 && <span className="livetv-noguide">No guide</span>}
+                      {progs && blocks.length === 0 && <span className="livetv-noguide">{ch.guideNote ?? (ch.event ? "Event feed, live when on" : "No guide")}</span>}
                       {!progs && <span className="livetv-loading" />}
                       {blocks.map((b) => (
                         <button

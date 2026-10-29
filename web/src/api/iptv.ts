@@ -179,10 +179,15 @@ export const deleteRecording = (id: Recording["id"]) => iptvPost<{ ok: boolean }
 
 export interface LiveGroup {
   id: string;
-  providerId: number | string | null;
+  providerId?: number | string | null;
   providerName?: string;
   name: string;
-  count: number;
+  count?: number;
+  /** The "Guide" view: every opted channel in group order, dark event feeds hidden. */
+  default?: boolean;
+  region?: string | null;
+  events?: number;
+  darkCount?: number;
 }
 
 export interface Channel {
@@ -197,6 +202,11 @@ export interface Channel {
   epgId?: string | null;
   catchupDays: number;
   favourite: boolean;
+  /** PPV / event feed. */
+  event?: boolean;
+  guide?: "epg" | "name" | "event" | "none";
+  guideNote?: string | null;
+  region?: string | null;
 }
 
 export interface Connection {
@@ -214,7 +224,7 @@ export interface PlayAnswer {
   connection?: Connection;
 }
 
-export const liveGroups = () => iptvGet<{ groups: LiveGroup[] }>("v1/iptv/live/groups");
+export const liveGroups = () => iptvGet<{ groups: LiveGroup[]; defaultGroup?: string }>("v1/iptv/live/groups");
 export const liveChannels = (group: string, offset = 0, limit = 500) =>
   iptvGet<{ total: number; offset: number; channels: Channel[] }>(`v1/iptv/live/channels?group=${encodeURIComponent(group)}&offset=${offset}&limit=${limit}`);
 export const epg = (channels: string[], from: number, to: number) =>
@@ -234,7 +244,7 @@ export const streamUrl = (rel: string) => `${COMPANION_BASE}/${rel.replace(/^\//
 let liveCheck: Promise<boolean> | null = null;
 /** True when some provider the person can use has opted-in live channels (asked once; reset by iptvChanged()). */
 export function hasLiveTv(): Promise<boolean> {
-  return (liveCheck ??= liveGroups().then((a) => a.status === 200 && !!a.data?.groups.some((g) => g.id !== "fav" && g.count > 0)));
+  return (liveCheck ??= liveGroups().then((a) => a.status === 200 && !!a.data?.groups.some((g) => g.id !== "fav" && !g.default && (g.count ?? 0) > 0)));
 }
 /** Settings changed what's opted in: ask again and tell the nav. */
 export function iptvChanged() {
@@ -244,7 +254,8 @@ export function iptvChanged() {
 
 /** Channel logo / provider poster the page may load: only companion-proxied (relative `v1/iptv/img/…`) paths; raw
  * provider URLs are refused by the CSP and would hand the viewer's address to the panel. */
-export const logoSrc = (logo?: string | null) => (logo && !/^[a-z][a-z0-9+.-]*:/i.test(logo) && !logo.startsWith("//") ? streamUrl(logo) : null);
+export const logoSrc = (logo?: string | null, size?: 96 | 192) =>
+  logo && !/^[a-z][a-z0-9+.-]*:/i.test(logo) && !logo.startsWith("//") ? streamUrl(size ? `${logo}${logo.includes("?") ? "&" : "?"}s=${size}` : logo) : null;
 
 // ---------- IPTV films / series ----------
 
