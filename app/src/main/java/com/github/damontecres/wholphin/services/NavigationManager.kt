@@ -5,12 +5,21 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import org.acra.ACRA
 import timber.log.Timber
 import javax.inject.Inject
+import com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import javax.inject.Singleton
 
 /**
  * Manages navigating between pages and manages the app's back stack
  */
 @Singleton
+private val BROWSE_KINDS =
+    setOf(
+        org.jellyfin.sdk.model.api.BaseItemKind.COLLECTION_FOLDER,
+        org.jellyfin.sdk.model.api.BaseItemKind.USER_VIEW,
+        org.jellyfin.sdk.model.api.BaseItemKind.FOLDER,
+    )
+
 class NavigationManager
     @Inject
     constructor() {
@@ -19,15 +28,47 @@ class NavigationManager
         /**
          * Go to the specified [com.github.damontecres.wholphin.ui.nav.Destination]
          */
-        fun navigateTo(destination: Destination) {
+        fun navigateTo(
+            destination: Destination,
+            /** Jellytip: why (key, timer, player...); traced with the call site. */
+            reason: String? = null,
+        ) {
+            val from = backStack.lastOrNull()
+            // Jellytip: from a browse page, only an explicit OK opens a title (see JellytipNavGate)
+            if (!JellytipNavGate.allow(isBrowsePage(from), opensTitle(destination))) {
+                JellytipTrace.nav("BLOCKED", from, destination, reason)
+                Timber.w("Blocked navigation without OK: %s -> %s", from, destination)
+                return
+            }
+            JellytipTrace.nav("to", from, destination, reason)
             backStack.add(destination)
             log()
         }
+
+        private fun isBrowsePage(d: Destination?): Boolean =
+            d is Destination.Home ||
+                d is Destination.Favorites ||
+                (d is Destination.MediaItem && d.type in BROWSE_KINDS)
+
+        private fun opensTitle(d: Destination): Boolean =
+            when (d) {
+                is Destination.MediaItem -> d.type !in BROWSE_KINDS
+                is Destination.SeriesOverview,
+                is Destination.Playback,
+                is Destination.PlaybackList,
+                is Destination.JellytipCollection,
+                is Destination.JellytipDiscover,
+                is Destination.DiscoveredItem,
+                -> true
+
+                else -> false
+            }
 
         /**
          * Go to the specified [Destination], but reset the back stack to Home first
          */
         fun navigateToFromDrawer(destination: Destination) {
+            JellytipTrace.nav("drawer", backStack.lastOrNull(), destination)
             goToHome()
             backStack.add(destination)
             log()
@@ -37,6 +78,7 @@ class NavigationManager
          * Go to the previous page
          */
         fun goBack() {
+            JellytipTrace.nav("back", backStack.lastOrNull(), backStack.getOrNull(backStack.size - 2))
             synchronized(this) {
                 if (backStack.size > 1) {
                     backStack.removeLastOrNull()
@@ -72,6 +114,7 @@ class NavigationManager
          * Resets the backstack to the specified destination
          */
         fun replace(destination: Destination) {
+            JellytipTrace.nav("replace", backStack.lastOrNull(), destination)
             while (backStack.size > 1) {
                 backStack.removeLastOrNull()
             }

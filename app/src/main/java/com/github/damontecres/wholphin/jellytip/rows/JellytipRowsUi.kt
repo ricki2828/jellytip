@@ -135,7 +135,7 @@ fun JellytipServerRowView(
         remember(viewModel) {
             { item ->
                 JellytipTrailerControl.stop()
-                viewModel.navigationManager.navigateTo(item.destination())
+                viewModel.navigationManager.navigateTo(item.destination(), "server row OK")
             }
         }
     val click: (BaseItem) -> Unit = { item -> if (!JellytipTrailerControl.onOk(item)) open(item) }
@@ -143,7 +143,7 @@ fun JellytipServerRowView(
         remember(viewModel) {
             { item ->
                 JellytipTrailerControl.stop()
-                viewModel.navigationManager.navigateTo(Destination.Playback(item))
+                viewModel.navigationManager.navigateTo(Destination.Playback(item), "server row Play key")
             }
         }
     val longClick: (BaseItem) -> Unit = onLongClickItem ?: open
@@ -231,7 +231,7 @@ private fun PersonRow(
     val entries = remember(films) { listOf(PersonRowEntry.Portrait) + films.map { PersonRowEntry.Film(it) } }
     val openPerson = {
         JellytipTrailerControl.stop()
-        viewModel.navigationManager.navigateTo(Destination.MediaItem(person.id, BaseItemKind.PERSON))
+        viewModel.navigationManager.navigateTo(Destination.MediaItem(person.id, BaseItemKind.PERSON), "person portrait OK")
     }
     ItemRow(
         title = row.title,
@@ -365,7 +365,7 @@ private fun FranchiseRow(
     val entries = remember(films) { listOf(FranchiseEntry.Info) + films.map { FranchiseEntry.Film(it) } }
     val openCollection = {
         JellytipTrailerControl.stop()
-        viewModel.navigationManager.navigateTo(Destination.JellytipCollection(collection.tmdbId, collection.name))
+        viewModel.navigationManager.navigateTo(Destination.JellytipCollection(collection.tmdbId, collection.name), "franchise info OK")
     }
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))) {
         if (collection.backdrop != null) {
@@ -602,9 +602,9 @@ fun JellytipCollectionPage(
                                 PosterCard(
                                     item,
                                     onClick = {
-                                        viewModel.navigationManager.navigateTo(item.destination())
+                                        viewModel.navigationManager.navigateTo(item.destination(), "collection part OK")
                                     },
-                                    onLongClick = { viewModel.navigationManager.navigateTo(item.destination()) },
+                                    onLongClick = { viewModel.navigationManager.navigateTo(item.destination(), "collection part long-press") },
                                     modifier =
                                         first.onFocusChanged {
                                             if (it.isFocused) {

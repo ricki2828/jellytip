@@ -334,6 +334,24 @@ fun PreferencesContent(
                                 }
                             }
                             when (pref) {
+                                com.github.damontecres.wholphin.jellytip.JellytipPreferences.SendDebugReport -> {
+                                    ClickPreference(
+                                        title = stringResource(R.string.jellytip_send_debug_report),
+                                        onClick = {
+                                            scope.launch(ExceptionHandler()) {
+                                                val message =
+                                                    com.github.damontecres.wholphin.jellytip.debug.JellytipDebugReport
+                                                        .send(context)
+                                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                            }
+                                        },
+                                        onLongClick = {},
+                                        summary = stringResource(R.string.jellytip_send_debug_report_summary),
+                                        interactionSource = interactionSource,
+                                        modifier = focusModifier,
+                                    )
+                                }
+
                                 AppPreference.InstalledVersion -> {
                                     ClickPreference(
                                         title = stringResource(R.string.installed_version),

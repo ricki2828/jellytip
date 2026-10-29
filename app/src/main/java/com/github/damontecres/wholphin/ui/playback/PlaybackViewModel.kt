@@ -1111,6 +1111,7 @@ class PlaybackViewModel
             }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("playback", "state=$playbackState item=${runCatching { itemId }.getOrNull()}")
             if (playbackState == Player.STATE_ENDED) {
                 Timber.v("Playback state is STATE_ENDED")
                 viewModelScope.launchDefault {

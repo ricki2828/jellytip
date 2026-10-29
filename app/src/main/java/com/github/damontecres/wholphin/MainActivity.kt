@@ -180,6 +180,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.init(applicationContext)
         Timber.i("MainActivity.onCreate: savedInstanceState is null=${savedInstanceState == null}")
         lifecycle.addObserver(playbackLifecycleObserver)
 
@@ -307,6 +308,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.key(event)
+        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onKey(event)
         JellytipInputGuard.onKey(event)
         if (JellytipInputGuard.shouldSwallow(event)) return true
         if (JellytipTrailerControl.onBackKey(event)) return true
@@ -539,6 +542,8 @@ class MainActivityViewModel
                             navigationManager.backStack.clear()
                         }
                         navigationManager.backStack.addAll(result.destinations)
+                        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+                            .nav("intent", null, result.destinations.lastOrNull(), "intent ${intent?.action}")
 
                         setupNavigationManager.navigateTo(
                             SetupDestination.AppContent(current),

@@ -161,13 +161,13 @@ fun JellytipWatchlistPage(
                         position = clicked
                         if (!JellytipTrailerControl.onOk(item)) {
                             JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination())
+                            viewModel.navigationManager.navigateTo(item.destination(), "watchlist OK")
                         }
                     },
                     onLongClickItem = { clicked, item ->
                         position = clicked
                         JellytipTrailerControl.stop()
-                        viewModel.navigationManager.navigateTo(item.destination())
+                        viewModel.navigationManager.navigateTo(item.destination(), "watchlist long-press")
                     },
                     onClickPlay = { _, item ->
                         JellytipTrailerControl.stop()

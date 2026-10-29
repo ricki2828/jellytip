@@ -72,6 +72,7 @@ object JellytipTrailerControl {
         this.trailerItemId = trailerItemId
         this.sound = sound
         this.owner = null
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "start ${item.id} ${item.name} sound=$sound")
     }
 
     /** A special takes the home player over for [url] (its frame draws the surface; the hero shows its still). */
@@ -86,6 +87,7 @@ object JellytipTrailerControl {
         this.trailerItemId = null
         this.sound = sound
         this.owner = owner
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("special:$owner", "start $itemId sound=$sound")
     }
 
     /** True while [owner]'s video is playing. */
@@ -109,6 +111,9 @@ object JellytipTrailerControl {
 
     /** Focus moved or page left: stop and reset to the default sound state next time. */
     fun stop() {
+        if (url != null) {
+            com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player(owner?.let { "special:$it" } ?: "hero", "stop $itemId")
+        }
         itemId = null
         url = null
         trailerItemId = null

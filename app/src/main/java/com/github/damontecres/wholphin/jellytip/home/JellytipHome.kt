@@ -400,6 +400,10 @@ private fun HeroTrailer(
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player(
+                        JellytipTrailerControl.owner?.let { "special:$it" } ?: "hero",
+                        "state=$playbackState item=${JellytipTrailerControl.itemId}",
+                    )
                     if (playbackState == Player.STATE_ENDED) currentOnEnded()
                 }
 

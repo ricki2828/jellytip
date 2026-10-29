@@ -42,6 +42,13 @@ object JellytipPreferences {
             summary = R.string.jellytip_api_token_summary,
         )
 
+    /** Ships the debug trace to the companion (handled in PreferencesContent). */
+    val SendDebugReport =
+        com.github.damontecres.wholphin.preferences.AppClickablePreference<AppPreferences>(
+            title = R.string.jellytip_send_debug_report,
+            summary = R.string.jellytip_send_debug_report_summary,
+        )
+
     val TrailerAutoplay =
         AppSwitchPreference<AppPreferences>(
             title = R.string.jellytip_trailer_autoplay,
@@ -100,6 +107,7 @@ object JellytipPreferences {
                     Ident,
                     TrailerAutoplay,
                     TrailerSound,
+                    SendDebugReport,
                 ),
             // Companion API settings are for the administrator only; hidden for everyone else
             conditionalPreferences =

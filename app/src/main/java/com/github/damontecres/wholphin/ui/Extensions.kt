@@ -323,6 +323,8 @@ fun logCoilError(
 ) {
     // Release-visible (Timber is stripped in release): adb logcat -s JellytipImg. Token-bearing query params removed.
     val safeUrl = url?.replace(Regex("([?&](api_key|ApiKey|X-Emby-Token)=)[^&]*", RegexOption.IGNORE_CASE), "$1***")
+    com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+        .image("fail $safeUrl ${errorResult.throwable.javaClass.simpleName}")
     android.util.Log.w(
         "JellytipImg",
         "fail url=$safeUrl err=${errorResult.throwable.javaClass.simpleName}: ${errorResult.throwable.message?.take(160)}",
