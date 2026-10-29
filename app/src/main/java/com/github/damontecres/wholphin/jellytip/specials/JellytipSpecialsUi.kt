@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.media3.common.VideoSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -109,7 +111,8 @@ internal object SpecialTokens {
     val POSTER_W = 100.dp
     val WIDE_H = JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP.dp
     val WIDE_W = (JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP * 16 / 9).dp
-    val BAND_H = 170.dp
+    /** Trailer Break video panel height: as tall as a row can be under the hero text (title + padding included). */
+    val BAND_H = 190.dp
     val FEATURE_H = 170.dp
     val FEATURE_W = 480.dp
     val VIDEO_H = 150.dp
@@ -202,8 +205,18 @@ private fun TrailerBreakRow(
     val scope = rememberCoroutineScope()
     val pick = remember(item.id, special.heroIndex) { viewModel.heroPick(item, special.heroIndex) }
     val sizes = rememberJellytipSizes()
+    val meta =
+        remember(item.id) {
+            listOfNotNull(
+                item.data.productionYear?.toString(),
+                item.data.genres?.take(2)?.takeIf { it.isNotEmpty() }?.joinToString(" / "),
+                item.data.officialRating?.takeIf { it.isNotBlank() },
+            ).joinToString("  \u00B7  ")
+        }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val bandWidth = maxWidth - SpecialTokens.SPACING * 2
+        val panelHeight = SpecialTokens.BAND_H
+        val panelWidth = panelHeight * 16f / 9f
         ItemRow(
             title = special.title,
             items = listOf(item),
@@ -224,32 +237,41 @@ private fun TrailerBreakRow(
             horizontalPadding = SpecialTokens.SPACING,
             modifier = focusModifier.onFocusChanged { active = it.hasFocus },
             cardContent = { _, _, cardModifier, onClick, onLongClick ->
-                SpecialCard(
-                    width = bandWidth,
-                    height = SpecialTokens.BAND_H,
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                    modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, false) },
+                // Plain night band: text on the left, the trailer in a true 16:9 panel on the right (only the panel takes focus)
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.width(bandWidth).height(panelHeight),
                 ) {
-                    if (pick.url != null) {
-                        AsyncImage(
-                            model = pick.url,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            alignment = focalAlignment(pick.focal),
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                    SpecialVideoSurface(owner, Modifier.fillMaxSize())
-                    LeftScrim()
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.align(Alignment.BottomStart).padding(sizes.px(28)),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.weight(1f).padding(start = sizes.px(16), end = sizes.px(40), bottom = sizes.px(6)),
                     ) {
-                        LogoOrTitle(item, maxWidthPx = 340, maxHeightPx = 110)
-                        if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.85f, px = JellytipHomeTokens.TEXT_PX)
+                        Kicker("Trailer break")
+                        LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 120)
+                        if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
+                        if (meta.isNotBlank()) Caption(meta, alpha = 0.6f)
+                        SoundHint(owner, "Sound on \u00B7 OK for details", Modifier)
                     }
-                    SoundHint(owner, "Sound on \u00B7 OK for details", Modifier.align(Alignment.BottomEnd).padding(sizes.px(24)))
+                    SpecialCard(
+                        width = panelWidth,
+                        height = panelHeight,
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, false) },
+                        corner = 6.dp,
+                    ) {
+                        // The panel is 16:9, so cropping the still to it is fine
+                        if (pick.url != null) {
+                            AsyncImage(
+                                model = pick.url,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                alignment = focalAlignment(pick.focal),
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        SpecialVideoSurface(owner, Modifier.fillMaxSize())
+                    }
                 }
             },
         )
@@ -912,13 +934,30 @@ private fun SpecialVideoSurface(
         if (mine) player?.addListener(listener)
         onDispose { player?.removeListener(listener) }
     }
+    // The TextureView stretches to whatever box it gets: size it to the video's own shape (black bars, never distorted)
+    var videoRatio by remember { mutableStateOf(16f / 9f) }
+    DisposableEffect(player) {
+        val listener =
+            object : Player.Listener {
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        videoRatio = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+                    }
+                }
+            }
+        player?.addListener(listener)
+        player?.videoSize?.takeIf { it.width > 0 && it.height > 0 }?.let { videoRatio = it.width * it.pixelWidthHeightRatio / it.height }
+        onDispose { player?.removeListener(listener) }
+    }
     val alpha by animateFloatAsState(if (mine && firstFrame) 1f else 0f, tween(if (mine) 600 else 150), label = "jellytip-special-video")
     if (mine && player != null) {
-        PlayerSurface(
-            player = player,
-            surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
-            modifier = modifier.graphicsLayer { this.alpha = alpha },
-        )
+        Box(modifier.graphicsLayer { this.alpha = alpha }.background(Color.Black), contentAlignment = Alignment.Center) {
+            PlayerSurface(
+                player = player,
+                surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
+                modifier = Modifier.aspectRatio(videoRatio.coerceIn(0.5f, 3f)),
+            )
+        }
     }
 }
 
@@ -971,18 +1010,22 @@ internal fun SpecialCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier,
+    /** Corner radius; null = the theme's card shape. */
+    corner: Dp? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
+    val shape = corner?.let { RoundedCornerShape(it) }
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier.size(width, height).jellytipSiblingDim(focused),
         interactionSource = source,
+        shape = if (shape != null) CardDefaults.shape(shape) else CardDefaults.shape(),
         colors = CardDefaults.colors(containerColor = Color(0xFF141414)),
         scale = JellytipFocus.scale(),
-        border = JellytipFocus.border(),
+        border = if (shape != null) JellytipFocus.border(shape) else JellytipFocus.border(),
         glow = JellytipFocus.glow(),
     ) {
         Box(Modifier.fillMaxSize(), content = content)
