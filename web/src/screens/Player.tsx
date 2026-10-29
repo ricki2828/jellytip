@@ -6,12 +6,35 @@ import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
+import { isPhone } from "../lib/device";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
 const NEXT_UP_SECONDS = 40;
 const DELAY_KEY = "jellytip.subDelay";
 const NET_RETRIES = 3;
+const DOUBLE_TAP_MS = 300;
+
+type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void };
+
+/** Phone: go fullscreen and turn to landscape (Android allows the lock only while fullscreen, and only from a tap). */
+async function enterLandscape(box: HTMLElement | null) {
+  if (!isPhone() || !box) return;
+  try {
+    if (!document.fullscreenElement && box.requestFullscreen) await box.requestFullscreen({ navigationUI: "hide" });
+    await (screen.orientation as LockableOrientation | undefined)?.lock?.("landscape");
+  } catch {
+    /* no gesture, or not supported (iOS): stay as is */
+  }
+}
+
+function leaveLandscape() {
+  try {
+    (screen.orientation as LockableOrientation | undefined)?.unlock?.();
+  } catch {
+    /* not supported */
+  }
+}
 
 // hls.js is ~half the bundle: only fetched when something plays
 let hlsModule: Promise<typeof import("hls.js")> | null = null;
@@ -270,6 +293,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
 
   const exit = useCallback(() => {
     stop();
+    leaveLandscape();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
     back(`/item/${id}`);
   }, [stop, id]);
@@ -305,6 +329,46 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     }
   };
   const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Phone: try landscape at once (works when the Play tap's activation is still fresh), else on the first tap
+  useEffect(() => {
+    enterLandscape(boxRef.current);
+    return leaveLandscape;
+  }, []);
+
+  // ---- touch: tap = show/hide controls, double-tap left/right half = -/+10 s (repeat taps keep seeking) ----
+  const lastTap = useRef<{ at: number; side: number } | null>(null);
+  const tapTimer = useRef<number | null>(null);
+  const touchClick = useRef(false);
+  const [seekFlash, setSeekFlash] = useState<{ side: number; n: number } | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  const onVideoPointerUp = (e: React.PointerEvent<HTMLVideoElement>) => {
+    if (e.pointerType === "mouse") return;
+    touchClick.current = true; // the click that follows belongs to this touch
+    enterLandscape(boxRef.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
+    const now = Date.now();
+    const prev = lastTap.current;
+    if (prev && now - prev.at < DOUBLE_TAP_MS && prev.side === side) {
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      seekBy(10 * side);
+      setSeekFlash((f) => ({ side, n: f && f.side === side ? f.n + 1 : 1 }));
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setSeekFlash(null), 700);
+      lastTap.current = { at: now, side };
+      return;
+    }
+    lastTap.current = { at: now, side };
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = window.setTimeout(() => {
+      tapTimer.current = null;
+      if (controls && !videoRef.current?.paused) setControls(false);
+      else poke();
+    }, DOUBLE_TAP_MS);
+  };
 
   // ---- keyboard (document listener runs before the app's window-level nav) ----
   const repeat = useRef(0);
@@ -381,13 +445,18 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   const title = item ? (item.Type === "Episode" ? `${item.SeriesName} · S${item.ParentIndexNumber} E${item.IndexNumber} · ${item.Name}` : item.Name) : "";
 
   return (
-    <div className={`player${controls || paused ? " show" : ""}`} onMouseMove={poke} onClick={poke}>
+    <div ref={boxRef} className={`player${controls || paused ? " show" : ""}`} onMouseMove={poke} onClick={() => !touchClick.current && poke()}>
       <video
         ref={videoRef}
         className="player-video"
         playsInline
-        onClick={togglePlay}
-        onDoubleClick={toggleFs}
+        onClick={() => {
+          // Touch taps are handled in onPointerUp (show/hide controls, double-tap seek); the mouse click plays/pauses
+          if (touchClick.current) touchClick.current = false;
+          else togglePlay();
+        }}
+        onPointerUp={onVideoPointerUp}
+        onDoubleClick={() => !isPhone() && toggleFs()}
         onPlay={() => setPaused(false)}
         onPause={() => {
           setPaused(true);
@@ -425,6 +494,12 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         </div>
       )}
       {buffering && !error && !needsTap && <div className="spinner" />}
+      {seekFlash && (
+        <div className={`seek-flash ${seekFlash.side < 0 ? "left" : "right"}`} aria-live="polite">
+          {seekFlash.side < 0 ? "−" : "+"}
+          {10 * seekFlash.n} s
+        </div>
+      )}
       {needsTap && !error && (
         <button
           className="tap-play"
@@ -433,6 +508,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
           aria-label="Play"
           onClick={(e) => {
             e.stopPropagation();
+            enterLandscape(boxRef.current);
             if (videoRef.current) tryPlay(videoRef.current);
           }}
         >
@@ -514,6 +590,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         </div>
       </div>
 
+      {menu && <div className="sheet-scrim" onClick={() => setMenu(false)} />}
       {menu && (
         <div className="sub-menu" onClick={(e) => e.stopPropagation()}>
           {audios.length > 1 && (
