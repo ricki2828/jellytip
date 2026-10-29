@@ -2,6 +2,26 @@ import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
 import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
+import { hasLiveTv, iptvChanged } from "../api/iptv";
+
+/** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
+function useLiveTv(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const check = () => void hasLiveTv().then((v) => alive && setOn(v));
+    const onSession = () => iptvChanged();
+    check();
+    window.addEventListener("jellytip-iptv", check);
+    window.addEventListener("jellytip-session", onSession);
+    return () => {
+      alive = false;
+      window.removeEventListener("jellytip-iptv", check);
+      window.removeEventListener("jellytip-session", onSession);
+    };
+  }, []);
+  return on;
+}
 
 export function Logo({ large = false }: { large?: boolean }) {
   return (
@@ -60,7 +80,8 @@ const LINKS: [string, string][] = [
 export function Nav({ current }: { current: string }) {
   const s = getSession();
   // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
-  const links: [string, string][] = s?.isAdmin ? [...LINKS, ["discover", "Discover"]] : LINKS;
+  const liveTv = useLiveTv();
+  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -98,6 +119,22 @@ export function Nav({ current }: { current: string }) {
             </svg>
           </a>
         )}
+        {/* Phone: Live TV as an icon in the top bar (the bottom tab bar keeps its 4-5 tabs) */}
+        {liveTv && (
+          <a href="#/livetv" className={`nav-icon nav-livetv${current === "livetv" ? " active" : ""}`} aria-label="Live TV" title="Live TV">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <rect x="3" y="6" width="18" height="13" rx="2" />
+              <path d="M8.5 2.5 12 6l3.5-3.5" />
+              <circle cx="17.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
+            </svg>
+          </a>
+        )}
+        <a href="#/settings" className={`nav-icon nav-settings${current === "settings" || current === "iptv" ? " active" : ""}`} aria-label="Settings" title="Settings" data-nav>
+          <svg viewBox="0 0 24 24" aria-hidden>
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
+          </svg>
+        </a>
         <span>{s?.userName}</span>
         <button data-nav className="link" onClick={() => logout()}>
           Sign out

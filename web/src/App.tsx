@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { getSession } from "./api/jellyfin";
 import { useRoute } from "./lib/router";
 import { Nav } from "./components/Nav";
@@ -12,8 +12,15 @@ import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
+import { Settings } from "./screens/Settings";
+import { parseTarget } from "./lib/iptvPlay";
 import { isNative } from "./lib/native";
 import { go, isRestoring } from "./lib/router";
+
+// IPTV screens (and mpegts.js / hls.js behind them) load only when someone opens them
+const IptvSettings = lazy(() => import("./screens/iptv/IptvSettings").then((m) => ({ default: m.IptvSettings })));
+const LiveTv = lazy(() => import("./screens/iptv/LiveTv").then((m) => ({ default: m.LiveTv })));
+const IptvPlayer = lazy(() => import("./screens/iptv/IptvPlayer").then((m) => ({ default: m.IptvPlayer })));
 
 export function App() {
   const [session, setSessionState] = useState(getSession);
@@ -26,7 +33,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route.name !== "play" && !isRestoring()) window.scrollTo(0, 0);
+    if (route.name !== "play" && route.name !== "iptvplay" && !isRestoring()) window.scrollTo(0, 0);
   }, [route.name, route.params.id]);
 
   // Phone app started without a connection: the downloads are what works
@@ -40,6 +47,18 @@ export function App() {
   if (route.name === "discover" && !session.isAdmin) {
     go("/home", true);
     return null;
+  }
+  if (route.name === "iptvplay") {
+    const target = parseTarget(route.query);
+    if (!target) {
+      go("/livetv", true);
+      return null;
+    }
+    return (
+      <Suspense fallback={null}>
+        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} />
+      </Suspense>
+    );
   }
   if (route.name === "play")
     return <Player key={route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} />;
@@ -57,6 +76,11 @@ export function App() {
         {route.name === "discover" && session.isAdmin && <Discover />}
         {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
+        {route.name === "settings" && <Settings />}
+        <Suspense fallback={null}>
+          {route.name === "iptv" && <IptvSettings />}
+          {route.name === "livetv" && <LiveTv />}
+        </Suspense>
       </main>
     </>
   );
