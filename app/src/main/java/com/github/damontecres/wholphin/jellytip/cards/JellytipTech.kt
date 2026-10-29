@@ -9,8 +9,9 @@ import java.util.UUID
 /**
  * Premium formats per item from the companion (Ricki: "content should have a 4k or Atmos badge or other premium
  * format"): `tech: [...]` on `/v1/items/{id}/backdrops`, `techs: {itemId: [...]}` maps on rows/specials/carousels.
- * Tags are the nightly build's ids (atmos, dtsx, lossless, dovi, hdr, uhd, 4k-hdr, imax); display names
- * ("Dolby Atmos", "4K") are accepted too. Tiles show at most a video and an audio badge; details list them all.
+ * Contract ("Tech badges", ~/ai/plans/jellytip-10x.md): 4K, DV, HDR10+, HDR, ATMOS, DTSX, TRUEHD, DTSHDMA; the
+ * nightly build's row tags and display names are accepted too. Tiles show at most a video and an audio badge;
+ * details list them all. A missing field means none.
  * Nothing here asks the server: it only keeps what payloads already carried.
  */
 object JellytipTech {
@@ -43,13 +44,14 @@ object JellytipTech {
     /** Snapshot read (recomposes when an answer arrives): the first of [ids] the companion answered for. */
     fun of(vararg ids: UUID?): Set<String> = ids.firstNotNullOfOrNull { id -> id?.let { techs[it] } }.orEmpty()
 
-    /** Tile badges, best first: one video ("4K DV", "4K HDR", "4K", "DV", "HDR"), one audio ("ATMOS", "DTS:X"). */
+    /** Tile badges, best first: one video ("4K DV", "4K HDR10+", "4K HDR", "4K", "DV"...), one audio ("ATMOS", "DTS:X"). */
     fun tileBadges(tags: Set<String>): List<String> {
         val video =
             listOfNotNull(
                 "4K".takeIf { UHD in tags },
                 when {
                     DOVI in tags -> "DV"
+                    HDR10_PLUS in tags -> "HDR10+"
                     HDR in tags -> "HDR"
                     else -> null
                 },
@@ -63,26 +65,32 @@ object JellytipTech {
         return listOfNotNull(video, audio)
     }
 
-    /** Details info line, e.g. ["4K", "Dolby Vision", "Dolby Atmos"]. */
+    /** Details info line, the full merged list, e.g. ["4K", "Dolby Vision", "Dolby Atmos"]. */
     fun fullNames(tags: Set<String>): List<String> =
         buildList {
             if (UHD in tags) add("4K")
-            if (DOVI in tags) add("Dolby Vision") else if (HDR in tags) add("HDR")
+            if (DOVI in tags) add("Dolby Vision")
+            if (HDR10_PLUS in tags) add("HDR10+") else if (HDR in tags && DOVI !in tags) add("HDR")
             if (IMAX in tags) add("IMAX")
             if (ATMOS in tags) add("Dolby Atmos")
             if (DTSX in tags) add("DTS:X")
-            if (LOSSLESS in tags && ATMOS !in tags && DTSX !in tags) add("Lossless audio")
+            if (TRUEHD in tags && ATMOS !in tags) add("Dolby TrueHD")
+            if (DTSHDMA in tags && DTSX !in tags) add("DTS-HD MA")
+            if (LOSSLESS in tags && ATMOS !in tags && DTSX !in tags && TRUEHD !in tags && DTSHDMA !in tags) add("Lossless audio")
         }
 
     /** Pure (unit tested): one payload tag → our ids. "4k-hdr" is both 4K and HDR. */
     fun normalize(raw: String): List<String> =
-        when (raw.lowercase().filter { it.isLetterOrDigit() }) {
+        when (raw.lowercase().replace("+", "plus").filter { it.isLetterOrDigit() }) {
             "uhd", "4k", "2160p" -> listOf(UHD)
             "4khdr", "uhdhdr" -> listOf(UHD, HDR)
             "dovi", "dv", "dolbyvision" -> listOf(DOVI)
-            "hdr", "hdr10", "hdr10plus", "hlg" -> listOf(HDR)
+            "hdr10plus" -> listOf(HDR10_PLUS)
+            "hdr", "hdr10", "hlg" -> listOf(HDR)
             "atmos", "dolbyatmos" -> listOf(ATMOS)
             "dtsx" -> listOf(DTSX)
+            "truehd", "dolbytruehd" -> listOf(TRUEHD)
+            "dtshdma", "dtshd" -> listOf(DTSHDMA)
             "lossless", "losslessaudio" -> listOf(LOSSLESS)
             "imax" -> listOf(IMAX)
             else -> emptyList()
@@ -90,6 +98,9 @@ object JellytipTech {
 
     const val UHD = "uhd"
     const val HDR = "hdr"
+    const val HDR10_PLUS = "hdr10plus"
+    const val TRUEHD = "truehd"
+    const val DTSHDMA = "dtshdma"
     const val DOVI = "dovi"
     const val ATMOS = "atmos"
     const val DTSX = "dtsx"

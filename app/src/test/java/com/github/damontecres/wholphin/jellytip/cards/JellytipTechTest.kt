@@ -15,6 +15,17 @@ class JellytipTechTest {
     }
 
     @Test
+    fun contractValues() {
+        val all = tags("4K", "DV", "HDR10+", "HDR", "ATMOS", "DTSX", "TRUEHD", "DTSHDMA")
+        assertEquals(listOf("4K DV", "ATMOS"), JellytipTech.tileBadges(all))
+        assertEquals(listOf("4K HDR10+"), JellytipTech.tileBadges(tags("4K", "HDR10+", "TRUEHD")))
+        assertEquals(listOf("HDR"), JellytipTech.tileBadges(tags("HDR", "DTSHDMA")))
+        assertEquals(listOf("4K", "Dolby Vision", "HDR10+", "Dolby Atmos", "DTS:X"), JellytipTech.fullNames(all))
+        assertEquals(listOf("4K", "HDR", "Dolby TrueHD"), JellytipTech.fullNames(tags("4K", "HDR", "TRUEHD")))
+        assertEquals(listOf("DTS-HD MA"), JellytipTech.fullNames(tags("DTSHDMA")))
+    }
+
+    @Test
     fun displayNamesAreAccepted() {
         assertEquals(tags("uhd", "dovi", "atmos"), tags("4K", "Dolby Vision", "Dolby Atmos"))
         assertEquals(emptySet<String>(), tags("stereo", ""))
