@@ -1,5 +1,8 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Production is served from https://ricki28.palawan.usbx.me/jellytip/, same origin as /jellyfin and /jellytip-api.
 // In dev, those two paths are proxied to the same host so the app never talks cross-origin.
@@ -31,9 +34,29 @@ function securityMeta(): Plugin {
   };
 }
 
+/**
+ * Emits sw.js: an app-shell-only service worker. It precaches index + the hashed build assets + manifest/icons and
+ * never touches /jellyfin, /jellytip-api or media (they don't fall under the /jellytip/ scope prefix it checks).
+ */
+function appShellWorker(): Plugin {
+  return {
+    name: "jellytip-app-shell-sw",
+    apply: "build",
+    generateBundle(_opts, bundle) {
+      const assets = Object.keys(bundle).filter((f) => f !== "sw.js" && !f.endsWith(".map"));
+      const shell = ["./", "manifest.webmanifest", "favicon.svg", "icons/icon-192.png", "icons/icon-512.png", ...assets];
+      const version = createHash("sha256").update(assets.sort().join("|")).digest("hex").slice(0, 12);
+      const source = readFileSync(fileURLToPath(new URL("./src/sw.template.js", import.meta.url)), "utf8")
+        .replace("__VERSION__", version)
+        .replace("__SHELL__", JSON.stringify(shell));
+      this.emitFile({ type: "asset", fileName: "sw.js", source });
+    },
+  };
+}
+
 export default defineConfig({
   base: "/jellytip/",
-  plugins: [react(), securityMeta()],
+  plugins: [react(), securityMeta(), appShellWorker()],
   server: {
     port: 5178,
     proxy: {

@@ -1,0 +1,19 @@
+{
+  "name": "Jellytip",
+  "short_name": "Jellytip",
+  "description": "Jellytip: movies and shows from your Jellyfin server.",
+  "id": "/jellytip/",
+  "start_url": "/jellytip/",
+  "scope": "/jellytip/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "categories": ["entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
