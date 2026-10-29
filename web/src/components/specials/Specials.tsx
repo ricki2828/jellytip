@@ -2,7 +2,7 @@
 // contract in ~/ai/plans/jellytip-specials.md). Each special renders as one block between the normal rows; unknown
 // layouts render nothing. Item data comes from one Jellyfin call per special; nothing per tile hits the companion.
 import { useEffect, useRef, useState } from "react";
-import { getItems, getSession, imageUrl, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
+import { getItems, getSession, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
 import {
   backdropInfo,
   companionMediaUrl,
@@ -32,6 +32,7 @@ import { Card } from "../Card";
 import { ScoreLine } from "../ScoreLine";
 import { infoLine, TitleLogo } from "../TitleBlock";
 import { PosterCard } from "../PosterCard";
+import { filmCount, PersonTile } from "../PersonTile";
 import "./specials.css";
 
 // ---------- shared ----------
@@ -246,24 +247,20 @@ function TrailerBreakBlock({ s }: { s: TrailerBreak }) {
 
 function PersonSpotlightBlock({ s }: { s: PersonSpotlight }) {
   const items = useItems(s.itemIds);
+  const phone = useIsPhone();
   const untitled = untitledSet(s);
   if (!items || items.length === 0) return null;
-  const img = s.imageTag ? imageUrl(s.personId, "Primary", { tag: s.imageTag, fillWidth: 400, fillHeight: 600, quality: 85 }) : null;
-  const open = () => go(`/person/${s.personId}?name=${encodeURIComponent(s.name)}`);
   return (
     <section className="special row person-spotlight">
       <SpecialHeader kicker={s.role === "director" ? "Director spotlight" : "Actor spotlight"} title={s.title ?? s.name} />
       <div className="row-scroll">
-        <button className="person-tile" data-nav onClick={open} aria-label={`${s.name}: all films`}>
-          {img ? <img src={img} alt="" /> : <span className="person-initial">{s.name.slice(0, 1)}</span>}
-          <span className="person-tile-text">
-            <strong>{s.name}</strong>
-            <span>
-              {s.filmCount} {s.filmCount === 1 ? "film" : "films"}
-              {s.unwatchedCount > 0 ? ` · ${s.unwatchedCount} unwatched` : ""}
-            </span>
-          </span>
-        </button>
+        <PersonTile
+          id={s.personId}
+          name={s.name}
+          imageTag={s.imageTag}
+          width={phone ? 150 : 200}
+          sub={`${filmCount(s.filmCount)}${s.unwatchedCount > 0 ? ` · ${s.unwatchedCount} unwatched` : ""}`}
+        />
         {items.map((i) => (
           <PosterCard key={i.Id} item={i} onOpen={() => go(`/item/${i.Id}`)} untitled={untitled.has(i.Id)} />
         ))}

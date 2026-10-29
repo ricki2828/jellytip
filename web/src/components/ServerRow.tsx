@@ -57,6 +57,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
       layout={r.layout === "poster" ? "poster" : "standard"}
       untitled={untitled}
       onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : undefined}
+      person={person ? { ...person, count: r.itemIds.length } : null}
       {...opts}
     />
   );

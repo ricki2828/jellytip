@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
 import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
-import { Card } from "./Card";
+import { Card, CARD_W, PHONE_CARD_W } from "./Card";
+import { filmCount, PersonTile } from "./PersonTile";
 import { PosterCard } from "./PosterCard";
 
 const POSTER_W = 150;
@@ -22,6 +23,8 @@ interface Props {
   untitled?: Set<string>;
   /** Header becomes a link (a person's filmography, a franchise page). */
   onTitle?: () => void;
+  /** Person rows: a portrait tile first (same height as the row's tiles), opening the filmography. */
+  person?: { id: string; name: string; imageTag?: string | null; count?: number } | null;
 }
 
 /** Calls `load` once the element nears the viewport; null while waiting, [] when it failed or came back empty. */
@@ -68,24 +71,35 @@ export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => vo
   );
 }
 
-export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle }: Props) {
+export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person }: Props) {
   const ref = useRef<HTMLElement>(null);
   const loaded = useLazyItems(ref, items, load);
   const phone = useIsPhone();
   const poster = layout === "poster";
+  const posterW = phone ? PHONE_POSTER_W : POSTER_W;
+  const cardH = Math.round(((phone ? PHONE_CARD_W : CARD_W) * 9) / 16);
 
   if (loaded && loaded.length === 0) return null;
   return (
     <section className={poster ? "row poster-row" : "row"} ref={ref}>
       <RowTitle title={title} onTitle={onTitle} />
       <div className="row-scroll">
+        {person && (
+          <PersonTile
+            id={person.id}
+            name={person.name}
+            imageTag={person.imageTag}
+            width={poster ? posterW : Math.round((cardH * 2) / 3)}
+            sub={person.count ? filmCount(person.count) : undefined}
+          />
+        )}
         {loaded
           ? loaded.map((it, i) =>
               poster ? (
                 <PosterCard
                   key={it.Id}
                   item={it}
-                  width={phone ? PHONE_POSTER_W : POSTER_W}
+                  width={posterW}
                   onOpen={() => (onOpen ? onOpen(it) : go(`/item/${it.Id}`))}
                   onFocus={onFocusItem && (() => onFocusItem(it))}
                   autoFocus={autoFocusFirst && i === 0}
