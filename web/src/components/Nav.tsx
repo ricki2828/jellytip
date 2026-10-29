@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
 import { go } from "../lib/router";
+import { isNative } from "../lib/native";
 
 export function Logo({ large = false }: { large?: boolean }) {
   return (
@@ -39,6 +40,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="m15 15 5.5 5.5" />
     </>
   ),
+  downloads: (
+    <>
+      <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+      <path d="M5 19.5h14" />
+    </>
+  ),
 };
 
 const LINKS: [string, string][] = [
@@ -46,6 +53,8 @@ const LINKS: [string, string][] = [
   ["movies", "Movies"],
   ["shows", "Shows"],
   ["search", "Search"],
+  // Offline downloads exist only in the Android app
+  ...(isNative ? ([["downloads", "Downloads"]] as [string, string][]) : []),
 ];
 
 export function Nav({ current }: { current: string }) {

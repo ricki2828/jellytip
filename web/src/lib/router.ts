@@ -23,6 +23,7 @@ function parse(): Route {
     case "movies":
     case "shows":
     case "search":
+    case "downloads":
     case "home":
       return { name: seg[0], params: {}, query };
     default:

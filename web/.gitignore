@@ -2,3 +2,4 @@ node_modules
 dist
 *.local
 dist-android
+__pycache__

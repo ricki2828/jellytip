@@ -23,6 +23,7 @@ import { Backdrop } from "../components/Backdrop";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { ScoreLine } from "../components/ScoreLine";
+import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButton";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
 import { runtimeText } from "../api/jellyfin";
 
@@ -230,6 +231,7 @@ export function Details({ id }: { id: string }) {
             <button className="btn" data-nav onClick={toggleFav}>
               {ud?.IsFavorite ? "♥ Favourite" : "♡ Favourite"}
             </button>
+            {item.Type !== "Series" && <DownloadButton item={item} onError={flash} />}
           </div>
         </div>
       </div>
@@ -243,6 +245,7 @@ export function Details({ id }: { id: string }) {
                   {s.Name}
                 </button>
               ))}
+              <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
             </div>
             {phone ? (
               // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target

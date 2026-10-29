@@ -7,6 +7,8 @@ import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, 
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 import { isPhone } from "../lib/device";
+import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
+import { localFileUrl } from "../lib/native";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -83,10 +85,25 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     [id],
   );
 
+  // Downloaded copy being played: progress goes to the offline queue (synced to Jellyfin when online), no session
+  const localRef = useRef<DownloadRecord | null>(null);
+  const runtime = () => localRef.current?.item.RunTimeTicks ?? (videoRef.current?.duration ?? 0) * TICKS_PER_SECOND;
+  const progress = () => {
+    if (localRef.current) recordProgress(id, position(), runtime());
+    else reportProgress(report());
+  };
+  const started = () => {
+    if (!localRef.current) reportStart(report());
+  };
+
   const stop = useCallback(() => {
     const p = planRef.current;
     if (!p || stoppedRef.current) return;
     stoppedRef.current = true;
+    if (localRef.current) {
+      if (startedRef.current) recordProgress(id, position(), runtime());
+      return;
+    }
     if (startedRef.current) reportStopped(report());
     else stopEncoding(p); // never started: no session to stop, but the server may already be transcoding
   }, [report]);
@@ -163,8 +180,19 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       setError("This title won't play in this browser.");
       return;
     }
-    fallbackDone.current = true;
     const at = videoRef.current?.currentTime || 0;
+    if (localRef.current) {
+      // The downloaded file won't play: stream it instead (when online)
+      abandonPlan();
+      localRef.current = null;
+      try {
+        attach(await negotiate(id, Math.round(at * TICKS_PER_SECOND)), at);
+      } catch (e) {
+        setError(navigator.onLine ? String((e as Error).message ?? e) : "The downloaded file won't play, and you're offline.");
+      }
+      return;
+    }
+    fallbackDone.current = true;
     abandonPlan();
     try {
       const p = await negotiate(id, Math.round(at * TICKS_PER_SECOND), { h264Only: true, audioStreamIndex: audioIndex ?? undefined });
@@ -203,8 +231,44 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     setNext(null);
     setCues([]);
     setBuffering(true);
+    localRef.current = null;
     (async () => {
       try {
+        const dl = await playableDownload(id);
+        if (!alive) return;
+        if (dl) {
+          // Downloaded: play the local file. Resume from Jellyfin's position when reachable, else the offline one.
+          localRef.current = dl;
+          const online = navigator.onLine ? await getItem(id).catch(() => null) : null;
+          if (!alive) return;
+          const it = online ?? dl.item;
+          setItem(it);
+          const pending = await localPosition(id);
+          const saved = pending ?? (it.UserData?.Played ? 0 : it.UserData?.PlaybackPositionTicks ?? 0);
+          const startTicks = startParam != null ? Number(startParam) * TICKS_PER_SECOND : saved;
+          const src = dl.item.MediaSources?.[0];
+          const subs = dl.subtitles.map((x) => ({ Index: x.index, Type: "Subtitle", DisplayTitle: x.label, IsTextSubtitleStream: true }));
+          const plan: PlayPlan = {
+            url: localFileUrl(dl.path!),
+            hls: false,
+            method: "DirectPlay",
+            playSessionId: "",
+            source: { Id: src?.Id ?? id, MediaStreams: subs, DefaultSubtitleStreamIndex: src?.DefaultSubtitleStreamIndex },
+          };
+          const def = subs.find((x) => x.Index === src?.DefaultSubtitleStreamIndex);
+          setSubIndex(def ? def.Index : -1);
+          setAudioIndex(null);
+          attach(plan, startTicks / TICKS_PER_SECOND);
+          if (it.Type === "Episode" && it.SeriesId && online) {
+            episodes(it.SeriesId)
+              .then((all) => {
+                const i = all.findIndex((e) => e.Id === it.Id);
+                if (alive) setNext(i >= 0 ? all[i + 1] ?? null : null);
+              })
+              .catch(() => undefined);
+          }
+          return;
+        }
         const it = await getItem(id);
         if (!alive) return;
         setItem(it);
@@ -245,7 +309,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   // ---- reporting ----
   useEffect(() => {
     const t = setInterval(() => {
-      if (startedRef.current && !stoppedRef.current) reportProgress(report());
+      if (startedRef.current && !stoppedRef.current) progress();
     }, PROGRESS_MS);
     const onUnload = () => stop();
     // Back from the bfcache: the page was "stopped" on pagehide, so the session has to be reopened
@@ -255,7 +319,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       startedRef.current = false;
       if (videoRef.current && !videoRef.current.paused) {
         startedRef.current = true;
-        reportStart(report());
+        started();
       }
     };
     window.addEventListener("pagehide", onUnload);
@@ -272,8 +336,9 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     setCues([]);
     if (subIndex < 0 || !plan) return;
     const ctl = new AbortController();
-    fetchSubtitles(id, plan.source.Id, subIndex, ctl.signal)
-      .then((txt) => setCues(parseVtt(txt)))
+    const offline = localRef.current?.subtitles.find((x) => x.index === subIndex);
+    (offline ? subtitleText(offline.key).then((t) => t ?? Promise.reject(new Error("missing"))) : fetchSubtitles(id, plan.source.Id, subIndex, ctl.signal))
+      .then((txt) => !ctl.signal.aborted && setCues(parseVtt(txt)))
       .catch(() => !ctl.signal.aborted && setCues([]));
     return () => ctl.abort();
   }, [subIndex, plan, id]);
@@ -461,7 +526,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         onPause={() => {
           setPaused(true);
           setControls(true);
-          if (startedRef.current) reportProgress(report());
+          if (startedRef.current) progress();
         }}
         onPlaying={() => {
           setBuffering(false);
@@ -469,11 +534,11 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
           netRetries.current = 0;
           if (!startedRef.current && planRef.current) {
             startedRef.current = true;
-            reportStart(report());
+            started();
           }
         }}
         onWaiting={() => setBuffering(true)}
-        onSeeked={() => startedRef.current && reportProgress(report())}
+        onSeeked={() => startedRef.current && progress()}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND)}
         onEnded={() => {
