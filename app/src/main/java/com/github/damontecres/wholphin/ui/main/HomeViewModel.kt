@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
+import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselRows
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.jellytip.cache.HomeCache
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -72,6 +73,7 @@ class HomeViewModel
         private val mediaManagementService: MediaManagementService,
         private val latestNextUpService: LatestNextUpService,
         private val homeCache: HomeCache,
+        private val jellytipRows: com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService,
     ) : ViewModel() {
         private val _state = MutableStateFlow(HomeState.EMPTY)
         val state: StateFlow<HomeState> = _state
@@ -190,6 +192,15 @@ class HomeViewModel
                 deferredRows.clear() // a newer load supersedes anything still waiting
                 val semaphore = Semaphore(4)
 
+                // Jellytip: with server rows (rows=1) the rows this app added from the old manifest are hidden on Home,
+                // so don't spend requests on them. Today's answer is usually cached; otherwise wait briefly for it.
+                val serverRows =
+                    jellytipRows.peek(JELLYTIP_HOME_PAGE)
+                        ?: kotlinx.coroutines.withTimeoutOrNull(SERVER_ROWS_WAIT_MS) { jellytipRows.load(JELLYTIP_HOME_PAGE) }
+                val skipRow: (HomeRowConfig) -> Boolean = { config ->
+                    serverRows != null && JellytipCarouselRows.isAppRow(config, serverRows.carouselIds)
+                }
+
                 // Continue Watching / Next Up change most: queue them first (the semaphore is FIFO)
                 val fetchOrder =
                     settings.rows.indices.sortedBy { if (isWatchingRow(settings.rows[it].config)) 0 else 1 }
@@ -198,6 +209,9 @@ class HomeViewModel
                         .map { settings.rows[it] }
                         .map { row ->
                             viewModelScope.async(WholphinDispatchers.IO) {
+                                if (skipRow(row.config)) {
+                                    return@async HomeRowLoadingState.Success(row.title, emptyList(), rowType = row.config)
+                                }
                                 semaphore.withPermit {
                                     Timber.v("Fetching row: %s", row)
                                     try {
@@ -458,3 +472,6 @@ private fun isWatchingRow(row: HomeRowConfig) =
         row is HomeRowConfig.ContinueWatchingCombined
 
 private const val IDLE_APPLY_MS = 60_000L
+
+private const val JELLYTIP_HOME_PAGE = "home"
+private const val SERVER_ROWS_WAIT_MS = 1_500L
