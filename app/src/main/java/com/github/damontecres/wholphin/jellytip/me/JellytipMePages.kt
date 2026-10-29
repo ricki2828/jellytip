@@ -220,7 +220,7 @@ fun JellytipMePage(
                     SettingRow("Kids profile", "On · ${AGES.firstOrNull { it.first == p.kidsMaxAge }?.second ?: "${p.kidsMaxAge}+"} · OK to leave (PIN)") { dialog = "leaveKids" }
                 }
             } else {
-                item { SettingRow("Hide watched", if (p.hideWatched) "On" else "Off") { viewModel.patch(JSONObject().put("hideWatched", !p.hideWatched)) } }
+                item { SettingRow("Hide watched (rows update overnight)", if (p.hideWatched) "On" else "Off") { viewModel.patch(JSONObject().put("hideWatched", !p.hideWatched)) } }
                 item { SettingRow("Intro", if (p.intro) "On" else "Off") { viewModel.setPlaybackToggle("intro", !p.intro) } }
                 item { SettingRow("Trailers play by themselves", if (p.trailerAutoplay) "On" else "Off") { viewModel.setPlaybackToggle("trailerAutoplay", !p.trailerAutoplay) } }
                 item { SettingRow("Trailer sound", if (p.trailerSound) "On" else "Off") { viewModel.setPlaybackToggle("trailerSound", !p.trailerSound) } }
@@ -230,7 +230,7 @@ fun JellytipMePage(
                     val lb = p.letterboxdUser?.let { "$it · ${p.letterboxdStatus}" } ?: "Not linked"
                     SettingRow("Your Letterboxd", lb) { dialog = "letterboxd" }
                 }
-                item { SettingRow("Kids profile", "Off · OK to set up") { dialog = "kidsAge" } }
+                item { SettingRow("Kids profile", "Off · OK to set up (needs a PIN to leave)") { dialog = "kidsAge" } }
             }
             if (JellytipMe.follows.isNotEmpty()) {
                 item { Text("Following", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp)) }

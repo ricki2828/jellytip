@@ -191,9 +191,15 @@ object JellytipMe {
 
     private suspend fun loadReactions() {
         val res = api?.userCall("v1/me/reactions") ?: return
-        if (res.first != 200) return
+        applyReactions(res)
+    }
+
+    /** `GET /reactions` and every thumbs / not-interested change answer `{thumbs, notInterested}`: the server's truth. */
+    private fun applyReactions(res: Pair<Int, String>?) {
+        if (res == null || res.first != 200) return
         runCatching {
             val o = JSONObject(res.second)
+            if (!o.has("thumbs") && !o.has("notInterested")) return
             val t = o.optJSONObject("thumbs")
             thumbs.clear()
             t?.keys()?.forEach { k -> thumbs[k] = t.optInt(k) }
@@ -223,8 +229,8 @@ object JellytipMe {
             return 200 to null
         }
         if (res.first == 409) {
-            // Changed elsewhere: take the server's copy, the caller can try again
-            api?.userCall("v1/me/prefs")?.takeIf { it.first == 200 }?.let { r -> runCatching { MeParse.prefs(r.second) }.getOrNull()?.let { _prefs.value = it } }
+            // Changed elsewhere: the answer carries the server's copy ({code:"version", prefs}); the caller can try again
+            runCatching { JSONObject(res.second).optJSONObject("prefs")?.toString()?.let(MeParse::prefs) }.getOrNull()?.let { _prefs.value = it }
         }
         val err = runCatching { JSONObject(res.second).optString("error").ifBlank { JSONObject(res.second).optString("code") } }.getOrNull()
         return res.first to err
@@ -240,6 +246,7 @@ object JellytipMe {
         scope.launch {
             val r = api?.userCall("v1/me/thumbs", JSONObject().put("itemId", key).put("value", value).toString())
             JellytipTrace.log("me", "thumbs $key=$value -> ${r?.first}")
+            applyReactions(r)
         }
     }
 
@@ -257,6 +264,7 @@ object JellytipMe {
             val body = JSONObject().put("itemId", key).toString()
             val r = api?.userCall("v1/me/not-interested", body, method = if (on) "POST" else "DELETE")
             JellytipTrace.log("me", "not-interested $key on=$on -> ${r?.first}")
+            applyReactions(r)
         }
     }
 
@@ -272,6 +280,8 @@ object JellytipMe {
             val body = JSONObject().put("personId", personId.toString()).toString()
             val r = api?.userCall("v1/me/follow", body, method = if (on) "POST" else "DELETE")
             JellytipTrace.log("me", "follow $personId on=$on -> ${r?.first}")
+            // The answer is {follows}: the server's list
+            if (r?.first == 200) runCatching { MeParse.follows(r.second) }.getOrNull()?.let { list -> follows.clear(); list.forEach { follows[it.personId] = it } }
         }
     }
 
@@ -290,7 +300,7 @@ object JellytipMe {
         return when (code) {
             200 -> null
             403 -> "That PIN isn't right."
-            429 -> "Too many tries. Wait 5 minutes."
+            429 -> "Too many wrong PINs. Try again in 5 minutes."
             else -> "Couldn't leave the kids profile (server said $code)."
         }
     }
