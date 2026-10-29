@@ -88,7 +88,11 @@ fun JellytipLiveTvPlayerPage(
             playback.lineup.takeIf { l -> l.any { it.id == channelId } }
                 ?: listOf(IptvChannel(channelId, channelId.substringBefore(':'), null, channelId, null, "", null, 0, false))
         }
-    var index by remember { mutableIntStateOf(lineup.indexOfFirst { it.id == channelId }.coerceAtLeast(0)) }
+    val startIndex = remember(channelId) { lineup.indexOfFirst { it.id == channelId }.coerceAtLeast(0) }
+    var index by remember { mutableIntStateOf(startIndex) }
+    // What the guide asked for (live, or a catch-up programme of this channel); zapping away switches to live
+    val opened = remember(channelId) { playback.state.value.target?.takeIf { it.channelId == channelId } }
+    var current by remember { mutableStateOf(opened ?: IptvTarget(lineup[startIndex].id, lineup[startIndex].name)) }
     var bannerTick by remember { mutableIntStateOf(1) }
     var bannerVisible by remember { mutableStateOf(true) }
     val focus = remember { FocusRequester() }
@@ -103,17 +107,16 @@ fun JellytipLiveTvPlayerPage(
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playback.stop("app hidden (full screen)") }
-    LifecycleEventEffect(Lifecycle.Event.ON_START) {
-        val ch = lineup[index]
-        playback.play(IptvTarget(ch.id, ch.name), "app shown (full screen)")
-    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { playback.play(current, "app shown (full screen)") }
 
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
     // Zap: open the stream once the choice has settled
     LaunchedEffect(index) {
         val ch = lineup[index]
-        if (playState.target?.channelId != ch.id) delay(ZAP_SETTLE_MS)
-        playback.play(IptvTarget(ch.id, ch.name), "full screen settle")
+        val target = if (index == startIndex && opened != null) opened else IptvTarget(ch.id, ch.name)
+        current = target
+        if (playback.state.value.target != target) delay(ZAP_SETTLE_MS)
+        playback.play(target, "full screen settle")
     }
     LaunchedEffect(bannerTick) {
         bannerVisible = true
@@ -184,7 +187,9 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         if (bannerVisible) {
-            NowNextBanner(channel, nowNext, now, Modifier.align(Alignment.BottomStart))
+            val cu = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
+            val shown = if (cu != null) IptvNowNext(IptvProg(cu.start!!, cu.stop!!, cu.label, null, true), null) else nowNext
+            NowNextBanner(channel, shown, now, Modifier.align(Alignment.BottomStart), catchUp = cu != null)
         }
     }
 }
@@ -195,6 +200,7 @@ private fun NowNextBanner(
     nn: IptvNowNext?,
     now: Long,
     modifier: Modifier,
+    catchUp: Boolean = false,
 ) {
     Box(
         modifier
@@ -213,7 +219,7 @@ private fun NowNextBanner(
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
                 Text(
-                    text = listOfNotNull(ch.num?.toString(), ch.name).joinToString("  "),
+                    text = listOfNotNull(ch.num?.toString(), ch.name, if (catchUp) "Catch-up" else null).joinToString("  "),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.75f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 14.sp,
@@ -232,8 +238,8 @@ private fun NowNextBanner(
                 if (p != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${hhmm(p.start)}–${hhmm(p.stop)}", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                        val frac = ((now - p.start).toFloat() / (p.stop - p.start).coerceAtLeast(1)).coerceIn(0f, 1f)
-                        Box(Modifier.width(220.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f))) {
+                        val frac = if (catchUp) 0f else ((now - p.start).toFloat() / (p.stop - p.start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                        if (!catchUp) Box(Modifier.width(220.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f))) {
                             Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(JellytipPalette.Jelly))
                         }
                     }

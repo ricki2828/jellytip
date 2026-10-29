@@ -147,6 +147,54 @@ class JellytipIptvService
             return play(q)
         }
 
+        /** `/play` for a recording, an IPTV film, or an episode of an IPTV series. */
+        suspend fun playItem(target: IptvTarget): IptvPlayResult {
+            val q =
+                buildString {
+                    append("v1/iptv/play?")
+                    when {
+                        target.recordingId != null -> append("recording=").append(enc(target.recordingId))
+                        target.episodeId != null -> append("series=").append(enc(target.seriesId.orEmpty())).append("&episode=").append(enc(target.episodeId))
+                        target.vodId != null -> append("vod=").append(enc(target.vodId))
+                        else -> return playChannel(target.channelId, target.start, target.stop)
+                    }
+                    append("&device=").append(enc(deviceId))
+                }
+            return play(q)
+        }
+
+        /** Recordings and the server's space; null = unavailable. */
+        suspend fun recordings(): Pair<IptvSpace?, List<IptvRecording>>? {
+            val (code, body) = get("v1/iptv/recordings") ?: return null
+            if (code != 200) return null
+            return runCatching { IptvParse.recordings(body) }.getOrNull()
+        }
+
+        /** Record the guide programme of [channelId] starting at [programmeStart] (epoch s). */
+        suspend fun record(
+            channelId: String,
+            programmeStart: Long,
+        ): IptvRecordResult {
+            val body = JSONObject().put("channel", channelId).put("programme", programmeStart).toString()
+            val res = api.userCall("v1/iptv/recordings", body) ?: return IptvRecordResult(false, "The server can't be reached.")
+            JellytipTrace.log("iptv", "record $channelId@$programmeStart -> ${res.first}")
+            return IptvParse.recordResult(res.first, res.second)
+        }
+
+        suspend fun cancelRecording(id: String): Boolean = api.userCall("v1/iptv/recordings/${enc(id)}/cancel", "{}")?.first == 200
+
+        suspend fun deleteRecording(id: String): Boolean = api.userCall("v1/iptv/recordings/${enc(id)}/delete", "{}")?.first == 200
+
+        /** Resume point for a recording ("rec:<id>"), IPTV film or episode id; the server marks it played at 90 %. */
+        suspend fun saveProgress(
+            item: String,
+            positionSecs: Double,
+            durationSecs: Double,
+        ) {
+            val body = JSONObject().put("item", item).put("position", positionSecs).put("duration", durationSecs).toString()
+            api.userCall("v1/iptv/progress", body)
+        }
+
         suspend fun play(query: String): IptvPlayResult {
             val res = api.userCall(query) ?: return IptvPlayResult.Failed("network", "The server can't be reached.")
             return IptvParse.play(res.first, res.second)

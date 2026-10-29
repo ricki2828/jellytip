@@ -398,6 +398,22 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)
         }
 
+        is Destination.JellytipIptvPlay -> {
+            val target =
+                androidx.compose.runtime.remember(destination) {
+                    com.github.damontecres.wholphin.jellytip.iptv.IptvTarget(
+                        channelId = destination.recordingId ?: destination.episodeId ?: destination.vodId ?: "item",
+                        label = destination.title,
+                        recordingId = destination.recordingId,
+                        vodId = destination.vodId,
+                        seriesId = destination.seriesId,
+                        episodeId = destination.episodeId,
+                        resumeMs = destination.resumeMs,
+                    )
+                }
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvPlayPage(target = target, modifier = modifier)
+        }
+
         is Destination.JellytipLiveTvPlayer -> {
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPlayerPage(channelId = destination.channelId, modifier = modifier)
         }

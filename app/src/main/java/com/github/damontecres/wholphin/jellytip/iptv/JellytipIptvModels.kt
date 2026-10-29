@@ -14,6 +14,8 @@ data class IptvGroup(
     val name: String,
     val count: Int,
     val providerName: String?,
+    /** The server's all-channels "Guide" (`default:true`): dark event feeds already left out. */
+    val isDefault: Boolean = false,
 )
 
 data class IptvChannel(
@@ -27,6 +29,10 @@ data class IptvChannel(
     val epgId: String?,
     val catchupDays: Int,
     val favourite: Boolean,
+    /** Server flag: PPV / event feed ("live when on"); null = old server, the app guesses from the names. */
+    val event: Boolean? = null,
+    /** e.g. "Event feed, live when on" | "No guide for this channel". */
+    val guideNote: String? = null,
 )
 
 /** One guide programme; times are epoch seconds. */
@@ -66,6 +72,41 @@ data class IptvPlayAnswer(
     val growing: Boolean,
 )
 
+/** A server-side recording (ffmpeg copy on the seedbox). Times are epoch seconds. */
+data class IptvRecording(
+    val id: String,
+    val channelId: String,
+    val channel: String,
+    val title: String,
+    val desc: String?,
+    val start: Long,
+    val stop: Long,
+    /** scheduled | recording | done | failed | cancelled */
+    val state: String,
+    val bytes: Long,
+    val error: String?,
+    val watched: Boolean,
+    val playable: Boolean,
+    val positionSecs: Double?,
+    val durationSecs: Double?,
+) {
+    val upcoming get() = state == "scheduled" || state == "recording"
+}
+
+data class IptvSpace(
+    val usedGb: Double,
+    val capGb: Double,
+    val freeGb: Double?,
+    val canRecord: Boolean,
+    val reason: String?,
+)
+
+/** A `POST /recordings` answer: [ok] with an optional [warning] (e.g. it takes the only connection), or why not. */
+data class IptvRecordResult(
+    val ok: Boolean,
+    val message: String?,
+)
+
 /** What a `/play` call came back with. */
 sealed interface IptvPlayResult {
     data class Ok(
@@ -94,7 +135,7 @@ object IptvParse {
         return (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
             val id = o.str("id") ?: return@mapNotNull null
-            IptvGroup(id, o.str("name") ?: id, o.optInt("count", 0), o.str("providerName"))
+            IptvGroup(id, o.str("name") ?: id, o.optInt("count", 0), o.str("providerName"), o.optBoolean("default", false))
         }
     }
 
@@ -114,6 +155,8 @@ object IptvParse {
             epgId = o.str("epgId"),
             catchupDays = o.optInt("catchupDays", 0),
             favourite = o.optBoolean("favourite", false),
+            event = if (o.has("event") && !o.isNull("event")) o.optBoolean("event") else null,
+            guideNote = o.str("guideNote"),
         )
     }
 
@@ -159,6 +202,63 @@ object IptvParse {
             val h = a.optJSONObject(i) ?: return@mapNotNull null
             IptvHolder(h.str("kind") ?: "watch", h.str("userName") ?: h.str("user"), h.str("label"), h.longOrNull("since"))
         }
+    }
+
+    fun recording(o: JSONObject?): IptvRecording? {
+        o ?: return null
+        val id = o.str("id") ?: return null
+        val prog = o.optJSONObject("progress")
+        return IptvRecording(
+            id = id,
+            channelId = o.str("channelId").orEmpty(),
+            channel = o.str("channel").orEmpty(),
+            title = o.str("title") ?: "Recording",
+            desc = o.str("desc"),
+            start = o.optLong("start"),
+            stop = o.optLong("stop"),
+            state = o.str("state") ?: "scheduled",
+            bytes = o.optLong("bytes", 0),
+            error = o.str("error"),
+            watched = o.optBoolean("watched", false),
+            playable = o.optBoolean("playable", false),
+            positionSecs = prog?.takeUnless { it.isNull("position") }?.optDouble("position"),
+            durationSecs = prog?.takeUnless { it.isNull("duration") }?.optDouble("duration"),
+        )
+    }
+
+    fun recordings(json: String): Pair<IptvSpace?, List<IptvRecording>> {
+        val root = JSONObject(json)
+        val sp = root.optJSONObject("space")
+        val space =
+            sp?.let {
+                IptvSpace(
+                    it.optDouble("usedGb", 0.0),
+                    it.optDouble("capGb", 0.0),
+                    if (it.isNull("freeGb")) null else it.optDouble("freeGb"),
+                    it.optBoolean("canRecord", true),
+                    it.str("reason"),
+                )
+            }
+        val a = root.optJSONArray("recordings") ?: JSONArray()
+        return space to (0 until a.length()).mapNotNull { recording(a.optJSONObject(it)) }
+    }
+
+    fun recordResult(
+        code: Int,
+        json: String,
+    ): IptvRecordResult {
+        val o = runCatching { JSONObject(json) }.getOrNull()
+        if (code in 200..299) return IptvRecordResult(true, o?.str("warning"))
+        val text =
+            when (o?.str("code")) {
+                "too_many" -> "Too many recordings already (20 upcoming, 2 at once)."
+                "no_space" -> "Not enough space on the server to record."
+                "too_long" -> "Recordings can be at most 6 hours."
+                "too_far" -> "Recordings can be set at most 14 days ahead."
+                "bad_window" -> "That programme can't be recorded (it's over)."
+                else -> o?.str("error") ?: "Server said $code"
+            }
+        return IptvRecordResult(false, text)
     }
 
     fun play(

@@ -70,6 +70,8 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.ui.components.DialogItem
+import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -103,6 +105,9 @@ data class LiveTvState(
     /** Guide window start (epoch s, on a half hour); the window is [IptvRules.WINDOW_SECS] wide. */
     val windowStart: Long = IptvRules.windowStart(nowSec()),
     val message: String? = null,
+    /** Recordings tab: null = loading. */
+    val recordings: List<IptvRecording>? = null,
+    val space: IptvSpace? = null,
 )
 
 internal fun nowSec() = System.currentTimeMillis() / 1000
@@ -138,14 +143,22 @@ class JellytipLiveTvViewModel
                     return@launch
                 }
                 recent = service.recent()
+                // The server's "Guide" (all opted channels) first, then Favourites / Recent, the groups in the
+                // server's order, and Recordings last
+                val default = groups.firstOrNull { it.isDefault }
                 val tabs =
                     buildList {
+                        default?.let { add(LiveTvTab(it.id, it.name.ifBlank { "Guide" })) }
                         groups.firstOrNull { it.id == JellytipIptvService.FAV }?.let { add(LiveTvTab(it.id, "Favourites")) }
                         if (recent.isNotEmpty()) add(LiveTvTab(JellytipIptvService.RECENT, "Recent"))
-                        groups.filter { it.id != JellytipIptvService.FAV && it.count > 0 }.forEach { add(LiveTvTab(it.id, cleanGroupName(it.name))) }
+                        groups
+                            .filter { it.id != JellytipIptvService.FAV && !it.isDefault && it.count > 0 }
+                            .forEach { add(LiveTvTab(it.id, cleanGroupName(it.name))) }
+                        add(LiveTvTab(RECORDINGS, "Recordings"))
                     }
                 _state.update { it.copy(tabs = tabs) }
-                tabs.firstOrNull()?.let { selectTab(it.id, "first tab") }
+                loadRecordings()
+                (default?.id ?: tabs.firstOrNull { it.id != RECORDINGS }?.id)?.let { selectTab(it, "first tab") }
                     ?: _state.update { it.copy(channels = emptyList(), message = "No channels are opted in yet (Settings › Live TV on the web).") }
             }
         }
@@ -158,6 +171,11 @@ class JellytipLiveTvViewModel
             JellytipTrace.log("iptv", "guide tab $id ($reason)")
             tabJob?.cancel()
             _state.update { it.copy(tab = id, channels = null, darkCount = 0, showDark = false, message = null) }
+            if (id == RECORDINGS) {
+                _state.update { it.copy(channels = emptyList()) }
+                loadRecordings()
+                return
+            }
             tabJob =
                 viewModelScope.launch {
                     val list = if (id == JellytipIptvService.RECENT) recent else service.channels(id)
@@ -175,7 +193,7 @@ class JellytipLiveTvViewModel
 
         private fun publish() {
             val s = _state.value
-            val dark = all.filter { IptvRules.isDark(it.name, it.group, nowNext[it.id]) }.map { it.id }.toSet()
+            val dark = all.filter { IptvRules.isDark(it.name, it.group, nowNext[it.id], it.event) }.map { it.id }.toSet()
             val shown = if (s.showDark) all else all.filter { it.id !in dark }
             _state.update {
                 it.copy(
@@ -192,7 +210,70 @@ class JellytipLiveTvViewModel
         }
 
         /** Window bounds: back a little (catch-up comes with recordings), ahead 3 days (what the server keeps). */
-        fun minWindowStart(): Long = IptvRules.windowStart(nowSec()) - BACK_SECS
+        fun minWindowStart(): Long {
+            val days = all.maxOfOrNull { it.catchupDays }?.coerceAtMost(MAX_CATCHUP_DAYS) ?: 0
+            return IptvRules.windowStart(nowSec()) - maxOf(BACK_SECS, days * 86_400L)
+        }
+
+        /** A past programme can be watched again when the channel keeps catch-up that far back. */
+        fun canCatchUp(
+            ch: IptvChannel,
+            p: IptvProg,
+        ): Boolean {
+            val now = nowSec()
+            if (p.title.isEmpty() || p.start >= now) return false
+            return p.catchup || (ch.catchupDays > 0 && now - p.start <= ch.catchupDays * 86_400L)
+        }
+
+        fun loadRecordings() {
+            viewModelScope.launch {
+                val got = service.recordings()
+                if (got == null) {
+                    _state.update { it.copy(recordings = it.recordings ?: emptyList(), message = if (it.tab == RECORDINGS) "Couldn't load recordings." else it.message) }
+                    return@launch
+                }
+                val (space, list) = got
+                _state.update { it.copy(recordings = list, space = space) }
+            }
+        }
+
+        /** True when a recording covers [p] on [ch] (the server pads start/stop around the programme). */
+        fun isRecorded(
+            ch: IptvChannel,
+            p: IptvProg,
+        ): Boolean =
+            _state.value.recordings.orEmpty().any {
+                it.channelId == ch.id && it.state != "cancelled" && it.state != "failed" && it.start <= p.start && it.stop >= p.stop
+            }
+
+        fun record(
+            ch: IptvChannel,
+            p: IptvProg,
+        ) {
+            viewModelScope.launch {
+                val r = service.record(ch.id, p.start)
+                _state.update { it.copy(message = if (r.ok) (r.message ?: "Recording “${p.title}”.") else r.message) }
+                if (r.ok) loadRecordings()
+            }
+        }
+
+        fun cancelRecording(r: IptvRecording) {
+            viewModelScope.launch {
+                val ok = service.cancelRecording(r.id)
+                JellytipTrace.log("iptv", "cancel recording ${r.id} ok=$ok")
+                _state.update { it.copy(message = if (ok) "Cancelled “${r.title}”." else "Couldn't cancel it.") }
+                loadRecordings()
+            }
+        }
+
+        fun deleteRecording(r: IptvRecording) {
+            viewModelScope.launch {
+                val ok = service.deleteRecording(r.id)
+                JellytipTrace.log("iptv", "delete recording ${r.id} ok=$ok")
+                _state.update { it.copy(message = if (ok) "Deleted “${r.title}”." else "Couldn't delete it.") }
+                loadRecordings()
+            }
+        }
 
         fun maxWindowStart(): Long = IptvRules.windowStart(nowSec()) + AHEAD_SECS
 
@@ -242,7 +323,9 @@ class JellytipLiveTvViewModel
         }
 
         companion object {
+            const val RECORDINGS = "recordings"
             private const val BACK_SECS = 2 * 60 * 60L
+            private const val MAX_CATCHUP_DAYS = 7
             private const val AHEAD_SECS = 3 * 24 * 60 * 60L - IptvRules.WINDOW_SECS
             private const val FETCH_BEFORE_SECS = 60 * 60L
             private const val FETCH_AFTER_SECS = 3 * 60 * 60L
@@ -353,10 +436,32 @@ fun JellytipLiveTvPage(
         playback.play(IptvTarget(ch.id, ch.name), "guide preview (rested ${PREVIEW_REST_MS} ms)")
     }
 
-    fun openFullScreen(ch: IptvChannel) {
+    var actions by remember { mutableStateOf<Pair<IptvChannel, IptvProg>?>(null) }
+
+    fun openFullScreen(
+        ch: IptvChannel,
+        target: IptvTarget = IptvTarget(ch.id, ch.name),
+    ) {
         playback.lineup = state.channels.orEmpty()
-        playback.play(IptvTarget(ch.id, ch.name), "guide OK")
+        playback.play(target, if (target.start != null) "guide OK (catch-up)" else "guide OK")
         viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide OK on ${ch.name}")
+    }
+
+    /** OK on a programme: on now = watch live; over = catch-up where the channel keeps it; later = what to do with it. */
+    fun onCellOk(
+        ch: IptvChannel,
+        p: IptvProg,
+    ) {
+        when {
+            p.title.isEmpty() || p.isOn(now) -> openFullScreen(ch)
+            p.stop <= now ->
+                if (viewModel.canCatchUp(ch, p)) {
+                    openFullScreen(ch, IptvTarget(ch.id, p.title, p.start, p.stop))
+                } else {
+                    actions = ch to p
+                }
+            else -> actions = ch to p
+        }
     }
 
     /** D-pad inside the grid: moves by programme (left/right) and by channel at the same time (up/down). */
@@ -455,7 +560,20 @@ fun JellytipLiveTvPage(
             }
         }
         Spacer(Modifier.height(6.dp))
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        if (state.tab == JellytipLiveTvViewModel.RECORDINGS) {
+            RecordingsList(
+                state = state,
+                onPlay = { r ->
+                    val resume = ((r.positionSecs ?: 0.0) * 1000).toLong().takeIf { r.durationSecs == null || (r.positionSecs ?: 0.0) < r.durationSecs * 0.9 } ?: 0L
+                    viewModel.navigationManager.navigateTo(
+                        Destination.JellytipIptvPlay(title = r.title, recordingId = r.id, resumeMs = resume),
+                        "recording OK ${r.id}",
+                    )
+                },
+                onCancel = viewModel::cancelRecording,
+                onDelete = viewModel::deleteRecording,
+            )
+        } else BoxWithConstraints(Modifier.fillMaxSize()) {
             val timelineW = maxWidth - CHANNEL_W
             val dpPerSec = timelineW / IptvRules.WINDOW_SECS.toFloat()
             val ws = state.windowStart
@@ -488,8 +606,11 @@ fun JellytipLiveTvPage(
                                                 ProgCell(
                                                     prog = p,
                                                     now = now,
-                                                    onClick = { openFullScreen(ch) },
-                                                    onLongClick = { viewModel.toggleFavourite(ch) },
+                                                    recorded = p.title.isNotEmpty() && viewModel.isRecorded(ch, p),
+                                                    note = ch.guideNote,
+                                                    catchUp = viewModel.canCatchUp(ch, p),
+                                                    onClick = { onCellOk(ch, p) },
+                                                    onLongClick = { actions = ch to p },
                                                     modifier =
                                                         Modifier
                                                             .offset(x = x)
@@ -540,6 +661,119 @@ fun JellytipLiveTvPage(
                 }
             }
         }
+    }
+    ProgrammeActions(
+        viewModel = viewModel,
+        target = actions,
+        now = now,
+        onWatch = { ch, t -> openFullScreen(ch, t) },
+        onDismiss = { actions = null },
+    )
+}
+
+@Composable
+private fun ProgrammeActions(
+    viewModel: JellytipLiveTvViewModel,
+    target: Pair<IptvChannel, IptvProg>?,
+    now: Long,
+    onWatch: (IptvChannel, IptvTarget) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val (ch, p) = target ?: return
+    val items =
+        buildList {
+            add(DialogItem("Watch ${ch.name} live", dismissOnClick = true) { onWatch(ch, IptvTarget(ch.id, ch.name)) })
+            if (viewModel.canCatchUp(ch, p)) {
+                add(DialogItem(if (p.isOn(now)) "Watch from the start" else "Watch “${p.title}”", dismissOnClick = true) { onWatch(ch, IptvTarget(ch.id, p.title, p.start, p.stop)) })
+            }
+            if (p.title.isNotEmpty() && p.stop > now && !viewModel.isRecorded(ch, p)) {
+                add(DialogItem("Record “${p.title}”", dismissOnClick = true) { viewModel.record(ch, p) })
+            }
+            add(DialogItem(if (ch.favourite) "Remove from Favourites" else "Add to Favourites", dismissOnClick = true) { viewModel.toggleFavourite(ch) })
+        }
+    val subtitle = if (p.title.isNotEmpty()) "${p.title}  ·  ${hhmm(p.start)}–${hhmm(p.stop)}" else ch.name
+    DialogPopup(
+        showDialog = true,
+        title = subtitle,
+        dialogItems = items,
+        onDismissRequest = onDismiss,
+    )
+}
+
+@Composable
+private fun RecordingsList(
+    state: LiveTvState,
+    onPlay: (IptvRecording) -> Unit,
+    onCancel: (IptvRecording) -> Unit,
+    onDelete: (IptvRecording) -> Unit,
+) {
+    var menu by remember { mutableStateOf<IptvRecording?>(null) }
+    Column(Modifier.fillMaxSize()) {
+        state.space?.let { sp ->
+            Text(
+                text =
+                    "Recordings use ${sp.usedGb.toInt()} of ${sp.capGb.toInt()} GB" +
+                        (sp.freeGb?.let { " · ${it.toInt()} GB free on the server" } ?: "") +
+                        (if (!sp.canRecord) " · can't record: ${sp.reason ?: "no space"}" else ""),
+                color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
+                fontFamily = JellytipFontFamily,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+            )
+        }
+        val list = state.recordings
+        when {
+            list == null -> Text("Loading recordings…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(12.dp))
+            list.isEmpty() -> Text("Nothing recorded yet. Hold OK on a programme in the guide to record it.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(12.dp))
+            else ->
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize()) {
+                    items(list, key = { it.id }) { r ->
+                        val day = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(r.start * 1000))
+                        val stateText =
+                            when (r.state) {
+                                "scheduled" -> r.error ?: "Scheduled"
+                                "recording" -> "Recording now"
+                                "done" -> if (r.watched) "Watched" else "Ready"
+                                "failed" -> "Failed" + (r.error?.let { ": $it" } ?: "")
+                                else -> "Cancelled"
+                            }
+                        Surface(
+                            onClick = { if (r.playable) onPlay(r) else menu = r },
+                            onLongClick = { menu = r },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
+                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                            colors =
+                                ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.White.copy(alpha = 0.06f),
+                                    focusedContainerColor = Color.White,
+                                    contentColor = JellytipPalette.Vanilla,
+                                    focusedContentColor = Color.Black,
+                                ),
+                            modifier = Modifier.fillMaxWidth().height(ROW_H),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                            ) {
+                                if (r.state == "recording") Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
+                                Text(r.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text("${r.channel.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), "")}  ·  $day ${hhmm(r.start)}–${hhmm(r.stop)}", fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1)
+                                Text(stateText, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(180.dp))
+                            }
+                        }
+                    }
+                }
+        }
+    }
+    menu?.let { r ->
+        val items =
+            buildList {
+                if (r.playable) add(DialogItem("Play", dismissOnClick = true) { onPlay(r) })
+                if (r.upcoming) add(DialogItem(if (r.state == "recording") "Stop recording" else "Cancel recording", dismissOnClick = true) { onCancel(r) })
+                if (!r.upcoming) add(DialogItem("Delete", dismissOnClick = true) { onDelete(r) })
+            }
+        DialogPopup(showDialog = true, title = r.title, dialogItems = items, onDismissRequest = { menu = null })
     }
 }
 
@@ -594,7 +828,7 @@ private fun FocusInfo(
             maxLines = 1,
         )
         Text(
-            text = prog?.title ?: ch?.let { "No guide information" } ?: "",
+            text = prog?.title ?: ch?.let { it.guideNote ?: "No guide information" } ?: "",
             color = JellytipPalette.Vanilla,
             fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.Medium,
@@ -660,7 +894,8 @@ private fun ChannelCell(
             var failed by remember(ch.logo) { mutableStateOf(false) }
             if (ch.logo != null && !failed) {
                 AsyncImage(
-                    model = ch.logo,
+                    // Small logo size (the server scales to fit 96 px)
+                    model = if (ch.logo.contains('?')) ch.logo else "${ch.logo}?s=96",
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     onError = { failed = true },
@@ -700,6 +935,9 @@ internal fun initials(name: String): String =
 private fun ProgCell(
     prog: IptvProg,
     now: Long,
+    recorded: Boolean,
+    catchUp: Boolean,
+    note: String?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier,
@@ -720,14 +958,20 @@ private fun ProgCell(
             ),
         modifier = modifier,
     ) {
-        Text(
-            text = prog.title.ifEmpty { "No guide information" },
-            fontFamily = JellytipFontFamily,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 8.dp),
-        )
+        ) {
+            if (recorded) Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
+            Text(
+                text = (if (catchUp) "↺ " else "") + prog.title.ifEmpty { note ?: "No guide information" },
+                fontFamily = JellytipFontFamily,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

@@ -182,6 +182,17 @@ sealed class Destination(
         val channelId: String,
     ) : Destination(true)
 
+    /** Jellytip: an IPTV recording, film or series episode full screen. */
+    @Serializable
+    data class JellytipIptvPlay(
+        val title: String,
+        val recordingId: String? = null,
+        val vodId: String? = null,
+        val seriesId: String? = null,
+        val episodeId: String? = null,
+        val resumeMs: Long = 0,
+    ) : Destination(true)
+
     /** Jellytip: a franchise (TMDB collection) page: series hero, blurb, progress, films in series order. */
     @Serializable
     data class JellytipCollection(

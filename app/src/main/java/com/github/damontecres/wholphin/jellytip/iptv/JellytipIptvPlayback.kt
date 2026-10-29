@@ -37,7 +37,20 @@ data class IptvTarget(
     val label: String,
     val start: Long? = null,
     val stop: Long? = null,
-)
+    /** Set for a recording / IPTV film / series episode instead of a channel (then [channelId] is just an id for traces). */
+    val recordingId: String? = null,
+    val vodId: String? = null,
+    val seriesId: String? = null,
+    val episodeId: String? = null,
+    /** Where to start a recording or film (ms). */
+    val resumeMs: Long = 0,
+) {
+    val isLive get() = recordingId == null && vodId == null && episodeId == null && start == null
+
+    /** The `item` key for POST /progress (recordings and IPTV films/episodes). */
+    val progressItem: String?
+        get() = recordingId?.let { "rec:$it" } ?: episodeId ?: vodId
+}
 
 sealed interface IptvPlayState {
     val target: IptvTarget?
@@ -180,7 +193,7 @@ class JellytipIptvPlayback
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} ($reason)")
             job =
                 scope.launch {
-                    when (val r = service.playChannel(target.channelId, target.start, target.stop)) {
+                    when (val r = service.playItem(target)) {
                         is IptvPlayResult.Ok -> {
                             val url = service.streamUrl(r.answer.url)
                             if (url == null) {
@@ -195,7 +208,7 @@ class JellytipIptvPlayback
                                     .apply { if (ts) setMimeType(MimeTypes.VIDEO_MP2T) }
                                     .build()
                             val p = ensurePlayer()
-                            p.setMediaItem(item)
+                            if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
                             p.playWhenReady = true
                             p.prepare()
                         }
@@ -233,6 +246,16 @@ class JellytipIptvPlayback
             if (_state.value !is IptvPlayState.Idle) JellytipTrace.player("iptv", "stop ($reason)")
             stopPlayer()
             _state.value = IptvPlayState.Idle
+        }
+
+        /** Save [target]'s resume point (recordings, films, episodes) from where the player is now. */
+        fun saveProgress(target: IptvTarget) {
+            val item = target.progressItem ?: return
+            val p = player ?: return
+            if (_state.value.target != target) return
+            val pos = p.currentPosition / 1000.0
+            val dur = p.duration.takeIf { it > 0 }?.div(1000.0) ?: return
+            scope.launch { service.saveProgress(item, pos, dur) }
         }
 
         fun setVolume(volume: Float) {

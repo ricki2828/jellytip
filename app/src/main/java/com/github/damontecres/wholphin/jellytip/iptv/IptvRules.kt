@@ -53,8 +53,10 @@ object IptvRules {
         channelName: String,
         groupName: String,
         nowNext: IptvNowNext?,
+        /** The server's `event` flag when it sends one (wins over the name guess). */
+        event: Boolean? = null,
     ): Boolean {
-        if (!isEventChannel(channelName, groupName)) return false
+        if (!(event ?: isEventChannel(channelName, groupName))) return false
         if (nowNext?.now != null || nowNext?.next != null) return false
         return !namesAFixture(channelName)
     }
