@@ -1,6 +1,6 @@
 // "On now" (GET v1/iptv/live/onnow): channels with something airing now, in the server's order (favourite region
-// first, then group order). Pure; tested in web/test/onNow.test.ts. Tolerant of the exact shape until it's pinned:
-// `channels[]` or `items[]`, each a channel with `now` (or `programme`) = {start, stop, title}.
+// first, then group order). Pure; tested in web/test/onNow.test.ts. Shape: {now, channels:[Channel + {sport, now, next}]};
+// the server's `sport` flag decides, keywords only when a server leaves it out.
 
 export interface OnNow {
   channelId: string;

@@ -69,8 +69,13 @@ export async function savePrefs(patch: Record<string, unknown>): Promise<string 
     return null;
   }
   if (a.status === 409) {
-    loading = null;
-    await load();
+    // The server sends the current prefs with the conflict ({code: "version", prefs})
+    const cur = a.data && typeof a.data === "object" ? (a.data as { prefs?: unknown }).prefs : undefined;
+    if (cur) set({ available: true, prefs: parsePrefs(cur) });
+    else {
+      loading = null;
+      await load();
+    }
     return "These settings changed on another device: they're reloaded, try again.";
   }
   return errText(a.status, a.data);
@@ -79,7 +84,10 @@ export async function savePrefs(patch: Record<string, unknown>): Promise<string 
 function errText(status: number, data: unknown): string {
   const e = data && typeof data === "object" ? (data as { error?: unknown }).error : null;
   if (status === 403 && e === "pin") return "That PIN isn't right.";
-  if (status === 429) return "Too many tries: wait 5 minutes.";
+  if (status === 429) {
+    const ra = data && typeof data === "object" ? Number((data as { retryAfter?: unknown }).retryAfter) : NaN;
+    return `Too many tries: wait ${ra > 0 ? Math.max(1, Math.ceil(ra / 60)) : 5} minute${ra > 0 && ra <= 60 ? "" : "s"}.`;
+  }
   if (typeof e === "string" && e) return e;
   return status === 0 ? "The server can't be reached." : `Server said ${status}`;
 }

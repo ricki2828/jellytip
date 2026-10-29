@@ -267,8 +267,8 @@ export async function vodItem(id: string): Promise<Answer<VodDetail>> {
 }
 
 /** Channels with something on now (live sport first); [] when none or IPTV isn't set up. */
-export async function onNow(limit = 40): Promise<import("../lib/onNow").OnNow[]> {
-  const a = await iptvGet<unknown>(`v1/iptv/live/onnow?limit=${limit}`);
+export async function onNow(limit = 40, sportOnly = false): Promise<import("../lib/onNow").OnNow[]> {
+  const a = await iptvGet<unknown>(`v1/iptv/live/onnow?limit=${limit}${sportOnly ? "&sport=1" : ""}`);
   if (a.status !== 200) return [];
   const { parseOnNow } = await import("../lib/onNow");
   return parseOnNow(a.data, Math.floor(Date.now() / 1000));

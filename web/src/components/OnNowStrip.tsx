@@ -22,7 +22,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     let alive = true;
     const load = async () => {
       if (checkProvider && !(await hasLiveTv())) return alive && setItems([]);
-      const list = await onNow(sportOnly ? 40 : 30);
+      const list = await onNow(sportOnly ? 20 : 30, sportOnly);
       if (!alive) return;
       setItems(sportOnly ? list.filter((o) => o.sport) : list);
       setNow(Date.now() / 1000);

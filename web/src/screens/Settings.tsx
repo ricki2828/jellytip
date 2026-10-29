@@ -66,7 +66,7 @@ function PinForm({ title, onPin, onCancel }: { title: string; onPin: (pin: strin
       className="settings-block"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!/^\d{4}$/.test(pin)) return setErr("Four digits.");
+        if (!/^\d{4,8}$/.test(pin)) return setErr("4 to 8 digits.");
         setBusy(true);
         const r = await onPin(pin);
         setBusy(false);
@@ -75,7 +75,7 @@ function PinForm({ title, onPin, onCancel }: { title: string; onPin: (pin: strin
       }}
     >
       <strong>{title}</strong>
-      <input className="settings-input pin" data-nav data-autofocus type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="PIN" />
+      <input className="settings-input pin" data-nav data-autofocus type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="PIN" />
       {err && <span className="settings-err">{err}</span>}
       <div className="buttons">
         <button className="btn small primary" data-nav disabled={busy}>
@@ -180,7 +180,7 @@ function Personal({ prefs }: { prefs: Prefs }) {
         {pinFor === "set" && (
           <li>
             <PinForm
-              title="Choose a 4-digit PIN (needed to leave the kids profile)"
+              title="Choose a PIN, 4 to 8 digits (needed to leave the kids profile)"
               onCancel={() => setPinFor(null)}
               onPin={async (pin) => {
                 const e = (await setKidsPin(pin)) ?? (prefs.kids.enabled ? null : await save({ kids: { enabled: true } }, true));
