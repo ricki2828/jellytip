@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
@@ -27,6 +28,17 @@ data class DiscoverTitle(
 ) {
     val key: String get() = "$mediaType:$tmdbId"
     val isTv: Boolean get() = mediaType == "tv"
+}
+
+/** A Discover browse tile: [state] = request progress, [jellyfinId] when it is already in the library. */
+data class JellytipDiscoverEntry(
+    val title: DiscoverTitle,
+    val inLibrary: Boolean,
+    val jellyfinId: java.util.UUID?,
+    val state: RequestState?,
+) {
+    /** Badge text: In library / Requested / Downloading n%. */
+    val badge: String? get() = if (inLibrary) "In library" else state?.label
 }
 
 data class DiscoverRow(
@@ -59,6 +71,8 @@ data class RequestOutcome(
     val estimateGb: Double?,
     val freeGbNow: Double?,
     val freeGbAfter: Double?,
+    /** Series: episodes the request covers (only the missing ones when it extends a series Sonarr has). */
+    val episodes: Int? = null,
 )
 
 object JellytipDiscoverParser {
@@ -78,6 +92,32 @@ object JellytipDiscoverParser {
                 library = o.optString("library"),
                 items = items,
             )
+        }
+    }
+
+    /** A `/v1/discover…` item: the title plus whether it is in the library / requested. */
+    fun entry(o: JSONObject): JellytipDiscoverEntry? {
+        val t = title(o) ?: return null
+        val req = o.optJSONObject("requested")
+        return JellytipDiscoverEntry(
+            title = t,
+            inLibrary = o.optBoolean("inLibrary", false),
+            jellyfinId = o.optString("jellyfinId").takeIf { it.isNotBlank() && it != "null" }?.let { runCatching { it.toUUID() }.getOrNull() },
+            state = req?.let { RequestState(it.optString("state"), if (it.isNull("progress")) null else it.optInt("progress")) },
+        )
+    }
+
+    fun entries(json: String): List<JellytipDiscoverEntry> {
+        val a = JSONObject(json).optJSONArray("items") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let(::entry) }
+    }
+
+    fun genres(json: String): List<Pair<Int, String>> {
+        val a = JSONObject(json).optJSONArray("genres") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i ->
+            val g = a.optJSONObject(i) ?: return@mapNotNull null
+            val id = g.optInt("id", 0).takeIf { it > 0 } ?: return@mapNotNull null
+            id to g.optString("name")
         }
     }
 
@@ -120,6 +160,7 @@ object JellytipDiscoverParser {
             estimateGb = num("estimateGb"),
             freeGbNow = num("freeGbNow"),
             freeGbAfter = num("freeGbAfter"),
+            episodes = o?.takeUnless { it.isNull("episodes") }?.optInt("episodes", 0)?.takeIf { it > 0 },
         )
     }
 }
@@ -167,19 +208,54 @@ class JellytipDiscoverService
         }
 
         /** Dry run: the server checks space and returns the estimate without adding anything. */
-        suspend fun preview(title: DiscoverTitle): RequestOutcome = send(title, dryRun = true)
+        suspend fun preview(
+            title: DiscoverTitle,
+            seasons: String? = null,
+        ): RequestOutcome = send(title, dryRun = true, seasons = seasons)
 
-        suspend fun request(title: DiscoverTitle): RequestOutcome {
-            val outcome = send(title, dryRun = false)
+        suspend fun request(
+            title: DiscoverTitle,
+            seasons: String? = null,
+        ): RequestOutcome {
+            val outcome = send(title, dryRun = false, seasons = seasons)
             if (outcome.status == "added" || outcome.status == "exists") refreshStatuses(listOf(title))
             return outcome
+        }
+
+        /** `GET /v1/discover?section=…` (admin only). Null = unavailable (not admin, offline). */
+        suspend fun section(
+            section: String,
+            media: String,
+            genre: Int? = null,
+        ): List<JellytipDiscoverEntry>? {
+            val path = "/v1/discover?section=$section&media=$media" + (genre?.let { "&genre=$it" } ?: "")
+            val json = api.getJson(path, timeoutMs = DISCOVER_TIMEOUT_MS, asUser = true) ?: return null
+            return runCatching { JellytipDiscoverParser.entries(json) }.getOrNull()
+        }
+
+        suspend fun genres(media: String): List<Pair<Int, String>> {
+            val json = api.getJson("/v1/discover/genres?media=$media", timeoutMs = DISCOVER_TIMEOUT_MS, asUser = true) ?: return emptyList()
+            return runCatching { JellytipDiscoverParser.genres(json) }.getOrDefault(emptyList())
+        }
+
+        suspend fun search(q: String): List<JellytipDiscoverEntry>? {
+            if (q.trim().length < 2) return emptyList()
+            val enc = java.net.URLEncoder.encode(q.trim(), "UTF-8")
+            val json = api.getJson("/v1/discover/search?q=$enc", timeoutMs = DISCOVER_TIMEOUT_MS, asUser = true) ?: return null
+            return runCatching { JellytipDiscoverParser.entries(json) }.getOrNull()
         }
 
         private suspend fun send(
             title: DiscoverTitle,
             dryRun: Boolean,
+            seasons: String? = null,
         ): RequestOutcome {
-            val body = JSONObject().put("tmdbId", title.tmdbId).put("type", title.mediaType).toString()
+            val body =
+                JSONObject()
+                    .put("tmdbId", title.tmdbId)
+                    .put("type", title.mediaType)
+                    .apply { if (title.isTv && seasons != null) put("seasons", seasons) }
+                    .toString()
             val res =
                 api.postJson("/v1/request" + if (dryRun) "?dryRun=1" else "", body)
                     ?: return RequestOutcome("error", "Could not reach the server", null, null, null, null)
@@ -189,5 +265,6 @@ class JellytipDiscoverService
         companion object {
             private const val ROWS_TTL_MS = 10 * 60 * 1000L
             private const val MAX_STATUS_IDS = 200
+            private const val DISCOVER_TIMEOUT_MS = 8_000L
         }
     }
