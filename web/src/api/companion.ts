@@ -123,6 +123,11 @@ function cached<T>(fetcher: (key: string, job: Job) => Promise<T | null | typeof
     inFlight.clear();
   });
   return {
+    /** Forget answers (in-flight ones still land): the next get asks the server again. */
+    clear: () => {
+      values.clear();
+      failedAt.clear();
+    },
     peek: (key: string): T | undefined => values.get(key),
     get(key: string, opts: RequestOptions = {}): Promise<T | null> {
       if (values.has(key)) return Promise.resolve(values.get(key)!);
@@ -614,4 +619,10 @@ export async function discoverGenres(media: MediaType): Promise<Genre[]> {
 /** Movies and series together; typed letter by letter, so never cached. */
 export async function discoverSearch(q: string, page = 1): Promise<DiscoverPage | null> {
   return discoverList(DISCOVER_PATHS.search(q, page), "movie");
+}
+
+/** Personal prefs changed (Home edit, hide watched, kids): rows and specials are asked for again. */
+export function dropPersonalCaches() {
+  rowsCache.clear();
+  specialsCache.clear();
 }

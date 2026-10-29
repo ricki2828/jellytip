@@ -5,6 +5,9 @@ import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
+import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
+import { usePrefs } from "../api/me";
+import { dropPersonalCaches } from "../api/companion";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
@@ -45,6 +48,10 @@ export function Home() {
   // Specials wait for the manifest so they land between the right rows (no jump when the rows arrive)
   const [rowsReady, setRowsReady] = useState(false);
   const [specials, setSpecials] = useState<Special[]>([]);
+  // Personal prefs (Home edit) when the server has them; a save reloads rows + specials
+  const { available: personal, prefs } = usePrefs();
+  const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -71,12 +78,14 @@ export function Home() {
         if (!alive) return;
         setRows(r);
         setRowsReady(true);
+        if (r) rememberRowTitles(r);
       });
     getSpecials("home").then((s) => alive && setSpecials(s));
     return () => {
       alive = false;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload]);
 
   // No Continue Watching: the hero starts on the first carousel's first title
   useEffect(() => {
@@ -103,7 +112,25 @@ export function Home() {
               ],
           rowsReady ? specials : [],
         )}
+        {personal && prefs && rows && rows.length > 0 && (
+          <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
+            Edit Home
+          </button>
+        )}
       </div>
+      {editing && prefs && rows && (
+        <HomeEdit
+          rows={rows}
+          prefs={prefs}
+          onClose={(saved) => {
+            setEditing(false);
+            if (saved) {
+              dropPersonalCaches();
+              setReload((n) => n + 1);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
