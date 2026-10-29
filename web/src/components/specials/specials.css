@@ -23,92 +23,6 @@
   letter-spacing: 0.02em;
 }
 
-/* 2:3 posters (spotlight, top 10, closet picks, filmography) */
-.poster {
-  position: relative;
-  flex: none;
-  aspect-ratio: 2 / 3;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--tile);
-  cursor: pointer;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.3s ease, filter 0.3s ease;
-}
-div.poster {
-  cursor: default;
-}
-.poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
-.poster img.in {
-  opacity: 1;
-}
-/* Title on dark while loading / with no picture; over untitled art with a soft scrim (as the 16:9 cards and the TV) */
-.poster-title {
-  position: absolute;
-  inset: auto 8px 8px 8px;
-  font-family: "Instrument Sans", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-  line-height: 1.25;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.poster-title.pending {
-  color: var(--dim);
-}
-.poster-fade {
-  position: absolute;
-  inset: 45% 0 0 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
-  pointer-events: none;
-}
-.poster:hover,
-.poster:focus {
-  transform: scale(1.04);
-  z-index: 2;
-}
-.poster:focus {
-  box-shadow: 0 0 0 2px var(--vanilla);
-}
-.poster.faded {
-  opacity: 0.38;
-  filter: grayscale(0.6);
-}
-.poster.faded:hover,
-.poster.faded:focus {
-  opacity: 0.75;
-}
-.poster.lit {
-  box-shadow: 0 0 0 2px var(--jelly), 0 0 24px rgba(226, 38, 77, 0.45);
-  transform: scale(1.05);
-}
-.card-tag {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  max-width: calc(100% - 40px);
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: rgba(10, 10, 10, 0.78);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* trailer_break: full-width band */
 .trailer-break {
@@ -502,15 +416,6 @@ div.poster {
 .person-head .page-title {
   margin: 0 0 6px;
 }
-.poster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px 10px;
-  padding: 0 var(--pad);
-}
-.poster-grid .poster {
-  width: 100%;
-}
 
 /* phone */
 @media (max-width: 760px), (hover: none) and (pointer: coarse) and (max-height: 520px) {
@@ -589,8 +494,5 @@ div.poster {
   }
   .person-page {
     padding-top: calc(58px + env(safe-area-inset-top, 0px));
-  }
-  .poster-grid {
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   }
 }

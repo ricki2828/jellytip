@@ -1,10 +1,11 @@
 // Movies / Shows: the companion carousels for this media type (Movies also gets the Letterboxd lists), then a sortable grid.
 import { useEffect, useRef, useState } from "react";
 import { getItems, type Item } from "../api/jellyfin";
-import { manifest, specials as getSpecials, type Carousel, type LetterboxdRow, type Special } from "../api/companion";
+import { manifest, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
+import { serverRowElement } from "../components/ServerRow";
 import { carouselLoader, LETTERBOXD_PREFIX, letterboxdLoader } from "./Home";
 
 const PAGE = 60;
@@ -30,16 +31,29 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   const gen = useRef(0);
 
   const [rowsReady, setRowsReady] = useState(false);
+  // Rows v1 from the companion when it has them; null = the Kometa carousels (+ Letterboxd lists) as before
+  const [rows, setRows] = useState<ServerRow[] | null>(null);
   const [specials, setSpecials] = useState<Special[]>([]);
   useEffect(() => {
     let alive = true;
-    manifest().then((m) => {
-      if (!alive) return;
-      setRowsReady(true);
-      if (!m) return;
-      setCarousels(m.carousels.filter((c) => c.mediaType === kind));
-      setLists(kind === "movie" ? m.letterboxd : []);
-    });
+    setRows(null);
+    setRowsReady(false);
+    serverRows(kind === "movie" ? "movies" : "shows")
+      .then((r) => {
+        if (r?.length) return r;
+        return manifest().then((m) => {
+          if (alive && m) {
+            setCarousels(m.carousels.filter((c) => c.mediaType === kind));
+            setLists(kind === "movie" ? m.letterboxd : []);
+          }
+          return null;
+        });
+      })
+      .then((r) => {
+        if (!alive) return;
+        setRows(r);
+        setRowsReady(true);
+      });
     getSpecials(kind === "movie" ? "movies" : "shows").then((s) => alive && setSpecials(s));
     return () => {
       alive = false;
@@ -104,10 +118,12 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     <div className="library">
       <h1 className="page-title">{kind === "movie" ? "Movies" : "Shows"}</h1>
       {withSpecials(
-        [
-          ...carousels.map((c, i) => <Row key={c.id} title={c.title} load={carouselLoader(c)} autoFocusFirst={i === 0} />),
-          ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} />),
-        ],
+        rows
+          ? rows.map((r, i) => serverRowElement(r, { autoFocusFirst: i === 0 }))
+          : [
+              ...carousels.map((c, i) => <Row key={c.id} title={c.title} load={carouselLoader(c)} autoFocusFirst={i === 0} />),
+              ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} />),
+            ],
         rowsReady ? specials : [],
       )}
       <section className="grid-section">

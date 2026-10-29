@@ -26,6 +26,7 @@ import { placeSpecials } from "../../lib/specialsPlacement";
 import { Backdrop } from "../Backdrop";
 import { Card } from "../Card";
 import { infoLine, TitleLogo } from "../TitleBlock";
+import { PosterCard } from "../PosterCard";
 import "./specials.css";
 
 // ---------- shared ----------
@@ -79,55 +80,6 @@ function useInView(threshold: number): [(el: Element | null) => void, boolean] {
     };
   }, [el, threshold]);
   return [setEl, inView];
-}
-
-/**
- * 2:3 poster tile. Primary posters carry their title, so nothing is drawn below or over them; the title sits on the
- * dark tile until the picture loads (never blank), stays when there is no picture, and is drawn over art known to have
- * no title in it (`untitled`).
- */
-export function PosterCard({ item, width = 150, onOpen, faded, lit, src, label, name: nameProp, untitled }: {
-  item?: Item;
-  width?: number;
-  onOpen?: () => void;
-  faded?: boolean;
-  lit?: boolean;
-  src?: string | null;
-  /** Accessible name / tooltip (defaults to the title). */
-  label?: string;
-  /** Title drawn on the tile (defaults to the item name). */
-  name?: string;
-  untitled?: boolean;
-}) {
-  const tag = item?.ImageTags?.Primary;
-  const w = width || 160; // 0 = fluid (grid cell sets the size)
-  const url = src ?? (item && tag ? imageUrl(item.Id, "Primary", { tag, fillWidth: Math.round(w * 2), fillHeight: Math.round(w * 3), quality: 85 }) : null);
-  const [failed, setFailed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const name = nameProp ?? item?.Name ?? label ?? "";
-  const hasImg = !!url && !failed;
-  const overlay = hasImg && loaded && untitled;
-  const cls = `poster${faded ? " faded" : ""}${lit ? " lit" : ""}`;
-  const inner = (
-    <>
-      {hasImg && <img className={loaded ? "in" : undefined} src={url} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
-      {overlay && <span className="poster-fade" />}
-      {(!hasImg || !loaded || overlay) && <span className={`poster-title${hasImg && !loaded ? " pending" : ""}`}>{name}</span>}
-      {item?.UserData?.Played && <span className="card-watched">✓</span>}
-    </>
-  );
-  const aria = label ?? name;
-  if (!onOpen)
-    return (
-      <div className={cls} style={width ? { width } : undefined} aria-label={aria} title={aria}>
-        {inner}
-      </div>
-    );
-  return (
-    <button className={cls} style={width ? { width } : undefined} data-nav aria-label={aria} title={aria} onClick={onOpen}>
-      {inner}
-    </button>
-  );
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -431,7 +383,8 @@ function AroundHouseBlock({ s }: { s: AroundHouse }) {
 
 // ---------- closet_picks ----------
 
-function GetItSheet({ pick, onClose }: { pick: ClosetPick; onClose: () => void }) {
+/** Admin "Get it" for a title not in the library: dry run first, then POST /v1/request (type movie). */
+export function GetItSheet({ pick, onClose }: { pick: { title: string; year?: number | null; tmdbId?: number | null }; onClose: () => void }) {
   const [check, setCheck] = useState<{ code: number; body: { status?: string; reason?: string; error?: string } } | null>(null);
   const [done, setDone] = useState<{ code: number; body: { status?: string; reason?: string; error?: string } } | null>(null);
   const [busy, setBusy] = useState(false);

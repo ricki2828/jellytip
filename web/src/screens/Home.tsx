@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
-import { manifest, specials as getSpecials, type Carousel, type LetterboxdRow, type Special } from "../api/companion";
+import { manifest, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
+import { itemsByIds, serverRowElement } from "../components/ServerRow";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
@@ -38,6 +39,8 @@ export function Home() {
   const [continueItems, setContinue] = useState<Item[] | null>(null);
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [lists, setLists] = useState<LetterboxdRow[]>([]);
+  // Rows v1 from the companion when it has them; null = the Kometa carousels + Letterboxd lists as before
+  const [rows, setRows] = useState<ServerRow[] | null>(null);
   const [focused, setFocused] = useState<Item | null>(null);
   // Specials wait for the manifest so they land between the right rows (no jump when the rows arrive)
   const [rowsReady, setRowsReady] = useState(false);
@@ -53,13 +56,22 @@ export function Home() {
       setContinue(merged);
       if (merged[0]) setFocused((f) => f ?? merged[0]);
     });
-    manifest().then((m) => {
-      if (!alive) return;
-      setRowsReady(true);
-      if (!m) return;
-      setCarousels(m.carousels.slice(0, MAX_CAROUSEL_ROWS));
-      setLists(m.letterboxd.slice(0, MAX_LETTERBOXD_ROWS));
-    });
+    serverRows("home")
+      .then((r) => {
+        if (r?.length) return r;
+        return manifest().then((m) => {
+          if (alive && m) {
+            setCarousels(m.carousels.slice(0, MAX_CAROUSEL_ROWS));
+            setLists(m.letterboxd.slice(0, MAX_LETTERBOXD_ROWS));
+          }
+          return null;
+        });
+      })
+      .then((r) => {
+        if (!alive) return;
+        setRows(r);
+        setRowsReady(true);
+      });
     getSpecials("home").then((s) => alive && setSpecials(s));
     return () => {
       alive = false;
@@ -68,9 +80,10 @@ export function Home() {
 
   // No Continue Watching: the hero starts on the first carousel's first title
   useEffect(() => {
-    if (focused || continueItems === null || continueItems.length || !carousels[0]) return;
-    carouselLoader(carousels[0])().then((items) => items[0] && setFocused((f) => f ?? items[0]));
-  }, [focused, continueItems, carousels]);
+    if (focused || continueItems === null || continueItems.length) return;
+    const first = rows?.[0] ? itemsByIds(rows[0].itemIds) : carousels[0] ? carouselLoader(carousels[0])() : null;
+    first?.then((items) => items[0] && setFocused((f) => f ?? items[0])).catch(() => undefined);
+  }, [focused, continueItems, carousels, rows]);
 
   const onFocusItem = useCallback((i: Item) => setFocused(i), []);
 
@@ -80,10 +93,12 @@ export function Home() {
       <div className="rows">
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
         {withSpecials(
-          [
-            ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
-            ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
-          ],
+          rows
+            ? rows.map((r) => serverRowElement(r, { onFocusItem }))
+            : [
+                ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
+                ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
+              ],
           rowsReady ? specials : [],
         )}
       </div>

@@ -10,6 +10,7 @@ import { Player } from "./screens/Player";
 import { Search } from "./screens/Search";
 import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
+import { Collection } from "./screens/Collection";
 import { isNative } from "./lib/native";
 import { go } from "./lib/router";
 
@@ -47,6 +48,7 @@ export function App() {
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "downloads" && isNative && <Downloads />}
         {route.name === "person" && <Person key={route.params.id} id={route.params.id} name={route.query.get("name")} />}
+        {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
       </main>
     </>

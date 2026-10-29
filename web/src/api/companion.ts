@@ -3,6 +3,8 @@
 
 import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
+import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
+export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
 const BASE = COMPANION_BASE;
@@ -496,3 +498,40 @@ export async function requestTitle(tmdbId: number, type: "movie" | "tv", dryRun:
     return { code: 0, body: { error: String((e as Error).message ?? e) } };
   }
 }
+
+// ---------- rows v1 (server-picked rows per page per day; contract: ~/ai/plans/jellytip-10x.md) ----------
+
+// One call per page per day; null (404, old server, no `rows` field) = the page builds its rows as before
+const rowsCache = cached<ServerRow[]>(async (key, job) => {
+  const page = key.split("|")[0];
+  const raw = await getJson<{ rowsVersion?: number; rows?: unknown }>(`/v1/home/carousels?rows=1&page=${page}`, job, 12000);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  return parseRows(raw.rows);
+});
+
+export function serverRows(page: SpecialsPage): Promise<ServerRow[] | null> {
+  return rowsCache.get(`${page}|${today()}`, { priority: "high" });
+}
+
+export interface CollectionPage extends Collection {
+  missing: { tmdbId: number; title: string; year?: number | null; posterUrl?: string | null; released?: boolean }[];
+  /** Caller is an admin: missing parts get "Get it". */
+  canRequest: boolean;
+  art: { itemId: string; name?: string; thumb?: string; lang?: string }[];
+}
+
+const collections = cached<CollectionPage>(async (id, job) => {
+  const raw = await getJson<Partial<CollectionPage>>(`/v1/collections/${id}`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  const c = parseCollection(raw);
+  if (!c) return null;
+  return {
+    ...c,
+    missing: Array.isArray(raw.missing) ? raw.missing.filter((m) => m && typeof m.tmdbId === "number" && m.title) : [],
+    canRequest: raw.canRequest === true,
+    art: Array.isArray(raw.art) ? raw.art.filter((a) => a && typeof a.itemId === "string") : [],
+  };
+});
+
+/** Franchise page data; null when the server has no such collection (404: fewer than 2 parts in the library). */
+export const collectionPage = (tmdbId: number) => collections.get(String(tmdbId), { priority: "high" });

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
+import { useIsPhone } from "../lib/device";
+import { go } from "../lib/router";
 import { Card } from "./Card";
+import { PosterCard } from "./PosterCard";
+
+const POSTER_W = 150;
+const PHONE_POSTER_W = 112;
 
 interface Props {
   title: string;
@@ -10,12 +16,17 @@ interface Props {
   onFocusItem?: (item: Item) => void;
   autoFocusFirst?: boolean;
   onOpen?: (item: Item) => void;
+  /** "poster" = 2:3 Primary posters; anything else the 16:9 titled tiles. */
+  layout?: "standard" | "poster";
+  /** Ids whose art has no title in it: those tiles draw the title. */
+  untitled?: Set<string>;
+  /** Header becomes a link (a person's filmography, a franchise page). */
+  onTitle?: () => void;
 }
 
-export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen }: Props) {
-  const ref = useRef<HTMLElement>(null);
+/** Calls `load` once the element nears the viewport; null while waiting, [] when it failed or came back empty. */
+export function useLazyItems(ref: React.RefObject<Element | null>, items?: Item[], load?: () => Promise<Item[]>): Item[] | null {
   const [loaded, setLoaded] = useState<Item[] | null>(items ?? null);
-  const [failed, setFailed] = useState(false);
   const loadRef = useRef(load);
   loadRef.current = load;
 
@@ -33,22 +44,60 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen }:
         io.disconnect();
         loadRef.current!()
           .then(setLoaded)
-          .catch(() => setFailed(true));
+          .catch(() => setLoaded([]));
       },
-      { rootMargin: "400px" },
+      { rootMargin: "600px 0px" }, // one batched Jellyfin call covers the rows coming up next
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [items, loaded]);
+  }, [ref, items, loaded]);
+  return loaded;
+}
 
-  if (failed || (loaded && loaded.length === 0)) return null;
+export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => void }) {
+  if (!onTitle) return <h2 className="row-title">{title}</h2>;
   return (
-    <section className="row" ref={ref}>
-      <h2 className="row-title">{title}</h2>
+    <h2 className="row-title">
+      <button className="row-title-link" data-nav onClick={onTitle}>
+        {title}
+        <span className="row-title-more" aria-hidden>
+          ›
+        </span>
+      </button>
+    </h2>
+  );
+}
+
+export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle }: Props) {
+  const ref = useRef<HTMLElement>(null);
+  const loaded = useLazyItems(ref, items, load);
+  const phone = useIsPhone();
+  const poster = layout === "poster";
+
+  if (loaded && loaded.length === 0) return null;
+  return (
+    <section className={poster ? "row poster-row" : "row"} ref={ref}>
+      <RowTitle title={title} onTitle={onTitle} />
       <div className="row-scroll">
         {loaded
-          ? loaded.map((it, i) => <Card key={it.Id} item={it} onFocusItem={onFocusItem} autoFocus={autoFocusFirst && i === 0} onOpen={onOpen} />)
-          : Array.from({ length: 6 }, (_, i) => <div key={i} className="card card-skeleton" />)}
+          ? loaded.map((it, i) =>
+              poster ? (
+                <PosterCard
+                  key={it.Id}
+                  item={it}
+                  width={phone ? PHONE_POSTER_W : POSTER_W}
+                  onOpen={() => (onOpen ? onOpen(it) : go(`/item/${it.Id}`))}
+                  onFocus={onFocusItem && (() => onFocusItem(it))}
+                  autoFocus={autoFocusFirst && i === 0}
+                  untitled={untitled?.has(it.Id)}
+                />
+              ) : (
+                <Card key={it.Id} item={it} onFocusItem={onFocusItem} autoFocus={autoFocusFirst && i === 0} onOpen={onOpen} untitled={untitled?.has(it.Id)} />
+              ),
+            )
+          : Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className={poster ? "poster card-skeleton" : "card card-skeleton"} style={poster ? { width: phone ? PHONE_POSTER_W : POSTER_W } : undefined} />
+            ))}
       </div>
     </section>
   );

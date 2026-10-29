@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { getItems, imageUrl, jf, uid, type Item } from "../api/jellyfin";
 import { go } from "../lib/router";
-import { PosterCard } from "../components/specials/Specials";
+import { PosterCard } from "../components/PosterCard";
 
 export function Person({ id, name }: { id: string; name: string | null }) {
   const [items, setItems] = useState<Item[] | null>(null);
