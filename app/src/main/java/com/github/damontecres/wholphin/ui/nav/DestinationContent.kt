@@ -350,10 +350,13 @@ fun DestinationContent(
 
         Destination.Favorites -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            FavoritesPage(
-                preferences = preferences,
-                modifier = modifier,
-            )
+            // Jellytip watchlist (rows like Home); the stock page only if it cannot load
+            com.github.damontecres.wholphin.jellytip.watchlist.JellytipWatchlistPage(preferences = preferences, modifier = modifier) {
+                FavoritesPage(
+                    preferences = preferences,
+                    modifier = modifier,
+                )
+            }
         }
 
         Destination.NowPlaying -> {
