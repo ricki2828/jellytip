@@ -269,7 +269,7 @@ export function Settings() {
   return (
     <div className="settings-page">
       <h1 className="page-title">Settings</h1>
-      <ul className="settings-list">
+      {!prefs?.kids.enabled && <ul className="settings-list">
         <li>
           <button className="settings-item" data-nav data-autofocus onClick={() => go("/iptv")}>
             <span>
@@ -279,7 +279,7 @@ export function Settings() {
             <span aria-hidden>›</span>
           </button>
         </li>
-      </ul>
+      </ul>}
       {available && prefs && <Personal prefs={prefs} />}
       <h2 className="settings-head">Account</h2>
       <ul className="settings-list">

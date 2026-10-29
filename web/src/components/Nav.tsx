@@ -3,6 +3,7 @@ import { getSession, logout } from "../api/jellyfin";
 import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
 import { hasLiveTv, iptvChanged } from "../api/iptv";
+import { useKids } from "../api/me";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
@@ -80,8 +81,10 @@ const LINKS: [string, string][] = [
 export function Nav({ current }: { current: string }) {
   const s = getSession();
   // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
-  const liveTv = useLiveTv();
-  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  // Kids profile: no Live TV, no Discover
+  const kids = useKids() != null;
+  const liveTv = useLiveTv() && !kids;
+  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(s?.isAdmin && !kids ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -111,7 +114,7 @@ export function Nav({ current }: { current: string }) {
         ))}
       </div>
       <div className="nav-user">
-        {s?.isAdmin && (
+        {s?.isAdmin && !kids && (
           <a href="#/discover" className={`nav-discover${current === "discover" ? " active" : ""}`} aria-label="Discover" title="Discover">
             <svg viewBox="0 0 24 24" aria-hidden>
               <circle cx="12" cy="12" r="8.5" />

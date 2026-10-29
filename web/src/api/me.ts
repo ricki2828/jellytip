@@ -179,3 +179,10 @@ export async function setKidsPin(pin: string): Promise<string | null> {
   }
   return errText(a.status, a.data);
 }
+
+/** The kids ceiling (max age) while a kids profile is on; null otherwise (or before prefs are known). */
+export function useKids(): number | null {
+  const { prefs } = usePrefs();
+  return prefs?.kids.enabled ? prefs.kids.maxAge : null;
+}
+export const kidsNow = (): number | null => (state.prefs?.kids.enabled ? state.prefs.kids.maxAge : null);

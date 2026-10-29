@@ -7,7 +7,7 @@ import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { serverRowElement } from "../components/ServerRow";
 import { RowsError } from "../components/RowsError";
-import { prefsNow } from "../api/me";
+import { prefsNow, useKids } from "../api/me";
 import { carouselLoader, LETTERBOXD_PREFIX, letterboxdLoader } from "./Home";
 
 const PAGE = 60;
@@ -37,6 +37,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   const [rows, setRows] = useState<ServerRow[] | null>(null);
   const [specials, setSpecials] = useState<Special[]>([]);
   const [rowsFailed, setRowsFailed] = useState(false);
+  const kids = useKids();
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -144,7 +145,8 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
             ],
         rowsReady ? specials : [],
       )}
-      <section className="grid-section">
+      {/* Kids profile: the browse grid reads Jellyfin directly (no kids filter): rows only */}
+      {kids == null && <section className="grid-section">
         <div className="grid-head">
           <h2 className="row-title">
             All {kind === "movie" ? "movies" : "shows"}
@@ -177,7 +179,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
             </span>
           )}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

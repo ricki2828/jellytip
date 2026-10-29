@@ -7,7 +7,8 @@ import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
-import { prefsNow, usePrefs } from "../api/me";
+import { kidsNow, prefsNow, prefsSoon, usePrefs } from "../api/me";
+import { kidsMayOpen } from "../components/KidsGate";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 
@@ -63,8 +64,18 @@ export function Home() {
       // Continue Watching first, then Next Up episodes of shows not already in it
       const seen = new Set(resume.map((i) => i.SeriesId ?? i.Id));
       const merged = [...resume, ...next.filter((n) => !seen.has(n.SeriesId ?? n.Id))];
-      setContinue(merged);
-      if (merged[0]) setFocused((f) => f ?? merged[0]);
+      // Kids profile: Continue Watching (straight from Jellyfin) keeps only titles within the age
+      const keep = async () => {
+        const maxAge = (await prefsSoon()) ? kidsNow() : null;
+        if (maxAge == null) return merged;
+        const ok = await Promise.all(merged.map((i) => kidsMayOpen(i, maxAge)));
+        return merged.filter((_, i) => ok[i]);
+      };
+      return keep().then((list) => {
+        if (!alive) return;
+        setContinue(list);
+        if (list[0]) setFocused((f) => f ?? list[0]);
+      });
     });
     setRowsFailed(false);
     serverRows("home")

@@ -27,6 +27,8 @@ import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButt
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
 import { DetailsQuote, ReviewsRow } from "../components/Reviews";
 import { TasteButtons } from "../components/TasteButtons";
+import { KidsBlocked, kidsMayOpen } from "../components/KidsGate";
+import { kidsNow, prefsSoon } from "../api/me";
 import { runtimeText } from "../api/jellyfin";
 import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
 
@@ -53,6 +55,7 @@ export function Details({ id }: { id: string }) {
   const [eps, setEps] = useState<Item[] | null>(null);
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [kidsDenied, setKidsDenied] = useState(false);
   const phone = useIsPhone();
   // Double feature (from the specials row): "Play both" plays this one, then the pair
   const pairParam = new URLSearchParams(location.hash.split("?")[1] ?? "").get("pair") ?? "";
@@ -83,6 +86,9 @@ export function Details({ id }: { id: string }) {
           return;
         }
         setItem(it);
+        setKidsDenied(false);
+        // Kids profile: a title above the age doesn't open (an episode takes its series' rating)
+        prefsSoon().then(() => kidsMayOpen(it, kidsNow())).then((ok) => alive && setKidsDenied(!ok));
         // One backdrop, never swapped: the ranking already cached by the hero / tiles is used at once; otherwise the
         // page stays dark until it arrives (at most RANK_WAIT_MS), and an answer after that is not applied
         const rankedId = heroItemId(it);
@@ -152,6 +158,7 @@ export function Details({ id }: { id: string }) {
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);
 
   if (error) return <div className="empty">Couldn't load this title. {error}</div>;
+  if (kidsDenied) return <KidsBlocked what="This title" />;
   if (!item) return <div className="details loading" />;
 
   const ud = item.UserData;

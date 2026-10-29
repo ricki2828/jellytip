@@ -2144,3 +2144,15 @@ button.overview.open {
 .rows-error p {
   margin: 0;
 }
+.kids-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 120px var(--pad) 40px;
+  color: var(--dim);
+}
+.kids-blocked p {
+  margin: 0;
+  font-size: 15px;
+}
