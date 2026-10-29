@@ -160,6 +160,28 @@ class JellytipMeViewModel
             }
         }
 
+        /**
+         * Change the age limit while kids mode is on. Lowering needs nothing; raising (any loosening) must carry the PIN
+         * in the same PATCH, or the server answers 403 {"error":"pin"}.
+         */
+        fun setKidsAge(
+            maxAge: Int,
+            pin: String?,
+        ) {
+            viewModelScope.launch {
+                val kids = JSONObject().put("maxAge", maxAge)
+                if (pin != null) kids.put("pin", pin)
+                val (code, err) = JellytipMe.patch(JSONObject().put("kids", kids))
+                message.value =
+                    when (code) {
+                        200 -> "Age limit saved. Home changes the next time it loads."
+                        403 -> "That PIN isn't right."
+                        429 -> "Too many wrong PINs. Try again in 5 minutes."
+                        else -> "Couldn't change it (${err ?: code})."
+                    }
+            }
+        }
+
         fun leaveKids(pin: String) {
             viewModelScope.launch { message.value = JellytipMe.leaveKids(pin) ?: "Kids profile off." }
         }
@@ -217,6 +239,9 @@ fun JellytipMePage(
             }
             if (p.kidsEnabled) {
                 item {
+                    SettingRow("Age limit", "${AGES.firstOrNull { it.first == p.kidsMaxAge }?.second ?: "${p.kidsMaxAge}+"} · OK to change") { dialog = "kidsChange" }
+                }
+                item {
                     SettingRow("Kids profile", "On · ${AGES.firstOrNull { it.first == p.kidsMaxAge }?.second ?: "${p.kidsMaxAge}+"} · OK to leave (PIN)") { dialog = "leaveKids" }
                 }
             } else {
@@ -268,6 +293,26 @@ fun JellytipMePage(
                 waitToLoad = false,
             )
 
+        "kidsChange" ->
+            DialogPopup(
+                showDialog = true,
+                title = "Age limit (a higher limit needs the PIN)",
+                dialogItems =
+                    AGES.map { (age, name) ->
+                        DialogItem(name, dismissOnClick = false) {
+                            val current = prefs?.kidsMaxAge ?: 0
+                            if (age > current) {
+                                dialog = "kidsRaise:$age"
+                            } else {
+                                dialog = null
+                                viewModel.setKidsAge(age, null)
+                            }
+                        }
+                    },
+                onDismissRequest = { dialog = null },
+                waitToLoad = false,
+            )
+
         "leaveKids" ->
             PinDialog("Enter the PIN to leave the kids profile", onPin = { pin ->
                 dialog = null
@@ -275,7 +320,13 @@ fun JellytipMePage(
             }, onDismiss = { dialog = null })
 
         else ->
-            dialog?.takeIf { it.startsWith("kidsPin:") }?.let { d ->
+            dialog?.takeIf { it.startsWith("kidsRaise:") }?.let { d ->
+                val age = d.substringAfter(':').toIntOrNull() ?: 0
+                PinDialog("Enter the PIN to raise the age limit", onPin = { pin ->
+                    dialog = null
+                    viewModel.setKidsAge(age, pin)
+                }, onDismiss = { dialog = null })
+            } ?: dialog?.takeIf { it.startsWith("kidsPin:") }?.let { d ->
                 val age = d.substringAfter(':').toIntOrNull() ?: 13
                 PinDialog("Choose a 4-digit PIN (needed to leave the kids profile)", onPin = { pin ->
                     dialog = null

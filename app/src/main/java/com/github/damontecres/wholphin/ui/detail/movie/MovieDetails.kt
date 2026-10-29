@@ -545,7 +545,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            (if (sectionsActive) state.similar else emptyList()).letNotEmpty { similar ->
+            (if (sectionsActive && !com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) state.similar else emptyList()).letNotEmpty { similar ->
                 item {
                     val imageHeight =
                         remember(movie.type) {
@@ -584,7 +584,7 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            (if (sectionsActive) state.discovered else emptyList()).letNotEmpty { discovered ->
+            (if (sectionsActive && !com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) state.discovered else emptyList()).letNotEmpty { discovered ->
                 item {
                     DiscoverRow(
                         row =

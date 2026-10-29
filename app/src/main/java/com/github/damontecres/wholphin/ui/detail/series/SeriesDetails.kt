@@ -657,7 +657,7 @@ fun SeriesDetailsContent(
                         )
                     }
                 }
-                if (similar.isNotEmpty()) {
+                if (similar.isNotEmpty() && !com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) {
                     if (sectionsActive) item {
                         ItemRow(
                             title = stringResource(R.string.more_like_this),
