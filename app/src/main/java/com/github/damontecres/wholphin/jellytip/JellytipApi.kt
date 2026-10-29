@@ -573,6 +573,48 @@ class JellytipApi
             }
         }
 
+        /** The companion base URL (no trailing slash); stream links and image paths from IPTV answers are relative to it. */
+        suspend fun companionBase(): String = JellytipPreferences.apiBase(preferences.data.first().jellytipApiUrl)
+
+        /**
+         * IPTV: GET (or POST when [body] is set) a companion path with the person's own Jellyfin token, which every
+         * `/v1/iptv/*` route needs (the shared app token alone is refused). Returns (http code, body) for any answer,
+         * so callers can read error codes (409 holders, 403 disabled); null when the server can't be reached.
+         */
+        suspend fun userCall(
+            path: String,
+            body: String? = null,
+            timeoutMs: Long = 10_000L,
+        ): Pair<Int, String>? =
+            withContext(WholphinDispatchers.IO) {
+                try {
+                    val prefs = preferences.data.first()
+                    val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl)
+                    val token = api.accessToken?.takeIf { it.isNotBlank() } ?: return@withContext 401 to """{"code":"signed_out"}"""
+                    val request =
+                        Request
+                            .Builder()
+                            .url("$base/${path.trimStart('/')}".toHttpUrlOrNull() ?: return@withContext null)
+                            .header("Authorization", "MediaBrowser Token=\"$token\"")
+                            .apply {
+                                if (prefs.jellytipApiToken.isNotBlank()) header("X-Jellytip-Token", prefs.jellytipApiToken)
+                                if (body != null) post(body.toRequestBody("application/json".toMediaType()))
+                            }.build()
+                    client
+                        .newBuilder()
+                        .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                        .build()
+                        .newCall(request)
+                        .execute()
+                        .use { it.code to it.body.string() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.w(e, "Jellytip IPTV %s unavailable", path)
+                    null
+                }
+            }
+
         /**
          * POST a JSON body to a companion API path. Always carries the Jellyfin session token (the server names the
          * requester from it) in addition to the manual token if one is set. Returns (http code, body) or null if unreachable.

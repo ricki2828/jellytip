@@ -49,6 +49,7 @@ class NavigationManager
             d is Destination.Home ||
                 d is Destination.Favorites ||
                 d is Destination.Discover ||
+                d is Destination.JellytipLiveTv ||
                 (d is Destination.MediaItem && d.type in BROWSE_KINDS)
 
         private fun opensTitle(d: Destination): Boolean =
@@ -58,6 +59,7 @@ class NavigationManager
                 is Destination.Playback,
                 is Destination.PlaybackList,
                 is Destination.JellytipCollection,
+                is Destination.JellytipLiveTvPlayer,
                 is Destination.JellytipDiscover,
                 is Destination.DiscoveredItem,
                 -> true

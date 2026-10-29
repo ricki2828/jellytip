@@ -393,6 +393,15 @@ fun DestinationContent(
             JellytipDiscoverDetails(title = destination.title, modifier = modifier)
         }
 
+        Destination.JellytipLiveTv -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)
+        }
+
+        is Destination.JellytipLiveTvPlayer -> {
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPlayerPage(channelId = destination.channelId, modifier = modifier)
+        }
+
         is Destination.JellytipCollection -> {
             com.github.damontecres.wholphin.jellytip.rows.JellytipCollectionPage(
                 tmdbId = destination.tmdbId,

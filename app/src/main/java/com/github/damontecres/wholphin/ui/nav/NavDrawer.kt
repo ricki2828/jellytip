@@ -136,6 +136,11 @@ class NavDrawerViewModel
                     )
                 }
 
+                NavDrawerItem.LiveTv -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipLiveTv)
+                }
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -167,6 +172,7 @@ class NavDrawerViewModel
                             is ServerNavDrawerItem -> it.destination
                             is NavDrawerItem.Favorites -> Destination.Favorites
                             is NavDrawerItem.Discover -> Destination.Discover
+                            is NavDrawerItem.LiveTv -> Destination.JellytipLiveTv
                             else -> null
                         }
                     }
@@ -240,6 +246,14 @@ sealed interface NavDrawerItem {
             get() = "a_discover"
 
         override fun name(context: Context): String = context.getString(R.string.discover)
+    }
+
+    /** Jellytip: the companion's IPTV guide, only for people with opted-in channels. */
+    object LiveTv : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_live_tv"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_live_tv)
     }
 }
 
@@ -655,7 +669,7 @@ fun NavigationDrawerScope.NavItem(
     containerColor: Color = Color.Unspecified,
 ) {
     val context = LocalContext.current
-    val useFont = library !is ServerNavDrawerItem || library.type != CollectionType.LIVETV
+    val useFont = library !is NavDrawerItem.LiveTv && (library !is ServerNavDrawerItem || library.type != CollectionType.LIVETV)
     val icon =
         remember(library) {
             when (library) {
@@ -669,6 +683,10 @@ fun NavigationDrawerScope.NavItem(
 
                 NavDrawerItem.Discover -> {
                     R.string.fa_magnifying_glass_plus
+                }
+
+                NavDrawerItem.LiveTv -> {
+                    R.drawable.gf_dvr
                 }
 
                 is ServerNavDrawerItem -> {

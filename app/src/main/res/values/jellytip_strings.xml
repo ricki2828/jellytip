@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="jellytip_settings">Jellytip</string>
+    <string name="jellytip_live_tv" translatable="false">Live TV</string>
     <string name="jellytip_send_debug_report" translatable="false">Send debug report</string>
     <string name="jellytip_send_debug_report_summary" translatable="false">Recent navigation, keys, focus and player events to the Jellytip server</string>
     <string name="jellytip_api_url">Jellytip API URL</string>

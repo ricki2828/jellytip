@@ -52,6 +52,7 @@ class NavDrawerService
         private val serverPreferencesDao: ServerPreferencesDao,
         private val seerrServerRepository: SeerrServerRepository,
         private val musicService: MusicService,
+        private val jellytipIptv: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvService,
     ) {
         private val _state = MutableStateFlow(NavDrawerItemState())
         val state: StateFlow<NavDrawerItemState> = _state
@@ -198,6 +199,9 @@ class NavDrawerService
                     // Jellytip: Discover is the companion's TMDB browse + Get it, admin only (never shown to anyone else)
                     if (userDto.policy?.isAdministrator == true) add(NavDrawerItem.Discover)
                 }
+            // Jellytip: "Live TV" right after Movies/Shows, only when the person has opted-in IPTV channels
+            val liveTv =
+                kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv() } == true
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
                 allLibraries
@@ -223,7 +227,9 @@ class NavDrawerService
             // (User-customised orders are stored per item and still win in the sort below.)
             val (mainLibraries, otherLibraries) =
                 libraries.partition { it.type == CollectionType.MOVIES || it.type == CollectionType.TVSHOWS }
-            val allItems = mainLibraries.sortedBy { if (it.type == CollectionType.MOVIES) 0 else 1 } + builtins + otherLibraries
+            val allItems =
+                mainLibraries.sortedBy { if (it.type == CollectionType.MOVIES) 0 else 1 } +
+                    (if (liveTv) listOf(NavDrawerItem.LiveTv) else emptyList()) + builtins + otherLibraries
 
             val navDrawerPins =
                 withContext(WholphinDispatchers.IO) {
@@ -272,3 +278,5 @@ data class NavDrawerItemState(
 )
 
 val UserDto.tvAccess: Boolean get() = policy?.enableLiveTvAccess == true
+
+private const val LIVE_TV_CHECK_MS = 4_000L

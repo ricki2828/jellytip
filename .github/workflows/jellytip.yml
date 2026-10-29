@@ -31,7 +31,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
       - name: Jellytip unit tests
-        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --no-daemon
+        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --no-daemon
       - name: Build debug app
         run: ./gradlew assembleDefaultDebug --no-daemon
       - name: Build release app

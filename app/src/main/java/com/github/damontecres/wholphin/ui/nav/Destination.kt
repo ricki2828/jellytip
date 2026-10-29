@@ -172,6 +172,16 @@ sealed class Destination(
         val title: DiscoverTitle,
     ) : Destination(false)
 
+    /** Jellytip: the IPTV Live TV guide (sidebar "Live TV"). */
+    @Serializable
+    data object JellytipLiveTv : Destination(false)
+
+    /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
+    @Serializable
+    data class JellytipLiveTvPlayer(
+        val channelId: String,
+    ) : Destination(true)
+
     /** Jellytip: a franchise (TMDB collection) page: series hero, blurb, progress, films in series order. */
     @Serializable
     data class JellytipCollection(
