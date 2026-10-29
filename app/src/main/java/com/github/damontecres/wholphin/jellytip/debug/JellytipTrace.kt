@@ -27,6 +27,7 @@ object JellytipTrace {
     private const val MAX_EVENTS = 1000
     private const val FLUSH_DELAY_MS = 2_000L
     private const val FILE_NAME = "jellytip_trace.txt"
+    const val CRASH_MARKER = "jellytip_crash_pending"
 
     private val events = ArrayDeque<String>(MAX_EVENTS)
     private val writer = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "jellytip-trace").apply { isDaemon = true } }
@@ -54,6 +55,8 @@ object JellytipTrace {
             try {
                 log("crash", "${thread.name}: ${error.javaClass.name}: ${error.message} @ ${error.stackTrace.take(8).joinToString(" < ")}")
                 flushNow()
+                // No network while dying: the next start sends the report (JellytipDebugReport.sendPendingCrash)
+                File(context.filesDir, CRASH_MARKER).writeText(System.currentTimeMillis().toString())
             } catch (_: Throwable) {
             }
             previous?.uncaughtException(thread, error)
@@ -175,10 +178,22 @@ object JellytipNavGate {
  * Returns a short message for a toast.
  */
 object JellytipDebugReport {
-    suspend fun send(context: Context): String {
-        JellytipTrace.log("report", "debug report requested")
+    /** After a crash, the next start sends the trace once the companion client is up. */
+    suspend fun sendPendingCrash(context: Context) {
+        val marker = File(context.filesDir, JellytipTrace.CRASH_MARKER)
+        if (!marker.exists()) return
+        marker.delete()
+        JellytipTrace.log("report", "sending report for the crash at ${marker.name}")
+        send(context, reason = "crash")
+    }
+
+    suspend fun send(
+        context: Context,
+        reason: String = "user",
+    ): String {
+        JellytipTrace.log("report", "debug report requested ($reason)")
         JellytipTrace.flushNow()
-        val body = build(context)
+        val body = build(context, reason)
         val api = com.github.damontecres.wholphin.jellytip.JellytipApi.shared
         val answer = api?.postJson("/v1/debug/report", body.toString())
         if (answer != null && answer.first in 200..299) return "Debug report sent"
@@ -193,7 +208,10 @@ object JellytipDebugReport {
         }
     }
 
-    private fun build(context: Context): JSONObject {
+    private fun build(
+        context: Context,
+        reason: String,
+    ): JSONObject {
         val pm = context.packageManager
         val version =
             try {
@@ -201,16 +219,29 @@ object JellytipDebugReport {
             } catch (e: Exception) {
                 null
             }
+        // Contract (jellytip-specials.md "Debug reports"): {app, version, device, user, createdAt, events:[{t, type, msg}]};
+        // the server names the user from the token, so no user name (or token) is sent
+        val events = JSONArray()
+        JellytipTrace.snapshot().forEach { line ->
+            val m = LINE.matchEntire(line)
+            events.put(
+                if (m == null) {
+                    JSONObject().put("msg", line)
+                } else {
+                    JSONObject().put("t", m.groupValues[1]).put("type", m.groupValues[2]).put("msg", m.groupValues[3])
+                },
+            )
+        }
         return JSONObject()
-            .put("app", JSONObject().put("package", context.packageName).put("version", version))
-            .put(
-                "device",
-                JSONObject()
-                    .put("manufacturer", Build.MANUFACTURER)
-                    .put("model", Build.MODEL)
-                    .put("sdk", Build.VERSION.SDK_INT)
-                    .put("abi", Build.SUPPORTED_ABIS.firstOrNull()),
-            ).put("time", System.currentTimeMillis())
-            .put("events", JSONArray(JellytipTrace.snapshot()))
+            .put("app", "jellytip-tv")
+            .put("version", version)
+            .put("package", context.packageName)
+            .put("reason", reason)
+            .put("device", "${Build.MANUFACTURER} ${Build.MODEL} sdk=${Build.VERSION.SDK_INT} ${Build.SUPPORTED_ABIS.firstOrNull()}")
+            .put("user", JSONObject.NULL)
+            .put("createdAt", java.time.Instant.now().toString())
+            .put("events", events)
     }
+
+    private val LINE = Regex("""^(\S+ \S+) \[([^\]]+)\] (.*)$""", RegexOption.DOT_MATCHES_ALL)
 }

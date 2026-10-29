@@ -181,6 +181,12 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         instance = this
         com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.init(applicationContext)
+        lifecycleScope.launch {
+            // A crash last time: send its trace once the app (and the companion client) is up
+            kotlinx.coroutines.delay(20_000)
+            com.github.damontecres.wholphin.jellytip.debug.JellytipDebugReport
+                .sendPendingCrash(applicationContext)
+        }
         Timber.i("MainActivity.onCreate: savedInstanceState is null=${savedInstanceState == null}")
         lifecycle.addObserver(playbackLifecycleObserver)
 
