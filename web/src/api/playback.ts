@@ -1,7 +1,7 @@
 // PlaybackInfo negotiation and session reporting (start / progress / stop) so resume and Continue Watching
 // stay in sync with the TV app.
 
-import { deviceId, getSession, jf, JF_BASE, qs, uid, type MediaSource } from "./jellyfin";
+import { authHeader, deviceId, getSession, jf, JF_BASE, qs, uid, type MediaSource } from "./jellyfin";
 import { deviceProfile } from "../lib/profile";
 
 export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
@@ -16,8 +16,31 @@ export interface PlayPlan {
 
 const MAX_TRANSCODE_W = 1920;
 const MAX_TRANSCODE_H = 1080;
+/** Reasons that leave the video stream untouched (remux / audio-only transcode); anything else re-encodes video. */
+const COPY_SAFE_REASONS = new Set([
+  "ContainerNotSupported",
+  "ContainerBitrateExceedsLimit",
+  "AudioCodecNotSupported",
+  "AudioChannelsNotSupported",
+  "AudioBitrateNotSupported",
+  "AudioSampleRateNotSupported",
+  "AudioProfileNotSupported",
+  "AudioBitDepthNotSupported",
+  "AudioIsExternal",
+  "SecondaryAudioNotSupported",
+]);
 
-export async function negotiate(itemId: string, startTicks: number, h264Only = false, audioStreamIndex?: number): Promise<PlayPlan> {
+export interface NegotiateOptions {
+  /** Fallback after a failed attempt: everything transcodes to H.264/AAC. */
+  h264Only?: boolean;
+  audioStreamIndex?: number;
+  /** Off when a non-default audio track is chosen: the browser can't switch tracks in a direct-played file. */
+  allowDirectPlay?: boolean;
+}
+
+export async function negotiate(itemId: string, startTicks: number, opts: NegotiateOptions = {}): Promise<PlayPlan> {
+  const { h264Only = false, audioStreamIndex } = opts;
+  const directPlay = !h264Only && opts.allowDirectPlay !== false;
   const info = await jf<{ MediaSources: MediaSource[]; PlaySessionId: string; ErrorCode?: string }>(
     `/Items/${itemId}/PlaybackInfo${qs({ UserId: uid() })}`,
     {
@@ -27,7 +50,7 @@ export async function negotiate(itemId: string, startTicks: number, h264Only = f
         DeviceProfile: deviceProfile(h264Only),
         StartTimeTicks: startTicks,
         AutoOpenLiveStream: true,
-        EnableDirectPlay: !h264Only,
+        EnableDirectPlay: directPlay,
         EnableDirectStream: !h264Only,
         EnableTranscoding: true,
         AllowVideoStreamCopy: !h264Only,
@@ -41,7 +64,7 @@ export async function negotiate(itemId: string, startTicks: number, h264Only = f
   const source = info.MediaSources?.[0];
   if (!source) throw new Error("No playable source");
   const token = getSession()!.token;
-  if (source.SupportsDirectPlay && !h264Only) {
+  if (source.SupportsDirectPlay && directPlay) {
     const url =
       `${JF_BASE}/Videos/${itemId}/stream.${(source.Container ?? "mp4").split(",")[0]}` +
       qs({ Static: true, MediaSourceId: source.Id, PlaySessionId: info.PlaySessionId, DeviceId: deviceId(), Tag: source.ETag, api_key: token });
@@ -50,7 +73,9 @@ export async function negotiate(itemId: string, startTicks: number, h264Only = f
   if (!source.TranscodingUrl) throw new Error("Server offered no stream for this browser");
   const u = new URL(JF_BASE + source.TranscodingUrl, location.origin);
   const reasons = (u.searchParams.get("TranscodeReasons") ?? "").split(",").filter(Boolean);
-  const videoTranscode = h264Only || reasons.some((r) => r.startsWith("Video") || r === "DirectPlayError");
+  // Anything that isn't a pure container/audio change re-encodes the video (codec, profile, level, anamorphic, interlaced,
+  // ref frames, bitrate, ...): those runs get the 1080p cap
+  const videoTranscode = h264Only || reasons.some((r) => !COPY_SAFE_REASONS.has(r));
   if (videoTranscode) {
     // Transcodes run on the seedbox CPU: never ask for more than 1080p
     u.searchParams.set("maxWidth", String(MAX_TRANSCODE_W));
@@ -99,9 +124,17 @@ export function reportStopped(r: Report) {
   return p;
 }
 
-/** WebVTT for a text subtitle stream (Jellyfin converts SRT/ASS on the fly). */
-export function subtitleUrl(itemId: string, sourceId: string, index: number): string {
-  return `${JF_BASE}/Videos/${itemId}/${sourceId}/Subtitles/${index}/0/Stream.vtt${qs({ api_key: getSession()!.token })}`;
+/** Stop the server-side ffmpeg of an HLS plan that never reported start (abandoned while loading). */
+export function stopEncoding(plan: PlayPlan) {
+  if (!plan.hls) return;
+  jf(`/Videos/ActiveEncodings${qs({ DeviceId: deviceId(), PlaySessionId: plan.playSessionId })}`, { method: "DELETE", keepalive: true }).catch(() => undefined);
+}
+
+/** WebVTT text for a text subtitle stream (Jellyfin converts SRT/ASS on the fly); token in the header, not the URL. */
+export async function fetchSubtitles(itemId: string, sourceId: string, index: number, signal?: AbortSignal): Promise<string> {
+  const res = await fetch(`${JF_BASE}/Videos/${itemId}/${sourceId}/Subtitles/${index}/0/Stream.vtt`, { headers: { Authorization: authHeader() }, signal });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.text();
 }
 
 export function trailerStreamUrl(trailerId: string): string {

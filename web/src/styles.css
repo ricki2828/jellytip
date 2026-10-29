@@ -966,6 +966,32 @@ button.overview.open {
   display: flex;
   flex-direction: column;
 }
+.menu-head {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.tap-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(242, 242, 240, 0.92);
+  color: var(--night);
+  font-size: 32px;
+  padding-left: 6px;
+  cursor: pointer;
+}
+.tap-play:focus {
+  box-shadow: 0 0 0 3px var(--night), 0 0 0 5px var(--vanilla);
+}
 .sub-menu button {
   border: 0;
   background: none;

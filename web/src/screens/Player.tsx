@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
-import { negotiate, reportProgress, reportStart, reportStopped, subtitleUrl, type PlayPlan } from "../api/playback";
+import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 
@@ -11,6 +11,7 @@ const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
 const NEXT_UP_SECONDS = 40;
 const DELAY_KEY = "jellytip.subDelay";
+const NET_RETRIES = 3;
 
 // hls.js is ~half the bundle: only fetched when something plays
 let hlsModule: Promise<typeof import("hls.js")> | null = null;
@@ -46,6 +47,9 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   const [cues, setCues] = useState<Cue[]>([]);
   const [delay, setDelay] = useState<number>(() => Number(localStorage.getItem(DELAY_KEY) ?? 0) || 0);
   const [next, setNext] = useState<Item | null>(null);
+  const [audioIndex, setAudioIndex] = useState<number | null>(null);
+  const [needsTap, setNeedsTap] = useState(false);
+  const netRetries = useRef(0);
   const hideTimer = useRef<number | null>(null);
   const subIndexRef = useRef(-1);
   subIndexRef.current = subIndex;
@@ -57,10 +61,30 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   );
 
   const stop = useCallback(() => {
-    if (!planRef.current || stoppedRef.current || !startedRef.current) return;
+    const p = planRef.current;
+    if (!p || stoppedRef.current) return;
     stoppedRef.current = true;
-    reportStopped(report());
+    if (startedRef.current) reportStopped(report());
+    else stopEncoding(p); // never started: no session to stop, but the server may already be transcoding
   }, [report]);
+
+  /** Close out the current plan before switching to another (fallback, audio change); the new one reports its own start. */
+  const abandonPlan = useCallback(() => {
+    stop();
+    startedRef.current = false;
+    stoppedRef.current = false;
+  }, [stop]);
+
+  const tryPlay = (v: HTMLVideoElement) =>
+    v.play().then(
+      () => setNeedsTap(false),
+      // Safari/iOS (and autoplay policies) refuse play() without a gesture: offer a big tap-to-play
+      () => {
+        setPaused(true);
+        setNeedsTap(true);
+      },
+    );
+  const fallbackRef = useRef<() => void>(() => undefined);
 
   // ---- load + negotiate ----
   const attach = useCallback(async (p: PlayPlan, startSeconds: number) => {
@@ -76,10 +100,13 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       u.searchParams.delete("StartTimeTicks"); // full-length VOD playlist; seek with startPosition instead
       const hls = new Hls({ startPosition: startSeconds, maxBufferLength: 30, backBufferLength: 60 });
       hlsRef.current = hls;
+      netRetries.current = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (!data.fatal) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details !== Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
-          hls.startLoad();
+        if (!data.fatal || hlsRef.current !== hls) return;
+        // Network hiccups: a few retries with backoff (1, 2, 4 s), then give up on this stream
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details !== Hls.ErrorDetails.MANIFEST_LOAD_ERROR && netRetries.current < NET_RETRIES) {
+          const wait = 1000 * 2 ** netRetries.current++;
+          setTimeout(() => hlsRef.current === hls && hls.startLoad(), wait);
           return;
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !retriedRef.current) {
@@ -87,7 +114,10 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
           retriedRef.current = true;
           return;
         }
-        fallback();
+        fallbackRef.current();
+      });
+      hls.on(Hls.Events.FRAG_LOADED, () => {
+        netRetries.current = 0;
       });
       hls.loadSource(u.pathname + u.search);
       hls.attachMedia(v);
@@ -99,7 +129,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       };
       v.addEventListener("loadedmetadata", seek);
     }
-    v.play().catch(() => setPaused(true));
+    tryPlay(v);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,13 +142,33 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     }
     fallbackDone.current = true;
     const at = videoRef.current?.currentTime || 0;
+    abandonPlan();
     try {
-      const p = await negotiate(id, Math.round(at * TICKS_PER_SECOND), true);
+      const p = await negotiate(id, Math.round(at * TICKS_PER_SECOND), { h264Only: true, audioStreamIndex: audioIndex ?? undefined });
       attach(p, at);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     }
-  }, [id, attach]);
+  }, [id, attach, abandonPlan, audioIndex]);
+  fallbackRef.current = fallback;
+
+  /** Switch audio track: renegotiate at the current position (no direct play: browsers can't switch tracks in-file). */
+  const chooseAudio = async (index: number) => {
+    setMenu(false);
+    if (!planRef.current || index === audioIndex) return;
+    const v = videoRef.current;
+    const at = v?.currentTime || 0;
+    const def = planRef.current.source.DefaultAudioStreamIndex;
+    abandonPlan();
+    setAudioIndex(index);
+    setBuffering(true);
+    try {
+      const p = await negotiate(id, Math.round(at * TICKS_PER_SECOND), { audioStreamIndex: index, allowDirectPlay: index === def });
+      attach(p, at);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -143,6 +193,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         const subs = (src.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
         const def = subs.find((s) => s.Index === src.DefaultSubtitleStreamIndex && s.IsTextSubtitleStream) ?? subs.find((s) => s.IsForced && s.IsTextSubtitleStream);
         setSubIndex(def ? def.Index : -1);
+        setAudioIndex(src.DefaultAudioStreamIndex ?? null);
         attach(p, startTicks / TICKS_PER_SECOND);
         if (it.Type === "Episode" && it.SeriesId) {
           episodes(it.SeriesId).then((all) => {
@@ -174,10 +225,22 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       if (startedRef.current && !stoppedRef.current) reportProgress(report());
     }, PROGRESS_MS);
     const onUnload = () => stop();
+    // Back from the bfcache: the page was "stopped" on pagehide, so the session has to be reopened
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted || !planRef.current) return;
+      stoppedRef.current = false;
+      startedRef.current = false;
+      if (videoRef.current && !videoRef.current.paused) {
+        startedRef.current = true;
+        reportStart(report());
+      }
+    };
     window.addEventListener("pagehide", onUnload);
+    window.addEventListener("pageshow", onShow);
     return () => {
       clearInterval(t);
       window.removeEventListener("pagehide", onUnload);
+      window.removeEventListener("pageshow", onShow);
     };
   }, [report, stop]);
 
@@ -185,14 +248,11 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   useEffect(() => {
     setCues([]);
     if (subIndex < 0 || !plan) return;
-    let alive = true;
-    fetch(subtitleUrl(id, plan.source.Id, subIndex))
-      .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
-      .then((txt) => alive && setCues(parseVtt(txt)))
-      .catch(() => alive && setCues([]));
-    return () => {
-      alive = false;
-    };
+    const ctl = new AbortController();
+    fetchSubtitles(id, plan.source.Id, subIndex, ctl.signal)
+      .then((txt) => setCues(parseVtt(txt)))
+      .catch(() => !ctl.signal.aborted && setCues([]));
+    return () => ctl.abort();
   }, [subIndex, plan, id]);
 
   useEffect(() => {
@@ -223,7 +283,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) v.play().catch(() => undefined);
+    if (v.paused) tryPlay(v);
     else v.pause();
   };
   const seekBy = (s: number) => {
@@ -232,8 +292,17 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     v.currentTime = Math.min(Math.max(v.currentTime + s, 0), (v.duration || duration) - 1);
   };
   const toggleFs = () => {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
-    else document.querySelector(".player")?.requestFullscreen().catch(() => undefined);
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    const box = document.querySelector<HTMLElement>(".player");
+    if (box?.requestFullscreen) box.requestFullscreen().catch(() => undefined);
+    else {
+      // iPhone Safari has no element fullscreen: only the video itself can go fullscreen (native controls)
+      const v = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+      v?.webkitEnterFullscreen?.();
+    }
   };
   const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
 
@@ -307,6 +376,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
   const v = videoRef.current;
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
+  const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
   const remaining = duration - time;
   const title = item ? (item.Type === "Episode" ? `${item.SeriesName} · S${item.ParentIndexNumber} E${item.IndexNumber} · ${item.Name}` : item.Name) : "";
 
@@ -326,6 +396,8 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         }}
         onPlaying={() => {
           setBuffering(false);
+          setNeedsTap(false);
+          netRetries.current = 0;
           if (!startedRef.current && planRef.current) {
             startedRef.current = true;
             reportStart(report());
@@ -341,7 +413,8 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
           else exit();
         }}
         onError={() => {
-          if (!plan?.hls) fallback();
+          // Direct play, or HLS played natively (Safari): hls.js reports its own errors, the element covers the rest
+          if (!hlsRef.current && videoRef.current?.getAttribute("src")) fallbackRef.current();
         }}
       />
       {shownCues.length > 0 && (
@@ -351,7 +424,21 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
           ))}
         </div>
       )}
-      {buffering && !error && <div className="spinner" />}
+      {buffering && !error && !needsTap && <div className="spinner" />}
+      {needsTap && !error && (
+        <button
+          className="tap-play"
+          data-nav
+          data-autofocus
+          aria-label="Play"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current) tryPlay(videoRef.current);
+          }}
+        >
+          ▶
+        </button>
+      )}
       {error && (
         <div className="player-error">
           <p>{error}</p>
@@ -414,7 +501,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
             </span>
           )}
           <button className="btn ghost" data-nav onClick={() => setMenu((m) => !m)}>
-            Subtitles
+            {audios.length > 1 ? "Audio & subtitles" : "Subtitles"}
           </button>
           {next && (
             <button className="btn ghost" data-nav onClick={playNext}>
@@ -429,6 +516,17 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
 
       {menu && (
         <div className="sub-menu" onClick={(e) => e.stopPropagation()}>
+          {audios.length > 1 && (
+            <>
+              <div className="menu-head">Audio</div>
+              {audios.map((a) => (
+                <button key={a.Index} data-nav className={a.Index === audioIndex ? "on" : ""} onClick={() => chooseAudio(a.Index)}>
+                  {subLabel(a)}
+                </button>
+              ))}
+              <div className="menu-head">Subtitles</div>
+            </>
+          )}
           <button
             data-nav
             data-autofocus
