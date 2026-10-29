@@ -120,7 +120,10 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
-function SpecialHeader({ kicker, title }: { kicker?: string; title?: string }) {
+/** Kicker = a short category label ("TOP 10"); never drawn when it just repeats the title (or how it starts). */
+function SpecialHeader({ kicker: k, title }: { kicker?: string; title?: string }) {
+  const same = (a?: string, b?: string) => !!a && !!b && b.trim().toLowerCase().startsWith(a.trim().toLowerCase());
+  const kicker = same(k, title) ? undefined : k;
   if (!kicker && !title) return null;
   return (
     <h2 className="row-title special-title">
@@ -304,7 +307,7 @@ function Top10Block({ s }: { s: Top10 }) {
   if (!items || items.length < 3) return null;
   return (
     <section className="special row top10">
-      <SpecialHeader kicker={s.variant === "letterboxd" ? "Top 10 on Letterboxd you haven't seen" : "Top 10 on Jellytip this month"} title={s.title} />
+      <SpecialHeader kicker="Top 10" title={s.title || (s.variant === "letterboxd" ? "On Letterboxd, not seen yet" : "On Jellytip this month")} />
       <div className="row-scroll">
         {items.map((i, n) => (
           <div key={i.Id} className="top10-entry">
@@ -433,7 +436,7 @@ function AroundHouseBlock({ s }: { s: AroundHouse }) {
   const untitled = untitledSet(s);
   return (
     <section className="special row around-house">
-      <SpecialHeader kicker="What friends are watching" title={s.title} />
+      <SpecialHeader kicker="Friends" title={s.title || "What friends are watching"} />
       <div className="row-scroll">
         {s.entries
           .filter((e) => byId.has(e.itemId))
