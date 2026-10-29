@@ -78,7 +78,7 @@ function Unified({ r, onChip }: { r: SearchResult; onChip: (q: string) => void }
             {r.collections.map((c) => (
               <button key={c.tmdbCollectionId} className="search-link" data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
                 <strong>{c.name}</strong>
-                {c.total ? <span>{c.inLibrary ?? 0} of {c.total} in the library</span> : null}
+                {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
               </button>
             ))}
           </div>
@@ -219,6 +219,13 @@ export function Search({ initial }: { initial: string }) {
       if (r) {
         setUnified(r);
         setFallback(null);
+        // Discover answered late (TMDB slower than 40 ms): it's cached server-side by now, so ask for just that group
+        if (r.pending.includes("discover")) {
+          await new Promise((ok) => setTimeout(ok, 300));
+          if (ctl.signal.aborted) return;
+          const d = await searchAll(term, ctl.signal, "discover");
+          if (!ctl.signal.aborted && d?.discover.length) setUnified((cur) => (cur === r ? { ...r, discover: d.discover, pending: [] } : cur));
+        }
         return;
       }
       // No unified search on this server (or it failed): Jellyfin's own search

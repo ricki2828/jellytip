@@ -12,9 +12,9 @@ const RETRY_MS = 5 * 60_000;
 let missingUntil = 0;
 
 /** Grouped results, or null when unified search isn't available (fall back to Jellyfin search). */
-export async function searchAll(q: string, signal?: AbortSignal): Promise<SearchResult | null> {
+export async function searchAll(q: string, signal?: AbortSignal, types = TYPES): Promise<SearchResult | null> {
   if (Date.now() < missingUntil) return null;
-  const a = await call("GET", `v1/search?q=${encodeURIComponent(q)}&limit=8&types=${TYPES}`, undefined, { signal });
+  const a = await call("GET", `v1/search?q=${encodeURIComponent(q)}&limit=8&types=${types}`, undefined, { signal });
   if (a.status === 404) missingUntil = Date.now() + RETRY_MS;
   if (a.status !== 200) return null;
   const r = parseSearch(a.data);
@@ -40,4 +40,5 @@ export async function suggestions(): Promise<Suggestions | null> {
 
 /** A result was opened: remember the query (fire and forget). */
 export const recordRecent = (q: string) => void (q.trim().length >= 2 && call("POST", "v1/search/recent", { q: q.trim() }));
-export const clearRecent = () => call("DELETE", "v1/search/recent");
+/** The companion has no DELETE: `{clear: true}` empties the list. */
+export const clearRecent = () => call("POST", "v1/search/recent", { clear: true });

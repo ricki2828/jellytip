@@ -43,3 +43,21 @@ test("removing a chip rebuilds the query from what stays", () => {
   assert.equal(withoutFilter("", f, "decade"), "crime french");
   assert.equal(withoutFilter("", { runtimeMax: 90 }, "runtimeMax"), "");
 });
+
+test("live shapes: country + language is one chip; year, runtimeMin, kind", () => {
+  const f = { decade: 1990, country: "FR", language: "fr", genre: "Crime" };
+  assert.deepEqual(filterChips(f).map((c) => c.label), ["90s", "French", "Crime"]);
+  assert.equal(withoutFilter("", f, "country"), "crime 1990s");
+  assert.deepEqual(filterChips({ language: "ko", year: 2019, runtimeMin: 150, kind: "series" }).map((c) => c.label), ["2019", "Korean", "over 150 min", "Shows"]);
+  const s = parseSearch({ parsed: { text: "", filters: { year: 2019, language: "ko", runtimeMin: 150, kind: "series" } }, groups: [] })!;
+  assert.deepEqual([s.filters.year, s.filters.language, s.filters.runtimeMin, s.filters.kind], [2019, "ko", 150, "series"]);
+});
+
+test("collections: inLibrary as a count or as the parts list", () => {
+  const s = parseSearch({ groups: [{ type: "collections", items: [
+    { tmdbCollectionId: 645, name: "Bond", inLibrary: [{ itemId: "a" }, { itemId: null }, { itemId: "b" }] },
+    { tmdbCollectionId: 9, name: "Other", inLibrary: 2, total: 5 },
+    { tmdbCollectionId: 10, name: "None known", inLibrary: [{ itemId: null }, { itemId: null }] },
+  ] }] })!;
+  assert.deepEqual(s.collections.map((c) => [c.inLibrary, c.total]), [[2, 3], [2, 5], [undefined, 2]]);
+});

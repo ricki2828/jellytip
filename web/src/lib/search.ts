@@ -3,10 +3,16 @@
 
 export interface SearchFilters {
   decade?: number | null;
+  year?: number | null;
   country?: string | null;
+  /** ISO 639-1 original language ("fr"); comes with `country` for words like "french". */
+  language?: string | null;
   genre?: string | null;
   runtimeMax?: number | null;
+  runtimeMin?: number | null;
   unwatched?: boolean | null;
+  /** "movie" | "series". */
+  kind?: string | null;
   person?: string | null;
   tech?: string | null;
 }
@@ -68,6 +74,8 @@ export interface SearchResult {
   techs: unknown;
   logoStyles: unknown;
   untitled: string[];
+  /** Groups the server is still fetching (Discover waits at most 40 ms for TMDB): ask again for just those. */
+  pending: string[];
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -99,10 +107,14 @@ export function parseSearch(raw: unknown): SearchResult | null {
   const f = obj(parsed?.filters) ?? {};
   const filters: SearchFilters = {
     decade: num(f.decade),
+    year: num(f.year),
     country: str(f.country),
+    language: str(f.language),
     genre: str(f.genre),
     runtimeMax: num(f.runtimeMax),
+    runtimeMin: num(f.runtimeMin),
     unwatched: f.unwatched === true ? true : null,
+    kind: str(f.kind),
     person: str(f.person),
     tech: str(f.tech),
   };
@@ -120,7 +132,13 @@ export function parseSearch(raw: unknown): SearchResult | null {
     collections: items(g, "collections", (x) => {
       const id = num(x.tmdbCollectionId);
       const name = str(x.name);
-      return id && name ? { tmdbCollectionId: id, name, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined } : null;
+      // Live server (29-Oct) sends `inLibrary` as the parts list instead of a count: count the ones with an item
+      const parts = Array.isArray(x.inLibrary) ? (x.inLibrary as unknown[]).map(obj) : null;
+      // (every itemId null there, e.g. for the shared token: no count rather than a misleading "0 of 26")
+      const owned = parts ? parts.filter((pt) => str(pt?.itemId)).length : null;
+      const inLibrary = parts ? owned || undefined : num(x.inLibrary) ?? undefined;
+      const total = num(x.total) ?? (parts ? parts.length : undefined);
+      return id && name ? { tmdbCollectionId: id, name, inLibrary, total } : null;
     }),
     lists: items(g, "lists", (x) => {
       const slug = str(x.slug);
@@ -142,6 +160,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
     techs: r.techs,
     logoStyles: r.logoStyles,
     untitled: strs(r.untitled),
+    pending: strs(r.pending),
   };
 }
 
@@ -154,10 +173,16 @@ const COUNTRY: Record<string, string> = {
   SE: "Swedish", DK: "Danish", NO: "Norwegian", MX: "Mexican", BR: "Brazilian", GB: "British", US: "American", NZ: "New Zealand",
   AU: "Australian", IE: "Irish", RU: "Russian", IR: "Iranian", TH: "Thai", TW: "Taiwanese", AR: "Argentinian", BE: "Belgian", NL: "Dutch",
 };
+const LANGUAGE: Record<string, string> = {
+  fr: "French", ko: "Korean", ja: "Japanese", es: "Spanish", it: "Italian", de: "German", zh: "Chinese", cn: "Cantonese", hi: "Hindi",
+  sv: "Swedish", da: "Danish", no: "Norwegian", pt: "Portuguese", ru: "Russian", fa: "Persian", th: "Thai", nl: "Dutch", mi: "Māori", en: "English",
+};
 const TECH: Record<string, string> = { "4K": "4K", DV: "Dolby Vision", "HDR10+": "HDR10+", HDR: "HDR", ATMOS: "Atmos", DTSX: "DTS:X" };
 
 export interface Chip {
   key: FilterKey;
+  /** Every filter the chip stands for ("French" = country FR + language fr). */
+  keys: FilterKey[];
   label: string;
   /** Words that bring this filter back when the query is rebuilt (the server re-reads them). */
   phrase: string | null;
@@ -168,18 +193,26 @@ const runtime = (m: number) => (m % 60 === 0 ? `${m / 60}h` : `${m} min`);
 /** The filters the server read, as removable chips (label for the chip, phrase for re-asking without the others). */
 export function filterChips(f: SearchFilters): Chip[] {
   const out: Chip[] = [];
-  if (f.decade) out.push({ key: "decade", label: f.decade >= 2000 ? `${f.decade}s` : `${String(f.decade).slice(2)}s`, phrase: `${f.decade}s` });
+  const add = (key: FilterKey, label: string, phrase: string | null, keys: FilterKey[] = [key]) => out.push({ key, keys, label, phrase });
+  if (f.decade) add("decade", f.decade >= 2000 ? `${f.decade}s` : `${String(f.decade).slice(2)}s`, `${f.decade}s`);
+  if (f.year) add("year", String(f.year), String(f.year));
+  const lang = f.language ? LANGUAGE[f.language.toLowerCase()] : undefined;
   if (f.country) {
     const c = COUNTRY[f.country.toUpperCase()];
-    out.push({ key: "country", label: c ?? f.country, phrase: c ? c.toLowerCase() : null });
-  }
-  if (f.genre) out.push({ key: "genre", label: f.genre, phrase: f.genre.toLowerCase() });
-  if (f.runtimeMax) out.push({ key: "runtimeMax", label: `under ${runtime(f.runtimeMax)}`, phrase: `under ${runtime(f.runtimeMax)}` });
-  if (f.unwatched) out.push({ key: "unwatched", label: "Unwatched", phrase: "unwatched" });
-  if (f.person) out.push({ key: "person", label: `with ${f.person}`, phrase: `with ${f.person}` });
+    // "french" comes back as country FR + language fr: one chip
+    const both = !!lang && !!c && c === lang;
+    add("country", c ?? f.country, c ? c.toLowerCase() : null, both ? ["country", "language"] : ["country"]);
+    if (lang && !both) add("language", `${lang} language`, null);
+  } else if (f.language) add("language", lang ?? f.language, lang ? lang.toLowerCase() : null);
+  if (f.genre) add("genre", f.genre, f.genre.toLowerCase());
+  if (f.runtimeMax) add("runtimeMax", `under ${runtime(f.runtimeMax)}`, `under ${runtime(f.runtimeMax)}`);
+  if (f.runtimeMin) add("runtimeMin", `over ${runtime(f.runtimeMin)}`, null);
+  if (f.kind) add("kind", f.kind === "series" || f.kind === "tv" ? "Shows" : "Films", f.kind === "series" || f.kind === "tv" ? "shows" : "films");
+  if (f.unwatched) add("unwatched", "Unwatched", "unwatched");
+  if (f.person) add("person", `with ${f.person}`, `with ${f.person}`);
   if (f.tech) {
     const t = TECH[f.tech.toUpperCase()] ?? f.tech;
-    out.push({ key: "tech", label: t, phrase: t.toLowerCase() });
+    add("tech", t, t.toLowerCase());
   }
   return out;
 }
@@ -189,7 +222,7 @@ export function filterChips(f: SearchFilters): Chip[] {
  * (The contract echoes the parsed filters, not where they were in the query, so the query is rebuilt.)
  */
 export function withoutFilter(text: string, f: SearchFilters, drop: FilterKey): string {
-  const keep = filterChips(f).filter((c) => c.key !== drop && c.phrase);
+  const keep = filterChips(f).filter((c) => !c.keys.includes(drop) && c.phrase);
   // Genre reads best before the text ("crime heist"), the rest after
   const genre = keep.find((c) => c.key === "genre");
   const rest = keep.filter((c) => c.key !== "genre").map((c) => c.phrase);
