@@ -241,7 +241,7 @@ private fun DetailsTitle(
             contentDescription = item.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
-            colorFilter = JellytipLogoTint.filter(logoUrl),
+            colorFilter = JellytipLogoTint.filter(logoUrl, item),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->

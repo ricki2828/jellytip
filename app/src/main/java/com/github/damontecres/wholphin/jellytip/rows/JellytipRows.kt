@@ -104,6 +104,7 @@ object JellytipRowsParser {
     /** Null when the answer has no `rows` (old server): the caller keeps today's behaviour. */
     fun parse(json: String): JellytipRowsAnswer? {
         val root = JSONObject(json)
+        com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(root.optJSONObject("logoStyles"))
         val arr = root.optJSONArray("rows") ?: return null
         val rows =
             (0 until arr.length()).mapNotNull { i ->
@@ -127,6 +128,7 @@ object JellytipRowsParser {
         val itemIds = o.uuids("itemIds")
         if (itemIds.isEmpty()) return null
         JellytipThumbTitles.markUntitled(o.uuids("untitled"))
+        com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(o.optJSONObject("logoStyles"))
         return JellytipServerRow(
             id = id,
             source = o.optString("source"),

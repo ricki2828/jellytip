@@ -6,6 +6,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import coil3.Image
+import com.github.damontecres.wholphin.data.model.BaseItem
+import org.jellyfin.sdk.model.serializer.toUUID
+import java.util.UUID
 import coil3.toBitmap
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import kotlin.math.sqrt
@@ -38,13 +41,68 @@ object JellytipLogoTint {
     /** true = flat silhouette, false = duotone; decided once per logo URL after it has decoded. */
     private val flat = mutableStateMapOf<String, Boolean>()
 
-    /** Filter for the logo at [url]; flat white until its pixels have been inspected. Null when the treatment is off. */
-    fun filter(url: String?): ColorFilter? =
-        when {
+    /**
+     * Per-item treatment chosen by the companion (`logoStyle` on /backdrops, `logoStyles` maps in specials/rows):
+     * "white" = the white treatment below, "mono" = greyscale with the shading kept, "original" = untouched.
+     * Items it has not answered for keep the white treatment.
+     */
+    private val styles = mutableStateMapOf<UUID, String>()
+
+    fun setStyle(
+        itemId: UUID,
+        style: String?,
+    ) {
+        when (style) {
+            STYLE_WHITE, STYLE_MONO, STYLE_ORIGINAL -> if (styles[itemId] != style) styles[itemId] = style
+            else -> {}
+        }
+    }
+
+    /** A `{"<itemId>": "white|mono|original"}` object from a payload (ids with or without dashes). */
+    fun setStyles(map: org.json.JSONObject?) {
+        map ?: return
+        map.keys().forEach { key ->
+            runCatching { key.toUUID() }.getOrNull()?.let { setStyle(it, map.optString(key)) }
+        }
+    }
+
+    const val STYLE_WHITE = "white"
+    const val STYLE_MONO = "mono"
+    const val STYLE_ORIGINAL = "original"
+
+    /** Greyscale (saturation 0) with a contrast/brightness lift so bevels and shading survive; alpha kept. */
+    private val mono: ColorFilter by lazy {
+        val lum = floatArrayOf(0.2126f, 0.7152f, 0.0722f)
+        val m = FloatArray(20)
+        for (ch in 0..2) {
+            for (i in 0..2) m[ch * 5 + i] = MONO_CONTRAST * lum[i]
+            m[ch * 5 + 4] = MONO_LIFT + 128f * (1f - MONO_CONTRAST)
+        }
+        m[18] = 1f
+        ColorFilter.colorMatrix(ColorMatrix(m))
+    }
+
+    private const val MONO_CONTRAST = 1.25f
+    private const val MONO_LIFT = 24f
+
+    /**
+     * The one place logos get their colour treatment (hero, details). [item] picks the companion's per-item style
+     * (its own id, then its series / logo owner); [url] the white treatment's flat-or-duotone decision.
+     */
+    fun filter(
+        url: String?,
+        item: BaseItem? = null,
+    ): ColorFilter? {
+        val style =
+            item?.let { i -> listOfNotNull(i.id, i.data.seriesId, i.data.parentLogoItemId).firstNotNullOfOrNull { styles[it] } }
+        return when {
+            style == STYLE_ORIGINAL -> null
+            style == STYLE_MONO -> mono
             !JellytipHomeTokens.WHITE_LOGO -> null
             url != null && flat[url] == false -> duotone
             else -> flatSilhouette
         }
+    }
 
     /** Call from the image's onSuccess; samples opaque pixels and records whether the logo is essentially single-tone. */
     fun inspect(

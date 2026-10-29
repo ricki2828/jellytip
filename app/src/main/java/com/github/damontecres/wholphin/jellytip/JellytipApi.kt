@@ -346,6 +346,7 @@ class JellytipApi
                         val info = JellytipBackdropInfo.parse(response.body.string())
                         infoCache[itemId] = info
                         com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles.set(itemId, info.thumbTitled)
+                        JellytipLogoTint.setStyle(itemId, info.logoStyle)
                         info
                     }
                 } catch (e: Exception) {
@@ -652,6 +653,8 @@ data class JellytipBackdropInfo(
     val tags: Map<Int, String> = emptyMap(),
     /** Whether the Thumb has title text baked in: false = textless (the tile overlays the title), null = unknown/no Thumb. */
     val thumbTitled: Boolean? = null,
+    /** "white" | "mono" | "original" (null = not answered): see [JellytipLogoTint]. */
+    val logoStyle: String? = null,
 ) {
     companion object {
         fun parse(json: String): JellytipBackdropInfo {
@@ -685,6 +688,7 @@ data class JellytipBackdropInfo(
                 focal,
                 tags,
                 thumbTitled,
+                root.optString("logoStyle").takeIf { it.isNotBlank() && !root.isNull("logoStyle") },
             )
         }
     }

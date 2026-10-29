@@ -510,7 +510,7 @@ fun JellytipHomeHeader(
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
-                        colorFilter = JellytipLogoTint.filter(logoUrl),
+                        colorFilter = JellytipLogoTint.filter(logoUrl, item),
                         onSuccess = { JellytipLogoTint.inspect(logoUrl, it.result.image) },
                         onError = { logoFailed = true },
                         modifier =
