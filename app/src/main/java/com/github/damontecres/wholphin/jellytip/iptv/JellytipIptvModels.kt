@@ -107,6 +107,15 @@ data class IptvRecordResult(
     val message: String?,
 )
 
+/** A channel with something airing now (`/live/onnow`); [sport] = live sport, listed first. */
+data class IptvOnNow(
+    val channel: IptvChannel,
+    val title: String,
+    val start: Long,
+    val stop: Long,
+    val sport: Boolean,
+)
+
 /** What a `/play` call came back with. */
 sealed interface IptvPlayResult {
     data class Ok(
@@ -168,6 +177,47 @@ object IptvParse {
         val a = root.optJSONArray("channels") ?: JSONArray()
         val list = (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { channel(it, resolve) } }
         return root.optInt("total", list.size) to list
+    }
+
+    /**
+     * `/live/onnow`, read defensively until its shape is pinned: `channels[]` or `items[]` (or a bare array), each a
+     * channel (or `{channel:{…}}`) with `now` / `programme` = {start, stop, title}. Live sport first, then server order.
+     */
+    fun onNow(
+        json: String,
+        now: Long,
+        resolve: (String) -> String?,
+    ): List<IptvOnNow> {
+        val trimmed = json.trimStart()
+        val list: JSONArray =
+            if (trimmed.startsWith("[")) {
+                JSONArray(json)
+            } else {
+                val r = JSONObject(json)
+                r.optJSONArray("channels") ?: r.optJSONArray("items") ?: JSONArray()
+            }
+        val out = ArrayList<IptvOnNow>()
+        val seen = HashSet<String>()
+        for (i in 0 until list.length()) {
+            val c = list.optJSONObject(i) ?: continue
+            val chObj = c.optJSONObject("channel") ?: c
+            val p = c.optJSONObject("now") ?: c.optJSONObject("programme") ?: c.optJSONObject("program") ?: continue
+            val ch = channel(chObj, resolve) ?: continue
+            if (!seen.add(ch.id)) continue
+            val start = p.longOrNull("start") ?: continue
+            val stop = p.longOrNull("stop") ?: continue
+            val title = p.str("title") ?: continue
+            if (now !in start until stop) continue
+            val explicit =
+                when {
+                    c.has("sport") && !c.isNull("sport") -> c.optBoolean("sport")
+                    chObj.has("sport") && !chObj.isNull("sport") -> chObj.optBoolean("sport")
+                    else -> null
+                }
+            val hint = listOfNotNull(c.str("genre"), c.str("category"), chObj.str("groupName"), ch.group, ch.name, title).joinToString(" ")
+            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint))
+        }
+        return out.filter { it.sport } + out.filter { !it.sport }
     }
 
     fun prog(o: JSONObject?): IptvProg? {

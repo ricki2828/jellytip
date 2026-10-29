@@ -82,6 +82,22 @@ class JellytipIptvService
             return out
         }
 
+        @Volatile
+        private var onNowCache: Pair<Long, List<IptvOnNow>>? = null
+
+        /** Last "on now" answer if it is younger than 2 minutes (Home shows it on the first frame). */
+        fun peekOnNow(): List<IptvOnNow>? = onNowCache?.takeIf { System.currentTimeMillis() - it.first < ON_NOW_TTL_MS }?.second
+
+        /** Channels with something on now (live sport first); empty for people without a provider. */
+        suspend fun onNow(limit: Int = 40): List<IptvOnNow> {
+            val b = base()
+            val (code, body) = get("v1/iptv/live/onnow?limit=$limit") ?: return emptyList()
+            if (code != 200) return emptyList<IptvOnNow>().also { onNowCache = System.currentTimeMillis() to it }
+            val list = runCatching { IptvParse.onNow(body, System.currentTimeMillis() / 1000) { resolve(b, it) } }.getOrDefault(emptyList())
+            onNowCache = System.currentTimeMillis() to list
+            return list
+        }
+
         /** Recently watched channels (recorded by /play), newest first. */
         suspend fun recent(): List<IptvChannel> {
             val b = base()
@@ -207,5 +223,6 @@ class JellytipIptvService
             private const val MAX_CHANNELS = 3000
             private const val EPG_BATCH = 300
             private const val LIVE_CHECK_TTL_MS = 10 * 60_000L
+            private const val ON_NOW_TTL_MS = 2 * 60_000L
         }
     }

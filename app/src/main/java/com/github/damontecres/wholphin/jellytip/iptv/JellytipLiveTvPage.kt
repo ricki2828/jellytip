@@ -342,9 +342,10 @@ class JellytipLiveTvViewModel
 private val CHANNEL_W = 176.dp
 private val ROW_H = 46.dp
 private val RULER_H = 22.dp
-private val PREVIEW_W = 256.dp
-private val PREVIEW_H = 144.dp
+private val PREVIEW_W = 224.dp
+private val PREVIEW_H = 126.dp
 private const val PREVIEW_REST_MS = 800L
+private const val ON_NOW_REFRESH_MS = 2 * 60_000L
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -381,7 +382,16 @@ fun JellytipLiveTvPage(
     var focusedProg by remember { mutableStateOf<IptvProg?>(null) }
     var focusTime by remember { mutableStateOf(nowSec()) }
     var placed by remember { mutableStateOf(false) }
-    var headerFocused by remember { mutableStateOf(false) }
+    var tabsFocused by remember { mutableStateOf(false) }
+    var onNowFocused by remember { mutableStateOf(false) }
+    val headerFocused = tabsFocused || onNowFocused
+    // null = first answer pending: its height is kept so the guide below never jumps when it arrives
+    val onNow by produceState(viewModel.service.peekOnNow()) {
+        while (true) {
+            value = viewModel.service.onNow()
+            delay(ON_NOW_REFRESH_MS)
+        }
+    }
     val now by produceState(nowSec()) {
         while (true) {
             delay(30_000)
@@ -391,6 +401,8 @@ fun JellytipLiveTvPage(
 
     DisposableEffect(Unit) {
         playback.attach("guide")
+        // The guide preview is muted (like home trailers); full screen has the sound
+        playback.setVolume(0f)
         onDispose { playback.detach("guide") }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playback.stop("app hidden (guide)") }
@@ -433,6 +445,7 @@ fun JellytipLiveTvPage(
     LaunchedEffect(focusedChannel?.id) {
         val ch = focusedChannel ?: return@LaunchedEffect
         delay(PREVIEW_REST_MS)
+        playback.setVolume(0f)
         playback.play(IptvTarget(ch.id, ch.name), "guide preview (rested ${PREVIEW_REST_MS} ms)")
     }
 
@@ -543,13 +556,29 @@ fun JellytipLiveTvPage(
             FocusInfo(focusedChannel, focusedProg, now, state.message, Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
+        // On now: live sport first, then the server's order; OK = full screen with sound
+        val onNowList = onNow
+        if (onNowList == null) {
+            Spacer(Modifier.height(64.dp))
+        } else if (onNowList.isNotEmpty()) {
+            OnNowStrip(
+                items = onNowList,
+                now = now,
+                onOpen = { o ->
+                    playback.lineup = onNowList.map { it.channel }
+                    playback.play(IptvTarget(o.channel.id, o.channel.name), "guide on-now OK")
+                    viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(o.channel.id), "guide on-now OK ${o.channel.name}")
+                },
+                modifier = Modifier.onFocusChanged { onNowFocused = it.hasFocus },
+            )
+        }
         // Tabs: Favourites / Recent first, then the opted groups in the server's order
         val tabs = state.tabs
         if (tabs != null && tabs.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 4.dp),
-                modifier = Modifier.fillMaxWidth().focusGroup().onFocusChanged { headerFocused = it.hasFocus },
+                modifier = Modifier.fillMaxWidth().focusGroup().onFocusChanged { tabsFocused = it.hasFocus },
             ) {
                 items(tabs, key = { it.id }) { t ->
                     TabChip(t.name, t.id == state.tab) {

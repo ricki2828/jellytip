@@ -392,6 +392,9 @@ fun HomePageContent(
     // a late answer is taken only if it does not move the focused row, otherwise it waits for the next visit.
     var specials by remember { mutableStateOf(liveSpecials) }
     var serverRows by remember { mutableStateOf(liveServerRows) }
+    // Jellytip IPTV: "Live sport on now" on Home only (people with a provider and 2+ live sport channels)
+    val liveSportNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberLiveSportOnNow() else null
+    var liveSport by remember { mutableStateOf(liveSportNow) }
     val hiddenRows =
         remember(serverRows, rowConfigs) {
             val shown = serverRows
@@ -408,8 +411,8 @@ fun HomePageContent(
     var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
     val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val entries =
-        remember(homeRows, specials, leadingRows, serverRows, hiddenRows) {
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows)
+        remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport) {
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport)
         }
     val focusedEntry =
         remember(entries, specialFocus?.id, position.row) {
@@ -423,6 +426,19 @@ fun HomePageContent(
     val focusedKey = entries.getOrNull(focusedEntry)?.key
     val currentFocusedKey by rememberUpdatedState(focusedKey)
     val currentHasFocus by rememberUpdatedState(hasFocus)
+    LaunchedEffect(liveSportNow) {
+        if (liveSportNow == liveSport) return@LaunchedEffect
+        // A late live-sport answer is taken only if it does not move the focused row (else next visit)
+        val key = currentFocusedKey
+        val candidate =
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow)
+        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        if (moves) {
+            JellytipTrace.layout("deferred live sport row: would move focused $key")
+        } else {
+            liveSport = liveSportNow
+        }
+    }
     LaunchedEffect(liveSpecials, liveServerRows) {
         if (liveSpecials === specials && liveServerRows === serverRows) return@LaunchedEffect
         val key = currentFocusedKey
@@ -437,6 +453,7 @@ fun HomePageContent(
                 } else {
                     rowConfigs.indices.filter { JellytipCarouselRows.isAppRow(rowConfigs[it], liveServerRows.carouselIds) }.toSet()
                 },
+                liveSport,
             )
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
@@ -569,6 +586,21 @@ fun HomePageContent(
                                 .animateItem(placementSpec = null)
                                 .graphicsLayer { alpha = rowAlpha }
                                 .padding(bottom = 8.dp)
+                        if (entry is JellytipHomeEntry.LiveSport) {
+                            val id = entry.key
+                            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveSportRow(
+                                items = entry.items,
+                                onFocus = {
+                                    specialFocus = JellytipSpecialFocus(id, null, false)
+                                    savedSpecialId = id
+                                },
+                                modifier =
+                                    rowModifier
+                                        .focusGroup()
+                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                            )
+                            return@items
+                        }
                         if (entry is JellytipHomeEntry.Server) {
                             val id = entry.key
                             CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {

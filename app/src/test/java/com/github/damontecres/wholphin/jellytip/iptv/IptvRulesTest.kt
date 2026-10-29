@@ -38,6 +38,13 @@ class IptvRulesTest {
     }
 
     @Test
+    fun sportGuess() {
+        assertTrue(IptvRules.looksLikeSport("|NZ| SKY SPORT 1 NRL: Storm v Broncos"))
+        assertTrue(IptvRules.looksLikeSport("Kayo 3"))
+        assertFalse(IptvRules.looksLikeSport("|UK| BBC ONE The News at Six"))
+    }
+
+    @Test
     fun windowAndProgAt() {
         assertEquals(1_800L, IptvRules.windowStart(2_000L))
         val progs = listOf(p(0, 100, "a"), p(100, 200, "b"), p(300, 400, "c"))

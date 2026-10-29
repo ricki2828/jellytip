@@ -85,6 +85,15 @@ object IptvRules {
         return out
     }
 
+    private val sportWords =
+        Regex(
+            """\b(sports?|football|soccer|rugby|cricket|nrl|afl|nfl|nba|nhl|mlb|ncaa[fb]?|f1|formula|golf|tennis|boxing|ufc|racing|motogp|super ?rugby|premier league|kayo|espn|bein|tnt sports|fox sports|sky sport)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    /** Same guess as the web client while the server's `sport` flag is missing. */
+    fun looksLikeSport(hint: String): Boolean = sportWords.containsMatchIn(hint)
+
     const val HALF_HOUR = 30 * 60L
     const val WINDOW_SECS = 3 * 60 * 60L
 

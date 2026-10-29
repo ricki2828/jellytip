@@ -27,6 +27,13 @@ sealed interface JellytipHomeEntry {
         override val key get() = "special-${special.id}"
     }
 
+    /** IPTV "Live sport on now" (Home, right after Continue Watching / Next Up). */
+    data class LiveSport(
+        val items: List<com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow>,
+    ) : JellytipHomeEntry {
+        override val key get() = "live-sport"
+    }
+
     /** A server-built row (rows=1 manifest). */
     data class Server(
         val row: JellytipServerRow,
@@ -53,6 +60,22 @@ fun jellytipHomeEntries(
     leadingRows: Int?,
     serverRows: List<JellytipServerRow> = emptyList(),
     hiddenRows: Set<Int> = emptySet(),
+    liveSport: List<com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow>? = null,
+): List<JellytipHomeEntry> {
+    val base = baseEntries(rows, specials, leadingRows, serverRows, hiddenRows)
+    if (liveSport.isNullOrEmpty()) return base
+    // Right after the leading Continue Watching / Next Up block
+    val lead = leadingRows ?: rows.indexOfFirst { !it.isContinueWatchingNextUp }.let { if (it < 0) rows.size else it }
+    val at = base.indexOfFirst { !(it is JellytipHomeEntry.Row && it.index < lead) }.let { if (it < 0) base.size else it }
+    return base.subList(0, at) + JellytipHomeEntry.LiveSport(liveSport) + base.subList(at, base.size)
+}
+
+private fun baseEntries(
+    rows: List<HomeRowLoadingState>,
+    specials: List<JellytipSpecial>,
+    leadingRows: Int?,
+    serverRows: List<JellytipServerRow>,
+    hiddenRows: Set<Int>,
 ): List<JellytipHomeEntry> {
     if (serverRows.isNotEmpty()) return withServerRows(rows, specials, leadingRows, serverRows, hiddenRows)
     if (specials.isEmpty()) return rows.indices.map { JellytipHomeEntry.Row(it) }
