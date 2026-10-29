@@ -2,8 +2,10 @@
 // Everything fails soft: a problem returns null and the UI falls back to plain Jellyfin data.
 
 import { getSession } from "./jellyfin";
+import { isNative, nativeGetJson, SERVER_ORIGIN } from "../lib/native";
 
-const BASE = "/jellytip-api";
+export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
+const BASE = COMPANION_BASE;
 const FAILURE_TTL_MS = 60_000;
 // Server allows 15 req/s per IP with a burst of 60; stay well under it so a screen full of cards never trips 429.
 const MAX_CONCURRENT = 4;
@@ -63,10 +65,19 @@ async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, ca
   const token = getSession()?.token;
   if (!token) return null;
   return throttled(job, async () => {
+    const headers = { Authorization: `MediaBrowser Token="${token}"` };
+    if (isNative) {
+      try {
+        const r = await nativeGetJson<T>(BASE + path, headers, timeoutMs);
+        return r.status >= 200 && r.status < 300 ? r.data : null;
+      } catch {
+        return null;
+      }
+    }
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const res = await fetch(BASE + path, { headers: { Authorization: `MediaBrowser Token="${token}"` }, signal: ctl.signal });
+      const res = await fetch(BASE + path, { headers, signal: ctl.signal });
       if (!res.ok) return null;
       return (await res.json()) as T;
     } catch {

@@ -71,7 +71,7 @@ export async function negotiate(itemId: string, startTicks: number, opts: Negoti
     return { url, hls: false, method: "DirectPlay", source, playSessionId: info.PlaySessionId };
   }
   if (!source.TranscodingUrl) throw new Error("Server offered no stream for this browser");
-  const u = new URL(JF_BASE + source.TranscodingUrl, location.origin);
+  const u = new URL(JF_BASE + source.TranscodingUrl, location.origin); // absolute in the app (JF_BASE has the origin)
   const reasons = (u.searchParams.get("TranscodeReasons") ?? "").split(",").filter(Boolean);
   // Anything that isn't a pure container/audio change re-encodes the video (codec, profile, level, anamorphic, interlaced,
   // ref frames, bitrate, ...): those runs get the 1080p cap
@@ -82,7 +82,7 @@ export async function negotiate(itemId: string, startTicks: number, opts: Negoti
     u.searchParams.set("maxHeight", String(MAX_TRANSCODE_H));
   }
   if (!u.searchParams.has("api_key")) u.searchParams.set("api_key", token);
-  return { url: u.pathname + u.search, hls: true, method: videoTranscode ? "Transcode" : "DirectStream", source, playSessionId: info.PlaySessionId };
+  return { url: u.origin === location.origin ? u.pathname + u.search : u.href, hls: true, method: videoTranscode ? "Transcode" : "DirectStream", source, playSessionId: info.PlaySessionId };
 }
 
 interface Report {

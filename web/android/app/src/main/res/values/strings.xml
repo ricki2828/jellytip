@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Jellytip</string>
+    <string name="title_activity_main">Jellytip</string>
+    <string name="package_name">com.jellytip.phone</string>
+    <string name="custom_url_scheme">com.jellytip.phone</string>
+</resources>

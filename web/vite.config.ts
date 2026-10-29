@@ -54,16 +54,22 @@ function appShellWorker(): Plugin {
   };
 }
 
-export default defineConfig({
-  base: "/jellytip/",
-  plugins: [react(), securityMeta(), appShellWorker()],
-  server: {
-    port: 5178,
-    proxy: {
-      "/jellyfin": { target: UPSTREAM, changeOrigin: true, secure: true },
-      "/jellytip-api": { target: UPSTREAM, changeOrigin: true, secure: true },
+// `vite build --mode android` = the bundle for the Capacitor app (npm run build:android): served from the WebView's
+// own https://localhost root, no service worker, and no CSP meta (Capacitor injects its bridge script inline;
+// the app only ever loads its own bundled files). API calls go to VITE_SERVER_ORIGIN (.env.android).
+export default defineConfig(({ mode }) => {
+  const app = mode === "android";
+  return {
+    base: app ? "./" : "/jellytip/",
+    plugins: app ? [react()] : [react(), securityMeta(), appShellWorker()],
+    server: {
+      port: 5178,
+      proxy: {
+        "/jellyfin": { target: UPSTREAM, changeOrigin: true, secure: true },
+        "/jellytip-api": { target: UPSTREAM, changeOrigin: true, secure: true },
+      },
     },
-  },
-  preview: { port: 5179 },
-  build: { outDir: "dist", sourcemap: false, chunkSizeWarningLimit: 900 },
+    preview: { port: 5179 },
+    build: { outDir: app ? "dist-android" : "dist", sourcemap: false, chunkSizeWarningLimit: 900 },
+  };
 });

@@ -7,14 +7,18 @@
     "dev": "vite",
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && vite build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:android": "tsc --noEmit && vite build --mode android && cap sync android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "hls.js": "^1.7.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

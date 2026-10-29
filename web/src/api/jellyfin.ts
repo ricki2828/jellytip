@@ -1,6 +1,9 @@
-// Jellyfin REST client. Same-origin only: the token is never sent anywhere but /jellyfin and /jellytip-api.
+// Jellyfin REST client. The token is only ever sent to the Jellyfin server and its companion API (same origin on the
+// website; the seedbox origin in the Android app).
 
-export const JF_BASE = "/jellyfin";
+import { SERVER_ORIGIN } from "../lib/native";
+
+export const JF_BASE = `${SERVER_ORIGIN}/jellyfin`;
 const CLIENT = "Jellytip Web";
 const VERSION = "0.1.0";
 const STORE_KEY = "jellytip.session";

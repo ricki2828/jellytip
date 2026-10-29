@@ -1,11 +1,14 @@
-"""Render the PWA icons (public/icons/) from the Jelly Tip art: same shapes as design/splash.html logoSVG and the
+"""Render the PWA icons (public/icons/) and the Android launcher icons + splash (android/app/src/main/res/) from the Jelly Tip art: same shapes as design/splash.html logoSVG and the
 intro end card (jellytip-intro/make_endcard.py icon()). Needs Pillow. Run: python3 scripts/make_icons.py"""
 import math
 import os
 
 from PIL import Image, ImageDraw
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "icons")
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+OUT = os.path.join(ROOT, "public", "icons")
+RES = os.path.join(ROOT, "android", "app", "src", "main", "res")
+DENSITIES = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
 BG = (10, 10, 10)
 
 
@@ -62,6 +65,34 @@ def main():
         # Maskable: full-bleed background, art inside the central 80% safe circle
         tile(n, 0.58).convert("RGB").save(os.path.join(OUT, f"maskable-{n}.png"))
     tile(180, 0.72).convert("RGB").save(os.path.join(OUT, "apple-touch-icon.png"))  # iOS rounds it itself
+    if os.path.isdir(RES):
+        android()
+
+
+def android():
+    for name, k in DENSITIES.items():
+        d = os.path.join(RES, f"mipmap-{name}")
+        legacy = int(48 * k)
+        tile(legacy, 0.8, 0.2).save(os.path.join(d, "ic_launcher.png"))
+        rnd = tile(legacy, 0.8)
+        mask = Image.new("L", rnd.size, 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, legacy - 1, legacy - 1], fill=255)
+        rnd.putalpha(mask)
+        rnd.save(os.path.join(d, "ic_launcher_round.png"))
+        # Adaptive foreground: 108 dp canvas, art inside the 66 dp safe zone (background colour comes from values/)
+        fg = int(108 * k)
+        im = Image.new("RGBA", (fg, fg), (0, 0, 0, 0))
+        art = jellytip(int(fg * 0.56))
+        im.alpha_composite(art, ((fg - art.width) // 2, (fg - art.height) // 2))
+        im.save(os.path.join(d, "ic_launcher_foreground.png"))
+    for folder in os.listdir(RES):
+        f = os.path.join(RES, folder, "splash.png")
+        if folder.startswith("drawable") and os.path.isfile(f):
+            w, h = Image.open(f).size
+            im = Image.new("RGBA", (w, h), BG + (255,))
+            art = jellytip(int(min(w, h) * 0.36))
+            im.alpha_composite(art, ((w - art.width) // 2, (h - art.height) // 2))
+            im.convert("RGB").save(f)
 
 
 if __name__ == "__main__":

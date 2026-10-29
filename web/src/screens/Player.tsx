@@ -142,7 +142,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
       hls.on(Hls.Events.FRAG_LOADED, () => {
         netRetries.current = 0;
       });
-      hls.loadSource(u.pathname + u.search);
+      hls.loadSource(u.origin === location.origin ? u.pathname + u.search : u.href);
       hls.attachMedia(v);
     } else {
       v.src = p.url;
