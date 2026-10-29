@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /*
- * IPTV (companion `/v1/iptv/*`; contract: ~/ai/plans/jellytip-iptv.md). Live TV guide, playback and recordings.
+ * IPTV (companion `/v1/iptv/...`; contract: ~/ai/plans/jellytip-iptv.md). Live TV guide, playback and recordings.
  * Provider credentials never reach the app: streams and logos come through companion links.
  */
 

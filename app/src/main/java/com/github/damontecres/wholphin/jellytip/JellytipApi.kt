@@ -578,7 +578,7 @@ class JellytipApi
 
         /**
          * IPTV: GET (or POST when [body] is set) a companion path with the person's own Jellyfin token, which every
-         * `/v1/iptv/*` route needs (the shared app token alone is refused). Returns (http code, body) for any answer,
+         * `/v1/iptv/...` route needs (the shared app token alone is refused). Returns (http code, body) for any answer,
          * so callers can read error codes (409 holders, 403 disabled); null when the server can't be reached.
          */
         suspend fun userCall(
