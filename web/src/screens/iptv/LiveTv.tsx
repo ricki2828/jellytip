@@ -6,6 +6,7 @@ import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFav
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
 import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
+import { OnNowStrip } from "../../components/OnNowStrip";
 import { go } from "../../lib/router";
 import "./iptv.css";
 
@@ -175,6 +176,7 @@ export function LiveTv() {
           </button>
         </div>
       </div>
+      <OnNowStrip title="On now" />
       {groups && groups.length > 1 && (
         <div className="chips livetv-groups" role="tablist" aria-label="Channel groups">
           {groups.map((g) => (

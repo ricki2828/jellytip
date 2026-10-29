@@ -6,6 +6,7 @@ import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
+import { OnNowStrip } from "../components/OnNowStrip";
 import { usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
 
@@ -103,6 +104,8 @@ export function Home() {
       <Hero item={focused} />
       <div className="rows">
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
+        {/* People with an IPTV provider: live sport right now, only when there are at least two */}
+        <OnNowStrip title="Live sport on now" sportOnly min={2} checkProvider />
         {withSpecials(
           rows
             ? rows.map((r) => serverRowElement(r, { onFocusItem }))
