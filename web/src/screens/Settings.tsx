@@ -92,7 +92,9 @@ function PinForm({ title, onPin, onCancel }: { title: string; onPin: (pin: strin
 function Personal({ prefs }: { prefs: Prefs }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [lb, setLb] = useState(prefs.letterboxd.username ?? "");
-  const [pinFor, setPinFor] = useState<"set" | "exit" | null>(null);
+  const [pinFor, setPinFor] = useState<"set" | "exit" | "raise" | null>(null);
+  // Kids profile on: raising the age is a loosening, so it needs the PIN in the same change (server rule)
+  const [raiseTo, setRaiseTo] = useState<number | null>(null);
   useEffect(() => setLb(prefs.letterboxd.username ?? ""), [prefs.letterboxd.username]);
 
   const save = async (patch: Record<string, unknown>, reloadRows = false) => {
@@ -208,13 +210,44 @@ function Personal({ prefs }: { prefs: Prefs }) {
           <strong>Suitable for</strong>
           <div className="chips">
             {KIDS_AGES.map(([age, label]) => (
-              <button key={age} className={`chip${prefs.kids.maxAge === age ? " on" : ""}`} data-nav aria-pressed={prefs.kids.maxAge === age} disabled={prefs.kids.enabled} onClick={() => void save({ kids: { maxAge: age } }, true)}>
+              <button
+                key={age}
+                className={`chip${prefs.kids.maxAge === age ? " on" : ""}`}
+                data-nav
+                aria-pressed={prefs.kids.maxAge === age}
+                onClick={() => {
+                  if (age === prefs.kids.maxAge) return;
+                  if (prefs.kids.enabled && age > prefs.kids.maxAge) {
+                    setRaiseTo(age);
+                    setPinFor("raise");
+                  } else void save({ kids: { maxAge: age } }, true);
+                }}
+              >
                 {label}
               </button>
             ))}
           </div>
-          {prefs.kids.enabled && <span className="settings-sub">Turn the kids profile off to change this.</span>}
+          {prefs.kids.enabled && <span className="settings-sub">Raising the age needs the PIN.</span>}
         </li>
+        {pinFor === "raise" && raiseTo != null && (
+          <li>
+            <PinForm
+              title={`PIN to allow ${ageLabel(raiseTo)}`}
+              onCancel={() => {
+                setPinFor(null);
+                setRaiseTo(null);
+              }}
+              onPin={async (pin) => {
+                const e = await save({ kids: { maxAge: raiseTo, pin } }, true);
+                if (!e) {
+                  setPinFor(null);
+                  setRaiseTo(null);
+                }
+                return e;
+              }}
+            />
+          </li>
+        )}
         {prefs.kids.pinSet && !prefs.kids.enabled && pinFor === null && (
           <li>
             <button className="settings-item" data-nav onClick={() => setPinFor("set")}>

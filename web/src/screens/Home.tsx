@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
-import { manifest, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
+import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
-import { usePrefs } from "../api/me";
+import { prefsNow, usePrefs } from "../api/me";
+import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 
 const MAX_CAROUSEL_ROWS = 10;
@@ -53,6 +54,7 @@ export function Home() {
   const { available: personal, prefs } = usePrefs();
   const [editing, setEditing] = useState(false);
   const [reload, setReload] = useState(0);
+  const [rowsFailed, setRowsFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -64,9 +66,15 @@ export function Home() {
       setContinue(merged);
       if (merged[0]) setFocused((f) => f ?? merged[0]);
     });
+    setRowsFailed(false);
     serverRows("home")
       .then((r) => {
         if (r?.length) return r;
+        // A 503 (or any failure in a kids profile) must not fall back to the unfiltered carousels
+        if (rowsBlocked("home") || prefsNow()?.kids.enabled) {
+          if (alive) setRowsFailed(true);
+          return null;
+        }
         return manifest().then((m) => {
           if (alive && m) {
             setCarousels(m.carousels.slice(0, MAX_CAROUSEL_ROWS));
@@ -106,7 +114,15 @@ export function Home() {
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
         {/* People with an IPTV provider: live sport right now, only when there are at least two */}
         <OnNowStrip title="Live sport on now" sportOnly min={2} checkProvider />
-        {withSpecials(
+        {rowsFailed && (
+          <RowsError
+            onRetry={() => {
+              dropPersonalCaches();
+              setReload((n) => n + 1);
+            }}
+          />
+        )}
+        {!rowsFailed && withSpecials(
           rows
             ? rows.map((r) => serverRowElement(r, { onFocusItem }))
             : [

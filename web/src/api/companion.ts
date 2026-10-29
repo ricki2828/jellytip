@@ -66,6 +66,10 @@ async function throttled<T>(job: Job, fn: () => Promise<T>): Promise<T | typeof 
   }
 }
 
+// Last HTTP status per path: a 503 on rows / specials means the server couldn't tell who is asking (kids filtering
+// can't be applied), and the page must show its error, never an unfiltered fallback
+const lastStatus = new Map<string, number>();
+
 async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, cancelled: false }, timeoutMs = 8000): Promise<T | null | typeof CANCELLED> {
   const token = getSession()?.token;
   if (!token) return null;
@@ -74,6 +78,7 @@ async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, ca
     if (isNative) {
       try {
         const r = await nativeGetJson<T>(BASE + path, headers, timeoutMs);
+        lastStatus.set(path, r.status);
         return r.status >= 200 && r.status < 300 ? r.data : null;
       } catch {
         return null;
@@ -83,6 +88,7 @@ async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, ca
     const t = setTimeout(() => ctl.abort(), timeoutMs);
     try {
       const res = await fetch(BASE + path, { headers, signal: ctl.signal });
+      lastStatus.set(path, res.status);
       if (!res.ok) return null;
       return (await res.json()) as T;
     } catch {
@@ -556,6 +562,9 @@ const rowsCache = cached<ServerRow[]>(async (key, job) => {
 export function serverRows(page: SpecialsPage): Promise<ServerRow[] | null> {
   return rowsCache.get(`${page}|${today()}`, { priority: "high" });
 }
+
+/** The rows call for this page answered 503: the server couldn't identify the person (show the error + retry). */
+export const rowsBlocked = (page: SpecialsPage) => lastStatus.get(`/v1/home/carousels?rows=1&page=${page}`) === 503;
 
 export interface CollectionPage extends Collection {
   missing: { tmdbId: number; title: string; year?: number | null; posterUrl?: string | null; released?: boolean }[];

@@ -1,11 +1,13 @@
 // Movies / Shows: the companion carousels for this media type (Movies also gets the Letterboxd lists), then a sortable grid.
 import { useEffect, useRef, useState } from "react";
 import { getItems, type Item } from "../api/jellyfin";
-import { manifest, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
+import { dropPersonalCaches, manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { serverRowElement } from "../components/ServerRow";
+import { RowsError } from "../components/RowsError";
+import { prefsNow } from "../api/me";
 import { carouselLoader, LETTERBOXD_PREFIX, letterboxdLoader } from "./Home";
 
 const PAGE = 60;
@@ -34,13 +36,21 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   // Rows v1 from the companion when it has them; null = the Kometa carousels (+ Letterboxd lists) as before
   const [rows, setRows] = useState<ServerRow[] | null>(null);
   const [specials, setSpecials] = useState<Special[]>([]);
+  const [rowsFailed, setRowsFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     setRows(null);
+    setRowsFailed(false);
     setRowsReady(false);
     serverRows(kind === "movie" ? "movies" : "shows")
       .then((r) => {
         if (r?.length) return r;
+        // A 503 (or any failure in a kids profile) must not fall back to the unfiltered carousels
+        if (rowsBlocked(kind === "movie" ? "movies" : "shows") || prefsNow()?.kids.enabled) {
+          if (alive) setRowsFailed(true);
+          return null;
+        }
         return manifest().then((m) => {
           if (alive && m) {
             setCarousels(m.carousels.filter((c) => c.mediaType === kind));
@@ -58,7 +68,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     return () => {
       alive = false;
     };
-  }, [kind]);
+  }, [kind, reload]);
 
   const loadPage = async (start: number, g: number) => {
     setLoading(true);
@@ -117,7 +127,15 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   return (
     <div className="library">
       <h1 className="page-title">{kind === "movie" ? "Movies" : "Shows"}</h1>
-      {withSpecials(
+      {rowsFailed && (
+        <RowsError
+          onRetry={() => {
+            dropPersonalCaches();
+            setReload((n) => n + 1);
+          }}
+        />
+      )}
+      {!rowsFailed && withSpecials(
         rows
           ? rows.map((r, i) => serverRowElement(r, { autoFocusFirst: i === 0 }))
           : [

@@ -2133,3 +2133,14 @@ button.overview.open {
 .livetv .onnow-row {
   margin-bottom: 6px;
 }
+.rows-error {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px var(--pad);
+  color: var(--dim);
+  font-size: 14px;
+}
+.rows-error p {
+  margin: 0;
+}

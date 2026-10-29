@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { search, type Item } from "../api/jellyfin";
 import { clearRecent, recordRecent, searchAll, suggestions, type Suggestions } from "../api/search";
+import { prefsNow } from "../api/me";
 import { filterChips, isEmpty, withoutFilter, type DiscoverHit, type LibHit, type SearchResult } from "../lib/search";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
@@ -198,6 +199,8 @@ export function Search({ initial }: { initial: string }) {
   const [unified, setUnified] = useState<SearchResult | null>(null);
   const [fallback, setFallback] = useState<Item[] | null>(null);
   const [sugg, setSugg] = useState<Suggestions | null>(null);
+  const [blocked, setBlocked] = useState(false);
+  const [retry, setRetry] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const term = q.trim();
 
@@ -216,6 +219,14 @@ export function Search({ initial }: { initial: string }) {
     const t = setTimeout(async () => {
       const r = await searchAll(term, ctl.signal);
       if (ctl.signal.aborted) return;
+      setBlocked(false);
+      // 503 (can't tell who is asking), or any failure in a kids profile: no unfiltered Jellyfin fallback
+      if (r === "blocked" || (!r && prefsNow()?.kids.enabled)) {
+        setUnified(null);
+        setFallback(null);
+        setBlocked(true);
+        return;
+      }
       if (r) {
         setUnified(r);
         setFallback(null);
@@ -224,7 +235,7 @@ export function Search({ initial }: { initial: string }) {
           await new Promise((ok) => setTimeout(ok, 300));
           if (ctl.signal.aborted) return;
           const d = await searchAll(term, ctl.signal, "discover");
-          if (!ctl.signal.aborted && d?.discover.length) setUnified((cur) => (cur === r ? { ...r, discover: d.discover, pending: [] } : cur));
+          if (!ctl.signal.aborted && d && d !== "blocked" && d.discover.length) setUnified((cur) => (cur === r ? { ...r, discover: d.discover, pending: [] } : cur));
         }
         return;
       }
@@ -238,7 +249,7 @@ export function Search({ initial }: { initial: string }) {
       ctl.abort();
       clearTimeout(t);
     };
-  }, [term]);
+  }, [term, retry]);
 
   const pick = (v: string) => {
     setQ(v);
@@ -268,6 +279,14 @@ export function Search({ initial }: { initial: string }) {
         {term.length < 2 && sugg && <Suggest s={sugg} onPick={pick} onClear={() => void clearRecent().then(() => setSugg((s) => s && { ...s, recent: [] }))} />}
         {term.length >= 2 && unified && <Unified r={unified} onChip={pick} />}
         {term.length >= 2 && fallback && <Fallback results={fallback} q={term} />}
+        {term.length >= 2 && blocked && (
+          <div className="rows-error" role="alert">
+            <p>Search isn't available right now.</p>
+            <button className="btn" data-nav onClick={() => setRetry((n) => n + 1)}>
+              Try again
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

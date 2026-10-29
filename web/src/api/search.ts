@@ -11,11 +11,15 @@ const TYPES = "films,shows,people,collections,lists,iptv,discover";
 const RETRY_MS = 5 * 60_000;
 let missingUntil = 0;
 
-/** Grouped results, or null when unified search isn't available (fall back to Jellyfin search). */
-export async function searchAll(q: string, signal?: AbortSignal, types = TYPES): Promise<SearchResult | null> {
+/**
+ * Grouped results; null when unified search isn't available (fall back to Jellyfin search); "blocked" when the server
+ * couldn't identify the person (503) — then nothing unfiltered may be shown.
+ */
+export async function searchAll(q: string, signal?: AbortSignal, types = TYPES): Promise<SearchResult | null | "blocked"> {
   if (Date.now() < missingUntil) return null;
   const a = await call("GET", `v1/search?q=${encodeURIComponent(q)}&limit=8&types=${types}`, undefined, { signal });
   if (a.status === 404) missingUntil = Date.now() + RETRY_MS;
+  if (a.status === 503) return "blocked";
   if (a.status !== 200) return null;
   const r = parseSearch(a.data);
   if (r) {
