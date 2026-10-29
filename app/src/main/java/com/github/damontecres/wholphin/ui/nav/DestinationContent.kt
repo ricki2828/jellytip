@@ -396,6 +396,21 @@ fun DestinationContent(
             JellytipDiscoverDetails(title = destination.title, modifier = modifier)
         }
 
+        Destination.JellytipMe -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.me.JellytipMePage(modifier = modifier)
+        }
+
+        Destination.JellytipTaste -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.me.JellytipTastePage(modifier = modifier)
+        }
+
+        Destination.JellytipHomeEdit -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.me.JellytipHomeEditPage(modifier = modifier)
+        }
+
         Destination.JellytipLiveTv -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)

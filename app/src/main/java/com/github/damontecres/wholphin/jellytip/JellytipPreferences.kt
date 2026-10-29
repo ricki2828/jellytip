@@ -49,6 +49,13 @@ object JellytipPreferences {
             summary = R.string.jellytip_send_debug_report_summary,
         )
 
+    /** Opens the personalisation hub (only when the server has /v1/me). */
+    val Personalise =
+        com.github.damontecres.wholphin.preferences.AppClickablePreference<AppPreferences>(
+            title = R.string.jellytip_personalise,
+            summary = R.string.jellytip_personalise_summary,
+        )
+
     val TrailerAutoplay =
         AppSwitchPreference<AppPreferences>(
             title = R.string.jellytip_trailer_autoplay,
@@ -112,6 +119,10 @@ object JellytipPreferences {
             // Companion API settings are for the administrator only; hidden for everyone else
             conditionalPreferences =
                 listOf(
+                    ConditionalPreferences(
+                        condition = { com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.value },
+                        preferences = listOf<AppPreference<AppPreferences, out Any?>>(Personalise),
+                    ),
                     ConditionalPreferences(
                         condition = { JellytipAdmin.isAdmin },
                         preferences = listOf<AppPreference<AppPreferences, out Any?>>(ApiUrl, ApiToken),

@@ -585,6 +585,9 @@ class JellytipApi
             path: String,
             body: String? = null,
             timeoutMs: Long = 10_000L,
+            /** PATCH / DELETE (personalisation); null = GET, or POST when [body] is set. */
+            method: String? = null,
+            headers: Map<String, String> = emptyMap(),
         ): Pair<Int, String>? =
             withContext(WholphinDispatchers.IO) {
                 try {
@@ -598,7 +601,12 @@ class JellytipApi
                             .header("Authorization", "MediaBrowser Token=\"$token\"")
                             .apply {
                                 if (prefs.jellytipApiToken.isNotBlank()) header("X-Jellytip-Token", prefs.jellytipApiToken)
-                                if (body != null) post(body.toRequestBody("application/json".toMediaType()))
+                                headers.forEach { (k, v) -> header(k, v) }
+                                val rb = body?.toRequestBody("application/json".toMediaType())
+                                when {
+                                    method != null -> this.method(method, rb ?: if (method == "DELETE") null else "{}".toRequestBody("application/json".toMediaType()))
+                                    rb != null -> post(rb)
+                                }
                             }.build()
                     client
                         .newBuilder()

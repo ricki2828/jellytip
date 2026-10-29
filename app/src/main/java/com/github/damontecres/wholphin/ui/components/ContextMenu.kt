@@ -554,6 +554,35 @@ private fun buildContextMenuItems(
                 },
             )
         }
+        // Jellytip personalisation: reactions feed Tonight's Pick / "because you loved" and filter rows (server side)
+        if (com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.value &&
+            item.type in setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE)
+        ) {
+            val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+            val thumb = me.thumbOf(item.id)
+            add(
+                DialogItem(
+                    if (thumb == 1) "Liked · undo" else "I like this",
+                    R.string.fa_heart,
+                    dismissOnClick = true,
+                ) { me.thumb(item.id, if (thumb == 1) 0 else 1) },
+            )
+            add(
+                DialogItem(
+                    if (thumb == -1) "Not for me · undo" else "Not for me",
+                    R.string.fa_eye_slash,
+                    dismissOnClick = true,
+                ) { me.thumb(item.id, if (thumb == -1) 0 else -1) },
+            )
+            val off = me.isNotInterested(item.id)
+            add(
+                DialogItem(
+                    if (off) "Show it in my rows again" else "Not interested (hide from rows)",
+                    R.string.fa_eye_slash,
+                    dismissOnClick = true,
+                ) { me.setNotInterested(item.id, !off) },
+            )
+        }
         if (contextMenu.canDelete) {
             add(
                 DialogItem(

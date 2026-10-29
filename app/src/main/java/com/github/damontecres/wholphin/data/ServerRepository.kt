@@ -125,6 +125,8 @@ class ServerRepository
                 _current.value = currentUser
                 _currentUserDto.value = ServerUserConfig(userDto)
                 JellytipAdmin.set(userDto.policy?.isAdministrator == true)
+                // Jellytip: personalisation prefs follow the person (a server without /v1/me hides the features)
+                com.github.damontecres.wholphin.jellytip.me.JellytipMe.refresh()
                 return@withContext currentUser
             }
 
@@ -201,6 +203,7 @@ class ServerRepository
                 return@withContext if (serverId == null || userId == null) {
                     _current.value = null
                     JellytipAdmin.set(false)
+                    com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
                     null
                 } else {
                     val serverAndUsers = serverDao.getServer(serverId)
@@ -281,6 +284,7 @@ class ServerRepository
                 apiClient.update(accessToken = null)
                 HomeSnapshotStore.clear(context)
                 JellytipAdmin.set(false)
+                com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             }
             withContext(ioDispatcher) {
                 serverDao.deleteUser(user.serverId, user.id)
@@ -296,6 +300,7 @@ class ServerRepository
                 apiClient.update(baseUrl = null, accessToken = null)
                 HomeSnapshotStore.clear(context)
                 JellytipAdmin.set(false)
+                com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             }
             withContext(ioDispatcher) {
                 serverDao.deleteServer(server.id)
@@ -305,6 +310,7 @@ class ServerRepository
         suspend fun switchServerOrUser() {
             HomeSnapshotStore.clear(context)
             JellytipAdmin.set(false)
+            com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             mostRecentServerProvider.clear()
         }
 

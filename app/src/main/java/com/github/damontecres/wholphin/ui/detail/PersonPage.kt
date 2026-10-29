@@ -268,6 +268,7 @@ fun PersonPage(
 
             PersonPageContent(
                 preferences = preferences,
+                personId = person.id,
                 name = name,
                 overview = person.data.overview,
                 imageUrl = imageUrl,
@@ -326,6 +327,8 @@ private const val DISCOVER_ROW = EPISODE_ROW + 1
 fun PersonPageContent(
     preferences: UserPreferences,
     name: String,
+    /** Jellytip: shows Follow when the server has personalisation. */
+    personId: java.util.UUID? = null,
     overview: String?,
     imageUrl: String?,
     birthdate: LocalDate?,
@@ -363,6 +366,7 @@ fun PersonPageContent(
         item {
             PersonHeader(
                 name = name,
+                personId = personId,
                 overview = overview,
                 imageUrl = imageUrl,
                 birthdate = birthdate,
@@ -480,6 +484,7 @@ fun rowTitle(
 @Composable
 fun PersonHeader(
     name: String,
+    personId: java.util.UUID? = null,
     overview: String?,
     imageUrl: String?,
     birthdate: LocalDate?,
@@ -595,14 +600,27 @@ fun PersonHeader(
                 interactionSource = interactionSource,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            ExpandableFaButton(
-                title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                onClick = favoriteOnClick,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-                interactionSource = buttonInteractionSource,
-                modifier = Modifier,
-            )
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ExpandableFaButton(
+                    title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
+                    iconStringRes = R.string.fa_heart,
+                    onClick = favoriteOnClick,
+                    iconColor = if (favorite) Color.Red else Color.Unspecified,
+                    interactionSource = buttonInteractionSource,
+                    modifier = Modifier,
+                )
+                // Jellytip: Follow (followed people get priority in person rows and the spotlight)
+                val meAvailable by com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.collectAsState()
+                if (personId != null && meAvailable) {
+                    val following = com.github.damontecres.wholphin.jellytip.me.JellytipMe.isFollowing(personId)
+                    ExpandableFaButton(
+                        title = if (following) R.string.jellytip_unfollow else R.string.jellytip_follow,
+                        iconStringRes = if (following) R.string.fa_check else R.string.fa_user,
+                        onClick = { com.github.damontecres.wholphin.jellytip.me.JellytipMe.follow(personId, name, !following) },
+                        modifier = Modifier,
+                    )
+                }
+            }
         }
     }
 }

@@ -172,6 +172,16 @@ sealed class Destination(
         val title: DiscoverTitle,
     ) : Destination(false)
 
+    /** Jellytip personalisation: hub (settings that follow the person), taste, Home edit. */
+    @Serializable
+    data object JellytipMe : Destination(false)
+
+    @Serializable
+    data object JellytipTaste : Destination(false)
+
+    @Serializable
+    data object JellytipHomeEdit : Destination(false)
+
     /** Jellytip: the IPTV Live TV guide (sidebar "Live TV"). */
     @Serializable
     data object JellytipLiveTv : Destination(false)

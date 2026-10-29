@@ -334,6 +334,17 @@ fun PreferencesContent(
                                 }
                             }
                             when (pref) {
+                                com.github.damontecres.wholphin.jellytip.JellytipPreferences.Personalise -> {
+                                    ClickPreference(
+                                        title = stringResource(R.string.jellytip_personalise),
+                                        onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipMe, "settings: personalise") },
+                                        onLongClick = {},
+                                        summary = stringResource(R.string.jellytip_personalise_summary),
+                                        interactionSource = interactionSource,
+                                        modifier = focusModifier,
+                                    )
+                                }
+
                                 com.github.damontecres.wholphin.jellytip.JellytipPreferences.SendDebugReport -> {
                                     ClickPreference(
                                         title = stringResource(R.string.jellytip_send_debug_report),

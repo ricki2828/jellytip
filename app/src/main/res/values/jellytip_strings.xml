@@ -2,6 +2,10 @@
 <resources>
     <string name="jellytip_settings">Jellytip</string>
     <string name="jellytip_live_tv" translatable="false">Live TV</string>
+    <string name="jellytip_personalise" translatable="false">Personalise</string>
+    <string name="jellytip_personalise_summary" translatable="false">Your taste, Home rows, follows, kids profile and settings that follow you</string>
+    <string name="jellytip_follow" translatable="false">Follow</string>
+    <string name="jellytip_unfollow" translatable="false">Following</string>
     <string name="jellytip_send_debug_report" translatable="false">Send debug report</string>
     <string name="jellytip_send_debug_report_summary" translatable="false">Recent navigation, keys, focus and player events to the Jellytip server</string>
     <string name="jellytip_api_url">Jellytip API URL</string>
