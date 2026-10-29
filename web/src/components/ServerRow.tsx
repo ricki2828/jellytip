@@ -4,7 +4,29 @@ import { getItems, type Item } from "../api/jellyfin";
 import type { ServerRow } from "../api/companion";
 import { go } from "../lib/router";
 import { FranchiseRow } from "./FranchiseRow";
-import { Row } from "./Row";
+import { Row, RowTitle } from "./Row";
+import { IptvCard, IptvPoster } from "./IptvTile";
+import { useIsPhone } from "../lib/device";
+import type { VodItem } from "../lib/iptvVod";
+
+/** A source "iptv" row: the person's IPTV titles, already in the manifest (no Jellyfin call). */
+function IptvRow({ title, items, poster, autoFocusFirst }: { title: string; items: VodItem[]; poster: boolean; autoFocusFirst?: boolean }) {
+  const phone = useIsPhone();
+  return (
+    <section className={poster ? "row poster-row" : "row"}>
+      <RowTitle title={title} />
+      <div className="row-scroll">
+        {items.map((it, i) =>
+          poster ? (
+            <IptvPoster key={it.id} item={it} width={phone ? 112 : 150} autoFocus={autoFocusFirst && i === 0} />
+          ) : (
+            <IptvCard key={it.id} item={it} autoFocus={autoFocusFirst && i === 0} />
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
 
 // Rows that reach the screen together share one Jellyfin call: each /Items request costs the server ~1 s whatever its
 // size, and a screen of rows fired in parallel took 4-5 s each. Items are kept per id for a couple of minutes (rows
@@ -44,6 +66,7 @@ export function itemsByIds(ids: string[]): Promise<Item[]> {
 window.addEventListener("jellytip-session", () => known.clear());
 
 export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item) => void; autoFocusFirst?: boolean } = {}) {
+  if (r.iptvItems.length && !r.itemIds.length) return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
   const load = () => itemsByIds(r.itemIds);
   const untitled = r.untitled.length ? new Set(r.untitled) : undefined;
   if (r.layout === "franchise" && r.collection)

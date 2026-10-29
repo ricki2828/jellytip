@@ -3,6 +3,7 @@
 import { getSession } from "./jellyfin";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
+import { parseVodDetail, type VodDetail } from "../lib/iptvVod";
 
 export interface IptvError {
   error?: string;
@@ -242,3 +243,12 @@ export function iptvChanged() {
 
 /** Channel logo the page may load: only companion-proxied (relative) paths; raw provider URLs are refused by the CSP. */
 export const logoSrc = (logo?: string | null) => (logo && !/^[a-z][a-z0-9+.-]*:/i.test(logo) && !logo.startsWith("//") ? streamUrl(logo) : null);
+
+// ---------- IPTV films / series ----------
+
+export async function vodItem(id: string): Promise<Answer<VodDetail>> {
+  const a = await iptvGet<unknown>(`v1/iptv/vod/${encodeURIComponent(id)}`);
+  if (a.status !== 200) return a as Answer<VodDetail>;
+  const d = parseVodDetail(a.data);
+  return d ? { status: 200, data: d } : { status: 502, data: { error: "The server sent something unexpected." } as VodDetail & IptvError };
+}

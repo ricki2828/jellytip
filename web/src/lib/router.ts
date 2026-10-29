@@ -27,8 +27,8 @@ function parse(): Route {
       if (!/^\d{1,9}$/.test(seg[1] ?? "")) return { name: "home", params: {}, query };
       return { name: "collection", params: { id: seg[1] }, query };
     case "iptv":
-      // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player
-      return { name: seg[1] === "play" ? "iptvplay" : "iptv", params: {}, query };
+      // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
+      return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };
     case "settings":
     case "livetv":
     case "discover":

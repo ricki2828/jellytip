@@ -1,4 +1,5 @@
 // Rows v1 manifest parsing (pure; tested in web/test/rows.test.ts). Contract: ~/ai/plans/jellytip-10x.md.
+import { parseVodItems, type VodItem } from "./iptvVod.ts";
 
 export type RowLayout = "standard" | "poster" | "franchise";
 
@@ -8,6 +9,9 @@ export interface CollectionPart {
   title: string;
   year?: number | null;
   itemId?: string | null;
+  /** "iptv" when the library lacks it but the person's IPTV has it (then `iptv` holds that copy; see lib/iptvVod). */
+  source?: string;
+  iptv?: unknown;
 }
 
 export interface Collection {
@@ -38,6 +42,8 @@ export interface ServerRow {
   person?: { id: string; name: string; role: string; imageTag?: string | null } | null;
   list?: { slug: string; owner?: string; liked?: boolean } | null;
   collection?: Collection | null;
+  /** source "iptv" rows: the person's IPTV titles (itemIds is empty). */
+  iptvItems: VodItem[];
 }
 
 const ROW_LAYOUTS: RowLayout[] = ["standard", "poster", "franchise"];
@@ -65,7 +71,8 @@ export function parseRows(raw: unknown): ServerRow[] | null {
   const seen = new Set<string>();
   for (const r of raw as (Partial<ServerRow> | null)[]) {
     const itemIds = [...new Set(strings(r?.itemIds))];
-    if (!r || typeof r.id !== "string" || seen.has(r.id) || !r.title || itemIds.length === 0) continue;
+    const iptvItems = parseVodItems((r as { iptvItems?: unknown } | null)?.iptvItems);
+    if (!r || typeof r.id !== "string" || seen.has(r.id) || !r.title || itemIds.length + iptvItems.length === 0) continue;
     seen.add(r.id);
     const collection = parseCollection(r.collection);
     let layout: RowLayout = ROW_LAYOUTS.includes(r.layout as RowLayout) ? (r.layout as RowLayout) : "standard";
@@ -82,6 +89,7 @@ export function parseRows(raw: unknown): ServerRow[] | null {
       person: r.person?.id && r.person.name ? r.person : null,
       list: r.list ?? null,
       collection,
+      iptvItems,
     });
   }
   return out;

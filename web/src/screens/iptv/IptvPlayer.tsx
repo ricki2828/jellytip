@@ -37,7 +37,7 @@ function progressKey(t: PlayTarget): string | null {
   return null;
 }
 
-export function IptvPlayer({ target, title }: { target: PlayTarget; title: string }) {
+export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -50,6 +50,8 @@ export function IptvPlayer({ target, title }: { target: PlayTarget; title: strin
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const isLive = !!target.channel && target.start == null;
+  // Where to start once the media is known: the resume point, then (after a renewed link) where the old one stopped
+  const seekTo = useRef(resume);
 
   const teardown = useCallback(() => {
     hlsRef.current?.destroy();
@@ -90,6 +92,7 @@ export function IptvPlayer({ target, title }: { target: PlayTarget; title: strin
       const what = linkFailure(status, code);
       if (what === "renew" && !renewed.current) {
         renewed.current = true;
+        if (!isLive && videoRef.current && videoRef.current.currentTime > 5) seekTo.current = videoRef.current.currentTime;
         teardown();
         void start();
         return;
@@ -100,7 +103,7 @@ export function IptvPlayer({ target, title }: { target: PlayTarget; title: strin
     },
     // start is defined below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [teardown],
+    [teardown, isLive],
   );
 
   const attach = useCallback(
@@ -233,6 +236,11 @@ export function IptvPlayer({ target, title }: { target: PlayTarget; title: strin
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
+        onLoadedMetadata={(e) => {
+          const at = seekTo.current;
+          seekTo.current = 0;
+          if (at > 0 && !isLive && at < (e.currentTarget.duration || Infinity) - 30) e.currentTarget.currentTime = at;
+        }}
         onError={() => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current)}
       />
       {state.kind === "loading" && <div className="spinner" />}

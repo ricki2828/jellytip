@@ -7,6 +7,8 @@ import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
 import { Card } from "./Card";
 import { useLazyItems } from "./Row";
+import { IptvCard } from "./IptvTile";
+import { iptvPart, type IptvPart } from "../lib/iptvVod";
 import "./FranchiseRow.css";
 
 const CARD_W = 320;
@@ -51,7 +53,29 @@ export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem
   const partNo = new Map(c.partsOrder.filter((p) => p.itemId).map((p) => [p.itemId!, c.partsOrder.indexOf(p) + 1]));
   const open = () => go(`/collection/${c.tmdbId}`);
 
-  if (items && items.length === 0) return null;
+  // Parts the library lacks but the person's IPTV has slot in at their place in the series (dot = via IPTV)
+  const iptv = c.partsOrder.map((p, i) => ({ part: iptvPart(p), n: i + 1 })).filter((x): x is { part: IptvPart; n: number } => !!x.part);
+  const tiles: ({ item: Item } | { part: IptvPart; n: number })[] | null = items
+    ? iptv.length
+      ? (() => {
+          const byId = new Map(items.map((it) => [it.Id, it]));
+          const out: ({ item: Item } | { part: IptvPart; n: number })[] = [];
+          c.partsOrder.forEach((p, i) => {
+            const it = p.itemId ? byId.get(p.itemId) : undefined;
+            if (it) {
+              out.push({ item: it });
+              byId.delete(it.Id);
+            } else {
+              const ip = iptvPart(p);
+              if (ip) out.push({ part: ip, n: i + 1 });
+            }
+          });
+          return [...out, ...[...byId.values()].map((item) => ({ item }))];
+        })()
+      : items.map((item) => ({ item }))
+    : null;
+
+  if (tiles && tiles.length === 0) return null;
   return (
     <section className="row franchise-row" ref={ref}>
       {backdrop && <img className="franchise-backdrop" src={backdrop} alt="" decoding="async" loading="lazy" />}
@@ -73,18 +97,22 @@ export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem
         </span>
       </div>
       <div className="row-scroll">
-        {items
-          ? items.map((it, i) => (
-              <Card
-                key={it.Id}
-                item={it}
-                width={width}
-                onFocusItem={onFocusItem}
-                autoFocus={autoFocusFirst && i === 0}
-                untitled={untitled?.has(it.Id)}
-                tag={partNo.has(it.Id) ? String(partNo.get(it.Id)) : undefined}
-              />
-            ))
+        {tiles
+          ? tiles.map((t, i) =>
+              "part" in t ? (
+                <IptvCard key={t.part.id} item={{ ...t.part, quality: t.part.quality ?? [] }} width={width} tag={String(t.n)} />
+              ) : (
+                <Card
+                  key={t.item.Id}
+                  item={t.item}
+                  width={width}
+                  onFocusItem={onFocusItem}
+                  autoFocus={autoFocusFirst && i === 0}
+                  untitled={untitled?.has(t.item.Id)}
+                  tag={partNo.has(t.item.Id) ? String(partNo.get(t.item.Id)) : undefined}
+                />
+              ),
+            )
           : Array.from({ length: 4 }, (_, i) => <div key={i} className="card card-skeleton" style={{ width, height: Math.round((width * 9) / 16) }} />)}
       </div>
     </section>

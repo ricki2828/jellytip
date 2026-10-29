@@ -14,12 +14,14 @@ import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
 import { Settings } from "./screens/Settings";
 import { parseTarget } from "./lib/iptvPlay";
+import { VOD_ID_RE } from "./lib/iptvVod";
 import { isNative } from "./lib/native";
 import { go, isRestoring } from "./lib/router";
 
 // IPTV screens (and mpegts.js / hls.js behind them) load only when someone opens them
 const IptvSettings = lazy(() => import("./screens/iptv/IptvSettings").then((m) => ({ default: m.IptvSettings })));
 const LiveTv = lazy(() => import("./screens/iptv/LiveTv").then((m) => ({ default: m.LiveTv })));
+const IptvDetails = lazy(() => import("./screens/iptv/IptvDetails").then((m) => ({ default: m.IptvDetails })));
 const IptvPlayer = lazy(() => import("./screens/iptv/IptvPlayer").then((m) => ({ default: m.IptvPlayer })));
 
 export function App() {
@@ -56,7 +58,7 @@ export function App() {
     }
     return (
       <Suspense fallback={null}>
-        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} />
+        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} />
       </Suspense>
     );
   }
@@ -80,6 +82,7 @@ export function App() {
         <Suspense fallback={null}>
           {route.name === "iptv" && <IptvSettings />}
           {route.name === "livetv" && <LiveTv />}
+          {route.name === "iptvitem" && VOD_ID_RE.test(route.query.get("id") ?? "") && <IptvDetails key={route.query.get("id")} id={route.query.get("id")!} />}
         </Suspense>
       </main>
     </>

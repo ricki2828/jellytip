@@ -81,7 +81,9 @@ export function Home() {
   // No Continue Watching: the hero starts on the first carousel's first title
   useEffect(() => {
     if (focused || continueItems === null || continueItems.length) return;
-    const first = rows?.[0] ? itemsByIds(rows[0].itemIds) : carousels[0] ? carouselLoader(carousels[0])() : null;
+    // IPTV rows carry no library items: the hero starts on the first library row
+    const lib = rows?.find((r) => r.itemIds.length);
+    const first = lib ? itemsByIds(lib.itemIds) : carousels[0] ? carouselLoader(carousels[0])() : null;
     first?.then((items) => items[0] && setFocused((f) => f ?? items[0])).catch(() => undefined);
   }, [focused, continueItems, carousels, rows]);
 

@@ -1704,3 +1704,53 @@ button.overview.open {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---------- IPTV titles in the normal pages: one small corner dot, "via IPTV" on details ---------- */
+.iptv-corner-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5cc8e8;
+  box-shadow: 0 0 0 2px rgba(10, 10, 10, 0.7);
+  pointer-events: none;
+}
+.iptv-tile-wrap {
+  position: relative;
+  flex: none;
+  display: block;
+}
+.iptv-tile-wrap > .poster {
+  width: 100%;
+}
+.iptv-card .card-watched {
+  right: 22px;
+}
+.iptv-card .card-title {
+  right: 48px;
+}
+.iptv-quality {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(10, 10, 10, 0.7);
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.iptv-via {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.iptv-via .iptv-corner-dot {
+  position: static;
+  box-shadow: none;
+}

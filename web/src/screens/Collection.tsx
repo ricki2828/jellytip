@@ -5,6 +5,8 @@ import { getItems, type Item } from "../api/jellyfin";
 import { collectionPage, type CollectionPage } from "../api/companion";
 import { Backdrop } from "../components/Backdrop";
 import { PosterCard } from "../components/PosterCard";
+import { IptvPoster } from "../components/IptvTile";
+import { iptvPart } from "../lib/iptvVod";
 import { ProgressBar, progressText, tmdbSized } from "../components/FranchiseRow";
 import { GetItSheet } from "../components/GetItSheet";
 import { useIsPhone } from "../lib/device";
@@ -82,6 +84,8 @@ export function Collection({ tmdbId }: { tmdbId: number }) {
               return (
                 <PosterCard key={p.tmdbId} item={item} width={0} tag={String(n)} untitled={textless.has(item.Id)} onOpen={() => go(`/item/${item.Id}`)} />
               );
+            const ip = iptvPart(p);
+            if (ip) return <IptvPoster key={p.tmdbId} item={{ ...ip, title: ip.title || p.title, year: ip.year ?? p.year }} width={0} tag={String(n)} />;
             const unreleased = miss?.released === false;
             const canGet = c.canRequest && !unreleased;
             const label = `${p.title}${p.year ? ` (${p.year})` : ""} · ${unreleased ? "not out yet" : "not in the library"}`;
