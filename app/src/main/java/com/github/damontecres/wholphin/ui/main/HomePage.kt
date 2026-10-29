@@ -68,6 +68,9 @@ import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialFocus
 import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialRow
 import com.github.damontecres.wholphin.jellytip.specials.jellytipHomeEntries
 import com.github.damontecres.wholphin.jellytip.specials.rememberJellytipSpecials
+import com.github.damontecres.wholphin.jellytip.specials.rememberJellytipRows
+import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRowView
+import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselRows
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -135,6 +138,8 @@ fun HomePage(
     val loading = state.loadingState
     val refreshing = state.refreshState
     val homeRows = state.homeRows
+    val homeSettings = state.settings
+    val rowConfigs = remember(homeSettings) { homeSettings.rows.map { it.config } }
 
     when (val state = loading) {
         is LoadingState.Error -> {
@@ -185,7 +190,8 @@ fun HomePage(
             val onLongClickItem =
                 remember {
                     longClick@{ clickedPosition: RowColumn, item: BaseItem ->
-                        position = clickedPosition
+                        // row -1 = a server-row tile: keep the remembered row position as it is
+                        if (clickedPosition.row >= 0) position = clickedPosition
                         if (JellytipTrailerControl.isPlayingFor(item)) {
                             // Long-press OK always opens details while the hero trailer plays
                             JellytipTrailerControl.stop()
@@ -224,7 +230,7 @@ fun HomePage(
                                         },
                                         onSendMediaInfo = viewModel.serverReportService::sendMediaReportFor,
                                         onDeleteItem = {
-                                            viewModel.deleteItem(position, it)
+                                            viewModel.deleteItem(clickedPosition, it)
                                         },
                                         onChooseVersion = { _, _ ->
                                             // Not supported on this page
@@ -282,6 +288,8 @@ fun HomePage(
                         JellytipHomeHeader(item = focusedItem, showLogo = showLogos)
                     },
                     specialsPage = "home",
+                    rowConfigs = rowConfigs,
+                    onLongClickExtraItem = { item -> onLongClickItem(RowColumn(-1, -1), item) },
                 )
             }
             overviewDialog?.let { info ->
@@ -357,10 +365,14 @@ fun HomePageContent(
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
     heroComposable: (@Composable (focusedItem: BaseItem?, hasFocus: Boolean) -> Unit)? = null,
     extraRows: (LazyListScope.() -> Unit)? = null,
-    /** Jellytip: companion specials for this page (`home`, `movies`, `shows`); null = none. */
+    /** Jellytip: companion page (`home`, `movies`, `shows`) for server rows and specials; null = none. */
     specialsPage: String? = null,
     /** Rows before the first "normal" row (Continue Watching / Next Up); null = detect from the row types. */
     specialsLeadingRows: Int? = null,
+    /** The configs behind [homeRows] (Home): rows the app added from the old manifest are hidden once server rows arrive. */
+    rowConfigs: List<HomeRowConfig>? = null,
+    /** Long press on a server-row tile (context menu); null = open details. */
+    onLongClickExtraItem: ((BaseItem) -> Unit)? = null,
 ) {
     var hasFocus by remember { mutableStateOf(false) }
     val rowFocusedItem =
@@ -371,17 +383,30 @@ fun HomePageContent(
         }
     // Jellytip specials: rows of their own between the normal rows; a focused special tile drives the hero instead
     val specials = specialsPage?.let { rememberJellytipSpecials(it) }
+    // Server rows (rows=1 manifest) replace the old carousel rows; old manifest / unavailable = today's rows
+    val serverRows = specialsPage?.let { rememberJellytipRows(it) }
+    val hiddenRows =
+        remember(serverRows, rowConfigs) {
+            if (serverRows == null || rowConfigs == null) {
+                emptySet()
+            } else {
+                rowConfigs.indices.filter { JellytipCarouselRows.isAppRow(rowConfigs[it], serverRows.carouselIds) }.toSet()
+            }
+        }
+    val leadingRows =
+        specialsLeadingRows
+            ?: rowConfigs?.let { c -> c.indexOfFirst { !JellytipCarouselRows.isLeadingRow(it) }.let { if (it < 0) c.size else it } }
     var specialFocus by remember { mutableStateOf<JellytipSpecialFocus?>(null) }
     var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
     val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val entries =
-        remember(homeRows, specials, specialsLeadingRows) {
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), specialsLeadingRows)
+        remember(homeRows, specials, leadingRows, serverRows, hiddenRows) {
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows)
         }
     val focusedEntry =
         remember(entries, specialFocus?.id, position.row) {
             val sid = specialFocus?.id
-            (if (sid != null) entries.indexOfFirst { it is JellytipHomeEntry.Special && it.special.id == sid } else -1).takeIf { it >= 0 }
+            (if (sid != null) entries.indexOfFirst { it.key == sid } else -1).takeIf { it >= 0 }
                 ?: entries.indexOfFirst { it is JellytipHomeEntry.Row && it.index == position.row }
         }
     val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
@@ -486,9 +511,28 @@ fun HomePageContent(
                                 .animateItem(placementSpec = null)
                                 .graphicsLayer { alpha = rowAlpha }
                                 .padding(bottom = 8.dp)
+                        if (entry is JellytipHomeEntry.Server) {
+                            val id = entry.key
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                JellytipServerRowView(
+                                    row = entry.row,
+                                    onFocusItem = { item, showHeader ->
+                                        specialFocus = JellytipSpecialFocus(id, item, showHeader)
+                                        savedSpecialId = id
+                                    },
+                                    onLongClickItem = onLongClickExtraItem,
+                                    focusModifier =
+                                        Modifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                    modifier = rowModifier,
+                                )
+                            }
+                            return@items
+                        }
                         if (entry is JellytipHomeEntry.Special) {
                             val page = specials ?: return@items
-                            val id = entry.special.id
+                            val id = entry.key
                             CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
                                 JellytipSpecialRow(
                                     special = entry.special,

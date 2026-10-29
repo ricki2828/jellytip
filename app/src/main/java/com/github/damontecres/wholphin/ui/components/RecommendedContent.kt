@@ -92,6 +92,7 @@ class RecommendedViewModel
         private val suggestionService: SuggestionService,
         val serverReportService: ServerReportService,
         private val jellytipCarousels: JellytipCarouselService,
+        private val jellytipRows: com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService,
         @Assisted private val parentId: UUID,
         @Assisted private val suggestionsType: BaseItemKind,
         @Assisted private val recommendedRows: List<RecommendedRow<*>>,
@@ -210,6 +211,8 @@ class RecommendedViewModel
             viewModelScope.launchIO {
                 try {
                     val userId = serverRepository.currentUser?.id ?: return@launchIO
+                    // The companion's server rows (rows=1) replace these carousels on the page when it has them
+                    jellytipSpecialsPage?.let { page -> if (jellytipRows.load(page) != null) return@launchIO }
                     val loaded =
                         jellytipCarousels.libraryRows(userId, mediaType).mapNotNull { carousel ->
                             try {

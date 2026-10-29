@@ -41,6 +41,8 @@ class JellytipHomeViewModel
         @param:AuthOkHttpClient val httpClient: OkHttpClient,
         /** Home "specials" (Trailer Break, Top 10, ...); a singleton so the day's answer survives leaving Home. */
         val specials: JellytipSpecialsService,
+        /** Server-built rows (rows=1 manifest) and franchise pages. */
+        val rows: com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService,
         val navigationManager: NavigationManager,
     ) : ViewModel() {
         val settings: Flow<JellytipSettings> =

@@ -176,6 +176,15 @@ object JellytipCarouselRows {
 
     private fun HomeRowConfig.isLetterboxd(): Boolean = this is HomeRowConfig.GetItems && name.startsWith(LETTERBOXD_PREFIX)
 
+    /** A row this app added from the old manifest (a Kometa carousel in [carouselIds], or a Letterboxd list). */
+    fun isAppRow(
+        config: HomeRowConfig,
+        carouselIds: Set<UUID>,
+    ): Boolean = config.carouselParent()?.let { it in carouselIds } == true || config.isLetterboxd()
+
+    /** Continue Watching / Next Up: stays above the server rows. */
+    fun isLeadingRow(config: HomeRowConfig): Boolean = config.isLeading()
+
     private fun HomeRowConfig.isLeading(): Boolean =
         this is HomeRowConfig.ContinueWatching ||
             this is HomeRowConfig.NextUp ||
