@@ -51,6 +51,7 @@ import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipReviews
@@ -196,6 +197,15 @@ fun MovieDetails(
                         ),
                     )
                 },
+                // Opened from a Home double feature: "Play both" plays this film, then the other one
+                onPlayBoth =
+                    JellytipDoubleBill.nextAfter(movie.id)?.let { next ->
+                        {
+                            viewModel.navigateTo(
+                                Destination.Playback(movie.id, 0L, jellytipThenItemId = next.toString()),
+                            )
+                        }
+                    },
                 overviewOnClick = {
                     overviewDialog =
                         ItemDetailsDialogInfo(movie)
@@ -331,6 +341,7 @@ fun MovieDetailsContent(
     onConfirmDelete: () -> Unit,
     onChooseVersion: (MediaSourceInfo) -> Unit,
     modifier: Modifier = Modifier,
+    onPlayBoth: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -414,6 +425,14 @@ fun MovieDetailsContent(
                                     JellytipButton(stringResource(R.string.restart), {
                                         position = HEADER_ROW
                                         playOnClick.invoke(Duration.ZERO)
+                                    }),
+                                )
+                            }
+                            if (onPlayBoth != null) {
+                                add(
+                                    JellytipButton("Play both", {
+                                        position = HEADER_ROW
+                                        onPlayBoth()
                                     }),
                                 )
                             }

@@ -92,6 +92,8 @@ sealed class Destination(
         val forceTranscoding: Boolean = false,
         val backend: PlayerBackend? = null,
         val shuffle: Boolean = false,
+        /** Jellytip "Play both" (double feature): item id to queue right after this one. */
+        val jellytipThenItemId: String? = null,
     ) : Destination(true) {
         constructor(item: BaseItem) : this(item.id, item.resumeMs)
     }

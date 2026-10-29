@@ -419,6 +419,30 @@ class PlaybackViewModel
                     }
                 }
             }
+            (destination as? Destination.Playback)?.jellytipThenItemId?.let { queueJellytipNext(it, playlistItem) }
+        }
+
+        /** Jellytip "Play both": queue [nextId] straight after [current] so it plays when the first film ends. */
+        private suspend fun queueJellytipNext(
+            nextId: String,
+            current: PlaylistItem,
+        ) {
+            try {
+                val next = PlaylistItem.Media(BaseItem(api.userLibraryApi.getItem(UUID.fromString(nextId)).content, false))
+                _state.update { s ->
+                    val items = s.playlist.items
+                    val at = items.indexOfFirst { it.id == current.id }
+                    if (at < 0) {
+                        // A single film has no queue of its own: [current, next], current playing
+                        val intros = items.takeWhile { it is PlaylistItem.Intro }
+                        s.copy(playlist = Playlist(intros + current + next))
+                    } else {
+                        s.copy(playlist = Playlist(items.take(at + 1) + next + items.drop(at + 1)))
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Play both: could not queue %s", nextId)
+            }
         }
 
         internal fun updateCurrentPlayback(block: (CurrentPlayback?) -> CurrentPlayback?) {
