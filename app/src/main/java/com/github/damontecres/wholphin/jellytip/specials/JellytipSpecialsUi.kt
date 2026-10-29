@@ -625,7 +625,7 @@ private fun BecauseLovedRow(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Around the house (admins only; the server sends it only to them): 16:9 tiles + who did what
+// What friends are watching (admins only; the server sends it only to them): 16:9 tiles + who did what
 
 @Composable
 private fun AroundHouseRow(

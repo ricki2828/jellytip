@@ -157,6 +157,7 @@ object JellytipSpecialsParser {
 
     fun parseAnswer(json: String): JellytipSpecialsAnswer {
         val root = JSONObject(json)
+        com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(root.optJSONObject("logoStyles"))
         val arr = root.optJSONArray("specials") ?: return JellytipSpecialsAnswer(date(json), emptyList(), emptySet(), emptyMap())
         val untitled = mutableSetOf<UUID>()
         val heroIndexes = mutableMapOf<UUID, Int>()
@@ -166,6 +167,7 @@ object JellytipSpecialsParser {
                 try {
                     special(o)?.also { sp ->
                         untitled += o.uuids("untitled")
+                        com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(o.optJSONObject("logoStyles"))
                         val hero = if (o.isNull("heroIndex")) null else o.optInt("heroIndex", -1).takeIf { it >= 0 }
                         when (sp) {
                             is JellytipSpecial.TrailerBreak -> hero?.let { heroIndexes[sp.itemId] = it }
@@ -238,7 +240,7 @@ object JellytipSpecialsParser {
             "top10" -> {
                 val ranked = o.uuids("itemIds")
                 if (ranked.isEmpty()) return null
-                JellytipSpecial.Top10(id, position, title, o.optString("variant", "household"), ranked.take(10))
+                JellytipSpecial.Top10(id, position, title.ifBlank { "Top 10 on Jellytip this month" }, o.optString("variant", "household"), ranked.take(10))
             }
 
             "double_feature" -> {
@@ -278,7 +280,7 @@ object JellytipSpecialsParser {
                         )
                     }
                 if (entries.isEmpty()) return null
-                JellytipSpecial.AroundHouse(id, position, title, entries)
+                JellytipSpecial.AroundHouse(id, position, title.ifBlank { "What friends are watching" }, entries)
             }
 
             "closet_picks" -> {
