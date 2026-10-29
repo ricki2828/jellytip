@@ -1,8 +1,14 @@
 # Companion patch: prepared phone downloads
 
 `downloads.py` is a drop-in module for the Jellytip companion API (`~/jellytip-api/jellytip_api/downloads.py`).
-It is **not applied yet** (server.py was being edited by someone else); these are the changes to make.
+**Applied on palawan 29-Oct-2026** with `patch_server.py` (backups: `server.py.bak-downloads`,
+`~/.apps/nginx/proxy.d/jellytip-api.conf.bak-downloads`). server.py itself is not in git; `patch_server.py` is the exact change.
 Tests: `python3 -m unittest web/server/test_downloads.py` (stdlib, Jellyfin stubbed).
+
+Verified end to end through nginx on 29-Oct (Scrubs "My Halloween", 21 min HEVC 1080p MKV → 720p): prepared in ~80 s
+(Jellyfin's ffmpeg reniced to 19 while it ran), 230 MB H.264/AAC stereo MP4 with moov before mdat, Range 206 for the
+first and last MB (bytes match the file), 416 past the end, 401 without a token, 404 for an unknown item, 400 for a bad
+quality; /v1/health and /v1/items/{id}/reviews unaffected.
 
 ## What it does
 - `POST /v1/downloads/prepare {itemId, quality: "720"|"1080"}`: queues a server-side transcode of the item to a phone
@@ -12,8 +18,10 @@ Tests: `python3 -m unittest web/server/test_downloads.py` (stdlib, Jellyfin stub
   `+faststart` remux.
 - `GET /v1/downloads/jobs/{jobId}` → `{jobId, state: queued|running|ready|failed, progress 0..1, bytes, fileUrl?}`.
 - `GET /v1/downloads/files/{jobId}`: the MP4 with `Range` support (206/416), so Android's DownloadManager can resume.
-- Housekeeping: files unused for 7 days are deleted, and the folder is held under 60 GB, oldest first.
-  The seedbox quota is the real limit; tune `MAX_BYTES` in the module.
+- Housekeeping: files unused for 7 days are deleted, and the folder is held under 20 GB, oldest first. New jobs are
+  refused (507) when the seedbox quota has less than 40 GB left; the app then falls back to a live transcode.
+- CPU: one job at a time; the module finds Jellyfin's ffmpeg for the job's source file and renices it to 19, and the
+  faststart remux runs under `nice -n 19`.
 
 The app sends the user's Jellyfin token (`Authorization: MediaBrowser Token="…"`) on all three, like the other routes,
 so `route()`'s existing Jellyfin-token check covers auth. No new secrets.
@@ -32,7 +40,9 @@ so `route()`'s existing Jellyfin-token check covers auth. No new secrets.
    DL_JOB_RE = re.compile(r"^/v1/downloads/jobs/([0-9a-f]{16})$")
    DL_FILE_RE = re.compile(r"^/v1/downloads/files/([0-9a-f]{16})$")
    ```
-3. In `route_post`, before the final 404. Check that the caller can see the item with their own token, then queue:
+3. In `route_post`, before the final 404: `prepare_download()` (see `patch_server.py`). It checks the item with the
+   caller's own token via `/Items?ids={id}` (their library access; `/Items/{id}` needs a user and 400s for API keys),
+   reads Path/RunTimeTicks with the admin key, then queues. Earlier draft of the same idea:
    ```python
    if path == "/v1/downloads/prepare":
        iid = str(body.get("itemId") or "").replace("-", "").lower()

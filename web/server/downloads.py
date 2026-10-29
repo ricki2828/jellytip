@@ -26,12 +26,18 @@ ABR = 160_000
 JOB_RE = re.compile(r"^[0-9a-f]{16}$")
 ITEM_RE = re.compile(r"^[0-9a-f]{32}$")
 TTL_DAYS = 7
-MAX_BYTES = 60 * 10**9
+MAX_BYTES = 20 * 10**9  # the seedbox quota is tight (~150 GB free on 29-Oct)
+MIN_FREE_GB = 40  # refuse new jobs below this much quota headroom (same spirit as the Get-it block at 30 GB)
+NICE = 19
 MAX_QUEUED = 30
 CHUNK = 1 << 20
 
 
 class Busy(Exception):
+    pass
+
+
+class LowStorage(Exception):
     pass
 
 
@@ -55,13 +61,15 @@ def parse_range(header, size):
 
 
 class Downloads:
-    def __init__(self, jf_url, jf_key, root, ffmpeg=None, fetch=None, clock=time.time):
+    def __init__(self, jf_url, jf_key, root, ffmpeg=None, fetch=None, clock=time.time, free_gb=None, proc_root="/proc"):
         self.jf_url, self.jf_key = (jf_url or "").rstrip("/"), jf_key
         self.root = root
         os.makedirs(root, exist_ok=True)
         self.ffmpeg = ffmpeg if ffmpeg is not None else shutil.which("ffmpeg")
         self.fetch = fetch or self._fetch
         self.clock = clock
+        self.free_gb = free_gb  # callable -> GB of quota left, or None to skip the check
+        self.proc_root = proc_root
         self.lock = threading.Lock()
         self.jobs = {}  # id -> dict(state, item, quality, progress, bytes, error, expected)
         self.queue = []
@@ -74,7 +82,7 @@ class Downloads:
 
     # ---------- public ----------
 
-    def prepare(self, item_id, quality, runtime_ticks=None):
+    def prepare(self, item_id, quality, runtime_ticks=None, source_path=None):
         """Start (or join) the job for this item+quality. Returns (http_status, body)."""
         item_id = (item_id or "").replace("-", "").lower()
         if not ITEM_RE.fullmatch(item_id) or quality not in QUALITIES:
@@ -88,9 +96,17 @@ class Downloads:
                 return (200 if job["state"] == "ready" else 202), self._view(jid)
             if len(self.queue) >= MAX_QUEUED:
                 raise Busy()
+            if self.free_gb is not None:
+                try:
+                    free = self.free_gb()
+                except Exception:  # noqa: BLE001: quota unknown: don't block on it
+                    free = None
+                if free is not None and free < MIN_FREE_GB:
+                    raise LowStorage()
             secs = (runtime_ticks or 0) / 10_000_000
             expected = int((QUALITIES[quality]["vbr"] + ABR) * secs / 8) if secs else None
-            self.jobs[jid] = {"state": "queued", "item": item_id, "quality": quality, "progress": 0.0, "bytes": 0, "expected": expected}
+            self.jobs[jid] = {"state": "queued", "item": item_id, "quality": quality, "progress": 0.0, "bytes": 0, "expected": expected,
+                              "source": source_path}
             self.queue.append(jid)
             if not (self.worker and self.worker.is_alive()):
                 self.worker = threading.Thread(target=self._run, daemon=True)
@@ -163,9 +179,40 @@ class Downloads:
         req = urllib.request.Request(url, headers={"Authorization": f'MediaBrowser Token="{self.jf_key}"'})
         return urllib.request.urlopen(req, timeout=120)
 
+    def _renice_transcoder(self, source_path, stop):
+        """Jellyfin runs the transcode (same user): find its ffmpeg reading this source and drop it to nice 19, so a
+        prepared download never competes with someone watching."""
+        while not stop.wait(3):
+            try:
+                pids = [p for p in os.listdir(self.proc_root) if p.isdigit()]
+            except OSError:
+                return
+            for pid in pids:
+                try:
+                    with open(os.path.join(self.proc_root, pid, "comm")) as f:
+                        if f.read().strip() != "ffmpeg":
+                            continue
+                    with open(os.path.join(self.proc_root, pid, "cmdline"), "rb") as f:
+                        if source_path.encode() not in f.read():
+                            continue
+                    if os.getpriority(os.PRIO_PROCESS, int(pid)) < NICE:
+                        os.setpriority(os.PRIO_PROCESS, int(pid), NICE)
+                except (OSError, ValueError):
+                    continue
+
     def _prepare_one(self, jid, job):
         part = os.path.join(self.root, f"{jid}.part")
         final = os.path.join(self.root, f"{jid}.mp4")
+        stop = threading.Event()
+        if job.get("source"):
+            threading.Thread(target=self._renice_transcoder, args=(job["source"], stop), daemon=True).start()
+        try:
+            self._transfer(job, part)
+        finally:
+            stop.set()
+        self._finish(part, final)
+
+    def _transfer(self, job, part):
         with self.fetch(self._transcode_url(job["item"], job["quality"])) as r, open(part, "wb") as f:
             while True:
                 buf = r.read(CHUNK)
@@ -176,13 +223,15 @@ class Downloads:
                     job["bytes"] += len(buf)
                     if job.get("expected"):
                         job["progress"] = min(0.98, job["bytes"] / job["expected"])
+
+    def _finish(self, part, final):
         if os.path.getsize(part) < 1_000_000:
             os.remove(part)
             raise RuntimeError("transcode output too small")
         if self.ffmpeg:
             # Jellyfin streams fragmented MP4; a faststart remux gives players a proper index (quick seeking)
             fixed = part + ".mp4"
-            p = subprocess.run([self.ffmpeg, "-v", "error", "-y", "-i", part, "-c", "copy", "-movflags", "+faststart", fixed],
+            p = subprocess.run(["nice", "-n", str(NICE), self.ffmpeg, "-v", "error", "-y", "-i", part, "-c", "copy", "-movflags", "+faststart", fixed],
                                capture_output=True, timeout=3600)
             if p.returncode == 0 and os.path.getsize(fixed) > 1_000_000:
                 os.replace(fixed, part)

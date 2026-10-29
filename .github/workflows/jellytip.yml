@@ -5,6 +5,10 @@ on:
     branches:
       - jellytip
       - jellytip-*
+    # The web/phone client lives in web/ with its own workflow (jellytip-phone.yml). A push that ONLY touches web/
+    # skips the TV build; any push that also changes the TV app still builds.
+    paths-ignore:
+      - 'web/**'
   workflow_dispatch:
 
 defaults:

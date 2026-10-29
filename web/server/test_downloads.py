@@ -62,6 +62,11 @@ class DownloadsTest(unittest.TestCase):
         self.assertEqual(self.d.file(jid)[0], 200)
         self.assertEqual(dl.parse_range("bytes=-500", 1000), (500, 999))
 
+    def test_low_storage_refused(self):
+        d = dl.Downloads("http://jf/jellyfin", "KEY", tempfile.mkdtemp(), ffmpeg="", fetch=lambda u: Stub(b""), free_gb=lambda: 12.0)
+        with self.assertRaises(dl.LowStorage):
+            d.prepare("d" * 32, "720")
+
     def test_restart_keeps_ready_files(self):
         _, body = self.d.prepare("c" * 32, "720")
         self.wait(body["jobId"])
