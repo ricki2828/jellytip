@@ -13,7 +13,7 @@ import {
   TICKS_PER_SECOND,
   type Item,
 } from "../api/jellyfin";
-import { backdropInfo, episodeArtFor, extras, type Extras } from "../api/companion";
+import { backdropInfo, episodeArtFor, extras, peekBackdropInfo, type Extras } from "../api/companion";
 import { trailerStreamUrl } from "../api/playback";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
@@ -34,6 +34,9 @@ function fmtClock(ticks: number) {
   const m = Math.floor((s % 3600) / 60);
   return h ? `${h}h ${m}m` : `${m}m`;
 }
+
+/** How long the details page waits (dark) for the companion's backdrop ranking before choosing without it. */
+const RANK_WAIT_MS = 500;
 
 export function Details({ id }: { id: string }) {
   const [item, setItem] = useState<Item | null>(null);
@@ -78,11 +81,23 @@ export function Details({ id }: { id: string }) {
           return;
         }
         setItem(it);
-        const quick = setTimeout(() => alive && setPick(heroPick(it, true)), 1200);
-        backdropInfo(heroItemId(it), { priority: "high" }).then(() => {
-          clearTimeout(quick);
-          if (alive) setPick(heroPick(it, true));
-        });
+        // One backdrop, never swapped: the ranking already cached by the hero / tiles is used at once; otherwise the
+        // page stays dark until it arrives (at most RANK_WAIT_MS), and an answer after that is not applied
+        const rankedId = heroItemId(it);
+        if (peekBackdropInfo(rankedId)) setPick(heroPick(it, true));
+        else {
+          let settled = false;
+          const settle = () => {
+            if (settled || !alive) return;
+            settled = true;
+            setPick(heroPick(it, true));
+          };
+          const quick = setTimeout(settle, RANK_WAIT_MS);
+          backdropInfo(rankedId, { priority: "high" }).then(() => {
+            clearTimeout(quick);
+            settle();
+          });
+        }
         const kind = it.Type === "Movie" ? "movie" : it.Type === "Series" ? "series" : null;
         if (kind) extras(it.Id, kind).then((e) => alive && setExt(e));
         const trailerOf = it.Type === "Episode" ? it.SeriesId : it.Id;
