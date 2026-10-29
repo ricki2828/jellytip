@@ -197,7 +197,7 @@ class JellytipDiscoverService
         suspend fun refreshStatuses(titles: Collection<DiscoverTitle>) {
             if (titles.isEmpty()) return
             val ids = titles.map { it.key }.distinct().take(MAX_STATUS_IDS).joinToString(",")
-            val json = api.getJson("/v1/request/status?tmdbIds=$ids") ?: return
+            val json = api.getJson("/v1/request/status?tmdbIds=$ids", asUser = true) ?: return
             try {
                 val fresh = JellytipDiscoverParser.statuses(json)
                 val stale = ids.split(",").toSet()

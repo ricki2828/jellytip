@@ -57,7 +57,7 @@ object JellytipSizes {
     suspend fun get(): Map<String, Long> {
         val now = System.currentTimeMillis()
         if (sizes.isNotEmpty() && now - fetchedAt < TTL_MS) return sizes
-        val body = JellytipApi.shared?.getJson("/v1/library/sizes", TIMEOUT_MS)
+        val body = JellytipApi.shared?.getJson("/v1/library/sizes", TIMEOUT_MS, asUser = true)
         if (body == null) {
             Timber.w("Jellytip sizes unavailable")
             return sizes
