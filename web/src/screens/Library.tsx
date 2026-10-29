@@ -1,7 +1,8 @@
 // Movies / Shows: the companion carousels for this media type (Movies also gets the Letterboxd lists), then a sortable grid.
 import { useEffect, useRef, useState } from "react";
 import { getItems, type Item } from "../api/jellyfin";
-import { manifest, type Carousel, type LetterboxdRow } from "../api/companion";
+import { manifest, specials as getSpecials, type Carousel, type LetterboxdRow, type Special } from "../api/companion";
+import { withSpecials } from "../components/specials/Specials";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { carouselLoader, LETTERBOXD_PREFIX, letterboxdLoader } from "./Home";
@@ -28,12 +29,21 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   const sentinel = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
 
+  const [rowsReady, setRowsReady] = useState(false);
+  const [specials, setSpecials] = useState<Special[]>([]);
   useEffect(() => {
+    let alive = true;
     manifest().then((m) => {
+      if (!alive) return;
+      setRowsReady(true);
       if (!m) return;
       setCarousels(m.carousels.filter((c) => c.mediaType === kind));
       setLists(kind === "movie" ? m.letterboxd : []);
     });
+    getSpecials(kind === "movie" ? "movies" : "shows").then((s) => alive && setSpecials(s));
+    return () => {
+      alive = false;
+    };
   }, [kind]);
 
   const loadPage = async (start: number, g: number) => {
@@ -93,12 +103,13 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   return (
     <div className="library">
       <h1 className="page-title">{kind === "movie" ? "Movies" : "Shows"}</h1>
-      {carousels.map((c, i) => (
-        <Row key={c.id} title={c.title} load={carouselLoader(c)} autoFocusFirst={i === 0} />
-      ))}
-      {lists.map((l) => (
-        <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} />
-      ))}
+      {withSpecials(
+        [
+          ...carousels.map((c, i) => <Row key={c.id} title={c.title} load={carouselLoader(c)} autoFocusFirst={i === 0} />),
+          ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} />),
+        ],
+        rowsReady ? specials : [],
+      )}
       <section className="grid-section">
         <div className="grid-head">
           <h2 className="row-title">

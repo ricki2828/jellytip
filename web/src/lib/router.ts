@@ -17,6 +17,7 @@ function parse(): Route {
   switch (seg[0]) {
     case "item":
     case "play":
+    case "person":
       // Ids go into API paths: anything but a Jellyfin id falls back to Home
       if (!ID_RE.test(seg[1] ?? "")) return { name: "home", params: {}, query };
       return { name: seg[0], params: { id: seg[1].toLowerCase() }, query };

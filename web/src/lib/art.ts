@@ -30,6 +30,8 @@ export function resolveBackdropIndex(currentTags: string[], itemId: string, inde
 }
 
 const isThumbGood = (id: string) => peekBackdropInfo(id)?.thumbGood ?? true;
+/** The companion checked the Thumb and found no title in it (unknown = titled, as before). */
+const isThumbUntitled = (id: string) => peekBackdropInfo(id)?.thumbTitled === false;
 
 function isEpisodeStillUsable(item: Item): boolean {
   const map = item.SeriesId ? peekEpisodeArt(item.SeriesId) : undefined;
@@ -73,20 +75,25 @@ export const TILE_H = 297;
  * Fallback chain (TV rules first, then never blank):
  * Thumb (title baked in) → still/backdrop + clearlogo (or title text) → poster letterboxed on a blurred backdrop/poster
  * → clearlogo on dark → title text on dark. Episodes: own still + series logo → series Thumb → series backdrop.
+ * A Thumb known to have no title in it (companion thumbTitled=false, or `untitled` from a specials payload) gets the
+ * title text drawn over it.
  */
-export function cardLayers(item: Item): CardLayer[] {
+export function cardLayers(item: Item, opts?: { untitled?: boolean }): CardLayer[] {
   const w = TILE_W;
   const h = TILE_H;
   const tags = item.ImageTags ?? {};
   const logo = (id?: string, tag?: string) => (id && tag ? imageUrl(id, "Logo", { tag, maxWidth: 400, maxHeight: 160 }) : null);
   const fill = (id: string, type: string, tag?: string, index?: number) => imageUrl(id, type, { tag, index, fillWidth: w, fillHeight: h, quality: 85 });
   const out: CardLayer[] = [];
+  // Untitled Thumb: an "image" layer with no logo, so the tile draws the title text over it (the TV look)
+  const thumb = (id: string, tag: string): CardLayer =>
+    ({ kind: opts?.untitled || isThumbUntitled(id) ? "image" : "titled", url: fill(id, "Thumb", tag), logoUrl: null });
 
   if (item.Type === "Episode" && item.SeriesId) {
     const seriesLogo = logo(item.ParentLogoItemId ?? item.SeriesId, item.ParentLogoImageTag);
     const thumbId = item.ParentThumbItemId ?? item.SeriesId;
     if (tags.Primary && isEpisodeStillUsable(item)) out.push({ kind: "image", url: fill(item.Id, "Primary", tags.Primary), logoUrl: seriesLogo });
-    if (item.ParentThumbImageTag && isThumbGood(thumbId)) out.push({ kind: "titled", url: fill(thumbId, "Thumb", item.ParentThumbImageTag), logoUrl: null });
+    if (item.ParentThumbImageTag && isThumbGood(thumbId)) out.push(thumb(thumbId, item.ParentThumbImageTag));
     const bt = item.ParentBackdropImageTags ?? [];
     const bid = item.ParentBackdropItemId ?? item.SeriesId;
     if (bt.length) {
@@ -101,8 +108,8 @@ export function cardLayers(item: Item): CardLayer[] {
 
   const ownLogo = tags.Logo ? logo(item.Id, tags.Logo) : item.ParentLogoImageTag ? logo(item.ParentLogoItemId ?? item.SeriesId, item.ParentLogoImageTag) : null;
   if (item.Type === "Season" && item.SeriesId && item.ParentThumbImageTag)
-    out.push({ kind: "titled", url: fill(item.ParentThumbItemId ?? item.SeriesId, "Thumb", item.ParentThumbImageTag), logoUrl: null });
-  if (tags.Thumb && isThumbGood(item.Id)) out.push({ kind: "titled", url: fill(item.Id, "Thumb", tags.Thumb), logoUrl: null });
+    out.push(thumb(item.ParentThumbItemId ?? item.SeriesId, item.ParentThumbImageTag));
+  if (tags.Thumb && isThumbGood(item.Id)) out.push(thumb(item.Id, tags.Thumb));
   const bt = item.BackdropImageTags ?? [];
   const idx = bt.length ? resolveBackdropIndex(bt, item.Id, bestBackdropIndex(item.Id)) : -1;
   const backdrop = idx >= 0 ? fill(item.Id, "Backdrop", bt[idx], idx) : null;
@@ -112,7 +119,7 @@ export function cardLayers(item: Item): CardLayer[] {
     out.push({ kind: "poster", url: poster, logoUrl: null, blurUrl: backdrop ?? poster });
   }
   // A Thumb the companion scored as poor is still better than no picture at all
-  if (tags.Thumb && !isThumbGood(item.Id)) out.push({ kind: "titled", url: fill(item.Id, "Thumb", tags.Thumb), logoUrl: null });
+  if (tags.Thumb && !isThumbGood(item.Id)) out.push(thumb(item.Id, tags.Thumb));
   if (ownLogo) out.push({ kind: "logo", url: null, logoUrl: ownLogo });
   out.push({ kind: "text", url: null, logoUrl: null });
   return out;

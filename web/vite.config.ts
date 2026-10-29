@@ -13,7 +13,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://image.tmdb.org", // closet picks not in the library carry TMDB posters
   "media-src 'self' blob:",
   "font-src 'self'",
   "connect-src 'self'",

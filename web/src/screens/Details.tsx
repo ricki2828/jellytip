@@ -49,6 +49,9 @@ export function Details({ id }: { id: string }) {
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const phone = useIsPhone();
+  // Double feature (from the specials row): "Play both" plays this one, then the pair
+  const pairParam = new URLSearchParams(location.hash.split("?")[1] ?? "").get("pair") ?? "";
+  const pairId = /^[0-9a-f]{32}$/i.test(pairParam) ? pairParam : null;
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -201,6 +204,11 @@ export function Details({ id }: { id: string }) {
             ) : (
               <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${item.Id}`)}>
                 {resumeTicks > 0 ? `Resume ${fmtClock(resumeTicks)}` : "Play"}
+              </button>
+            )}
+            {pairId && item.Type === "Movie" && (
+              <button className="btn" data-nav onClick={() => go(`/play/${item.Id}?then=${pairId}`)}>
+                Play both
               </button>
             )}
             {item.Type !== "Series" && resumeTicks > 0 && (

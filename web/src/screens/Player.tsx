@@ -57,7 +57,8 @@ function clock(s: number) {
 
 const subLabel = (s: MediaStream) => s.DisplayTitle || [s.Language, s.Codec].filter(Boolean).join(" ") || `Track ${s.Index}`;
 
-export function Player({ id, startParam }: { id: string; startParam: string | null }) {
+/** @param thenId double feature: play this item when the first one ends (instead of the next episode) */
+export function Player({ id, startParam, thenId }: { id: string; startParam: string | null; thenId?: string | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const planRef = useRef<PlayPlan | null>(null);
@@ -234,6 +235,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     fallbackDone.current = false;
     setError(null);
     setNext(null);
+    if (thenId && /^[0-9a-f]{32}$/i.test(thenId)) getItem(thenId).then((t) => setNext(t), () => undefined);
     setCues([]);
     setBuffering(true);
     localRef.current = null;
@@ -268,7 +270,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
             episodes(it.SeriesId)
               .then((all) => {
                 const i = all.findIndex((e) => e.Id === it.Id);
-                if (alive) setNext(i >= 0 ? all[i + 1] ?? null : null);
+                if (alive && !thenId) setNext(i >= 0 ? all[i + 1] ?? null : null);
               })
               .catch(() => undefined);
           }
@@ -290,7 +292,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
         if (it.Type === "Episode" && it.SeriesId) {
           episodes(it.SeriesId).then((all) => {
             const i = all.findIndex((e) => e.Id === it.Id);
-            if (alive) setNext(i >= 0 ? all[i + 1] ?? null : null);
+            if (alive && !thenId) setNext(i >= 0 ? all[i + 1] ?? null : null);
           });
         }
       } catch (e) {
@@ -610,7 +612,7 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
 
       {next && remaining > 0 && remaining < NEXT_UP_SECONDS && (
         <button className="btn primary next-up" data-nav onClick={playNext}>
-          Next episode · E{next.IndexNumber} {next.Name}
+          {thenId ? `Up next · ${next.Name}` : `Next episode · E${next.IndexNumber} ${next.Name}`}
         </button>
       )}
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
-import { manifest, type Carousel, type LetterboxdRow } from "../api/companion";
+import { manifest, specials as getSpecials, type Carousel, type LetterboxdRow, type Special } from "../api/companion";
+import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
 
@@ -38,6 +39,9 @@ export function Home() {
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [lists, setLists] = useState<LetterboxdRow[]>([]);
   const [focused, setFocused] = useState<Item | null>(null);
+  // Specials wait for the manifest so they land between the right rows (no jump when the rows arrive)
+  const [rowsReady, setRowsReady] = useState(false);
+  const [specials, setSpecials] = useState<Special[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -50,10 +54,13 @@ export function Home() {
       if (merged[0]) setFocused((f) => f ?? merged[0]);
     });
     manifest().then((m) => {
-      if (!alive || !m) return;
+      if (!alive) return;
+      setRowsReady(true);
+      if (!m) return;
       setCarousels(m.carousels.slice(0, MAX_CAROUSEL_ROWS));
       setLists(m.letterboxd.slice(0, MAX_LETTERBOXD_ROWS));
     });
+    getSpecials("home").then((s) => alive && setSpecials(s));
     return () => {
       alive = false;
     };
@@ -72,12 +79,13 @@ export function Home() {
       <Hero item={focused} />
       <div className="rows">
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
-        {carousels.map((c) => (
-          <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />
-        ))}
-        {lists.map((l) => (
-          <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />
-        ))}
+        {withSpecials(
+          [
+            ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
+            ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
+          ],
+          rowsReady ? specials : [],
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 // Everything fails soft: a problem returns null and the UI falls back to plain Jellyfin data.
 
 import { getSession } from "./jellyfin";
-import { isNative, nativeGetJson, SERVER_ORIGIN } from "../lib/native";
+import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
 const BASE = COMPANION_BASE;
@@ -195,6 +195,8 @@ export interface BackdropInfo {
   heroIndex: number | null;
   detailsIndex: number | null;
   thumbGood: boolean;
+  /** Whether the Thumb has the title in the picture (null = not checked yet; treated as titled). */
+  thumbTitled: boolean | null;
   focal: Map<number, Focal>;
   tags: Map<number, string>;
 }
@@ -227,7 +229,8 @@ const backdrops = cached<BackdropInfo>(async (id, job) => {
     backdrops?: { index: number; tag?: string; focalX?: number | null; focalY?: number | null; face?: boolean }[] | null;
     heroIndex?: number | null;
     detailsIndex?: number | null;
-    thumb?: { good?: boolean } | null;
+    thumb?: { good?: boolean; titled?: boolean | null } | null;
+    thumbTitled?: boolean | null;
   }>(`/v1/items/${id}/backdrops`, job);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   const arr = raw.backdrops ?? [];
@@ -244,6 +247,7 @@ const backdrops = cached<BackdropInfo>(async (id, job) => {
     heroIndex: idx(raw.heroIndex),
     detailsIndex: idx(raw.detailsIndex),
     thumbGood: raw.thumb?.good ?? true,
+    thumbTitled: raw.thumbTitled ?? raw.thumb?.titled ?? null,
     focal,
     tags,
   };
@@ -354,3 +358,141 @@ const quoteCache = cached<{ quote: Quote | null }>(async (id, job) => {
 
 /** Short Letterboxd pull-quote for the home hero (never triggers a TMDB lookup); null when there is none. */
 export const reviewQuote = (id: string, opts?: RequestOptions) => quoteCache.get(id, opts).then((q) => q?.quote ?? null);
+
+// ---------- specials (new carousel formats; contract: ~/ai/plans/jellytip-specials.md) ----------
+
+export type SpecialsPage = "home" | "movies" | "shows";
+
+interface SpecialBase {
+  id: string;
+  layout: string;
+  /** Insert before the Nth normal carousel row (0 = right under Continue Watching). */
+  position: number;
+  title?: string;
+  /** Item ids whose tile art has no title in the picture: those tiles draw the title over it. */
+  untitled?: string[];
+}
+
+export interface TrailerBreak extends SpecialBase {
+  layout: "trailer_break";
+  itemId: string;
+  trailerItemId?: string;
+  reason?: string;
+}
+export interface PersonSpotlight extends SpecialBase {
+  layout: "person_spotlight";
+  personId: string;
+  name: string;
+  role: "actor" | "director";
+  imageTag?: string;
+  filmCount: number;
+  unwatchedCount: number;
+  itemIds: string[];
+}
+export interface TonightsPick extends SpecialBase {
+  layout: "tonights_pick";
+  itemId: string;
+  reason?: string;
+  kicker?: string;
+}
+export interface Top10 extends SpecialBase {
+  layout: "top10";
+  variant: "household" | "letterboxd";
+  itemIds: string[];
+}
+export interface DoubleFeature extends SpecialBase {
+  layout: "double_feature";
+  pairs: { a: string; b: string; reason?: string; totalRuntimeMin?: number }[];
+}
+export interface BecauseLoved extends SpecialBase {
+  layout: "because_loved";
+  anchorItemId: string;
+  rating?: number | null;
+  quote?: string | null;
+  itemIds: string[];
+}
+export interface AroundHouse extends SpecialBase {
+  layout: "around_house";
+  entries: { itemId: string; who: string; what: "finished" | "watching" | "requested"; when: string }[];
+}
+export interface ClosetPick {
+  title: string;
+  year?: number;
+  itemId?: string | null;
+  tmdbId?: number | null;
+  posterUrl?: string | null;
+  atSec?: number | null;
+}
+export interface ClosetPicks extends SpecialBase {
+  layout: "closet_picks";
+  guest: string;
+  videoUrl: string;
+  posterUrl?: string | null;
+  durationSec?: number;
+  picks: ClosetPick[];
+}
+
+export type Special = TrailerBreak | PersonSpotlight | TonightsPick | Top10 | DoubleFeature | BecauseLoved | AroundHouse | ClosetPicks;
+
+export const SPECIAL_LAYOUTS = ["trailer_break", "person_spotlight", "tonights_pick", "top10", "double_feature", "because_loved", "around_house", "closet_picks"];
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+// One call per page per day (the server picks the same specials all day); 404 / failure = page as before
+const specialsCache = cached<Special[]>(async (key, job) => {
+  const page = key.split("|")[0];
+  const raw = await getJson<{ specials?: Partial<Special>[] }>(`/v1/home/specials?page=${page}`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  return (raw.specials ?? []).filter((s): s is Special => !!s && typeof s.id === "string" && SPECIAL_LAYOUTS.includes(s.layout ?? "")).map((s) => ({
+      ...s,
+      position: Math.max(0, Number(s.position) || 0),
+      untitled: Array.isArray(s.untitled) ? s.untitled.filter((x) => typeof x === "string") : undefined,
+    }));
+});
+
+export function specials(page: SpecialsPage): Promise<Special[]> {
+  return specialsCache.get(`${page}|${today()}`, { priority: "high" }).then((s) => s ?? []);
+}
+
+/** Media/image URL from the companion: absolute stays (http/https), "/path" is on the server origin, else relative to the API. */
+export function companionUrl(u: string): string {
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith("/")) return `${SERVER_ORIGIN}${u}`;
+  return `${COMPANION_BASE}/${u}`;
+}
+
+/** Closet clip / poster from the companion: needs the token as api_key (a <video> can't send the auth header). */
+export function companionMediaUrl(u: string): string {
+  const url = companionUrl(u);
+  const token = getSession()?.token;
+  const ours = url.startsWith(COMPANION_BASE) || (!SERVER_ORIGIN && url.startsWith("/jellytip-api/"));
+  if (!ours || !token || /[?&]api_key=/.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(token)}`;
+}
+
+export interface RequestResult {
+  status?: "exists" | "blocked" | "added";
+  reason?: string;
+  title?: string;
+  freeGbAfter?: number | null;
+  error?: string;
+}
+
+/** "Get it" (admins): POST /v1/request {tmdbId, type}; dryRun first to show what would happen. */
+export async function requestTitle(tmdbId: number, type: "movie" | "tv", dryRun: boolean): Promise<{ code: number; body: RequestResult }> {
+  const token = getSession()?.token;
+  if (!token) return { code: 401, body: { error: "signed out" } };
+  const url = `${BASE}/v1/request${dryRun ? "?dryRun=1" : ""}`;
+  const headers = { Authorization: `MediaBrowser Token="${token}"` };
+  const body = { tmdbId, type };
+  try {
+    if (isNative) {
+      const r = await nativePostJson<RequestResult>(url, headers, body);
+      return { code: r.status, body: r.data ?? {} };
+    }
+    const res = await fetch(url, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return { code: res.status, body: ((await res.json().catch(() => ({}))) as RequestResult) ?? {} };
+  } catch (e) {
+    return { code: 0, body: { error: String((e as Error).message ?? e) } };
+  }
+}

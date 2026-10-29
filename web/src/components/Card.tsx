@@ -64,16 +64,20 @@ interface Props {
   label?: string;
   /** Overlay text drawn instead of the logo/title (episode lists: "3 · Episode name"). */
   caption?: string;
+  /** Small chip in the top-left corner (e.g. "Nadine finished · 2d ago"). */
+  tag?: string;
+  /** The art is known to carry no title (specials payload `untitled`): draw the title over it. */
+  untitled?: boolean;
 }
 
-function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, label, caption }: Props) {
+function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, label, caption, tag, untitled }: Props) {
   const phone = useIsPhone();
   const width = widthProp ?? (phone ? PHONE_CARD_W : CARD_W);
   const ref = useRef<HTMLButtonElement>(null);
   const visible = useVisible(ref);
   const ready = useCompanionReady(item, visible);
   const fluid = width === 0;
-  const layers = visible && ready ? cardLayers(item) : null;
+  const layers = visible && ready ? cardLayers(item, { untitled }) : null;
   // Failed images are remembered by URL and skipped; a chain that changes later (companion answer) only adds new URLs
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState<Set<string>>(new Set());
@@ -138,6 +142,7 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
           S{item.ParentIndexNumber} E{item.IndexNumber}
         </span>
       )}
+      {tag && <span className="card-tag">{tag}</span>}
       {ud?.Played && <span className="card-watched" aria-label="Watched">✓</span>}
       {progress > 0 && (
         <span className="card-progress">
