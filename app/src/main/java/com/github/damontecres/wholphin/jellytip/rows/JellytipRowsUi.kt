@@ -156,6 +156,18 @@ fun JellytipServerRowView(
     val loaded = items
     Box(modifier.fillMaxWidth()) {
         when {
+            row.iptvItems.isNotEmpty() -> {
+                // IPTV rows: the titles came with the row (no library ids), tiles carry the IPTV dot + quality
+                com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
+                    title = row.title,
+                    items = row.iptvItems,
+                    poster = row.isPoster,
+                    heightDp = options.heightDp,
+                    onFocusTile = { onFocusItem(null, false) },
+                    modifier = focusModifier,
+                )
+            }
+
             loaded == null -> {
                 // Same height as the loaded row: the title plus a card's height and the row padding
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -624,7 +636,28 @@ fun JellytipCollectionPage(
                                             else -> "  ·  not in the library"
                                         }
                                 val requestable = canRequest && part.released
-                                if (requestable || index == 0) {
+                                val iptv = part.iptv
+                                if (iptv != null) {
+                                    // The person's IPTV has it: fills the gap, playable "via IPTV"
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                                        item = if (iptv.poster == null) iptv.copy(poster = part.posterUrl) else iptv,
+                                        width = SpecialTokens.POSTER_W,
+                                        height = SpecialTokens.POSTER_H,
+                                        poster = true,
+                                        onClick = {
+                                            viewModel.navigationManager.navigateTo(
+                                                Destination.JellytipIptvDetails(iptv.id, iptv.title),
+                                                "collection part OK (iptv)",
+                                            )
+                                        },
+                                        modifier =
+                                            first.onFocusChanged {
+                                                if (it.isFocused) {
+                                                    focused = listOfNotNull(part.title, part.year?.toString()).joinToString("  ·  ") + "  ·  via IPTV"
+                                                }
+                                            },
+                                    )
+                                } else if (requestable || index == 0) {
                                     SpecialCard(
                                         width = SpecialTokens.POSTER_W,
                                         height = SpecialTokens.POSTER_H,

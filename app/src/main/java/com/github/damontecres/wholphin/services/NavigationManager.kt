@@ -61,6 +61,7 @@ class NavigationManager
                 is Destination.JellytipCollection,
                 is Destination.JellytipLiveTvPlayer,
                 is Destination.JellytipIptvPlay,
+                is Destination.JellytipIptvDetails,
                 is Destination.JellytipDiscover,
                 is Destination.DiscoveredItem,
                 -> true

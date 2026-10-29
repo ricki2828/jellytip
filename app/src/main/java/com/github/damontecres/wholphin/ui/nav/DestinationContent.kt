@@ -398,6 +398,11 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)
         }
 
+        is Destination.JellytipIptvDetails -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDetailsPage(id = destination.id, title = destination.title, modifier = modifier)
+        }
+
         is Destination.JellytipIptvPlay -> {
             val target =
                 androidx.compose.runtime.remember(destination) {

@@ -49,6 +49,8 @@ data class JellytipServerRow(
     val collection: JellytipCollection?,
     /** People rows ("Starring X", "Directed by X"): the row opens with this person's portrait. */
     val person: Person? = null,
+    /** IPTV rows (`source:"iptv"`): the titles come with the row, there are no library ids. */
+    val iptvItems: List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem> = emptyList(),
 ) {
     data class Person(
         val id: UUID,
@@ -97,6 +99,8 @@ data class JellytipCollection(
         val year: Int?,
         val posterUrl: String?,
         val released: Boolean,
+        /** The person's IPTV has this part (`source:"iptv"`): it fills the gap, playable "via IPTV". */
+        val iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
     )
 
     /** "3 of 8 watched" */
@@ -136,7 +140,8 @@ object JellytipRowsParser {
     private fun row(o: JSONObject): JellytipServerRow? {
         val id = o.str("id") ?: return null
         val itemIds = o.uuids("itemIds")
-        if (itemIds.isEmpty()) return null
+        val iptv = com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.items(o.optJSONArray("iptvItems"), com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
+        if (itemIds.isEmpty() && iptv.isEmpty()) return null
         JellytipThumbTitles.markUntitled(o.uuids("untitled"))
         com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(o.optJSONObject("logoStyles"))
         com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(o.optJSONObject("techs"))
@@ -148,6 +153,7 @@ object JellytipRowsParser {
             layout = o.optString("layout", "standard"),
             mediaType = o.optString("mediaType", "movie"),
             itemIds = itemIds,
+            iptvItems = iptv,
             collection = o.optJSONObject("collection")?.let { collection(it) },
             person =
                 o.optJSONObject("person")?.let { p ->
@@ -176,6 +182,7 @@ object JellytipRowsParser {
                     year = m.optInt("year", 0).takeIf { it > 0 },
                     posterUrl = m.str("posterUrl"),
                     released = m.optBoolean("released", true),
+                    iptv = iptvPart(m),
                 )
             }
         return JellytipCollection(
@@ -192,6 +199,14 @@ object JellytipRowsParser {
             missing = missing,
             canRequest = o.optBoolean("canRequest", false),
         )
+    }
+
+    /** A part the library lacks but the person's IPTV has: `source:"iptv", iptv:{id, title, year, quality, poster, …}`. */
+    private fun iptvPart(m: JSONObject): com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? {
+        if (m.optString("source") != "iptv") return null
+        val i = m.optJSONObject("iptv") ?: return null
+        if (!i.has("kind")) i.put("kind", "movie")
+        return com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.item(i, com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
     }
 
     private fun String.toUuidOrNull(): UUID? = runCatching { toUUID() }.getOrNull()
@@ -298,6 +313,7 @@ class JellytipRowsService
          * items changed since (played, watched toggled: [markChanged]).
          */
         suspend fun items(row: JellytipServerRow): List<BaseItem>? {
+            if (row.itemIds.isEmpty()) return emptyList() // IPTV rows: titles came with the row
             val key = rowKey(row) ?: return null
             val cached = rowItems[key]
             if (cached != null && System.currentTimeMillis() - cached.at < ITEMS_FRESH_MS && !cached.changedSince()) return cached.value
