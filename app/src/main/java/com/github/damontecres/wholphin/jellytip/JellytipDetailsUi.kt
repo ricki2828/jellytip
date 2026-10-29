@@ -111,14 +111,26 @@ fun JellytipDetailsBackground(
     val choice by viewModel.stillChoice(item.id).collectAsState(0)
     // 0 = automatic slideshow, k = pinned to the k-th still ("Change still" cycles through these)
     val pinned = if (allStills.isEmpty()) 0 else choice % (allStills.size + 1)
-    val pick by produceState<ImagePick?>(null, item.id) { value = viewModel.detailsPick(item) }
+    // Ranking cached from Home = the right still at once; otherwise wait (night background) for the ranking, at most
+    // DETAILS_STILL_WAIT_MS, and keep the first still chosen, so a different image never shows first and then swaps
+    val pick by produceState(remember(item.id) { viewModel.cachedDetailsPick(item) }, item.id) {
+        if (value == null) value = viewModel.detailsPick(item)
+    }
+    var waited by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(item.id) {
+        delay(DETAILS_STILL_WAIT_MS)
+        waited = true
+    }
+    val ready = pick != null || waited || (item.type == org.jellyfin.sdk.model.api.BaseItemKind.EPISODE && extras != null)
+    // Keyed on ready (false -> true once): later answers never swap the still that is already up
+    val chosen = remember(item.id, ready) { if (ready) pick ?: ImagePick(detailsImageFor(allStills), null) else null }
     val stills =
         if (pinned > 0) {
             listOf(allStills[pinned - 1])
         } else {
-            listOfNotNull(pick?.url ?: detailsImageFor(allStills))
+            listOfNotNull(chosen?.url)
         }
-    val focal = if (pinned > 0) null else pick?.focal
+    val focal = if (pinned > 0) null else chosen?.focal
     val trailer = remember(trailers) { trailers.filterIsInstance<LocalTrailer>().firstOrNull() }
     val trailerUrl = remember(trailer) { trailer?.let { viewModel.trailerUrl(it) } }
 
@@ -201,6 +213,9 @@ fun JellytipDetailsBackground(
 
 private val NIGHT = Color(0xFF08070C)
 
+/** Longest wait for the companion's details still before the first still is chosen (and kept). */
+private const val DETAILS_STILL_WAIT_MS = 500L
+
 /**
  * The single details-page image. [ranked] is best-first (companion stills, then Jellyfin backdrops; for episodes
  * just the episode still). The best one is reserved for the home hero, so details uses the second-best when
@@ -219,16 +234,23 @@ private fun KenBurnsImage(
     }
     // Alternate pan direction per image, deterministically
     val direction = if (abs(url.hashCode()) % 2 == 0) 1f else -1f
+    // Fade in once when decoded (no pop over the night background)
+    var shown by remember(url) { mutableStateOf(false) }
+    val fade by animateFloatAsState(if (shown) 1f else 0f, tween(450), label = "jellytip-details-still")
     AsyncImage(
         model = url,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),
-        onSuccess = { JellytipScrim.inspect(url, it.result.image) },
+        onSuccess = {
+            JellytipScrim.inspect(url, it.result.image)
+            shown = true
+        },
         modifier =
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    alpha = fade
                     val p = progress.value
                     val scale = 1f + com.github.damontecres.wholphin.jellytip.home.KEN_BURNS_MAX_ZOOM * p
                     transformOrigin = focalOrigin(focal)

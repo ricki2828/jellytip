@@ -59,6 +59,16 @@ class JellytipDetailsViewModel
             return JellytipImagePick.forDetails(imageUrlService, item).takeIf { it.url != null }
         }
 
+        /**
+         * [detailsPick] without waiting: only when the companion's ranking for the item (the series for a series page)
+         * is already cached from Home, else null.
+         */
+        fun cachedDetailsPick(item: BaseItem): ImagePick? {
+            if (item.type == BaseItemKind.EPISODE) return null
+            JellytipApi.shared?.peekInfo(com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId(item)) ?: return null
+            return JellytipImagePick.forDetails(imageUrlService, item).takeIf { it.url != null }
+        }
+
         fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
 
         /** "Change still": advance to the next still (or back to automatic) for this item, locally only. */
