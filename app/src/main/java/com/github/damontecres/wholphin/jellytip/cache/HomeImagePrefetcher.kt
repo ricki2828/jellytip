@@ -7,7 +7,13 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Scale
 import com.github.damontecres.wholphin.data.model.BaseItem
+import androidx.compose.ui.unit.Dp
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cards.selectJellytipCardArt
 import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
+import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecial
+import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialsPage
+import com.github.damontecres.wholphin.jellytip.specials.SpecialTokens
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.ui.components.ViewOptionImageType
 import com.github.damontecres.wholphin.ui.playback.scale
@@ -168,6 +174,91 @@ class HomeImagePrefetcher
                             .forEach { launch { loadHero(it, toMemory = false) } }
                     }
                 }
+        }
+
+        /**
+         * A fresh specials answer: warm the first tiles of each special at the sizes the tiles request, and the backdrop
+         * stills of Trailer Break / Tonight's Pick (disk only, like the neighbours' heroes).
+         */
+        fun warmSpecials(page: JellytipSpecialsPage) {
+            scope.launch {
+                try {
+                    JellytipImageGate.await()
+                    val (thumbs, stills) = specialsSpecs(page)
+                    coroutineScope {
+                        stills.forEach { launch { loadHero(it, toMemory = false) } }
+                        thumbs.forEach { launch { loadThumb(it) } }
+                    }
+                } catch (ex: kotlin.coroutines.cancellation.CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Specials image warm-up failed")
+                }
+            }
+        }
+
+        private fun specialsSpecs(page: JellytipSpecialsPage): Pair<List<ThumbSpec>, List<String>> {
+            val d = density
+            fun px(dp: Dp) = (dp.value * d).roundToInt()
+            val thumbs = mutableListOf<ThumbSpec>()
+            val stills = mutableListOf<String>()
+
+            fun poster(item: BaseItem?) {
+                item ?: return
+                val w = px(SpecialTokens.POSTER_W)
+                val h = px(SpecialTokens.POSTER_H)
+                imageUrlService.getItemImageUrl(item, ImageType.PRIMARY, fillWidth = w, fillHeight = h)?.let { thumbs += ThumbSpec(it, w, h, true) }
+            }
+
+            fun titled(
+                item: BaseItem?,
+                width: Dp,
+                height: Dp,
+            ) {
+                item ?: return
+                val w = px(width)
+                val h = px(height)
+                val ranked = item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE } ?: item.id
+                val art = selectJellytipCardArt(imageUrlService, item, w, h, JellytipApi.shared?.peekBestBackdropIndex(ranked))
+                art.baseUrl?.let { thumbs += ThumbSpec(it, w, h, true) }
+            }
+
+            fun still(
+                item: BaseItem?,
+                heroIndex: Int?,
+            ) {
+                item ?: return
+                JellytipImagePick.forHome(imageUrlService, item, heroIndex).url?.let { stills += it }
+            }
+            val items = page.items
+            val n = CARDS_PER_ROW
+            page.specials.forEach { special ->
+                when (special) {
+                    is JellytipSpecial.TrailerBreak -> still(items[special.itemId], special.heroIndex)
+                    is JellytipSpecial.TonightsPick -> still(items[special.itemId], special.heroIndex)
+                    is JellytipSpecial.PersonSpotlight -> {
+                        val w = px(SpecialTokens.PORTRAIT_W)
+                        val h = px(SpecialTokens.POSTER_H)
+                        imageUrlService
+                            .getItemImageUrl(itemId = special.personId, imageType = ImageType.PRIMARY, fillWidth = w, fillHeight = h, tag = special.imageTag)
+                            ?.let { thumbs += ThumbSpec(it, w, h, true) }
+                        special.films.take(n).forEach { poster(items[it]) }
+                    }
+                    is JellytipSpecial.Top10 -> special.ranked.take(n).forEach { poster(items[it]) }
+                    is JellytipSpecial.DoubleFeature ->
+                        special.pairs.take(n / 2).forEach {
+                            titled(items[it.a], SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
+                            titled(items[it.b], SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
+                        }
+                    is JellytipSpecial.BecauseLoved -> {
+                        titled(items[special.anchorItemId], SpecialTokens.QUOTE_W, SpecialTokens.WIDE_H)
+                        special.similar.take(n).forEach { titled(items[it], SpecialTokens.WIDE_W, SpecialTokens.WIDE_H) }
+                    }
+                    is JellytipSpecial.AroundHouse -> special.entries.take(n).forEach { titled(items[it.itemId], SpecialTokens.WIDE_W, SpecialTokens.WIDE_H) }
+                    is JellytipSpecial.ClosetPicks -> special.picks.take(n).forEach { pick -> pick.itemId?.let { poster(items[it]) } }
+                }
+            }
+            return thumbs to stills
         }
 
         private suspend fun loadThumb(spec: ThumbSpec) {

@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip.specials
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cache.HomeImagePrefetcher
 import com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles
 import com.github.damontecres.wholphin.ui.HomeItemFields
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
@@ -36,6 +37,7 @@ class JellytipSpecialsService
         private val api: ApiClient,
         private val jellytipApi: JellytipApi,
         private val serverRepository: ServerRepository,
+        private val prefetcher: HomeImagePrefetcher,
     ) {
         private data class Entry(
             val page: JellytipSpecialsPage,
@@ -65,6 +67,7 @@ class JellytipSpecialsService
                 val items = loadItems(answer.specials.flatMap { it.itemIds }.distinct())
                 val resolved = JellytipSpecialsPage(answer.specials.mapNotNull { it.keepVisible(items) }, items)
                 cache[key] = Entry(resolved, System.currentTimeMillis())
+                prefetcher.warmSpecials(resolved)
                 resolved
             } catch (e: CancellationException) {
                 throw e

@@ -103,8 +103,8 @@ object JellytipDoubleBill {
     fun nextAfter(a: UUID): UUID? = pair?.takeIf { it.first == a }?.second
 }
 
-/** Sizes in dp; every special fits the ~230 dp the home leaves below the hero text. */
-private object SpecialTokens {
+/** Sizes in dp; every special fits the ~230 dp the home leaves below the hero text. Shared with the image prefetcher. */
+internal object SpecialTokens {
     val POSTER_H = 150.dp
     val POSTER_W = 100.dp
     val WIDE_H = JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP.dp
@@ -249,7 +249,7 @@ private fun TrailerBreakRow(
                         LogoOrTitle(item, maxWidthPx = 340, maxHeightPx = 110)
                         if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.85f, px = JellytipHomeTokens.TEXT_PX)
                     }
-                    SoundHint(owner, Modifier.align(Alignment.BottomEnd).padding(sizes.px(24)))
+                    SoundHint(owner, "Sound on \u00B7 OK for details", Modifier.align(Alignment.BottomEnd).padding(sizes.px(24)))
                 }
             },
         )
@@ -702,6 +702,7 @@ private fun ClosetPicksRow(
                             scope.launch {
                                 val url = resolve() ?: return@launch
                                 JellytipTrailerControl.startSpecial(owner, url, sound = true)
+                                JellytipTrailerControl.hintTick = System.nanoTime()
                             }
                     }
 
@@ -715,7 +716,7 @@ private fun ClosetPicksRow(
                             Destination.JellytipDiscover(
                                 DiscoverTitle(
                                     tmdbId = tmdb,
-                                    mediaType = "movie",
+                                    mediaType = entry.pick.mediaType,
                                     title = entry.pick.title,
                                     year = entry.pick.year,
                                     posterUrl = entry.pick.posterUrl,
@@ -759,7 +760,7 @@ private fun ClosetPicksRow(
                             )
                             Caption(if (special.picks.size == 1) "1 pick" else "${special.picks.size} picks", alpha = 0.7f)
                         }
-                        SoundHint(owner, Modifier.align(Alignment.TopEnd).padding(sizes.px(14)))
+                        SoundHint(owner, "Sound on \u00B7 OK to mute", Modifier.align(Alignment.TopEnd).padding(sizes.px(14)))
                     }
                 }
 
@@ -921,15 +922,35 @@ private fun SpecialVideoSurface(
     }
 }
 
-/** "OK for sound" while [owner]'s video plays muted. */
+/**
+ * The special's own hint (the hero's chip stays hidden while a special holds the player): "OK for sound" while its video
+ * plays muted, then [soundOnText] for 2 s after OK turns the sound on.
+ */
 @Composable
 private fun SoundHint(
     owner: String,
+    soundOnText: String,
     modifier: Modifier,
 ) {
-    if (!JellytipTrailerControl.isPlayingForOwner(owner) || JellytipTrailerControl.sound) return
+    val playing = JellytipTrailerControl.isPlayingForOwner(owner)
+    val sound = JellytipTrailerControl.sound
+    var soundOnVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(JellytipTrailerControl.hintTick, playing, sound) {
+        soundOnVisible = false
+        if (!playing || !sound || JellytipTrailerControl.hintTick == 0L) return@LaunchedEffect
+        soundOnVisible = true
+        delay(2_000)
+        soundOnVisible = false
+    }
+    val text =
+        when {
+            !playing -> return
+            !sound -> "OK for sound"
+            soundOnVisible -> soundOnText
+            else -> return
+        }
     Caption(
-        "OK for sound",
+        text,
         alpha = 0.9f,
         modifier =
             modifier
