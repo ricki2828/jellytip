@@ -7,6 +7,8 @@ import { backdropInfo, extras, type Extras } from "../api/companion";
 import { trailerStreamUrl } from "../api/playback";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
+import { useVideoBlocked } from "../lib/videoFocus";
+import { useSoundBack } from "../lib/soundBack";
 import { Backdrop } from "./Backdrop";
 import { ScoreLine } from "./ScoreLine";
 import { infoLine, TitleLogo } from "./TitleBlock";
@@ -17,20 +19,6 @@ const TRAILER_DELAY_MS = 2500;
 const RANK_WAIT_MS = 1200; // the companion usually answers well inside this; a premature guess costs a second full-size image
 const trailerCache = new Map<string, string | null>();
 
-// "Back" while the hero trailer has sound = mute, as on the TV. Turning sound on pushes a same-URL history entry, so
-// phone Back / the mouse back button pop it (popstate) instead of leaving the page. If the user navigates away with
-// sound still on, that entry is left behind; landing on it later is skipped so Back never looks dead.
-const SOUND_STATE = "jellytipHeroSound";
-let soundEntryOwner: (() => void) | null = null; // the mounted hero's mute(fromPop) while its entry is on top
-window.addEventListener("popstate", (e) => {
-  const owner = soundEntryOwner;
-  if (owner) {
-    soundEntryOwner = null;
-    owner();
-  } else if ((e.state as Record<string, unknown> | null)?.[SOUND_STATE]) {
-    history.back();
-  }
-});
 window.addEventListener("jellytip-session", () => trailerCache.clear()); // per user (and token in the URL)
 
 async function trailerFor(item: Item): Promise<string | null> {
@@ -52,44 +40,13 @@ export function Hero({ item }: { item: Item | null }) {
   const [hint, setHint] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // "Back" while the trailer has sound = mute, as on the TV (shared with the specials' inline videos)
+  const back = useSoundBack("hero", sound, () => setSound(false));
   const soundOn = () => {
     setSound(true);
-    if (!soundEntryOwner) {
-      history.pushState({ ...(history.state ?? {}), [SOUND_STATE]: true }, "");
-      soundEntryOwner = () => setSound(false); // popped by Back: just mute
-    }
+    back.soundOn();
   };
-  const mute = () => {
-    setSound(false);
-    if (soundEntryOwner) {
-      soundEntryOwner = null;
-      history.back(); // drop our entry; the popstate finds no owner and a plain state, so nothing else happens
-    }
-  };
-
-  // Esc / Backspace while sound is on: mute and swallow the key (document runs before the app's window-level Esc)
-  useEffect(() => {
-    if (!sound) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" && e.key !== "Backspace") return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      mute();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sound]);
-
-  // Leaving home with sound on: the pushed entry stays behind (skipped on the way back), the owner goes
-  useEffect(
-    () => () => {
-      soundEntryOwner = null;
-    },
-    [],
-  );
+  const mute = back.mute;
 
   useEffect(() => {
     if (!item) return;
@@ -124,6 +81,18 @@ export function Hero({ item }: { item: Item | null }) {
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = !sound;
   }, [sound, trailer]);
+
+  // Another video on the page (trailer break, closet clip) took over: pause, resume when it lets go
+  const blocked = useVideoBlocked("hero");
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (blocked) {
+      v.pause();
+      if (sound) mute(); // its sound must not come back when the hero resumes
+    } else v.play().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocked, trailer]);
 
   if (!shown) return <div className="hero" />;
 
