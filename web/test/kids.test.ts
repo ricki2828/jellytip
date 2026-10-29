@@ -22,3 +22,15 @@ test("allowed against the ceiling", () => {
   assert.ok(!kidsAllowed("PG-13", 10));
   assert.ok(!kidsAllowed(null, 16));
 });
+
+test("server table extras: numeric and regional ratings", () => {
+  assert.equal(ratingAge("PG-10"), 10);
+  assert.equal(ratingAge("10"), 10);
+  assert.equal(ratingAge("M12"), 13);
+  assert.equal(ratingAge("AV15+"), 16);
+  assert.equal(ratingAge("NR17"), 18);
+  assert.equal(ratingAge("NR"), 18);
+  assert.equal(ratingAge("AL"), 0);
+  assert.equal(ratingAge("GB:12A"), 13);
+  assert.equal(ratingAge("MA15+"), 16);
+});

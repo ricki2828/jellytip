@@ -52,7 +52,7 @@ function Unified({ r, onChip }: { r: SearchResult; onChip: (q: string) => void }
       {chips.length > 0 && (
         <div className="chips search-chips" aria-label="Filters read from your search">
           {chips.map((c) => (
-            <button key={c.key} className="chip on" data-nav onClick={() => onChip(withoutFilter(r.text, r.filters, c.key))} aria-label={`Remove ${c.label}`}>
+            <button key={c.id} className="chip on" data-nav onClick={() => onChip(withoutFilter(r.text, r.filters, c.id))} aria-label={`Remove ${c.label}`}>
               {c.label}
               <span aria-hidden> ×</span>
             </button>

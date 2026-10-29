@@ -14,7 +14,8 @@ export interface SearchFilters {
   /** "movie" | "series". */
   kind?: string | null;
   person?: string | null;
-  tech?: string | null;
+  /** Formats, all required ("4k atmos" → ["4K", "ATMOS"]); older servers sent one string. */
+  tech?: string[] | null;
 }
 
 export type FilterKey = keyof SearchFilters;
@@ -116,7 +117,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
     unwatched: f.unwatched === true ? true : null,
     kind: str(f.kind),
     person: str(f.person),
-    tech: str(f.tech),
+    tech: Array.isArray(f.tech) ? strs(f.tech) : str(f.tech) ? [str(f.tech)!] : null,
   };
   return {
     q: str(r.q) ?? "",
@@ -180,6 +181,8 @@ const LANGUAGE: Record<string, string> = {
 const TECH: Record<string, string> = { "4K": "4K", DV: "Dolby Vision", "HDR10+": "HDR10+", HDR: "HDR", ATMOS: "Atmos", DTSX: "DTS:X" };
 
 export interface Chip {
+  /** Unique per chip ("tech:ATMOS" for each format). */
+  id: string;
   key: FilterKey;
   /** Every filter the chip stands for ("French" = country FR + language fr). */
   keys: FilterKey[];
@@ -193,7 +196,7 @@ const runtime = (m: number) => (m % 60 === 0 ? `${m / 60}h` : `${m} min`);
 /** The filters the server read, as removable chips (label for the chip, phrase for re-asking without the others). */
 export function filterChips(f: SearchFilters): Chip[] {
   const out: Chip[] = [];
-  const add = (key: FilterKey, label: string, phrase: string | null, keys: FilterKey[] = [key]) => out.push({ key, keys, label, phrase });
+  const add = (key: FilterKey, label: string, phrase: string | null, keys: FilterKey[] = [key], id: string = key) => out.push({ id, key, keys, label, phrase });
   if (f.decade) add("decade", f.decade >= 2000 ? `${f.decade}s` : `${String(f.decade).slice(2)}s`, `${f.decade}s`);
   if (f.year) add("year", String(f.year), String(f.year));
   const lang = f.language ? LANGUAGE[f.language.toLowerCase()] : undefined;
@@ -210,9 +213,9 @@ export function filterChips(f: SearchFilters): Chip[] {
   if (f.kind) add("kind", f.kind === "series" || f.kind === "tv" ? "Shows" : "Films", f.kind === "series" || f.kind === "tv" ? "shows" : "films");
   if (f.unwatched) add("unwatched", "Unwatched", "unwatched");
   if (f.person) add("person", `with ${f.person}`, `with ${f.person}`);
-  if (f.tech) {
-    const t = TECH[f.tech.toUpperCase()] ?? f.tech;
-    add("tech", t, t.toLowerCase());
+  for (const v of f.tech ?? []) {
+    const t = TECH[v.toUpperCase()] ?? v;
+    add("tech", t, t.toLowerCase(), ["tech"], `tech:${v.toUpperCase()}`);
   }
   return out;
 }
@@ -221,8 +224,11 @@ export function filterChips(f: SearchFilters): Chip[] {
  * The query again without one filter: the free text the server kept plus the phrases of the filters that stay.
  * (The contract echoes the parsed filters, not where they were in the query, so the query is rebuilt.)
  */
-export function withoutFilter(text: string, f: SearchFilters, drop: FilterKey): string {
-  const keep = filterChips(f).filter((c) => !c.keys.includes(drop) && c.phrase);
+export function withoutFilter(text: string, f: SearchFilters, drop: string): string {
+  const chips = filterChips(f);
+  // `drop` is a chip id ("tech:ATMOS" drops just that format) or a filter key (drops everything it covers)
+  const target = chips.find((c) => c.id === drop);
+  const keep = chips.filter((c) => (target ? c !== target && !(target.key !== "tech" && c.keys.some((k) => target.keys.includes(k))) : !c.keys.includes(drop as FilterKey)) && c.phrase);
   // Genre reads best before the text ("crime heist"), the rest after
   const genre = keep.find((c) => c.key === "genre");
   const rest = keep.filter((c) => c.key !== "genre").map((c) => c.phrase);

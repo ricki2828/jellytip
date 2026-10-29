@@ -31,7 +31,7 @@ test("parse: groups typed, malformed items dropped, missing groups empty", () =>
 });
 
 test("chips: readable labels for the parsed filters", () => {
-  const chips = filterChips({ decade: 1990, country: "FR", genre: "Crime", runtimeMax: 120, unwatched: true, person: "Kubrick", tech: "ATMOS" });
+  const chips = filterChips({ decade: 1990, country: "FR", genre: "Crime", runtimeMax: 120, unwatched: true, person: "Kubrick", tech: ["ATMOS"] });
   assert.deepEqual(chips.map((c) => c.label), ["90s", "French", "Crime", "under 2h", "Unwatched", "with Kubrick", "Atmos"]);
   assert.deepEqual(filterChips({ decade: 2010 }).map((c) => c.label), ["2010s"]);
   assert.equal(filterChips({ country: "ZZ" })[0].phrase, null);
@@ -60,4 +60,12 @@ test("collections: inLibrary as a count or as the parts list", () => {
     { tmdbCollectionId: 10, name: "None known", inLibrary: [{ itemId: null }, { itemId: null }] },
   ] }] })!;
   assert.deepEqual(s.collections.map((c) => [c.inLibrary, c.total]), [[2, 3], [2, 5], [undefined, 2]]);
+});
+
+test("formats: a list (or an old single string); removing one keeps the other", () => {
+  const s = parseSearch({ parsed: { text: "", filters: { tech: ["4K", "ATMOS"] } }, groups: [] })!;
+  assert.deepEqual(s.filters.tech, ["4K", "ATMOS"]);
+  assert.deepEqual(filterChips(s.filters).map((c) => [c.id, c.label]), [["tech:4K", "4K"], ["tech:ATMOS", "Atmos"]]);
+  assert.equal(withoutFilter("", s.filters, "tech:4K"), "atmos");
+  assert.deepEqual(parseSearch({ parsed: { filters: { tech: "DV" } }, groups: [] })!.filters.tech, ["DV"]);
 });
