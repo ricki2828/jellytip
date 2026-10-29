@@ -135,6 +135,8 @@ sealed interface JellytipSpecial {
             val tmdbId: Int?,
             val posterUrl: String?,
             val atSec: Int?,
+            /** TMDB media type for a request: "movie" (default when the server sends none) or "tv". */
+            val mediaType: String = "movie",
         )
 
         override val itemIds get() = picks.mapNotNull { it.itemId }
@@ -288,6 +290,7 @@ object JellytipSpecialsParser {
                             itemId = p.uuid("itemId"),
                             tmdbId = if (p.isNull("tmdbId")) null else p.optInt("tmdbId").takeIf { it > 0 },
                             posterUrl = p.str("posterUrl"),
+                            mediaType = if (p.str("mediaType")?.lowercase() in setOf("tv", "series", "show")) "tv" else "movie",
                             atSec = if (!p.has("atSec") || p.isNull("atSec")) null else p.optDouble("atSec").takeIf { !it.isNaN() && it >= 0 }?.toInt(),
                         )
                     }
