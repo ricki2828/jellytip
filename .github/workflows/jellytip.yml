@@ -130,7 +130,19 @@ jobs:
         if: ${{ steps.gate.outputs.ready == 'true' }}
         with:
           persist-credentials: false
+          fetch-depth: 0
           sparse-checkout: store/play/release-notes
+      - name: Tag must be on a release branch
+        if: ${{ steps.gate.outputs.ready == 'true' && startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          ok=0
+          for r in origin/jellytip origin/jellytip-play; do
+            git merge-base --is-ancestor "$GITHUB_SHA" "$r" 2>/dev/null && ok=1
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error title=Tag not on a release branch::$GITHUB_REF ($GITHUB_SHA) is not an ancestor of origin/jellytip origin/jellytip-play. Tag a commit that is on the release branch."
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         if: ${{ steps.gate.outputs.ready == 'true' }}
         with:
@@ -171,7 +183,17 @@ jobs:
           echo "USER_FRACTION=$fraction" >> "$GITHUB_ENV"
           echo "### Play upload: track $track, status $status, versionCode ${{ needs.build.outputs.version_code }}, signer $got" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload to Google Play
-        if: ${{ steps.gate.outputs.ready == 'true' }}
+        if: ${{ steps.gate.outputs.ready == 'true' && env.STATUS != 'inProgress' }}
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: xyz.taiaroa.jellytip
+          releaseFiles: ${{ env.AAB }}
+          track: ${{ env.TRACK }}
+          status: ${{ env.STATUS }}
+          whatsNewDirectory: store/play/release-notes
+      - name: Upload to Google Play (staged rollout)
+        if: ${{ steps.gate.outputs.ready == 'true' && env.STATUS == 'inProgress' }}
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
