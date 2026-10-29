@@ -8,6 +8,7 @@ import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
 import { logoClass, logoOwner } from "../lib/logoStyle";
 import { TechBadges } from "./TechBadges";
+import { useTileMenu } from "./TasteButtons";
 import { techOf, tileBadges } from "../lib/techBadges";
 
 export const CARD_W = 264;
@@ -104,6 +105,7 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
 
   // Premium formats, bottom-right; episodes keep that corner for "S1 E2"
   const tech = item.Type === "Episode" ? [] : techOf(item.Id);
+  const menu = useTileMenu(item);
   const techCount = tileBadges(tech).length;
   const techShown = techCount > 0;
 
@@ -118,7 +120,8 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
       aria-label={title}
       onFocus={() => onFocusItem?.(item)}
       onMouseEnter={() => onFocusItem?.(item)}
-      onClick={() => (onOpen ? onOpen(item) : go(`/item/${item.Id}`))}
+      onClick={() => !menu.swallowClick() && (onOpen ? onOpen(item) : go(`/item/${item.Id}`))}
+      {...menu.props}
     >
       {layer?.kind === "poster" && layer.blurUrl && (
         <img className={`card-blur${baseReady ? " in" : ""}`} src={layer.blurUrl} alt="" decoding="async" />

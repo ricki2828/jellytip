@@ -14,6 +14,7 @@ import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
 import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
+import { TileMenuHost } from "./components/TasteButtons";
 import { parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
 import { isNative } from "./lib/native";
@@ -69,6 +70,7 @@ export function App() {
   return (
     <>
       <Nav current={route.name} />
+      <TileMenuHost />
       <main>
         {route.name === "home" && <Home />}
         {route.name === "movies" && <Library key="movie" kind="movie" />}

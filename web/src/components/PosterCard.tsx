@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { imageUrl, type Item } from "../api/jellyfin";
 import { TechBadges } from "./TechBadges";
+import { useTileMenu } from "./TasteButtons";
 import { techOf, tileBadges } from "../lib/techBadges";
 import "./PosterCard.css";
 
@@ -37,6 +38,7 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   const name = nameProp ?? item?.Name ?? label ?? "";
   const hasImg = !!url && !failed;
   const overlay = hasImg && loaded && untitled;
+  const menu = useTileMenu(item);
   const tech = techProp ?? (item && item.Type !== "Episode" ? techOf(item.Id) : []);
   const techShown = tileBadges(tech).length > 0;
   const cls = `poster${faded ? " faded" : ""}${lit ? " lit" : ""}${techShown ? " has-tech" : ""}`;
@@ -65,7 +67,8 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
       data-autofocus={autoFocus || undefined}
       aria-label={aria}
       title={aria}
-      onClick={onOpen}
+      onClick={() => !menu.swallowClick() && onOpen()}
+      {...menu.props}
       onFocus={onFocus}
       onMouseEnter={onFocus}
     >

@@ -5,6 +5,7 @@ import { go } from "../lib/router";
 import { Card, CARD_W, PHONE_CARD_W } from "./Card";
 import { filmCount, PersonTile } from "./PersonTile";
 import { PosterCard } from "./PosterCard";
+import { signalOf } from "../api/me";
 
 const POSTER_W = 150;
 const PHONE_POSTER_W = 112;
@@ -73,7 +74,15 @@ export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => vo
 
 export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person }: Props) {
   const ref = useRef<HTMLElement>(null);
-  const loaded = useLazyItems(ref, items, load);
+  const lazy = useLazyItems(ref, items, load);
+  // "Not interested" takes a title out of the row at once (the server drops it from tomorrow's rows)
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const on = () => bump((n) => n + 1);
+    window.addEventListener("jellytip-signals", on);
+    return () => window.removeEventListener("jellytip-signals", on);
+  }, []);
+  const loaded = lazy && lazy.filter((it) => !signalOf(it.Id).notInterested);
   const phone = useIsPhone();
   const poster = layout === "poster";
   const posterW = phone ? PHONE_POSTER_W : POSTER_W;

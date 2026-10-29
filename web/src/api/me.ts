@@ -47,6 +47,11 @@ export function usePrefs(): PrefsState {
 }
 
 export const prefsNow = () => state.prefs;
+/** Personalisation is on (sync; for many tiles at once without a hook each). Asks the server the first time. */
+export const personalOn = () => {
+  void load();
+  return state.available === true;
+};
 
 /** Deep-merged update; returns an error text or null. A 409 (changed elsewhere) reloads and asks to try again. */
 export async function savePrefs(patch: Record<string, unknown>): Promise<string | null> {

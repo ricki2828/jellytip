@@ -26,6 +26,7 @@ import { ScoreLine } from "../components/ScoreLine";
 import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButton";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
 import { DetailsQuote, ReviewsRow } from "../components/Reviews";
+import { TasteButtons } from "../components/TasteButtons";
 import { runtimeText } from "../api/jellyfin";
 import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
 
@@ -273,6 +274,7 @@ export function Details({ id }: { id: string }) {
               {ud?.IsFavorite ? "♥ Favourite" : "♡ Favourite"}
             </button>
             {item.Type !== "Series" && <DownloadButton item={item} onError={flash} />}
+            {item.Type !== "Episode" && <TasteButtons item={item} />}
           </div>
           {phone && <DetailsQuote item={item} phone />}
         </div>
