@@ -203,7 +203,9 @@ private fun TrailerBreakRow(
     }
     SpecialVideoDriver(owner, active, settings.trailerAutoplay, item.id, resolve)
     val scope = rememberCoroutineScope()
-    val pick = remember(item.id, special.heroIndex) { viewModel.heroPick(item, special.heroIndex) }
+    // Never the hero's image: the hero shows heroIndex for this film, so the panel takes the next-best still
+    val pick = rememberDistinctStill(item)
+    val heroItem = if (hasDistinctStill(item)) item else null
     val sizes = rememberJellytipSizes()
     val meta =
         remember(item.id) {
@@ -257,8 +259,9 @@ private fun TrailerBreakRow(
                         height = panelHeight,
                         onClick = onClick,
                         onLongClick = onLongClick,
-                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, false) },
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(heroItem, false) },
                         corner = 6.dp,
+                        focusScale = LARGE_CARD_SCALE,
                     ) {
                         // The panel is 16:9, so cropping the still to it is fine
                         if (pick.url != null) {
@@ -385,7 +388,8 @@ private fun TonightsPickRow(
     viewModel: JellytipHomeViewModel,
 ) {
     val item = items[special.itemId] ?: return
-    val pick = remember(item.id, special.heroIndex) { viewModel.heroPick(item, special.heroIndex) }
+    val pick = rememberDistinctStill(item)
+    val heroItem = if (hasDistinctStill(item)) item else null
     val sizes = rememberJellytipSizes()
     ItemRow(
         title = special.title,
@@ -400,7 +404,8 @@ private fun TonightsPickRow(
                 height = SpecialTokens.FEATURE_H,
                 onClick = onClick,
                 onLongClick = onLongClick,
-                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, false) },
+                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(heroItem, false) },
+                focusScale = LARGE_CARD_SCALE,
             ) {
                 if (pick.url != null) {
                     AsyncImage(
@@ -1001,6 +1006,25 @@ private fun SoundHint(
 // ---------------------------------------------------------------------------------------------------------------------
 // Shared pieces
 
+/** 1.03x on 300-480 dp cards = under 8 dp per side: inside the 10 dp row padding (the 1.08x default would clip). */
+private const val LARGE_CARD_SCALE = 1.03f
+
+/** A backdrop other than the hero's for [item] (companion detailsIndex, else the first one that is not the hero's). */
+@Composable
+private fun rememberDistinctStill(item: BaseItem): com.github.damontecres.wholphin.jellytip.cache.ImagePick {
+    val service = LocalImageUrlService.current
+    return remember(item.id) { com.github.damontecres.wholphin.jellytip.cache.JellytipImagePick.forDetails(service, item) }
+}
+
+/**
+ * With a single backdrop the panel and the hero would show the same picture: then the tile does not pass its film to
+ * the hero (the hero keeps the previous image) rather than duplicating it.
+ */
+private fun hasDistinctStill(item: BaseItem): Boolean =
+    (if (item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON) item.data.parentBackdropImageTags else item.data.backdropImageTags)
+        .orEmpty()
+        .size > 1
+
 internal val SoftShadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)
 
 @Composable
@@ -1012,6 +1036,8 @@ internal fun SpecialCard(
     modifier: Modifier,
     /** Corner radius; null = the theme's card shape. */
     corner: Dp? = null,
+    /** Focus zoom; large cards use less so the zoom stays inside the row's padding and is never clipped. */
+    focusScale: Float = JellytipFocus.SCALE,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -1024,7 +1050,7 @@ internal fun SpecialCard(
         interactionSource = source,
         shape = if (shape != null) CardDefaults.shape(shape) else CardDefaults.shape(),
         colors = CardDefaults.colors(containerColor = Color(0xFF141414)),
-        scale = JellytipFocus.scale(),
+        scale = CardDefaults.scale(focusedScale = focusScale),
         border = if (shape != null) JellytipFocus.border(shape) else JellytipFocus.border(),
         glow = JellytipFocus.glow(),
     ) {
