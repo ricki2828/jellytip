@@ -16,6 +16,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.BaseItemKind
+import com.github.damontecres.wholphin.ui.LocalImageUrlService
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -164,6 +169,10 @@ fun JellytipServerRowView(
                 FranchiseRow(row, row.collection!!, loaded, options, onFocusItem, click, longClick, play, focusModifier, viewModel)
             }
 
+            row.person != null -> {
+                PersonRow(row, row.person, loaded, options, onFocusItem, click, longClick, play, focusModifier, viewModel)
+            }
+
             else -> {
                 ItemRow(
                     title = row.title,
@@ -186,6 +195,128 @@ fun JellytipServerRowView(
             }
         }
     }
+}
+
+private sealed interface PersonRowEntry {
+    data object Portrait : PersonRowEntry
+
+    data class Film(
+        val item: BaseItem,
+    ) : PersonRowEntry
+}
+
+/**
+ * People rows ("Starring X", "Directed by X"): a 2:3 portrait first (person Primary image, name, "N films"; OK = the
+ * person page with their filmography; the hero text hides while it has focus), then the films.
+ */
+@Composable
+private fun PersonRow(
+    row: JellytipServerRow,
+    person: JellytipServerRow.Person,
+    films: List<BaseItem>,
+    options: HomeRowViewOptions,
+    onFocusItem: (BaseItem?, Boolean) -> Unit,
+    click: (BaseItem) -> Unit,
+    longClick: (BaseItem) -> Unit,
+    play: (BaseItem) -> Unit,
+    focusModifier: Modifier,
+    viewModel: JellytipHomeViewModel,
+) {
+    val sizes = rememberJellytipSizes()
+    val service = LocalImageUrlService.current
+    val density = LocalDensity.current
+    val height = options.heightDp.dp
+    val width = height * 2f / 3f
+    val entries = remember(films) { listOf(PersonRowEntry.Portrait) + films.map { PersonRowEntry.Film(it) } }
+    val openPerson = {
+        JellytipTrailerControl.stop()
+        viewModel.navigationManager.navigateTo(Destination.MediaItem(person.id, BaseItemKind.PERSON))
+    }
+    ItemRow(
+        title = row.title,
+        items = entries,
+        onClickItem = { _, entry ->
+            when (entry) {
+                PersonRowEntry.Portrait -> openPerson()
+                is PersonRowEntry.Film -> click(entry.item)
+            }
+        },
+        onLongClickItem = { _, entry ->
+            when (entry) {
+                PersonRowEntry.Portrait -> openPerson()
+                is PersonRowEntry.Film -> longClick(entry.item)
+            }
+        },
+        horizontalPadding = options.spacing.dp,
+        modifier = focusModifier,
+        cardContent = { index, entry, cardModifier, onClick, onLongClick ->
+            when (entry) {
+                is PersonRowEntry.Film -> {
+                    HomePageCardContent(
+                        index = index,
+                        item = entry.item,
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        viewOptions = options,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(entry.item, true) }.playKey(entry.item, play),
+                    )
+                }
+
+                else -> {
+                    val url =
+                        remember(person.id, person.imageTag, density, height) {
+                            with(density) {
+                                service.getItemImageUrl(
+                                    itemId = person.id,
+                                    imageType = ImageType.PRIMARY,
+                                    fillWidth = width.roundToPx(),
+                                    fillHeight = height.roundToPx(),
+                                    tag = person.imageTag,
+                                )
+                            }
+                        }
+                    var failed by remember(url) { mutableStateOf(false) }
+                    SpecialCard(
+                        width = width,
+                        height = height,
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                    ) {
+                        if (url != null && !failed) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = person.name,
+                                contentScale = ContentScale.Crop,
+                                onError = { failed = true },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .fillMaxHeight(0.55f)
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)))),
+                        )
+                        Column(Modifier.align(Alignment.BottomStart).padding(sizes.px(12))) {
+                            Text(
+                                text = person.name,
+                                color = Color.White,
+                                fontFamily = JellytipFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                                style = TextStyle(shadow = SoftShadow),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Caption(if (films.size == 1) "1 film" else "${films.size} films", alpha = 0.75f, px = 16)
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
 
 /** The remote's Play key on a tile plays it straight away, as on the normal rows. */

@@ -47,7 +47,16 @@ data class JellytipServerRow(
     val mediaType: String,
     val itemIds: List<UUID>,
     val collection: JellytipCollection?,
+    /** People rows ("Starring X", "Directed by X"): the row opens with this person's portrait. */
+    val person: Person? = null,
 ) {
+    data class Person(
+        val id: UUID,
+        val name: String,
+        val role: String,
+        val imageTag: String?,
+    )
+
     val isPoster get() = layout == LAYOUT_POSTER
     val isFranchise get() = layout == LAYOUT_FRANCHISE && collection != null
 
@@ -138,6 +147,11 @@ object JellytipRowsParser {
             mediaType = o.optString("mediaType", "movie"),
             itemIds = itemIds,
             collection = o.optJSONObject("collection")?.let { collection(it) },
+            person =
+                o.optJSONObject("person")?.let { p ->
+                    val pid = p.str("id")?.toUuidOrNull() ?: return@let null
+                    JellytipServerRow.Person(pid, p.str("name").orEmpty(), p.optString("role", "actor"), p.str("imageTag"))
+                },
         )
     }
 
