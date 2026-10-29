@@ -5,7 +5,19 @@ on:
     branches:
       - jellytip
       - jellytip-*
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      play_upload:
+        description: 'Upload the release AAB to Google Play (store/play/RELEASE.md). Off: build only.'
+        type: boolean
+        default: false
+      play_track:
+        description: 'Play track for the upload (internal, alpha = closed testing, beta, production)'
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
 
 defaults:
   run:
@@ -21,6 +33,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version_code: ${{ steps.vc.outputs.code }}
     steps:
       - name: Checkout the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,20 +46,40 @@ jobs:
         uses: ./.github/actions/setup
       - name: Build debug app
         run: ./gradlew assembleDefaultDebug --no-daemon
+      - name: Version code
+        id: vc
+        env:
+          VC_OFFSET: ${{ vars.APP_VERSION_CODE_OFFSET || 1000 }}
+        run: |
+          # versionCode = run_number + APP_VERSION_CODE_OFFSET (default 1000). Independent of upstream tags.
+          # If jellytip.yml is renamed, run_number restarts: raise the offset first.
+          echo "code=$(( GITHUB_RUN_NUMBER + VC_OFFSET ))" >> "$GITHUB_OUTPUT"
       - name: Build release app
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: ./gradlew assembleDefaultRelease -PjellytipVersionCode=$((1000 + GITHUB_RUN_NUMBER)) --no-daemon
+        run: ./gradlew assembleDefaultRelease -PjellytipVersionCode=${{ steps.vc.outputs.code }} --no-daemon
       - name: Build release AAB (Play)
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: ./gradlew bundleAppstoreRelease -PjellytipVersionCode=$((1000 + GITHUB_RUN_NUMBER)) --no-daemon
+        run: ./gradlew bundleAppstoreRelease -PjellytipVersionCode=${{ steps.vc.outputs.code }} --no-daemon
+      - name: AAB signing fingerprint
+        env:
+          EXPECTED: ${{ vars.EXPECTED_UPLOAD_SHA256 || '5E:C5:7F:ED:1C:6C:7F:1E:7C:F1:C0:6C:33:C3:E6:F8:F8:97:55:A0:6F:D5:72:BB:F5:EB:A7:5D:81:93:AB:9B' }}
+        run: |
+          aab=app/build/outputs/bundle/appstoreRelease/app-appstore-release.aab
+          got=$(keytool -printcert -jarfile "$aab" | awk '/SHA256:/{print $2; exit}')
+          echo "### AAB: versionCode ${{ steps.vc.outputs.code }}, signer SHA-256 $got" >> "$GITHUB_STEP_SUMMARY"
+          echo "AAB signer SHA-256: $got"
+          if [ "${got^^}" != "${EXPECTED^^}" ]; then
+            echo "::error title=Upload key mismatch::AAB is signed with $got, expected $EXPECTED (repo variable EXPECTED_UPLOAD_SHA256). Play would reject it."
+            exit 1
+          fi
       - name: Upload release AAB
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -64,3 +98,89 @@ jobs:
           name: jellytip-debug-apk
           path: app/build/outputs/apk/default/debug/*.apk
           retention-days: 14
+
+  play-upload:
+    # Google Play upload (store/play/RELEASE.md). Runs after build on a v* tag, or on a manual dispatch
+    # from the release branch with play_upload ticked. Without PLAY_SERVICE_ACCOUNT_JSON in the
+    # `release` Environment it skips with a notice and stays green.
+    # Track: dispatch input, else repo variable PLAY_TRACK, else internal. Status: repo variable
+    # PLAY_RELEASE_STATUS (default draft until the first publish). Notes: store/play/release-notes.
+    name: Play upload
+    needs: [build]
+    if: ${{ needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.play_upload && (github.ref == 'refs/heads/jellytip' || github.ref == 'refs/heads/jellytip-play'))) }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - name: Check for the Play service account secret
+        id: gate
+        env:
+          PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SA" ]; then
+            echo "::notice title=Play upload skipped::PLAY_SERVICE_ACCOUNT_JSON is not set in the release Environment (store/play/RELEASE.md). The signed AAB is in this run's jellytip-release-aab artifact for a manual upload."
+            echo "### Play upload skipped: PLAY_SERVICE_ACCOUNT_JSON secret not set" >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: ${{ steps.gate.outputs.ready == 'true' }}
+        with:
+          persist-credentials: false
+          sparse-checkout: store/play/release-notes
+      - uses: actions/download-artifact@v4
+        if: ${{ steps.gate.outputs.ready == 'true' }}
+        with:
+          name: jellytip-release-aab
+          path: dist
+      - name: Verify the AAB signing key and resolve track and status
+        if: ${{ steps.gate.outputs.ready == 'true' }}
+        env:
+          EXPECTED: ${{ vars.EXPECTED_UPLOAD_SHA256 || '5E:C5:7F:ED:1C:6C:7F:1E:7C:F1:C0:6C:33:C3:E6:F8:F8:97:55:A0:6F:D5:72:BB:F5:EB:A7:5D:81:93:AB:9B' }}
+          INPUT_TRACK: ${{ inputs.play_track }}
+          VAR_TRACK: ${{ vars.PLAY_TRACK }}
+          VAR_STATUS: ${{ vars.PLAY_RELEASE_STATUS }}
+          VAR_FRACTION: ${{ vars.PLAY_USER_FRACTION }}
+        run: |
+          aab=$(ls dist/*.aab | head -1)
+          got=$(keytool -printcert -jarfile "$aab" | awk '/SHA256:/{print $2; exit}')
+          if [ "${got^^}" != "${EXPECTED^^}" ]; then
+            echo "::error title=Upload key mismatch::AAB is signed with $got, expected $EXPECTED. Not uploading."
+            exit 1
+          fi
+          track="${INPUT_TRACK:-${VAR_TRACK:-internal}}"
+          status="${VAR_STATUS:-draft}"
+          case "$track" in internal|alpha|beta|production) ;; *) echo "::error::unknown Play track '$track'"; exit 1 ;; esac
+          case "$status" in completed|draft|inProgress|halted) ;; *) echo "::error::unknown Play status '$status'"; exit 1 ;; esac
+          fraction=""
+          if [ "$status" = inProgress ]; then
+            fraction="$VAR_FRACTION"
+            python3 -c "import sys; f=float(sys.argv[1]); assert 0 < f < 1" "$fraction" 2>/dev/null \
+              || { echo "::error::PLAY_RELEASE_STATUS=inProgress needs repo variable PLAY_USER_FRACTION between 0 and 1"; exit 1; }
+          fi
+          ls store/play/release-notes/whatsnew-* > /dev/null || { echo "::error::no store/play/release-notes/whatsnew-<locale> file"; exit 1; }
+          for f in store/play/release-notes/whatsnew-*; do
+            n=$(wc -m < "$f"); [ "$n" -le 500 ] || { echo "::error::$f is $n characters; Play allows 500"; exit 1; }
+          done
+          echo "AAB=$aab" >> "$GITHUB_ENV"
+          echo "TRACK=$track" >> "$GITHUB_ENV"
+          echo "STATUS=$status" >> "$GITHUB_ENV"
+          echo "USER_FRACTION=$fraction" >> "$GITHUB_ENV"
+          echo "### Play upload: track $track, status $status, versionCode ${{ needs.build.outputs.version_code }}, signer $got" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload to Google Play
+        if: ${{ steps.gate.outputs.ready == 'true' }}
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: xyz.taiaroa.jellytip
+          releaseFiles: ${{ env.AAB }}
+          track: ${{ env.TRACK }}
+          status: ${{ env.STATUS }}
+          userFraction: ${{ env.USER_FRACTION }}
+          whatsNewDirectory: store/play/release-notes
+      - name: Remove the service account key file (the action writes it to the workspace)
+        if: always()
+        run: rm -f serviceAccountJson.json
