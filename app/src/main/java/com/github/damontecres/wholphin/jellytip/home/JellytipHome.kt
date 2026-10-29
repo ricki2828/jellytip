@@ -269,7 +269,8 @@ fun JellytipHomeHero(
             // "Sound on" hint, 2 s, bottom-right just above the first row
             var hintVisible by remember { mutableStateOf(false) }
             LaunchedEffect(JellytipTrailerControl.hintTick) {
-                if (JellytipTrailerControl.hintTick == 0L) return@LaunchedEffect
+                // A special's video (Trailer Break, Closet Picks) shows its own hint in its frame
+                if (JellytipTrailerControl.hintTick == 0L || JellytipTrailerControl.owner != null) return@LaunchedEffect
                 hintVisible = true
                 delay(2_000)
                 hintVisible = false
