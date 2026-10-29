@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip
 import androidx.datastore.core.DataStore
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.update
 import com.github.damontecres.wholphin.services.hilt.StandardOkHttpClient
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import kotlinx.coroutines.CancellationException
@@ -569,6 +570,31 @@ class JellytipApi
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip storage unavailable")
                     null
+                }
+            }
+        }
+
+        /**
+         * The person's server-side playback prefs (personalisation) written into this device's settings at sign-in, so
+         * intro and trailer behaviour follow them across devices. Only changes what differs.
+         */
+        suspend fun applyPlaybackPrefs(
+            intro: Boolean,
+            trailerAutoplay: Boolean,
+            trailerSound: Boolean,
+        ) {
+            preferences.updateData { current ->
+                if (current.jellytipSplashDisabled == !intro &&
+                    current.jellytipDisableTrailerAutoplay == !trailerAutoplay &&
+                    current.jellytipTrailerSound == trailerSound
+                ) {
+                    current
+                } else {
+                    current.update {
+                        jellytipSplashDisabled = !intro
+                        jellytipDisableTrailerAutoplay = !trailerAutoplay
+                        jellytipTrailerSound = trailerSound
+                    }
                 }
             }
         }

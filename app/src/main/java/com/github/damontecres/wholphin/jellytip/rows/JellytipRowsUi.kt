@@ -354,6 +354,11 @@ private sealed interface FranchiseEntry {
     data class Film(
         val item: BaseItem,
     ) : FranchiseEntry
+
+    /** A part the library lacks but the person's IPTV has: drawn in its series slot with the IPTV dot. */
+    data class Iptv(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    ) : FranchiseEntry
 }
 
 /**
@@ -374,7 +379,23 @@ private fun FranchiseRow(
     viewModel: JellytipHomeViewModel,
 ) {
     val sizes = rememberJellytipSizes()
-    val entries = remember(films) { listOf(FranchiseEntry.Info) + films.map { FranchiseEntry.Film(it) } }
+    // Series order from the parts; IPTV fills the slots the library lacks; library films without a part go last
+    val entries =
+        remember(films, collection) {
+            val byId = films.associateBy { it.id }
+            val ordered =
+                collection.parts.mapNotNull { part ->
+                    part.itemId?.let { byId[it] }?.let { FranchiseEntry.Film(it) }
+                        ?: part.iptv?.let { FranchiseEntry.Iptv(it) }
+                }
+            val seen = ordered.mapNotNull { (it as? FranchiseEntry.Film)?.item?.id }.toSet()
+            val withLibrary = if (ordered.none { it is FranchiseEntry.Film } && films.isNotEmpty()) films.map { FranchiseEntry.Film(it) } + ordered else ordered + films.filter { it.id !in seen }.map { FranchiseEntry.Film(it) }
+            listOf(FranchiseEntry.Info) + withLibrary
+        }
+    val openIptv: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem) -> Unit = { iptv ->
+        JellytipTrailerControl.stop()
+        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(iptv.id, iptv.title), "franchise row OK (iptv)")
+    }
     val openCollection = {
         JellytipTrailerControl.stop()
         viewModel.navigationManager.navigateTo(Destination.JellytipCollection(collection.tmdbId, collection.name), "franchise info OK")
@@ -409,12 +430,14 @@ private fun FranchiseRow(
                     when (entry) {
                         FranchiseEntry.Info -> openCollection()
                         is FranchiseEntry.Film -> click(entry.item)
+                        is FranchiseEntry.Iptv -> openIptv(entry.item)
                     }
                 },
                 onLongClickItem = { _, entry ->
                     when (entry) {
                         FranchiseEntry.Info -> openCollection()
                         is FranchiseEntry.Film -> longClick(entry.item)
+                        is FranchiseEntry.Iptv -> openIptv(entry.item)
                     }
                 },
                 horizontalPadding = options.spacing.dp,
@@ -429,6 +452,17 @@ private fun FranchiseRow(
                                 onLongClick = onLongClick,
                                 viewOptions = options,
                                 modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(entry.item, true) }.playKey(entry.item, play),
+                            )
+                        }
+
+                        is FranchiseEntry.Iptv -> {
+                            com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                                item = entry.item,
+                                width = options.heightDp.dp * 16f / 9f,
+                                height = options.heightDp.dp,
+                                poster = false,
+                                onClick = onClick,
+                                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
                             )
                         }
 

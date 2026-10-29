@@ -39,6 +39,12 @@ data class SearchCollection(
     val total: Int,
 )
 
+data class SearchList(
+    val slug: String,
+    val name: String,
+    val count: Int,
+)
+
 data class SearchIptv(
     val id: String,
     val name: String,
@@ -56,6 +62,7 @@ data class SearchGroup(
     val collections: List<SearchCollection> = emptyList(),
     val iptv: List<SearchIptv> = emptyList(),
     val discover: List<DiscoverTitle> = emptyList(),
+    val lists: List<SearchList> = emptyList(),
 )
 
 data class SearchAnswer(
@@ -66,7 +73,7 @@ data class SearchAnswer(
     /** Groups still coming (admins' discover): ask again with `types=<them>` ~300 ms later. */
     val pending: List<String>,
 ) {
-    val isEmpty get() = groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() }
+    val isEmpty get() = groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() && it.lists.isEmpty() }
 }
 
 data class SearchSuggest(
@@ -178,7 +185,13 @@ object SearchParse {
                                     )
                                 },
                         )
-                    else -> null // lists etc.: no TV page for them yet
+                    "lists" ->
+                        SearchGroup(
+                            type,
+                            total,
+                            lists = items.mapNotNull { SearchList(it.str("slug") ?: return@mapNotNull null, it.str("name").orEmpty(), it.optInt("count", 0)) },
+                        )
+                    else -> null
                 }
             }
         return SearchAnswer(

@@ -91,6 +91,8 @@ data class JellytipCollection(
         val title: String,
         val year: Int?,
         val itemId: UUID?,
+        /** Not in the library but on the person's IPTV (`source:"iptv"`): fills the slot in franchise rows. */
+        val iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
     )
 
     data class Missing(
@@ -172,6 +174,7 @@ object JellytipRowsParser {
                     title = p.str("title").orEmpty(),
                     year = p.optInt("year", 0).takeIf { it > 0 },
                     itemId = p.str("itemId")?.toUuidOrNull(),
+                    iptv = iptvPart(p),
                 )
             }
         val missing =

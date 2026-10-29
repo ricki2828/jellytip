@@ -396,6 +396,11 @@ fun DestinationContent(
             JellytipDiscoverDetails(title = destination.title, modifier = modifier)
         }
 
+        is Destination.JellytipList -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.rows.JellytipListPage(slug = destination.slug, name = destination.name, modifier = modifier)
+        }
+
         Destination.JellytipMe -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.me.JellytipMePage(modifier = modifier)

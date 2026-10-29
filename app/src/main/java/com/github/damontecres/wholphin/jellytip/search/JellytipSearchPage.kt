@@ -315,6 +315,7 @@ private fun groupTitle(g: SearchGroup): String {
             "collections" -> "Collections"
             "iptv" -> "On IPTV"
             "discover" -> "Not in the library"
+            "lists" -> "Letterboxd lists"
             else -> g.type
         }
     return name
@@ -365,6 +366,12 @@ private fun ResultGroup(
                         TextCard(c.name, "${c.inLibrary} of ${c.total} in the library") {
                             viewModel.opened("collection")
                             viewModel.navigationManager.navigateTo(Destination.JellytipCollection(c.tmdbId, c.name), "search collection OK")
+                        }
+                    }
+                    items(g.lists, key = { "l${it.slug}" }) { l ->
+                        TextCard(l.name, "${l.count} films · Letterboxd") {
+                            viewModel.opened("list")
+                            viewModel.navigationManager.navigateTo(Destination.JellytipList(l.slug, l.name), "search list OK")
                         }
                     }
                     items(g.iptv, key = { "i${it.id}" }) { i ->

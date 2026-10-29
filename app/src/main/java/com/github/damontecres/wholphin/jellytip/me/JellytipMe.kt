@@ -168,8 +168,14 @@ object JellytipMe {
                 JellytipTrace.log("me", "prefs unavailable (${res?.first})")
                 return@launch
             }
-            runCatching { MeParse.prefs(res.second) }.getOrNull()?.let { _prefs.value = it }
+            val p = runCatching { MeParse.prefs(res.second) }.getOrNull()
+            p?.let { _prefs.value = it }
             _available.value = true
+            // Intro / trailer settings follow the person: write them into this device's settings
+            p?.let {
+                runCatching { api?.applyPlaybackPrefs(it.intro, it.trailerAutoplay, it.trailerSound) }
+                JellytipTrace.log("me", "device settings from prefs: intro=${it.intro} trailers=${it.trailerAutoplay} sound=${it.trailerSound}")
+            }
             loadReactions()
             loadFollows()
         }

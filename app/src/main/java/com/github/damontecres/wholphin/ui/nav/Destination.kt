@@ -172,6 +172,13 @@ sealed class Destination(
         val title: DiscoverTitle,
     ) : Destination(false)
 
+    /** Jellytip: a Letterboxd list the companion tracks (its films in the list's order). */
+    @Serializable
+    data class JellytipList(
+        val slug: String,
+        val name: String,
+    ) : Destination(false)
+
     /** Jellytip personalisation: hub (settings that follow the person), taste, Home edit. */
     @Serializable
     data object JellytipMe : Destination(false)
