@@ -372,11 +372,14 @@ fun DestinationContent(
 
         is Destination.Search -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            SearchPage(
-                initialQuery = destination.query,
-                userPreferences = preferences,
-                modifier = modifier,
-            )
+            // Jellytip: the companion's 10x search; a server without it (404) keeps the app's own page
+            com.github.damontecres.wholphin.jellytip.search.JellytipSearchPage(initialQuery = destination.query, modifier = modifier) {
+                SearchPage(
+                    initialQuery = destination.query,
+                    userPreferences = preferences,
+                    modifier = modifier,
+                )
+            }
         }
 
         Destination.Debug -> {
