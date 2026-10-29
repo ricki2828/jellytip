@@ -121,8 +121,8 @@ internal object SpecialTokens {
     val POSTER_W = 100.dp
     val WIDE_H = JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP.dp
     val WIDE_W = (JellytipHomeTokens.LANDSCAPE_CARD_HEIGHT_DP * 16 / 9).dp
-    /** Trailer Break video panel height: as tall as a row can be under the hero text (title + padding included). */
-    val BAND_H = 190.dp
+    /** Trailer Break band height (panel = this minus the inset): fits under the hero text with the row spacing. */
+    val BAND_H = 176.dp
     val FEATURE_H = 170.dp
     val FEATURE_W = 480.dp
     val VIDEO_H = 150.dp
@@ -159,11 +159,11 @@ fun JellytipSpecialRow(
                     // Free the hero player/decoder before the details page starts
                     JellytipTrailerControl.stop()
                     JellytipDoubleBill.pair = null
-                    viewModel.navigationManager.navigateTo(item.destination())
+                    viewModel.navigationManager.navigateTo(item.destination(), "special OK")
                 },
                 navigate = { destination ->
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(destination)
+                    viewModel.navigationManager.navigateTo(destination, "special OK")
                 },
             )
         }
@@ -221,75 +221,84 @@ private fun TrailerBreakRow(
         remember(item.id) {
             listOfNotNull(
                 item.data.productionYear?.toString(),
-                item.data.genres?.take(2)?.takeIf { it.isNotEmpty() }?.joinToString(" / "),
                 item.data.officialRating?.takeIf { it.isNotBlank() },
+                item.data.runTimeTicks?.let { ticks -> (ticks / 600_000_000L).toInt().takeIf { it > 0 }?.let { runtime(it) } },
+                item.data.genres?.take(3)?.takeIf { it.isNotEmpty() }?.joinToString(", "),
             ).joinToString("  \u00B7  ")
         }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val bandWidth = maxWidth - SpecialTokens.SPACING * 2
-        val panelHeight = SpecialTokens.BAND_H
-        val panelWidth = panelHeight * 16f / 9f
-        ItemRow(
-            title = special.title,
-            items = listOf(item),
-            onClickItem = { _, _ ->
-                when {
-                    JellytipTrailerControl.onOkOwner(owner) -> {}
-                    JellytipTrailerControl.isPlayingForOwner(owner) -> actions.open(item)
-                    else ->
-                        scope.launch {
-                            // Not playing yet (autoplay off, or still waiting): start now with sound
-                            val url = resolve() ?: return@launch actions.open(item)
-                            JellytipTrailerControl.startSpecial(owner, url, sound = true, itemId = item.id)
-                            JellytipTrailerControl.hintTick = System.nanoTime()
-                        }
+    val onOk: () -> Unit = {
+        when {
+            JellytipTrailerControl.onOkOwner(owner) -> {}
+            JellytipTrailerControl.isPlayingForOwner(owner) -> actions.open(item)
+            else ->
+                scope.launch {
+                    // Not playing yet (autoplay off, or still waiting): start now with sound
+                    val url = resolve() ?: return@launch actions.open(item)
+                    JellytipTrailerControl.startSpecial(owner, url, sound = true, itemId = item.id)
+                    JellytipTrailerControl.hintTick = System.nanoTime()
                 }
-            },
-            onLongClickItem = { _, _ -> actions.open(item) },
-            horizontalPadding = SpecialTokens.SPACING,
-            modifier = focusModifier.onFocusChanged { active = it.hasFocus },
-            cardContent = { _, _, cardModifier, onClick, onLongClick ->
-                // Plain night band: text on the left, the trailer in a true 16:9 panel on the right (only the panel takes focus)
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier.width(bandWidth).height(panelHeight),
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.weight(1f).padding(start = sizes.px(16), end = sizes.px(40), bottom = sizes.px(6)),
-                    ) {
-                        KickerUnlessTitled("Trailer break", special.title)
-                        LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 120)
-                        if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
-                        if (meta.isNotBlank()) Caption(meta, alpha = 0.6f)
-                        SoundHint(owner, "Sound on \u00B7 OK for details", Modifier)
-                    }
-                    SpecialCard(
-                        width = panelWidth,
-                        height = panelHeight,
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(heroItem, false) },
-                        corner = 6.dp,
-                        focusScale = LARGE_CARD_SCALE,
-                    ) {
-                        // The panel is 16:9, so cropping the still to it is fine
-                        if (pick.url != null) {
-                            AsyncImage(
-                                model = pick.url,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                alignment = focalAlignment(pick.focal),
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                        SpecialVideoSurface(owner, Modifier.fillMaxSize())
-                    }
-                }
-            },
-        )
+        }
+    }
+    val playing = JellytipTrailerControl.isPlayingForOwner(owner)
+    val hint =
+        when {
+            playing && JellytipTrailerControl.sound -> "Sound on \u00B7 OK again for details"
+            playing -> "OK for sound \u00B7 again for details"
+            else -> "OK to play with sound \u00B7 again for details"
+        }
+    // As on the web: one framed near-black band, no row title above (the kicker is the title), info on the left and
+    // a fixed 16:9 panel on the right (the still until the trailer has a picture, then the trailer, letterboxed).
+    // Height fits under the hero text with the row spacing, so nothing is cut at the bottom of the screen.
+    val panelHeight = SpecialTokens.BAND_H - BAND_INSET * 2
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            focusModifier
+                .onFocusChanged { active = it.hasFocus }
+                .padding(horizontal = SpecialTokens.SPACING)
+                .fillMaxWidth()
+                .height(SpecialTokens.BAND_H)
+                .background(BAND_BG, RoundedCornerShape(8.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                .padding(BAND_INSET),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.weight(1f).padding(start = sizes.px(20), end = sizes.px(40)),
+        ) {
+            Kicker(special.title.ifBlank { "Trailer break" })
+            LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 100)
+            if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
+            if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
+            Caption(hint, alpha = 0.45f, px = 16)
+        }
+        SpecialCard(
+            width = panelHeight * 16f / 9f,
+            height = panelHeight,
+            onClick = onOk,
+            onLongClick = { actions.open(item) },
+            modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(heroItem, false) },
+            corner = 6.dp,
+            focusScale = LARGE_CARD_SCALE,
+        ) {
+            Box(Modifier.fillMaxSize().background(Color.Black))
+            // The panel is 16:9, so cropping the still to it is fine
+            if (pick.url != null) {
+                AsyncImage(
+                    model = pick.url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = focalAlignment(pick.focal),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            SpecialVideoSurface(owner, Modifier.fillMaxSize())
+        }
     }
 }
+
+private val BAND_BG = Color(0xFF0E0E0E)
+private val BAND_INSET = 12.dp
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Person spotlight: portrait tile (opens the person page = filmography) + their films as 2:3 posters
