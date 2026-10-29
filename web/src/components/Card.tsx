@@ -1,13 +1,12 @@
-// Landscape titled tile: titled Thumb art, else still/backdrop + clearlogo, else backdrop + title text.
-// Nothing is drawn below the tile.
+// Landscape titled tile (see cardLayers for the fallback chain). Nothing is drawn below the tile, and it is never blank:
+// the title sits on the dark tile until the picture has loaded.
 import { memo, useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
 import { backdropInfo, episodeArtFor, peekBackdropInfo, peekEpisodeArt } from "../api/companion";
-import { cardArt, heroItemId } from "../lib/art";
+import { cardLayers, heroItemId } from "../lib/art";
 import { go } from "../lib/router";
 
 export const CARD_W = 264;
-export const CARD_H = Math.round((CARD_W * 9) / 16);
 const RANK_WAIT_MS = 300;
 
 function useVisible<T extends Element>(ref: React.RefObject<T | null>, margin = "300px"): boolean {
@@ -34,7 +33,6 @@ function useCompanionReady(item: Item, visible: boolean): boolean {
     const t = setTimeout(() => alive && setReady(true), RANK_WAIT_MS);
     const jobs: Promise<unknown>[] = [backdropInfo(rankedId)];
     if (item.Type === "Episode" && item.SeriesId) jobs.push(episodeArtFor(item.SeriesId));
-    if (item.ParentThumbItemId && item.ParentThumbItemId !== rankedId) jobs.push(backdropInfo(item.ParentThumbItemId));
     Promise.all(jobs).then(() => {
       if (!alive) return;
       setReady(true);
@@ -52,6 +50,7 @@ function useCompanionReady(item: Item, visible: boolean): boolean {
 interface Props {
   item: Item;
   onFocusItem?: (item: Item) => void;
+  /** CSS width in px; 0 = fluid (grid cells size it). */
   width?: number;
   autoFocus?: boolean;
   /** Overrides the default (open details). */
@@ -65,23 +64,28 @@ function CardImpl({ item, onFocusItem, width = CARD_W, autoFocus, onOpen, label,
   const ref = useRef<HTMLButtonElement>(null);
   const visible = useVisible(ref);
   const ready = useCompanionReady(item, visible);
-  // width 0 = fluid (grid cells size it); images are requested at a typical cell size
   const fluid = width === 0;
-  const imgW = fluid ? 340 : width;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const art = visible && ready ? cardArt(item, Math.round(imgW * dpr), Math.round(((imgW * 9) / 16) * dpr)) : null;
-  const [baseFailed, setBaseFailed] = useState<string | null>(null);
-  const [logoFailed, setLogoFailed] = useState<string | null>(null);
-  const showLogo = !caption && art && !(art.titled && baseFailed !== art.baseUrl) && art.logoUrl && logoFailed !== art.logoUrl;
-  const baseOk = !!art?.baseUrl && baseFailed !== art.baseUrl;
-  // Titled art that failed to load still needs a name on the tile
-  const titled = !!art?.titled && baseOk;
-  const showText = art && !titled && !showLogo;
+  const layers = visible && ready ? cardLayers(item) : null;
+  // Failed images are remembered by URL and skipped; a chain that changes later (companion answer) only adds new URLs
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState<Set<string>>(new Set());
+  const layer = layers?.find((l) => !failed.has(l.url ?? l.logoUrl ?? "")) ?? null;
+  const fail = (u: string | null | undefined) => u && setFailed((f) => new Set(f).add(u));
+  const done = (u: string) => setLoaded((l) => (l.has(u) ? l : new Set(l).add(u)));
+
+  const baseReady = !!layer?.url && loaded.has(layer.url);
+  const titledShown = layer?.kind === "titled" && baseReady;
+  const name = item.Type === "Episode" ? item.SeriesName ?? item.Name : item.Name;
   const ud = item.UserData;
   const progress = ud?.PlayedPercentage && ud.PlayedPercentage > 0 && ud.PlayedPercentage < 100 ? ud.PlayedPercentage : 0;
   const title =
     label ??
     (item.Type === "Episode" ? `${item.SeriesName ?? ""}${item.SeriesName ? " · " : ""}S${item.ParentIndexNumber ?? "?"} E${item.IndexNumber ?? "?"} ${item.Name}` : item.Name);
+  // Logo: bottom-left on untitled art, centred on the dark tile for the logo layer
+  const logoUrl = !caption && layer && (layer.kind === "image" || layer.kind === "logo") ? layer.logoUrl : null;
+  const logoOk = !!logoUrl && !failed.has(`logo:${logoUrl}`);
+  // Text shows until the picture is up (so a tile is never blank), and stays wherever nothing else names the title
+  const showText = !titledShown && !(logoOk && (layer?.kind === "logo" || baseReady)) && !(layer?.kind === "poster" && baseReady);
 
   return (
     <button
@@ -96,14 +100,32 @@ function CardImpl({ item, onFocusItem, width = CARD_W, autoFocus, onOpen, label,
       onMouseEnter={() => onFocusItem?.(item)}
       onClick={() => (onOpen ? onOpen(item) : go(`/item/${item.Id}`))}
     >
-      {baseOk && (
-        <img className="card-img" src={art!.baseUrl!} alt="" loading="lazy" decoding="async" onError={() => setBaseFailed(art!.baseUrl)} />
+      {layer?.kind === "poster" && layer.blurUrl && (
+        <img className={`card-blur${baseReady ? " in" : ""}`} src={layer.blurUrl} alt="" decoding="async" />
       )}
-      {art && (!titled || caption) && <div className="card-fade" />}
-      {caption && titled && <span className="card-title">{caption}</span>}
-      {showLogo && <img className="card-logo" src={art!.logoUrl!} alt="" onError={() => setLogoFailed(art!.logoUrl)} />}
-      {showText && <span className="card-title">{caption ?? (item.Type === "Episode" ? item.SeriesName ?? item.Name : item.Name)}</span>}
-      {!caption && item.Type === "Episode" && art && !titled && (
+      {layer?.url && (
+        <img
+          key={layer.url}
+          className={`${layer.kind === "poster" ? "card-poster" : "card-img"}${baseReady ? " in" : ""}`}
+          src={layer.url}
+          alt=""
+          decoding="async"
+          onLoad={() => done(layer.url!)}
+          onError={() => fail(layer.url)}
+        />
+      )}
+      {(!titledShown || caption) && layer?.kind !== "logo" && <div className="card-fade" />}
+      {logoOk && (
+        <img
+          className={layer?.kind === "logo" ? "card-logo center" : `card-logo${baseReady ? " in" : ""}`}
+          src={logoUrl!}
+          alt=""
+          onError={() => fail(`logo:${logoUrl}`)}
+          onLoad={() => layer?.kind === "logo" && done(logoUrl!)}
+        />
+      )}
+      {(caption ? !!layer : showText) && <span className={`card-title${baseReady || layer?.kind === "text" ? "" : " pending"}`}>{caption ?? name}</span>}
+      {!caption && item.Type === "Episode" && layer && !titledShown && (
         <span className="card-ep">
           S{item.ParentIndexNumber} E{item.IndexNumber}
         </span>

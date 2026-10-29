@@ -289,13 +289,40 @@ img {
   height: calc(var(--card-w) * 9 / 16);
   cursor: default;
 }
-.card-img {
+.card-img,
+.card-blur {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: fade-in 0.3s ease;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.card-img.in {
+  opacity: 1;
+}
+.card-blur {
+  filter: blur(16px) brightness(0.55);
+  transform: scale(1.2);
+}
+.card-blur.in {
+  opacity: 1;
+}
+.card-poster {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  height: 100%;
+  transform: translateX(-50%);
+  object-fit: contain;
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.card-poster.in {
+  opacity: 1;
 }
 .card-fade {
   position: absolute;
@@ -311,6 +338,21 @@ img {
   object-fit: contain;
   object-position: left bottom;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.card-logo.in {
+  opacity: 1;
+}
+.card-logo.center {
+  left: 50%;
+  top: 50%;
+  bottom: auto;
+  max-width: 62%;
+  max-height: 52%;
+  object-position: center;
+  transform: translate(-50%, -50%);
+  opacity: 1;
 }
 .card-title {
   position: absolute;
@@ -325,6 +367,9 @@ img {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.card-title.pending {
+  color: var(--dim);
 }
 .card-ep {
   position: absolute;

@@ -44,55 +44,78 @@ function bestBackdropIndex(id: string): number | null {
 /** True when the tile draws a backdrop (not a good titled Thumb). */
 function cardDrawsBackdrop(item: Item): boolean {
   if (item.Type === "Episode" && item.SeriesId) {
-    const thumb = item.ParentThumbItemId;
-    const titled = !!item.ParentThumbImageTag && !!thumb && isThumbGood(thumb);
+    const thumb = item.ParentThumbItemId ?? item.SeriesId;
+    const titled = !!item.ParentThumbImageTag && isThumbGood(thumb);
     return !titled && (!item.ImageTags?.Primary || !isEpisodeStillUsable(item));
   }
   return !item.ImageTags?.Thumb || !isThumbGood(item.Id);
 }
 
-export interface CardArt {
-  baseUrl: string | null;
-  /** Base image already carries the title (Thumb). */
-  titled: boolean;
+/** One way to draw a tile. Layers are tried in order; a failed image moves the tile to the next one. */
+export interface CardLayer {
+  kind: "titled" | "image" | "poster" | "logo" | "text";
+  /** Base image (titled Thumb, still/backdrop, or the poster for "poster"). */
+  url: string | null;
+  /** Clearlogo drawn bottom-left on untitled art, or centred for "logo". */
   logoUrl: string | null;
+  /** Blurred fill behind a letterboxed poster. */
+  blurUrl?: string | null;
 }
 
 /**
- * 1. Thumb (title baked in) · 2. episodes: own still + series logo, else series Thumb / backdrop
- * 3. backdrop + clearlogo · 4. backdrop/primary + title text (the caller draws it)
+ * Tile images are requested at one canonical size so every screen (rows, grid, search) shares the server's resize cache:
+ * the seedbox resizes on first request, which is what makes cold tiles slow.
  */
-export function cardArt(item: Item, w: number, h: number): CardArt {
+export const TILE_W = 528;
+export const TILE_H = 297;
+
+/**
+ * Fallback chain (TV rules first, then never blank):
+ * Thumb (title baked in) → still/backdrop + clearlogo (or title text) → poster letterboxed on a blurred backdrop/poster
+ * → clearlogo on dark → title text on dark. Episodes: own still + series logo → series Thumb → series backdrop.
+ */
+export function cardLayers(item: Item): CardLayer[] {
+  const w = TILE_W;
+  const h = TILE_H;
   const tags = item.ImageTags ?? {};
-  const logo = (id?: string, tag?: string) =>
-    id && tag ? imageUrl(id, "Logo", { tag, maxWidth: Math.round(w * 0.4), maxHeight: Math.round(h * 0.35) }) : null;
+  const logo = (id?: string, tag?: string) => (id && tag ? imageUrl(id, "Logo", { tag, maxWidth: 400, maxHeight: 160 }) : null);
   const fill = (id: string, type: string, tag?: string, index?: number) => imageUrl(id, type, { tag, index, fillWidth: w, fillHeight: h, quality: 85 });
+  const out: CardLayer[] = [];
 
   if (item.Type === "Episode" && item.SeriesId) {
     const seriesLogo = logo(item.ParentLogoItemId ?? item.SeriesId, item.ParentLogoImageTag);
-    if (tags.Primary && isEpisodeStillUsable(item)) return { baseUrl: fill(item.Id, "Primary", tags.Primary), titled: false, logoUrl: seriesLogo };
-    if (item.ParentThumbItemId && item.ParentThumbImageTag && isThumbGood(item.ParentThumbItemId))
-      return { baseUrl: fill(item.ParentThumbItemId, "Thumb", item.ParentThumbImageTag), titled: true, logoUrl: null };
+    const thumbId = item.ParentThumbItemId ?? item.SeriesId;
+    if (tags.Primary && isEpisodeStillUsable(item)) out.push({ kind: "image", url: fill(item.Id, "Primary", tags.Primary), logoUrl: seriesLogo });
+    if (item.ParentThumbImageTag && isThumbGood(thumbId)) out.push({ kind: "titled", url: fill(thumbId, "Thumb", item.ParentThumbImageTag), logoUrl: null });
     const bt = item.ParentBackdropImageTags ?? [];
-    if (item.ParentBackdropItemId && bt.length) {
-      const idx = resolveBackdropIndex(bt, item.ParentBackdropItemId, bestBackdropIndex(item.ParentBackdropItemId));
-      return { baseUrl: fill(item.ParentBackdropItemId, "Backdrop", bt[idx], idx), titled: false, logoUrl: seriesLogo };
+    const bid = item.ParentBackdropItemId ?? item.SeriesId;
+    if (bt.length) {
+      const idx = resolveBackdropIndex(bt, bid, bestBackdropIndex(bid));
+      out.push({ kind: "image", url: fill(bid, "Backdrop", bt[idx], idx), logoUrl: seriesLogo });
     }
-    return { baseUrl: null, titled: false, logoUrl: seriesLogo };
+    if (tags.Primary && !isEpisodeStillUsable(item)) out.push({ kind: "image", url: fill(item.Id, "Primary", tags.Primary), logoUrl: seriesLogo });
+    if (seriesLogo) out.push({ kind: "logo", url: null, logoUrl: seriesLogo });
+    out.push({ kind: "text", url: null, logoUrl: null });
+    return out;
   }
-  if (item.Type === "Season" && item.SeriesId) {
-    if (item.ParentThumbItemId && item.ParentThumbImageTag)
-      return { baseUrl: fill(item.ParentThumbItemId, "Thumb", item.ParentThumbImageTag), titled: true, logoUrl: null };
-  }
-  if (tags.Thumb && isThumbGood(item.Id)) return { baseUrl: fill(item.Id, "Thumb", tags.Thumb), titled: true, logoUrl: null };
-  const lg = tags.Logo ? logo(item.Id, tags.Logo) : null;
+
+  const ownLogo = tags.Logo ? logo(item.Id, tags.Logo) : item.ParentLogoImageTag ? logo(item.ParentLogoItemId ?? item.SeriesId, item.ParentLogoImageTag) : null;
+  if (item.Type === "Season" && item.SeriesId && item.ParentThumbImageTag)
+    out.push({ kind: "titled", url: fill(item.ParentThumbItemId ?? item.SeriesId, "Thumb", item.ParentThumbImageTag), logoUrl: null });
+  if (tags.Thumb && isThumbGood(item.Id)) out.push({ kind: "titled", url: fill(item.Id, "Thumb", tags.Thumb), logoUrl: null });
   const bt = item.BackdropImageTags ?? [];
-  if (bt.length) {
-    const idx = resolveBackdropIndex(bt, item.Id, bestBackdropIndex(item.Id));
-    return { baseUrl: fill(item.Id, "Backdrop", bt[idx], idx), titled: false, logoUrl: lg };
+  const idx = bt.length ? resolveBackdropIndex(bt, item.Id, bestBackdropIndex(item.Id)) : -1;
+  const backdrop = idx >= 0 ? fill(item.Id, "Backdrop", bt[idx], idx) : null;
+  if (backdrop) out.push({ kind: "image", url: backdrop, logoUrl: ownLogo });
+  if (tags.Primary) {
+    const poster = imageUrl(item.Id, "Primary", { tag: tags.Primary, maxHeight: h, quality: 85 });
+    out.push({ kind: "poster", url: poster, logoUrl: null, blurUrl: backdrop ?? poster });
   }
-  if (tags.Primary) return { baseUrl: fill(item.Id, "Primary", tags.Primary), titled: false, logoUrl: lg };
-  return { baseUrl: null, titled: false, logoUrl: lg };
+  // A Thumb the companion scored as poor is still better than no picture at all
+  if (tags.Thumb && !isThumbGood(item.Id)) out.push({ kind: "titled", url: fill(item.Id, "Thumb", tags.Thumb), logoUrl: null });
+  if (ownLogo) out.push({ kind: "logo", url: null, logoUrl: ownLogo });
+  out.push({ kind: "text", url: null, logoUrl: null });
+  return out;
 }
 
 /** Backdrop index for the home hero (details=false) or the details page. */
