@@ -18,11 +18,13 @@ import { trailerStreamUrl } from "../api/playback";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
 import { focusFirst } from "../lib/spatial";
+import { useIsPhone } from "../lib/device";
 import { Backdrop } from "../components/Backdrop";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { ScoreLine } from "../components/ScoreLine";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
+import { runtimeText } from "../api/jellyfin";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -44,6 +46,7 @@ export function Details({ id }: { id: string }) {
   const [eps, setEps] = useState<Item[] | null>(null);
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const phone = useIsPhone();
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -241,12 +244,31 @@ export function Details({ id }: { id: string }) {
                 </button>
               ))}
             </div>
-            <div className="row-scroll">
-              {(eps ?? []).map((e) => (
-                <Card key={e.Id} item={e} caption={`${e.IndexNumber ?? ""} · ${e.Name}`} />
-              ))}
-              {!eps && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
-            </div>
+            {phone ? (
+              // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
+              <div className="ep-list">
+                {(eps ?? []).map((e) => (
+                  <div key={e.Id} className="ep-row">
+                    <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} />
+                    <button className="ep-text" onClick={() => go(`/item/${e.Id}`)}>
+                      <span className="ep-name">
+                        {e.IndexNumber}. {e.Name}
+                      </span>
+                      <span className="ep-meta">{[runtimeText(e.RunTimeTicks), e.UserData?.Played ? "Watched" : null].filter(Boolean).join("  ·  ")}</span>
+                      {e.Overview && <span className="ep-overview">{e.Overview}</span>}
+                    </button>
+                  </div>
+                ))}
+                {!eps && Array.from({ length: 3 }, (_, i) => <div key={i} className="ep-row card-skeleton" />)}
+              </div>
+            ) : (
+              <div className="row-scroll">
+                {(eps ?? []).map((e) => (
+                  <Card key={e.Id} item={e} caption={`${e.IndexNumber ?? ""} · ${e.Name}`} />
+                ))}
+                {!eps && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
+              </div>
+            )}
           </section>
         )}
         {item.Type === "Episode" && siblings.length > 0 && (

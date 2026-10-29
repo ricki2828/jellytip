@@ -59,6 +59,8 @@ function pick(from: DOMRect, dir: Dir, els: HTMLElement[], current: Element | nu
 }
 
 export function focusFirst(root: ParentNode = document) {
+  // Touch-only devices have no focus ring to drive; focusing would just scroll the page under the user's thumb
+  if (matchMedia("(hover: none) and (pointer: coarse)").matches) return;
   const el = root.querySelector<HTMLElement>("[data-autofocus]") ?? root.querySelector<HTMLElement>("[data-nav]");
   el?.focus({ preventScroll: false });
 }

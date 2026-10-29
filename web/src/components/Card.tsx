@@ -5,8 +5,11 @@ import type { Item } from "../api/jellyfin";
 import { backdropInfo, episodeArtFor, peekBackdropInfo, peekEpisodeArt } from "../api/companion";
 import { cardLayers, heroItemId } from "../lib/art";
 import { go } from "../lib/router";
+import { useIsPhone } from "../lib/device";
 
 export const CARD_W = 264;
+/** Phone rows: big enough to hit, with the next tile peeking in to show the row swipes. */
+export const PHONE_CARD_W = 216;
 const RANK_WAIT_MS = 300;
 
 function useVisible<T extends Element>(ref: React.RefObject<T | null>, margin = "300px"): boolean {
@@ -63,7 +66,9 @@ interface Props {
   caption?: string;
 }
 
-function CardImpl({ item, onFocusItem, width = CARD_W, autoFocus, onOpen, label, caption }: Props) {
+function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, label, caption }: Props) {
+  const phone = useIsPhone();
+  const width = widthProp ?? (phone ? PHONE_CARD_W : CARD_W);
   const ref = useRef<HTMLButtonElement>(null);
   const visible = useVisible(ref);
   const ready = useCompanionReady(item, visible);

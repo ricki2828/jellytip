@@ -19,6 +19,28 @@ export function Logo({ large = false }: { large?: boolean }) {
   );
 }
 
+const ICONS: Record<string, React.ReactNode> = {
+  home: <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1z" />,
+  movies: (
+    <>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <path d="M3.5 9.5h17M8 5v4.5M16 5v4.5" />
+    </>
+  ),
+  shows: (
+    <>
+      <rect x="3" y="6" width="18" height="12.5" rx="2" />
+      <path d="M9 21h6M9 2.5l3 3.5 3-3.5" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="m15 15 5.5 5.5" />
+    </>
+  ),
+};
+
 const LINKS: [string, string][] = [
   ["home", "Home"],
   ["movies", "Movies"],
@@ -52,6 +74,17 @@ export function Nav({ current }: { current: string }) {
         <button data-nav className="link" onClick={() => logout()}>
           Sign out
         </button>
+      </div>
+      {/* Phone: the same links as a bottom tab bar (shown by the phone media query only) */}
+      <div className="tabbar" role="tablist">
+        {LINKS.map(([k, label]) => (
+          <a key={k} href={`#/${k}`} role="tab" aria-selected={current === k} className={current === k ? "active" : ""}>
+            <svg viewBox="0 0 24 24" aria-hidden>
+              {ICONS[k]}
+            </svg>
+            <span>{label}</span>
+          </a>
+        ))}
       </div>
     </nav>
   );
