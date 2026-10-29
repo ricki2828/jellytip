@@ -8,7 +8,7 @@ import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
-import { localFileUrl } from "../lib/native";
+import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -21,6 +21,10 @@ type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<v
 
 /** Phone: go fullscreen and turn to landscape (Android allows the lock only while fullscreen, and only from a tap). */
 async function enterLandscape(box: HTMLElement | null) {
+  if (isNative) {
+    await NativeDownloads.setPlayerMode({ fullscreen: true }).catch(() => undefined);
+    return;
+  }
   if (!isPhone() || !box) return;
   try {
     if (!document.fullscreenElement && box.requestFullscreen) await box.requestFullscreen({ navigationUI: "hide" });
@@ -31,6 +35,7 @@ async function enterLandscape(box: HTMLElement | null) {
 }
 
 function leaveLandscape() {
+  if (isNative) NativeDownloads.setPlayerMode({ fullscreen: false }).catch(() => undefined);
   try {
     (screen.orientation as LockableOrientation | undefined)?.unlock?.();
   } catch {
@@ -380,7 +385,13 @@ export function Player({ id, startParam }: { id: string; startParam: string | nu
     if (!v) return;
     v.currentTime = Math.min(Math.max(v.currentTime + s, 0), (v.duration || duration) - 1);
   };
+  const nativeFs = useRef(true); // the app enters player mode on mount
   const toggleFs = () => {
+    if (isNative) {
+      nativeFs.current = !nativeFs.current;
+      NativeDownloads.setPlayerMode({ fullscreen: nativeFs.current }).catch(() => undefined);
+      return;
+    }
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => undefined);
       return;

@@ -47,6 +47,8 @@ export interface JellytipDownloadsPlugin {
   remove(o: { ids: number[]; paths: string[] }): Promise<void>;
   storage(): Promise<{ usedBytes: number; freeBytes: number; dir: string }>;
   exists(o: { path: string }): Promise<{ exists: boolean; bytes: number }>;
+  /** Landscape + hidden system bars for the player (the WebView can't go fullscreen by itself in Capacitor). */
+  setPlayerMode(o: { fullscreen: boolean }): Promise<void>;
 }
 
 export const NativeDownloads = registerPlugin<JellytipDownloadsPlugin>("JellytipDownloads");

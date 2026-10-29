@@ -1,6 +1,8 @@
 package com.jellytip.phone;
 
+import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.pm.ActivityInfo;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
@@ -12,6 +14,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import java.util.Iterator;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -126,6 +131,28 @@ public class DownloadsPlugin extends Plugin {
         ret.put("exists", p.startsWith(dir().getAbsolutePath()) && f.isFile());
         ret.put("bytes", f.isFile() ? f.length() : 0);
         call.resolve(ret);
+    }
+
+    /**
+     * Player mode: landscape + system bars hidden (swipe to peek), or back to normal. The WebView can't do element
+     * fullscreen or lock orientation itself inside Capacitor, so the player asks for it here.
+     */
+    @PluginMethod
+    public void setPlayerMode(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("fullscreen", false));
+        Activity a = getActivity();
+        a.runOnUiThread(() -> {
+            WindowInsetsControllerCompat c = WindowCompat.getInsetsController(a.getWindow(), a.getWindow().getDecorView());
+            if (on) {
+                c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                c.hide(WindowInsetsCompat.Type.systemBars());
+                a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            } else {
+                c.show(WindowInsetsCompat.Type.systemBars());
+                a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            }
+            call.resolve();
+        });
     }
 
     private static long[] ids(PluginCall call) {

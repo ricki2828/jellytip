@@ -12,6 +12,8 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   plugins: {
+    // Edge to edge with viewport-fit=cover: env(safe-area-inset-*) carries the real insets (styles.css pads for them)
+    SystemBars: { insetsHandling: "css", initialViewportFitValueHint: "cover", style: "DARK" },
     // Native HTTP is used explicitly for the companion API (it sends no CORS headers); not patched over fetch/XHR,
     // so hls.js and media keep using the WebView's own networking.
     CapacitorHttp: { enabled: false },
