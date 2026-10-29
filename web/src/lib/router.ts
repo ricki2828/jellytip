@@ -7,6 +7,8 @@ export interface Route {
   query: URLSearchParams;
 }
 
+const ID_RE = /^[0-9a-f]{32}$/i;
+
 function parse(): Route {
   const raw = location.hash.replace(/^#/, "") || "/home";
   const [path, q = ""] = raw.split("?");
@@ -14,9 +16,10 @@ function parse(): Route {
   const query = new URLSearchParams(q);
   switch (seg[0]) {
     case "item":
-      return { name: "item", params: { id: seg[1] ?? "" }, query };
     case "play":
-      return { name: "play", params: { id: seg[1] ?? "" }, query };
+      // Ids go into API paths: anything but a Jellyfin id falls back to Home
+      if (!ID_RE.test(seg[1] ?? "")) return { name: "home", params: {}, query };
+      return { name: seg[0], params: { id: seg[1].toLowerCase() }, query };
     case "movies":
     case "shows":
     case "search":

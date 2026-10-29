@@ -425,8 +425,14 @@ img {
   gap: 14px 10px;
   padding: 10px var(--pad);
 }
+.load-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--dim);
+}
 .sentinel {
-  height: 40px;
+  min-height: 40px;
   text-align: center;
   color: var(--faint);
 }

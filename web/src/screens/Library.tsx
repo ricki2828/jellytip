@@ -23,6 +23,8 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // A failed page stops the infinite scroll (else the sentinel re-fires in a loop) until Retry or a sort/filter change
+  const [failed, setFailed] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
 
@@ -36,21 +38,30 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
 
   const loadPage = async (start: number, g: number) => {
     setLoading(true);
+    setFailed(false);
     try {
       const [, by, order] = SORTS[sort];
+      // Random re-shuffles on every request, so pages would overlap: take the whole (small) library in one go
+      const random = by === "Random";
       const r = await getItems({
         IncludeItemTypes: kind === "movie" ? "Movie" : "Series",
         Recursive: true,
         SortBy: by,
         SortOrder: order,
-        StartIndex: start,
-        Limit: PAGE,
+        StartIndex: random ? 0 : start,
+        Limit: random ? 2000 : PAGE,
         Filters: unwatched ? "IsUnplayed" : undefined,
         EnableTotalRecordCount: true,
       });
       if (g !== gen.current) return;
-      setItems((prev) => (start === 0 ? r.Items : [...prev, ...r.Items]));
-      setTotal(r.TotalRecordCount ?? null);
+      setItems((prev) => {
+        const merged = start === 0 ? r.Items : [...prev, ...r.Items];
+        const seen = new Set<string>();
+        return merged.filter((i) => !seen.has(i.Id) && !!seen.add(i.Id));
+      });
+      setTotal(random ? r.Items.length : r.TotalRecordCount ?? null);
+    } catch {
+      if (g === gen.current) setFailed(true);
     } finally {
       if (g === gen.current) setLoading(false);
     }
@@ -60,13 +71,14 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     const g = ++gen.current;
     setItems([]);
     setTotal(null);
+    setFailed(false);
     loadPage(0, g);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, sort, unwatched]);
 
   useEffect(() => {
     const el = sentinel.current;
-    if (!el) return;
+    if (!el || failed) return;
     const io = new IntersectionObserver(
       (es) => {
         if (es.some((e) => e.isIntersecting) && !loading && total != null && items.length < total) loadPage(items.length, gen.current);
@@ -76,7 +88,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     io.observe(el);
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, total, loading]);
+  }, [items.length, total, loading, failed]);
 
   return (
     <div className="library">
@@ -111,6 +123,14 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
         </div>
         <div ref={sentinel} className="sentinel">
           {loading && "Loading…"}
+          {failed && (
+            <span className="load-failed">
+              {items.length === 0 ? `Couldn't load ${kind === "movie" ? "movies" : "shows"}.` : "Couldn't load more."}
+              <button data-nav className="chip" onClick={() => loadPage(items.length, gen.current)}>
+                Retry
+              </button>
+            </span>
+          )}
         </div>
       </section>
     </div>
