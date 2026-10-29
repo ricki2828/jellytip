@@ -43,6 +43,7 @@ export function Details({ id }: { id: string }) {
   const [season, setSeason] = useState<string | null>(null);
   const [eps, setEps] = useState<Item[] | null>(null);
   const [siblings, setSiblings] = useState<Item[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function Details({ id }: { id: string }) {
         }
         setItem(it);
         const quick = setTimeout(() => alive && setPick(heroPick(it, true)), 1200);
-        backdropInfo(heroItemId(it)).then(() => {
+        backdropInfo(heroItemId(it), { priority: "high" }).then(() => {
           clearTimeout(quick);
           if (alive) setPick(heroPick(it, true));
         });
@@ -79,9 +80,11 @@ export function Details({ id }: { id: string }) {
             setSeasonList(s);
             const wanted = new URLSearchParams(location.hash.split("?")[1] ?? "").get("season");
             // Default: the first season with something unwatched, else the first
-            setSeason(wanted ?? (s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
+            // A ?season= that isn't one of this series' seasons (empty, stale) is ignored
+            const asked = wanted ? s.find((x) => x.Id === wanted) : undefined;
+            setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
           });
-          episodeArtFor(it.Id).then(() => alive && bump((n) => n + 1));
+          episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
         }
         if (it.Type === "Episode" && it.SeriesId) {
           getEpisodes(it.SeriesId).then((all) => alive && setSiblings(all));
@@ -133,13 +136,25 @@ export function Details({ id }: { id: string }) {
   const prev = epIdx > 0 ? siblings[epIdx - 1] : null;
   const next = epIdx >= 0 && epIdx < siblings.length - 1 ? siblings[epIdx + 1] : null;
 
+  const flash = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(null), 3000);
+  };
   const toggleWatched = async () => {
-    await setPlayed(item.Id, !ud?.Played);
-    setItem({ ...item, UserData: { ...ud, Played: !ud?.Played, PlaybackPositionTicks: 0, PlayedPercentage: 0 } });
+    try {
+      await setPlayed(item.Id, !ud?.Played);
+      setItem({ ...item, UserData: { ...ud, Played: !ud?.Played, PlaybackPositionTicks: 0, PlayedPercentage: 0 } });
+    } catch {
+      flash("Couldn't update watched. Try again.");
+    }
   };
   const toggleFav = async () => {
-    await setFavorite(item.Id, !ud?.IsFavorite);
-    setItem({ ...item, UserData: { ...ud, IsFavorite: !ud?.IsFavorite } });
+    try {
+      await setFavorite(item.Id, !ud?.IsFavorite);
+      setItem({ ...item, UserData: { ...ud, IsFavorite: !ud?.IsFavorite } });
+    } catch {
+      flash("Couldn't update favourite. Try again.");
+    }
   };
 
   return (
@@ -201,7 +216,7 @@ export function Details({ id }: { id: string }) {
                 <button className="btn" data-nav disabled={!next} onClick={() => next && go(`/item/${next.Id}`, true)}>
                   Next ›
                 </button>
-                <button className="btn" data-nav onClick={() => go(`/item/${item.SeriesId}?season=${item.SeasonId ?? ""}`)}>
+                <button className="btn" data-nav onClick={() => go(item.SeasonId ? `/item/${item.SeriesId}?season=${item.SeasonId}` : `/item/${item.SeriesId}`)}>
                   Series
                 </button>
               </>
@@ -264,9 +279,20 @@ export function Details({ id }: { id: string }) {
         {loadSimilar && <Row key={`sim-${item.Id}`} title="More like this" load={loadSimilar} />}
       </div>
 
+      {notice && <div className="toast">{notice}</div>}
       {showTrailer && trailerId && (
         <div className="trailer-modal" onClick={() => setShowTrailer(false)}>
-          <video src={trailerStreamUrl(trailerId)} autoPlay controls onEnded={() => setShowTrailer(false)} onClick={(e) => e.stopPropagation()} />
+          <video
+            src={trailerStreamUrl(trailerId)}
+            autoPlay
+            controls
+            onEnded={() => setShowTrailer(false)}
+            onError={() => {
+              setShowTrailer(false);
+              flash("The trailer won't play in this browser.");
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
           <button className="btn modal-close" data-nav data-autofocus onClick={() => setShowTrailer(false)}>
             Close
           </button>

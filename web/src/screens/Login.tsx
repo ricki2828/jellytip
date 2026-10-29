@@ -10,6 +10,7 @@ export function Login() {
   const [qcAvailable, setQcAvailable] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const poll = useRef<number | null>(null);
+  const polling = useRef(false);
 
   useEffect(() => {
     quickConnectEnabled().then(setQcAvailable);
@@ -37,15 +38,22 @@ export function Login() {
       const { Code, Secret } = await quickConnectInitiate();
       setCode(Code);
       if (poll.current) clearInterval(poll.current);
-      poll.current = window.setInterval(async () => {
+      const timer = window.setInterval(async () => {
+        if (polling.current) return; // previous check still out (slow server): don't stack requests
+        polling.current = true;
         try {
-          if (await quickConnectPoll(Secret)) clearInterval(poll.current!);
+          if (await quickConnectPoll(Secret)) clearInterval(timer);
         } catch {
-          clearInterval(poll.current!);
-          setCode(null);
-          setError("Quick Connect expired. Start again.");
+          clearInterval(timer);
+          if (poll.current === timer) {
+            setCode(null);
+            setError("Quick Connect expired. Start again.");
+          }
+        } finally {
+          polling.current = false;
         }
       }, 3000);
+      poll.current = timer;
     } catch {
       setError("Quick Connect isn't available right now.");
     }
