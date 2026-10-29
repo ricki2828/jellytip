@@ -190,6 +190,8 @@ export interface Focal {
   x: number;
   y: number;
   face: boolean;
+  /** Top of the highest face minus 40% of its height, as a fraction of image height: must stay in frame. */
+  headTop?: number | null;
 }
 
 export interface BackdropInfo {
@@ -229,7 +231,7 @@ export interface Manifest {
 const backdrops = cached<BackdropInfo>(async (id, job) => {
   const raw = await getJson<{
     animation?: boolean;
-    backdrops?: { index: number; tag?: string; focalX?: number | null; focalY?: number | null; face?: boolean }[] | null;
+    backdrops?: { index: number; tag?: string; focalX?: number | null; focalY?: number | null; face?: boolean; headTop?: number | null }[] | null;
     heroIndex?: number | null;
     detailsIndex?: number | null;
     thumb?: { good?: boolean; titled?: boolean | null } | null;
@@ -244,7 +246,8 @@ const backdrops = cached<BackdropInfo>(async (id, job) => {
   arr.forEach((b, i) => {
     const idx = b.index ?? i;
     if (b.tag) tags.set(idx, b.tag);
-    if (b.focalX != null && b.focalY != null) focal.set(idx, { x: b.focalX, y: b.focalY, face: !!b.face });
+    if (b.focalX != null && b.focalY != null)
+      focal.set(idx, { x: b.focalX, y: b.focalY, face: !!b.face, headTop: typeof b.headTop === "number" ? Math.min(Math.max(b.headTop, 0), 1) : null });
   });
   const idx = (v: number | null | undefined) => (v != null && v >= 0 ? v : null);
   return {

@@ -181,27 +181,4 @@ export function heroPick(item: Item, details: boolean): ImagePick {
   return backdropAt(id, tags, i, info);
 }
 
-/**
- * CSS object-position keeping the focal point in frame for an object-fit: cover image: horizontally proportional,
- * vertically at 40% of the container but never cropping into the head (same maths as the TV focalAlignment).
- */
-export function focalPosition(focal: Focal | null, cw: number, ch: number, iw: number, ih: number): string {
-  if (!focal || !cw || !ch || !iw || !ih) return "50% 30%";
-  const scale = Math.max(cw / iw, ch / ih);
-  const sw = iw * scale;
-  const sh = ih * scale;
-  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
-  const x = clamp(focal.x * (cw - sw), Math.min(cw - sw, 0), 0);
-  let y = 0;
-  if (focal.y >= 0.25) {
-    const headroom = focal.face ? 0.14 : 0.2;
-    const desired = 0.4 * ch - focal.y * sh;
-    const limit = -(Math.max(focal.y - headroom, 0) * sh);
-    y = clamp(Math.max(desired, limit), Math.min(ch - sh, 0), 0);
-  }
-  return `${Math.round(x)}px ${Math.round(y)}px`;
-}
-
-export function focalOrigin(focal: Focal | null): string {
-  return focal ? `${Math.min(Math.max(focal.x, 0.2), 0.8) * 100}% 40%` : "50% 30%";
-}
+export { focalOrigin, focalPosition } from "./focal";

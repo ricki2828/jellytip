@@ -55,7 +55,7 @@ export function Backdrop({ url, focal, kenBurns = false }: { url: string | null;
           src={l.url}
           alt=""
           className={`backdrop-img in${i === layers.length - 1 ? " top" : ""}${kenBurns ? " kb" : ""}`}
-          style={{ objectPosition: focalPosition(l.focal, size.w, size.h, l.w, l.h), transformOrigin: focalOrigin(l.focal) }}
+          style={{ objectPosition: focalPosition(l.focal, size.w, size.h, l.w, l.h), transformOrigin: focalOrigin(l.focal, size.w, size.h, l.w, l.h) }}
         />
       ))}
     </div>
