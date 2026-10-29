@@ -304,3 +304,53 @@ export function manifest(): Promise<Manifest | null> {
   }
   return manifestPromise;
 }
+
+// ---------- reviews ----------
+
+export interface Review {
+  id: string;
+  author: string;
+  own: boolean;
+  /** Out of 5 in half steps; null when the reviewer gave none. */
+  rating: number | null;
+  likes: number | null;
+  /** ~200 chars; empty for spoilers and stars-only own ratings. */
+  excerpt: string;
+  text: string;
+  spoiler: boolean;
+  source: string;
+  url: string | null;
+}
+
+export interface Quote {
+  text: string;
+  author: string;
+  source: string;
+}
+
+export interface Reviews {
+  /** "letterboxd" | "tmdb" | "none" */
+  source: string;
+  quote: Quote | null;
+  reviews: Review[];
+}
+
+const reviewsCache = cached<Reviews>(async (id, job) => {
+  const raw = await getJson<Partial<Reviews>>(`/v1/items/${id}/reviews`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  return { source: raw.source ?? "none", quote: raw.quote?.text ? raw.quote : null, reviews: raw.reviews ?? [] };
+});
+
+/** Reviews for a movie or series: Ricki's own first, then the most-liked (the server filters spoilers and profanity). */
+export const reviews = (id: string, opts?: RequestOptions) => reviewsCache.get(id, opts);
+
+const quoteCache = cached<{ quote: Quote | null }>(async (id, job) => {
+  const full = reviewsCache.peek(id);
+  if (full) return { quote: full.quote };
+  const raw = await getJson<{ quote?: Quote | null }>(`/v1/items/${id}/reviews?fields=quote`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  return { quote: raw.quote?.text ? raw.quote : null };
+});
+
+/** Short Letterboxd pull-quote for the home hero (never triggers a TMDB lookup); null when there is none. */
+export const reviewQuote = (id: string, opts?: RequestOptions) => quoteCache.get(id, opts).then((q) => q?.quote ?? null);
