@@ -4,6 +4,7 @@
 import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
+import { registerLogoStyles } from "../lib/logoStyle";
 export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
@@ -233,8 +234,10 @@ const backdrops = cached<BackdropInfo>(async (id, job) => {
     detailsIndex?: number | null;
     thumb?: { good?: boolean; titled?: boolean | null } | null;
     thumbTitled?: boolean | null;
+    logoStyle?: string | null;
   }>(`/v1/items/${id}/backdrops`, job);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  if (raw.logoStyle) registerLogoStyles({ [id]: raw.logoStyle });
   const arr = raw.backdrops ?? [];
   const focal = new Map<number, Focal>();
   const tags = new Map<number, string>();
@@ -443,8 +446,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 // One call per page per day (the server picks the same specials all day); 404 / failure = page as before
 const specialsCache = cached<Special[]>(async (key, job) => {
   const page = key.split("|")[0];
-  const raw = await getJson<{ specials?: Partial<Special>[] }>(`/v1/home/specials?page=${page}`, job);
+  const raw = await getJson<{ specials?: (Partial<Special> & { logoStyles?: unknown })[]; logoStyles?: unknown }>(`/v1/home/specials?page=${page}`, job);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  registerLogoStyles(raw.logoStyles);
+  raw.specials?.forEach((s) => registerLogoStyles(s?.logoStyles));
   return (raw.specials ?? []).filter((s): s is Special => !!s && typeof s.id === "string" && SPECIAL_LAYOUTS.includes(s.layout ?? "")).map((s) => ({
       ...s,
       position: Math.max(0, Number(s.position) || 0),
@@ -504,8 +509,10 @@ export async function requestTitle(tmdbId: number, type: "movie" | "tv", dryRun:
 // One call per page per day; null (404, old server, no `rows` field) = the page builds its rows as before
 const rowsCache = cached<ServerRow[]>(async (key, job) => {
   const page = key.split("|")[0];
-  const raw = await getJson<{ rowsVersion?: number; rows?: unknown }>(`/v1/home/carousels?rows=1&page=${page}`, job, 12000);
+  const raw = await getJson<{ rowsVersion?: number; rows?: unknown; logoStyles?: unknown }>(`/v1/home/carousels?rows=1&page=${page}`, job, 12000);
   if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
+  registerLogoStyles(raw.logoStyles);
+  if (Array.isArray(raw.rows)) raw.rows.forEach((r) => registerLogoStyles((r as { logoStyles?: unknown } | null)?.logoStyles));
   return parseRows(raw.rows);
 });
 

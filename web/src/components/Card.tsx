@@ -6,6 +6,7 @@ import { backdropInfo, episodeArtFor, peekBackdropInfo, peekEpisodeArt } from ".
 import { cardLayers, heroItemId } from "../lib/art";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
+import { logoClass, logoOwner } from "../lib/logoStyle";
 
 export const CARD_W = 264;
 /** Phone rows: big enough to hit, with the next tile peeking in to show the row swipes. */
@@ -129,7 +130,7 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
       {(!titledShown || caption) && layer?.kind !== "logo" && <div className="card-fade" />}
       {logoOk && (
         <img
-          className={layer?.kind === "logo" ? "card-logo center" : `card-logo${baseReady ? " in" : ""}`}
+          className={`${layer?.kind === "logo" ? "card-logo center" : `card-logo${baseReady ? " in" : ""}`} ${logoClass(logoOwner(item), "original")}`}
           src={logoUrl!}
           alt=""
           onError={() => fail(`logo:${logoUrl}`)}

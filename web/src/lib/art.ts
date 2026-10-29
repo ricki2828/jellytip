@@ -151,14 +151,34 @@ export interface ImagePick {
   focal: Focal | null;
 }
 
+/**
+ * Still for a special on the home page (trailer break panel, tonight's pick): never the hero's image (heroIndex) and,
+ * where there is a choice, not the tile's either. Prefers the companion's detailsIndex (its #2).
+ */
+export function specialPick(item: Item): ImagePick {
+  const tags = backdropTags(item);
+  if (tags.length === 0) return { url: null, focal: null };
+  const id = heroItemId(item);
+  const info = peekBackdropInfo(id);
+  const hero = resolveBackdropIndex(tags, id, info?.heroIndex ?? 0);
+  const card = cardDrawsBackdrop(item) ? resolveBackdropIndex(tags, id, bestBackdropIndex(id)) : -1;
+  const order = [info?.detailsIndex != null ? resolveBackdropIndex(tags, id, info.detailsIndex) : -1, ...tags.keys()];
+  const i = order.find((n) => n >= 0 && n !== hero && n !== card) ?? order.find((n) => n >= 0 && n !== hero) ?? 0;
+  return backdropAt(id, tags, i, info);
+}
+
+function backdropAt(id: string, tags: string[], i: number, info: ReturnType<typeof peekBackdropInfo>): ImagePick {
+  const width = Math.min(HERO_MAX_WIDTH, Math.round((window.innerWidth * Math.min(window.devicePixelRatio || 1, 2)) / 160) * 160 || HERO_MAX_WIDTH);
+  return { url: imageUrl(id, "Backdrop", { tag: tags[i], index: i, maxWidth: width, quality: 85 }), focal: info?.focal.get(i) ?? null };
+}
+
 export function heroPick(item: Item, details: boolean): ImagePick {
   const tags = backdropTags(item);
   if (tags.length === 0) return { url: null, focal: null };
   const id = heroItemId(item);
   const info = peekBackdropInfo(id);
   const i = pickIndex(item, (details ? info?.detailsIndex : info?.heroIndex) ?? null, details);
-  const width = Math.min(HERO_MAX_WIDTH, Math.round((window.innerWidth * Math.min(window.devicePixelRatio || 1, 2)) / 160) * 160 || HERO_MAX_WIDTH);
-  return { url: imageUrl(id, "Backdrop", { tag: tags[i], index: i, maxWidth: width, quality: 85 }), focal: info?.focal.get(i) ?? null };
+  return backdropAt(id, tags, i, info);
 }
 
 /**

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getItems, getSession, imageUrl, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
 import {
+  backdropInfo,
   companionMediaUrl,
   extras,
   type Extras,
@@ -20,7 +21,7 @@ import {
   type TrailerBreak,
 } from "../../api/companion";
 import { trailerStreamUrl } from "../../api/playback";
-import { cardLayers, heroPick } from "../../lib/art";
+import { cardLayers, heroItemId, specialPick, type ImagePick } from "../../lib/art";
 import { go } from "../../lib/router";
 import { claimVideo, releaseVideo, useVideoBlocked } from "../../lib/videoFocus";
 import { useSoundBack } from "../../lib/soundBack";
@@ -67,6 +68,29 @@ const untitledSet = (s: Special) => new Set(s.untitled ?? []);
  * Mostly on screen (`threshold` of it)? Takes the element through a callback ref: the blocks render nothing until their items load, so
  * the element appears after the first effect would have run.
  */
+/**
+ * Still for a trailer break / tonight's pick (rules in specialPick), chosen once the companion ranking is in so the
+ * hero's image never flashes first.
+ */
+function useSpecialStill(item: Item | undefined): ImagePick {
+  const [pick, setPick] = useState<ImagePick>({ url: null, focal: null });
+  useEffect(() => {
+    if (!item) return;
+    let alive = true;
+    const set = () => alive && setPick(specialPick(item));
+    const t = setTimeout(set, 1500); // companion slow or down: best guess without it
+    backdropInfo(heroItemId(item), { priority: "high" }).then(() => {
+      clearTimeout(t);
+      set();
+    });
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [item]);
+  return pick;
+}
+
 function useInView(threshold: number): [(el: Element | null) => void, boolean] {
   const [el, setEl] = useState<Element | null>(null);
   const [inView, setInView] = useState(false);
@@ -161,8 +185,8 @@ function TrailerBreakBlock({ s }: { s: TrailerBreak }) {
     else v.pause();
   }, [wantPlay, blocked, sound, trailer]);
 
+  const pick = useSpecialStill(item);
   if (!item) return null;
-  const pick = heroPick(item, false);
   const playing = wantPlay && !blocked;
   return (
     <section className={`special trailer-break${playing ? " playing" : ""}`} ref={box}>
@@ -248,8 +272,8 @@ function PersonSpotlightBlock({ s }: { s: PersonSpotlight }) {
 
 function TonightsPickBlock({ s }: { s: TonightsPick }) {
   const item = useItems([s.itemId])?.[0];
+  const pick = useSpecialStill(item);
   if (!item) return null;
-  const pick = heroPick(item, false);
   return (
     <section className="special tonights-pick">
       <button className="tp-card" data-nav onClick={() => go(`/item/${item.Id}`)} aria-label={`Tonight's pick: ${item.Name}`}>
@@ -279,7 +303,7 @@ function Top10Block({ s }: { s: Top10 }) {
   if (!items || items.length < 3) return null;
   return (
     <section className="special row top10">
-      <SpecialHeader kicker={s.variant === "letterboxd" ? "Top 10 on Letterboxd you haven't seen" : "Top 10 in the house this month"} title={s.title} />
+      <SpecialHeader kicker={s.variant === "letterboxd" ? "Top 10 on Letterboxd you haven't seen" : "Top 10 on Jellytip this month"} title={s.title} />
       <div className="row-scroll">
         {items.map((i, n) => (
           <div key={i.Id} className="top10-entry">
@@ -395,7 +419,7 @@ function AroundHouseBlock({ s }: { s: AroundHouse }) {
   const untitled = untitledSet(s);
   return (
     <section className="special row around-house">
-      <SpecialHeader kicker="Around the house" title={s.title} />
+      <SpecialHeader kicker="What friends are watching" title={s.title} />
       <div className="row-scroll">
         {s.entries
           .filter((e) => byId.has(e.itemId))

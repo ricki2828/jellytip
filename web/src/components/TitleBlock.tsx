@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { logoUrl, runtimeText, type Item } from "../api/jellyfin";
+import { logoClass, logoOwner } from "../lib/logoStyle";
 
 /** Clearlogo drawn as an off-white silhouette (never repeats the coloured tile logo), else the typeset title. */
 export function TitleLogo({ item, big = false }: { item: Item; big?: boolean }) {
@@ -9,7 +10,7 @@ export function TitleLogo({ item, big = false }: { item: Item; big?: boolean }) 
   if (url && failed !== url) {
     return (
       <img
-        className={big ? "title-logo big" : "title-logo"}
+        className={`${big ? "title-logo big" : "title-logo"} ${logoClass(logoOwner(item), "white")}`}
         src={url}
         alt={name}
         onError={() => setFailed(url)}
