@@ -1,0 +1,160 @@
+/* Reviews row + full-text sheet (Details) and the home hero pull-quote. Kept here so styles.css stays untouched. */
+.review-card {
+  flex: none;
+  width: 300px;
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tile);
+  color: var(--vanilla);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.review-card.own {
+  background: rgba(255, 183, 77, 0.1);
+}
+.review-card:hover,
+.review-card:focus {
+  transform: scale(1.04);
+  z-index: 2;
+  outline: none;
+}
+.review-card:focus {
+  box-shadow: 0 0 0 2px var(--vanilla), 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.review-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.review-author {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.review-card.own .review-author,
+.review-card.own .review-stars {
+  color: var(--warm);
+}
+.review-stars {
+  flex: none;
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.02em;
+}
+.review-body {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgba(242, 242, 240, 0.85);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.review-body.quiet {
+  font-style: italic;
+  color: var(--faint);
+}
+.review-likes {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.review-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.82);
+  display: grid;
+  place-items: center;
+}
+.review-sheet {
+  width: min(640px, 92vw);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+  border-radius: 8px;
+  background: #141414;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+.review-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.review-sheet-author {
+  font-size: 16px;
+  font-weight: 600;
+}
+.review-sheet.own .review-sheet-author {
+  color: var(--warm);
+}
+.review-sheet-meta {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.review-sheet-text {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(242, 242, 240, 0.9);
+}
+.review-sheet-text p {
+  margin: 0 0 0.9em;
+  white-space: pre-line;
+}
+
+.hero-quote {
+  margin: 0;
+  max-width: 640px;
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.hero-quote-by {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) and (max-height: 520px) {
+  .review-card {
+    width: 240px;
+    height: 140px;
+    padding: 11px 12px;
+  }
+  .review-card:hover {
+    transform: none;
+  }
+  .review-modal {
+    place-items: end stretch;
+  }
+  .review-sheet {
+    width: 100%;
+    max-height: 82vh;
+    border-radius: 14px 14px 0 0;
+    padding: 18px var(--pad) calc(18px + env(safe-area-inset-bottom));
+  }
+  .hero-quote {
+    font-size: 12px;
+  }
+}

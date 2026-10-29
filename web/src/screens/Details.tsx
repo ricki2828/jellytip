@@ -25,6 +25,7 @@ import { Row } from "../components/Row";
 import { ScoreLine } from "../components/ScoreLine";
 import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButton";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
+import { ReviewsRow } from "../components/Reviews";
 import { runtimeText } from "../api/jellyfin";
 
 function fmtClock(ticks: number) {
@@ -282,6 +283,7 @@ export function Details({ id }: { id: string }) {
             onOpen={(e) => go(`/item/${e.Id}`, true)}
           />
         )}
+        <ReviewsRow item={item} />
         {cast.length > 0 && (
           <section className="row">
             <h2 className="row-title">Cast</h2>

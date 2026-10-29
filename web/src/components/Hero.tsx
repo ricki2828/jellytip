@@ -10,6 +10,7 @@ import { go } from "../lib/router";
 import { Backdrop } from "./Backdrop";
 import { ScoreLine } from "./ScoreLine";
 import { infoLine, TitleLogo } from "./TitleBlock";
+import { HeroQuote } from "./Reviews";
 
 const DEBOUNCE_MS = 250;
 const TRAILER_DELAY_MS = 2500;
@@ -161,6 +162,7 @@ export function Hero({ item }: { item: Item | null }) {
         {episodeLine && <div className="line strong">{episodeLine}</div>}
         <div className="line">{infoLine(shown)}</div>
         {shown.Overview && <p className="overview two">{shown.Overview}</p>}
+        <HeroQuote item={shown} />
         <ScoreLine extras={ext} />
         <div className="buttons">
           <button className="btn primary" data-nav onClick={() => go(`/play/${shown.Id}`)}>
