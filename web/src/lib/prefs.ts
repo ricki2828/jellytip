@@ -10,7 +10,7 @@ export interface Prefs {
   version: number | null;
 }
 
-export const KIDS_RATINGS = ["G", "PG", "PG-13", "M", "R13", "R16"];
+export const KIDS_RATINGS = ["G", "PG", "PG-13", "M"];
 export const SPECIALS_MAX = 6;
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
 import { localTrailers } from "../api/jellyfin";
+import { prefsNow } from "../api/me";
 import { backdropInfo, extras, type Extras } from "../api/companion";
 import { trailerStreamUrl } from "../api/playback";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
@@ -68,7 +69,9 @@ export function Hero({ item }: { item: Item | null }) {
     });
     const kind = shown.Type === "Movie" ? "movie" : shown.Type === "Series" ? "series" : null;
     if (kind) extras(shown.Id, kind).then((e) => alive && setExt(e));
+    // The person's playback prefs can turn hero trailers off (they follow them across devices)
     const t = setTimeout(() => {
+      if (prefsNow()?.playback.trailerAutoplay === false) return;
       trailerFor(shown).then((u) => alive && setTrailer(u));
     }, TRAILER_DELAY_MS);
     return () => {
