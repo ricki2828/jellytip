@@ -134,9 +134,10 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
         void Promise.resolve(p.play()).catch(() => setPaused(true));
         return;
       }
-      if (engine === "hls" && !v.canPlayType("application/vnd.apple.mpegurl")) {
-        const H = (await loadHls()).default;
-        if (!alive.current || linkRef.current !== url) return;
+      // hls.js wherever MSE exists (Android WebViews claim native HLS but handle live playlists badly); else native
+      const H = engine === "hls" ? (await loadHls()).default : null;
+      if (!alive.current || linkRef.current !== url) return;
+      if (H && H.isSupported()) {
         const h = new H({ liveDurationInfinity: true, maxBufferLength: 30, backBufferLength: 30 });
         hlsRef.current = h;
         h.on(H.Events.ERROR, (_e, data) => {
