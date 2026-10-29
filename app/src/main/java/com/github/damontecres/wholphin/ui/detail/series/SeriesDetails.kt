@@ -67,6 +67,7 @@ import com.github.damontecres.wholphin.data.model.studioNames
 import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsPullQuote
 import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
 import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
@@ -444,6 +445,8 @@ fun SeriesDetailsContent(
         modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus },
     ) {
         JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = !topFocused)
+        // One review, bottom right, balancing the info block (loaded with the page, fades in once)
+        JellytipDetailsPullQuote(reviews) { headerAlpha }
         JellytipBreadcrumb(
             crumbs = listOf(JellytipCrumb(series.name ?: "", {})),
             modifier =
