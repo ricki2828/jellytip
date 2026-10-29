@@ -9,27 +9,48 @@ const FAILURE_TTL_MS = 60_000;
 const MAX_CONCURRENT = 4;
 const MIN_GAP_MS = 90;
 
+/** One queued companion request. Higher priority starts first; a cancelled job that hasn't started is dropped. */
+interface Job {
+  priority: number;
+  cancelled: boolean;
+}
+
+export interface RequestOptions {
+  /** Details / hero lookups jump ahead of the tile rankings queued for a screen full of cards. */
+  priority?: "high";
+  /** Abort when the caller goes away (an unmounted card); the request is dropped once no caller still wants it. */
+  signal?: AbortSignal;
+}
+
+const CANCELLED = Symbol("cancelled");
+const PRIORITY_HIGH = 1;
+
 let active = 0;
 let lastStart = 0;
-const waiting: (() => void)[] = [];
+const waiting: { job: Job; go: (run: boolean) => void }[] = [];
 
 function pump() {
+  for (let i = waiting.length - 1; i >= 0; i--) if (waiting[i].job.cancelled) waiting.splice(i, 1)[0].go(false);
   if (active >= MAX_CONCURRENT || waiting.length === 0) return;
   const wait = lastStart + MIN_GAP_MS - Date.now();
   if (wait > 0) {
     setTimeout(pump, wait);
     return;
   }
+  let best = 0; // highest priority, FIFO within a priority
+  for (let i = 1; i < waiting.length; i++) if (waiting[i].job.priority > waiting[best].job.priority) best = i;
+  const [next] = waiting.splice(best, 1);
   lastStart = Date.now();
   active++;
-  waiting.shift()!();
+  next.go(true);
 }
 
-async function throttled<T>(fn: () => Promise<T>): Promise<T> {
-  await new Promise<void>((resolve) => {
-    waiting.push(resolve);
+async function throttled<T>(job: Job, fn: () => Promise<T>): Promise<T | typeof CANCELLED> {
+  const run = await new Promise<boolean>((go) => {
+    waiting.push({ job, go });
     pump();
   });
+  if (!run) return CANCELLED;
   try {
     return await fn();
   } finally {
@@ -38,10 +59,10 @@ async function throttled<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function getJson<T>(path: string, timeoutMs = 8000): Promise<T | null> {
+async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, cancelled: false }, timeoutMs = 8000): Promise<T | null | typeof CANCELLED> {
   const token = getSession()?.token;
   if (!token) return null;
-  return throttled(async () => {
+  return throttled(job, async () => {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), timeoutMs);
     try {
@@ -56,28 +77,73 @@ async function getJson<T>(path: string, timeoutMs = 8000): Promise<T | null> {
   });
 }
 
-/** Per-key cache: values forever (per page load), failures retried after a minute, one request in flight per key. */
-function cached<T>(fetcher: (key: string) => Promise<T | null>) {
+// Everything cached here belongs to one signed-in user: dropped when the session changes (sign out / other user)
+let generation = 0;
+const resetters: (() => void)[] = [];
+window.addEventListener("jellytip-session", () => {
+  generation++;
+  resetters.forEach((r) => r());
+});
+
+interface Entry<T> {
+  job: Job;
+  refs: number;
+  pinned: boolean;
+  promise: Promise<T | null>;
+}
+
+/**
+ * Per-key cache: values kept for the session, failures retried after a minute, one request in flight per key
+ * (shared by every caller; dropped from the queue only when all callers that passed a signal have aborted).
+ */
+function cached<T>(fetcher: (key: string, job: Job) => Promise<T | null | typeof CANCELLED>) {
   const values = new Map<string, T>();
   const failedAt = new Map<string, number>();
-  const inFlight = new Map<string, Promise<T | null>>();
+  const inFlight = new Map<string, Entry<T>>();
+  resetters.push(() => {
+    values.clear();
+    failedAt.clear();
+    inFlight.forEach((e) => (e.job.cancelled = true));
+    inFlight.clear();
+  });
   return {
     peek: (key: string): T | undefined => values.get(key),
-    get(key: string): Promise<T | null> {
+    get(key: string, opts: RequestOptions = {}): Promise<T | null> {
       if (values.has(key)) return Promise.resolve(values.get(key)!);
       const f = failedAt.get(key);
       if (f && Date.now() - f < FAILURE_TTL_MS) return Promise.resolve(null);
-      let p = inFlight.get(key);
-      if (!p) {
-        p = fetcher(key).then((v) => {
+      if (opts.signal?.aborted) return Promise.resolve(null);
+      let e = inFlight.get(key);
+      if (!e) {
+        const job: Job = { priority: 0, cancelled: false };
+        const gen = generation;
+        const entry: Entry<T> = { job, refs: 0, pinned: false, promise: Promise.resolve(null) };
+        entry.promise = fetcher(key, job).then((v) => {
+          if (inFlight.get(key) === entry) inFlight.delete(key);
+          if (v === CANCELLED || gen !== generation) return null; // dropped, or answered for a previous session
           if (v == null) failedAt.set(key, Date.now());
           else values.set(key, v);
-          inFlight.delete(key);
           return v;
         });
-        inFlight.set(key, p);
+        inFlight.set(key, entry);
+        e = entry;
       }
-      return p;
+      const entry = e;
+      if (opts.priority === "high") entry.job.priority = PRIORITY_HIGH;
+      if (opts.signal) {
+        entry.refs++;
+        opts.signal.addEventListener(
+          "abort",
+          () => {
+            if (--entry.refs > 0 || entry.pinned) return;
+            entry.job.cancelled = true;
+            if (inFlight.get(key) === entry) inFlight.delete(key);
+            pump();
+          },
+          { once: true },
+        );
+      } else entry.pinned = true; // a caller without a signal always wants the answer
+      return entry.promise;
     },
   };
 }
@@ -144,15 +210,15 @@ export interface Manifest {
 
 // ---------- endpoints ----------
 
-const backdrops = cached<BackdropInfo>(async (id) => {
+const backdrops = cached<BackdropInfo>(async (id, job) => {
   const raw = await getJson<{
     animation?: boolean;
     backdrops?: { index: number; tag?: string; focalX?: number | null; focalY?: number | null; face?: boolean }[] | null;
     heroIndex?: number | null;
     detailsIndex?: number | null;
     thumb?: { good?: boolean } | null;
-  }>(`/v1/items/${id}/backdrops`);
-  if (!raw) return null;
+  }>(`/v1/items/${id}/backdrops`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   const arr = raw.backdrops ?? [];
   const focal = new Map<number, Focal>();
   const tags = new Map<number, string>();
@@ -172,38 +238,40 @@ const backdrops = cached<BackdropInfo>(async (id) => {
   };
 });
 
-export const backdropInfo = (id: string) => backdrops.get(id);
+export const backdropInfo = (id: string, opts?: RequestOptions) => backdrops.get(id, opts);
 export const peekBackdropInfo = (id: string) => backdrops.peek(id);
 
-const extrasCache = cached<Extras>(async (key) => {
+const extrasCache = cached<Extras>(async (key, job) => {
   const [id, type] = key.split("|");
-  const raw = await getJson<{ scores?: Score[]; letterboxd?: LetterboxdMine | null }>(`/v1/items/${id}/extras?type=${type}`);
-  if (!raw) return null;
+  const raw = await getJson<{ scores?: Score[]; letterboxd?: LetterboxdMine | null }>(`/v1/items/${id}/extras?type=${type}`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   return { scores: (raw.scores ?? []).filter((s) => s.value != null), letterboxd: raw.letterboxd ?? null };
 });
 
 /** Scores + Letterboxd for a movie or series (the server resolves provider ids from the item). */
 export function extras(id: string, type: "movie" | "series") {
-  return extrasCache.get(`${id}|${type}`);
+  return extrasCache.get(`${id}|${type}`, { priority: "high" });
 }
 
-const episodeArt = cached<Map<string, boolean>>(async (parentId) => {
-  const raw = await getJson<{ episodeId: string; usable?: boolean }[]>(`/v1/items/${parentId}/episodes-art`);
-  if (!raw) return null;
+const episodeArt = cached<Map<string, boolean>>(async (parentId, job) => {
+  const raw = await getJson<{ episodeId: string; usable?: boolean }[]>(`/v1/items/${parentId}/episodes-art`, job);
+  if (raw === CANCELLED || !raw) return raw === CANCELLED ? CANCELLED : null;
   return new Map(raw.map((e) => [e.episodeId.replace(/-/g, ""), e.usable !== false]));
 });
 
 /** Usable-still flags for every episode of a series (unknown counts as usable). */
-export const episodeArtFor = (seriesId: string) => episodeArt.get(seriesId);
+export const episodeArtFor = (seriesId: string, opts?: RequestOptions) => episodeArt.get(seriesId, opts);
 export const peekEpisodeArt = (seriesId: string) => episodeArt.peek(seriesId);
 
 let manifestPromise: Promise<Manifest | null> | null = null;
+resetters.push(() => (manifestPromise = null));
 
 export function manifest(): Promise<Manifest | null> {
   if (!manifestPromise) {
-    manifestPromise = getJson<{ carousels?: Partial<Carousel>[]; letterboxd?: Partial<LetterboxdRow>[] }>("/v1/home/carousels").then((raw) => {
-      if (!raw) {
-        manifestPromise = null; // retry on the next visit
+    const gen = generation;
+    const p: Promise<Manifest | null> = getJson<{ carousels?: Partial<Carousel>[]; letterboxd?: Partial<LetterboxdRow>[] }>("/v1/home/carousels").then((raw) => {
+      if (!raw || raw === CANCELLED || gen !== generation) {
+        if (manifestPromise === p) manifestPromise = null; // retry on the next visit
         return null;
       }
       return {
@@ -221,6 +289,7 @@ export function manifest(): Promise<Manifest | null> {
           .map((l) => ({ slug: l.slug!, name: l.name!, mediaType: l.mediaType ?? "movie", itemIds: l.itemIds! })),
       };
     });
+    manifestPromise = p;
   }
   return manifestPromise;
 }

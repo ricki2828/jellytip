@@ -15,6 +15,7 @@ const DEBOUNCE_MS = 250;
 const TRAILER_DELAY_MS = 2500;
 const RANK_WAIT_MS = 1200; // the companion usually answers well inside this; a premature guess costs a second full-size image
 const trailerCache = new Map<string, string | null>();
+window.addEventListener("jellytip-session", () => trailerCache.clear()); // per user (and token in the URL)
 
 async function trailerFor(item: Item): Promise<string | null> {
   const target = item.Type === "Episode" || item.Type === "Season" ? item.SeriesId : item.Id;
@@ -49,7 +50,7 @@ export function Hero({ item }: { item: Item | null }) {
     setExt(null);
     // Wait briefly for the companion's ranking; past that show a non-tile backdrop and upgrade when it arrives
     const quick = setTimeout(() => alive && setPick(heroPick(shown, false)), RANK_WAIT_MS);
-    backdropInfo(heroItemId(shown)).then(() => {
+    backdropInfo(heroItemId(shown), { priority: "high" }).then(() => {
       clearTimeout(quick);
       if (alive) setPick(heroPick(shown, false));
     });

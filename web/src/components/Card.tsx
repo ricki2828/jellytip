@@ -30,9 +30,11 @@ function useCompanionReady(item: Item, visible: boolean): boolean {
   useEffect(() => {
     if (!visible || known()) return;
     let alive = true;
+    // Unmounted (scrolled past, page left) before the queue reached it: the ranking request is dropped
+    const ctl = new AbortController();
     const t = setTimeout(() => alive && setReady(true), RANK_WAIT_MS);
-    const jobs: Promise<unknown>[] = [backdropInfo(rankedId)];
-    if (item.Type === "Episode" && item.SeriesId) jobs.push(episodeArtFor(item.SeriesId));
+    const jobs: Promise<unknown>[] = [backdropInfo(rankedId, { signal: ctl.signal })];
+    if (item.Type === "Episode" && item.SeriesId) jobs.push(episodeArtFor(item.SeriesId, { signal: ctl.signal }));
     Promise.all(jobs).then(() => {
       if (!alive) return;
       setReady(true);
@@ -40,6 +42,7 @@ function useCompanionReady(item: Item, visible: boolean): boolean {
     });
     return () => {
       alive = false;
+      ctl.abort();
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
