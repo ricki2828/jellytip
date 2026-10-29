@@ -136,6 +136,86 @@
   white-space: nowrap;
 }
 
+/* Details: one review bottom-right of the hero (desktop) / under the buttons (phone) */
+.details-quote {
+  position: absolute;
+  right: var(--pad);
+  bottom: 9vh;
+  width: min(380px, 30vw);
+  margin: 0;
+  text-align: right;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+  animation: quote-in 0.5s ease both;
+}
+.details-quote blockquote {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.45;
+  color: rgba(242, 242, 240, 0.86);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.details-quote figcaption,
+.details-quote-by {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.details-quote-stars {
+  color: var(--warm);
+  margin-right: 2px;
+}
+@keyframes quote-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.details-quote.phone {
+  position: static;
+  width: auto;
+  min-height: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  text-align: left;
+  font-size: 12.5px;
+  font-style: italic;
+  color: rgba(242, 242, 240, 0.86);
+}
+.details-quote.phone.pending {
+  animation: none;
+}
+.details-quote-text {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.details-quote.phone.open .details-quote-text {
+  flex-basis: 100%;
+  white-space: normal;
+}
+.details-quote.phone .details-quote-by {
+  font-style: normal;
+}
+.details-quote-more {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--vanilla);
+  font: inherit;
+  font-style: normal;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 @media (max-width: 760px), (hover: none) and (pointer: coarse) and (max-height: 520px) {
   .review-card {
     width: 240px;

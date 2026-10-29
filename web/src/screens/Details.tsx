@@ -25,7 +25,7 @@ import { Row } from "../components/Row";
 import { ScoreLine } from "../components/ScoreLine";
 import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButton";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
-import { ReviewsRow } from "../components/Reviews";
+import { DetailsQuote, ReviewsRow } from "../components/Reviews";
 import { runtimeText } from "../api/jellyfin";
 
 function fmtClock(ticks: number) {
@@ -53,6 +53,11 @@ export function Details({ id }: { id: string }) {
   const pairParam = new URLSearchParams(location.hash.split("?")[1] ?? "").get("pair") ?? "";
   const pairId = /^[0-9a-f]{32}$/i.test(pairParam) ? pairParam : null;
   const [, bump] = useState(0);
+  const [pairItem, setPairItem] = useState<Item | null>(null);
+  useEffect(() => {
+    setPairItem(null);
+    if (pairId) getItem(pairId).then(setPairItem, () => undefined);
+  }, [pairId]);
 
   useEffect(() => {
     let alive = true;
@@ -188,6 +193,14 @@ export function Details({ id }: { id: string }) {
             ))}
           </div>
           {dim && <div className="line dim">{dim}</div>}
+          {pairId && pairItem && item.Type === "Movie" && (
+            <div className="line pair-line">
+              Double feature with{" "}
+              <button className="link" data-nav onClick={() => go(`/item/${pairItem.Id}?pair=${item.Id}`, true)}>
+                {pairItem.Name}
+              </button>
+            </div>
+          )}
           {item.Overview && (
             <button className={`overview${overviewOpen ? " open" : ""}`} data-nav onClick={() => setOverviewOpen((o) => !o)}>
               {item.Overview}
@@ -208,7 +221,7 @@ export function Details({ id }: { id: string }) {
             )}
             {pairId && item.Type === "Movie" && (
               <button className="btn" data-nav onClick={() => go(`/play/${item.Id}?then=${pairId}`)}>
-                Play both
+                ▶ Play both
               </button>
             )}
             {item.Type !== "Series" && resumeTicks > 0 && (
@@ -242,7 +255,9 @@ export function Details({ id }: { id: string }) {
             </button>
             {item.Type !== "Series" && <DownloadButton item={item} onError={flash} />}
           </div>
+          {phone && <DetailsQuote item={item} phone />}
         </div>
+        {!phone && <DetailsQuote item={item} phone={false} />}
       </div>
 
       <div className="details-below">

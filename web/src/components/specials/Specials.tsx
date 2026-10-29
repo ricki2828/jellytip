@@ -25,6 +25,7 @@ import { cardLayers, heroItemId, specialPick, type ImagePick } from "../../lib/a
 import { go } from "../../lib/router";
 import { claimVideo, releaseVideo, useVideoBlocked } from "../../lib/videoFocus";
 import { useSoundBack } from "../../lib/soundBack";
+import { useIsPhone } from "../../lib/device";
 import { placeSpecials } from "../../lib/specialsPlacement";
 import { Backdrop } from "../Backdrop";
 import { Card } from "../Card";
@@ -324,13 +325,23 @@ function pairArt(i: Item): string | null {
   return cardLayers(i).find((l) => l.url && l.kind !== "poster")?.url ?? null;
 }
 
+const PAIR_HALF_W = 264;
+const PHONE_PAIR_HALF_W = 168;
+
+/**
+ * Each pair is one framed unit with two halves you pick separately (as on the TV): 1 | 2, each a normal titled tile
+ * that opens its own film; details opened from a pair offer "Play both" (that film first). Caption shared below.
+ */
 function DoubleFeatureBlock({ s }: { s: DoubleFeature }) {
   const ids = s.pairs.flatMap((p) => [p.a, p.b]);
   const items = useItems(ids);
+  const phone = useIsPhone();
   if (!items) return null;
   const byId = new Map(items.map((i) => [i.Id, i]));
   const pairs = s.pairs.filter((p) => byId.has(p.a) && byId.has(p.b));
   if (!pairs.length) return null;
+  const untitled = untitledSet(s);
+  const w = phone ? PHONE_PAIR_HALF_W : PAIR_HALF_W;
   return (
     <section className="special row double-feature">
       <SpecialHeader kicker="Double feature" title={s.title} />
@@ -340,27 +351,30 @@ function DoubleFeatureBlock({ s }: { s: DoubleFeature }) {
           const b = byId.get(p.b)!;
           const runtime = p.totalRuntimeMin ? runtimeText(p.totalRuntimeMin * 60 * 10_000_000) : null;
           return (
-            <button
-              key={`${p.a}-${p.b}`}
-              className="pair-tile"
-              data-nav
-              aria-label={`Double feature: ${a.Name} and ${b.Name}`}
-              onClick={() => go(`/item/${a.Id}?pair=${b.Id}`)}
-            >
-              <span className="pair-art">
-                {[a, b].map((i) => {
-                  const u = pairArt(i);
-                  return u ? <img key={i.Id} src={u} alt="" /> : <span key={i.Id} className="poster-title">{i.Name}</span>;
-                })}
-                <span className="pair-plus">+</span>
-              </span>
-              <span className="pair-text">
+            <div key={`${p.a}-${p.b}`} className="pair-unit" role="group" aria-label={`Double feature: ${a.Name} and ${b.Name}`}>
+              <div className="pair-halves">
+                {[
+                  [a, b],
+                  [b, a],
+                ].map(([one, other], n) => (
+                  <Card
+                    key={one.Id}
+                    item={one}
+                    width={w}
+                    tag={String(n + 1)}
+                    untitled={untitled.has(one.Id)}
+                    label={`${n + 1} of 2: ${one.Name} (double feature with ${other.Name})`}
+                    onOpen={() => go(`/item/${one.Id}?pair=${other.Id}`)}
+                  />
+                ))}
+              </div>
+              <span className="pair-caption">
                 <strong>
                   {a.Name} + {b.Name}
                 </strong>
-                {(p.reason || runtime) && <span>{[p.reason, runtime].filter(Boolean).join("  ·  ")}</span>}
+                {(p.reason || runtime) && <span>{[p.reason, runtime && `${runtime} together`].filter(Boolean).join("  ·  ")}</span>}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>

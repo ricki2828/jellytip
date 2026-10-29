@@ -224,66 +224,42 @@
   z-index: 1;
 }
 
-/* double_feature: two 16:9 thumbs joined */
-.pair-tile {
-  position: relative;
+/* double_feature: one framed unit per pair, two halves picked separately, caption below */
+.pair-unit {
   flex: none;
-  width: 420px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--tile);
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.16s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
-.pair-tile:hover,
-.pair-tile:focus {
-  transform: scale(1.03);
+.pair-halves {
+  display: flex;
+  gap: 6px;
 }
-.pair-tile:focus {
-  box-shadow: 0 0 0 2px var(--vanilla);
+.pair-halves .card .card-tag {
+  min-width: 20px;
+  text-align: center;
 }
-.pair-art {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-  aspect-ratio: 32 / 9;
-}
-.pair-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.pair-plus {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 28px;
-  height: 28px;
-  margin: -14px 0 0 -14px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--night);
-  font-weight: 700;
-}
-.pair-text {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 28px 10px 8px;
+.pair-caption {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  padding: 0 4px;
+  max-width: 0;
+  min-width: 100%;
   font-size: 11.5px;
   color: var(--dim);
 }
-.pair-text strong {
+.pair-caption strong {
   font-size: 13px;
+  font-weight: 600;
   color: var(--vanilla);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* because_loved: the anchor quote card */
@@ -492,9 +468,6 @@
   }
   .top10-num {
     font-size: 128px;
-  }
-  .pair-tile {
-    width: 300px;
   }
   .quote-card {
     width: 260px;

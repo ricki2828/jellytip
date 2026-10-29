@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Item } from "../api/jellyfin";
 import { reviewQuote, reviews as getReviews, type Quote, type Review, type Reviews } from "../api/companion";
+import { pickPullQuote } from "../lib/pullQuote";
 import "./Reviews.css";
 
 const QUOTE_MAX = 120;
@@ -151,5 +152,49 @@ export function HeroQuote({ item }: { item: Item }) {
     <p className="hero-quote">
       “{quote.text}” <span className="hero-quote-by">— {quote.author} on Letterboxd</span>
     </p>
+  );
+}
+
+/**
+ * Details page: one review, bottom-right of the hero on desktop (balancing the info bottom-left), under the buttons on
+ * the phone as one line + "more". Same request as the Reviews row (cached). Fades in; nothing when there is none.
+ */
+export function DetailsQuote({ item, phone }: { item: Item; phone: boolean }) {
+  const [data, setData] = useState<Reviews | null | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setData(undefined);
+    setOpen(false);
+    if (!reviewable(item)) return setData(null);
+    const ctl = new AbortController();
+    getReviews(item.Id, { priority: "high", signal: ctl.signal }).then((r) => !ctl.signal.aborted && setData(r));
+    return () => ctl.abort();
+  }, [item.Id, item.Type]);
+
+  const q = pickPullQuote(data ?? null);
+  // Phone: hold the line while it loads so the page below doesn't jump when it lands
+  if (!q) return phone && data === undefined ? <div className="details-quote phone pending" aria-hidden /> : null;
+  const by = (
+    <span className="details-quote-by">
+      {q.rating != null && <span className="details-quote-stars">{stars(q.rating)}</span>} — {q.own ? `${q.author} (you)` : q.author} on {q.site}
+    </span>
+  );
+  if (!phone)
+    return (
+      <figure className="details-quote">
+        <blockquote>“{q.text}”</blockquote>
+        <figcaption>{by}</figcaption>
+      </figure>
+    );
+  return (
+    <div className={`details-quote phone${open ? " open" : ""}`}>
+      <span className="details-quote-text">“{q.text}”</span>
+      {!open && (
+        <button className="details-quote-more" data-nav onClick={() => setOpen(true)}>
+          more
+        </button>
+      )}
+      {open && by}
+    </div>
   );
 }

@@ -1546,3 +1546,10 @@ button.overview.open {
 .chip.dl-season {
   margin-left: auto;
 }
+.pair-line .link {
+  padding: 0 3px;
+  font: inherit;
+  color: var(--vanilla);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
