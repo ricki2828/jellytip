@@ -1086,6 +1086,7 @@ button.overview.open {
   }
   main {
     padding-bottom: calc(var(--tabbar-h) + var(--safe-b));
+    overflow-x: clip; /* nothing may widen the page sideways (rows scroll inside themselves) */
   }
 
   /* top bar: logo only; navigation moves to the bottom tab bar */
@@ -1329,6 +1330,10 @@ button.overview.open {
   }
   .grid-head .chips {
     padding: 0 var(--pad);
+    /* a flex child defaults to its content width: without this the sort chips widen the page past the screen,
+       Chrome grows the layout viewport to match and fixed bars (Sign out, tab bar) end up off-screen */
+    min-width: 0;
+    max-width: 100%;
   }
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
