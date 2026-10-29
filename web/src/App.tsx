@@ -12,7 +12,7 @@ import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
 import { isNative } from "./lib/native";
-import { go } from "./lib/router";
+import { go, isRestoring } from "./lib/router";
 
 export function App() {
   const [session, setSessionState] = useState(getSession);
@@ -25,7 +25,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route.name !== "play") window.scrollTo(0, 0);
+    if (route.name !== "play" && !isRestoring()) window.scrollTo(0, 0);
   }, [route.name, route.params.id]);
 
   // Phone app started without a connection: the downloads are what works

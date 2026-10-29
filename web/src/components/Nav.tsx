@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
-import { go } from "../lib/router";
+import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
 
 export function Logo({ large = false }: { large?: boolean }) {
@@ -66,8 +66,17 @@ export function Nav({ current }: { current: string }) {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  const root = isRootRoute(current);
   return (
-    <nav className={scrolled ? "nav solid" : "nav"}>
+    <nav className={`nav${scrolled ? " solid" : ""}${root ? "" : " has-back"}`}>
+      {/* Every non-root screen: same Back as Android's (sheet / sound first, then the previous screen, else Home) */}
+      {!root && (
+        <button className="nav-back" onClick={systemBack} aria-label="Back" title="Back">
+          <svg viewBox="0 0 24 24" aria-hidden>
+            <path d="M14.5 5.5 8 12l6.5 6.5" />
+          </svg>
+        </button>
+      )}
       <button className="nav-logo" onClick={() => go("/home")} tabIndex={-1} aria-label="Home">
         <Logo />
       </button>

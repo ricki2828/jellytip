@@ -73,6 +73,33 @@ img {
   background: rgba(10, 10, 10, 0.94);
   transition: background 0.2s;
 }
+.nav-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: -14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--vanilla);
+  cursor: pointer;
+}
+.nav-back svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nav-back:hover,
+.nav-back:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+}
 .nav-logo {
   background: none;
   border: 0;
@@ -1108,6 +1135,23 @@ button.overview.open {
   }
   .nav-links,
   .nav-user span {
+    display: none;
+  }
+  /* back arrow: 44px target, reads on any artwork; it takes the logo's place */
+  .nav-back {
+    width: 44px;
+    height: 44px;
+    margin: -6px 0 -6px -8px;
+    background: rgba(10, 10, 10, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  }
+  .nav-back svg {
+    width: 24px;
+    height: 24px;
+  }
+  .nav.has-back .nav-logo {
     display: none;
   }
   .nav-user .link {
