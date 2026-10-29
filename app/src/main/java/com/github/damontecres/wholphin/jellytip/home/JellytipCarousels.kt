@@ -45,6 +45,7 @@ data class JellytipCarouselManifest(
     companion object {
         fun parse(json: String): JellytipCarouselManifest {
             val root = JSONObject(json)
+            com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(root.optJSONObject("techs"))
             val carousels =
                 root
                     .optJSONArray("carousels")

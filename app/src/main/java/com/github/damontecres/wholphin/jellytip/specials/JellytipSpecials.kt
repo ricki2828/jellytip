@@ -158,6 +158,7 @@ object JellytipSpecialsParser {
     fun parseAnswer(json: String): JellytipSpecialsAnswer {
         val root = JSONObject(json)
         com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(root.optJSONObject("logoStyles"))
+        com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(root.optJSONObject("techs"))
         val arr = root.optJSONArray("specials") ?: return JellytipSpecialsAnswer(date(json), emptyList(), emptySet(), emptyMap())
         val untitled = mutableSetOf<UUID>()
         val heroIndexes = mutableMapOf<UUID, Int>()
@@ -168,6 +169,7 @@ object JellytipSpecialsParser {
                     special(o)?.also { sp ->
                         untitled += o.uuids("untitled")
                         com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(o.optJSONObject("logoStyles"))
+                        com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(o.optJSONObject("techs"))
                         val hero = if (o.isNull("heroIndex")) null else o.optInt("heroIndex", -1).takeIf { it >= 0 }
                         when (sp) {
                             is JellytipSpecial.TrailerBreak -> hero?.let { heroIndexes[sp.itemId] = it }

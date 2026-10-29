@@ -347,6 +347,7 @@ class JellytipApi
                         infoCache[itemId] = info
                         com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles.set(itemId, info.thumbTitled)
                         JellytipLogoTint.setStyle(itemId, info.logoStyle)
+                        info.tech?.let { com.github.damontecres.wholphin.jellytip.cards.JellytipTech.set(itemId, it) }
                         info
                     }
                 } catch (e: Exception) {
@@ -657,6 +658,8 @@ data class JellytipBackdropInfo(
     val thumbTitled: Boolean? = null,
     /** "white" | "mono" | "original" (null = not answered): see [JellytipLogoTint]. */
     val logoStyle: String? = null,
+    /** Premium formats (`tech`), null = not sent: see [com.github.damontecres.wholphin.jellytip.cards.JellytipTech]. */
+    val tech: List<String>? = null,
 ) {
     companion object {
         fun parse(json: String): JellytipBackdropInfo {
@@ -696,6 +699,7 @@ data class JellytipBackdropInfo(
                 tags,
                 thumbTitled,
                 root.optString("logoStyle").takeIf { it.isNotBlank() && !root.isNull("logoStyle") },
+                root.optJSONArray("tech")?.let { a -> (0 until a.length()).map { a.optString(it) } },
             )
         }
     }

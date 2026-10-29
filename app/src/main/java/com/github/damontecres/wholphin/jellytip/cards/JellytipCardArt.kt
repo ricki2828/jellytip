@@ -2,7 +2,10 @@ package com.github.damontecres.wholphin.jellytip.cards
 
 import com.github.damontecres.wholphin.ui.logCoilError
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -197,6 +201,8 @@ fun JellytipTitledImage(
     var logoError by remember(art.logoUrl) { mutableStateOf(false) }
     val showLogo = !art.titledAlready && art.logoUrl != null && !logoError
     val showText = !art.titledAlready && !showLogo
+    // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
+    val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
     Box(modifier = modifier.fillMaxSize().background(Color(0xFF141414))) {
         if (art.baseUrl != null && !baseError) {
             AsyncImage(
@@ -238,20 +244,60 @@ fun JellytipTitledImage(
                         .heightIn(max = cardHeight * LOGO_HEIGHT_FRACTION),
             )
         } else if (showText) {
-            // Untitled art (textless Thumb, or a backdrop with no logo): small white title with a soft shadow over the scrim
-            Text(
-                text = item.title ?: "",
-                color = Color.White,
-                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
-                fontFamily = JellytipFontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            // Untitled art (textless Thumb, or a backdrop with no logo): small white title with a soft shadow over the
+            // scrim. Badges share its row so the title wraps before them instead of running underneath.
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier =
                     Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = pad, end = pad, bottom = pad),
+                        .fillMaxWidth()
+                        .padding(start = pad, end = if (tech.isEmpty()) pad else TECH_INSET, bottom = pad),
+            ) {
+                Text(
+                    text = item.title ?: "",
+                    color = Color.White,
+                    style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (tech.isNotEmpty()) TechBadges(tech)
+            }
+        }
+        if (!showText && tech.isNotEmpty()) {
+            TechBadges(tech, Modifier.align(Alignment.BottomEnd).padding(end = TECH_INSET, bottom = TECH_INSET))
+        }
+    }
+}
+
+private val TECH_INSET = 6.dp
+
+/** At most two tiny monochrome badges (video, audio): white at 80% on a subtle dark pill. */
+@Composable
+private fun TechBadges(
+    badges: List<String>,
+    modifier: Modifier = Modifier,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
+        badges.take(2).forEach { b ->
+            Text(
+                text = b,
+                color = Color.White.copy(alpha = 0.8f),
+                fontFamily = JellytipFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                letterSpacing = 0.6.sp,
+                maxLines = 1,
+                modifier =
+                    Modifier
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
     }

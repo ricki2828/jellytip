@@ -124,17 +124,24 @@ fun JellytipDetailsBlock(
                     )
                 }
 
-                // Info line: year · rating · runtime · genres, then quiet file-detail badges
+                // Info line: year · rating · runtime · premium formats · genres, then quiet file-detail badges.
+                // Premium formats (4K · Dolby Vision · Dolby Atmos) come from the companion's /backdrops answer.
+                val premium =
+                    com.github.damontecres.wholphin.jellytip.cards.JellytipTech.fullNames(
+                        com.github.damontecres.wholphin.jellytip.cards.JellytipTech
+                            .of(item.id, dto.seriesId),
+                    )
                 val info =
-                    remember(item.id) {
+                    remember(item.id, premium) {
                         listOfNotNull(
                             dto.productionYear?.toString(),
                             dto.officialRating,
                             runtimeText(dto.runTimeTicks),
+                            premium.joinToString("  ·  ").takeIf { it.isNotEmpty() },
                             dto.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
                         ).joinToString("  ·  ")
                     }
-                val badges = remember(item.id) { fileBadges(item) }
+                val badges = remember(item.id, premium) { fileBadges(item).filterNot { it == "4K" && "4K" in premium } }
                 if (info.isNotEmpty() || badges.isNotEmpty()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
