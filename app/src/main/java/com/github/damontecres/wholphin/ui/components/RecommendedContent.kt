@@ -110,6 +110,19 @@ class RecommendedViewModel
         private val _state = MutableStateFlow(RecommendedState())
         val state: StateFlow<RecommendedState> = _state
 
+        /** Jellytip: which companion specials this library page shows (`movies` / `shows`), or null for none. */
+        val jellytipSpecialsPage: String?
+            get() =
+                when (suggestionsType) {
+                    BaseItemKind.MOVIE -> "movies"
+                    BaseItemKind.SERIES -> "shows"
+                    else -> null
+                }
+
+        /** Continue Watching / Next Up rows at the top; specials count their position from the row after them. */
+        val jellytipLeadingRows: Int
+            get() = recommendedRows.takeWhile { it.title == R.string.continue_watching || it.title == R.string.next_up }.size
+
         fun init() {
             viewModelScope.launchDefault {
                 val limit =
@@ -545,6 +558,8 @@ fun RecommendedContent(
                             showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                         )
                     },
+                    specialsPage = viewModel.jellytipSpecialsPage,
+                    specialsLeadingRows = viewModel.jellytipLeadingRows,
                 )
             }
         }

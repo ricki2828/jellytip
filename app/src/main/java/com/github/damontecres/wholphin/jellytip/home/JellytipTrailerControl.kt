@@ -23,6 +23,24 @@ object JellytipTrailerControl {
     var sound by mutableStateOf(false)
     var hintTick by mutableLongStateOf(0L) // bumped each time the "sound on" hint should show
 
+    /**
+     * Who shows the video: null = the hero; otherwise a home "special" (Trailer Break, Closet Picks) that took the one
+     * home player over. Only the owner draws a PlayerSurface for it.
+     */
+    var owner by mutableStateOf<String?>(null)
+        private set
+
+    /** The one home ExoPlayer (created by the hero on first use), so a special can draw it in its own frame. */
+    var player by mutableStateOf<androidx.media3.common.Player?>(null)
+
+    /**
+     * Id of the video special (Trailer Break, Closet Picks) that holds focus, or null. While set, the hero must not start
+     * (or keep) its own trailer. An id, not a flag, so moving straight from one video special to another cannot clear it.
+     */
+    var focusedSpecial by mutableStateOf<String?>(null)
+
+    val specialVideoFocused get() = focusedSpecial != null
+
     val playing get() = url != null
 
     /**
@@ -53,6 +71,40 @@ object JellytipTrailerControl {
         this.url = url
         this.trailerItemId = trailerItemId
         this.sound = sound
+        this.owner = null
+    }
+
+    /** A special takes the home player over for [url] (its frame draws the surface; the hero shows its still). */
+    fun startSpecial(
+        owner: String,
+        url: String,
+        sound: Boolean,
+        itemId: UUID? = null,
+    ) {
+        this.itemId = itemId
+        this.url = url
+        this.trailerItemId = null
+        this.sound = sound
+        this.owner = owner
+    }
+
+    /** True while [owner]'s video is playing. */
+    fun isPlayingForOwner(owner: String) = url != null && this.owner == owner
+
+    /** Stop only if [owner] (null = hero) currently holds the player, so the hero never stops a special's video. */
+    fun stopIfOwner(owner: String?) {
+        if (this.owner == owner) stop()
+    }
+
+    /**
+     * OK on a video special: unmute when its video plays muted (hint chip) and return true; false = sound already on or not
+     * playing, so the caller does its normal action.
+     */
+    fun onOkOwner(owner: String): Boolean {
+        if (!isPlayingForOwner(owner) || sound) return false
+        sound = true
+        hintTick = System.nanoTime()
+        return true
     }
 
     /** Focus moved or page left: stop and reset to the default sound state next time. */
@@ -60,10 +112,11 @@ object JellytipTrailerControl {
         itemId = null
         url = null
         trailerItemId = null
+        owner = null
     }
 
     /** True if [item]'s trailer is playing in the hero. */
-    fun isPlayingFor(item: BaseItem) = url != null && itemId == item.id
+    fun isPlayingFor(item: BaseItem) = url != null && owner == null && itemId == item.id
 
     /**
      * OK on [item] while its trailer plays muted = unmute (stay on home, hint chip). Returns true when consumed;

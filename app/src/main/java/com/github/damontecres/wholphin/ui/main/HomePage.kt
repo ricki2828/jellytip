@@ -32,6 +32,7 @@ import androidx.compose.runtime.withFrameNanos
 import com.github.damontecres.wholphin.jellytip.JellytipSession
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +63,11 @@ import com.github.damontecres.wholphin.data.model.QuickDetailsData
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
 import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
+import com.github.damontecres.wholphin.jellytip.specials.JellytipHomeEntry
+import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialFocus
+import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialRow
+import com.github.damontecres.wholphin.jellytip.specials.jellytipHomeEntries
+import com.github.damontecres.wholphin.jellytip.specials.rememberJellytipSpecials
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -275,6 +281,7 @@ fun HomePage(
                     headerComposable = { focusedItem ->
                         JellytipHomeHeader(item = focusedItem, showLogo = showLogos)
                     },
+                    specialsPage = "home",
                 )
             }
             overviewDialog?.let { info ->
@@ -350,14 +357,35 @@ fun HomePageContent(
     onClickViewMore: (RowColumn, HomeRowLoadingState.Success) -> Unit = { _, _ -> },
     heroComposable: (@Composable (focusedItem: BaseItem?, hasFocus: Boolean) -> Unit)? = null,
     extraRows: (LazyListScope.() -> Unit)? = null,
+    /** Jellytip: companion specials for this page (`home`, `movies`, `shows`); null = none. */
+    specialsPage: String? = null,
+    /** Rows before the first "normal" row (Continue Watching / Next Up); null = detect from the row types. */
+    specialsLeadingRows: Int? = null,
 ) {
     var hasFocus by remember { mutableStateOf(false) }
-    val focusedItem =
+    val rowFocusedItem =
         remember(homeRows, position) {
             (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(
                 position.column,
             )
         }
+    // Jellytip specials: rows of their own between the normal rows; a focused special tile drives the hero instead
+    val specials = specialsPage?.let { rememberJellytipSpecials(it) }
+    var specialFocus by remember { mutableStateOf<JellytipSpecialFocus?>(null) }
+    var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
+    val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val entries =
+        remember(homeRows, specials, specialsLeadingRows) {
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), specialsLeadingRows)
+        }
+    val focusedEntry =
+        remember(entries, specialFocus?.id, position.row) {
+            val sid = specialFocus?.id
+            (if (sid != null) entries.indexOfFirst { it is JellytipHomeEntry.Special && it.special.id == sid } else -1).takeIf { it >= 0 }
+                ?: entries.indexOfFirst { it is JellytipHomeEntry.Row && it.index == position.row }
+        }
+    val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
+    val headerItem = if (specialFocus?.showHeader == false) null else focusedItem
 
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
@@ -368,6 +396,12 @@ fun HomePageContent(
 
     if (takeFocus) {
         LaunchedEffect(homeRows) {
+            // Back on Home after opening something from a special: focus that special again
+            val special = savedSpecialId?.let { specialRequesters[it] }
+            if (!firstFocused && special != null) {
+                withFrameNanos { }
+                if (special.tryRequestFocus()) firstFocused = true
+            }
             if (!firstFocused && homeRows.isNotEmpty()) {
                 if (position.row >= 0) {
                     val index = position.row.coerceIn(0, rowFocusRequesters.lastIndex)
@@ -410,11 +444,14 @@ fun HomePageContent(
                 Modifier
                     .focusProperties {
                         onEnter = {
-                            rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+                            val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
+                            if (special == null || !special.tryRequestFocus()) {
+                                rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+                            }
                         }
                     }.fillMaxSize(),
         ) {
-            headerComposable.invoke(focusedItem)
+            headerComposable.invoke(headerItem)
 
             val density = LocalDensity.current
             val spaceAbovePx =
@@ -439,15 +476,38 @@ fun HomePageContent(
                         Modifier
                             .focusRestorer(),
                 ) {
-                    itemsIndexed(homeRows) { rowIndex, row ->
+                    items(count = entries.size, key = { entries[it].key }) { entryIndex ->
+                        val entry = entries[entryIndex]
                         // Jellytip: rows above the focused one fade out completely so no clipped sliver is left at the top
-                        val aboveFocus = LocalJellytipHome.current && rowIndex < position.row
+                        val aboveFocus = LocalJellytipHome.current && entryIndex < focusedEntry
                         val rowAlpha by animateFloatAsState(if (aboveFocus) 0f else 1f, tween(150), label = "jellytip-row-above")
                         val rowModifier =
                             Modifier
                                 .animateItem(placementSpec = null)
                                 .graphicsLayer { alpha = rowAlpha }
                                 .padding(bottom = 8.dp)
+                        if (entry is JellytipHomeEntry.Special) {
+                            val page = specials ?: return@items
+                            val id = entry.special.id
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                JellytipSpecialRow(
+                                    special = entry.special,
+                                    page = page,
+                                    onFocusItem = { item, showHeader ->
+                                        specialFocus = JellytipSpecialFocus(id, item, showHeader)
+                                        savedSpecialId = id
+                                    },
+                                    focusModifier =
+                                        Modifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                    modifier = rowModifier,
+                                )
+                            }
+                            return@items
+                        }
+                        val rowIndex = (entry as JellytipHomeEntry.Row).index
+                        val row = homeRows[rowIndex]
                         CompositionLocalProvider(
                             LocalBringIntoViewSpec provides defaultBringIntoViewSpec,
                         ) {
@@ -514,6 +574,8 @@ fun HomePageContent(
                                                     remember(rowIndex, index) {
                                                         { isFocused: Boolean ->
                                                             if (isFocused) {
+                                                                specialFocus = null
+                                                                savedSpecialId = null
                                                                 currentOnFocusPosition(
                                                                     RowColumn(
                                                                         rowIndex,
@@ -568,6 +630,8 @@ fun HomePageContent(
                                                     modifier =
                                                         mod.onFocusChanged {
                                                             if (it.isFocused) {
+                                                                specialFocus = null
+                                                                savedSpecialId = null
                                                                 currentOnFocusPosition.invoke(
                                                                     RowColumn(
                                                                         rowIndex,

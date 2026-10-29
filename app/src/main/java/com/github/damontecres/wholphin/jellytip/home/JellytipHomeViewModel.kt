@@ -10,8 +10,10 @@ import com.github.damontecres.wholphin.jellytip.cache.ImagePick
 import com.github.damontecres.wholphin.jellytip.cache.JellytipImagePick
 import com.github.damontecres.wholphin.jellytip.cache.jellytipBackdropUrl
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
+import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialsService
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.ImageUrlService
+import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +39,9 @@ class JellytipHomeViewModel
         private val imageUrlService: ImageUrlService,
         preferences: DataStore<AppPreferences>,
         @param:AuthOkHttpClient val httpClient: OkHttpClient,
+        /** Home "specials" (Trailer Break, Top 10, ...); a singleton so the day's answer survives leaving Home. */
+        val specials: JellytipSpecialsService,
+        val navigationManager: NavigationManager,
     ) : ViewModel() {
         val settings: Flow<JellytipSettings> =
             preferences.data

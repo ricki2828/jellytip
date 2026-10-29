@@ -224,9 +224,10 @@ fun JellytipHomeHero(
     }
 
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
-    val trailerWanted = hasFocus && resumed && settings.trailerAutoplay
+    val trailerWanted = hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused
     LaunchedEffect(item?.id, trailerWanted) {
-        JellytipTrailerControl.stop()
+        // A special's video (Trailer Break, Closet Picks) is not the hero's to stop
+        JellytipTrailerControl.stopIfOwner(null)
         if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
@@ -262,6 +263,7 @@ fun JellytipHomeHero(
                     sound = JellytipTrailerControl.sound,
                     httpClient = viewModel.httpClient,
                     onEnded = { JellytipTrailerControl.stop() },
+                    drawSurface = JellytipTrailerControl.owner == null,
                 )
             }
             // "Sound on" hint, 2 s, bottom-right just above the first row
@@ -380,6 +382,7 @@ private fun HeroTrailer(
     sound: Boolean,
     httpClient: okhttp3.OkHttpClient,
     onEnded: () -> Unit,
+    drawSurface: Boolean = true,
 ) {
     val context = LocalContext.current
     var firstFrame by remember { mutableStateOf(false) }
@@ -408,7 +411,9 @@ private fun HeroTrailer(
                 }
             }
         player.addListener(listener)
+        JellytipTrailerControl.player = player
         onDispose {
+            if (JellytipTrailerControl.player === player) JellytipTrailerControl.player = null
             player.removeListener(listener)
             player.release()
         }
@@ -430,7 +435,8 @@ private fun HeroTrailer(
         animationSpec = tween(if (url != null) 800 else 150),
         label = "jellytip-home-trailer-alpha",
     )
-    if (alpha > 0f || url != null) {
+    // A special that took the player over draws it in its own frame; two surfaces would fight over the decoder output
+    if (drawSurface && (alpha > 0f || url != null)) {
         PlayerSurface(
             player = player,
             surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
