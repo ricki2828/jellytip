@@ -313,10 +313,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** A Back key-down went on to the system (which starts predictive back on it): its key-up must follow it there. */
+    private var backDownToSystem = false
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.key(event)
         com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onKey(event)
         JellytipInputGuard.onKey(event)
+        // Never split a Back press: an interceptor that turns on between key-down and key-up (trailer sound, overlay,
+        // screensaver) must not eat the key-up of a press the system already started handling, or predictive back is
+        // left half done and the screen stops following the back stack (29-Oct P0)
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) backDownToSystem = false
+            if (event.action == KeyEvent.ACTION_UP && backDownToSystem) {
+                backDownToSystem = false
+                com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("key", "back key-up follows its key-down to the system")
+                return super.dispatchKeyEvent(event)
+            }
+        }
+        val consumed = jellytipInterceptKey(event)
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN && !consumed) backDownToSystem = true
+        return consumed || super.dispatchKeyEvent(event)
+    }
+
+    /** The app's own key interceptors; true = consumed (the event does not reach the views / system). */
+    private fun jellytipInterceptKey(event: KeyEvent): Boolean {
         if (JellytipInputGuard.shouldSwallow(event)) return true
         if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
@@ -326,7 +347,7 @@ class MainActivity : AppCompatActivity() {
             return true
         } else {
             screensaverService.pulse()
-            return super.dispatchKeyEvent(event)
+            return false
         }
     }
 

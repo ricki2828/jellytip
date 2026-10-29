@@ -45,18 +45,28 @@ object JellytipTrailerControl {
 
     /**
      * Back while the hero trailer plays with sound on = mute (trailer keeps playing, focus and drawer untouched).
-     * Consumes both key events of the press; anything else (muted, not playing, full screen) falls through.
+     * Consumes both key events of the press, or neither: the key-up is taken only when this press's key-down was.
+     * (29-Oct P0: a trailer that started with sound between the key-down and key-up of a Back press took only the
+     * key-up; the system's predictive back had already started on the key-down and never finished, which froze the
+     * screen on the previous page while the back stack moved on.)
      */
     fun onBackKey(event: android.view.KeyEvent): Boolean {
         if (event.keyCode != android.view.KeyEvent.KEYCODE_BACK) return false
-        if (!(playing && sound) && !muteOnUp) return false
-        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-            muteOnUp = true
-        } else if (event.action == android.view.KeyEvent.ACTION_UP) {
-            muteOnUp = false
-            sound = false
+        return when (event.action) {
+            android.view.KeyEvent.ACTION_DOWN -> {
+                if (event.repeatCount == 0) muteOnUp = playing && sound
+                muteOnUp
+            }
+
+            android.view.KeyEvent.ACTION_UP -> {
+                if (!muteOnUp) return false
+                muteOnUp = false
+                sound = false
+                true
+            }
+
+            else -> muteOnUp
         }
-        return true
     }
 
     private var muteOnUp = false

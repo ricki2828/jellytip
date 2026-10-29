@@ -111,6 +111,38 @@ class JellytipIptvPlayback
         private val owners = mutableSetOf<String>()
         private var releaseJob: Job? = null
 
+        init {
+            // Stop the stream whenever the app is hidden, even if no Live TV page is composed (a page that never
+            // drew, or a stuck screen, must not keep the provider's one connection and the audio going)
+            (context.applicationContext as? android.app.Application)?.registerActivityLifecycleCallbacks(
+                object : android.app.Application.ActivityLifecycleCallbacks {
+                    override fun onActivityStopped(activity: android.app.Activity) {
+                        if (!activity.isChangingConfigurations && _state.value !is IptvPlayState.Idle) {
+                            stop("app hidden (activity stopped)")
+                        }
+                    }
+
+                    override fun onActivityCreated(
+                        activity: android.app.Activity,
+                        savedInstanceState: android.os.Bundle?,
+                    ) {}
+
+                    override fun onActivityStarted(activity: android.app.Activity) {}
+
+                    override fun onActivityResumed(activity: android.app.Activity) {}
+
+                    override fun onActivityPaused(activity: android.app.Activity) {}
+
+                    override fun onActivitySaveInstanceState(
+                        activity: android.app.Activity,
+                        outState: android.os.Bundle,
+                    ) {}
+
+                    override fun onActivityDestroyed(activity: android.app.Activity) {}
+                },
+            )
+        }
+
         private val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {

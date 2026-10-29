@@ -421,6 +421,9 @@ private fun HeroTrailer(
             if (JellytipTrailerControl.player === player) JellytipTrailerControl.player = null
             player.removeListener(listener)
             player.release()
+            // The home player is gone: no trailer is playing any more, so Back on the next page is a plain Back
+            // (a stale "playing with sound" state used to turn it into "mute")
+            JellytipTrailerControl.stop()
         }
     }
     LaunchedEffect(url) {

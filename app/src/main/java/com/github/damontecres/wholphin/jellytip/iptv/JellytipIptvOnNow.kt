@@ -63,6 +63,7 @@ class JellytipOnNowViewModel
             all: List<IptvOnNow>,
             reason: String,
         ) {
+            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
             playback.lineup = all.map { it.channel }
             playback.play(IptvTarget(o.channel.id, o.channel.name), reason)
             navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(o.channel.id), reason)
