@@ -422,6 +422,10 @@ class PlaybackViewModel
             (destination as? Destination.Playback)?.jellytipThenItemId?.let { queueJellytipNext(it, playlistItem) }
         }
 
+        /** Second film of a Jellytip "Play both": plays when the first ends, whatever the next-up preferences say. */
+        @Volatile
+        private var jellytipQueuedId: UUID? = null
+
         /** Jellytip "Play both": queue [nextId] straight after [current] so it plays when the first film ends. */
         private suspend fun queueJellytipNext(
             nextId: String,
@@ -429,6 +433,7 @@ class PlaybackViewModel
         ) {
             try {
                 val next = PlaylistItem.Media(BaseItem(api.userLibraryApi.getItem(UUID.fromString(nextId)).content, false))
+                jellytipQueuedId = next.id
                 _state.update { s ->
                     val items = s.playlist.items
                     val at = items.indexOfFirst { it.id == current.id }
@@ -1117,6 +1122,13 @@ class PlaybackViewModel
                             when {
                                 currentItem is PlaylistItem.Intro -> {
                                     Timber.v("Current item is intro, so playing next up immediately")
+                                    playNextUp()
+                                }
+
+                                nextItem.id == jellytipQueuedId -> {
+                                    // "Play both" was an explicit choice: play the second film regardless of next-up prefs
+                                    Timber.v("Play both: playing queued ${nextItem.id}")
+                                    jellytipQueuedId = null
                                     playNextUp()
                                 }
 
