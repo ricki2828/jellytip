@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -71,6 +72,8 @@ import com.github.damontecres.wholphin.jellytip.specials.rememberJellytipSpecial
 import com.github.damontecres.wholphin.jellytip.specials.rememberJellytipRows
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRowView
 import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselRows
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -180,9 +183,9 @@ fun HomePage(
                             if (currentHomePrefs.clickToPlay &&
                                 homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
                             ) {
-                                viewModel.navigationManager.navigateTo(Destination.Playback(item))
+                                viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (click-to-play row)")
                             } else {
-                                viewModel.navigationManager.navigateTo(item.destination())
+                                viewModel.navigationManager.navigateTo(item.destination(), "home OK")
                             }
                         }
                     }
@@ -196,7 +199,7 @@ fun HomePage(
                             // Long-press OK always opens details while the hero trailer plays
                             JellytipTrailerControl.stop()
                             // Open details only after OK is released: the key-up used to click Play and start the film
-                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
+                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination(), "home long-press OK") }
                             return@longClick
                         }
                         val row =
@@ -252,7 +255,7 @@ fun HomePage(
             val onClickPlay =
                 remember {
                     { _: RowColumn, item: BaseItem ->
-                        viewModel.navigationManager.navigateTo(Destination.Playback(item))
+                        viewModel.navigationManager.navigateTo(Destination.Playback(item), "home Play key")
                     }
                 }
             val onClickViewMore =
@@ -382,9 +385,13 @@ fun HomePageContent(
             )
         }
     // Jellytip specials: rows of their own between the normal rows; a focused special tile drives the hero instead
-    val specials = specialsPage?.let { rememberJellytipSpecials(it) }
+    val liveSpecials = specialsPage?.let { rememberJellytipSpecials(it) }
     // Server rows (rows=1 manifest) replace the old carousel rows; old manifest / unavailable = today's rows
-    val serverRows = specialsPage?.let { rememberJellytipRows(it) }
+    val liveServerRows = specialsPage?.let { rememberJellytipRows(it) }
+    // What is on screen. Starts with today's cached copies (disk), so specials/rows are in place on the first frame;
+    // a late answer is taken only if it does not move the focused row, otherwise it waits for the next visit.
+    var specials by remember { mutableStateOf(liveSpecials) }
+    var serverRows by remember { mutableStateOf(liveServerRows) }
     val hiddenRows =
         remember(serverRows, rowConfigs) {
             if (serverRows == null || rowConfigs == null) {
@@ -411,6 +418,56 @@ fun HomePageContent(
         }
     val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
     val headerItem = if (specialFocus?.showHeader == false) null else focusedItem
+
+    val focusedKey = entries.getOrNull(focusedEntry)?.key
+    val currentFocusedKey by rememberUpdatedState(focusedKey)
+    val currentHasFocus by rememberUpdatedState(hasFocus)
+    LaunchedEffect(liveSpecials, liveServerRows) {
+        if (liveSpecials === specials && liveServerRows === serverRows) return@LaunchedEffect
+        val key = currentFocusedKey
+        val candidate =
+            jellytipHomeEntries(
+                homeRows,
+                liveSpecials?.specials.orEmpty(),
+                leadingRows,
+                liveServerRows?.rows.orEmpty(),
+                if (liveServerRows == null || rowConfigs == null) {
+                    emptySet()
+                } else {
+                    rowConfigs.indices.filter { JellytipCarouselRows.isAppRow(rowConfigs[it], liveServerRows.carouselIds) }.toSet()
+                },
+            )
+        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        if (moves) {
+            JellytipTrace.layout("deferred late specials/rows: would move focused $key")
+        } else {
+            specials = liveSpecials
+            serverRows = liveServerRows
+        }
+    }
+    // Trace any list change that moves the focused entry (index and px), to find "jumping around" while browsing
+    var lastFocusedIndex by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    LaunchedEffect(entries) {
+        val key = currentFocusedKey ?: return@LaunchedEffect
+        val index = entries.indexOfFirst { it.key == key }
+        val before = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset
+        val previous = lastFocusedIndex
+        if (previous != null && previous.first == key && previous.second != index) {
+            withFrameNanos { }
+            val after = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset
+            JellytipTrace.layout("focused $key moved ${previous.second}->$index px ${before ?: "?"}->${after ?: "?"} entries=${entries.size}")
+        }
+        lastFocusedIndex = key to index
+    }
+    // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
+    var heroItem by remember { mutableStateOf(focusedItem) }
+    var heroHeaderItem by remember { mutableStateOf(headerItem) }
+    LaunchedEffect(focusedItem, headerItem) {
+        delay(HERO_DEBOUNCE_MS)
+        heroItem = focusedItem
+        heroHeaderItem = headerItem
+        JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
+    }
 
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
@@ -463,7 +520,7 @@ fun HomePageContent(
         focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
     Box(modifier = modifier.onFocusChanged { hasFocus = it.hasFocus }) {
-        heroComposable?.invoke(focusedItem, hasFocus)
+        heroComposable?.invoke(heroItem, hasFocus)
         Column(
             modifier =
                 Modifier
@@ -476,7 +533,7 @@ fun HomePageContent(
                         }
                     }.fillMaxSize(),
         ) {
-            headerComposable.invoke(headerItem)
+            headerComposable.invoke(heroHeaderItem)
 
             val density = LocalDensity.current
             val spaceAbovePx =
@@ -559,11 +616,19 @@ fun HomePageContent(
                                 is HomeRowLoadingState.Loading,
                                 is HomeRowLoadingState.Pending,
                                 -> {
-                                    FocusableItemRow(
-                                        title = r.title.getString(),
-                                        subtitle = stringResource(R.string.loading),
-                                        modifier = rowModifier,
-                                    )
+                                    if (LocalJellytipHome.current) {
+                                        // Jellytip: reserve the loaded row's height so nothing below moves when it fills in
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = rowModifier) {
+                                            ItemRowTitle(r.title.getString())
+                                            Spacer(Modifier.height(jellytipRowOptions(HomeRowViewOptions()).heightDp.dp + 16.dp))
+                                        }
+                                    } else {
+                                        FocusableItemRow(
+                                            title = r.title.getString(),
+                                            subtitle = stringResource(R.string.loading),
+                                            modifier = rowModifier,
+                                        )
+                                    }
                                 }
 
                                 is HomeRowLoadingState.Error -> {
@@ -948,3 +1013,6 @@ fun HomePageViewMoreCard(
         showTitle = viewOptions.showTitles,
     )
 }
+
+/** Jellytip: hero/text block lag behind focus by this much (fast scrolling skips the tiles in between). */
+private const val HERO_DEBOUNCE_MS = 150L

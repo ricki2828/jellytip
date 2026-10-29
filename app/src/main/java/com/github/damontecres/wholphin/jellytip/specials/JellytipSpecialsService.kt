@@ -34,6 +34,7 @@ data class JellytipSpecialsPage(
 class JellytipSpecialsService
     @Inject
     constructor(
+        @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
         private val api: ApiClient,
         private val jellytipApi: JellytipApi,
         private val serverRepository: ServerRepository,
@@ -51,8 +52,54 @@ class JellytipSpecialsService
             return "$user:$page:${LocalDate.now()}"
         }
 
-        /** Cached answer for [page] (today, this user), or null. */
-        fun peek(page: String): JellytipSpecialsPage? = key(page)?.let { cache[it]?.page }
+        /**
+         * Cached answer for [page] (today, this user), or null. Falls back to today's copy on disk (answer + its items),
+         * so Home draws the specials in their places on the first frame instead of inserting them under the user.
+         */
+        fun peek(page: String): JellytipSpecialsPage? {
+            val key = key(page) ?: return null
+            cache[key]?.let { return it.page }
+            return try {
+                val file = diskFile(page)?.takeIf { it.exists() && it.lastModified() >= startOfToday() } ?: return null
+                val saved = org.json.JSONObject(file.readText())
+                val answer = JellytipSpecialsParser.parseAnswer(saved.getString("answer"))
+                val items =
+                    diskJson
+                        .decodeFromString(kotlinx.serialization.builtins.ListSerializer(BaseItem.serializer()), saved.getString("items"))
+                        .associateBy { it.id }
+                JellytipThumbTitles.markUntitled(answer.untitled)
+                answer.heroIndexes.forEach { (id, index) -> jellytipApi.hintHeroIndex(id, index) }
+                // Stale on purpose (at = 0): shown now, refreshed by the next load()
+                JellytipSpecialsPage(answer.specials.mapNotNull { it.keepVisible(items) }, items).also { cache[key] = Entry(it, 0L) }
+            } catch (e: Exception) {
+                Timber.w(e, "Specials disk cache unreadable")
+                null
+            }
+        }
+
+        private fun diskFile(page: String): java.io.File? =
+            serverRepository.currentUser?.id?.let {
+                java.io.File(java.io.File(context.filesDir, "jellytip").apply { mkdirs() }, "specials_${it}_$page.json")
+            }
+
+        private fun startOfToday(): Long = LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+        private fun saveToDisk(
+            page: String,
+            json: String,
+            items: Map<UUID, BaseItem>,
+        ) {
+            try {
+                val slim = items.values.map { it.copy(data = it.data.copy(people = null, chapters = null, trickplay = null)) }
+                val out =
+                    org.json.JSONObject()
+                        .put("answer", json)
+                        .put("items", diskJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(BaseItem.serializer()), slim))
+                diskFile(page)?.writeText(out.toString())
+            } catch (e: Exception) {
+                Timber.w(e, "Specials disk cache not written")
+            }
+        }
 
         suspend fun load(page: String): JellytipSpecialsPage? {
             val key = key(page) ?: return null
@@ -67,6 +114,7 @@ class JellytipSpecialsService
                 val items = loadItems(answer.specials.flatMap { it.itemIds }.distinct())
                 val resolved = JellytipSpecialsPage(answer.specials.mapNotNull { it.keepVisible(items) }, items)
                 cache[key] = Entry(resolved, System.currentTimeMillis())
+                saveToDisk(page, json, items)
                 prefetcher.warmSpecials(resolved)
                 resolved
             } catch (e: CancellationException) {
@@ -104,6 +152,7 @@ class JellytipSpecialsService
         suspend fun companionUrl(path: String): String? = jellytipApi.resolveUrl(path)
 
         companion object {
+            private val diskJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             private const val TIMEOUT_MS = 6_000L
             private const val FRESH_MS = 30 * 60_000L
             private const val BATCH = 100
