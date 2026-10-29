@@ -50,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: jellytip-release-aab
-          path: app/build/outputs/bundle/appstoreRelease/*.aab
+          path: app/build/outputs/bundle/appstoreRelease/app-appstore-release.aab
           retention-days: 14
       - name: Upload release APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
