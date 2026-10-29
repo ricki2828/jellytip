@@ -18,7 +18,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +62,7 @@ data class JellytipCardArt(
 
 /**
  * Image priority (sizes are physical px of the card so the 2 GB device decodes no more than it shows):
- * 1. Thumb (title baked into landscape art)
+ * 1. Thumb (title baked into landscape art; a Thumb the companion knows is textless gets the logo or title on top)
  * 2. episodes: the episode's own still + series logo, else series Thumb/backdrop
  * 3. backdrop + clearlogo, 4. backdrop + title text (caller draws it)
  */
@@ -108,7 +111,8 @@ fun selectJellytipCardArt(
         }
         val thumbId = d.parentThumbItemId
         if (thumbId != null && d.parentThumbImageTag != null && JellytipApi.shared?.isThumbGood(thumbId) != false) {
-            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), true, null)
+            val untitled = JellytipThumbTitles.isUntitled(thumbId)
+            return JellytipCardArt(fill(thumbId, ImageType.THUMB, d.parentThumbImageTag), !untitled, if (untitled) seriesLogo else null)
         }
         val backdropId = d.parentBackdropItemId
         val backdropTag = d.parentBackdropImageTags?.firstOrNull()
@@ -120,11 +124,12 @@ fun selectJellytipCardArt(
         return JellytipCardArt(null, false, seriesLogo)
     }
 
+    val logoUrl = if (ImageType.LOGO in tags) logo(item.id, tags[ImageType.LOGO]) else null
     if (ImageType.THUMB in tags && JellytipApi.shared?.isThumbGood(item.id) != false) {
-        return JellytipCardArt(fill(item.id, ImageType.THUMB, tags[ImageType.THUMB]), true, null)
+        val untitled = JellytipThumbTitles.isUntitled(item.id)
+        return JellytipCardArt(fill(item.id, ImageType.THUMB, tags[ImageType.THUMB]), !untitled, if (untitled) logoUrl else null)
     }
     val backdropTag = d.backdropImageTags?.firstOrNull()
-    val logoUrl = if (ImageType.LOGO in tags) logo(item.id, tags[ImageType.LOGO]) else null
     return when {
         backdropTag != null -> {
             val tags = d.backdropImageTags.orEmpty()
@@ -152,6 +157,8 @@ fun JellytipTitledImage(
     cardWidth: Dp,
     cardHeight: Dp,
     modifier: Modifier = Modifier,
+    /** False (home specials): use only what the companion already answered, never ask it per tile. */
+    fetchRanking: Boolean = true,
 ) {
     val service = LocalImageUrlService.current
     val density = LocalDensity.current
@@ -160,9 +167,9 @@ fun JellytipTitledImage(
     val heightPx = remember(cardHeight, density) { with(density) { cardHeight.roundToPx() } }
     // Photo-ranked backdrop: wait up to 300 ms for the companion before first paint, then settle on index 0 and upgrade if it arrives late
     val rankedId = item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE } ?: item.id
-    val initial = RankState(JellytipApi.shared?.peekBestBackdropIndex(rankedId), JellytipApi.shared == null)
+    val initial = RankState(JellytipApi.shared?.peekBestBackdropIndex(rankedId), JellytipApi.shared == null || !fetchRanking)
     val ranking by produceState(initial, rankedId) {
-        val api = JellytipApi.shared ?: return@produceState
+        val api = JellytipApi.shared?.takeIf { fetchRanking } ?: return@produceState
         if (value.index != null) return@produceState
         val quick = withTimeoutOrNull(RANK_WAIT_MS) { api.bestBackdropIndex(rankedId) }
         value = RankState(quick, true)
@@ -170,13 +177,16 @@ fun JellytipTitledImage(
     }
     // Episode stills: which are usable (not black/blurry/non-photo) comes from the companion once per series
     val episodeArtReady by produceState(item.type != BaseItemKind.EPISODE, rankedId) {
-        if (item.type == BaseItemKind.EPISODE) JellytipApi.shared?.loadEpisodeArt(rankedId)
+        if (item.type == BaseItemKind.EPISODE && fetchRanking) JellytipApi.shared?.loadEpisodeArt(rankedId)
         value = true
     }
     val hasTitledArt = ImageType.THUMB in item.data.imageTags.orEmpty()
     val bestIndex = ranking.index
+    // Snapshot read here (not inside remember) so a late "textless Thumb" answer recomputes the art
+    val thumbUntitled =
+        JellytipThumbTitles.isUntitled(item.id) || item.data.parentThumbItemId?.let { JellytipThumbTitles.isUntitled(it) } == true
     val art =
-        remember(item, widthPx, heightPx, bestIndex, ranking.ready, episodeArtReady) {
+        remember(item, widthPx, heightPx, bestIndex, ranking.ready, episodeArtReady, thumbUntitled) {
             if (ranking.ready || bestIndex != null || hasTitledArt) {
                 selectJellytipCardArt(service, item, widthPx, heightPx, bestIndex)
             } else {
@@ -228,9 +238,11 @@ fun JellytipTitledImage(
                         .heightIn(max = cardHeight * LOGO_HEIGHT_FRACTION),
             )
         } else if (showText) {
+            // Untitled art (textless Thumb, or a backdrop with no logo): small white title with a soft shadow over the scrim
             Text(
                 text = item.title ?: "",
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
+                style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
                 fontFamily = JellytipFontFamily,
                 fontWeight = FontWeight.Medium,
                 fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),

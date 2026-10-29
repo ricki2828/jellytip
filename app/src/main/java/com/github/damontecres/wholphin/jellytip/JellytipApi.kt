@@ -237,13 +237,32 @@ class JellytipApi
         fun peekInfo(itemId: UUID): JellytipBackdropInfo? = infoCache[itemId]
 
         /** Cached companion `heroIndex` for [itemId], or null if unknown. */
-        fun peekHeroIndex(itemId: UUID): Int? = infoCache[itemId]?.heroIndex
+        fun peekHeroIndex(itemId: UUID): Int? = infoCache[itemId]?.heroIndex ?: heroHints[itemId]
+
+        /** heroIndex values that arrived inline (home specials), so focusing those items needs no `/backdrops` call. */
+        private val heroHints = BoundedCache<UUID, Int>(MAX_CACHED)
+
+        fun hintHeroIndex(
+            itemId: UUID,
+            index: Int,
+        ) {
+            heroHints[itemId] = index
+        }
+
+        /** Absolute URL for a companion path such as `v1/closet/x.mp4` (absolute URLs pass through). */
+        suspend fun resolveUrl(pathOrUrl: String): String? {
+            if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl
+            val prefs = preferences.data.first()
+            val base = JellytipPreferences.apiBase(prefs.jellytipApiUrl).trimEnd('/')
+            if (base.isBlank()) return null
+            return "$base/${pathOrUrl.trimStart('/')}"
+        }
 
         /** Cached companion `detailsIndex` for [itemId], or null if unknown. */
         fun peekDetailsIndex(itemId: UUID): Int? = infoCache[itemId]?.detailsIndex
 
         /** Companion `heroIndex` (a backdrop that does not look like the item's card art); one request shared with [bestBackdropIndex]. */
-        suspend fun heroBackdropIndex(itemId: UUID): Int? = backdropInfo(itemId)?.heroIndex
+        suspend fun heroBackdropIndex(itemId: UUID): Int? = backdropInfo(itemId)?.heroIndex ?: heroHints[itemId]
 
         /** Cached photo-ranked backdrop index for [itemId], or null if unknown / animation / no ranking. */
         fun peekBestBackdropIndex(itemId: UUID): Int? = infoCache[itemId]?.best?.takeIf { it >= 0 }
@@ -326,6 +345,7 @@ class JellytipApi
                         }
                         val info = JellytipBackdropInfo.parse(response.body.string())
                         infoCache[itemId] = info
+                        com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles.set(itemId, info.thumbTitled)
                         info
                     }
                 } catch (e: Exception) {
@@ -343,6 +363,8 @@ class JellytipApi
         suspend fun getJson(
             path: String,
             timeoutMs: Long = TIMEOUT_MS,
+            /** Also send the Jellyfin session token with a manual token, so per-user routes know who is asking. */
+            asUser: Boolean = false,
         ): String? =
             withContext(WholphinDispatchers.IO) {
                 try {
@@ -355,7 +377,8 @@ class JellytipApi
                             .apply {
                                 if (prefs.jellytipApiToken.isNotBlank()) {
                                     header("X-Jellytip-Token", prefs.jellytipApiToken)
-                                } else {
+                                }
+                                if (prefs.jellytipApiToken.isBlank() || asUser) {
                                     api.accessToken?.takeIf { it.isNotBlank() }?.let {
                                         header("Authorization", "MediaBrowser Token=\"$it\"")
                                     }
@@ -627,6 +650,8 @@ data class JellytipBackdropInfo(
     val focal: Map<Int, JellytipFocal>,
     /** Image tag the companion scored at each backdrop index; used to re-find the image when the item's set changed. */
     val tags: Map<Int, String> = emptyMap(),
+    /** Whether the Thumb has title text baked in: false = textless (the tile overlays the title), null = unknown/no Thumb. */
+    val thumbTitled: Boolean? = null,
 ) {
     companion object {
         fun parse(json: String): JellytipBackdropInfo {
@@ -651,7 +676,16 @@ data class JellytipBackdropInfo(
             }
             fun idx(key: String) = if (root.isNull(key)) null else root.optInt(key, -1).takeIf { it >= 0 }
             val thumb = root.optJSONObject("thumb")
-            return JellytipBackdropInfo(best, idx("heroIndex"), idx("detailsIndex"), thumb?.optBoolean("good", true) ?: true, focal, tags)
+            val thumbTitled = if (!root.has("thumbTitled") || root.isNull("thumbTitled")) null else root.optBoolean("thumbTitled")
+            return JellytipBackdropInfo(
+                best,
+                idx("heroIndex"),
+                idx("detailsIndex"),
+                thumb?.optBoolean("good", true) ?: true,
+                focal,
+                tags,
+                thumbTitled,
+            )
         }
     }
 }
