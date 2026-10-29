@@ -10,8 +10,7 @@ import { registerTechs } from "../lib/techBadges";
 
 type Method = "GET" | "POST" | "DELETE";
 
-// Letterboxd lists have no page of their own on the web yet: not asked for
-const TYPES = "films,shows,people,collections,iptv,discover";
+const TYPES = "films,shows,people,collections,lists,iptv,discover";
 
 async function call(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<{ status: number; data: unknown }> {
   const token = getSession()?.token;

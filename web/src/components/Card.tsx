@@ -104,12 +104,13 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
 
   // Premium formats, bottom-right; episodes keep that corner for "S1 E2"
   const tech = item.Type === "Episode" ? [] : techOf(item.Id);
-  const techShown = tileBadges(tech).length > 0;
+  const techCount = tileBadges(tech).length;
+  const techShown = techCount > 0;
 
   return (
     <button
       ref={ref}
-      className={`card${fluid ? " fluid" : ""}${techShown ? " has-tech" : ""}`}
+      className={`card${fluid ? " fluid" : ""}${techShown ? ` has-tech${techCount > 1 ? " has-tech-2" : ""}` : ""}`}
       data-nav
       data-autofocus={autoFocus || undefined}
       style={fluid ? undefined : { width, height: Math.round((width * 9) / 16) }}

@@ -22,6 +22,10 @@ function parse(): Route {
       // Ids go into API paths: anything but a Jellyfin id falls back to Home
       if (!ID_RE.test(seg[1] ?? "")) return { name: "home", params: {}, query };
       return { name: seg[0], params: { id: seg[1].toLowerCase() }, query };
+    case "list":
+      // Letterboxd list slugs
+      if (!/^[a-z0-9][a-z0-9_-]{0,120}$/i.test(seg[1] ?? "")) return { name: "home", params: {}, query };
+      return { name: "list", params: { id: seg[1] }, query };
     case "collection":
       // TMDB collection ids are numeric
       if (!/^\d{1,9}$/.test(seg[1] ?? "")) return { name: "home", params: {}, query };

@@ -1762,6 +1762,9 @@ button.overview.open {
   white-space: nowrap;
 }
 .card.has-tech .card-title {
+  right: 52px;
+}
+.card.has-tech-2 .card-title {
   right: 96px;
 }
 .card.has-tech .card-logo:not(.center) {

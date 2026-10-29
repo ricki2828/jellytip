@@ -13,6 +13,7 @@ import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
 import { Settings } from "./screens/Settings";
+import { ListPage } from "./screens/ListPage";
 import { parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
 import { isNative } from "./lib/native";
@@ -79,6 +80,7 @@ export function App() {
         {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
         {route.name === "settings" && <Settings />}
+        {route.name === "list" && <ListPage key={route.params.id} slug={route.params.id} />}
         <Suspense fallback={null}>
           {route.name === "iptv" && <IptvSettings />}
           {route.name === "livetv" && <LiveTv />}

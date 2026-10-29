@@ -84,6 +84,19 @@ function Unified({ r, onChip }: { r: SearchResult; onChip: (q: string) => void }
           </div>
         </section>
       )}
+      {r.lists.length > 0 && (
+        <section className="grid-section">
+          <h2 className="row-title">Lists</h2>
+          <div className="search-links">
+            {r.lists.map((l) => (
+              <button key={l.slug} className="search-link" data-nav onClick={() => go(`/list/${l.slug}`)}>
+                <strong>{l.name}</strong>
+                <span>{[l.source === "letterboxd" ? "Letterboxd" : l.source, l.count ? `${l.count} films` : null].filter(Boolean).join(" · ")}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {r.iptv.length > 0 && (
         <section className="grid-section">
           <h2 className="row-title">On your IPTV</h2>
