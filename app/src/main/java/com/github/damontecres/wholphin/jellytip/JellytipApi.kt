@@ -374,6 +374,49 @@ class JellytipApi
                 }
             }
 
+        private val reviewsCache = BoundedCache<UUID, Pair<Long, JellytipReviews?>>(MAX_CACHED)
+        private val quoteCache = BoundedCache<UUID, Pair<Long, JellytipQuote?>>(MAX_CACHED)
+
+        /** Companion `/reviews` for a movie or series (Ricki's own first). Null on failure; cached 30 min, failures 1 min. */
+        suspend fun getReviews(item: BaseItem): JellytipReviews? {
+            if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return null
+            reviewsCache[item.id]?.let { (at, value) ->
+                val ttl = if (value != null) REVIEWS_TTL_MS else FAILURE_TTL_MS
+                if (System.currentTimeMillis() - at < ttl) return value
+            }
+            val value =
+                getJson("/v1/items/${item.id}/reviews")?.let {
+                    try {
+                        JellytipReviews.parse(it)
+                    } catch (e: Exception) {
+                        Timber.w(e, "Jellytip reviews parse failed")
+                        null
+                    }
+                }
+            reviewsCache[item.id] = System.currentTimeMillis() to value
+            return value
+        }
+
+        /** Short pull-quote for the home hero (Letterboxd only, never a TMDB lookup). Null when there is none. */
+        suspend fun getQuote(item: BaseItem): JellytipQuote? {
+            if (item.type != BaseItemKind.MOVIE && item.type != BaseItemKind.SERIES) return null
+            reviewsCache[item.id]?.let { (at, value) ->
+                if (value != null && System.currentTimeMillis() - at < REVIEWS_TTL_MS) return value.quote
+            }
+            quoteCache[item.id]?.let { (at, value) ->
+                if (System.currentTimeMillis() - at < REVIEWS_TTL_MS) return value
+            }
+            val body = getJson("/v1/items/${item.id}/reviews?fields=quote") ?: return null // not cached: retried next time
+            val value =
+                try {
+                    JSONObject(body).optJSONObject("quote")?.let { JellytipQuote.parse(it) }
+                } catch (e: Exception) {
+                    null
+                }
+            quoteCache[item.id] = System.currentTimeMillis() to value
+            return value
+        }
+
         private val introRefreshStarted = java.util.concurrent.atomic.AtomicBoolean(false)
 
         /**
@@ -545,6 +588,7 @@ class JellytipApi
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
             private const val AUDIENCE_TTL_MS = 10 * 60_000L
+            private const val REVIEWS_TTL_MS = 30 * 60_000L
             private val AUDIENCE_KINDS = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)
         }
     }

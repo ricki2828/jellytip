@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -70,6 +71,9 @@ import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
 import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
 import com.github.damontecres.wholphin.jellytip.JellytipScoreRow
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipReviews
+import com.github.damontecres.wholphin.jellytip.JellytipReviewsRow
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
@@ -358,6 +362,7 @@ private const val TRAILER_ROW = PEOPLE_ROW + 1
 private const val EXTRAS_ROW = TRAILER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
 private const val DISCOVER_ROW = SIMILAR_ROW + 1
+private const val REVIEWS_ROW = DISCOVER_ROW + 1
 
 @Composable
 fun SeriesDetailsContent(
@@ -400,7 +405,7 @@ fun SeriesDetailsContent(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     var position by rememberInt()
-    val focusRequesters = remember { List(DISCOVER_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(REVIEWS_ROW + 1) { FocusRequester() } }
     val playFocusRequester = remember { FocusRequester() }
     // Always open hero-first: Play focused, list scrolled to top (never restore a saved cast/extras row).
     val listState = rememberLazyListState()
@@ -421,12 +426,14 @@ fun SeriesDetailsContent(
     // buttons can never scroll to, reveal or flash them.
     var sectionsActive by remember { mutableStateOf(false) }
     val hasBelow = true
+    // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
+    val reviews by produceState<JellytipReviews?>(null, series.id) { value = JellytipApi.shared?.getReviews(series) }
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
             withFrameNanos { }
             withFrameNanos { }
-            for (r in listOf(SEASONS_ROW, PEOPLE_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
+            for (r in listOf(SEASONS_ROW, PEOPLE_ROW, REVIEWS_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
         }
     }
     val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
@@ -617,6 +624,17 @@ fun SeriesDetailsContent(
                                 Modifier
                                     .fillMaxWidth()
                                     .focusRequester(focusRequesters[PEOPLE_ROW]),
+                        )
+                    }
+                }
+                reviews?.takeIf { sectionsActive && it.reviews.isNotEmpty() }?.let { r ->
+                    item {
+                        JellytipReviewsRow(
+                            reviews = r,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequesters[REVIEWS_ROW]),
                         )
                     }
                 }

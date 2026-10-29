@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,6 +52,9 @@ import com.github.damontecres.wholphin.jellytip.JellytipButton
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBackground
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
+import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.JellytipReviews
+import com.github.damontecres.wholphin.jellytip.JellytipReviewsRow
 import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSubtitlesDialog
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.TrailerService
@@ -304,6 +308,7 @@ private const val CHAPTER_ROW = TRAILER_ROW + 1
 private const val EXTRAS_ROW = CHAPTER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
 private const val DISCOVER_ROW = SIMILAR_ROW + 1
+private const val REVIEWS_ROW = DISCOVER_ROW + 1
 
 @Composable
 fun MovieDetailsContent(
@@ -330,7 +335,7 @@ fun MovieDetailsContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var position by rememberInt(0)
-    val focusRequesters = remember { List(DISCOVER_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(REVIEWS_ROW + 1) { FocusRequester() } }
     val dto = movie.data
     val resumePosition = dto.userData?.playbackPositionTicks?.ticks ?: Duration.ZERO
 
@@ -347,7 +352,10 @@ fun MovieDetailsContent(
     // Sections are not composed at all until the user presses Down from the header, so moving along the
     // buttons can never scroll to, reveal or flash them.
     var sectionsActive by remember { mutableStateOf(false) }
-    val hasBelow = state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
+    // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
+    val reviews by produceState<JellytipReviews?>(null, movie.id) { value = JellytipApi.shared?.getReviews(movie) }
+    val hasReviews = reviews?.reviews?.isNotEmpty() == true
+    val hasBelow = hasReviews || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
@@ -357,7 +365,7 @@ fun MovieDetailsContent(
             if (listState.layoutInfo.totalItemsCount > 1) listState.animateScrollToItem(1)
             withFrameNanos { }
             var focused = false
-            for (r in listOf(PEOPLE_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
+            for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
                 if (focusRequesters[r].tryRequestFocus()) {
                     focused = true
                     break
@@ -465,6 +473,17 @@ fun MovieDetailsContent(
                             Modifier
                                 .fillMaxWidth()
                                 .focusRequester(focusRequesters[PEOPLE_ROW]),
+                    )
+                }
+            }
+            reviews?.takeIf { sectionsActive && hasReviews }?.let { r ->
+                item {
+                    JellytipReviewsRow(
+                        reviews = r,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequesters[REVIEWS_ROW]),
                     )
                 }
             }

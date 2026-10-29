@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipFocal
 import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import com.github.damontecres.wholphin.jellytip.cache.focalOrigin
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
+import com.github.damontecres.wholphin.jellytip.JellytipQuote
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
@@ -115,6 +117,7 @@ fun JellytipHomeTheme(content: @Composable () -> Unit) {
 /** Design tokens for the home hero. Sizes are in physical px at 1080p; edit here only. */
 object JellytipHomeTokens {
     const val TEXT_PX = 22
+    const val QUOTE_PX = 20 // hero pull-quote, a touch smaller than the other hero lines
     const val TITLE_PX = 34
     const val LOGO_MAX_W_PX = 380
     const val LOGO_MAX_H_PX = 150
@@ -151,6 +154,7 @@ object JellytipHomeTokens {
 
 private const val BACKDROP_DEBOUNCE_MS = 250L
 private const val SETTLE_EXTRAS_MS = 600L
+private const val QUOTE_MAX_CHARS = 120
 /** Slow zoom about the focal point; capped at 5% so the hero is never heavily enlarged. */
 const val KEN_BURNS_MAX_ZOOM = 0.05f
 private const val KEN_BURNS_MS = 24_000
@@ -465,6 +469,13 @@ fun JellytipHomeHeader(
     }
     val scoreLine =
         remember(extras, item?.id) { jellytipScoreLine(extras?.takeIf { it.first == item?.id }?.second) }
+    // Pull-quote waits for the score line so the block grows once, not twice
+    val quote by produceState<Pair<UUID, JellytipQuote?>?>(null, extras) {
+        val (id, _) = extras ?: return@produceState
+        val target = item?.takeIf { it.id == id } ?: return@produceState
+        value = id to JellytipApi.shared?.getQuote(target)?.takeIf { it.text.length <= QUOTE_MAX_CHARS }
+    }
+    val heroQuote = quote?.takeIf { it.first == item?.id }?.second
 
     with(density) {
         val textSize = JellytipHomeTokens.TEXT_PX.toSp()
@@ -548,6 +559,17 @@ fun JellytipHomeHeader(
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (heroQuote != null) {
+                    Text(
+                        text = "\u201C${heroQuote.text}\u201D  \u2014 ${heroQuote.author} on Letterboxd",
+                        style = MaterialTheme.typography.bodySmall.copy(shadow = shadow),
+                        fontSize = JellytipHomeTokens.QUOTE_PX.toSp(),
+                        fontStyle = FontStyle.Italic,
+                        color = quiet,
+                        maxLines = 2, // 120 chars plus the attribution can exceed the 900 px block
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
