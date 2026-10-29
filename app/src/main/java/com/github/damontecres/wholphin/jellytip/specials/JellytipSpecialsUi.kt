@@ -1008,6 +1008,7 @@ private fun SoundHint(
 
 /** 1.03x on 300-480 dp cards = under 8 dp per side: inside the 10 dp row padding (the 1.08x default would clip). */
 private const val LARGE_CARD_SCALE = 1.03f
+private const val WIDE_CARD_DP = 200
 
 /** A backdrop other than the hero's for [item] (companion detailsIndex, else the first one that is not the hero's). */
 @Composable
@@ -1036,8 +1037,11 @@ internal fun SpecialCard(
     modifier: Modifier,
     /** Corner radius; null = the theme's card shape. */
     corner: Dp? = null,
-    /** Focus zoom; large cards use less so the zoom stays inside the row's padding and is never clipped. */
-    focusScale: Float = JellytipFocus.SCALE,
+    /**
+     * Focus zoom. Null = by width: cards wider than [WIDE_CARD_DP] zoom [LARGE_CARD_SCALE], because 1.08x on a 300+ dp
+     * card grows past the 10 dp row gap and draws over its neighbours (double features) or is clipped at the row edge.
+     */
+    focusScale: Float? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -1050,7 +1054,7 @@ internal fun SpecialCard(
         interactionSource = source,
         shape = if (shape != null) CardDefaults.shape(shape) else CardDefaults.shape(),
         colors = CardDefaults.colors(containerColor = Color(0xFF141414)),
-        scale = CardDefaults.scale(focusedScale = focusScale),
+        scale = CardDefaults.scale(focusedScale = focusScale ?: if (width > WIDE_CARD_DP.dp) LARGE_CARD_SCALE else JellytipFocus.SCALE),
         border = if (shape != null) JellytipFocus.border(shape) else JellytipFocus.border(),
         glow = JellytipFocus.glow(),
     ) {
