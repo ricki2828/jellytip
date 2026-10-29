@@ -486,6 +486,9 @@ class PlaybackViewModel
                     // Starting playback, so want to invalidate the last played timestamp for this item
                     datePlayedService.invalidate(item)
                 }
+                // Jellytip server rows (progress, watched, franchise counts) reload this item when Home is back
+                com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(item.id)
+                com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(item.data.seriesId)
 
                 if (item.type !in supportItemKinds) {
                     showToast(

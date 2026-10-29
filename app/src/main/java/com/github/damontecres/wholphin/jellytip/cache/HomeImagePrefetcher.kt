@@ -176,6 +176,21 @@ class HomeImagePrefetcher
                 }
         }
 
+        /** Warm card images computed elsewhere (server rows, their cold-start snapshot). */
+        fun warmThumbs(specs: List<ThumbSpec>) {
+            if (specs.isEmpty()) return
+            scope.launch {
+                try {
+                    JellytipImageGate.await()
+                    coroutineScope { specs.forEach { launch { loadThumb(it) } } }
+                } catch (ex: kotlin.coroutines.cancellation.CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Row image warm-up failed")
+                }
+            }
+        }
+
         /**
          * A fresh specials answer: warm the first tiles of each special at the sizes the tiles request, and the backdrop
          * stills of Trailer Break / Tonight's Pick (disk only, like the neighbours' heroes).

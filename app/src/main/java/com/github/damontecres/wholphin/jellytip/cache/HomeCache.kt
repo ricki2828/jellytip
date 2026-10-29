@@ -30,6 +30,7 @@ class HomeCache
         private val usage: RowUsageStore,
         private val serverRepository: ServerRepository,
         @param:StandardOkHttpClient private val httpClient: OkHttpClient,
+        private val rows: com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -38,6 +39,8 @@ class HomeCache
             scope.launch {
                 try {
                     store.read()?.let { prefetcher.warmFromSnapshot(it) }
+                    // Server rows keep their own snapshot (needs the signed-in user, so it may be skipped this early)
+                    rows.warmFromSnapshot()
                 } catch (ex: Exception) {
                     Timber.w(ex, "Snapshot warm-up failed")
                 }

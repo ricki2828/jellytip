@@ -6,10 +6,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cache.HomeImagePrefetcher
+import com.github.damontecres.wholphin.jellytip.cache.HomeSnapshot
+import com.github.damontecres.wholphin.jellytip.cache.RowSnapshot
 import com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles
+import com.github.damontecres.wholphin.ui.util.StringStringProvider
+import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.ui.HomeItemFields
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -194,6 +204,7 @@ class JellytipRowsService
         private val api: ApiClient,
         private val jellytipApi: JellytipApi,
         private val serverRepository: ServerRepository,
+        private val prefetcher: HomeImagePrefetcher,
     ) {
         private data class Timed<T>(
             val value: T,
@@ -253,24 +264,115 @@ class JellytipRowsService
             }
         }
 
-        /** Already loaded items of [row] (server order), or null. */
-        fun peekItems(row: JellytipServerRow): List<BaseItem>? = rowKey(row)?.let { rowItems[it]?.value }
+        /**
+         * Already loaded items of [row] (server order), or null. Before the first load of this process the last saved
+         * copy (cold-start snapshot) is used, so the row draws at once and refreshes in place.
+         */
+        fun peekItems(row: JellytipServerRow): List<BaseItem>? {
+            val key = rowKey(row) ?: return null
+            rowItems[key]?.let { return it.value }
+            return snapshotRows()[row.id]?.items
+        }
 
-        /** [row]'s items in server order (items the caller cannot see are left out); empty on failure. */
-        suspend fun items(row: JellytipServerRow): List<BaseItem> {
-            val key = rowKey(row) ?: return emptyList()
-            rowItems[key]?.takeIf { System.currentTimeMillis() - it.at < ITEMS_FRESH_MS }?.let { return it.value }
-            return try {
-                val loaded = loadItems(row.itemIds)
-                rowItems[key] = Timed(loaded, System.currentTimeMillis())
-                loaded
-            } catch (e: CancellationException) {
-                throw e
+        /**
+         * [row]'s items in server order (items the caller cannot see are left out). Null = the load failed and nothing
+         * is cached; empty = the caller can see none of them. A cached copy is reused unless it is old or one of its
+         * items changed since (played, watched toggled: [markChanged]).
+         */
+        suspend fun items(row: JellytipServerRow): List<BaseItem>? {
+            val key = rowKey(row) ?: return null
+            val cached = rowItems[key]
+            if (cached != null && System.currentTimeMillis() - cached.at < ITEMS_FRESH_MS && !cached.changedSince()) return cached.value
+            // One request per row even when the prefetch and the drawn row ask at the same time
+            val job =
+                inFlight.computeIfAbsent(key) {
+                    scope.async {
+                        try {
+                            loadItems(row.itemIds).also { rowItems[key] = Timed(it, System.currentTimeMillis()) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Timber.w(e, "Row %s items failed", row.id)
+                            null
+                        } finally {
+                            inFlight.remove(key)
+                        }
+                    }
+                }
+            return job.await() ?: cached?.value
+        }
+
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val inFlight = ConcurrentHashMap<String, Deferred<List<BaseItem>?>>()
+
+        private fun Timed<List<BaseItem>>.changedSince(): Boolean =
+            value.any { item -> (changedAt[item.id] ?: 0L) > at || item.data.seriesId?.let { (changedAt[it] ?: 0L) > at } == true }
+
+        /**
+         * A fresh page: load the first rows' items in the background, warm their card images and save them as the
+         * cold-start snapshot (rows below the fold load when drawn).
+         */
+        suspend fun prefetch(
+            page: String,
+            answer: JellytipRowsAnswer,
+        ) {
+            val userId = user() ?: return
+            val first = answer.rows.take(PREFETCH_ROWS)
+            val loaded = mutableListOf<RowSnapshot>()
+            for (row in first) {
+                val items = items(row)?.takeIf { it.isNotEmpty() } ?: continue
+                val thumbs = prefetcher.thumbsFor(HomeRowLoadingState.Success(StringStringProvider(row.title), items, row.rawViewOptions()))
+                prefetcher.warmThumbs(thumbs)
+                loaded += RowSnapshot("srv:${row.id}", items.take(SNAPSHOT_ITEMS).map(::slim), false, thumbs)
+            }
+            if (loaded.isEmpty()) return
+            try {
+                val merged = (loaded.associateBy { it.key.removePrefix("srv:") } + snapshotRows().filterKeys { k -> loaded.none { it.key == "srv:$k" } })
+                val snap = HomeSnapshot(userId.toString(), merged.values.take(MAX_SNAPSHOT_ROWS).toList(), null)
+                synchronized(this) {
+                    snapshotMemo = userId to merged
+                    snapshotFile(userId)?.writeText(snapshotJson.encodeToString(HomeSnapshot.serializer(), snap))
+                }
             } catch (e: Exception) {
-                Timber.w(e, "Row %s items failed", row.id)
-                rowItems[key]?.value ?: emptyList()
+                Timber.w(e, "Rows snapshot not saved (%s)", page)
             }
         }
+
+        /** Cold start (during the intro): warm the images of the saved server rows. */
+        fun warmFromSnapshot() {
+            val thumbs = snapshotRows().values.flatMap { it.thumbs }
+            if (thumbs.isNotEmpty()) prefetcher.warmThumbs(thumbs)
+        }
+
+        /** Saved rows of one user (user id, rows by row id). */
+        @Volatile
+        private var snapshotMemo: Pair<UUID, Map<String, RowSnapshot>>? = null
+
+        private fun snapshotFile(userId: UUID): File? = File(File(context.filesDir, "jellytip").apply { mkdirs() }, "rows_snapshot_$userId.json")
+
+        /** Saved server rows by row id (empty when none or another user). */
+        private fun snapshotRows(): Map<String, RowSnapshot> {
+            val userId = user() ?: return emptyMap()
+            snapshotMemo?.takeIf { it.first == userId }?.let { return it.second }
+            val rows =
+                try {
+                    snapshotFile(userId)
+                        ?.takeIf { it.exists() }
+                        ?.readText()
+                        ?.let { snapshotJson.decodeFromString(HomeSnapshot.serializer(), it) }
+                        ?.takeIf { it.userId == userId.toString() }
+                        ?.rows
+                        ?.associateBy { it.key.removePrefix("srv:") }
+                        .orEmpty()
+                } catch (e: Exception) {
+                    Timber.w(e, "Rows snapshot unreadable")
+                    emptyMap()
+                }
+            snapshotMemo = userId to rows
+            return rows
+        }
+
+        private fun slim(item: BaseItem) = item.copy(data = item.data.copy(people = null, chapters = null, trickplay = null))
 
         /** `/v1/collections/{tmdbId}` plus its in-library items (series order); null when unavailable (404 etc.). */
         suspend fun collection(tmdbId: Int): Pair<JellytipCollection, List<BaseItem>>? =
@@ -310,6 +412,18 @@ class JellytipRowsService
         }
 
         companion object {
+            /** When each item last changed (played, watched toggled); rows holding it reload on their next draw. */
+            private val changedAt = ConcurrentHashMap<UUID, Long>()
+
+            /** Called when [itemId] starts playing or its watched state is toggled. */
+            fun markChanged(itemId: UUID?) {
+                if (itemId != null) changedAt[itemId] = System.currentTimeMillis()
+            }
+
+            private val snapshotJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            private const val PREFETCH_ROWS = 6
+            private const val SNAPSHOT_ITEMS = 12
+            private const val MAX_SNAPSHOT_ROWS = 40
             private const val TIMEOUT_MS = 6_000L
             private const val PAGE_FRESH_MS = 30 * 60_000L
             private const val ITEMS_FRESH_MS = 10 * 60_000L

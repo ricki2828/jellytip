@@ -116,7 +116,10 @@ fun rememberJellytipRows(
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ): JellytipRowsAnswer? {
     val loaded by produceState(viewModel.rows.peek(page), page) {
-        viewModel.rows.load(page)?.let { value = it }
+        viewModel.rows.load(page)?.let {
+            value = it
+            viewModel.rows.prefetch(page, it)
+        }
     }
     return loaded
 }

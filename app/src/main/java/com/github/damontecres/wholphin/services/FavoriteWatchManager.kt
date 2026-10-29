@@ -24,6 +24,8 @@ class FavoriteWatchManager
             played: Boolean,
         ): UserItemDataDto {
             datePlayedService.invalidate(itemId)
+            // Jellytip server rows holding this item reload their watched state on their next draw
+            com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(itemId)
             return if (played) {
                 api.playStateApi.markPlayedItem(itemId).content
             } else {

@@ -29,6 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import com.github.damontecres.wholphin.ui.playback.isPlayKeyUp
+import com.github.damontecres.wholphin.ui.playback.playable
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -89,6 +93,14 @@ private val PosterOptions
 /** Franchise rows: the same titled 16:9 art throughout the series, a little taller. */
 private val FranchiseOptions get() = StandardOptions.copy(heightDp = RowTokens.FRANCHISE_HEIGHT_DP)
 
+/** The row's view options before the Jellytip home defaults (what the prefetcher and snapshot expect). */
+internal fun JellytipServerRow.rawViewOptions(): HomeRowViewOptions =
+    when {
+        isFranchise -> FranchiseOptions
+        isPoster -> PosterOptions
+        else -> HomeRowViewOptions()
+    }
+
 /**
  * One server row on Home / Movies / Shows. Items load (one batch request) when the row is first drawn; until then the
  * row keeps its height so nothing below it moves. [onFocusItem] drives the hero like a normal row; [onLongClickItem]
@@ -103,7 +115,16 @@ fun JellytipServerRowView(
     modifier: Modifier = Modifier,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
-    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) { value = viewModel.rows.items(row) }
+    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) {
+        // A failed load keeps the placeholder and retries once; still failing = placeholder stays (no collapse)
+        val first = viewModel.rows.items(row)
+        if (first != null) {
+            value = first
+        } else {
+            delay(RETRY_MS)
+            viewModel.rows.items(row)?.let { value = it }
+        }
+    }
     val open: (BaseItem) -> Unit =
         remember(viewModel) {
             { item ->
@@ -112,6 +133,13 @@ fun JellytipServerRowView(
             }
         }
     val click: (BaseItem) -> Unit = { item -> if (!JellytipTrailerControl.onOk(item)) open(item) }
+    val play: (BaseItem) -> Unit =
+        remember(viewModel) {
+            { item ->
+                JellytipTrailerControl.stop()
+                viewModel.navigationManager.navigateTo(Destination.Playback(item))
+            }
+        }
     val longClick: (BaseItem) -> Unit = onLongClickItem ?: open
     val options =
         when {
@@ -133,7 +161,7 @@ fun JellytipServerRowView(
             loaded.isEmpty() -> {}
 
             row.isFranchise -> {
-                FranchiseRow(row, row.collection!!, loaded, options, onFocusItem, click, longClick, focusModifier, viewModel)
+                FranchiseRow(row, row.collection!!, loaded, options, onFocusItem, click, longClick, play, focusModifier, viewModel)
             }
 
             else -> {
@@ -151,7 +179,7 @@ fun JellytipServerRowView(
                             onClick = onClick,
                             onLongClick = onLongClick,
                             viewOptions = options,
-                            modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, true) },
+                            modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(item, true) }.playKey(item, play),
                         )
                     },
                 )
@@ -159,6 +187,22 @@ fun JellytipServerRowView(
         }
     }
 }
+
+/** The remote's Play key on a tile plays it straight away, as on the normal rows. */
+private fun Modifier.playKey(
+    item: BaseItem?,
+    play: (BaseItem) -> Unit,
+): Modifier =
+    onKeyEvent { event ->
+        if (item != null && isPlayKeyUp(event) && item.type.playable) {
+            play(item)
+            true
+        } else {
+            false
+        }
+    }
+
+private const val RETRY_MS = 3_000L
 
 private sealed interface FranchiseEntry {
     data object Info : FranchiseEntry
@@ -181,6 +225,7 @@ private fun FranchiseRow(
     onFocusItem: (BaseItem?, Boolean) -> Unit,
     click: (BaseItem) -> Unit,
     longClick: (BaseItem) -> Unit,
+    play: (BaseItem) -> Unit,
     focusModifier: Modifier,
     viewModel: JellytipHomeViewModel,
 ) {
@@ -237,7 +282,7 @@ private fun FranchiseRow(
                                 onClick = onClick,
                                 onLongClick = onLongClick,
                                 viewOptions = options,
-                                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(entry.item, true) },
+                                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(entry.item, true) }.playKey(entry.item, play),
                             )
                         }
 
@@ -265,7 +310,9 @@ private fun FranchiseRow(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     if (collection.overview.isNotBlank()) Caption(collection.overview, alpha = 0.85f, maxLines = 2)
-                                    Caption(collection.progressText + "  ·  OK for the collection", alpha = 0.6f)
+                                    // Counted from the loaded films (fresh after playback), not the morning's manifest
+                                    val watched = films.count { it.data.userData?.played == true }
+                                    Caption("$watched of ${collection.total} watched  ·  OK for the collection", alpha = 0.6f)
                                 }
                             }
                         }
