@@ -24,6 +24,15 @@
 
         </activity>
 
+        <!-- Advances the "Downloads at once" queue when a download ends, even with the app closed -->
+        <receiver
+            android:name=".DownloadCompleteReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

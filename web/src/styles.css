@@ -1429,6 +1429,17 @@ button.overview.open {
 .dl-settings .chips {
   flex-wrap: wrap;
 }
+.dl-limit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.dl-limit .chip {
+  min-width: 40px;
+}
 .dl-space,
 .dl-hint,
 .dl-offline {

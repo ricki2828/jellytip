@@ -5,8 +5,6 @@ import android.app.DownloadManager;
 import android.content.pm.ActivityInfo;
 import android.content.Context;
 import android.database.Cursor;
-import android.net.Uri;
-import android.os.Environment;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -17,7 +15,6 @@ import java.io.File;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-import java.util.Iterator;
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -29,46 +26,42 @@ import org.json.JSONException;
 @CapacitorPlugin(name = "JellytipDownloads")
 public class DownloadsPlugin extends Plugin {
 
-    private static final String SUBDIR = "jellytip";
+    private static final String SUBDIR = DownloadQueue.SUBDIR;
 
     private DownloadManager dm() {
         return (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
     }
 
     private File dir() {
-        File d = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_MOVIES), SUBDIR);
-        //noinspection ResultOfMethodCallIgnored
-        d.mkdirs();
-        return d;
+        return DownloadQueue.dir(getContext());
+    }
+
+    /** Replace the waiting list ({key,url,headers,fileName,title,wifiOnly}[] in order) and the slot limit, then pump. */
+    @PluginMethod
+    public void setQueue(PluginCall call) {
+        int limit = call.getInt("limit", 2);
+        JSArray items = call.getArray("items", new JSArray());
+        new Thread(() -> {
+            DownloadQueue.setQueue(getContext(), limit, items);
+            JSObject ret = new JSObject();
+            ret.put("started", DownloadQueue.started(getContext()));
+            ret.put("active", DownloadQueue.active(getContext()));
+            call.resolve(ret);
+        }).start();
+    }
+
+    /** Items the queue handed to DownloadManager (while the app was open or closed) that the web app hasn't recorded. */
+    @PluginMethod
+    public void takeStarted(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("started", DownloadQueue.started(getContext()));
+        call.resolve(ret);
     }
 
     @PluginMethod
-    public void enqueue(PluginCall call) {
-        String url = call.getString("url");
-        String fileName = call.getString("fileName");
-        if (url == null || fileName == null || fileName.contains("/") || fileName.contains("..")) {
-            call.reject("url and a plain fileName are required");
-            return;
-        }
-        boolean wifiOnly = Boolean.TRUE.equals(call.getBoolean("wifiOnly", false));
-        DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
-        JSObject headers = call.getObject("headers", new JSObject());
-        Iterator<String> keys = headers.keys();
-        while (keys.hasNext()) {
-            String k = keys.next();
-            req.addRequestHeader(k, headers.getString(k));
-        }
-        req.setTitle(call.getString("title", "Jellytip"));
-        req.setDescription("Jellytip download");
-        req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
-        req.setDestinationInExternalFilesDir(getContext(), Environment.DIRECTORY_MOVIES, SUBDIR + "/" + fileName);
-        req.setAllowedOverMetered(!wifiOnly);
-        req.setAllowedOverRoaming(!wifiOnly);
-        long id = dm().enqueue(req);
-        JSObject ret = new JSObject();
-        ret.put("downloadId", id);
-        ret.put("path", new File(dir(), fileName).getAbsolutePath());
-        call.resolve(ret);
+    public void ackStarted(PluginCall call) {
+        DownloadQueue.ack(getContext(), call.getArray("keys", new JSArray()));
+        call.resolve();
     }
 
     @PluginMethod

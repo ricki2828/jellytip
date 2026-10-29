@@ -1,6 +1,8 @@
 // Offline downloads (phone app only). The file transfer itself runs in Android's DownloadManager (DownloadsPlugin.java),
 // so it survives the app closing; this module picks the source, keeps a record per item in IndexedDB (with images and
 // text subtitles, so the Downloads screen and the player work in airplane mode), and tracks progress.
+// "Downloads at once": files wait in our own queue (rules in downloadQueue.ts) and are handed to DownloadManager N at
+// a time by the native side (DownloadQueue.java), which keeps advancing it while the app is closed.
 //
 // Source per item, best first:
 //  1. original file: already phone-friendly (MP4 container, H.264, AAC/MP3, at most 1080p): static, resumable;
@@ -15,10 +17,11 @@ import { getSession } from "../api/jellyfin";
 import { isNative, nativeGetJson, nativePostJson, NativeDownloads, type NativeDownloadStatus } from "./native";
 import { idbAll, idbDelete, idbGet, idbPut } from "./offlineStore";
 import { cardLayers, heroItemId, HERO_MAX_WIDTH } from "./art";
+import { DEFAULT_LIMIT, linePosition, nextPrepare, nextSeq, normaliseLimit, SLOT_STATES, waitingLine, type QState } from "./downloadQueue";
 
 export type Quality = "720" | "1080";
 export type Source = "original" | "prepared" | "transcode";
-export type DownloadState = "preparing" | "queued" | "downloading" | "paused" | "done" | "failed";
+export type DownloadState = QState;
 
 export interface OfflineSubtitle {
   index: number;
@@ -40,6 +43,10 @@ export interface DownloadRecord {
   bytesTotal: number;
   error?: string;
   addedAt: number;
+  /** Queue order (season episodes in order); see downloadQueue.ts */
+  seq: number;
+  /** File URL waiting for a download slot (state "waiting") */
+  url?: string;
   /** blobs-store keys: tile art, backdrop, logo */
   images: { tile?: string; backdrop?: string; logo?: string };
   subtitles: OfflineSubtitle[];
@@ -47,7 +54,8 @@ export interface DownloadRecord {
 
 const QUALITY_KEY = "jellytip.dlQuality";
 const WIFI_KEY = "jellytip.dlWifiOnly";
-const ACTIVE: DownloadState[] = ["preparing", "queued", "downloading", "paused"];
+const LIMIT_KEY = "jellytip.dlAtOnce";
+const ACTIVE: DownloadState[] = ["serverQueued", "preparing", "waiting", ...SLOT_STATES];
 const PRESETS: Record<Quality, { w: number; h: number; vbr: number }> = {
   "720": { w: 1280, h: 720, vbr: 2_500_000 },
   "1080": { w: 1920, h: 1080, vbr: 5_000_000 },
@@ -58,7 +66,16 @@ export const downloadsAvailable = isNative;
 export const getQuality = (): Quality => (localStorage.getItem(QUALITY_KEY) === "1080" ? "1080" : "720");
 export const setQuality = (q: Quality) => localStorage.setItem(QUALITY_KEY, q);
 export const getWifiOnly = () => localStorage.getItem(WIFI_KEY) !== "0"; // default on
-export const setWifiOnly = (on: boolean) => localStorage.setItem(WIFI_KEY, on ? "1" : "0");
+export const setWifiOnly = (on: boolean) => {
+  localStorage.setItem(WIFI_KEY, on ? "1" : "0");
+  kick(); // waiting files pick the new rule up when they start
+};
+export const getLimit = () => normaliseLimit(localStorage.getItem(LIMIT_KEY) ?? DEFAULT_LIMIT);
+/** Applies at once: a higher limit starts more now; a lower one lets running downloads finish. */
+export const setLimit = (n: number) => {
+  localStorage.setItem(LIMIT_KEY, String(normaliseLimit(n)));
+  kick();
+};
 
 // ---------- change notifications ----------
 
@@ -72,7 +89,8 @@ const notify = () => listeners.forEach((l) => l());
 
 // ---------- records ----------
 
-export const listDownloads = () => idbAll<DownloadRecord>("downloads");
+export const listDownloads = () =>
+  idbAll<DownloadRecord>("downloads").then((all) => all.map((r) => (r.seq ? r : { ...r, seq: r.addedAt * 1000 }))); // records from before the queue
 export const getDownload = (id: string) => idbGet<DownloadRecord>("downloads", id);
 const save = async (r: DownloadRecord) => {
   await idbPut("downloads", r.itemId, r);
@@ -159,11 +177,10 @@ async function jobStatus(jobId: string): Promise<JobStatus | null> {
 const fileName = (r: DownloadRecord) => `${r.itemId}-${r.quality}-${r.source}.mp4`;
 const titleOf = (i: Item) => (i.Type === "Episode" ? `${i.SeriesName ?? ""} S${i.ParentIndexNumber}E${i.IndexNumber} ${i.Name}` : i.Name);
 
-async function enqueueNative(r: DownloadRecord, url: string) {
-  const res = await NativeDownloads.enqueue({ url, headers: { Authorization: authHeader() }, fileName: fileName(r), title: titleOf(r.item), wifiOnly: getWifiOnly() });
-  r.downloadId = res.downloadId;
-  r.path = res.path;
-  r.state = "queued";
+/** File ready: it waits for a slot in the native queue. */
+function markWaiting(r: DownloadRecord, url: string) {
+  r.url = url;
+  r.state = "waiting";
   r.error = undefined;
 }
 
@@ -224,27 +241,23 @@ export async function startDownload(itemOrId: Item | string, quality: Quality = 
     item,
     quality,
     source: "original",
-    state: "queued",
+    state: "waiting",
     bytesDone: 0,
     bytesTotal: 0,
     addedAt: Date.now(),
+    seq: nextSeq(),
     images: {},
     subtitles: [],
   };
   if (isPhoneFriendly(item, quality)) {
-    await enqueueNative(r, `${JF_BASE}/Videos/${item.Id}/stream.mp4${qs({ Static: true, MediaSourceId: item.MediaSources?.[0]?.Id })}`);
+    markWaiting(r, `${JF_BASE}/Videos/${item.Id}/stream.mp4${qs({ Static: true, MediaSourceId: item.MediaSources?.[0]?.Id })}`);
   } else {
-    const job = await requestPrepared(item.Id, quality);
-    if (job) {
-      r.source = "prepared";
-      r.state = "preparing";
-      r.jobId = job.jobId;
-    } else {
-      r.source = "transcode";
-      await enqueueNative(r, liveTranscodeUrl(item, quality));
-    }
+    // The server prepares a phone copy first; one job at a time, so it may wait its turn
+    r.source = "prepared";
+    r.state = "serverQueued";
   }
   await save(r);
+  kick();
   // Artwork and subtitles in the background; the record is already visible
   Promise.all([saveImages(item), saveSubtitles(item)]).then(async ([images, subtitles]) => {
     const cur = await getDownload(item.Id);
@@ -262,6 +275,12 @@ export async function retryDownload(id: string) {
   await startDownload(r.item.MediaSources ? r.item : id, r.quality);
 }
 
+/** Place in its line for the UI: "Queued (n in line)" / "Queued for server (n)". */
+export async function queuePosition(id: string): Promise<number | null> {
+  const all = await listDownloads();
+  return linePosition(all.map((r) => ({ id: r.itemId, state: r.state, seq: r.seq })), id);
+}
+
 export async function deleteDownload(id: string) {
   const r = await getDownload(id);
   if (!r) return;
@@ -270,6 +289,7 @@ export async function deleteDownload(id: string) {
   await Promise.all(keys.map((k) => idbDelete("blobs", k)));
   await idbDelete("downloads", id);
   notify();
+  kick(); // its slot (or place in line) frees up
 }
 
 export const storageInfo = () => NativeDownloads.storage();
@@ -287,45 +307,108 @@ export async function playableDownload(id: string): Promise<DownloadRecord | nul
 
 let polling = false;
 
-async function pollOnce(): Promise<boolean> {
+/** The native queue handed these to DownloadManager (maybe while the app was closed): record them. */
+async function applyStarted(started: Record<string, { downloadId?: number; path?: string; error?: string }>, all: DownloadRecord[]) {
+  const keys = Object.keys(started);
+  if (!keys.length) return;
+  for (const key of keys) {
+    const r = all.find((x) => x.itemId === key);
+    if (!r) continue;
+    const s = started[key];
+    if (s.error || s.downloadId == null) {
+      r.state = "failed";
+      r.error = `Couldn't start the download: ${s.error ?? "unknown error"}`;
+    } else {
+      r.downloadId = s.downloadId;
+      r.path = s.path;
+      r.state = "queued";
+      r.url = undefined;
+      r.error = undefined;
+    }
+    await save(r);
+  }
+  await NativeDownloads.ackStarted({ keys }).catch(() => undefined);
+}
+
+const snapshot = (r: DownloadRecord) => JSON.stringify([r.state, r.bytesDone, r.bytesTotal, r.prepareProgress, r.error, r.url, r.jobId]);
+
+/** One pass: native → records, server preparation, then hand the waiting line to the native queue. */
+async function syncOnce(): Promise<boolean> {
   const all = await listDownloads();
-  const active = all.filter((r) => ACTIVE.includes(r.state));
-  if (active.length === 0) return false;
-  const ids = active.map((r) => r.downloadId).filter((x): x is number => x != null);
+  await applyStarted((await NativeDownloads.takeStarted().catch(() => ({ started: {} }))).started, all);
+
+  // DownloadManager progress for everything holding a slot
+  const inDm = all.filter((r) => SLOT_STATES.includes(r.state) && r.downloadId != null);
   const native = new Map<number, NativeDownloadStatus>();
-  if (ids.length) (await NativeDownloads.query({ ids }).catch(() => ({ items: [] }))).items.forEach((s) => native.set(s.downloadId, s));
-  for (const r of active) {
-    const before = JSON.stringify([r.state, r.bytesDone, r.bytesTotal, r.prepareProgress, r.error]);
-    if (r.state === "preparing" && r.jobId) {
-      const st = navigator.onLine ? await jobStatus(r.jobId) : null;
-      if (st?.state === "ready" && st.fileUrl) {
-        try {
-          await enqueueNative(r, `${COMPANION_BASE}/${st.fileUrl.replace(/^\//, "")}`);
-        } catch (e) {
-          r.state = "failed";
-          r.error = String((e as Error).message ?? e);
-        }
-      } else if (st?.state === "failed") {
+  if (inDm.length) (await NativeDownloads.query({ ids: inDm.map((r) => r.downloadId!) }).catch(() => ({ items: [] }))).items.forEach((s) => native.set(s.downloadId, s));
+  for (const r of inDm) {
+    const before = snapshot(r);
+    const s = native.get(r.downloadId!);
+    if (!s) {
+      r.state = "failed";
+      r.error = "The download was cancelled";
+    } else {
+      r.bytesDone = s.bytesDone;
+      r.bytesTotal = s.bytesTotal;
+      r.state = s.status === "done" ? "done" : s.status === "failed" ? "failed" : s.status === "running" ? "downloading" : s.status === "paused" ? "paused" : "queued";
+      if (s.status === "failed") r.error = `Download failed (${s.reason})`;
+      else if (s.status === "paused") r.error = s.reason === 3 ? "Waiting for Wi-Fi" : s.reason === 2 ? "Waiting for network" : "Paused";
+      else r.error = undefined;
+    }
+    if (snapshot(r) !== before) await save(r);
+  }
+
+  // Server preparation: poll the running job, then start the next one (one at a time)
+  if (navigator.onLine) {
+    for (const r of all.filter((x) => x.state === "preparing" && x.jobId)) {
+      const before = snapshot(r);
+      const st = await jobStatus(r.jobId!);
+      if (st?.state === "ready" && st.fileUrl) markWaiting(r, `${COMPANION_BASE}/${st.fileUrl.replace(/^\//, "")}`);
+      else if (st?.state === "failed") {
         r.state = "failed";
         r.error = st.error ?? "The server couldn't prepare this download";
       } else if (st) r.prepareProgress = st.progress;
-    } else if (r.downloadId != null) {
-      const s = native.get(r.downloadId);
-      if (!s) {
-        r.state = "failed";
-        r.error = "The download was cancelled";
-      } else {
-        r.bytesDone = s.bytesDone;
-        r.bytesTotal = s.bytesTotal;
-        r.state = s.status === "done" ? "done" : s.status === "failed" ? "failed" : s.status === "running" ? "downloading" : s.status === "paused" ? "paused" : "queued";
-        if (s.status === "failed") r.error = `Download failed (${s.reason})`;
-        if (s.status === "paused") r.error = s.reason === 3 ? "Waiting for Wi-Fi" : s.reason === 2 ? "Waiting for network" : "Paused";
-        else if (s.status !== "failed") r.error = undefined;
-      }
+      if (snapshot(r) !== before) await save(r);
     }
-    if (JSON.stringify([r.state, r.bytesDone, r.bytesTotal, r.prepareProgress, r.error]) !== before) await save(r);
+    const nextId = nextPrepare(all.map((x) => ({ id: x.itemId, state: x.state, seq: x.seq })));
+    const next = nextId ? all.find((x) => x.itemId === nextId) : undefined;
+    if (next) {
+      const job = await requestPrepared(next.itemId, next.quality);
+      if (job) {
+        next.state = "preparing";
+        next.jobId = job.jobId;
+        next.prepareProgress = 0;
+      } else {
+        // No prepared copies on this server (or storage low there): live transcode, which can't resume
+        next.source = "transcode";
+        markWaiting(next, liveTranscodeUrl(next.item, next.quality));
+      }
+      await save(next);
+    }
   }
-  return true;
+
+  // Hand the waiting line (in order) to the native queue; it starts as many as the limit allows
+  const line = waitingLine(all.map((x) => ({ id: x.itemId, state: x.state, seq: x.seq })));
+  const byId = new Map(all.map((x) => [x.itemId, x]));
+  const items = line.map((q) => {
+    const r = byId.get(q.id)!;
+    return { key: r.itemId, url: r.url!, headers: { Authorization: authHeader() }, fileName: fileName(r), title: titleOf(r.item), wifiOnly: getWifiOnly() };
+  });
+  const res = await NativeDownloads.setQueue({ limit: getLimit(), items }).catch(() => null);
+  if (res) await applyStarted(res.started, all);
+
+  return all.some((r) => ACTIVE.includes(r.state));
+}
+
+// Passes never overlap (two at once could ask the server to prepare twice)
+let chain: Promise<boolean> = Promise.resolve(false);
+const sync = () => (chain = chain.then(syncOnce, syncOnce));
+
+/** Something changed (new download, delete, setting): run a pass now and keep polling while anything is active. */
+function kick() {
+  if (!isNative) return;
+  sync().catch(() => undefined);
+  ensurePolling();
 }
 
 function ensurePolling() {
@@ -334,7 +417,7 @@ function ensurePolling() {
   const tick = async () => {
     let more = false;
     try {
-      more = await pollOnce();
+      more = await sync();
     } catch {
       more = true;
     }
@@ -391,7 +474,11 @@ export async function syncProgress() {
 if (isNative) {
   window.addEventListener("online", () => {
     syncProgress();
-    ensurePolling();
+    kick();
+  });
+  // Back from the background: the native queue may have moved on (downloads finished, next ones started)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") kick();
   });
   setTimeout(() => {
     syncProgress();

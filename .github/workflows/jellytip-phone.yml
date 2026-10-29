@@ -42,6 +42,8 @@ jobs:
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
       - name: Install web dependencies
         run: npm ci
+      - name: Unit tests (download queue rules)
+        run: npm test
       - name: Build web bundle and sync into the Android project
         run: npm run build:android
       - name: Decode signing key

@@ -5,11 +5,13 @@ import {
   blobUrl,
   deleteDownload,
   formatBytes,
+  getLimit,
   getQuality,
   getWifiOnly,
   isActive,
   listDownloads,
   retryDownload,
+  setLimit,
   setQuality,
   setWifiOnly,
   storageInfo,
@@ -18,6 +20,7 @@ import {
   type Quality,
 } from "../lib/downloads";
 import { go } from "../lib/router";
+import { LIMIT_OPTIONS, linePosition } from "../lib/downloadQueue";
 
 function useBlob(key?: string): string | null {
   const [url, setUrl] = useState<string | null>(null);
@@ -37,11 +40,15 @@ function useBlob(key?: string): string | null {
   return url;
 }
 
-function status(r: DownloadRecord): string {
+function status(r: DownloadRecord, place: number | null): string {
   const size = formatBytes(r.bytesTotal > 0 ? r.bytesTotal : r.bytesDone);
   switch (r.state) {
     case "done":
       return [size, r.quality === "1080" ? "1080p" : "720p"].filter(Boolean).join("  ·  ");
+    case "waiting":
+      return place ? `Queued (${place} in line)` : "Queued";
+    case "serverQueued":
+      return place ? `Queued for server (${place})` : "Queued for server";
     case "preparing":
       return `Preparing on the server${r.prepareProgress != null ? ` ${Math.round(r.prepareProgress * 100)}%` : ""}`;
     case "failed":
@@ -53,7 +60,7 @@ function status(r: DownloadRecord): string {
   }
 }
 
-function Entry({ r, label }: { r: DownloadRecord; label: string }) {
+function Entry({ r, label, place }: { r: DownloadRecord; label: string; place: number | null }) {
   const img = useBlob(r.images.tile);
   const frac = r.bytesTotal > 0 ? r.bytesDone / r.bytesTotal : r.state === "preparing" ? r.prepareProgress ?? 0 : 0;
   const [confirm, setConfirm] = useState(false);
@@ -70,7 +77,7 @@ function Entry({ r, label }: { r: DownloadRecord; label: string }) {
       </button>
       <div className="dl-text">
         <span className="dl-name">{label}</span>
-        <span className={`dl-status${r.state === "failed" ? " bad" : ""}`}>{status(r)}</span>
+        <span className={`dl-status${r.state === "failed" ? " bad" : ""}`}>{status(r, place)}</span>
         <span className="dl-actions">
           {r.state === "failed" && (
             <button className="chip" data-nav onClick={() => retryDownload(r.itemId)}>
@@ -101,6 +108,7 @@ export function Downloads() {
   const [items, setItems] = useState<DownloadRecord[] | null>(null);
   const [quality, setQ] = useState<Quality>(getQuality);
   const [wifi, setWifi] = useState(getWifiOnly);
+  const [limit, setLim] = useState(getLimit);
   const [space, setSpace] = useState<{ usedBytes: number; freeBytes: number } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
 
@@ -121,6 +129,8 @@ export function Downloads() {
     };
   }, []);
 
+  const qitems = (items ?? []).map((r) => ({ id: r.itemId, state: r.state, seq: r.seq }));
+  const place = (r: DownloadRecord) => linePosition(qitems, r.itemId);
   const movies = (items ?? []).filter((r) => r.item.Type !== "Episode");
   const shows = new Map<string, DownloadRecord[]>();
   for (const r of items ?? []) {
@@ -160,19 +170,37 @@ export function Downloads() {
             Wi-Fi only
           </button>
         </div>
+        <div className="dl-limit">
+          <span>Downloads at once</span>
+          <div className="chips">
+            {LIMIT_OPTIONS.map((n) => (
+              <button
+                key={n}
+                data-nav
+                className={`chip${limit === n ? " on" : ""}`}
+                onClick={() => {
+                  setLimit(n);
+                  setLim(n);
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
         {space && (
           <p className="dl-space">
             {formatBytes(space.usedBytes) || "0 MB"} used  ·  {formatBytes(space.freeBytes)} free on this phone
           </p>
         )}
-        <p className="dl-hint">Quality and Wi-Fi only apply to new downloads.</p>
+        <p className="dl-hint">Quality applies to new downloads; Wi-Fi only to downloads that haven't started yet.</p>
       </div>
       {items && items.length === 0 && <p className="empty">Nothing downloaded yet. Use Download on a movie or episode.</p>}
       {movies.length > 0 && (
         <section className="dl-group">
           <h2 className="row-title">Movies</h2>
           {movies.map((r) => (
-            <Entry key={r.itemId} r={r} label={r.item.Name} />
+            <Entry key={r.itemId} r={r} label={r.item.Name} place={place(r)} />
           ))}
         </section>
       )}
@@ -180,7 +208,7 @@ export function Downloads() {
         <section key={name} className="dl-group">
           <h2 className="row-title">{name}</h2>
           {list.map((r) => (
-            <Entry key={r.itemId} r={r} label={`S${r.item.ParentIndexNumber} E${r.item.IndexNumber} · ${r.item.Name}`} />
+            <Entry key={r.itemId} r={r} label={`S${r.item.ParentIndexNumber} E${r.item.IndexNumber} · ${r.item.Name}`} place={place(r)} />
           ))}
         </section>
       ))}

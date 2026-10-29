@@ -42,11 +42,17 @@ export interface NativeDownloadStatus {
 
 /** android/app/src/main/java/com/jellytip/phone/DownloadsPlugin.java */
 export interface JellytipDownloadsPlugin {
-  enqueue(o: { url: string; headers: Record<string, string>; fileName: string; title: string; wifiOnly: boolean }): Promise<{ downloadId: number; path: string }>;
   query(o: { ids: number[] }): Promise<{ items: NativeDownloadStatus[] }>;
   remove(o: { ids: number[]; paths: string[] }): Promise<void>;
   storage(): Promise<{ usedBytes: number; freeBytes: number; dir: string }>;
   exists(o: { path: string }): Promise<{ exists: boolean; bytes: number }>;
+  /** "Downloads at once": replace the waiting files (in order) and the limit; native starts what fits now. */
+  setQueue(o: {
+    limit: number;
+    items: { key: string; url: string; headers: Record<string, string>; fileName: string; title: string; wifiOnly: boolean }[];
+  }): Promise<{ started: Record<string, { downloadId?: number; path?: string; error?: string }>; active: number }>;
+  takeStarted(): Promise<{ started: Record<string, { downloadId?: number; path?: string; error?: string }> }>;
+  ackStarted(o: { keys: string[] }): Promise<void>;
   /** Landscape + hidden system bars for the player (the WebView can't go fullscreen by itself in Capacitor). */
   setPlayerMode(o: { fullscreen: boolean }): Promise<void>;
 }

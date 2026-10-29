@@ -5,6 +5,7 @@ import { downloadsAvailable, getDownload, isActive, listDownloads, startDownload
 import { go } from "../lib/router";
 
 function pct(r: DownloadRecord): string {
+  if (r.state === "waiting" || r.state === "serverQueued") return "Queued";
   if (r.state === "preparing") return r.prepareProgress != null ? `Preparing ${Math.round(r.prepareProgress * 100)}%` : "Preparing";
   if (r.bytesTotal > 0) return `${Math.floor((r.bytesDone / r.bytesTotal) * 100)}%`;
   return r.state === "paused" ? r.error ?? "Paused" : "Starting";
