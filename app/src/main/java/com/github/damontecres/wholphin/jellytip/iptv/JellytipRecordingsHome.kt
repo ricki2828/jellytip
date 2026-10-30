@@ -134,7 +134,7 @@ fun JellytipRecordingsRow(
                 RecordingCard(
                     r,
                     now,
-                    onClick = { if (r.playable) viewModel.play(r) else sheet = r },
+                    onClick = { if (r.playable && r.state != "recording") viewModel.play(r) else sheet = r },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
                 )
             }
@@ -143,16 +143,14 @@ fun JellytipRecordingsRow(
     sheet?.let { r ->
         val options =
             buildList {
-                if (r.upcoming) {
-                    add(DialogItem(if (r.state == "recording") "Stop recording" else "Cancel recording", dismissOnClick = true) { viewModel.cancel(r) })
-                }
+                addAll(recordingSheetItems(r, onPlay = { viewModel.play(r) }, onCancel = { viewModel.cancel(r) }))
                 add(
                     DialogItem("All recordings", dismissOnClick = true) {
                         viewModel.navigationManager.navigateTo(Destination.JellytipRecordings, "home recording sheet")
                     },
                 )
             }
-        DialogPopup(showDialog = true, title = "${r.title}  ·  ${whenLabel(r.start)}", dialogItems = options, onDismissRequest = { sheet = null })
+        DialogPopup(showDialog = true, title = recordingSheetTitle(r, "${r.title}  ·  ${whenLabel(r.start)}"), dialogItems = options, onDismissRequest = { sheet = null })
     }
 }
 

@@ -123,7 +123,15 @@ data class IptvHolder(
     val userName: String?,
     val label: String?,
     val since: Long?,
+    /** A recording holding the slot (plan "Stop recording" pop-up): its id, so the client can stop it. */
+    val recordingId: String? = null,
+    val title: String? = null,
+    val channel: String? = null,
+    /** Epoch seconds the holder lets go (a recording's padded stop); null = unknown. */
+    val endsAt: Long? = null,
 ) {
+    val isRecording get() = kind == "recording"
+
     val text: String
         get() =
             listOfNotNull(userName, if (kind == "recording") "recording" else "watching", label)
@@ -530,7 +538,16 @@ object IptvParse {
         val a = conn?.optJSONArray("active") ?: o?.optJSONArray("holders") ?: return emptyList()
         return (0 until a.length()).mapNotNull { i ->
             val h = a.optJSONObject(i) ?: return@mapNotNull null
-            IptvHolder(h.str("kind") ?: "watch", h.str("userName") ?: h.str("user"), h.str("label"), h.longOrNull("since"))
+            IptvHolder(
+                kind = h.str("kind") ?: "watch",
+                userName = h.str("userName") ?: h.str("user") ?: h.str("name"),
+                label = h.str("label"),
+                since = h.longOrNull("since"),
+                recordingId = h.str("recordingId"),
+                title = h.str("title"),
+                channel = h.str("channel"),
+                endsAt = h.longOrNull("endsAt"),
+            )
         }
     }
 

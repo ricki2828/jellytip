@@ -219,6 +219,7 @@ fun JellytipLiveTvPlayerPage(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
+        StreamBusyPopup(playState, playback)
         if (bannerVisible) {
             val cu = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
             val shown = if (cu != null) IptvNowNext(IptvProg(cu.start!!, cu.stop!!, cu.label, null, true), null) else nowNext

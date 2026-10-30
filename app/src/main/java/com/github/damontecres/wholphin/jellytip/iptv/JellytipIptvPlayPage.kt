@@ -174,6 +174,7 @@ fun JellytipIptvPlayPage(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
+        StreamBusyPopup(playState, playback)
         if (controlsVisible) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),

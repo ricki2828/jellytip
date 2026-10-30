@@ -283,7 +283,16 @@ class JellytipLiveTvViewModel
             viewModelScope.launch {
                 val ok = service.cancelRecording(r.id)
                 JellytipTrace.log("iptv", "cancel recording ${r.id} ok=$ok")
-                _state.update { it.copy(message = if (ok) "Cancelled “${r.title}”." else "Couldn't cancel it.") }
+                _state.update {
+                    it.copy(
+                        message =
+                            when {
+                                !ok -> "Couldn't cancel it."
+                                r.state == "recording" -> "Stopped “${r.title}”; what's recorded is kept."
+                                else -> "Cancelled “${r.title}”."
+                            },
+                    )
+                }
                 loadRecordings()
             }
         }
@@ -817,7 +826,7 @@ private fun RecordingsList(
                                 else -> "Cancelled"
                             }
                         Surface(
-                            onClick = { if (r.playable) onPlay(r) else menu = r },
+                            onClick = { if (r.playable && r.state != "recording") onPlay(r) else menu = r },
                             onLongClick = { menu = r },
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
@@ -848,11 +857,11 @@ private fun RecordingsList(
     menu?.let { r ->
         val items =
             buildList {
-                if (r.playable) add(DialogItem("Play", dismissOnClick = true) { onPlay(r) })
-                if (r.upcoming) add(DialogItem(if (r.state == "recording") "Stop recording" else "Cancel recording", dismissOnClick = true) { onCancel(r) })
+                if (r.playable && r.state != "recording") add(DialogItem("Play", dismissOnClick = true) { onPlay(r) })
+                addAll(recordingSheetItems(r, onPlay = { onPlay(r) }, onCancel = { onCancel(r) }))
                 if (!r.upcoming) add(DialogItem("Delete", dismissOnClick = true) { onDelete(r) })
             }
-        DialogPopup(showDialog = true, title = r.title, dialogItems = items, onDismissRequest = { menu = null })
+        DialogPopup(showDialog = true, title = recordingSheetTitle(r, r.title), dialogItems = items, onDismissRequest = { menu = null })
     }
 }
 

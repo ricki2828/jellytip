@@ -71,6 +71,7 @@ sealed interface IptvPlayState {
     data class Full(
         override val target: IptvTarget,
         val message: String,
+        val holders: List<IptvHolder> = emptyList(),
     ) : IptvPlayState
 
     data class Failed(
@@ -273,7 +274,7 @@ class JellytipIptvPlayback
                         is IptvPlayResult.Full -> {
                             stopPlayer()
                             JellytipTrace.player("iptv", "full ${target.channelId}: ${r.message}")
-                            setState(IptvPlayState.Full(target, r.message), "409")
+                            setState(IptvPlayState.Full(target, r.message, r.holders), "409")
                         }
 
                         is IptvPlayResult.Failed -> fail(target, r.message)
@@ -295,6 +296,31 @@ class JellytipIptvPlayback
                 stop()
                 clearMediaItems()
             }
+        }
+
+        /**
+         * "Stop recording & watch" (plan "Stop recording" pop-up): cancel [recordingId] (the file is kept), give the
+         * panel ~3 s to free the slot, then play [target] again.
+         */
+        fun stopRecordingAndPlay(
+            target: IptvTarget,
+            recordingId: String,
+        ) {
+            job?.cancel()
+            setState(IptvPlayState.Opening(target), "stop recording $recordingId")
+            job =
+                scope.launch {
+                    val ok = service.cancelRecording(recordingId)
+                    JellytipTrace.player("iptv", "stop recording $recordingId for ${target.channelId} ok=$ok")
+                    if (!ok) {
+                        fail(target, "Couldn't stop the recording.")
+                        return@launch
+                    }
+                    delay(SLOT_FREE_WAIT_MS)
+                    renewed = false
+                    // Still full = the pop-up comes back with whoever holds it now
+                    launchOpen(target, "after stopping recording $recordingId")
+                }
         }
 
         /** Stop now and free the provider connection (closing the HTTP stream releases the slot). */
@@ -372,6 +398,7 @@ class JellytipIptvPlayback
 
         companion object {
             private const val HANDOVER_MS = 400L
+            private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000
         }
