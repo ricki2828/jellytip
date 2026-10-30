@@ -11,7 +11,7 @@ test("parse: groups typed, malformed items dropped, missing groups empty", () =>
     groups: [
       { type: "films", items: [{ id: J.toUpperCase(), name: "La Haine", year: 1995, kind: "Movie" }, { id: "x", name: "bad" }] },
       { type: "people", items: [{ personId: J, name: "Vincent Cassel", filmCount: 4 }] },
-      { type: "iptv", items: [{ iptvId: "3:m:9", name: "Léon", tech: ["4K", 1] }, { iptvId: "../x", name: "no" }] },
+      { type: "iptv", items: [{ iptvId: "3:m:9", name: "Léon", tech: ["4K", 1], poster: "v1/iptv/img/p", quality: ["1080p"], rating: 8.5 }, { iptvId: "../x", name: "no" }] },
       { type: "discover", items: [{ tmdbId: 11, mediaType: "tv", title: "Engrenages" }] },
       { type: "weird", items: [{}] },
     ],
@@ -20,7 +20,7 @@ test("parse: groups typed, malformed items dropped, missing groups empty", () =>
   assert.equal(s.films[0].id, J);
   assert.equal(s.films.length, 1);
   assert.equal(s.people[0].filmCount, 4);
-  assert.deepEqual(s.iptv, [{ iptvId: "3:m:9", name: "Léon", year: null, kind: "movie", tech: ["4K"] }]);
+  assert.deepEqual(s.iptv, [{ iptvId: "3:m:9", name: "Léon", year: null, kind: "movie", tech: ["4K"], poster: "v1/iptv/img/p", backdrop: null, quality: ["1080p"], rating: 8.5 }]);
   assert.equal(s.discover[0].mediaType, "tv");
   assert.deepEqual(s.shows, []);
   assert.equal(s.text, "crime");

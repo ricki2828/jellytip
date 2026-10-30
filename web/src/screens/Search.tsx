@@ -102,7 +102,7 @@ function Unified({ r, onChip }: { r: SearchResult; onChip: (q: string) => void }
           <h2 className="row-title">On your IPTV</h2>
           <div className="grid">
             {r.iptv.map((h) => (
-              <IptvCard key={h.iptvId} item={{ id: h.iptvId, title: h.name, year: h.year, quality: [], tech: h.tech, poster: null, backdrop: null }} width={0} />
+              <IptvCard key={h.iptvId} item={{ id: h.iptvId, title: h.name, year: h.year, quality: h.quality, tech: h.tech, poster: h.poster, backdrop: h.backdrop }} width={0} />
             ))}
           </div>
         </section>

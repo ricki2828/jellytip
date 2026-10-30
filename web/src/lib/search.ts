@@ -51,6 +51,10 @@ export interface IptvHit {
   year?: number | null;
   kind: "movie" | "series";
   tech: string[];
+  poster: string | null;
+  backdrop: string | null;
+  quality: string[];
+  rating: number | null;
 }
 export interface DiscoverHit {
   tmdbId: number;
@@ -150,7 +154,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
       const id = str(x.iptvId);
       const name = str(x.name);
       return id && /^[A-Za-z0-9_-]{1,40}:[ms]:[A-Za-z0-9_.-]{1,64}$/.test(id) && name
-        ? { iptvId: id, name, year: num(x.year), kind: x.kind === "series" || id.includes(":s:") ? "series" : "movie", tech: strs(x.tech) }
+        ? { iptvId: id, name, year: num(x.year), kind: x.kind === "series" || id.includes(":s:") ? "series" : "movie", tech: strs(x.tech), poster: str(x.poster), backdrop: str(x.backdrop), quality: strs(x.quality), rating: num(x.rating) }
         : null;
     }),
     discover: items(g, "discover", (x) => {
