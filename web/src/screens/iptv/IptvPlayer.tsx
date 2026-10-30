@@ -3,6 +3,7 @@
 // stale or 403 expired gets one fresh /play and a retry; 409 shows who holds the connection. Leaving tears the stream
 // down at once (the provider may allow a single connection).
 import { BackArrow } from "../../components/BackArrow";
+import { flashNote } from "../../components/TasteButtons";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
@@ -10,7 +11,7 @@ import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
 import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
-import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
@@ -38,6 +39,8 @@ async function probe(url: string): Promise<{ status: number; code: string | null
     return { status: 0, code: null };
   }
 }
+
+const isLiveTarget = (t: PlayTarget) => !!t.channel && t.start == null;
 
 function progressKey(t: PlayTarget): string | null {
   if (t.recording) return `rec:${t.recording}`;
@@ -78,6 +81,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const lastMove = useRef(Date.now());
   const quietUntil = useRef(0);
   const [stalled, setStalled] = useState(false);
+  // A "From kick-off" catch-up (the programme was still on air when it started) ends at the moment it was pressed: then back to live
+  const kickoffRun = useRef(!isLiveTarget(target) && !!target.channel && target.stop != null && target.stop * 1000 > Date.now());
+  const loadDone = useRef(false);
+  const returned = useRef(false);
   // Where to start once the media is known: the resume point, then (after a renewed link) where the old one stopped
   const seekTo = useRef(resume);
 
@@ -193,6 +200,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           { enableWorker: false, lazyLoad: false, liveBufferLatencyChasing: a.kind === "live", liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5 },
         );
         tsRef.current = p;
+        p.on(mpegts.Events.LOADING_COMPLETE, () => (loadDone.current = true));
         p.on(mpegts.Events.ERROR, (type: string, detail: string, info?: { code?: number; msg?: string }) => {
           if (type === mpegts.ErrorTypes.NETWORK_ERROR || type === mpegts.ErrorTypes.MEDIA_ERROR)
             void onLinkError(url, [type, detail, info?.code, info?.msg].filter((x) => x != null && x !== "").join(" "));
@@ -297,6 +305,20 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     };
   }, [poke]);
 
+  const backToLive = useCallback(() => {
+    if (returned.current || !target.channel) return;
+    returned.current = true;
+    flashNote("Back to live");
+    go(livePath(target.channel, title, extras), true);
+  }, [target.channel, title, extras]);
+  useEffect(() => {
+    if (!kickoffRun.current || state.kind !== "playing") return;
+    // mpegts has no "ended": the stream finished loading and playback has stopped moving
+    const t = setInterval(() => {
+      if (loadDone.current && Date.now() - lastMove.current >= 3000) backToLive();
+    }, 1000);
+    return () => clearInterval(t);
+  }, [state.kind, backToLive]);
   const alt = extras?.alternates?.[0];
   useEffect(() => {
     if (!isLive || !alt || state.kind !== "playing") return;
@@ -458,6 +480,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         onClick={() => !isLive && !touchClick.current && togglePlay()}
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
+        onEnded={() => kickoffRun.current && backToLive()}
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => {
           lastMove.current = Date.now();
@@ -501,7 +524,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
         {kickoff && state.kind === "playing" && (
-          <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}`, true)}>
+          <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extras)}`, true)}>
             From kick-off
           </button>
         )}
