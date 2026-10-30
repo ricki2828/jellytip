@@ -36,6 +36,7 @@ data class JellytipPullQuote(
     val author: String,
     val rating: Double?,
     val source: String,
+    val mark: String? = null,
 )
 
 private const val QUOTE_MAX_CHARS = 220
@@ -51,7 +52,7 @@ fun jellytipPullQuote(reviews: JellytipReviews?): JellytipPullQuote? {
         ?.let { return JellytipPullQuote(trimAtWord(it.text.ifBlank { it.excerpt }), it.author, it.rating, it.source) }
     reviews.quote?.let { q ->
         val rating = reviews.reviews.firstOrNull { it.author == q.author }?.rating
-        return JellytipPullQuote(trimAtWord(q.text), q.author, rating, q.source)
+        return JellytipPullQuote(trimAtWord(q.text), q.author, rating, q.source, q.mark)
     }
     return reviews.reviews
         .firstOrNull { !it.spoiler && it.excerpt.isNotBlank() }
@@ -119,8 +120,7 @@ fun BoxScope.JellytipDetailsPullQuote(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
-            val source = if (quote.source == "tmdb") "TMDB" else "Letterboxd"
-            Text(
+            MarkText(
                 text =
                     androidx.compose.ui.text.buildAnnotatedString {
                         quote.rating?.let {
@@ -129,13 +129,11 @@ fun BoxScope.JellytipDetailsPullQuote(
                             pop()
                             append("  ")
                         }
-                        append("— ${quote.author.ifBlank { "a reviewer" }} on $source")
+                        appendQuoteSource(quote.source, quote.author, quote.mark)
                     },
                 color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
-                fontFamily = JellytipFontFamily,
                 fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
-                style = TextStyle(shadow = shadow),
-                maxLines = 1,
+                style = TextStyle(shadow = shadow, fontFamily = JellytipFontFamily),
             )
         }
     }

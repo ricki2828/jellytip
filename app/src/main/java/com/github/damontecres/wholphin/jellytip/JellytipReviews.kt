@@ -60,11 +60,18 @@ data class JellytipQuote(
     val text: String,
     val author: String,
     val source: String,
+    /** Source mark id when the server sends one (`rt_fresh` / `rt_rotten` for the Critics Consensus). */
+    val mark: String? = null,
 ) {
     companion object {
         fun parse(o: JSONObject): JellytipQuote? {
             val text = o.optString("text").takeIf { it.isNotBlank() && it != "null" } ?: return null
-            return JellytipQuote(text, o.optString("author"), o.optString("source", "letterboxd"))
+            return JellytipQuote(
+                text,
+                o.optString("author").takeIf { it != "null" }.orEmpty(),
+                o.optString("source", "letterboxd"),
+                o.optString("mark").takeIf { it.isNotBlank() && it != "null" },
+            )
         }
     }
 }
@@ -134,9 +141,10 @@ fun JellytipReviewsRow(
     val firstFocus = remember { FocusRequester() }
     var position by remember { mutableStateOf(0) }
     val sourceLabel =
-        when (reviews.source) {
-            "tmdb" -> "TMDB"
-            "letterboxd" -> "Letterboxd"
+        when {
+            reviews.source == "tmdb" -> "TMDB"
+            reviews.source == "letterboxd" -> "Letterboxd"
+            isRtSource(reviews.source) -> "Rotten Tomatoes"
             else -> null
         }
     Column(
@@ -268,7 +276,11 @@ private fun JellytipReviewDialog(
                     listOfNotNull(
                         review.rating?.let { reviewStars(it) },
                         review.likes?.takeIf { it > 0 }?.let { "♥ ${likesText(it)}" },
-                        if (review.source == "tmdb") "TMDB" else "Letterboxd",
+                        when {
+                            review.source == "tmdb" -> "TMDB"
+                            isRtSource(review.source) -> "Rotten Tomatoes"
+                            else -> "Letterboxd"
+                        },
                     ).joinToString("   ")
                 Text(
                     text = meta,

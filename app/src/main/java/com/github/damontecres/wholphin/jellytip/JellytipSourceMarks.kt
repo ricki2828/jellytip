@@ -165,15 +165,70 @@ internal val LetterboxdInline: Map<String, InlineTextContent> =
         for (n in 0..100) put(mcId(n), mark(H) { m -> MetacriticBox(m, n) })
     }
 
+/**
+ * Alternate text of every mark: invisible. Android's ellipsis cuts a line at a placeholder by dropping the span and
+ * drawing what is under it, so a long score line ending in "…" showed a literal "LB" (30-Oct, Ricki); Text with
+ * [MarkText] also never ellipsizes, this is the second guard.
+ */
+private const val MARK_ALT = "\u200B"
+
 internal fun AnnotatedString.Builder.appendLbMark() {
-    appendInlineContent(LB_MARK_ID, "LB")
+    appendInlineContent(LB_MARK_ID, MARK_ALT)
     append(" ")
 }
 
+/** [alt] names the mark for readers of this code; what is drawn under it is invisible ([MARK_ALT]). */
+@Suppress("UNUSED_PARAMETER")
 internal fun AnnotatedString.Builder.appendMark(
     id: String,
     alt: String,
 ) {
-    appendInlineContent(id, alt)
+    appendInlineContent(id, MARK_ALT)
     append(" ")
+}
+
+/** A Rotten Tomatoes source (the Critics Consensus quote): `rt`, `rottentomatoes`, `rt_consensus`… */
+internal fun isRtSource(source: String) = source.startsWith("rt") || source.startsWith("rotten")
+
+/**
+ * A quote's attribution: "— author on Letterboxd" / "on TMDB", or the tomato mark ([mark] = `rt_fresh` / `rt_rotten`,
+ * fresh when unknown) + "Rotten Tomatoes Critics Consensus".
+ */
+internal fun AnnotatedString.Builder.appendQuoteSource(
+    source: String,
+    author: String,
+    mark: String? = null,
+) {
+    if (isRtSource(source)) {
+        appendMark(if (mark == "rt_rotten") "rt_rotten" else "rt_fresh", "RT")
+        append("Rotten Tomatoes Critics Consensus")
+        return
+    }
+    append("\u2014 ${author.ifBlank { "a reviewer" }} on ${if (source == "tmdb") "TMDB" else "Letterboxd"}")
+}
+
+/**
+ * The one way to show text built with [appendMark] / [appendLbMark] (score lines, chips, review and quote sources): the
+ * marks' inline content always attached, and clipped instead of ellipsized (an ellipsis at a mark shows its alt text).
+ */
+@Composable
+internal fun MarkText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    style: TextStyle = androidx.tv.material3.LocalTextStyle.current,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    maxLines: Int = 1,
+) {
+    androidx.tv.material3.Text(
+        text = text,
+        modifier = modifier,
+        color = color,
+        style = style,
+        fontSize = fontSize,
+        inlineContent = LetterboxdInline,
+        maxLines = maxLines,
+        softWrap = maxLines > 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+    )
 }

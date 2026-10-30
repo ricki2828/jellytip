@@ -356,12 +356,10 @@ internal fun JellytipChip(
             .background(background, RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
-        Text(
+        MarkText(
             text = text,
             color = content,
             style = MaterialTheme.typography.labelLarge,
-            inlineContent = LetterboxdInline,
-            maxLines = 1,
         )
     }
 }

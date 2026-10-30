@@ -218,13 +218,10 @@ fun JellytipDetailsBlock(
                 }
 
             scoreLine(extras)?.let {
-                Text(
+                MarkText(
                     text = it,
                     style = body,
-                    inlineContent = LetterboxdInline,
                     color = quiet.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
 

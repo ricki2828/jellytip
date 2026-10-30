@@ -77,7 +77,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
 import com.github.damontecres.wholphin.jellytip.specials.Kicker
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
-import com.github.damontecres.wholphin.jellytip.LetterboxdInline
+import com.github.damontecres.wholphin.jellytip.appendQuoteSource
 import com.github.damontecres.wholphin.jellytip.scoreLine as jellytipScoreLine
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import com.github.damontecres.wholphin.ui.AspectRatio
@@ -571,25 +571,25 @@ fun JellytipHomeHeader(
                     )
                 }
                 if (scoreLine != null) {
-                    Text(
+                    com.github.damontecres.wholphin.jellytip.MarkText(
                         text = scoreLine,
-                        inlineContent = LetterboxdInline,
                         style = MaterialTheme.typography.bodyMedium.copy(shadow = shadow),
                         fontSize = textSize,
                         color = JellytipPalette.Vanilla.copy(alpha = 0.9f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (heroQuote != null) {
-                    Text(
-                        text = "\u201C${heroQuote.text}\u201D  \u2014 ${heroQuote.author} on Letterboxd",
-                        style = MaterialTheme.typography.bodySmall.copy(shadow = shadow),
+                    // Quote and attribution in one block (the RT mark for the Critics Consensus); clipped, never "…"
+                    com.github.damontecres.wholphin.jellytip.MarkText(
+                        text =
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                append("\u201C${heroQuote.text}\u201D  ")
+                                appendQuoteSource(heroQuote.source, heroQuote.author, heroQuote.mark)
+                            },
+                        style = MaterialTheme.typography.bodySmall.copy(shadow = shadow, fontStyle = FontStyle.Italic),
                         fontSize = JellytipHomeTokens.QUOTE_PX.toSp(),
-                        fontStyle = FontStyle.Italic,
                         color = quiet,
                         maxLines = 2, // 120 chars plus the attribution can exceed the 900 px block
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
