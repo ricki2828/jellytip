@@ -57,6 +57,12 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_RESUME_MS = "resumeMs";
     static final String EXTRA_NOTE = "note";
     static final String EXTRA_GROWING = "growing";
+    static final String EXTRA_CHANNEL_ID = "channelId";
+    static final String EXTRA_ALT_IDS = "altIds";
+    static final String EXTRA_ALT_NAMES = "altNames";
+    static final String EXTRA_PROG_START = "programmeStart";
+    static final String EXTRA_PROG_STOP = "programmeStop";
+    static final String RESULT_CHANNEL_ID = "channelId";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -69,6 +75,8 @@ public class PlayerActivity extends AppCompatActivity {
     private static final long PROGRESS_MS = 30_000;
     private static final int MAX_RECONNECTS = 5;
     private static final long NOTE_MS = 6_000;
+    private static final long STALL_MS = 10_000;
+    private static final long URL_TIMEOUT_MS = 15_000;
     private static final long SEEK_BACK_MS = 10_000;
     private static final long SEEK_FORWARD_MS = 30_000;
     /** "Live" on a growing recording lands this far before the end of what is recorded so far. */
@@ -80,6 +88,24 @@ public class PlayerActivity extends AppCompatActivity {
     private ProgressBar spinner;
     private TextView titleView;
     private boolean live;
+    /** The open player (one at a time), for [provideUrl] answers from the web app. */
+    static java.lang.ref.WeakReference<PlayerActivity> instance = new java.lang.ref.WeakReference<>(null);
+    private String channelId;
+    private String channelTitle;
+    private final java.util.List<String[]> alternates = new java.util.ArrayList<>(); // {id, name}
+    private final java.util.Set<String> tried = new java.util.HashSet<>();
+    private long programmeStart;
+    private long programmeStop;
+    /** Watching the programme on now from its start (a catch-up link); "Back to live" returns. */
+    private boolean fromKickOff;
+    private TextView kickOffButton;
+    private long stalledSince;
+    private int requestSeq;
+    private final java.util.Map<Integer, UrlCallback> pending = new java.util.HashMap<>();
+
+    interface UrlCallback {
+        void onUrl(String url, String mime, String error);
+    }
     private boolean growing;
     /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
     private boolean toLiveEdge;
@@ -88,6 +114,8 @@ public class PlayerActivity extends AppCompatActivity {
     private boolean closing;
     private int reconnects;
     private MediaItem item;
+    /** Shown and hidden with the controls (title, back, kick-off, Live). */
+    private final java.util.List<View> overlays = new java.util.ArrayList<>();
 
     private final Runnable progressTick =
         new Runnable() {
@@ -106,6 +134,17 @@ public class PlayerActivity extends AppCompatActivity {
         String mime = in.getStringExtra(EXTRA_MIME);
         live = in.getBooleanExtra(EXTRA_LIVE, false);
         growing = in.getBooleanExtra(EXTRA_GROWING, false);
+        channelId = in.getStringExtra(EXTRA_CHANNEL_ID);
+        channelTitle = in.getStringExtra(EXTRA_TITLE);
+        String[] altIds = in.getStringArrayExtra(EXTRA_ALT_IDS);
+        String[] altNames = in.getStringArrayExtra(EXTRA_ALT_NAMES);
+        if (altIds != null) {
+            for (int i = 0; i < altIds.length; i++) alternates.add(new String[] {altIds[i], altNames != null && i < altNames.length ? altNames[i] : altIds[i]});
+        }
+        if (channelId != null) tried.add(channelId);
+        programmeStart = in.getLongExtra(EXTRA_PROG_START, 0);
+        programmeStop = in.getLongExtra(EXTRA_PROG_STOP, 0);
+        instance = new java.lang.ref.WeakReference<>(this);
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
@@ -130,9 +169,35 @@ public class PlayerActivity extends AppCompatActivity {
         titleView.setTextColor(Color.WHITE);
         titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         titleView.setShadowLayer(8, 0, 2, Color.BLACK);
-        titleView.setPadding(dp(24), dp(16), dp(24), dp(16));
+        titleView.setPadding(dp(64), dp(16), dp(24), dp(16));
         root.addView(titleView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP));
-        view.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) visibility -> titleView.setVisibility(visibility));
+        overlays.add(titleView);
+        // On-screen back (live too): same as Android back
+        TextView back = new TextView(this);
+        back.setText("\u2039");
+        back.setTextColor(Color.WHITE);
+        back.setTextSize(TypedValue.COMPLEX_UNIT_SP, 34);
+        back.setShadowLayer(8, 0, 2, Color.BLACK);
+        back.setPadding(dp(18), dp(2), dp(18), dp(8));
+        back.setContentDescription("Back");
+        back.setOnClickListener(v -> close("back", null));
+        root.addView(back, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
+        overlays.add(back);
+        // From kick-off for a live programme the web app knows the start of (catch-up of what is on now)
+        if (live && programmeStart > 0 && channelId != null) {
+            kickOffButton = pill("From kick-off", 0xCC333333);
+            kickOffButton.setOnClickListener(v -> toggleKickOff());
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+            lp.topMargin = dp(16);
+            lp.rightMargin = dp(24);
+            root.addView(kickOffButton, lp);
+            overlays.add(kickOffButton);
+        }
+        view.setControllerVisibilityListener(
+            (PlayerView.ControllerVisibilityListener) visibility -> {
+                for (View o : overlays) o.setVisibility(visibility);
+            }
+        );
 
         String note = in.getStringExtra(EXTRA_NOTE);
         if (note != null && !note.isEmpty()) {
@@ -209,6 +274,7 @@ public class PlayerActivity extends AppCompatActivity {
         player.setPlayWhenReady(true);
         player.prepare();
         if (!live) handler.postDelayed(progressTick, PROGRESS_MS);
+        if (live) handler.postDelayed(stallTick, 1_000);
     }
 
     private final Player.Listener listener =
@@ -262,13 +328,7 @@ public class PlayerActivity extends AppCompatActivity {
         lp.topMargin = dp(16);
         lp.rightMargin = dp(24);
         root.addView(liveButton, lp);
-        // Shows and hides with the controls, like the title
-        view.setControllerVisibilityListener(
-            (PlayerView.ControllerVisibilityListener) visibility -> {
-                titleView.setVisibility(visibility);
-                liveButton.setVisibility(visibility);
-            }
-        );
+        overlays.add(liveButton);
     }
 
     private void onError(PlaybackException error) {
@@ -303,7 +363,156 @@ public class PlayerActivity extends AppCompatActivity {
             );
             return;
         }
+        // Live: a fatal error moves to the event's next channel before giving up
+        if (live && !fromKickOff && failover("error " + error.getErrorCodeName())) return;
         close("error", error);
+    }
+
+    /** Live and meant to play but buffering for 10 s: the same as a fatal error (failover). */
+    private final Runnable stallTick =
+        new Runnable() {
+            @Override
+            public void run() {
+                if (closing || player == null) return;
+                boolean stalled = player.getPlayWhenReady() && player.getPlaybackState() == Player.STATE_BUFFERING;
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (!stalled) {
+                    stalledSince = 0;
+                } else if (stalledSince == 0) {
+                    stalledSince = now;
+                } else if (now - stalledSince >= STALL_MS && !fromKickOff) {
+                    stalledSince = now;
+                    failover("stalled 10 s");
+                }
+                handler.postDelayed(this, 1_000);
+            }
+        };
+
+    /**
+     * Ask the web app for a stream link ("needUrl" event, answered by JellytipPlayer.provideUrl). [reason] is
+     * failover | kickoff | live. No answer in 15 s = error.
+     */
+    private void requestUrl(String reason, String forChannel, long start, long stop, UrlCallback cb) {
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p == null) {
+            cb.onUrl(null, null, "no web app");
+            return;
+        }
+        int id = ++requestSeq;
+        pending.put(id, cb);
+        JSObject o = new JSObject();
+        o.put("requestId", id);
+        o.put("reason", reason);
+        o.put("channelId", forChannel);
+        if (start > 0) {
+            o.put("start", start);
+            o.put("stop", stop);
+        }
+        p.emit("needUrl", o);
+        handler.postDelayed(
+            () -> {
+                UrlCallback left = pending.remove(id);
+                if (left != null) left.onUrl(null, null, "timeout");
+            },
+            URL_TIMEOUT_MS
+        );
+    }
+
+    /** From PlayerPlugin.provideUrl (main thread). */
+    void onProvidedUrl(int requestId, String url, String mime, String error) {
+        UrlCallback cb = pending.remove(requestId);
+        if (cb != null && !closing) cb.onUrl(url, mime, error);
+    }
+
+    /** Play another link in place (failover, kick-off, back to live). */
+    private void switchTo(String url, String mime, boolean seekable) {
+        MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
+        String type = mimeFor(url, mime);
+        if (type != null) b.setMimeType(type);
+        item = b.build();
+        reconnects = 0;
+        stalledSince = 0;
+        player.setMediaItem(item);
+        player.prepare();
+        player.setPlayWhenReady(true);
+        view.setShowRewindButton(seekable);
+        view.setShowFastForwardButton(seekable);
+    }
+
+    /** Next untried alternate of the event; false = none left. */
+    private boolean failover(String why) {
+        String[] next = null;
+        for (String[] a : alternates) {
+            if (!tried.contains(a[0])) {
+                next = a;
+                break;
+            }
+        }
+        if (next == null) return false;
+        final String[] alt = next;
+        tried.add(alt[0]);
+        emitEvent("failover", "{\"from\":\"" + channelId + "\",\"to\":\"" + alt[0] + "\",\"why\":\"" + why + "\"}");
+        spinner.setVisibility(View.VISIBLE);
+        requestUrl(
+            "failover",
+            alt[0],
+            0,
+            0,
+            (url, mime, error) -> {
+                if (url == null) {
+                    // This one couldn't be opened: try the next, else stop with the original error text
+                    if (!failover(why)) close("error", null);
+                    return;
+                }
+                channelId = alt[0];
+                titleView.setText(alt[1]);
+                switchTo(url, mime, false);
+                android.widget.Toast.makeText(this, "Switched to " + alt[1], android.widget.Toast.LENGTH_SHORT).show();
+            }
+        );
+        return true;
+    }
+
+    /** "From kick-off" (catch-up from the programme's start) or "Back to live". */
+    private void toggleKickOff() {
+        boolean toStart = !fromKickOff;
+        kickOffButton.setEnabled(false);
+        requestUrl(
+            toStart ? "kickoff" : "live",
+            channelId,
+            toStart ? programmeStart : 0,
+            toStart ? programmeStop : 0,
+            (url, mime, error) -> {
+                kickOffButton.setEnabled(true);
+                if (url == null) {
+                    android.widget.Toast.makeText(this, toStart ? "Can't start from kick-off" : "Can't go back to live", android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                fromKickOff = toStart;
+                kickOffButton.setText(toStart ? "\u25CF Back to live" : "From kick-off");
+                switchTo(url, mime, toStart);
+            }
+        );
+    }
+
+    private void emitEvent(String name, String json) {
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p == null) return;
+        try {
+            p.emit(name, new JSObject(json));
+        } catch (org.json.JSONException ignored) {
+            // diagnostic only
+        }
+    }
+
+    private TextView pill(String text, int background) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        t.setBackgroundColor(background);
+        t.setPadding(dp(14), dp(8), dp(14), dp(8));
+        return t;
     }
 
     private static HttpDataSource.InvalidResponseCodeException httpError(Throwable t) {
@@ -359,6 +568,7 @@ public class PlayerActivity extends AppCompatActivity {
         handler.removeCallbacksAndMessages(null);
         Intent data = new Intent();
         data.putExtra(RESULT_REASON, reason);
+        if (channelId != null) data.putExtra(RESULT_CHANNEL_ID, channelId);
         if (player != null) {
             data.putExtra(RESULT_POSITION_MS, player.getCurrentPosition());
             long d = player.getDuration();

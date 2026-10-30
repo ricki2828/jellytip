@@ -62,6 +62,8 @@ export const NativeDownloads = registerPlugin<JellytipDownloadsPlugin>("Jellytip
 /** What the native IPTV player reports when it closes (android/app/src/main/java/com/jellytip/phone/PlayerPlugin.java). */
 export interface NativePlayerResult {
   reason: "back" | "ended" | "error";
+  /** The channel playing when it closed (after a failover it differs from the one opened). */
+  channelId?: string;
   positionMs: number;
   durationMs: number;
   error?: string;
@@ -75,9 +77,36 @@ export interface NativePlayerResult {
 
 export interface JellytipPlayerPlugin {
   /** Full-screen ExoPlayer for an IPTV link; resolves when it closes. */
-  open(o: { url: string; title: string; mime?: string; live: boolean; growing?: boolean; resumeMs?: number; note?: string }): Promise<NativePlayerResult>;
+  open(o: {
+    url: string;
+    title: string;
+    mime?: string;
+    live: boolean;
+    growing?: boolean;
+    resumeMs?: number;
+    note?: string;
+    /** Live (plan "8h Block 3"): the channel playing, for failover and From kick-off. */
+    channelId?: string;
+    /** The event's other channels, best first; links are asked for with "needUrl" when needed. */
+    alternates?: { id: string; name: string }[];
+    /** The programme on now (epoch s): enables the "From kick-off" button. */
+    programmeStart?: number;
+    programmeStop?: number;
+  }): Promise<NativePlayerResult>;
+  /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
+  provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
   addListener(event: "progress", cb: (e: { positionMs: number; durationMs: number }) => void): Promise<{ remove: () => Promise<void> }>;
   addListener(event: "playerError", cb: (e: Record<string, unknown>) => void): Promise<{ remove: () => Promise<void> }>;
+  /**
+   * The player needs a link: reason "failover" (channelId = the alternate to try), "kickoff" (channelId + start/stop:
+   * /play catch-up of the programme on now) or "live" (channelId: back to live). Answer with provideUrl within 15 s.
+   */
+  addListener(
+    event: "needUrl",
+    cb: (e: { requestId: number; reason: "failover" | "kickoff" | "live"; channelId: string; start?: number; stop?: number }) => void,
+  ): Promise<{ remove: () => Promise<void> }>;
+  /** Diagnostic: the player switched channel ({from, to, why}). */
+  addListener(event: "failover", cb: (e: { from: string; to: string; why: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
 /** The phone app plays all IPTV natively (mpegts.js can't pass AC-3 through MSE and dies on long live streams). */
