@@ -75,3 +75,22 @@ test("410 stale and 403 expired renew; 409 is full; other 403s are final", () =>
   assert.equal(linkFailure(409, "max_connections"), "full");
   assert.equal(linkFailure(502, "provider_error"), "fatal");
 });
+
+import { fallbackFormat, playbackFailureText } from "../src/lib/iptvPlay.ts";
+import { scrub } from "../src/lib/scrub.ts";
+
+test("live TS falls back to HLS once; nothing else falls back", () => {
+  assert.equal(fallbackFormat(true, "ts"), "m3u8");
+  assert.equal(fallbackFormat(true, "m3u8"), null);
+  assert.equal(fallbackFormat(false, "ts"), null);
+});
+
+test("failure text names the engine detail and never claims a stop", () => {
+  assert.match(playbackFailureText("native", "MediaError 4", 200), /can't play this file \(MediaError 4\)/);
+  assert.match(playbackFailureText("mpegts", "", 200), /couldn't play it\.$/);
+  assert.equal(playbackFailureText("hls", "x", 0), "The server can't be reached.");
+});
+
+test("debug log drops the signed part of stream links", () => {
+  assert.equal(scrub("GET https://h/jellytip-api/v1/iptv/s/abc123.ts?x=1 failed"), "GET https://h/jellytip-api/v1/iptv/s/…?x=1 failed");
+});

@@ -7,11 +7,14 @@ import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
 import { play, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
-import { engineFor, failureText, linkFailure, playQuery, type PlayTarget } from "../../lib/iptvPlay";
+import { engineFor, failureText, fallbackFormat, linkFailure, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { back } from "../../lib/router";
 import "./iptv.css";
 
 const PROGRESS_MS = 30_000;
+// Connected but no picture and no clock after this long: treat as a failed stream (silent spinners hide codec problems)
+const NO_PICTURE_MS = 15_000;
 const loadHls = () => import("hls.js");
 const loadMpegts = () => import("mpegts.js");
 
@@ -42,6 +45,10 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
   const linkRef = useRef<string | null>(null);
+  const answerRef = useRef<PlayAnswer | null>(null);
+  const engineRef = useRef<Engine>("native");
+  const fmtRef = useRef<"ts" | "m3u8">("ts");
+  const watchRef = useRef<number | undefined>(undefined);
   const renewed = useRef(false);
   const alive = useRef(true);
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -54,6 +61,7 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
   const seekTo = useRef(resume);
 
   const teardown = useCallback(() => {
+    window.clearTimeout(watchRef.current);
     hlsRef.current?.destroy();
     hlsRef.current = null;
     const ts = tsRef.current;
@@ -85,11 +93,38 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
 
   // A stream link failed: work out why, then renew once, show who holds the connection, or give up
   const onLinkError = useCallback(
-    async (url: string) => {
+    async (url: string, detail = "") => {
       if (!alive.current || linkRef.current !== url) return;
       const { status, code } = await probe(url);
       if (!alive.current || linkRef.current !== url) return;
       const what = linkFailure(status, code);
+      const v = videoRef.current;
+      const engine = engineRef.current;
+      debugEvent("iptv-player", "stream failed", {
+        player: engine,
+        format: fmtRef.current,
+        mime: answerRef.current?.mime ?? null,
+        kind: answerRef.current?.kind ?? null,
+        status,
+        code,
+        detail,
+        mediaError: v?.error ? `${v.error.code} ${v.error.message}` : null,
+        readyState: v?.readyState,
+        networkState: v?.networkState,
+        size: v ? `${v.videoWidth}x${v.videoHeight}` : null,
+        time: v?.currentTime,
+        verdict: what,
+      });
+      void sendDebugReport();
+      const hls = what === "fatal" && status >= 200 && status < 300 ? fallbackFormat(isLive, fmtRef.current) : null;
+      if (hls) {
+        // Live TS connected but would not play: ask for the HLS variant once
+        fmtRef.current = hls;
+        debugEvent("iptv-player", "falling back to HLS", {}, "info");
+        teardown();
+        void start();
+        return;
+      }
       if (what === "renew" && !renewed.current) {
         renewed.current = true;
         if (!isLive && videoRef.current && videoRef.current.currentTime > 5) seekTo.current = videoRef.current.currentTime;
@@ -99,7 +134,7 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
       }
       teardown();
       if (what === "full") setState({ kind: "full", text: "Every connection to this provider is in use." });
-      else setState({ kind: "error", text: failureText(code, status === 0 ? "The server can't be reached." : "This stream stopped.") });
+      else setState({ kind: "error", text: failureText(code, playbackFailureText(engine, detail, status)) });
     },
     // start is defined below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +148,15 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
       const url = streamUrl(a.url);
       linkRef.current = url;
       const engine = engineFor(a.url, a.mime);
+      engineRef.current = engine;
+      answerRef.current = a;
+      debugEvent("iptv-player", "attach", { player: engine, mime: a.mime ?? null, kind: a.kind, format: fmtRef.current, canPlay: a.mime ? v.canPlayType(a.mime) : null }, "info");
+      watchRef.current = window.setTimeout(() => {
+        const el = videoRef.current;
+        if (!alive.current || linkRef.current !== url || !el || el.paused) return;
+        if (el.currentTime > 0.5 && el.videoWidth > 0) return;
+        void onLinkError(url, "no picture after 15 s");
+      }, NO_PICTURE_MS);
       if (engine === "mpegts") {
         const mpegts = (await loadMpegts()).default;
         if (!alive.current || linkRef.current !== url) return;
@@ -126,8 +170,9 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
           { enableWorker: false, lazyLoad: false, liveBufferLatencyChasing: a.kind === "live", liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5 },
         );
         tsRef.current = p;
-        p.on(mpegts.Events.ERROR, (type: string) => {
-          if (type === mpegts.ErrorTypes.NETWORK_ERROR || type === mpegts.ErrorTypes.MEDIA_ERROR) void onLinkError(url);
+        p.on(mpegts.Events.ERROR, (type: string, detail: string, info?: { code?: number; msg?: string }) => {
+          if (type === mpegts.ErrorTypes.NETWORK_ERROR || type === mpegts.ErrorTypes.MEDIA_ERROR)
+            void onLinkError(url, [type, detail, info?.code, info?.msg].filter((x) => x != null && x !== "").join(" "));
         });
         p.attachMediaElement(v);
         p.load();
@@ -141,7 +186,8 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
         const h = new H({ liveDurationInfinity: true, maxBufferLength: 30, backBufferLength: 30 });
         hlsRef.current = h;
         h.on(H.Events.ERROR, (_e, data) => {
-          if (data.fatal && hlsRef.current === h) void onLinkError(url);
+          if (data.fatal && hlsRef.current === h)
+            void onLinkError(url, [data.type, data.details, data.response?.code, data.error?.message].filter((x) => x != null && x !== "").join(" "));
         });
         h.loadSource(url);
         h.attachMedia(v);
@@ -153,8 +199,8 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
 
   const start = useCallback(async () => {
     setState({ kind: "loading" });
-    const fmt = isLive && !(await loadMpegts()).default.getFeatureList().mseLivePlayback ? "m3u8" : "ts";
-    const a = await play(playQuery(target, iptvDevice(), fmt));
+    if (isLive && fmtRef.current === "ts" && !(await loadMpegts()).default.getFeatureList().mseLivePlayback) fmtRef.current = "m3u8";
+    const a = await play(playQuery(target, iptvDevice(), fmtRef.current));
     if (!alive.current) return;
     if (a.status === 200 && a.data?.url) {
       setAnswer(a.data);
@@ -242,7 +288,7 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
           seekTo.current = 0;
           if (at > 0 && !isLive && at < (e.currentTarget.duration || Infinity) - 30) e.currentTarget.currentTime = at;
         }}
-        onError={() => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current)}
+        onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
       {state.kind === "loading" && <div className="spinner" />}
       {(state.kind === "error" || state.kind === "full") && (

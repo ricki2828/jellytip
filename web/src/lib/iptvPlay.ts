@@ -86,3 +86,17 @@ export function failureText(code: string | null | undefined, fallback: string): 
       return fallback;
   }
 }
+
+/** One more try as HLS when live TS connected but could not be played (mpegts.js limits: AC-3/E-AC-3 audio, HEVC, odd streams). */
+export function fallbackFormat(live: boolean, format: "ts" | "m3u8"): "m3u8" | null {
+  return live && format === "ts" ? "m3u8" : null;
+}
+
+/** Text for a stream that connected (or was cut short) but did not play. `detail` is the engine's own wording. */
+export function playbackFailureText(engine: Engine, detail: string, status: number): string {
+  if (status === 0) return "The server can't be reached.";
+  const d = detail ? ` (${detail})` : "";
+  if (engine === "native")
+    return `This phone can't play this file${d}. The server has no converted copy to offer; it may play on the TV app or on Plex.`;
+  return `This stream connected but the phone couldn't play it${d}.`;
+}
