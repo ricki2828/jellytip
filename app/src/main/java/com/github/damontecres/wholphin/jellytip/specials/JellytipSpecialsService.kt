@@ -164,7 +164,7 @@ private fun JellytipSpecial.keepVisible(items: Map<UUID, BaseItem>): JellytipSpe
     when (this) {
         is JellytipSpecial.TrailerBreak -> takeIf { itemId in items }
         is JellytipSpecial.TonightsPick -> takeIf { itemId in items }
-        is JellytipSpecial.PersonSpotlight -> copy(films = films.filter { it in items }).takeIf { it.films.isNotEmpty() }
+        is JellytipSpecial.PersonSpotlight -> copy(films = films.filter { it in items }).takeIf { it.films.isNotEmpty() || it.iptvItems.isNotEmpty() }
         is JellytipSpecial.Top10 -> copy(ranked = ranked.filter { it in items }).takeIf { it.ranked.size >= 3 }
         is JellytipSpecial.DoubleFeature -> copy(pairs = pairs.filter { it.a in items && it.b in items }).takeIf { it.pairs.isNotEmpty() }
         is JellytipSpecial.BecauseLoved -> copy(similar = similar.filter { it in items }).takeIf { anchorItemId in items && it.similar.isNotEmpty() }

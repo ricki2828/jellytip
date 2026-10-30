@@ -42,6 +42,8 @@ sealed interface JellytipSpecial {
         val filmCount: Int,
         val unwatchedCount: Int,
         val films: List<UUID>,
+        /** Their films that are not in the library but are on IPTV (shown after the library ones). */
+        val iptvItems: List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem> = emptyList(),
     ) : JellytipSpecial {
         override val itemIds get() = films
     }
@@ -212,7 +214,10 @@ object JellytipSpecialsParser {
 
             "person_spotlight" -> {
                 val films = o.uuids("itemIds")
-                if (films.isEmpty()) return null
+                val iptv =
+                    com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse
+                        .items(o.optJSONArray("iptvItems"), com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
+                if (films.isEmpty() && iptv.isEmpty()) return null
                 JellytipSpecial.PersonSpotlight(
                     id = id,
                     position = position,
@@ -224,6 +229,7 @@ object JellytipSpecialsParser {
                     filmCount = o.optInt("filmCount", films.size),
                     unwatchedCount = o.optInt("unwatchedCount", 0),
                     films = films,
+                    iptvItems = iptv,
                 )
             }
 

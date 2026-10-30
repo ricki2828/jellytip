@@ -309,6 +309,11 @@ private sealed interface PersonEntry {
     data class Film(
         val item: BaseItem,
     ) : PersonEntry
+
+    /** On IPTV, not in the library (after the library films; the tile carries the IPTV cue). */
+    data class Vod(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    ) : PersonEntry
 }
 
 @Composable
@@ -319,7 +324,10 @@ private fun PersonSpotlightRow(
     focusModifier: Modifier,
     actions: SpecialActions,
 ) {
-    val entries = remember(special, items) { listOf(PersonEntry.Portrait) + special.films.mapNotNull { items[it] }.map { PersonEntry.Film(it) } }
+    val entries =
+        remember(special, items) {
+            listOf(PersonEntry.Portrait) + special.films.mapNotNull { items[it] }.map { PersonEntry.Film(it) } + special.iptvItems.map { PersonEntry.Vod(it) }
+        }
     val sizes = rememberJellytipSizes()
     val service = LocalImageUrlService.current
     val density = LocalDensity.current
@@ -330,6 +338,7 @@ private fun PersonSpotlightRow(
             when (entry) {
                 PersonEntry.Portrait -> actions.navigate(Destination.MediaItem(special.personId, BaseItemKind.PERSON))
                 is PersonEntry.Film -> actions.click(entry.item)
+                is PersonEntry.Vod -> actions.navigate(Destination.JellytipIptvDetails(entry.item.id, entry.item.title))
             }
         },
         onLongClickItem = { _, entry -> if (entry is PersonEntry.Film) actions.open(entry.item) },
@@ -339,6 +348,17 @@ private fun PersonSpotlightRow(
             when (entry) {
                 is PersonEntry.Film -> {
                     PosterCard(entry.item, onClick, onLongClick, cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(entry.item, true) })
+                }
+
+                is PersonEntry.Vod -> {
+                    com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                        item = entry.item,
+                        width = SpecialTokens.POSTER_W,
+                        height = SpecialTokens.POSTER_H,
+                        poster = true,
+                        onClick = onClick,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                    )
                 }
 
                 else -> {
