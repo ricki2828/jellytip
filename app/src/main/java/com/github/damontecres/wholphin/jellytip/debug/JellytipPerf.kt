@@ -10,6 +10,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.view.FrameMetrics
 import android.view.Window
+import kotlinx.coroutines.launch
 
 /**
  * Frame stats for the TV (release and debug builds): every frame's total duration from FrameMetrics, summarised into
@@ -22,6 +23,23 @@ object JellytipPerf {
     private const val KEEP_LINES = 30 // 5 min of 10 s lines
 
     private val frameMs = ArrayList<Float>(1024)
+
+    /** Per screen since the process started: every window's frames attributed to the screen at its end. */
+    private class DestStats {
+        var windows = 0
+        var frames = 0
+        var janky = 0
+        var gc = 0L
+        var max = 0f
+
+        /** p90 of each 10 s window (the screen's p90 is reported as their median, its worst as the max). */
+        val p90s = ArrayList<Float>()
+    }
+
+    private val byDest = LinkedHashMap<String, DestStats>()
+
+    @Volatile
+    private var lastUpload = 0L
     private val lines = ArrayDeque<String>(KEEP_LINES)
     private val main = Handler(Looper.getMainLooper())
     private val marks = HashSet<String>()
@@ -106,6 +124,16 @@ object JellytipPerf {
                 runCatching { destination() }.getOrDefault("?").take(80),
             )
         JellytipTrace.log("perf", line)
+        val dest = runCatching { destination() }.getOrDefault("?").take(80)
+        synchronized(byDest) {
+            val d = byDest.getOrPut(dest) { DestStats() }
+            d.windows++
+            d.frames += sorted.size
+            d.janky += sorted.count { it > jankMs }
+            d.gc += gcDelta
+            d.max = maxOf(d.max, sorted.last())
+            if (d.p90s.size < 500) d.p90s += pct(0.9f)
+        }
         synchronized(lines) {
             if (lines.size >= KEEP_LINES) lines.removeFirst()
             lines.addLast("${System.currentTimeMillis()} $line")
@@ -119,6 +147,51 @@ object JellytipPerf {
         JellytipTrace.log("perf", "startup $name +${since}ms")
         synchronized(lines) { lines.addLast("${System.currentTimeMillis()} startup $name +${since}ms") }
     }
+
+    /**
+     * Per-screen totals since the process started, worst janky % first: {dest: {frames, jankyPct, p90Median, max, gc,
+     * windows}}. In every debug report, so screens can be ranked (plan "8h Block 5").
+     */
+    fun byDestination(): org.json.JSONObject {
+        val out = org.json.JSONObject()
+        synchronized(byDest) {
+            byDest.entries
+                .filter { it.value.frames > 0 }
+                .sortedByDescending { it.value.janky * 100f / it.value.frames }
+                .forEach { (dest, d) ->
+                    val p90 = d.p90s.sorted().let { if (it.isEmpty()) 0f else it[it.size / 2] }
+                    out.put(
+                        dest,
+                        org.json.JSONObject()
+                            .put("frames", d.frames)
+                            .put("jankyPct", Math.round(d.janky * 1000f / d.frames) / 10.0)
+                            .put("p90Median", Math.round(p90 * 10f) / 10.0)
+                            .put("max", Math.round(d.max))
+                            .put("gc", d.gc)
+                            .put("windows", d.windows),
+                    )
+                }
+        }
+        return out
+    }
+
+    /**
+     * Going to the background: at most every 6 h, and only after real use (2 000+ frames since the last one), send a
+     * "perf" debug report so frame stats reach the server without anyone pressing "Send debug report".
+     */
+    fun maybeUpload(context: android.content.Context) {
+        val frames = synchronized(byDest) { byDest.values.sumOf { it.frames } }
+        val now = System.currentTimeMillis()
+        if (frames < UPLOAD_MIN_FRAMES || now - lastUpload < UPLOAD_EVERY_MS) return
+        lastUpload = now
+        val app = context.applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { JellytipDebugReport.send(app, reason = "perf") }
+        }
+    }
+
+    private const val UPLOAD_MIN_FRAMES = 2_000
+    private const val UPLOAD_EVERY_MS = 6 * 3_600_000L
 
     /** The last 5 minutes of [perf] lines (and startup marks), for the debug report. */
     fun recent(): List<String> = synchronized(lines) { lines.toList() }

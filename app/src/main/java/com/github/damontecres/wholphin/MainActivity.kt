@@ -190,7 +190,11 @@ class MainActivity : AppCompatActivity() {
         Timber.i("MainActivity.onCreate: savedInstanceState is null=${savedInstanceState == null}")
         lifecycle.addObserver(playbackLifecycleObserver)
         com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.attach(this) {
-            navigationManager.backStack.lastOrNull()?.let { it::class.simpleName } ?: "-"
+            // Readable names in release builds (class names are minified: "ao1"); data class toString keeps the name
+            navigationManager.backStack.lastOrNull()?.let { d ->
+                val name = d.toString().substringBefore('(')
+                if (d is Destination.MediaItem) "$name:${d.type}:${d.collectionType ?: "-"}" else name
+            } ?: "-"
         }
 
         val backStackStr = savedInstanceState?.getString(KEY_BACK_STACK)
@@ -380,6 +384,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.setForeground(false)
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.maybeUpload(this)
         Timber.d("onStop")
         screensaverService.stop(true)
         tvProviderSchedulerService.launchOneTimeRefresh()
