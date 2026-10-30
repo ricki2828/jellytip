@@ -51,7 +51,7 @@ export function heroSources(rows: RowLike[], specials: SpecialLike[]): HeroSourc
     if (k && !r.iptvItems.length) add(k, r.itemIds);
   }
   for (const s of specials) {
-    if (s.layout === "tonights_pick") add("Tonight's pick", [(s as { itemId: string }).itemId]);
+    if (s.layout === "tonights_pick") add("Tonight's pick", [(s as { itemId: string | null }).itemId ?? ""].filter(Boolean));
     else if (s.layout === "person_spotlight") add(`${(s as { name: string }).name} spotlight`, (s as { itemIds: string[] }).itemIds);
     else if (s.layout === "because_loved") add("Because you loved it", [(s as { anchorItemId: string }).anchorItemId]);
     else if (s.layout === "top10") add("Top 10 today", (s as { itemIds: string[] }).itemIds);

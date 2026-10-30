@@ -4,6 +4,7 @@
 import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 import { parseVodItems, type VodItem } from "../lib/iptvVod";
+import { parseFeaturePairs } from "../lib/specialsIptv";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
@@ -424,7 +425,9 @@ export interface PersonSpotlight extends SpecialBase {
 }
 export interface TonightsPick extends SpecialBase {
   layout: "tonights_pick";
-  itemId: string;
+  /** null when the pick is an IPTV title (then `iptvItem` is set). */
+  itemId: string | null;
+  iptvItem?: VodItem | null;
   reason?: string;
   kicker?: string;
 }
@@ -435,7 +438,8 @@ export interface Top10 extends SpecialBase {
 }
 export interface DoubleFeature extends SpecialBase {
   layout: "double_feature";
-  pairs: { a: string; b: string; reason?: string; totalRuntimeMin?: number }[];
+  /** A half that is on IPTV rather than in the library has its id null and the title in aIptv / bIptv. */
+  pairs: { a: string | null; b: string | null; aIptv?: VodItem | null; bIptv?: VodItem | null; reason?: string; totalRuntimeMin?: number }[];
 }
 export interface BecauseLoved extends SpecialBase {
   layout: "because_loved";
@@ -487,9 +491,18 @@ const specialsCache = cached<Special[]>(async (key, job) => {
       ...s,
       position: Math.max(0, Number(s.position) || 0),
       untitled: Array.isArray(s.untitled) ? s.untitled.filter((x) => typeof x === "string") : undefined,
-      ...(s.layout === "person_spotlight" ? { iptvItems: parseVodItems((s as { iptvItems?: unknown }).iptvItems) } : {}),
-    }));
+      ...specialExtras(s),
+    }) as Special);
 });
+
+/** Layout-specific fields that need parsing (IPTV titles in specials). */
+function specialExtras(s: Partial<Special>): Record<string, unknown> {
+  const raw = s as { iptvItems?: unknown; iptvItem?: unknown; itemId?: unknown; pairs?: unknown };
+  if (s.layout === "person_spotlight") return { iptvItems: parseVodItems(raw.iptvItems) };
+  if (s.layout === "tonights_pick") return { iptvItem: parseVodItems([raw.iptvItem])[0] ?? null, itemId: typeof raw.itemId === "string" && raw.itemId ? raw.itemId : null };
+  if (s.layout === "double_feature") return { pairs: parseFeaturePairs(raw.pairs) };
+  return {};
+}
 
 export function specials(page: SpecialsPage): Promise<Special[]> {
   return specialsCache.get(`${page}|${today()}`, { priority: "high" }).then((s) => s ?? []);

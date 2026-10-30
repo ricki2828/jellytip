@@ -8,7 +8,7 @@ import { go } from "../lib/router";
 import { Card } from "./Card";
 import { useLazyItems } from "./Row";
 import { IptvCard } from "./IptvTile";
-import { iptvPart, type IptvPart } from "../lib/iptvVod";
+import { iptvPart, type IptvPart, type VodItem } from "../lib/iptvVod";
 import "./FranchiseRow.css";
 
 const CARD_W = 320;
@@ -41,9 +41,12 @@ interface Props {
   untitled?: Set<string>;
   onFocusItem?: (item: Item) => void;
   autoFocusFirst?: boolean;
+  /** Row-level IPTV titles with `order` (library ids undashed, vod ids) in part order: the server's own slotting. */
+  iptvItems?: VodItem[];
+  order?: string[];
 }
 
-export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem, autoFocusFirst }: Props) {
+export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem, autoFocusFirst, iptvItems, order }: Props) {
   const ref = useRef<HTMLElement>(null);
   const items = useLazyItems(ref, undefined, load);
   const phone = useIsPhone();
@@ -55,8 +58,30 @@ export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem
 
   // Parts the library lacks but the person's IPTV has slot in at their place in the series (dot = via IPTV)
   const iptv = c.partsOrder.map((p, i) => ({ part: iptvPart(p), n: i + 1 })).filter((x): x is { part: IptvPart; n: number } => !!x.part);
+  const undash = (id: string) => id.replace(/-/g, "").toLowerCase();
   const tiles: ({ item: Item } | { part: IptvPart; n: number })[] | null = items
-    ? iptv.length
+    ? iptvItems?.length && order?.length
+      ? (() => {
+          const lib = new Map(items.map((it) => [undash(it.Id), it]));
+          const vod = new Map(iptvItems.map((v) => [undash(v.id), v]));
+          const out: ({ item: Item } | { part: IptvPart; n: number })[] = [];
+          order.forEach((id, i) => {
+            const it = lib.get(undash(id));
+            if (it) {
+              out.push({ item: it });
+              lib.delete(undash(id));
+              return;
+            }
+            const v = vod.get(undash(id));
+            if (v) {
+              out.push({ part: v as IptvPart, n: i + 1 });
+              vod.delete(undash(id));
+            }
+          });
+          // Anything the order didn't name goes last
+          return [...out, ...[...lib.values()].map((item) => ({ item })), ...[...vod.values()].map((v) => ({ part: v as IptvPart, n: 0 }))];
+        })()
+      : iptv.length
       ? (() => {
           const byId = new Map(items.map((it) => [it.Id, it]));
           const out: ({ item: Item } | { part: IptvPart; n: number })[] = [];
@@ -100,7 +125,7 @@ export function FranchiseRow({ title, collection: c, load, untitled, onFocusItem
         {tiles
           ? tiles.map((t, i) =>
               "part" in t ? (
-                <IptvCard key={t.part.id} item={{ ...t.part, quality: t.part.quality ?? [] }} width={width} tag={String(t.n)} />
+                <IptvCard key={t.part.id} item={{ ...t.part, quality: t.part.quality ?? [] }} width={width} tag={t.n ? String(t.n) : undefined} />
               ) : (
                 <Card
                   key={t.item.Id}

@@ -74,11 +74,11 @@ window.addEventListener("jellytip-session", () => known.clear());
 
 export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item) => void; autoFocusFirst?: boolean } = {}) {
   if (r.id.startsWith("trending-top10")) return <TrendingRow key={r.id} row={r} />;
-  if (r.iptvItems.length && !r.itemIds.length) return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
+  if (r.iptvItems.length && !r.itemIds.length && r.layout !== "franchise") return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
   const load = () => itemsByIds(r.itemIds);
   const untitled = r.untitled.length ? new Set(r.untitled) : undefined;
   if (r.layout === "franchise" && r.collection)
-    return <FranchiseRow key={r.id} title={r.title} collection={r.collection} load={load} untitled={untitled} {...opts} />;
+    return <FranchiseRow key={r.id} title={r.title} collection={r.collection} load={load} untitled={untitled} iptvItems={r.iptvItems} order={r.order} {...opts} />;
   const person = r.person;
   // My list and other mixed rows: in the server's `order` when it sends one, else library items first, then the IPTV titles
   const extra = r.iptvItems.length ? r.iptvItems.map((it) => ({ id: it.id, node: <IptvTile key={it.id} item={it} poster={r.layout === "poster"} /> })) : undefined;

@@ -16,7 +16,7 @@ type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "back
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
 /** TMDB art, or provider art through the companion's image proxy; raw provider URLs never load (CSP, privacy). */
-const safeArt = (u: string | null | undefined) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u));
+export const safeArt = (u: string | null | undefined) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u));
 
 export function IptvDot() {
   return <span className="iptv-corner-dot" aria-hidden title="via IPTV" />;

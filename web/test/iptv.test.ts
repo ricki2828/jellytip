@@ -204,3 +204,20 @@ test("native link: direct answers keep the provider URL, companion links become 
   // A direct flag on a relative link is not trusted as a provider URL
   assert.deepEqual(nativeLink({ url: "v1/iptv/s/x.ts", direct: true }, abs), { url: "https://c.example/v1/iptv/s/x.ts", direct: false });
 });
+
+import { parseFeaturePairs } from "../src/lib/specialsIptv.ts";
+
+test("double feature: IPTV halves parse, pairs missing a half drop", () => {
+  const v = { id: "3:m:9", title: "Léon", year: 1994, quality: ["1080p"] };
+  const pairs = parseFeaturePairs([
+    { a: "lib1", b: null, bIptv: v, reason: "r" },
+    { a: "lib2", b: "lib3" },
+    { a: "lib4", b: null },
+    { a: null, b: null, aIptv: v },
+  ]);
+  assert.equal(pairs.length, 2);
+  assert.equal(pairs[0].b, null);
+  assert.equal(pairs[0].bIptv?.title, "Léon");
+  assert.equal(pairs[1].a, "lib2");
+  assert.deepEqual(parseFeaturePairs(null), []);
+});

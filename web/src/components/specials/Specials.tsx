@@ -30,7 +30,9 @@ import { Backdrop } from "../Backdrop";
 import { Card } from "../Card";
 import { ScoreLine } from "../ScoreLine";
 import { infoLine, TitleLogo } from "../TitleBlock";
-import { IptvPoster } from "../IptvTile";
+import { IptvCard, IptvDot, IptvPoster, safeArt } from "../IptvTile";
+import { tmdbSized } from "../FranchiseRow";
+import { vodPath, type VodItem } from "../../lib/iptvVod";
 import { PosterCard } from "../PosterCard";
 import { GetItSheet } from "../GetItSheet";
 import { filmCount, PersonTile } from "../PersonTile";
@@ -277,7 +279,7 @@ function PersonSpotlightBlock({ s }: { s: PersonSpotlight }) {
 // ---------- tonights_pick ----------
 
 function TonightsPickBlock({ s }: { s: TonightsPick }) {
-  const item = useItems([s.itemId])?.[0];
+  const item = useItems([s.itemId ?? ""])?.[0];
   const pick = useSpecialStill(item);
   if (!item) return null;
   return (
@@ -295,6 +297,32 @@ function TonightsPickBlock({ s }: { s: TonightsPick }) {
       <div className="tp-actions">
         <button className="btn primary" data-nav onClick={() => go(`/play/${item.Id}`)}>
           Play
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** Tonight's pick that is on the person's IPTV: its backdrop, the same reason and kicker, the "via IPTV" cue. */
+function IptvPickBlock({ s, v }: { s: TonightsPick; v: VodItem }) {
+  const art = tmdbSized(safeArt(v.backdrop) ?? safeArt(v.poster), "w1280");
+  const info = [v.year, v.rating ? `★ ${v.rating.toFixed(1)}` : null, ...(v.quality ?? []).slice(0, 1)].filter(Boolean).join("  ·  ");
+  return (
+    <section className="special tonights-pick">
+      <button className="tp-card" data-nav onClick={() => go(vodPath(v.id))} aria-label={`Tonight's pick: ${v.title}, via IPTV`}>
+        <Backdrop url={art} focal={null} />
+        <span className="tp-scrim" />
+        <span className="tp-text">
+          <span className="kicker">{s.kicker || s.title || "Tonight's pick"}</span>
+          <strong className="tp-iptv-title">{v.title}</strong>
+          {s.reason && <em className="reason">{s.reason}</em>}
+          <span className="line">{info}</span>
+        </span>
+        <IptvDot />
+      </button>
+      <div className="tp-actions">
+        <button className="btn primary" data-nav onClick={() => go(vodPath(v.id))}>
+          {v.kind === "series" ? "View" : "Play"}
         </button>
       </div>
     </section>
@@ -337,45 +365,55 @@ const PHONE_PAIR_HALF_W = 168;
  * Each pair is one framed unit with two halves you pick separately (as on the TV): 1 | 2, each a normal titled tile
  * that opens its own film; details opened from a pair offer "Play both" (that film first). Caption shared below.
  */
+type Half = { lib: Item; iptv?: undefined } | { iptv: VodItem; lib?: undefined };
+
 function DoubleFeatureBlock({ s }: { s: DoubleFeature }) {
-  const ids = s.pairs.flatMap((p) => [p.a, p.b]);
+  const ids = s.pairs.flatMap((p) => [p.a, p.b]).filter((x): x is string => !!x);
   const items = useItems(ids);
   const phone = useIsPhone();
   if (!items) return null;
   const byId = new Map(items.map((i) => [i.Id, i]));
-  const pairs = s.pairs.filter((p) => byId.has(p.a) && byId.has(p.b));
+  const half = (id: string | null, v?: VodItem | null): Half | null => (id ? (byId.has(id) ? { lib: byId.get(id)! } : null) : v ? { iptv: v } : null);
+  const pairs = s.pairs
+    .map((p) => ({ p, a: half(p.a, p.aIptv), b: half(p.b, p.bIptv) }))
+    .filter((x): x is { p: DoubleFeature["pairs"][number]; a: Half; b: Half } => !!x.a && !!x.b);
   if (!pairs.length) return null;
   const untitled = untitledSet(s);
   const w = phone ? PHONE_PAIR_HALF_W : PAIR_HALF_W;
+  const name = (h: Half) => h.lib?.Name ?? h.iptv!.title;
+  const idOf = (h: Half) => h.lib?.Id ?? h.iptv!.id;
   return (
     <section className="special row double-feature">
       <SpecialHeader kicker="Double feature" title={s.title} />
       <div className="row-scroll">
-        {pairs.map((p) => {
-          const a = byId.get(p.a)!;
-          const b = byId.get(p.b)!;
+        {pairs.map(({ p, a, b }) => {
           const runtime = p.totalRuntimeMin ? runtimeText(p.totalRuntimeMin * 60 * 10_000_000) : null;
           return (
-            <div key={`${p.a}-${p.b}`} className="pair-unit" role="group" aria-label={`Double feature: ${a.Name} and ${b.Name}`}>
+            <div key={`${idOf(a)}-${idOf(b)}`} className="pair-unit" role="group" aria-label={`Double feature: ${name(a)} and ${name(b)}`}>
               <div className="pair-halves">
                 {[
                   [a, b],
                   [b, a],
-                ].map(([one, other], n) => (
-                  <Card
-                    key={one.Id}
-                    item={one}
-                    width={w}
-                    tag={String(n + 1)}
-                    untitled={untitled.has(one.Id)}
-                    label={`${n + 1} of 2: ${one.Name} (double feature with ${other.Name})`}
-                    onOpen={() => go(`/item/${one.Id}?pair=${other.Id}`)}
-                  />
-                ))}
+                ].map(([one, other], n) =>
+                  one.lib ? (
+                    <Card
+                      key={one.lib.Id}
+                      item={one.lib}
+                      width={w}
+                      tag={String(n + 1)}
+                      untitled={untitled.has(one.lib.Id)}
+                      label={`${n + 1} of 2: ${name(one)} (double feature with ${name(other)})`}
+                      // "Play both" needs both in the library; with an IPTV half each opens on its own
+                      onOpen={() => go(other.lib ? `/item/${one.lib!.Id}?pair=${other.lib.Id}` : `/item/${one.lib!.Id}`)}
+                    />
+                  ) : (
+                    <IptvCard key={one.iptv.id} item={one.iptv} width={w} tag={String(n + 1)} />
+                  ),
+                )}
               </div>
               <span className="pair-caption">
                 <strong>
-                  {a.Name} + {b.Name}
+                  {name(a)} + {name(b)}
                 </strong>
                 {(p.reason || runtime) && <span>{[p.reason, runtime && `${runtime} together`].filter(Boolean).join("  ·  ")}</span>}
               </span>
@@ -577,7 +615,7 @@ export function SpecialBlock({ s }: { s: Special }) {
     case "person_spotlight":
       return <PersonSpotlightBlock s={s} />;
     case "tonights_pick":
-      return <TonightsPickBlock s={s} />;
+      return !s.itemId && s.iptvItem ? <IptvPickBlock s={s} v={s.iptvItem} /> : s.itemId ? <TonightsPickBlock s={s} /> : null;
     case "top10":
       return <Top10Block s={s} />;
     case "double_feature":
