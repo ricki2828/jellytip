@@ -103,6 +103,28 @@ class JellytipIptvPlayback
         /** Channels of the guide tab that opened full screen, so Up/Down there zaps through the same list. */
         var lineup: List<IptvChannel> = emptyList()
 
+        /**
+         * Other channels showing the same event, per lineup channel id, best first: full screen falls to the next one when
+         * a stream fails (live-sport plan §4). Empty = no fallback.
+         */
+        var alternates: Map<String, List<IptvChannel>> = emptyMap()
+
+        /** OK on an "on now" card (Home row, guide strip): lineup = the cards, [channel] = the card's channel or an alternate. */
+        fun openOnNow(
+            card: IptvOnNow,
+            all: List<IptvOnNow>,
+            channel: IptvChannel,
+            reason: String,
+        ) {
+            lineup = all.map { if (it === card) channel else it.channel }
+            alternates =
+                all.associate { o ->
+                    val main = if (o === card) channel else o.channel
+                    main.id to (listOf(o.channel) + o.alternates).filter { it.id != main.id }
+                }
+            play(IptvTarget(channel.id, channel.name), reason)
+        }
+
         /** Channel the full-screen player was on when it closed: the guide lands on it (and keeps it playing). */
         var lastFullScreenChannel: String? = null
 

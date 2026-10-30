@@ -57,16 +57,19 @@ class JellytipOnNowViewModel
         val playback: JellytipIptvPlayback,
         val navigationManager: NavigationManager,
     ) : ViewModel() {
-        /** OK on an "on now" card: full screen with sound, Up/Down zapping through the cards' channels. */
+        /**
+         * OK on an "on now" card: full screen with sound, Up/Down zapping through the cards' channels. [channel] = one
+         * of the card's alternates (long-press menu) instead of its main channel.
+         */
         fun open(
             o: IptvOnNow,
             all: List<IptvOnNow>,
             reason: String,
+            channel: IptvChannel = o.channel,
         ) {
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-            playback.lineup = all.map { it.channel }
-            playback.play(IptvTarget(o.channel.id, o.channel.name), reason)
-            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(o.channel.id), reason)
+            playback.openOnNow(o, all, channel, reason)
+            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(channel.id), reason)
         }
     }
 
@@ -79,9 +82,11 @@ fun OnNowCard(
     height: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
@@ -115,22 +120,22 @@ fun OnNowCard(
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Old server (no kind): every card is LIVE, as before
+                    KindPill(o.kind, legacyLive = true)
+                    if (o.sport) SportMark(androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.8f), 11.dp)
                     Text(
-                        text = "LIVE",
-                        color = Color.White,
-                        fontFamily = JellytipFontFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 9.sp,
-                        letterSpacing = 0.6.sp,
-                        modifier = Modifier.background(JellytipPalette.Jelly, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
-                    )
-                    Text(
-                        text = o.channel.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), ""),
+                        text =
+                            listOfNotNull(
+                                o.channel.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), ""),
+                                alsoOnText(o.alternates.size),
+                            ).joinToString("  ·  "),
                         fontFamily = JellytipFontFamily,
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    QualityChips(o.channel.quality)
                 }
                 Text(o.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val frac = ((now - o.start).toFloat() / (o.stop - o.start).coerceAtLeast(1)).coerceIn(0f, 1f)
@@ -142,23 +147,50 @@ fun OnNowCard(
     }
 }
 
-/** The guide's "On now" strip (above the tabs): live sport first, then the server's order. */
+/** The guide's "On now" strip (above the tabs), in the server's order (old server: live sport first). Long-press = alternates. */
 @Composable
 fun OnNowStrip(
     items: List<IptvOnNow>,
     now: Long,
-    onOpen: (IptvOnNow) -> Unit,
+    onOpen: (IptvOnNow, IptvChannel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var menu by remember { mutableStateOf<IptvOnNow?>(null) }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 4.dp),
         modifier = modifier.fillMaxWidth().focusGroup().focusRestorer(),
     ) {
         items(items, key = { it.channel.id }) { o ->
-            OnNowCard(o, now, 230.dp, 56.dp, onClick = { onOpen(o) })
+            OnNowCard(
+                o,
+                now,
+                230.dp,
+                56.dp,
+                onClick = { onOpen(o, o.channel) },
+                onLongClick = if (o.alternates.isNotEmpty()) ({ menu = o }) else null,
+            )
         }
     }
+    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> onOpen(o, ch) }, onDismiss = { menu = null }) }
+}
+
+/** Long-press on an event card: watch it on the main channel or any alternate (best first, as the server ranked them). */
+@Composable
+fun AlternatesMenu(
+    o: IptvOnNow,
+    onPick: (IptvChannel) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val items =
+        (listOf(o.channel) + o.alternates).map { ch ->
+            val q = listOfNotNull(ch.quality?.label, ch.quality?.audioLabel, if (ch.quality?.slow == true) "may buffer" else null)
+            com.github.damontecres.wholphin.ui.components.DialogItem(
+                listOf(ch.name, q.joinToString(" ")).filter { it.isNotBlank() }.joinToString("  ·  "),
+                dismissOnClick = true,
+            ) { onPick(ch) }
+        }
+    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = o.title, dialogItems = items, onDismissRequest = onDismiss)
 }
 
 /** Home: "Live sport on now" — only when at least two sport channels are live (people without IPTV get nothing). */
@@ -175,6 +207,7 @@ fun JellytipLiveSportRow(
             value = nowSec()
         }
     }
+    var menu by remember { mutableStateOf<IptvOnNow?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Live sport on now")
         LazyRow(
@@ -190,10 +223,12 @@ fun JellytipLiveSportRow(
                     72.dp,
                     onClick = { viewModel.open(o, items, "home live sport OK") },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
+                    onLongClick = if (o.alternates.isNotEmpty()) ({ menu = o }) else null,
                 )
             }
         }
     }
+    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> viewModel.open(o, items, "home live sport alternate", ch) }, onDismiss = { menu = null }) }
 }
 
 /** Live sport for Home: the last answer at once (no late insert), refreshed for next time. */

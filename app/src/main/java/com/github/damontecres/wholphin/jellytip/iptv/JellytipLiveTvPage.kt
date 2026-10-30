@@ -455,7 +455,14 @@ fun JellytipLiveTvPage(
         ch: IptvChannel,
         target: IptvTarget = IptvTarget(ch.id, ch.name),
     ) {
-        playback.lineup = state.channels.orEmpty()
+        val chans = state.channels.orEmpty()
+        playback.lineup = chans
+        // Same-event alternates the server named (plan §4); ones outside this tab get a minimal channel to tune
+        val byId = chans.associateBy { it.id }
+        playback.alternates =
+            chans.filter { it.alternates.isNotEmpty() }.associate { c ->
+                c.id to c.alternates.filter { it != c.id }.map { id -> byId[id] ?: IptvParse.altChannel(id, c) }
+            }
         playback.play(target, if (target.start != null) "guide OK (catch-up)" else "guide OK")
         viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide OK on ${ch.name}")
     }
@@ -564,10 +571,9 @@ fun JellytipLiveTvPage(
             OnNowStrip(
                 items = onNowList,
                 now = now,
-                onOpen = { o ->
-                    playback.lineup = onNowList.map { it.channel }
-                    playback.play(IptvTarget(o.channel.id, o.channel.name), "guide on-now OK")
-                    viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(o.channel.id), "guide on-now OK ${o.channel.name}")
+                onOpen = { o, ch ->
+                    playback.openOnNow(o, onNowList, ch, "guide on-now OK")
+                    viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide on-now OK ${ch.name}")
                 },
                 modifier = Modifier.onFocusChanged { onNowFocused = it.hasFocus },
             )
@@ -849,13 +855,18 @@ private fun FocusInfo(
     modifier: Modifier,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
-        Text(
-            text = listOfNotNull(ch?.num?.toString(), ch?.name).joinToString("  "),
-            color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
-            fontFamily = JellytipFontFamily,
-            fontSize = 13.sp,
-            maxLines = 1,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (prog?.kind != "live" || prog?.isOn(now) == true) KindPill(prog?.kind)
+            if (ch?.sport == true || prog?.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.7f), 13.dp)
+            Text(
+                text = listOfNotNull(ch?.num?.toString(), ch?.name, ch?.let { alsoOnText(it.alternates.size) }).joinToString("  "),
+                color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
+                fontFamily = JellytipFontFamily,
+                fontSize = 13.sp,
+                maxLines = 1,
+            )
+            QualityChips(ch?.quality)
+        }
         Text(
             text = prog?.title ?: ch?.let { it.guideNote ?: "No guide information" } ?: "",
             color = JellytipPalette.Vanilla,
@@ -940,15 +951,24 @@ private fun ChannelCell(
                 )
             }
         }
-        Text(
-            text = (if (ch.favourite) "★ " else "") + ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), ""),
-            color = JellytipPalette.Vanilla.copy(alpha = if (focusedRow) 1f else 0.75f),
-            fontFamily = JellytipFontFamily,
-            fontWeight = if (focusedRow) FontWeight.Medium else FontWeight.Normal,
-            fontSize = 13.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val q = ch.quality
+        val hasChips = q != null && (q.label != null || q.audioLabel != null || q.slow)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (ch.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.7f), 11.dp)
+                Text(
+                    text = (if (ch.favourite) "★ " else "") + ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), ""),
+                    color = JellytipPalette.Vanilla.copy(alpha = if (focusedRow) 1f else 0.75f),
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = if (focusedRow) FontWeight.Medium else FontWeight.Normal,
+                    fontSize = 13.sp,
+                    // Room for the quality line below when the channel was probed
+                    maxLines = if (hasChips) 1 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (hasChips) QualityChips(q)
+        }
     }
 }
 
@@ -993,6 +1013,8 @@ private fun ProgCell(
             modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 8.dp),
         ) {
             if (recorded) Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
+            // LIVE only while it is on; REPLAY whenever the server says so
+            if (prog.kind != "live" || onNow) KindPill(prog.kind)
             Text(
                 text = (if (catchUp) "↺ " else "") + prog.title.ifEmpty { note ?: "No guide information" },
                 fontFamily = JellytipFontFamily,

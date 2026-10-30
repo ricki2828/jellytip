@@ -33,7 +33,66 @@ data class IptvChannel(
     val event: Boolean? = null,
     /** e.g. "Event feed, live when on" | "No guide for this channel". */
     val guideNote: String? = null,
+    /** Probed stream quality (live-sport plan §1); null = old server or never probed. */
+    val quality: IptvQuality? = null,
+    /** Server: a sport channel (sport icon); null = not said. */
+    val sport: Boolean? = null,
+    /** Same event on other channels, best first (`event.alternates`); empty = none known. */
+    val alternates: List<String> = emptyList(),
 )
+
+/** "also on 2 channels" for a card that stands for an event shown on several channels. */
+fun alsoOnText(alternates: Int): String? =
+    when {
+        alternates <= 0 -> null
+        alternates == 1 -> "also on 1 channel"
+        else -> "also on $alternates channels"
+    }
+
+/**
+ * Probed stream quality (`quality: {bucket, height, fps, audio, checkedAt}`, ~/ai/plans/jellytip-live-sport.md §1/1b).
+ * Buckets: uhd, fhd50, fhd, hd, sd, slow, dead, unknown. Audio: atmos, 5.1, stereo.
+ */
+data class IptvQuality(
+    val bucket: String?,
+    val height: Int?,
+    val fps: Double?,
+    val audio: String?,
+) {
+    /** Tile chip: UHD / 1080 50fps / 1080 / 720 / SD; a slow channel is labelled by its resolution. Null = no chip. */
+    val label: String?
+        get() =
+            when (bucket) {
+                "uhd" -> "UHD"
+                "fhd50" -> "1080 50fps"
+                "fhd" -> "1080"
+                "hd" -> "720"
+                "sd" -> "SD"
+                "slow" ->
+                    height?.let {
+                        when {
+                            it >= 2000 -> "UHD"
+                            it >= 1000 -> "1080"
+                            it >= 700 -> "720"
+                            it > 0 -> "SD"
+                            else -> null
+                        }
+                    }
+                else -> null
+            }
+
+    /** ATMOS / 5.1; nothing for stereo or unknown. */
+    val audioLabel: String?
+        get() =
+            when (audio?.lowercase()) {
+                "atmos" -> "ATMOS"
+                "5.1" -> "5.1"
+                else -> null
+            }
+
+    /** Delivered below real time on recent checks: show "may buffer". */
+    val slow get() = bucket == "slow"
+}
 
 /** One guide programme; times are epoch seconds. */
 data class IptvProg(
@@ -42,6 +101,9 @@ data class IptvProg(
     val title: String,
     val desc: String?,
     val catchup: Boolean,
+    /** live | replay | highlights | other (server, live-sport plan §2); null = old server. */
+    val kind: String? = null,
+    val sport: Boolean? = null,
 ) {
     fun isOn(at: Long) = at in start until stop
 }
@@ -114,6 +176,10 @@ data class IptvOnNow(
     val start: Long,
     val stop: Long,
     val sport: Boolean,
+    /** live | replay | highlights | other; null = old server (the card shows LIVE as before). */
+    val kind: String? = null,
+    /** Other channels showing the same event, best first (already collapsed into this one card). */
+    val alternates: List<IptvChannel> = emptyList(),
 )
 
 /** What a `/play` call came back with. */
@@ -164,9 +230,27 @@ object IptvParse {
             epgId = o.str("epgId"),
             catchupDays = o.optInt("catchupDays", 0),
             favourite = o.optBoolean("favourite", false),
-            event = if (o.has("event") && !o.isNull("event")) o.optBoolean("event") else null,
+            event = if (o.has("event") && !o.isNull("event") && o.opt("event") is Boolean) o.optBoolean("event") else null,
             guideNote = o.str("guideNote"),
+            quality = quality(o.optJSONObject("quality")),
+            sport = if (o.has("sport") && !o.isNull("sport")) o.optBoolean("sport") else null,
+            alternates = alternates(o.optJSONObject("event")),
         )
+    }
+
+    fun quality(o: JSONObject?): IptvQuality? {
+        o ?: return null
+        return IptvQuality(
+            bucket = o.str("bucket"),
+            height = if (o.isNull("height")) null else o.optInt("height", 0).takeIf { it > 0 },
+            fps = if (o.isNull("fps")) null else o.optDouble("fps").takeIf { !it.isNaN() && it > 0 },
+            audio = o.str("audio"),
+        )
+    }
+
+    private fun alternates(event: JSONObject?): List<String> {
+        val a = event?.optJSONArray("alternates") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i -> a.opt(i)?.let { v -> (v as? JSONObject)?.str("id") ?: (v as? String) }?.takeIf { it.isNotBlank() } }
     }
 
     fun channels(
@@ -198,34 +282,74 @@ object IptvParse {
             }
         val out = ArrayList<IptvOnNow>()
         val seen = HashSet<String>()
+        val events = HashMap<String, Int>() // event key -> index in out
+        val byId = HashMap<String, IptvChannel>()
+        var ranked = false // the new server ranks (plan §4): keep its order exactly
         for (i in 0 until list.length()) {
             val c = list.optJSONObject(i) ?: continue
             val chObj = c.optJSONObject("channel") ?: c
             val p = c.optJSONObject("now") ?: c.optJSONObject("programme") ?: c.optJSONObject("program") ?: continue
-            val ch = channel(chObj, resolve) ?: continue
+            val base = channel(chObj, resolve) ?: continue
+            // Quality / event may sit on the item instead of the channel object
+            val event = c.optJSONObject("event") ?: chObj.optJSONObject("event")
+            val ch =
+                base.copy(
+                    quality = base.quality ?: quality(c.optJSONObject("quality")),
+                    alternates = base.alternates.ifEmpty { alternates(event) },
+                )
+            byId[ch.id] = ch
             if (!seen.add(ch.id)) continue
             val start = p.longOrNull("start") ?: continue
             val stop = p.longOrNull("stop") ?: continue
             val title = p.str("title") ?: continue
             if (now !in start until stop) continue
+            val kind = p.str("kind") ?: c.str("kind")
+            if (kind != null || ch.quality != null || event != null) ranked = true
             val explicit =
                 when {
+                    p.has("sport") && !p.isNull("sport") -> p.optBoolean("sport")
                     c.has("sport") && !c.isNull("sport") -> c.optBoolean("sport")
                     chObj.has("sport") && !chObj.isNull("sport") -> chObj.optBoolean("sport")
                     else -> null
                 }
+            // One card per event: later channels of the same event become its alternates
+            val key = event?.str("key")
+            val firstOfEvent = key?.let { events[it] }
+            if (firstOfEvent != null) {
+                val f = out[firstOfEvent]
+                if (f.channel.alternates.none { it == ch.id }) {
+                    out[firstOfEvent] = f.copy(channel = f.channel.copy(alternates = f.channel.alternates + ch.id))
+                }
+                continue
+            }
             val hint = listOfNotNull(c.str("genre"), c.str("category"), chObj.str("groupName"), ch.group, ch.name, title).joinToString(" ")
-            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint))
+            if (key != null) events[key] = out.size
+            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint), kind)
         }
-        return out.filter { it.sport } + out.filter { !it.sport }
+        val resolved = out.map { o -> o.copy(alternates = o.channel.alternates.filter { it != o.channel.id }.map { id -> byId[id] ?: altChannel(id, o.channel) }) }
+        return if (ranked) resolved else resolved.filter { it.sport } + resolved.filter { !it.sport }
     }
+
+    /** An alternate the answer named but did not describe: enough to tune it (name from the main channel). */
+    fun altChannel(
+        id: String,
+        main: IptvChannel,
+    ): IptvChannel = IptvChannel(id, id.substringBefore(':'), null, "${main.name} (alt)", null, main.group, null, 0, false)
 
     fun prog(o: JSONObject?): IptvProg? {
         o ?: return null
         val start = o.longOrNull("start") ?: return null
         val stop = o.longOrNull("stop") ?: return null
         if (stop <= start) return null
-        return IptvProg(start, stop, o.str("title") ?: "", o.str("desc"), o.optBoolean("catchup", false))
+        return IptvProg(
+            start,
+            stop,
+            o.str("title") ?: "",
+            o.str("desc"),
+            o.optBoolean("catchup", false),
+            kind = o.str("kind"),
+            sport = if (o.has("sport") && !o.isNull("sport")) o.optBoolean("sport") else null,
+        )
     }
 
     /** `/epg` answer: programmes per channel, sorted, overlaps trimmed so cells never stack. */

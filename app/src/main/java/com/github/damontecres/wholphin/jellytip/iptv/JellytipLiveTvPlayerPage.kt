@@ -98,13 +98,16 @@ fun JellytipLiveTvPlayerPage(
     var bannerTick by remember { mutableIntStateOf(1) }
     var bannerVisible by remember { mutableStateOf(true) }
     val focus = remember { FocusRequester() }
-    val channel = lineup[index]
+    // Same-event alternate in use after the lineup channel's stream failed (plan §4); null = the lineup channel
+    var fallback by remember { mutableStateOf<IptvChannel?>(null) }
+    val tried = remember { mutableSetOf<String>() }
+    val channel = fallback ?: lineup[index]
 
     DisposableEffect(Unit) {
         playback.attach("full")
         playback.setVolume(1f)
         onDispose {
-            playback.lastFullScreenChannel = lineup[index].id
+            playback.lastFullScreenChannel = (fallback ?: lineup[index]).id
             playback.detach("full")
         }
     }
@@ -126,10 +129,27 @@ fun JellytipLiveTvPlayerPage(
     // Zap: open the stream once the choice has settled
     LaunchedEffect(index) {
         val ch = lineup[index]
+        fallback = null
+        tried.clear()
+        tried += ch.id
         val target = if (index == startIndex && opened != null) opened else IptvTarget(ch.id, ch.name)
         current = target
         if (playback.state.value.target != target) delay(ZAP_SETTLE_MS)
         playback.play(target, "full screen settle")
+    }
+    // The stream failed: try the same event on its next-best channel (each alternate once per zap)
+    LaunchedEffect(playState) {
+        val failed = playState as? IptvPlayState.Failed ?: return@LaunchedEffect
+        if (failed.target != current || !current.isLive) return@LaunchedEffect
+        val base = lineup[index]
+        val next = playback.alternates[base.id].orEmpty().firstOrNull { it.id !in tried } ?: return@LaunchedEffect
+        tried += next.id
+        JellytipTrace.player("iptv", "full screen ${current.channelId} failed: alternate ${next.id} ${next.name}")
+        fallback = next
+        val target = IptvTarget(next.id, next.name)
+        current = target
+        bannerTick++
+        playback.play(target, "alternate after failure")
     }
     LaunchedEffect(bannerTick) {
         bannerVisible = true
@@ -231,14 +251,19 @@ private fun NowNextBanner(
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                Text(
-                    text = listOfNotNull(ch.num?.toString(), ch.name, if (catchUp) "Catch-up" else null).joinToString("  "),
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.75f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                )
                 val p = nn?.now
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!catchUp) KindPill(p?.kind)
+                    if (ch.sport == true || p?.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.75f), 14.dp)
+                    Text(
+                        text = listOfNotNull(ch.num?.toString(), ch.name, if (catchUp) "Catch-up" else null).joinToString("  "),
+                        color = JellytipPalette.Vanilla.copy(alpha = 0.75f),
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                    )
+                    QualityChips(ch.quality)
+                }
                 Text(
                     text = p?.title ?: "No guide information",
                     color = JellytipPalette.Vanilla,
