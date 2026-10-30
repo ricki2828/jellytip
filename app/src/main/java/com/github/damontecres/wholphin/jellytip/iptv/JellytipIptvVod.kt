@@ -37,6 +37,8 @@ data class IptvVodItem(
     val tech: List<String> = emptyList(),
     /** In the person's My list (`favourite`, plan "My list"); false = not, or an older server. */
     val favourite: Boolean = false,
+    /** Watched (progress reached 92%, plan "8h Block 1"); drawn as a tick. */
+    val played: Boolean = false,
 ) {
     val isSeries get() = kind == "series"
 
@@ -147,6 +149,7 @@ object IptvVodParse {
             progress = progress(o.optJSONObject("progress")),
             tech = o.optJSONArray("tech")?.let { t -> (0 until t.length()).mapNotNull { t.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
             favourite = o.optBoolean("favourite", false),
+            played = o.optBoolean("played", false) || o.optJSONObject("progress")?.optBoolean("played", false) == true,
         )
     }
 

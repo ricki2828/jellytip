@@ -335,6 +335,9 @@ fun HomePage(
     }
 }
 
+/** Column reported for a focused IPTV tile in a library row: past any library item (no hero item, no prefetch). */
+private const val IPTV_TILE_COLUMN = 100_000
+
 val HomeRowLoadingState?.isContinueWatchingNextUp: Boolean
     get() =
         (this as? HomeRowLoadingState.Success).let { row ->
@@ -841,7 +844,41 @@ fun HomePageContent(
                                 }
 
                                 is HomeRowLoadingState.Success -> {
-                                    if (row.items.isNotEmpty()) {
+                                    // Jellytip: IPTV in Continue Watching / Next Up (Block 1), merged by last played
+                                    val iptvResume =
+                                        if (LocalJellytipHome.current) {
+                                            com.github.damontecres.wholphin.jellytip.iptv.rememberIptvResume(
+                                                continueRow = row.rowType is HomeRowConfig.ContinueWatching || row.rowType is HomeRowConfig.ContinueWatchingCombined,
+                                                nextUpRow = row.rowType is HomeRowConfig.NextUp || row.rowType is HomeRowConfig.ContinueWatchingCombined,
+                                            )
+                                        } else {
+                                            emptyList()
+                                        }
+                                    if (iptvResume.isNotEmpty()) {
+                                        com.github.damontecres.wholphin.jellytip.iptv.JellytipResumeRow(
+                                            title = row.title.getString(),
+                                            library = row.items,
+                                            iptv = iptvResume,
+                                            viewOptions = jellytipRowOptions(row.viewOptions),
+                                            onClickLibrary = { index, item -> onClickItem.invoke(RowColumn(rowIndex, index), item) },
+                                            onLongClickLibrary = { index, item -> onLongClickItem.invoke(RowColumn(rowIndex, index), item) },
+                                            onFocusLibrary = { index ->
+                                                specialFocus = null
+                                                savedSpecialId = null
+                                                currentOnFocusPosition(RowColumn(rowIndex, index))
+                                            },
+                                            onFocusIptv = {
+                                                // This row is the focused one (rows above fade); no library item, so the hero keeps the last one
+                                                currentOnFocusPosition(RowColumn(rowIndex, IPTV_TILE_COLUMN))
+                                                specialFocus = JellytipSpecialFocus("iptv-resume-$rowIndex", null, false)
+                                            },
+                                            modifier =
+                                                rowModifier
+                                                    .fillMaxWidth()
+                                                    .focusGroup()
+                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                        )
+                                    } else if (row.items.isNotEmpty()) {
                                         val viewOptions =
                                             if (LocalJellytipHome.current) {
                                                 jellytipRowOptions(row.viewOptions)

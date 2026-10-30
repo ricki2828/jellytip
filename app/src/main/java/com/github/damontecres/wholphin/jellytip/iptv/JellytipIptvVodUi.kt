@@ -142,6 +142,22 @@ fun IptvVodTile(
             )
         }
         IptvCornerMark(item.qualityLabel, Modifier.align(Alignment.TopEnd).padding(6.dp))
+        if (item.played) {
+            // Watched: a tick like the library's played mark
+            Text(
+                text = "✓",
+                color = Color.White,
+                fontFamily = JellytipFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(JellytipPalette.Jelly, RoundedCornerShape(50))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
         item.progress?.takeIf { it.resumable && it.durationSecs > 0 }?.let { p ->
             Box(
                 Modifier
