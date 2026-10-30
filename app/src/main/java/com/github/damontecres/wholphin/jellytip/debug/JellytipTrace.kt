@@ -241,6 +241,7 @@ object JellytipDebugReport {
             .put("user", JSONObject.NULL)
             .put("createdAt", java.time.Instant.now().toString())
             .put("events", events)
+            .put("perf", JSONArray(JellytipPerf.recent()))
     }
 
     private val LINE = Regex("""^(\S+ \S+) \[([^\]]+)\] (.*)$""", RegexOption.DOT_MATCHES_ALL)

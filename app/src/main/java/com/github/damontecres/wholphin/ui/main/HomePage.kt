@@ -392,6 +392,16 @@ fun HomePageContent(
     // a late answer is taken only if it does not move the focused row, otherwise it waits for the next visit.
     var specials by remember { mutableStateOf(liveSpecials) }
     var serverRows by remember { mutableStateOf(liveServerRows) }
+    // Cold-start marks (traced once per process): first Home frame, then the server rows on screen
+    if (specialsPage == "home") {
+        LaunchedEffect(Unit) {
+            androidx.compose.runtime.withFrameNanos { }
+            com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.mark("home-first-frame")
+        }
+        LaunchedEffect(serverRows != null) {
+            if (serverRows != null) com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.mark("rows-shown")
+        }
+    }
     // Jellytip IPTV: "Live sport on now" on Home only (people with a provider and 2+ live sport channels)
     val liveSportNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberLiveSportOnNow() else null
     var liveSport by remember { mutableStateOf(liveSportNow) }

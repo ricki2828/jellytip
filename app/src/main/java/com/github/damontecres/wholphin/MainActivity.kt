@@ -189,6 +189,9 @@ class MainActivity : AppCompatActivity() {
         }
         Timber.i("MainActivity.onCreate: savedInstanceState is null=${savedInstanceState == null}")
         lifecycle.addObserver(playbackLifecycleObserver)
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.attach(this) {
+            navigationManager.backStack.lastOrNull()?.let { it::class.simpleName } ?: "-"
+        }
 
         val backStackStr = savedInstanceState?.getString(KEY_BACK_STACK)
         val restoredBackStack =
@@ -376,6 +379,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.setForeground(false)
         Timber.d("onStop")
         screensaverService.stop(true)
         tvProviderSchedulerService.launchOneTimeRefresh()
@@ -388,6 +392,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.setForeground(true)
         Timber.d("onStart")
 
         lifecycleScope.launchDefault {
@@ -428,6 +433,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.detach(this)
         Timber.d("onDestroy")
     }
 

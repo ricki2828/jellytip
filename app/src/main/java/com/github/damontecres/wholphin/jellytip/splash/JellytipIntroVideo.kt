@@ -163,6 +163,7 @@ private fun IntroVideo(
                 if (!everReady && player.playbackState == Player.STATE_READY) {
                     everReady = true
                     Log.i(TAG, "video ready after ${SystemClock.uptimeMillis() - t0} ms")
+                    com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.mark("intro")
                 }
                 if (!everReady && SystemClock.uptimeMillis() - t0 > START_TIMEOUT_MS) {
                     Log.i(TAG, "video not ready in $START_TIMEOUT_MS ms (state=${player.playbackState}); falling back to end card")
