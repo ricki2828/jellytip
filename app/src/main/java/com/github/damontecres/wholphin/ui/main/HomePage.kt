@@ -546,6 +546,26 @@ fun HomePageContent(
             }
         }
     }
+    // Jellytip: no library row to land on (only server rows/specials, or the Watchlist with only IPTV favourites in
+    // extraRows): focus the first row of any kind once nothing is still loading
+    val anyRowFocus = remember { FocusRequester() }
+    if (takeFocus) {
+        LaunchedEffect(homeRows, entries.size, extraRows != null) {
+            if (firstFocused) return@LaunchedEffect
+            val pending = homeRows.any { it is HomeRowLoadingState.Loading || it is HomeRowLoadingState.Pending }
+            val libraryRow = homeRows.any { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
+            if (pending || libraryRow || (entries.isEmpty() && extraRows == null)) return@LaunchedEffect
+            withFrameNanos { }
+            delay(100) // let the first entries compose
+            if (firstFocused || currentHasFocus) return@LaunchedEffect
+            anyRowFocus.tryRequestFocus()
+            withFrameNanos { }
+            if (currentHasFocus) {
+                firstFocused = true
+                JellytipTrace.focus("home: first row of any kind (no library row)")
+            }
+        }
+    }
     // After the cold-start intro, make sure the first home row (not the nav rail) holds focus
     val introTick by JellytipSession.introDoneTick.collectAsState()
     LaunchedEffect(introTick, homeRows) {
@@ -599,6 +619,7 @@ fun HomePageContent(
                         ),
                     modifier =
                         Modifier
+                            .focusRequester(anyRowFocus)
                             .focusRestorer(),
                 ) {
                     items(count = entries.size, key = { entries[it].key }) { entryIndex ->
