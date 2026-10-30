@@ -44,6 +44,8 @@ export interface ServerRow {
   collection?: Collection | null;
   /** source "iptv" rows: the person's IPTV titles (itemIds is empty). */
   iptvItems: VodItem[];
+  /** Mixed rows (My list): every id (library undashed, vod ids) in display order, newest first. */
+  order: string[];
 }
 
 const ROW_LAYOUTS: RowLayout[] = ["standard", "poster", "franchise"];
@@ -90,7 +92,18 @@ export function parseRows(raw: unknown): ServerRow[] | null {
       list: r.list ?? null,
       collection,
       iptvItems,
+      order: strings((r as { order?: unknown }).order),
     });
   }
   return out;
+}
+
+/** Tiles in a mixed row's display order: by `order` (ids as the server wrote them), the rest after in their given order. */
+export function inOrder<T extends { id: string }>(tiles: T[], order: string[]): T[] {
+  if (!order.length) return tiles;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return tiles
+    .map((t, i) => ({ t, i }))
+    .sort((x, y) => (rank.get(x.t.id) ?? Infinity) - (rank.get(y.t.id) ?? Infinity) || x.i - y.i)
+    .map((x) => x.t);
 }

@@ -24,3 +24,11 @@ test("rows without id/title/items and duplicate ids are dropped; item ids dedupe
   const rows = parseRows([null, { id: "a", title: "", itemIds: ["1"] }, { id: "b", title: "B", itemIds: [] }, { id: "c", title: "C", itemIds: ["2", "1", "2", 7], untitled: ["1", null] }, { id: "c", title: "C2", itemIds: ["3"] }])!;
   assert.deepEqual(rows.map((r) => [r.id, r.itemIds, r.untitled]), [["c", ["2", "1"], ["1"]]]);
 });
+
+import { inOrder } from "../src/lib/rows.ts";
+test("mixed rows follow the server order; unnamed tiles keep their place at the end", () => {
+  const tiles = [{ id: "a" }, { id: "b" }, { id: "1:m:9" }, { id: "z" }];
+  assert.deepEqual(inOrder(tiles, ["1:m:9", "b", "a"]).map((t) => t.id), ["1:m:9", "b", "a", "z"]);
+  assert.deepEqual(inOrder(tiles, []).map((t) => t.id), ["a", "b", "1:m:9", "z"]);
+  assert.deepEqual(parseRows([{ id: "r", title: "T", itemIds: ["a"], order: ["a", 3] }])?.[0].order, ["a"]);
+});

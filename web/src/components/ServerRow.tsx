@@ -9,14 +9,10 @@ import { IptvCard, IptvPoster } from "./IptvTile";
 import { useIsPhone } from "../lib/device";
 import type { VodItem } from "../lib/iptvVod";
 
-/** IPTV titles as tiles in a row's scroller (My list: beside the library items). */
-function IptvTiles({ items, poster }: { items: VodItem[]; poster: boolean }) {
+/** An IPTV title as a tile in a library row's scroller (My list: beside the library items). */
+function IptvTile({ item, poster }: { item: VodItem; poster: boolean }) {
   const phone = useIsPhone();
-  return (
-    <>
-      {items.map((it) => (poster ? <IptvPoster key={it.id} item={it} width={phone ? 112 : 150} /> : <IptvCard key={it.id} item={it} />))}
-    </>
-  );
+  return poster ? <IptvPoster item={item} width={phone ? 112 : 150} /> : <IptvCard item={item} />;
 }
 
 /** A source "iptv" row: the person's IPTV titles, already in the manifest (no Jellyfin call). */
@@ -82,8 +78,8 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
   if (r.layout === "franchise" && r.collection)
     return <FranchiseRow key={r.id} title={r.title} collection={r.collection} load={load} untitled={untitled} {...opts} />;
   const person = r.person;
-  // My list and other mixed rows: library items first, then the IPTV titles
-  const extra = r.iptvItems.length ? <IptvTiles items={r.iptvItems} poster={r.layout === "poster"} /> : undefined;
+  // My list and other mixed rows: in the server's `order` when it sends one, else library items first, then the IPTV titles
+  const extra = r.iptvItems.length ? r.iptvItems.map((it) => ({ id: it.id, node: <IptvTile key={it.id} item={it} poster={r.layout === "poster"} /> })) : undefined;
   return (
     <Row
       key={r.id}
@@ -94,6 +90,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
       onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : undefined}
       person={person ? { ...person, count: r.itemIds.length } : null}
       extra={extra}
+      order={r.order}
       {...opts}
     />
   );

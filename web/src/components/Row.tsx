@@ -6,6 +6,7 @@ import { Card, CARD_W, PHONE_CARD_W } from "./Card";
 import { filmCount, PersonTile } from "./PersonTile";
 import { PosterCard } from "./PosterCard";
 import { signalOf } from "../api/me";
+import { inOrder } from "../lib/rows";
 
 const POSTER_W = 150;
 const PHONE_POSTER_W = 112;
@@ -27,7 +28,9 @@ interface Props {
   /** Person rows: a portrait tile first (same height as the row's tiles), opening the filmography. */
   person?: { id: string; name: string; imageTag?: string | null; count?: number } | null;
   /** More tiles after the items (My list: IPTV titles beside library ones). */
-  extra?: React.ReactNode;
+  extra?: { id: string; node: React.ReactNode }[];
+  /** With `extra`: ids in display order (library ids undashed); items not named go last, library first. */
+  order?: string[];
 }
 
 /** Calls `load` once the element nears the viewport; null while waiting, [] when it failed or came back empty. */
@@ -74,7 +77,7 @@ export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => vo
   );
 }
 
-export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person, extra }: Props) {
+export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person, extra, order }: Props) {
   const ref = useRef<HTMLElement>(null);
   const lazy = useLazyItems(ref, items, load);
   // "Not interested" takes a title out of the row at once (the server drops it from tomorrow's rows)
@@ -90,7 +93,32 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
   const posterW = phone ? PHONE_POSTER_W : POSTER_W;
   const cardH = Math.round(((phone ? PHONE_CARD_W : CARD_W) * 9) / 16);
 
-  if (loaded && loaded.length === 0 && !extra) return null;
+  if (loaded && loaded.length === 0 && !extra?.length) return null;
+
+  const libTile = (it: Item, i: number) =>
+    poster ? (
+      <PosterCard
+        key={it.Id}
+        item={it}
+        width={posterW}
+        onOpen={() => (onOpen ? onOpen(it) : go(`/item/${it.Id}`))}
+        onFocus={onFocusItem && (() => onFocusItem(it))}
+        autoFocus={autoFocusFirst && i === 0}
+        untitled={untitled?.has(it.Id)}
+      />
+    ) : (
+      <Card key={it.Id} item={it} onFocusItem={onFocusItem} autoFocus={autoFocusFirst && i === 0} onOpen={onOpen} untitled={untitled?.has(it.Id)} />
+    );
+  const tiles = (items: Item[] | null) => {
+    if (!items)
+      return Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className={poster ? "poster card-skeleton" : "card card-skeleton"} style={poster ? { width: phone ? PHONE_POSTER_W : POSTER_W } : undefined} />
+      ));
+    const all = [...items.map((it, i) => ({ id: it.Id.replace(/-/g, ""), node: libTile(it, i) })), ...(extra ?? [])];
+    if (!extra?.length || !order?.length) return all.map((t) => t.node);
+    // Mixed row: the server's interleaved order (newest first); anything it did not name keeps library-first order at the end
+    return inOrder(all, order).map((t) => t.node);
+  };
   return (
     <section className={poster ? "row poster-row" : "row"} ref={ref}>
       <RowTitle title={title} onTitle={onTitle} />
@@ -104,26 +132,7 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
             sub={person.count ? filmCount(person.count) : undefined}
           />
         )}
-        {loaded
-          ? loaded.map((it, i) =>
-              poster ? (
-                <PosterCard
-                  key={it.Id}
-                  item={it}
-                  width={posterW}
-                  onOpen={() => (onOpen ? onOpen(it) : go(`/item/${it.Id}`))}
-                  onFocus={onFocusItem && (() => onFocusItem(it))}
-                  autoFocus={autoFocusFirst && i === 0}
-                  untitled={untitled?.has(it.Id)}
-                />
-              ) : (
-                <Card key={it.Id} item={it} onFocusItem={onFocusItem} autoFocus={autoFocusFirst && i === 0} onOpen={onOpen} untitled={untitled?.has(it.Id)} />
-              ),
-            )
-          : Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className={poster ? "poster card-skeleton" : "card card-skeleton"} style={poster ? { width: phone ? PHONE_POSTER_W : POSTER_W } : undefined} />
-            ))}
-        {extra}
+        {tiles(loaded)}
       </div>
     </section>
   );
