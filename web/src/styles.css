@@ -103,6 +103,18 @@ img {
 .nav-livetv {
   display: none;
 }
+/* Desktop: the cog carries its name, so Settings is easy to find */
+.nav-settings {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 0 12px 0 8px;
+  border-radius: 16px;
+}
+.nav-settings-label {
+  font-size: 0.9rem;
+}
 
 /* ---------- settings ---------- */
 .settings-page {
@@ -1249,6 +1261,13 @@ button.overview.open {
   .nav-icon svg {
     width: 22px;
     height: 22px;
+  }
+  .nav-settings {
+    padding: 0;
+    border-radius: 50%;
+  }
+  .nav-settings-label {
+    display: none;
   }
   .nav-discover.active {
     color: var(--jelly);
