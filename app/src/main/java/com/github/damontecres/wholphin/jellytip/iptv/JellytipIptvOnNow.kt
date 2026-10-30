@@ -41,6 +41,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -238,8 +239,8 @@ fun JellytipLiveSportRow(
         ItemRowTitle("Live sport on now")
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            modifier = modifier.fillMaxWidth(),
+            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
+            modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
             items(items, key = { it.channel.id }) { o ->
                 OnNowCard(

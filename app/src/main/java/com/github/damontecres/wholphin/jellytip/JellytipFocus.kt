@@ -30,8 +30,15 @@ object JellytipFocus {
     const val SCALE = 1.08f
     const val DIM_ALPHA = 0.7f
 
+    /** Wide cards zoom less: 1.08x on a 188 dp 16:9 tile grows ~7.5 dp per side into the 10 dp gap (30-Oct: crowding). */
+    const val WIDE_SCALE = 1.04f
+    val WIDE_CARD_WIDTH = 150.dp
+
     @Composable
     fun scale() = CardDefaults.scale(focusedScale = SCALE)
+
+    @Composable
+    fun scaleFor(width: androidx.compose.ui.unit.Dp) = CardDefaults.scale(focusedScale = if (width >= WIDE_CARD_WIDTH) WIDE_SCALE else SCALE)
 
     @Composable
     fun border(shape: Shape = MaterialTheme.shapes.medium) =

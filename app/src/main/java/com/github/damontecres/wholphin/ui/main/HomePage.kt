@@ -655,9 +655,26 @@ fun HomePageContent(
                         50.dp.toPx()
                     }
                 }
-            val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+            // A row taller than the space under the hero (poster rows) scrolls up until its focused card fits, focus zoom included
+            val bottomMarginPx = remember(density) { with(density) { 14.dp.toPx() } }
+            val titleSpacePx = remember(density) { with(density) { 30.dp.toPx() } }
+            val platformBringIntoViewSpec = LocalBringIntoViewSpec.current
+            // Rows bleed through the drawer's page padding: their scroll rule works on the visible part only
+            val bleed =
+                com.github.damontecres.wholphin.jellytip.JellytipRowBleed(
+                    com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp,
+                    16.dp,
+                )
+            val defaultBringIntoViewSpec =
+                remember(platformBringIntoViewSpec, density, bleed) {
+                    with(density) {
+                        com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(platformBringIntoViewSpec, bleed.start.toPx(), bleed.end.toPx())
+                    }
+                }
             CompositionLocalProvider(
-                LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec(spaceAbovePx),
+                LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec(spaceAbovePx, bottomMarginPx, titleSpacePx),
+                // Rows draw through the nav drawer's page padding to the screen edge (30-Oct: rows cut off on the LHS)
+                com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed provides bleed,
             ) {
                 LazyColumn(
                     state = listState,
@@ -683,62 +700,70 @@ fun HomePageContent(
                                 .padding(bottom = 8.dp)
                         if (entry is JellytipHomeEntry.UpcomingSport) {
                             val id = entry.key
-                            com.github.damontecres.wholphin.jellytip.iptv.JellytipUpcomingSportRow(
-                                items = entry.items,
-                                onFocus = {
-                                    specialFocus = JellytipSpecialFocus(id, null, false)
-                                    savedSpecialId = id
-                                },
-                                modifier =
-                                    rowModifier
-                                        .focusGroup()
-                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
-                            )
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                com.github.damontecres.wholphin.jellytip.iptv.JellytipUpcomingSportRow(
+                                    items = entry.items,
+                                    onFocus = {
+                                        specialFocus = JellytipSpecialFocus(id, null, false)
+                                        savedSpecialId = id
+                                    },
+                                    modifier =
+                                        rowModifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                )
+                            }
                             return@items
                         }
                         if (entry is JellytipHomeEntry.Reminders) {
                             val id = entry.key
-                            com.github.damontecres.wholphin.jellytip.iptv.JellytipRemindersRow(
-                                items = entry.items,
-                                onFocus = {
-                                    specialFocus = JellytipSpecialFocus(id, null, false)
-                                    savedSpecialId = id
-                                },
-                                modifier =
-                                    rowModifier
-                                        .focusGroup()
-                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
-                            )
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                com.github.damontecres.wholphin.jellytip.iptv.JellytipRemindersRow(
+                                    items = entry.items,
+                                    onFocus = {
+                                        specialFocus = JellytipSpecialFocus(id, null, false)
+                                        savedSpecialId = id
+                                    },
+                                    modifier =
+                                        rowModifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                )
+                            }
                             return@items
                         }
                         if (entry is JellytipHomeEntry.Recordings) {
                             val id = entry.key
-                            com.github.damontecres.wholphin.jellytip.iptv.JellytipRecordingsRow(
-                                items = entry.items,
-                                onFocus = {
-                                    specialFocus = JellytipSpecialFocus(id, null, false)
-                                    savedSpecialId = id
-                                },
-                                modifier =
-                                    rowModifier
-                                        .focusGroup()
-                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
-                            )
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                com.github.damontecres.wholphin.jellytip.iptv.JellytipRecordingsRow(
+                                    items = entry.items,
+                                    onFocus = {
+                                        specialFocus = JellytipSpecialFocus(id, null, false)
+                                        savedSpecialId = id
+                                    },
+                                    modifier =
+                                        rowModifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                )
+                            }
                             return@items
                         }
                         if (entry is JellytipHomeEntry.LiveSport) {
                             val id = entry.key
-                            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveSportRow(
-                                items = entry.items,
-                                onFocus = {
-                                    specialFocus = JellytipSpecialFocus(id, null, false)
-                                    savedSpecialId = id
-                                },
-                                modifier =
-                                    rowModifier
-                                        .focusGroup()
-                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
-                            )
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                                com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveSportRow(
+                                    items = entry.items,
+                                    onFocus = {
+                                        specialFocus = JellytipSpecialFocus(id, null, false)
+                                        savedSpecialId = id
+                                    },
+                                    modifier =
+                                        rowModifier
+                                            .focusGroup()
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                )
+                            }
                             return@items
                         }
                         if (entry is JellytipHomeEntry.Server) {

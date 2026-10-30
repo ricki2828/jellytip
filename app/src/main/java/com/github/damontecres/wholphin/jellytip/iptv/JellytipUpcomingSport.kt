@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.DialogItem
@@ -129,8 +130,8 @@ fun JellytipUpcomingSportRow(
         ItemRowTitle("Coming up in sport")
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            modifier = modifier.fillMaxWidth(),
+            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
+            modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
             items(items, key = { it.key }) { u ->
                 UpcomingTile(u, now, onClick = { overlay = u }, modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() })
@@ -175,8 +176,8 @@ fun JellytipRemindersRow(
         ItemRowTitle("Your reminders")
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            modifier = modifier.fillMaxWidth(),
+            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
+            modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
             items(items.filter { it.stop > now }, key = { it.key }) { u ->
                 UpcomingTile(

@@ -59,6 +59,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.rememberIsJellytipAdmin
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.jellytip.specials.Caption
@@ -818,9 +819,10 @@ private fun MixedRow(
         ItemRowTitle(row.title)
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = options.spacing.dp, vertical = 8.dp),
+            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(options.spacing.dp, 8.dp),
             modifier =
                 Modifier
+                    .jellytipRowBleed()
                     .fillMaxWidth()
                     .focusGroup()
                     .focusRestorer(),

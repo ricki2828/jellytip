@@ -1063,7 +1063,7 @@ private fun SoundHint(
 
 /** 1.03x on 300-480 dp cards = under 8 dp per side: inside the 10 dp row padding (the 1.08x default would clip). */
 private const val LARGE_CARD_SCALE = 1.03f
-private const val WIDE_CARD_DP = 200
+private const val WIDE_CARD_DP = 150
 
 /** A backdrop other than the hero's for [item] (companion detailsIndex, else the first one that is not the hero's). */
 @Composable

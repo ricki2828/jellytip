@@ -6,7 +6,6 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +47,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.ConfirmDialog
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -78,8 +78,8 @@ fun LazyListScope.jellytipDiscoverRows(
             ItemRowTitle(row.title)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                modifier = Modifier.fillMaxWidth().focusGroup(),
+                contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(12.dp, 8.dp),
+                modifier = Modifier.jellytipRowBleed().fillMaxWidth().focusGroup(),
             ) {
                 items(row.items, key = { it.key }) { t -> DiscoverTile(t, statuses[t.key], onClick = { onOpen(t) }) }
             }

@@ -1,10 +1,8 @@
 package com.github.damontecres.wholphin.ui.cards
 
-import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -27,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 
@@ -71,9 +71,10 @@ fun <T> ItemRow(
             LazyRow(
             state = state,
             horizontalArrangement = Arrangement.spacedBy(horizontalPadding),
-            contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 8.dp),
+            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(horizontalPadding, 8.dp),
             modifier =
                 rowFocusModifier
+                    .jellytipRowBleed()
                     .fillMaxWidth()
                     .focusGroup()
                     .focusRestorer(firstFocus)

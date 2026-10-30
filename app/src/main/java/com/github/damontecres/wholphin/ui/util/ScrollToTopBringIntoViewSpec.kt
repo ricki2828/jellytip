@@ -27,6 +27,12 @@ import androidx.compose.foundation.lazy.LazyColumn
  */
 class ScrollToTopBringIntoViewSpec(
     val spaceAbovePx: Float = 100f,
+    /**
+     * Jellytip: room kept under the focused card. A card taller than the space below [spaceAbovePx] (poster rows under
+     * the hero) is scrolled up until it fits, but never so far that less than [minAbovePx] is left for its row title.
+     */
+    val bottomMarginPx: Float = 0f,
+    val minAbovePx: Float = spaceAbovePx,
 ) : BringIntoViewSpec {
     override fun calculateScrollDistance(
         offset: Float,
@@ -39,6 +45,7 @@ class ScrollToTopBringIntoViewSpec(
 //            size,
 //            containerSize,
 //        )
-        return offset - spaceAbovePx
+        val above = minOf(spaceAbovePx, containerSize - size - bottomMarginPx).coerceAtLeast(minOf(minAbovePx, spaceAbovePx))
+        return offset - above
     }
 }

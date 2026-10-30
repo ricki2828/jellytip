@@ -130,7 +130,7 @@ fun BannerCard(
             CardDefaults.colors(
 //                containerColor = Color.Transparent,
             ),
-        scale = JellytipFocus.scale(),
+        scale = JellytipFocus.scaleFor(cardHeight * aspectRatio),
         border = JellytipFocus.border(),
         glow = JellytipFocus.glow(),
     ) {
