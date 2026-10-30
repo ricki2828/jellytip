@@ -76,6 +76,7 @@ public class PlayerActivity extends AppCompatActivity {
     private static final int MAX_RECONNECTS = 5;
     private static final long NOTE_MS = 6_000;
     private static final long STALL_MS = 10_000;
+    private static final long UNLOCK_ROTATION_MS = 1_500;
     private static final long URL_TIMEOUT_MS = 15_000;
     private static final long SEEK_BACK_MS = 10_000;
     private static final long SEEK_FORWARD_MS = 30_000;
@@ -147,7 +148,10 @@ public class PlayerActivity extends AppCompatActivity {
         instance = new java.lang.ref.WeakReference<>(this);
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
+        // Opens in landscape (either side) whatever way the phone is held; free rotation starts later ([unlockRotation])
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        handler.postDelayed(this::unlockRotation, UNLOCK_ROTATION_MS);
+        getContentResolver().registerContentObserver(android.provider.Settings.System.getUriFor(android.provider.Settings.System.ACCELEROMETER_ROTATION), false, rotationLockObserver);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
@@ -604,8 +608,57 @@ public class PlayerActivity extends AppCompatActivity {
         if (!isChangingConfigurations()) close("back", null);
     }
 
+    /** Set once the player has opened in landscape: from then on the phone's own rotation decides. */
+    private boolean rotationUnlocked;
+
+    /**
+     * After the landscape start (or 1.5 s): turning the phone to portrait rotates, as long as the system auto-rotate
+     * is on. With rotation locked it stays landscape.
+     */
+    private void unlockRotation() {
+        if (closing) return;
+        rotationUnlocked = true;
+        applyRotationRule();
+    }
+
+    private void applyRotationRule() {
+        if (!rotationUnlocked) return;
+        boolean autoRotate = android.provider.Settings.System.getInt(getContentResolver(), android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 1;
+        setRequestedOrientation(autoRotate ? ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    }
+
+    private final android.database.ContentObserver rotationLockObserver =
+        new android.database.ContentObserver(handler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                applyRotationRule();
+            }
+        };
+
+    @Override
+    public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        boolean landscape = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        // The device reported landscape: safe to let it rotate (it won't flip straight back to portrait)
+        if (landscape && !rotationUnlocked) unlockRotation();
+        layoutForOrientation(landscape);
+    }
+
+    /** Portrait: the picture at the top (letterboxed), the controls at the bottom; landscape: centred full screen. */
+    private void layoutForOrientation(boolean landscape) {
+        View content = view.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        if (content == null) return;
+        if (content.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
+            lp.gravity = landscape ? Gravity.CENTER : Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            lp.topMargin = landscape ? 0 : dp(56);
+            content.setLayoutParams(lp);
+        }
+    }
+
     @Override
     protected void onDestroy() {
+        getContentResolver().unregisterContentObserver(rotationLockObserver);
         handler.removeCallbacksAndMessages(null);
         release();
         super.onDestroy();
