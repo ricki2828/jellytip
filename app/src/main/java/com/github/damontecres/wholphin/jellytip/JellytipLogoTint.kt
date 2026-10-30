@@ -53,7 +53,7 @@ object JellytipLogoTint {
         style: String?,
     ) {
         when (style) {
-            STYLE_WHITE, STYLE_MONO, STYLE_ORIGINAL -> if (styles[itemId] != style) styles[itemId] = style
+            STYLE_WHITE, STYLE_MONO, STYLE_ORIGINAL -> if (styles[itemId] != style) jellytipGlobalWrite { styles[itemId] = style }
             else -> {}
         }
     }
@@ -110,7 +110,7 @@ object JellytipLogoTint {
         image: Image,
     ) {
         if (url == null || !JellytipHomeTokens.WHITE_LOGO || flat.containsKey(url)) return
-        flat[url] =
+        val value: Boolean =
             try {
                 val w = 64
                 val bmp = image.toBitmap(w, (w * image.height / image.width.coerceAtLeast(1)).coerceIn(8, 256))
@@ -135,5 +135,6 @@ object JellytipLogoTint {
             } catch (e: Exception) {
                 true
             }
+        jellytipGlobalWrite { flat[url] = value }
     }
 }

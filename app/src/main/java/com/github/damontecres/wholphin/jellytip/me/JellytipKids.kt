@@ -135,7 +135,7 @@ object JellytipKids {
         scope.launch {
             todo.forEach { id ->
                 val r = runCatching { api.userLibraryApi.getItem(itemId = id).content.officialRating }.getOrNull()
-                seriesRatings[id] = r.orEmpty()
+                com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { seriesRatings[id] = r.orEmpty() }
             }
         }
     }

@@ -36,7 +36,7 @@ object JellytipScrim {
         image: Image,
     ) {
         if (url == null || strengths.containsKey(url)) return
-        strengths[url] =
+        val value: Float =
             try {
                 val w = 64
                 val h = (w * image.height / image.width.coerceAtLeast(1)).coerceIn(8, 256)
@@ -58,5 +58,6 @@ object JellytipScrim {
             } catch (e: Exception) {
                 0f
             }
+        jellytipGlobalWrite { strengths[url] = value }
     }
 }

@@ -30,7 +30,7 @@ object JellytipTech {
         tags: List<String>,
     ) {
         val set = tags.flatMap(::normalize).toSet()
-        if (techs[itemId] != set) techs[itemId] = set
+        if (techs[itemId] != set) com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { techs[itemId] = set }
     }
 
     /** A `{"<itemId>": [...]}` object from a payload (ids with or without dashes). */

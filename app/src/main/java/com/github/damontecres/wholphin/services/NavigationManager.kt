@@ -9,10 +9,6 @@ import com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import javax.inject.Singleton
 
-/**
- * Manages navigating between pages and manages the app's back stack
- */
-@Singleton
 private val BROWSE_KINDS =
     setOf(
         org.jellyfin.sdk.model.api.BaseItemKind.COLLECTION_FOLDER,
@@ -20,9 +16,26 @@ private val BROWSE_KINDS =
         org.jellyfin.sdk.model.api.BaseItemKind.FOLDER,
     )
 
+/**
+ * Manages navigating between pages and manages the app's back stack
+ *
+ * Jellytip (30-Oct P0): this MUST be a singleton. e4946624 slipped [BROWSE_KINDS] in between the `@Singleton`
+ * annotation and the class, so Hilt gave every ViewModel its own NavigationManager with its own back stack: their
+ * navigations were traced but went to a list the screen never showed (live sport audio over a frozen Home).
+ */
+@Singleton
 class NavigationManager
     @Inject
     constructor() {
+        init {
+            val n = instances.incrementAndGet()
+            if (n > 1) {
+                // Never again silently: a second instance means navigations can go to a back stack nobody shows
+                JellytipTrace.log("nav", "ERROR NavigationManager instance #$n (must be a singleton)")
+                Timber.e("NavigationManager instance #%d: must be a singleton", n)
+            }
+        }
+
         var backStack: MutableList<Destination> = NavBackStack(Destination.Home())
 
         /**
@@ -129,6 +142,10 @@ class NavigationManager
                 backStack[0] = destination
             }
             log()
+        }
+
+        companion object {
+            private val instances = java.util.concurrent.atomic.AtomicInteger(0)
         }
 
         private fun log() {

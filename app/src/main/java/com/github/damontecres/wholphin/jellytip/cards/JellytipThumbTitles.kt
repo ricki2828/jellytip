@@ -17,9 +17,9 @@ object JellytipThumbTitles {
         titled: Boolean?,
     ) {
         if (titled == false) {
-            if (untitled[itemId] != true) untitled[itemId] = true
+            if (untitled[itemId] != true) com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { untitled[itemId] = true }
         } else if (untitled.containsKey(itemId)) {
-            untitled.remove(itemId)
+            com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { untitled.remove(itemId) }
         }
     }
 
