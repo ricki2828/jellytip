@@ -10,6 +10,10 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
+import { IptvCard } from "../components/IptvTile";
+import { iptvContinue, iptvNext } from "../api/iptv";
+import { continuePath, continueTitle, mergeContinue, type ContinueEntry } from "../lib/continue";
+import { go } from "../lib/router";
 import { RemindersRow } from "../components/Reminders";
 import { UpcomingRow } from "../components/Upcoming";
 import { usePrefs } from "../api/me";
@@ -57,8 +61,23 @@ function HomeHero({ focused, slides, engaged }: { focused: Item | null; slides: 
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }
 
+const iptvKey = (e: ContinueEntry) => `iptv:${e.kind}:${e.id}`;
+
+/** An IPTV title in progress (or up next): opens the IPTV player at its position. */
+function ContinueTile({ e, autoFocus }: { e: ContinueEntry; autoFocus?: boolean }) {
+  return (
+    <IptvCard
+      item={{ id: e.id, title: continueTitle(e), year: null, quality: [], tech: e.tech, poster: e.poster, backdrop: e.backdrop, progress: e.pos > 0 && e.dur > 0 ? { position: e.pos, duration: e.dur } : null }}
+      autoFocus={autoFocus}
+      onOpen={() => go(continuePath(e))}
+    />
+  );
+}
+
 export function Home() {
   const [continueItems, setContinue] = useState<Item[] | null>(null);
+  const [iptvTiles, setIptvTiles] = useState<ContinueEntry[]>([]);
+  const [continueOrder, setContinueOrder] = useState<string[]>([]);
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [lists, setLists] = useState<LetterboxdRow[]>([]);
   // Rows v1 from the companion when it has them; null = the Kometa carousels + Letterboxd lists as before
@@ -87,13 +106,15 @@ export function Home() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([resumeItems().catch(() => []), nextUp().catch(() => [])]).then(([resume, next]) => {
+    // Library and IPTV together: in-progress titles by last played, then Next Up (an IPTV route that is missing answers [])
+    Promise.all([resumeItems().catch(() => []), nextUp().catch(() => []), iptvContinue().catch(() => []), iptvNext().catch(() => [])]).then(([resume, next, ic, inx]) => {
       if (!alive) return;
-      // Continue Watching first, then Next Up episodes of shows not already in it
-      const seen = new Set(resume.map((i) => i.SeriesId ?? i.Id));
-      const merged = [...resume, ...next.filter((n) => !seen.has(n.SeriesId ?? n.Id))];
-      setContinue(merged);
-      if (merged[0]) setFocused((f) => f ?? merged[0]);
+      const merged = mergeContinue(resume, next, ic, inx);
+      const lib = merged.flatMap((m) => (m.kind === "lib" ? [m.item] : []));
+      setContinue(lib);
+      setIptvTiles(merged.flatMap((m) => (m.kind === "iptv" ? [m.entry] : [])));
+      setContinueOrder(merged.map((m) => (m.kind === "lib" ? m.item.Id.replace(/-/g, "") : iptvKey(m.entry))));
+      if (lib[0]) setFocused((f) => f ?? lib[0]);
     });
     setRowsFailed(false);
     serverRows("home")
@@ -184,7 +205,16 @@ export function Home() {
     <div className="home">
       <HomeHero focused={focused} slides={slides} engaged={engaged} />
       <div className="rows">
-        {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
+        {continueItems && (continueItems.length > 0 || iptvTiles.length > 0) && (
+          <Row
+            title="Continue Watching"
+            items={continueItems}
+            onFocusItem={onFocusItem}
+            autoFocusFirst={!continueOrder[0]?.startsWith("iptv:")}
+            extra={iptvTiles.map((e, i) => ({ id: iptvKey(e), node: <ContinueTile key={iptvKey(e)} e={e} autoFocus={i === 0 && continueOrder[0] === iptvKey(e)} /> }))}
+            order={continueOrder}
+          />
+        )}
         <RemindersRow />
         {/* Recordings: ready, recording now and scheduled, right after Continue Watching */}
         <RecordingsRow />

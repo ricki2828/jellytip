@@ -26,6 +26,8 @@ export interface VodItem {
   providerName?: string;
   category?: string | null;
   progress?: VodProgress | null;
+  /** Watched (the server's `played`, or 92%+ of the way through). */
+  played?: boolean;
   /** On the person's My list; null/absent when the server doesn't say (no toggle then). */
   favourite?: boolean | null;
 }
@@ -106,6 +108,7 @@ export function parseVodItem(raw: unknown): VodItem | null {
     providerName: str(r.providerName) ?? undefined,
     category: str(r.category),
     progress: progress(r.progress),
+    played: r.played === true || (progress(r.progress)?.played ?? false),
     favourite: typeof r.favourite === "boolean" ? r.favourite : null,
   };
 }

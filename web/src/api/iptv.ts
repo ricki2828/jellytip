@@ -1,9 +1,11 @@
 // IPTV (companion /v1/iptv/*; contract: ~/ai/plans/jellytip-iptv.md). Needs the person's own Jellyfin token; providers
 // are private to their owner. Credentials go up once and never come back (the server shows the host only).
 import { getSession } from "./jellyfin";
+import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
 import { parseVodDetail, type VodDetail } from "../lib/iptvVod";
+import { parseContinue, type ContinueEntry } from "../lib/continue";
 import { parseOnNow, type OnNow } from "../lib/onNow";
 import { parseQualitySummary, parseSuggest, type Quality, type QualitySummary, type Suggestion } from "../lib/sport";
 
@@ -321,4 +323,14 @@ export async function recordingById(id: string): Promise<Recording | null> {
   if (a.status !== 200 || !a.data) return null;
   const d = a.data as { recording?: Recording } & Recording;
   return d.recording ?? (typeof d.start === "number" ? d : null);
+}
+
+/** IPTV titles in progress / up next for Home (empty on 404, errors or a server without the routes). */
+export async function iptvContinue(): Promise<ContinueEntry[]> {
+  const a = await companionCall("GET", "v1/me/continue?limit=20");
+  return a.status === 200 ? parseContinue(a.data) : [];
+}
+export async function iptvNext(): Promise<ContinueEntry[]> {
+  const a = await companionCall("GET", "v1/me/next");
+  return a.status === 200 ? parseContinue(a.data) : [];
 }

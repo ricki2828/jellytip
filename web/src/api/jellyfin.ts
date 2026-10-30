@@ -22,6 +22,7 @@ export interface UserData {
   Played?: boolean;
   IsFavorite?: boolean;
   UnplayedItemCount?: number;
+  LastPlayedDate?: string;
 }
 
 export interface Person {

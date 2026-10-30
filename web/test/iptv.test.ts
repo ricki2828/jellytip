@@ -264,3 +264,28 @@ test("sports I follow: tap cycles neutral, follow, mute; never both lists", () =
   assert.equal(hasSportPrefs({ teams: [], leagues: [], sports: [], muted: { sports: [], leagues: [], tags: [] }, setup: false }), false);
   assert.equal(hasSportPrefs({ teams: [], leagues: [], sports: [], muted: { sports: [], leagues: [], tags: ["womens"] }, setup: false }), true);
 });
+
+import { continuePath, continueTitle, mergeContinue, parseContinue } from "../src/lib/continue.ts";
+
+const ce = (o: Record<string, unknown>) => ({ source: "iptv", kind: "movie", id: "3:m:9", title: "Léon", pos: 600, dur: 6600, at: 1000, poster: null, backdrop: null, tech: [], ...o });
+
+test("continue: parse, titles and resume paths", () => {
+  const l = parseContinue({ items: [ce({}), ce({ kind: "episode", id: "3:e:77", seriesId: "3:s:5", seriesTitle: "Show", season: 2, episode: 3, title: "Pilot", pos: 12 }), ce({ kind: "recording", id: "rec:4" }), { kind: "movie" }, ce({ source: "other" })] });
+  assert.equal(l.length, 3);
+  assert.equal(continueTitle(l[1]), "Show · S2 E3 · Pilot");
+  assert.equal(continuePath(l[0]), "/iptv/play?vod=3%3Am%3A9&t=L%C3%A9on&resume=600");
+  assert.equal(continuePath(l[1]), "/iptv/play?series=3%3As%3A5&episode=3%3Ae%3A77&t=Show+%C2%B7+S2+E3+%C2%B7+Pilot".replace("Show+%C2%B7+S2+E3+%C2%B7+Pilot", encodeURIComponent("Show · S2 E3 · Pilot")));
+  assert.match(continuePath(l[2]), /recording=4/);
+  assert.deepEqual(parseContinue(null), []);
+});
+
+test("continue: library and IPTV by recency, next up only for shows not above", () => {
+  const lib = (Id: string, d?: string, SeriesId?: string) => ({ Id, SeriesId, UserData: d ? { LastPlayedDate: d } : undefined });
+  const resume = [lib("a", "2026-10-30T10:00:00Z"), lib("b", "2026-10-28T10:00:00Z")];
+  const iptv = parseContinue({ items: [ce({ id: "3:m:1", at: Date.parse("2026-10-29T10:00:00Z") / 1000 })] });
+  const next = [lib("n1", undefined, "S1"), lib("n2", undefined, "SHOW9")];
+  const iNext = parseContinue({ items: [ce({ kind: "episode", id: "3:e:2", seriesId: "SHOW9", pos: 0 }), ce({ kind: "episode", id: "3:e:3", seriesId: "3:s:8", pos: 0 })] });
+  const m = mergeContinue([...resume, lib("c", "2026-10-01T00:00:00Z", "SHOW9")], next, iptv, iNext);
+  const names = m.map((x) => (x.kind === "lib" ? x.item.Id : x.entry.id));
+  assert.deepEqual(names, ["a", "3:m:1", "b", "c", "n1", "3:e:3"]);
+});

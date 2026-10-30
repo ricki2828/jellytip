@@ -11,7 +11,7 @@ import { CARD_W, PHONE_CARD_W } from "./Card";
 import { PosterCard } from "./PosterCard";
 import { tmdbSized } from "./FranchiseRow";
 
-type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { tech?: string[]; progress?: VodItem["progress"] };
+type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { tech?: string[]; progress?: VodItem["progress"]; played?: boolean };
 
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
@@ -33,6 +33,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
         tag={tag}
         tech={vodTech(item)}
         autoFocus={autoFocus}
+        watched={!!(item as Tile).played || !!(item as Tile).progress?.played}
         onOpen={() => go(vodPath(item.id))}
       />
       <IptvDot />
@@ -40,7 +41,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
   );
 }
 
-export function IptvCard({ item, width: widthProp, tag, autoFocus }: { item: Tile; width?: number; tag?: string; autoFocus?: boolean }) {
+export function IptvCard({ item, width: widthProp, tag, autoFocus, onOpen }: { item: Tile; width?: number; tag?: string; autoFocus?: boolean; onOpen?: () => void }) {
   const phone = useIsPhone();
   const width = widthProp ?? (phone ? PHONE_CARD_W : CARD_W);
   const art = tmdbSized(safeArt(item.backdrop ?? item.poster, 480), "w780");
@@ -57,14 +58,14 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus }: { item: Til
       style={width === 0 ? undefined : { width, height: Math.round((width * 9) / 16) }}
       title={label(item)}
       aria-label={label(item)}
-      onClick={() => go(vodPath(item.id))}
+      onClick={() => (onOpen ? onOpen() : go(vodPath(item.id)))}
     >
       {art && !failed && <img className={`card-img${loaded ? " in" : ""}`} src={art} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
       <div className="card-fade" />
       <span className="card-title">{item.title}</span>
       {tag && <span className="card-tag">{tag}</span>}
       <TechBadges tech={tech} />
-      {p?.played && (
+      {(p?.played || item.played) && (
         <span className="card-watched" aria-label="Watched">
           ✓
         </span>
