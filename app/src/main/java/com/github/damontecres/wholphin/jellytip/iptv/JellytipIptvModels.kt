@@ -215,6 +215,9 @@ data class IptvOnNow(
     /** Other channels showing the same event, best first (already collapsed into this one card). */
     val alternates: List<IptvChannel> = emptyList(),
     val art: IptvArt? = null,
+    /** League / sport names when the server knows them ("Not interested in ‹league›"); null = unknown. */
+    val league: String? = null,
+    val sportName: String? = null,
 )
 
 /**
@@ -256,6 +259,8 @@ data class IptvUpcoming(
     val art: IptvArt? = null,
     /** The person's reminder for this event (plan "Remind me"); null = none. */
     val reminderId: String? = null,
+    /** Sport name ("cricket", "speedway") when the server sends one; null = unknown. */
+    val sportName: String? = null,
 ) {
     fun isLive(now: Long) = now in start until stop
 
@@ -441,7 +446,19 @@ object IptvParse {
             val hint = listOfNotNull(c.str("genre"), c.str("category"), chObj.str("groupName"), ch.group, ch.name, title).joinToString(" ")
             if (key != null) events[key] = out.size
             val art = art(c.optJSONObject("art") ?: p.optJSONObject("art"), resolve)
-            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint), kind, art = art)
+            val match = c.optJSONObject("match") ?: p.optJSONObject("match")
+            out +=
+                IptvOnNow(
+                    ch,
+                    title,
+                    start,
+                    stop,
+                    explicit ?: IptvRules.looksLikeSport(hint),
+                    kind,
+                    art = art,
+                    league = c.str("league") ?: p.str("league") ?: match?.str("league"),
+                    sportName = c.str("sportName") ?: p.str("sportName") ?: match?.str("sportName"),
+                )
         }
         val resolved =
             out.map { o ->
@@ -513,6 +530,7 @@ object IptvParse {
                 recordingId = o.str("recordingId"),
                 art = art(o.optJSONObject("art"), resolve),
                 reminderId = o.str("reminderId") ?: if (reminders) o.str("id") else null,
+                sportName = o.str("sportName") ?: match?.str("sportName"),
             )
         }
     }

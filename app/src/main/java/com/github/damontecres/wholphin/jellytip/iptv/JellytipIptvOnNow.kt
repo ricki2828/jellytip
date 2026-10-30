@@ -171,11 +171,11 @@ fun OnNowStrip(
                 230.dp,
                 56.dp,
                 onClick = { onOpen(o, o.channel) },
-                onLongClick = if (o.alternates.isNotEmpty()) ({ menu = o }) else null,
+                onLongClick = if (o.alternates.isNotEmpty() || o.sport) ({ menu = o }) else null,
             )
         }
     }
-    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> onOpen(o, ch) }, onDismiss = { menu = null }) }
+    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> onOpen(o, ch) }, onDismiss = { menu = null }, extra = if (o.sport) rememberSportMuteItems(o.league, o.sportName) else emptyList()) }
 }
 
 /** Long-press on an event card: watch it on the main channel or any alternate (best first, as the server ranked them). */
@@ -184,8 +184,9 @@ fun AlternatesMenu(
     o: IptvOnNow,
     onPick: (IptvChannel) -> Unit,
     onDismiss: () -> Unit,
+    extra: List<com.github.damontecres.wholphin.ui.components.DialogItem> = emptyList(),
 ) {
-    val items =
+    val channels =
         (listOf(o.channel) + o.alternates).map { ch ->
             com.github.damontecres.wholphin.ui.components.DialogItem(
                 headlineContent = {
@@ -217,7 +218,7 @@ fun AlternatesMenu(
                 dismissOnClick = true,
             )
         }
-    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = o.title, dialogItems = items, onDismissRequest = onDismiss)
+    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = o.title, dialogItems = channels + extra, onDismissRequest = onDismiss)
 }
 
 /** Home: "Live sport on now" — only when at least two sport channels are live (people without IPTV get nothing). */
@@ -235,6 +236,8 @@ fun JellytipLiveSportRow(
         }
     }
     var menu by remember { mutableStateOf<IptvOnNow?>(null) }
+    val muted = rememberSportMuted()
+    val shown = remember(items, muted) { items.filterNot { muted.mutes(it.league, it.sportName) } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Live sport on now")
         LazyRow(
@@ -242,20 +245,28 @@ fun JellytipLiveSportRow(
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
             modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
-            items(items, key = { it.channel.id }) { o ->
+            items(shown, key = { it.channel.id }) { o ->
                 OnNowCard(
                     o,
                     now,
                     280.dp,
                     72.dp,
-                    onClick = { viewModel.open(o, items, "home live sport OK") },
+                    onClick = { viewModel.open(o, shown, "home live sport OK") },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
-                    onLongClick = if (o.alternates.isNotEmpty()) ({ menu = o }) else null,
+                    // Long press: the other channels and "Not interested in ‹league›" / "‹sport›"
+                    onLongClick = { menu = o },
                 )
             }
         }
     }
-    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> viewModel.open(o, items, "home live sport alternate", ch) }, onDismiss = { menu = null }) }
+    menu?.let { o ->
+        AlternatesMenu(
+            o,
+            onPick = { ch -> viewModel.open(o, shown, "home live sport alternate", ch) },
+            onDismiss = { menu = null },
+            extra = rememberSportMuteItems(o.league, o.sportName),
+        )
+    }
 }
 
 /** Live sport for Home: the last answer at once (no late insert), refreshed for next time. */

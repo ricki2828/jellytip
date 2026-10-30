@@ -61,7 +61,7 @@ fun ApplicationContent(
     // Jellytip: the reminder nudge banner takes OK (Watch) and Back while it shows
     val reminderBanner: JellytipReminderBannerViewModel = hiltViewModel()
     Box(
-        modifier = modifier.onPreviewKeyEvent { reminderBanner.reminders.onKey(it.nativeKeyEvent) },
+        modifier = modifier.onPreviewKeyEvent { reminderBanner.reminders.onKey(it.nativeKeyEvent) || com.github.damontecres.wholphin.jellytip.JellytipUndo.onKey(it.nativeKeyEvent) },
     ) {
         val backdropStyle = preferences.appPreferences.interfacePreferences.backdropStyle
         Backdrop(
@@ -108,5 +108,6 @@ fun ApplicationContent(
             },
         )
         JellytipReminderBanner(reminderBanner.reminders)
+        com.github.damontecres.wholphin.jellytip.JellytipUndoBar()
     }
 }

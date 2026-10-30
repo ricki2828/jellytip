@@ -126,6 +126,8 @@ fun JellytipUpcomingSportRow(
             value = nowSec()
         }
     }
+    val muted = rememberSportMuted()
+    val shown = remember(items, muted) { items.filterNot { muted.mutes(it.league, it.sportName) } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Coming up in sport")
         LazyRow(
@@ -133,7 +135,7 @@ fun JellytipUpcomingSportRow(
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
             modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
-            items(items, key = { it.key }) { u ->
+            items(shown, key = { it.key }) { u ->
                 UpcomingTile(u, now, onClick = { overlay = u }, modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() })
             }
         }
@@ -243,6 +245,7 @@ private fun UpcomingOverlay(
 ) {
     val remindersOn by viewModel.reminders.available.collectAsState()
     val reminderList by viewModel.reminders.items.collectAsState()
+    val muteItems = rememberSportMuteItems(u.league, u.sportName)
     val live = u.isLive(now)
     val channels = listOf(u.channel) + u.alternateChannels
     val items =
@@ -268,6 +271,7 @@ private fun UpcomingOverlay(
                 u.recordingId != null -> add(DialogItem("Recording scheduled", dismissOnClick = true) {})
                 u.recordable && u.stop > now -> add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
             }
+            addAll(muteItems)
             // Remind me (plan "Remind me"): hidden until the server answers the reminders route (404 = never)
             if (remindersOn == true && u.stop > now) {
                 val rid = viewModel.reminders.reminderIdFor(u, reminderList)
@@ -396,7 +400,9 @@ fun JellytipUpcomingSportPage(
     }
     var overlay by remember { mutableStateOf<IptvUpcoming?>(null) }
     val first = remember { FocusRequester() }
-    val list = items
+    val muted = rememberSportMuted()
+    val all = items
+    val list = remember(all, muted) { all?.filterNot { muted.mutes(it.league, it.sportName) } }
     LaunchedEffect(list?.isNotEmpty() == true) {
         if (list?.isNotEmpty() == true) {
             withFrameNanos { }

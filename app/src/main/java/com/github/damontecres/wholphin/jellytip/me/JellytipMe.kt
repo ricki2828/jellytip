@@ -5,6 +5,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +36,22 @@ data class MePrefs(
     /** none | pending | linked | error */
     val letterboxdStatus: String,
     val version: Int?,
+    /** `sport.muted` (plan "Learn sport taste"): never shown in live sport, upcoming or reminders. */
+    val sportMuted: SportMuted = SportMuted(),
 )
+
+data class SportMuted(
+    val sports: List<String> = emptyList(),
+    val leagues: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+) {
+    fun mutes(
+        league: String?,
+        sport: String?,
+    ): Boolean =
+        (league != null && leagues.any { it.equals(league, ignoreCase = true) }) ||
+            (sport != null && sports.any { it.equals(sport, ignoreCase = true) })
+}
 
 data class MeFollow(
     val personId: UUID,
@@ -83,6 +99,10 @@ object MeParse {
             letterboxdUser = lb.str("username"),
             letterboxdStatus = lb.str("status") ?: "none",
             version = if (o.has("version") && !o.isNull("version")) o.optInt("version") else null,
+            sportMuted =
+                o.optJSONObject("sport")?.optJSONObject("muted")?.let { m ->
+                    SportMuted(strings(m.optJSONArray("sports")), strings(m.optJSONArray("leagues")), strings(m.optJSONArray("tags")))
+                } ?: SportMuted(),
         )
     }
 
@@ -215,6 +235,35 @@ object JellytipMe {
         }
         val err = runCatching { JSONObject(res.second).optString("error").ifBlank { JSONObject(res.second).optString("code") } }.getOrNull()
         return res.first to err
+    }
+
+    /**
+     * "Not interested in ‹league›" / "‹sport›" (`sport.muted.leagues` / `.sports`): add or remove [value], PATCHed as the
+     * whole list (arrays replace). One retry after a 409 (the answer carried the server's copy). [onDone] gets success.
+     */
+    fun setSportMuted(
+        kind: String,
+        value: String,
+        on: Boolean,
+        onDone: (Boolean) -> Unit = {},
+    ) {
+        scope.launch {
+            var ok = false
+            for (attempt in 0..1) {
+                val m = _prefs.value?.sportMuted ?: SportMuted()
+                val current = if (kind == "sports") m.sports else m.leagues
+                val next = if (on) (current.filterNot { it.equals(value, true) } + value) else current.filterNot { it.equals(value, true) }
+                val body = JSONObject().put("sport", JSONObject().put("muted", JSONObject().put(kind, JSONArray(next))))
+                val (code, _) = patch(body)
+                if (code == 200) {
+                    ok = true
+                    break
+                }
+                if (code != 409) break
+            }
+            JellytipTrace.log("me", "sport muted $kind '$value' on=$on ok=$ok")
+            withContext(Dispatchers.Main) { onDone(ok) }
+        }
     }
 
     /** 1 = like, -1 = not for me, 0 = clear. */
