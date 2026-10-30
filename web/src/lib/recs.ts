@@ -60,3 +60,6 @@ export function lengthText(r: Pick<Rec, "start" | "stop">): string {
   const m = Math.max(0, Math.round((r.stop - r.start) / 60));
   return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`;
 }
+
+/** "&resume=<s>" for a recording partly watched (none when finished or barely started). */
+export const resumeAt = (p?: { position: number; played?: boolean } | null) => (p && !p.played && p.position > 30 ? `&resume=${Math.floor(p.position)}` : "");

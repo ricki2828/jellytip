@@ -4,12 +4,12 @@ import { useState } from "react";
 import { cancelRecording } from "../api/iptv";
 import { refreshRecs, useRecs } from "../api/recStore";
 import { StopRecordingSheet } from "./StopRecordingSheet";
-import { chipFor, lengthText, orderRecs, type Rec } from "../lib/recs";
+import { chipFor, resumeAt, lengthText, orderRecs, type Rec } from "../lib/recs";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import "../screens/iptv/iptv.css";
 
-const playPath = (r: Rec) => `${targetPath({ recording: String(r.id) })}&t=${encodeURIComponent(r.title)}`;
+const playPath = (r: Rec) => `${targetPath({ recording: String(r.id) })}&t=${encodeURIComponent(r.title)}${resumeAt(r.progress)}`;
 
 function RecTile({ r, onOpen }: { r: Rec; onOpen: () => void }) {
   const chip = chipFor(r);

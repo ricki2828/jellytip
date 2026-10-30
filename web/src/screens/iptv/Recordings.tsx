@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cancelRecording, deleteRecording, errorText, recordings as getRecordings, type Answer, type Recording, type Space } from "../../api/iptv";
 import { StopRecordingSheet } from "../../components/StopRecordingSheet";
 import { targetPath } from "../../lib/iptvPlay";
+import { resumeAt } from "../../lib/recs";
 import { go } from "../../lib/router";
 
 const STATE: Record<Recording["state"], string> = {
@@ -84,7 +85,7 @@ export function Recordings() {
             </div>
             <div className="buttons">
               {r.playable && (
-                <button className="btn small primary" data-nav onClick={() => go(`${targetPath({ recording: String(r.id) })}&t=${encodeURIComponent(r.title)}`)}>
+                <button className="btn small primary" data-nav onClick={() => go(`${targetPath({ recording: String(r.id) })}&t=${encodeURIComponent(r.title)}${resumeAt(r.progress)}`)}>
                   {r.state === "recording" ? "Watch from start" : r.progress && !r.progress.played ? "Resume" : "Play"}
                 </button>
               )}

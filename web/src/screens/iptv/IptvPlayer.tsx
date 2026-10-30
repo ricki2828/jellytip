@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
-import { play, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
+import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
+import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
@@ -59,6 +60,11 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const isLive = !!target.channel && target.start == null;
+  const [meta, setMeta] = useState<RecMeta | null>(null);
+  const [controls, setControls] = useState(true);
+  const hideTimer = useRef<number | null>(null);
+  const lenRef = useRef(0);
+  const growRef = useRef(false);
   // Where to start once the media is known: the resume point, then (after a renewed link) where the old one stopped
   const seekTo = useRef(resume);
 
@@ -89,8 +95,10 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
   const report = useCallback(() => {
     const key = progressKey(target);
     const v = videoRef.current;
-    if (!key || !v || !isFinite(v.duration) || v.duration <= 0 || v.currentTime < 5) return;
-    void saveProgress(key, Math.floor(v.currentTime), Math.floor(v.duration));
+    const dur = isFinite(v?.duration ?? NaN) && (v?.duration ?? 0) > 0 ? v!.duration : lenRef.current;
+    // An in-progress recording has no final length yet: don't save a half-length as if it were the whole
+    if (!key || !v || !(dur > 0) || v.currentTime < 5 || growRef.current) return;
+    void saveProgress(key, Math.floor(v.currentTime), Math.floor(dur));
   }, [target]);
 
   // A stream link failed: work out why, then renew once, show who holds the connection, or give up
@@ -237,6 +245,19 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
+  // A recording's own times: its length when the file can't say, and whether it is still growing
+  useEffect(() => {
+    if (!target.recording) return;
+    let on = true;
+    void recordingById(target.recording).then((r) => {
+      if (on && r)
+        setMeta({ state: r.state, start: r.start, stop: r.stop, stopPadded: r.stopPadded, began: r.began, ended: r.ended, progressDuration: r.progress?.duration ?? null });
+    });
+    return () => {
+      on = false;
+    };
+  }, [target.recording]);
+
   // Progress for films, episodes and recordings (live has none)
   useEffect(() => {
     if (!progressKey(target)) return;
@@ -251,52 +272,167 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
     return () => clearTimeout(t);
   }, [state.kind, answer]);
 
+  const poke = useCallback(() => {
+    setControls(true);
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setControls(false), 3500);
+  }, []);
+  useEffect(() => {
+    poke();
+    return () => {
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    };
+  }, [poke]);
+
+  const growing = !!answer?.growing || meta?.state === "recording";
+  growRef.current = growing;
+  const length = isLive ? 0 : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
+  lenRef.current = length;
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) void v.play().catch(() => undefined);
     else v.pause();
   };
+  const seekTo_ = (to: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    // In-progress: only what is recorded so far (the buffer's end when the player knows it)
+    const sk = v.seekable;
+    const cap = growing && sk.length ? Math.min(length || Infinity, sk.end(sk.length - 1) + 1) : length;
+    v.currentTime = clampSeek(to, cap, growing);
+    setTime(v.currentTime);
+  };
+  const seekBy = (d: number) => {
+    const v = videoRef.current;
+    if (v) seekTo_(v.currentTime + d);
+  };
+  const jumpLive = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const sk = v.seekable;
+    v.currentTime = sk.length ? Math.max(0, sk.end(sk.length - 1) - 1) : Math.max(0, length - 3);
+    void v.play().catch(() => undefined);
+  };
   const exit = () => {
     teardown();
-    back("/livetv");
+    back(target.recording ? "/recordings" : "/livetv");
+  };
+  const touchClick = useRef(false);
+  const lastTap = useRef<{ at: number; side: number } | null>(null);
+  const tapTimer = useRef<number | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const onVideoPointerUp = (e: React.PointerEvent<HTMLVideoElement>) => {
+    if (e.pointerType === "mouse" || isLive) return;
+    touchClick.current = true;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
+    const now = Date.now();
+    const prev = lastTap.current;
+    lastTap.current = { at: now, side };
+    if (prev && now - prev.at < 300 && prev.side === side) {
+      if (tapTimer.current) window.clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      seekBy(10 * side);
+      setFlash(`${side < 0 ? "−" : "+"}10 s`);
+      window.setTimeout(() => setFlash(null), 600);
+      return;
+    }
+    if (tapTimer.current) window.clearTimeout(tapTimer.current);
+    tapTimer.current = window.setTimeout(() => {
+      tapTimer.current = null;
+      if (controls && !videoRef.current?.paused) setControls(false);
+      else poke();
+    }, 300);
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         e.stopPropagation();
         exit();
-      } else if (e.key === " " && !isLive) {
+        return;
+      }
+      if (isLive) return;
+      poke();
+      const onButton = (document.activeElement as HTMLElement | null)?.tagName === "BUTTON";
+      let handled = true;
+      switch (e.key) {
+        case " ":
+        case "k":
+        case "MediaPlayPause":
+          togglePlay();
+          break;
+        case "Enter":
+          // On a focused control Enter is that control's click; elsewhere (D-pad OK on the picture) it plays / pauses
+          if (onButton) handled = false;
+          else togglePlay();
+          break;
+        case "ArrowLeft":
+          seekBy(-10);
+          break;
+        case "ArrowRight":
+          seekBy(10);
+          break;
+        case "j":
+        case "PageDown":
+        case "MediaRewind":
+          seekBy(-30);
+          break;
+        case "l":
+        case "PageUp":
+        case "MediaFastForward":
+          seekBy(30);
+          break;
+        default:
+          handled = false;
+      }
+      if (handled) {
         e.preventDefault();
-        togglePlay();
+        e.stopPropagation();
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive]);
+  }, [isLive, controls, length, growing]);
 
-  const seekable = !isLive && duration > 0;
-  const fmt = (s: number) => `${Math.floor(s / 3600) ? `${Math.floor(s / 3600)}:` : ""}${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  // Where to start: the resume point (or, after a renewed link, where the old one stopped), once the player can take a seek
+  const applyResume = (v: HTMLVideoElement) => {
+    const at = seekTo.current;
+    if (!(at > 0) || isLive) return;
+    if (v.readyState < 1) return;
+    const total = isFinite(v.duration) && v.duration > 0 ? v.duration : lenRef.current;
+    seekTo.current = 0;
+    if (!total || at < total - 30) v.currentTime = at;
+  };
+  const seekable = !isLive && length > 0;
+  const fmt = clockText;
 
   return (
-    <div className="player show iptv-player">
+    <div
+      className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" ? " show" : ""}`}
+      onMouseMove={isLive ? undefined : poke}
+      onClick={() => {
+        if (touchClick.current) touchClick.current = false;
+        else if (!isLive) poke();
+      }}
+    >
       <video
         ref={videoRef}
         className="player-video"
         playsInline
-        onClick={() => !isLive && togglePlay()}
+        onClick={() => !isLive && !touchClick.current && togglePlay()}
+        onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
-        onLoadedMetadata={(e) => {
-          const at = seekTo.current;
-          seekTo.current = 0;
-          if (at > 0 && !isLive && at < (e.currentTarget.duration || Infinity) - 30) e.currentTarget.currentTime = at;
-        }}
+        onLoadedMetadata={(e) => applyResume(e.currentTarget)}
+        onCanPlay={(e) => applyResume(e.currentTarget)}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
       {state.kind === "loading" && <div className="spinner" />}
@@ -334,6 +470,7 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
         <span className="player-method">via IPTV</span>
       </div>
+      {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
@@ -341,24 +478,42 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
               className="seek"
               type="range"
               min={0}
-              max={duration}
+              max={length}
               step={1}
-              value={Math.min(time, duration)}
-              onChange={(e) => {
-                if (videoRef.current) videoRef.current.currentTime = Number(e.target.value);
-              }}
-              style={{ ["--p" as string]: `${(time / duration) * 100}%` }}
+              value={Math.min(time, length)}
+              onChange={(e) => seekTo_(Number(e.target.value))}
+              style={{ ["--p" as string]: `${Math.min(100, (time / length) * 100)}%` }}
               aria-label="Seek"
             />
           )}
-          <div className="player-row">
-            <button className="btn ghost" data-nav onClick={togglePlay}>
+          <div className="player-row iptv-controls">
+            <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">
+              −30s
+            </button>
+            <button className="btn ghost" data-nav onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
+              −10s
+            </button>
+            <button className="btn ghost" data-nav data-autofocus onClick={togglePlay}>
               {paused ? "Play" : "Pause"}
+            </button>
+            <button className="btn ghost" data-nav onClick={() => seekBy(10)} aria-label="Forward 10 seconds">
+              +10s
+            </button>
+            <button className="btn ghost" data-nav onClick={() => seekBy(30)} aria-label="Forward 30 seconds">
+              +30s
             </button>
             <span className="clock">
               {fmt(time)}
-              {seekable ? ` / ${fmt(duration)}` : ""}
+              {seekable ? ` / ${fmt(length)}${growing ? "+" : ""}` : ""}
             </span>
+            {growing && (
+              <>
+                <span className="spacer" />
+                <button className="btn ghost" data-nav onClick={jumpLive}>
+                  Jump to live
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

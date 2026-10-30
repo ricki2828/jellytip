@@ -137,6 +137,8 @@ export interface Recording {
   stop: number;
   /** Stop plus the end padding, when the server sends it. */
   stopPadded?: number;
+  began?: number | null;
+  ended?: number | null;
   state: "scheduled" | "recording" | "done" | "failed" | "cancelled";
   bytes?: number;
   error?: string | null;
@@ -303,3 +305,11 @@ export async function qualitySummary(): Promise<QualitySummary | null> {
 
 /** Admin: check every opted channel now (the server only probes when nobody is watching). */
 export const probeNow = () => iptvPost<{ queued?: number }>("v1/iptv/quality/probe", {});
+
+/** One recording (its times and state), or null when the server doesn't know it. */
+export async function recordingById(id: string): Promise<Recording | null> {
+  const a = await iptvGet<Recording | { recording: Recording }>(`v1/iptv/recordings/${encodeURIComponent(id)}`);
+  if (a.status !== 200 || !a.data) return null;
+  const d = a.data as { recording?: Recording } & Recording;
+  return d.recording ?? (typeof d.start === "number" ? d : null);
+}

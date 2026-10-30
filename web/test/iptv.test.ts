@@ -174,3 +174,22 @@ test("reminders: nudge once at soon and once at kick-off", () => {
   assert.deepEqual(dueNudges(items, seen, 10_100).map((n) => n.at), ["live"]);
   assert.equal(dueNudges(items, seen, 10_200).length, 0);
 });
+
+import { clampSeek, clockText, recordingLength } from "../src/lib/recPlay.ts";
+
+test("recording length: the file's own, else from the recording's times", () => {
+  assert.equal(recordingLength(null, 1000, 5400), 5400);
+  assert.equal(recordingLength({ state: "done", start: 1000, stop: 4600, began: 940, ended: 5000 }, 9999, NaN), 4060);
+  assert.equal(recordingLength({ state: "done", start: 1000, stop: 4600, stopPadded: 4900 }, 9999, Infinity), 3900);
+  assert.equal(recordingLength({ state: "done", start: 1000, stop: 4600, progressDuration: 3700 }, 9999, 0), 3700);
+  assert.equal(recordingLength({ state: "recording", start: 1000, stop: 4600, began: 940 }, 1500, Infinity), 560);
+  assert.equal(recordingLength(null, 1, NaN), 0);
+});
+
+test("seek clamps inside what exists; live edge keeps a margin", () => {
+  assert.equal(clampSeek(-5, 100, false), 0);
+  assert.equal(clampSeek(500, 100, false), 99);
+  assert.equal(clampSeek(500, 100, true), 97);
+  assert.equal(clockText(3723), "1:02:03");
+  assert.equal(clockText(65), "01:05");
+});
