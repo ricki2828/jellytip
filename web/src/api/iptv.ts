@@ -235,6 +235,11 @@ export interface PlayAnswer {
   expires?: number;
   growing?: boolean;
   connection?: Connection;
+  /**
+   * Direct from provider (plan part C, owner + native clients only): [url] is the provider's own absolute stream
+   * link (credentials inside: never log it). The one-connection guard can't be enforced for it.
+   */
+  direct?: boolean;
 }
 
 export const liveGroups = () => iptvGet<{ groups: LiveGroup[]; defaultGroup?: string }>("v1/iptv/live/groups");

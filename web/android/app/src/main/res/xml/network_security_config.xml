@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Direct-from-provider IPTV (plan "IPTV playback on phones", part C): the native player opens the provider's own
+  stream URL, and IPTV providers serve plain http from hosts only known at runtime (each person's provider), so
+  cleartext can't be limited to a host list here. The WebView still loads the app from https://localhost
+  (allowMixedContent stays false), and the companion API is https.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

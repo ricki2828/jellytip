@@ -8,7 +8,8 @@ import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
 import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
-import { engineFor, failureText, fallbackFormat, linkFailure, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
@@ -43,7 +44,11 @@ function progressKey(t: PlayTarget): string | null {
   return null;
 }
 
-export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
+export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number }) {
+  return nativeIptvPlayer ? <NativeIptvPlayer {...props} /> : <WebIptvPlayer {...props} />;
+}
+
+function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -517,6 +522,166 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const DIRECT_NOTE = "Playing straight from your provider: Jellytip can't see other devices on this connection.";
+
+/** Why the native player gave up, in words (no links: a direct one carries the provider login). */
+function nativeFailureText(r: NativePlayerResult): string {
+  if (r.httpStatus) return `The stream was refused (${r.httpStatus}).`;
+  switch (r.errorCode) {
+    case "ERROR_CODE_DECODING_FORMAT_UNSUPPORTED":
+    case "ERROR_CODE_DECODER_INIT_FAILED":
+      return "This phone can't play this channel's video or audio.";
+    case "ERROR_CODE_IO_NETWORK_CONNECTION_FAILED":
+    case "ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT":
+      return "The stream kept dropping. Check the connection and try again.";
+    default:
+      return "The stream stopped playing.";
+  }
+}
+
+/**
+ * Phone app (plan "IPTV playback on phones", part A): /play here (the 409 pop-up and renewals stay in the web app),
+ * then the full-screen ExoPlayer activity plays the link. Progress is saved from its reports; when it closes with an
+ * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
+ * /v1/debug/report like the web player's.
+ */
+function NativeIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
+  const [state, setState] = useState<State>({ kind: "loading" });
+  const alive = useRef(true);
+  const renewed = useRef(false);
+  const isLive = !!target.channel && target.start == null;
+  const key = progressKey(target);
+
+  const exit = useCallback(() => back(target.recording ? "/recordings" : "/livetv"), [target.recording]);
+
+  // One native session: open the player, save progress while it plays, then act on how it closed
+  const session = useCallback(
+    async (a: PlayAnswer, resumeMs: number) => {
+      const link = nativeLink(a, streamUrl);
+      const live = isLive || a.kind === "live";
+      debugEvent("iptv-player", "native attach", { player: "exoplayer", mime: a.mime ?? null, kind: a.kind, direct: link.direct, live }, "info");
+      const subs = [
+        await NativePlayer.addListener("progress", (e) => {
+          if (key && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000));
+        }),
+        await NativePlayer.addListener("playerError", (e) => {
+          debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, ...e });
+          void sendDebugReport();
+        }),
+      ];
+      let r: NativePlayerResult;
+      try {
+        r = await NativePlayer.open({ url: link.url, title, mime: a.mime, live, resumeMs, note: link.direct ? DIRECT_NOTE : undefined });
+      } catch (e) {
+        r = { reason: "error", positionMs: 0, durationMs: 0, error: String((e as Error).message ?? e) };
+      } finally {
+        subs.forEach((s) => void s.remove());
+      }
+      if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000));
+      if (!alive.current) return;
+      if (r.reason !== "error") {
+        exit();
+        return;
+      }
+      const what = linkFailure(r.httpStatus ?? 0, r.iptvError);
+      debugEvent("iptv-player", "native stream failed", {
+        player: "exoplayer",
+        kind: a.kind,
+        mime: a.mime ?? null,
+        direct: link.direct,
+        errorCode: r.errorCode ?? null,
+        error: r.error ?? null,
+        status: r.httpStatus ?? 0,
+        code: r.iptvError ?? null,
+        time: r.positionMs / 1000,
+        verdict: what,
+      });
+      void sendDebugReport();
+      if (what === "renew" && !renewed.current) {
+        renewed.current = true;
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        void start(false, live ? 0 : r.positionMs);
+        return;
+      }
+      if (what === "full") setState({ kind: "full", text: "Every connection to this provider is in use." });
+      else setState({ kind: "error", text: failureText(r.iptvError, nativeFailureText(r)) });
+    },
+    // start is declared below and stable for the target
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLive, key, title, exit],
+  );
+
+  /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
+  const start = useCallback(
+    async (retry = false, resumeMs = resume * 1000): Promise<boolean> => {
+      if (!retry) setState({ kind: "loading" });
+      const a = await play(playQuery(target, iptvDevice(), "ts", true));
+      if (!alive.current) return false;
+      if (a.status === 200 && a.data?.url) {
+        setState({ kind: "playing" });
+        void session(a.data, resumeMs);
+        return true;
+      }
+      const what = linkFailure(a.status, a.data?.code);
+      const text = a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`);
+      if (retry) setState({ kind: "error", text });
+      else if (what === "full") {
+        const b = parseBlocker(a.data);
+        const popup = b && (canStop(b) || (b.kind === "viewer" && (b.title || b.channel))) ? b : undefined;
+        setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection, blocker: popup });
+      } else setState({ kind: "error", text: failureText(a.data?.code, text) });
+      return false;
+    },
+    [target, resume, session],
+  );
+
+  useEffect(() => {
+    alive.current = true;
+    renewed.current = false;
+    void start();
+    return () => {
+      alive.current = false;
+    };
+  }, [start]);
+
+  return (
+    <div className="player show iptv-player">
+      {(state.kind === "loading" || state.kind === "playing") && <div className="spinner" />}
+      {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
+      {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
+        <div className="player-error">
+          <p>{state.text}</p>
+          {state.kind === "full" && state.connection?.active?.length ? (
+            <ul className="iptv-holders">
+              {state.connection.active.map((h, i) => (
+                <li key={i}>
+                  {h.kind === "recording" ? "Recording" : "Watching"} {h.label ?? ""}
+                  {h.userName || h.user ? ` · ${h.userName ?? h.user}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="buttons">
+            <button className="btn primary" data-nav data-autofocus onClick={() => void start()}>
+              Try again
+            </button>
+            <button className="btn" data-nav onClick={exit}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="player-top">
+        <button className="btn ghost" data-nav onClick={exit} aria-label="Back">
+          ‹ Back
+        </button>
+        <span className="player-title">{title}</span>
+        <span className="player-method">via IPTV</span>
+      </div>
     </div>
   );
 }
