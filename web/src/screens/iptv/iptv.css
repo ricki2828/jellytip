@@ -988,3 +988,12 @@
   padding-right: 52px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
+.iptv-pw {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.iptv-pw input {
+  flex: 1;
+  min-width: 0;
+}

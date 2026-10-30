@@ -115,3 +115,30 @@ test("409 holders: viewer cannot be stopped, old server shapes tolerated", () =>
   assert.equal(parseBlocker(null), null);
   assert.equal(parseBlocker({ error: "x" }), null);
 });
+
+import { normaliseServer, normaliseWebUrl, parseProviderLink } from "../src/lib/providerLink.ts";
+
+test("provider link: get.php and player_api.php with login", () => {
+  assert.deepEqual(parseProviderLink("http://host.tv:8080/get.php?username=bob&password=p%40ss&type=m3u_plus&output=ts"), {
+    kind: "xtream",
+    server: "http://host.tv:8080",
+    username: "bob",
+    password: "p@ss",
+  });
+  assert.deepEqual(parseProviderLink("  host.tv/player_api.php?username=a&password=b "), { kind: "xtream", server: "http://host.tv", username: "a", password: "b" });
+});
+
+test("provider link: stream URL, plain playlist, junk", () => {
+  assert.deepEqual(parseProviderLink("http://host.tv:8080/live/u1/pw%2F2/123.ts"), { kind: "xtream", server: "http://host.tv:8080", username: "u1", password: "pw/2" });
+  assert.deepEqual(parseProviderLink("https://x.example/list/abc.m3u"), { kind: "m3u", playlistUrl: "https://x.example/list/abc.m3u" });
+  assert.equal(parseProviderLink("not a link"), null);
+  assert.equal(parseProviderLink(""), null);
+});
+
+test("server field: scheme added, tails and spaces stripped", () => {
+  assert.equal(normaliseServer(" provider.example:8080/ "), "http://provider.example:8080");
+  assert.equal(normaliseServer("https://p.example/get.php?username=a"), "https://p.example");
+  assert.equal(normaliseServer("http://p.example/player_api.php"), "http://p.example");
+  assert.equal(normaliseServer("hello"), null);
+  assert.equal(normaliseWebUrl("p.example/a.m3u"), "http://p.example/a.m3u");
+});

@@ -24,6 +24,7 @@ import {
   type SyncStage,
 } from "../../api/iptv";
 import { getSession } from "../../api/jellyfin";
+import { normaliseServer, normaliseWebUrl, parseProviderLink } from "../../lib/providerLink";
 import { Recordings } from "./Recordings";
 import "./iptv.css";
 
@@ -53,38 +54,92 @@ function ProviderForm({ existing, onDone, onCancel }: { existing?: Provider; onD
   const [server, setServer] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [paste, setPaste] = useState("");
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [xmltvUrl, setXmltvUrl] = useState("");
   const [englishOnly, setEnglishOnly] = useState(existing?.englishOnly ?? true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [fieldErr, setFieldErr] = useState<Partial<Record<"server" | "username" | "password" | "playlistUrl", string>>>({});
   const editing = !!existing;
+  const clear = (k: keyof typeof fieldErr) => setFieldErr((f) => ({ ...f, [k]: undefined }));
+
+  const onPaste = (v: string) => {
+    setPaste(v);
+    if (!v.trim()) return setPasteNote(null);
+    const l = parseProviderLink(v);
+    if (!l) return setPasteNote("That doesn't look like a link. Check it starts with http:// and try again.");
+    setFieldErr({});
+    if (l.kind === "xtream") {
+      setKind("xtream");
+      setServer(l.server);
+      setUsername(l.username);
+      setPassword(l.password);
+      setPasteNote("Filled in below. Check it, then Add.");
+    } else {
+      setKind("m3u");
+      setPlaylistUrl(l.playlistUrl);
+      setPasteNote("That's a playlist address (no login inside), so it went to the M3U tab.");
+    }
+    setPaste(""); // the link holds the login: don't leave it sitting in the box
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
+    const fe: typeof fieldErr = {};
     const body: Record<string, unknown> = { name: name.trim() || undefined, englishOnly };
     if (kind === "xtream") {
-      if (!editing && (!server.trim() || !username.trim() || !password)) return setErr("Server, username and password are all needed.");
       // Editing: blank login fields stay as they are on the server
-      if (server.trim()) body.server = server.trim();
+      if (server.trim() || !editing) {
+        const sv = normaliseServer(server);
+        if (!server.trim()) fe.server = "Enter the server address, like http://provider.example:8080.";
+        else if (!sv) fe.server = "That isn't a web address. It should look like http://provider.example:8080.";
+        else body.server = sv;
+      }
       if (username.trim()) body.username = username.trim();
+      else if (!editing) fe.username = "Enter the username.";
       if (password) body.password = password;
+      else if (!editing) fe.password = "Enter the password.";
     } else {
-      if (!editing && !playlistUrl.trim()) return setErr("The playlist (M3U) address is needed.");
-      if (playlistUrl.trim()) body.playlistUrl = playlistUrl.trim();
+      if (playlistUrl.trim()) {
+        const pl = normaliseWebUrl(playlistUrl);
+        if (!pl) fe.playlistUrl = "That isn't a web address. It should start with http:// or https://.";
+        else body.playlistUrl = pl;
+      } else if (!editing) fe.playlistUrl = "Enter the playlist (M3U) address.";
       if (xmltvUrl.trim()) body.xmltvUrl = xmltvUrl.trim();
     }
+    setFieldErr(fe);
+    if (Object.keys(fe).length) return;
     setBusy(true);
     const a = editing ? await editProvider(existing.id, body) : await addProvider({ kind, ...body });
     setBusy(false);
-    setPassword("");
-    if (a.status >= 200 && a.status < 300 && a.data) onDone(a.data);
-    else setErr(a.data?.code === "rate_limited" ? "Too many login changes: try again in an hour." : errorText(a));
+    if (a.status >= 200 && a.status < 300 && a.data) {
+      setPassword("");
+      onDone(a.data);
+    } else setErr(a.data?.error ? a.data.error : a.data?.code === "rate_limited" ? "Too many login changes: try again in an hour." : errorText(a));
   };
 
   return (
-    <form className="iptv-form" onSubmit={submit} autoComplete="off">
+    <form className="iptv-form" onSubmit={submit} autoComplete="off" noValidate>
+      {!editing && (
+        <label>
+          <span>Paste your provider link</span>
+          <input
+            data-nav
+            value={paste}
+            onChange={(e) => onPaste(e.target.value)}
+            placeholder="http://…/get.php?username=…&password=…"
+            inputMode="url"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {pasteNote && <span className="iptv-hint">{pasteNote}</span>}
+        </label>
+      )}
       {!editing && (
         <div className="chips" role="radiogroup" aria-label="Provider type">
           <button type="button" className={`chip${kind === "xtream" ? " on" : ""}`} data-nav role="radio" aria-checked={kind === "xtream"} onClick={() => setKind("xtream")}>
@@ -103,26 +158,35 @@ function ProviderForm({ existing, onDone, onCancel }: { existing?: Provider; onD
         <>
           <label>
             <span>Server</span>
-            <input data-nav value={server} onChange={(e) => setServer(e.target.value)} placeholder={editing ? `${existing.server ?? "unchanged"} (leave blank to keep)` : "http://provider.example:8080"} inputMode="url" spellCheck={false} />
+            <input data-nav value={server} onChange={(e) => (setServer(e.target.value), clear("server"))} placeholder={editing ? `${existing.server ?? "unchanged"} (leave blank to keep)` : "http://provider.example:8080"} inputMode="url" autoCapitalize="none" spellCheck={false} aria-invalid={!!fieldErr.server} />
+            {fieldErr.server && <span className="iptv-err">{fieldErr.server}</span>}
           </label>
           <label>
             <span>Username</span>
-            <input data-nav value={username} onChange={(e) => setUsername(e.target.value)} placeholder={editing ? "unchanged" : ""} autoCapitalize="none" spellCheck={false} />
+            <input data-nav value={username} onChange={(e) => (setUsername(e.target.value), clear("username"))} placeholder={editing ? "unchanged" : ""} autoCapitalize="none" spellCheck={false} aria-invalid={!!fieldErr.username} />
+            {fieldErr.username && <span className="iptv-err">{fieldErr.username}</span>}
           </label>
           <label>
             <span>Password</span>
-            <input data-nav type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={editing ? "unchanged" : ""} autoComplete="new-password" />
+            <span className="iptv-pw">
+              <input data-nav type={showPw ? "text" : "password"} value={password} onChange={(e) => (setPassword(e.target.value), clear("password"))} placeholder={editing ? "unchanged" : ""} autoComplete="new-password" autoCapitalize="none" spellCheck={false} aria-invalid={!!fieldErr.password} />
+              <button type="button" className="btn small" data-nav onClick={() => setShowPw((v) => !v)} aria-pressed={showPw}>
+                {showPw ? "Hide" : "Show"}
+              </button>
+            </span>
+            {fieldErr.password && <span className="iptv-err">{fieldErr.password}</span>}
           </label>
         </>
       ) : (
         <>
           <label>
             <span>Playlist (M3U) address</span>
-            <input data-nav value={playlistUrl} onChange={(e) => setPlaylistUrl(e.target.value)} placeholder={editing ? "unchanged" : "https://…/playlist.m3u"} inputMode="url" spellCheck={false} />
+            <input data-nav value={playlistUrl} onChange={(e) => (setPlaylistUrl(e.target.value), clear("playlistUrl"))} placeholder={editing ? "unchanged" : "https://…/playlist.m3u"} inputMode="url" autoCapitalize="none" spellCheck={false} aria-invalid={!!fieldErr.playlistUrl} />
+            {fieldErr.playlistUrl && <span className="iptv-err">{fieldErr.playlistUrl}</span>}
           </label>
           <label>
             <span>Guide (XMLTV) address, optional</span>
-            <input data-nav value={xmltvUrl} onChange={(e) => setXmltvUrl(e.target.value)} placeholder={editing ? "unchanged" : "https://…/epg.xml"} inputMode="url" spellCheck={false} />
+            <input data-nav value={xmltvUrl} onChange={(e) => setXmltvUrl(e.target.value)} placeholder={editing ? "unchanged" : "https://…/epg.xml"} inputMode="url" autoCapitalize="none" spellCheck={false} />
           </label>
         </>
       )}
@@ -131,7 +195,7 @@ function ProviderForm({ existing, onDone, onCancel }: { existing?: Provider; onD
         <span>English only (skip other-language groups and titles)</span>
       </label>
       <p className="iptv-hint">The login is checked once and kept only on the server; it is never shown again.</p>
-      {err && <p className="iptv-err">{err}</p>}
+      {err && <p className="iptv-err" role="alert">{err}</p>}
       <div className="buttons">
         <button type="submit" className="btn primary" data-nav disabled={busy}>
           {busy ? "Checking…" : editing ? "Save" : "Add and check"}
