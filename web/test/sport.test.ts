@@ -55,6 +55,7 @@ test("on now: the server's order is kept when it ranks; one card per event", () 
 
 test("settings parsers tolerate odd input", () => {
   assert.deepEqual(parseSuggest({ teams: ["Warriors", { name: "49ers" }, 3], leagues: [{ name: "NRL" }, "NRL"] }).map((s) => `${s.type}:${s.name}`), ["team:Warriors", "team:49ers", "league:NRL"]);
+  assert.equal(parseSuggest({ leagues: [{ name: "World Cup", type: "tournament" }, { name: "NRL", type: "league" }] }).map((s) => s.tournament === true).join(), "true,false");
   assert.deepEqual(parseSuggest(null), []);
   const q = parseQualitySummary({
     providers: [

@@ -69,8 +69,8 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
     <>
       <h2 className="settings-head">Live sport</h2>
       <div className="settings-block settings-pad">
-        <span className="settings-sub">Teams and leagues you follow come first in Live TV and on Home when they are on now.</span>
-        <div className="chips settings-chips-gap" aria-label="Your teams and leagues">
+        <span className="settings-sub">Teams, leagues and tournaments you follow come first in Live TV and on Home when they are on now.</span>
+        <div className="chips settings-chips-gap" aria-label="Your teams, leagues and tournaments">
           {teams.length + leagues.length === 0 && <span className="settings-sub">Nothing picked yet.</span>}
           {teams.map((n) => (
             <button key={`t:${n}`} className="chip on" data-nav aria-label={`Remove ${n}`} onClick={() => void save({ teams: toggleName(teams, n) })}>
@@ -84,14 +84,14 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           ))}
         </div>
         <div className="settings-inline settings-chips-gap">
-          <input className="settings-input" data-nav value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search teams and leagues" spellCheck={false} maxLength={60} aria-label="Search teams and leagues" />
+          <input className="settings-input" data-nav value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search teams, leagues &amp; tournaments" spellCheck={false} maxLength={60} aria-label="Search teams, leagues and tournaments" />
         </div>
         {found.length > 0 && (
           <div className="chips settings-chips-gap" aria-label="Suggestions">
             {found.slice(0, 40).map((s) => (
               <button key={`${s.type}:${s.name}`} className={`chip${picked(s) ? " on" : ""}`} data-nav aria-pressed={picked(s)} onClick={() => toggle(s)}>
                 {s.name}
-                <span className="livetv-count">{s.type}</span>
+                <span className="livetv-count">{s.tournament ? "Tournament" : s.type === "league" ? "League" : "Team"}</span>
               </button>
             ))}
           </div>

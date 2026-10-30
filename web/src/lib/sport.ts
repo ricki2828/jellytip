@@ -107,6 +107,8 @@ export function kindPill(kind: Kind | null | undefined): { text: "LIVE" | "REPLA
 export interface Suggestion {
   name: string;
   type: "team" | "league";
+  /** A league entry the server marks `type: "tournament"` (World Cup, Six Nations…). */
+  tournament?: boolean;
 }
 
 /** GET /v1/iptv/sport/suggest?q= → {teams:[…], leagues:[…]} (strings or {name}); anything else = none. */
@@ -115,12 +117,15 @@ export function parseSuggest(raw: unknown): Suggestion[] {
   const names = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => (typeof x === "string" ? x : str(obj(x)?.name))).filter((x): x is string => !!x);
   const out: Suggestion[] = [];
   const seen = new Set<string>();
+  const tournaments = new Set(
+    (Array.isArray(r?.leagues) ? r!.leagues : []).flatMap((x) => (obj(x)?.type === "tournament" && str(obj(x)?.name) ? [str(obj(x)?.name)!.toLowerCase()] : [])),
+  );
   for (const [key, type] of [["teams", "team"], ["leagues", "league"]] as const)
     for (const name of names(r?.[key])) {
       const k = `${type}:${name.toLowerCase()}`;
       if (!seen.has(k)) {
         seen.add(k);
-        out.push({ name, type });
+        out.push(type === "league" && tournaments.has(name.toLowerCase()) ? { name, type, tournament: true } : { name, type });
       }
     }
   return out;
