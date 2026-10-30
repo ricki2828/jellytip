@@ -768,3 +768,21 @@
 .sport-star {
   color: #e0a43a;
 }
+
+.onnow-alts button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.onnow-alts .onnow-logo {
+  width: 28px;
+  height: 18px;
+  flex: none;
+}
+.onnow-alt-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

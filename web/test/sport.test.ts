@@ -21,6 +21,14 @@ test("sport fields are read when present and absent otherwise", () => {
   assert.equal(none.quality, null);
 });
 
+test("alternate channels carry name and quality when the server sends them", () => {
+  const s = parseSport({ eventGroup: { key: "k", alternates: ["1:2"], alternateChannels: [{ id: "1:2", name: "Sky 2", num: 502, quality: { bucket: "uhd", audio: "atmos" } }, { name: "no id" }] } });
+  assert.equal(s.alternateChannels.length, 1);
+  assert.equal(s.alternateChannels[0].name, "Sky 2");
+  assert.equal(s.alternateChannels[0].quality?.audio, "atmos");
+  assert.equal(parseSport({ eventGroup: { key: "k", alternates: ["1:2"] } }).alternateChannels.length, 0);
+});
+
 test("labels: quality chips, pills and the buffer hint", () => {
   assert.equal(qualityLabel({ bucket: "uhd", height: 2160, fps: 50, audio: null, hint: null }), "UHD");
   assert.equal(qualityLabel({ bucket: "fhd50", height: 1080, fps: 50, audio: null, hint: null }), "1080 50fps");

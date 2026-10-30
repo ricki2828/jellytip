@@ -49,7 +49,11 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
   const live = (items ?? []).filter((o) => o.stop > now);
   if (live.length < min) return null;
   const play = (id: string, name: string) => go(`${targetPath({ channel: id })}&t=${encodeURIComponent(name)}`);
-  const nameOf = (id: string) => (items ?? []).find((o) => o.channelId === id)?.channel ?? "Another channel";
+  // Newer servers send names and quality for each alternate; older ones only ids (names then come from the list, if there)
+  const alts = (o: OnNow) =>
+    o.info.alternateChannels.length
+      ? o.info.alternateChannels
+      : o.info.alternates.map((id) => ({ id, name: (items ?? []).find((x) => x.channelId === id)?.channel ?? "Another channel", num: null, logo: null, quality: null }));
   return (
     <section className="row onnow-row">
       <h2 className="row-title">{title}</h2>
@@ -77,16 +81,18 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
                 <span style={{ width: `${progressOf(o, now) * 100}%` }} />
               </span>
             </button>
-            {o.info.alternates.length > 0 && (
+            {alts(o).length > 0 && (
               <>
                 <button className="onnow-also" data-nav aria-expanded={openAlt === o.channelId} onClick={() => setOpenAlt(openAlt === o.channelId ? null : o.channelId)}>
-                  Also on {o.info.alternates.length}
+                  Also on {alts(o).length}
                 </button>
                 {openAlt === o.channelId && (
                   <div className="onnow-alts">
-                    {o.info.alternates.map((id) => (
-                      <button key={id} data-nav onClick={() => play(id, nameOf(id))}>
-                        {nameOf(id)}
+                    {alts(o).map((a) => (
+                      <button key={a.id} data-nav onClick={() => play(a.id, a.name)}>
+                        <Logo o={{ ...o, logo: a.logo, channel: a.name }} />
+                        <span className="onnow-alt-name">{a.name}</span>
+                        <SportBadges quality={a.quality} size="sm" />
                       </button>
                     ))}
                   </div>

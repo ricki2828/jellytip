@@ -21,6 +21,8 @@ export interface SportInfo {
   quality: Quality | null;
   /** Other channels showing the same event, best first. */
   alternates: string[];
+  /** The same, with names and stream quality (newer servers); empty when only ids came. */
+  alternateChannels: { id: string; name: string; num: number | null; logo: string | null; quality: Quality | null }[];
   eventKey: string | null;
   match: { team: string | null; league: string | null } | null;
 }
@@ -52,6 +54,11 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     kind,
     sport: p.sport === true || r.sport === true,
     quality: parseQuality(r.quality),
+    alternateChannels: (Array.isArray(ev?.alternateChannels) ? (ev!.alternateChannels as unknown[]) : []).flatMap((x) => {
+      const c = obj(x);
+      const id = str(c?.id);
+      return c && id ? [{ id, name: str(c.name) ?? "Another channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality) }] : [];
+    }),
     alternates: Array.isArray(ev?.alternates) ? (ev!.alternates as unknown[]).filter((x): x is string => typeof x === "string") : [],
     eventKey: str(ev?.key),
     match: m ? { team: str(m.team), league: str(m.league) } : null,
