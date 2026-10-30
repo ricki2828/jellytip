@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
+import { buildSlides, excludedIds, heroSources, SLIDE_MS, type HeroSlide } from "../lib/heroMix";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { rememberRowTitles } from "../lib/rowTitles";
@@ -41,6 +42,18 @@ export const letterboxdLoader = (l: LetterboxdRow) => async () => {
   return [...new Set(l.itemIds)].map((id) => byId.get(id)).filter((x): x is Item => !!x);
 };
 
+/** The hero: the featured mix rotates until someone touches a tile, then it follows focus. Own state, so a slide change does not re-render Home. */
+function HomeHero({ focused, slides, engaged }: { focused: Item | null; slides: HeroSlide[]; engaged: boolean }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (engaged || slides.length < 2) return;
+    const t = setInterval(() => setI((n) => n + 1), SLIDE_MS);
+    return () => clearInterval(t);
+  }, [engaged, slides]);
+  const slide = !engaged && slides.length ? slides[i % slides.length] : null;
+  return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
+}
+
 export function Home() {
   const [continueItems, setContinue] = useState<Item[] | null>(null);
   const [carousels, setCarousels] = useState<Carousel[]>([]);
@@ -56,6 +69,18 @@ export function Home() {
   const [editing, setEditing] = useState(false);
   const [reload, setReload] = useState(0);
   const [rowsFailed, setRowsFailed] = useState(false);
+  const [slides, setSlides] = useState<HeroSlide[]>([]);
+  // The mix runs until the person acts: focus the autofocused first tile does not count
+  const [engaged, setEngaged] = useState(false);
+  const userInput = useRef(false);
+  useEffect(() => {
+    const on = () => {
+      userInput.current = true;
+    };
+    const evs = ["keydown", "pointerdown", "touchstart", "mousemove"] as const;
+    evs.forEach((e) => window.addEventListener(e, on, { passive: true, once: true }));
+    return () => evs.forEach((e) => window.removeEventListener(e, on));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -106,7 +131,36 @@ export function Home() {
     first?.then((items) => items[0] && setFocused((f) => f ?? items[0])).catch(() => undefined);
   }, [focused, continueItems, carousels, rows]);
 
-  const onFocusItem = useCallback((i: Item) => setFocused(i), []);
+  // Featured mix from the rows and specials already fetched; the items arrive in the same batch as the first rows
+  useEffect(() => {
+    if (!rowsReady || continueItems === null || !rows) return setSlides([]);
+    let alive = true;
+    const sources = heroSources(rows, specials);
+    const ids = [...new Set(sources.flatMap((s) => s.ids))];
+    if (!ids.length) return setSlides([]);
+    itemsByIds(ids)
+      .then((items) => {
+        if (!alive) return;
+        const byId = new Map(items.map((it) => [it.Id.replace(/-/g, ""), it]));
+        const day = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
+        setSlides(
+          buildSlides(
+            sources.map((s) => ({ kicker: s.kicker, items: s.ids.map((id) => byId.get(id.replace(/-/g, ""))).filter((x): x is Item => !!x) })),
+            excludedIds(continueItems),
+            day,
+          ),
+        );
+      })
+      .catch(() => alive && setSlides([]));
+    return () => {
+      alive = false;
+    };
+  }, [rows, specials, rowsReady, continueItems]);
+
+  const onFocusItem = useCallback((i: Item) => {
+    setFocused(i);
+    if (userInput.current) setEngaged(true);
+  }, []);
 
   // Hovering or focusing a tile changes `focused` (the hero follows): unchanged elements keep React from re-rendering every row
   const body = useMemo(
@@ -125,7 +179,7 @@ export function Home() {
 
   return (
     <div className="home">
-      <Hero item={focused} />
+      <HomeHero focused={focused} slides={slides} engaged={engaged} />
       <div className="rows">
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
         {/* People with an IPTV provider: live sport right now, only when there are at least two */}

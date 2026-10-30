@@ -2163,3 +2163,13 @@ button.overview.open {
 .rows-error p {
   margin: 0;
 }
+
+/* featured-mix slide label above the hero title */
+.hero-kicker {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--jelly);
+}

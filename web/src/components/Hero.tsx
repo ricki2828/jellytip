@@ -32,8 +32,11 @@ async function trailerFor(item: Item): Promise<string | null> {
   return url;
 }
 
-export function Hero({ item }: { item: Item | null }) {
+/** `kicker`: where a featured-mix slide came from; `rotating`: the mix is on, so no trailers (slides last a few seconds). */
+export function Hero({ item, kicker, rotating = false }: { item: Item | null; kicker?: string; rotating?: boolean }) {
   const [shown, setShown] = useState<Item | null>(null);
+  // The kicker changes with the slide that is shown, not the one that is coming (the title is debounced)
+  const [shownKicker, setShownKicker] = useState<string | undefined>(undefined);
   const [pick, setPick] = useState<ImagePick>({ url: null, focal: null });
   const [ext, setExt] = useState<Extras | null>(null);
   const [trailer, setTrailer] = useState<string | null>(null);
@@ -51,7 +54,10 @@ export function Hero({ item }: { item: Item | null }) {
 
   useEffect(() => {
     if (!item) return;
-    const t = setTimeout(() => setShown(item), shown ? DEBOUNCE_MS : 0);
+    const t = setTimeout(() => {
+      setShown(item);
+      setShownKicker(kicker);
+    }, shown ? DEBOUNCE_MS : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.Id]);
@@ -70,7 +76,7 @@ export function Hero({ item }: { item: Item | null }) {
     const kind = shown.Type === "Movie" ? "movie" : shown.Type === "Series" ? "series" : null;
     if (kind) extras(shown.Id, kind).then((e) => alive && setExt(e));
     // The person's playback prefs can turn hero trailers off (they follow them across devices)
-    const t = setTimeout(() => {
+    const t = rotating ? undefined : setTimeout(() => {
       if (prefsNow()?.playback.trailerAutoplay === false) return;
       trailerFor(shown).then((u) => alive && setTrailer(u));
     }, TRAILER_DELAY_MS);
@@ -79,7 +85,7 @@ export function Hero({ item }: { item: Item | null }) {
       clearTimeout(t);
       clearTimeout(quick);
     };
-  }, [shown]);
+  }, [shown, rotating]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = !sound;
@@ -130,6 +136,7 @@ export function Hero({ item }: { item: Item | null }) {
       <div className="scrim-bottom" />
       {hint && <div className="hero-hint">Sound on · click again for details</div>}
       <div className="hero-text">
+        {shownKicker && <div className="hero-kicker">{shownKicker}</div>}
         <TitleLogo item={shown} />
         {episodeLine && <div className="line strong">{episodeLine}</div>}
         <div className="line">{infoLine(shown)}</div>
