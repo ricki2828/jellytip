@@ -47,6 +47,14 @@ jobs:
           name: jellytip-release-apk
           path: app/build/outputs/apk/default/release/*.apk
           retention-days: 14
+      # R8 mapping for the release build, to de-obfuscate crash stacks (artifact only: the repo is public, never in a release)
+      - name: Upload release R8 mapping
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: jellytip-release-mapping-${{ github.sha }}
+          path: app/build/outputs/mapping/defaultRelease/mapping.txt
+          retention-days: 30
+          if-no-files-found: warn
       - name: Upload APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
