@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip.specials
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
@@ -102,7 +103,10 @@ fun rememberJellytipSpecials(
     page: String,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ): JellytipSpecialsPage? {
-    val loaded by produceState(viewModel.specials.peek(page), page) {
+    // remember: the initial value is otherwise re-evaluated on every recomposition of the caller (every focus move on
+    // Home), and peek() goes to disk (exists/lastModified, even a parse) whenever the memory copy is missing
+    val initial = remember(page) { viewModel.specials.peek(page) }
+    val loaded by produceState(initial, page) {
         viewModel.specials.load(page)?.let { value = it }
     }
     return loaded
@@ -138,7 +142,8 @@ fun rememberJellytipRows(
     page: String,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ): JellytipRowsAnswer? {
-    val loaded by produceState(viewModel.rows.peek(page), page) {
+    val initial = remember(page) { viewModel.rows.peek(page) }
+    val loaded by produceState(initial, page) {
         viewModel.rows.load(page)?.let {
             value = it
             viewModel.rows.prefetch(page, it)

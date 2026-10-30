@@ -199,7 +199,8 @@ fun JellytipLiveSportRow(
 /** Live sport for Home: the last answer at once (no late insert), refreshed for next time. */
 @Composable
 fun rememberLiveSportOnNow(viewModel: JellytipOnNowViewModel = hiltViewModel()): List<IptvOnNow>? {
-    val loaded by produceState(viewModel.service.peekOnNow()?.sportOnly()) {
+    val initial = remember { viewModel.service.peekOnNow()?.sportOnly() }
+    val loaded by produceState(initial) {
         value = viewModel.service.onNow().sportOnly()
     }
     return loaded
