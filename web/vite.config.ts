@@ -44,7 +44,10 @@ function appShellWorker(): Plugin {
     apply: "build",
     generateBundle(_opts, bundle) {
       const assets = Object.keys(bundle).filter((f) => f !== "sw.js" && !f.endsWith(".map"));
-      const shell = ["./", "manifest.webmanifest", "favicon.svg", "icons/icon-192.png", "icons/icon-512.png", ...assets];
+      // The video engines (hls.js, mpegts.js: ~850 KB) are fetched on first playback and kept then; installing the
+      // worker must not pull them down beside the first screen's requests (on every deploy, too)
+      const eager = assets.filter((f) => !/(^|\/)(hls|mpegts)-/.test(f));
+      const shell = ["./", "manifest.webmanifest", "favicon.svg", "icons/icon-192.png", "icons/icon-512.png", ...eager];
       const version = createHash("sha256").update(assets.sort().join("|")).digest("hex").slice(0, 12);
       const source = readFileSync(fileURLToPath(new URL("./src/sw.template.js", import.meta.url)), "utf8")
         .replace("__VERSION__", version)

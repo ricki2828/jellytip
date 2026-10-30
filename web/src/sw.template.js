@@ -33,5 +33,18 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(req).catch(() => caches.match(new URL("./", self.registration.scope).href)));
     return;
   }
-  event.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+  // Hashed build files outside the install list (the lazy video engines) are kept after their first fetch
+  event.respondWith(
+    caches.match(req).then(
+      (hit) =>
+        hit ||
+        fetch(req).then((res) => {
+          if (res.ok && url.pathname.startsWith(`${SCOPE}assets/`)) {
+            const copy = res.clone();
+            event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+          }
+          return res;
+        }),
+    ),
+  );
 });
