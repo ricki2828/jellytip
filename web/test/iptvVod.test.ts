@@ -58,3 +58,25 @@ test("favourite flag is read only when the server sends a boolean", () => {
   assert.equal(pvi({ id: "1:m:2", title: "A" })?.favourite, null);
   assert.equal(pvi({ id: "1:m:2", title: "A", favourite: "yes" })?.favourite, null);
 });
+
+test("vod detail: TMDB art, cast with portraits, genres, trailer", () => {
+  const d = parseVodDetail({
+    id: "3:m:9",
+    title: "Léon",
+    backdrop: "v1/iptv/img/3:m:9.abcd",
+    logo: "https://image.tmdb.org/t/p/w500/l.png",
+    genres: ["Crime", "Drama", "Thriller", "Extra"],
+    trailer: "v1/iptv/trailer/3:m:9.mp4",
+    cast: [{ name: "Jean Reno", character: "Léon", profile: "v1/iptv/img/p.1" }, { name: "Nat", profile: null }, { character: "no name" }],
+  });
+  assert.equal(d?.logo, "https://image.tmdb.org/t/p/w500/l.png");
+  assert.equal(d?.genre, "Crime, Drama, Thriller");
+  assert.equal(d?.trailer, "v1/iptv/trailer/3:m:9.mp4");
+  assert.deepEqual(d?.castList?.map((c) => c.name), ["Jean Reno", "Nat"]);
+  assert.equal(d?.cast, "Jean Reno, Nat");
+  // The older shapes still parse
+  const old = parseVodDetail({ id: "3:m:9", title: "Léon", genre: "Crime", cast: "A, B" });
+  assert.equal(old?.genre, "Crime");
+  assert.equal(old?.cast, "A, B");
+  assert.equal(old?.castList, undefined);
+});

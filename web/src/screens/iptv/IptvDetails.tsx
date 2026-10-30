@@ -1,10 +1,10 @@
 // Details for an IPTV film or series (#/iptv/item?id=<pid>:m|s:<sid>): TMDB backdrop, title, facts, "via IPTV", Play /
 // Resume through the IPTV player; series get season chips and an episode list.
 import { useEffect, useState } from "react";
-import { errorText, vodFavourite, vodItem } from "../../api/iptv";
+import { errorText, streamUrl, vodFavourite, vodItem } from "../../api/iptv";
 import { dropPersonalCaches } from "../../api/companion";
 import { Backdrop } from "../../components/Backdrop";
-import { IptvDot } from "../../components/IptvTile";
+import { IptvDot, safeArt } from "../../components/IptvTile";
 import { tmdbSized } from "../../components/FranchiseRow";
 import { useIsPhone } from "../../lib/device";
 import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
@@ -29,11 +29,15 @@ export function IptvDetails({ id }: { id: string }) {
   // My list: null = the server does not offer it (no button)
   const [fav, setFav] = useState<boolean | null>(null);
   const [favBusy, setFavBusy] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setD(null);
     setErr(null);
+    setLogoFailed(false);
+    setTrailerUrl(null);
     vodItem(id).then((a) => {
       if (!alive) return;
       if (a.status === 200 && a.data) {
@@ -64,6 +68,8 @@ export function IptvDetails({ id }: { id: string }) {
     for (const s of d.seasons ?? []) for (const e of s.episodes) if (!e.progress?.played) return { s: s.season, e };
     return null;
   })();
+  const logo = safeArt(d.logo, 480);
+  const trailer = trailerTarget(d.trailer);
   const formats = detailBadges(vodTech(d));
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
@@ -72,11 +78,24 @@ export function IptvDetails({ id }: { id: string }) {
   return (
     <div className="details iptv-details">
       <div className="details-hero">
-        <Backdrop url={tmdbSized(d.backdrop && /^https:\/\/image\.tmdb\.org\//.test(d.backdrop) ? d.backdrop : null, phone ? "w1280" : "original")} focal={null} />
+        <Backdrop url={tmdbSized(safeArt(d.backdrop ?? d.poster, 960), phone ? "w1280" : "original")} focal={null} />
         <div className="scrim-left" />
         <div className="scrim-bottom" />
         <div className="details-text">
-          <h1 className="title-text big">{d.title}</h1>
+          {logo && !logoFailed ? (
+            <img
+              className="title-logo big"
+              src={logo}
+              alt={d.title}
+              onError={() => setLogoFailed(true)}
+              onLoad={(e) => {
+                // Tall / narrow logos render tiny: typeset the title instead
+                if (e.currentTarget.naturalHeight > e.currentTarget.naturalWidth * 0.6) setLogoFailed(true);
+              }}
+            />
+          ) : (
+            <h1 className="title-text big">{d.title}</h1>
+          )}
           <div className="line info">
             {facts && <span>{facts}</span>}
             {formats.map((b) => (
@@ -110,6 +129,11 @@ export function IptvDetails({ id }: { id: string }) {
                   </button>
                 )}
               </>
+            )}
+            {trailer && (
+              <button className="btn" data-nav onClick={() => (trailer.inApp ? setTrailerUrl(trailer.url) : window.open(trailer.url, "_blank", "noopener,noreferrer"))}>
+                Trailer
+              </button>
             )}
             {fav !== null && (
               <button
@@ -162,6 +186,40 @@ export function IptvDetails({ id }: { id: string }) {
           </section>
         </div>
       )}
+      {(d.castList?.length ?? 0) > 0 && (
+        <div className="details-below">
+          <section className="row">
+            <h2 className="row-title">Cast</h2>
+            <div className="row-scroll">
+              {d.castList!.map((p, i) => {
+                const img = safeArt(p.profile, 192);
+                return (
+                  <div key={`${p.name}${i}`} className="person">
+                    {img ? <img src={img} alt="" loading="lazy" /> : <div className="person-blank" />}
+                    <div className="person-text">
+                      <span>{p.name}</span>
+                      {p.character && <span className="dim">{p.character}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+      {trailerUrl && (
+        <div className="trailer-modal" onClick={() => setTrailerUrl(null)}>
+          <video src={trailerUrl} autoPlay controls onEnded={() => setTrailerUrl(null)} onError={() => setTrailerUrl(null)} onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
+}
+
+/** Trailer address: a direct video (companion-relative path or a video file) plays in a modal; any other web link opens in a tab. */
+function trailerTarget(t?: string | null): { url: string; inApp: boolean } | null {
+  if (!t) return null;
+  if (/^https?:\/\//i.test(t)) return { url: t, inApp: /\.(mp4|webm|m3u8)(\?|$)/i.test(t) };
+  if (t.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(t)) return null;
+  return { url: streamUrl(t), inApp: true };
 }

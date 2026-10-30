@@ -16,7 +16,7 @@ type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "back
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
 /** TMDB art, or provider art through the companion's image proxy; raw provider URLs never load (CSP, privacy). */
-export const safeArt = (u: string | null | undefined) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u));
+export const safeArt = (u: string | null | undefined, size?: 96 | 192 | 480 | 960) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u, size));
 
 export function IptvDot() {
   return <span className="iptv-corner-dot" aria-hidden title="via IPTV" />;
@@ -27,7 +27,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
     <span className="iptv-tile-wrap" style={width ? { width } : undefined}>
       <PosterCard
         width={width}
-        src={safeArt(item.poster)}
+        src={safeArt(item.poster ?? item.backdrop, 480)}
         name={item.title}
         label={label(item as Tile)}
         tag={tag}
@@ -43,7 +43,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
 export function IptvCard({ item, width: widthProp, tag, autoFocus }: { item: Tile; width?: number; tag?: string; autoFocus?: boolean }) {
   const phone = useIsPhone();
   const width = widthProp ?? (phone ? PHONE_CARD_W : CARD_W);
-  const art = tmdbSized(safeArt(item.backdrop), "w780");
+  const art = tmdbSized(safeArt(item.backdrop ?? item.poster, 480), "w780");
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const tech = vodTech(item);

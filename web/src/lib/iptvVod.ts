@@ -45,6 +45,12 @@ export interface VodDetail extends VodItem {
   runtime?: number | null;
   genre?: string | null;
   cast?: string | null;
+  /** TMDB cast with portraits (`profile`: companion-relative proxy path or a TMDB URL). */
+  castList?: { name: string; character?: string | null; profile?: string | null }[];
+  /** Title logo art (proxy path or TMDB URL). */
+  logo?: string | null;
+  /** Trailer address: a web link, or a companion-relative video path. */
+  trailer?: string | null;
   director?: string | null;
   copies?: { id: string; providerTitle?: string; quality?: string[] }[];
   seasons?: { season: number; episodes: VodEpisode[] }[];
@@ -144,7 +150,24 @@ export function parseVodDetail(raw: unknown): VodDetail | null {
         .filter((s) => s.episodes.length > 0)
         .sort((a, b) => a.season - b.season)
     : undefined;
-  return { ...base, runtime: num(r.runtime), genre: str(r.genre), cast: str(r.cast), director: str(r.director), seasons };
+  const castList = Array.isArray(r.cast)
+    ? (r.cast as Record<string, unknown>[])
+        .map((c) => ({ name: str(c?.name), character: str(c?.character), profile: str(c?.profile) }))
+        .filter((c): c is { name: string; character: string | null; profile: string | null } => !!c.name)
+        .slice(0, 20)
+    : undefined;
+  const genres = strs(r.genres);
+  return {
+    ...base,
+    runtime: num(r.runtime),
+    genre: str(r.genre) ?? (genres.length ? genres.slice(0, 3).join(", ") : null),
+    cast: typeof r.cast === "string" ? str(r.cast) : castList?.length ? castList.slice(0, 4).map((c) => c.name).join(", ") : null,
+    castList,
+    logo: str(r.logo),
+    trailer: str(r.trailer),
+    director: str(r.director),
+    seasons,
+  };
 }
 
 /** The franchise part's IPTV copy, when the server attached one. */
