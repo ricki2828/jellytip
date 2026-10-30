@@ -5,7 +5,20 @@ import { getSession } from "../api/jellyfin";
 import { hasLiveTv, probeNow, qualitySummary, sportSuggest } from "../api/iptv";
 import { savePrefs } from "../api/me";
 import type { Prefs } from "../lib/prefs";
-import { BUCKET_NAME, toggleName, type QualitySummary, type Suggestion } from "../lib/sport";
+import { BUCKET_NAME, toggleName, type ProviderQuality, type QualitySummary, type Suggestion } from "../lib/sport";
+
+const when = (t: number) => new Date(t * 1000).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+/** First-pass progress, plus what the checker is doing (running, waiting for the night window, backing off). */
+function progressText(p: ProviderQuality): string {
+  const now = Date.now() / 1000;
+  const bits: string[] = [];
+  if (p.progress) bits.push(`${p.progress.done} of ${p.progress.total} channels checked`);
+  if (p.running) bits.push("checking now");
+  else if (p.backoffUntil && p.backoffUntil > now) bits.push(`paused until ${when(p.backoffUntil)}`);
+  else if (!p.onboarded && p.autoAfter && p.autoAfter > now) bits.push(`first automatic check ${when(p.autoAfter)}`);
+  return bits.join(" · ");
+}
 
 export function SportSettings({ prefs }: { prefs: Prefs }) {
   const [live, setLive] = useState(false);
@@ -88,15 +101,14 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
       {summary && (
         <div className="settings-block settings-pad">
           <strong>Stream quality</strong>
-          <span className="settings-sub">
-            {summary.counts.length ? summary.counts.map((c) => `${BUCKET_NAME[c.bucket]} ${c.n}`).join(" · ") : "No channels checked yet."}
-          </span>
-          {summary.progress && (
-            <span className="settings-sub">
-              First check: {summary.progress.done} of {summary.progress.total} channels
-              {summary.progress.done >= summary.progress.total ? " (done)" : ""}
-            </span>
-          )}
+          {summary.providers.map((p) => (
+            <div key={p.name} className="settings-sub">
+              {summary.providers.length > 1 && <strong>{p.name}: </strong>}
+              {p.counts.length ? p.counts.map((c) => `${BUCKET_NAME[c.bucket]} ${c.n}`).join(" · ") : "No channels checked yet."}
+              <br />
+              {progressText(p)}
+            </div>
+          ))}
           {admin && (
             <div className="settings-inline settings-chips-gap">
               <button className="btn small" data-nav disabled={checking} onClick={() => void check()}>

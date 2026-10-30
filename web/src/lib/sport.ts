@@ -9,6 +9,8 @@ export interface Quality {
   bucket: Bucket;
   height: number | null;
   fps: number | null;
+  /** The server's own warning ("may buffer"), also set for bucket slow. */
+  hint: string | null;
   /** Best audio the stream carries; stereo and unprobed show nothing. */
   audio: "atmos" | "5.1" | "stereo" | null;
 }
@@ -33,8 +35,9 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 export function parseQuality(raw: unknown): Quality | null {
   const q = obj(raw);
   if (!q || !BUCKETS.includes(q.bucket as Bucket)) return null;
+  const hint = typeof q.hint === "string" && q.hint ? q.hint : null;
   const a = typeof q.audio === "string" ? q.audio.toLowerCase() : "";
-  return { bucket: q.bucket as Bucket, height: num(q.height), fps: num(q.fps), audio: a === "atmos" ? "atmos" : a === "5.1" ? "5.1" : a === "stereo" ? "stereo" : null };
+  return { bucket: q.bucket as Bucket, height: num(q.height), fps: num(q.fps), hint, audio: a === "atmos" ? "atmos" : a === "5.1" ? "5.1" : a === "stereo" ? "stereo" : null };
 }
 
 /** Reads the sport fields off an on-now / guide / channel object (`programme` is where kind and sport live). */
@@ -42,7 +45,8 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
   const r = obj(raw) ?? {};
   const p = obj(programme) ?? obj(r.programme) ?? obj(r.now) ?? {};
   const kind = KINDS.includes(p.kind as Kind) ? (p.kind as Kind) : KINDS.includes(r.kind as Kind) ? (r.kind as Kind) : null;
-  const ev = obj(r.event);
+  // `eventGroup` (Channel.event is the PPV-feed flag, a boolean)
+  const ev = obj(r.eventGroup);
   const m = obj(r.match);
   return {
     kind,
@@ -82,7 +86,7 @@ export function qualityLabel(q: Quality | null): string | null {
 /** Chip text for the audio: ATMOS or 5.1; nothing for stereo or unknown. */
 export const audioLabel = (q: Quality | null): string | null => (q?.audio === "atmos" ? "ATMOS" : q?.audio === "5.1" ? "5.1" : null);
 
-export const mayBuffer = (q: Quality | null) => q?.bucket === "slow";
+export const mayBuffer = (q: Quality | null) => q?.bucket === "slow" || !!q?.hint;
 
 /** Pill for a programme: red LIVE, grey REPLAY (replays and highlights), nothing for the rest. */
 export function kindPill(kind: Kind | null | undefined): { text: "LIVE" | "REPLAY"; tone: "live" | "replay" } | null {
@@ -115,22 +119,60 @@ export function parseSuggest(raw: unknown): Suggestion[] {
   return out;
 }
 
-export interface QualitySummary {
+export interface ProviderQuality {
+  name: string;
   counts: { bucket: Bucket; n: number }[];
-  /** Onboarding pass: checked of total, or null when the server doesn't say. */
+  /** Channels checked of all opted channels. */
+  progress: { done: number; total: number } | null;
+  running: boolean;
+  /** Epoch seconds: the first automatic check window / a back-off after the provider refused. */
+  autoAfter: number | null;
+  backoffUntil: number | null;
+  onboarded: boolean;
+}
+
+export interface QualitySummary {
+  providers: ProviderQuality[];
+  /** All providers together. */
+  counts: { bucket: Bucket; n: number }[];
   progress: { done: number; total: number } | null;
 }
 
-/** Quality summary → counts per bucket (best first, empty ones dropped) and onboarding progress. */
+const countsOf = (b: Record<string, unknown>) => BUCKETS.map((bucket) => ({ bucket, n: num(b[bucket]) ?? 0 })).filter((c) => c.n > 0);
+
+/** GET /v1/iptv/quality → {providers:[{name, buckets, progress:{total,probed,fresh}, running, autoAfter, …}]}; summed and per provider. */
 export function parseQualitySummary(raw: unknown): QualitySummary | null {
   const r = obj(raw);
-  const b = obj(r?.buckets) ?? obj(r?.counts);
-  if (!r || !b) return null;
-  const counts = BUCKETS.map((bucket) => ({ bucket, n: num(b[bucket]) ?? 0 })).filter((c) => c.n > 0);
-  const p = obj(r.progress) ?? obj(r.onboarding);
-  const done = num(p?.done) ?? num(p?.checked);
-  const total = num(p?.total);
-  return { counts, progress: done != null && total != null && total > 0 ? { done, total } : null };
+  if (!r || !Array.isArray(r.providers)) return null;
+  const providers: ProviderQuality[] = [];
+  const sum = new Map<Bucket, number>();
+  let done = 0;
+  let total = 0;
+  for (const x of r.providers) {
+    const p = obj(x);
+    const b = obj(p?.buckets);
+    if (!p || !b) continue;
+    const counts = countsOf(b);
+    counts.forEach((c) => sum.set(c.bucket, (sum.get(c.bucket) ?? 0) + c.n));
+    const pr = obj(p.progress);
+    const t = num(pr?.total);
+    const d = num(pr?.probed);
+    if (t != null && d != null) {
+      total += t;
+      done += d;
+    }
+    providers.push({
+      name: str(p.name) ?? "Provider",
+      counts,
+      progress: t != null && d != null && t > 0 ? { done: d, total: t } : null,
+      running: p.running === true,
+      autoAfter: num(p.autoAfter),
+      backoffUntil: num(p.backoffUntil),
+      onboarded: num(p.onboardedAt) != null,
+    });
+  }
+  if (!providers.length) return null;
+  return { providers, counts: BUCKETS.map((bucket) => ({ bucket, n: sum.get(bucket) ?? 0 })).filter((c) => c.n > 0), progress: total > 0 ? { done, total } : null };
 }
 
 export const BUCKET_NAME: Record<Bucket, string> = {

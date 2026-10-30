@@ -190,6 +190,9 @@ export interface LiveGroup {
   region?: string | null;
   events?: number;
   darkCount?: number;
+  /** Admin-only "Hidden: not working" view. */
+  hidden?: boolean;
+  deadCount?: number;
 }
 
 export interface Channel {
@@ -211,6 +214,8 @@ export interface Channel {
   region?: string | null;
   /** Stream check result (live-sport smarts); missing until the server has probed it. */
   quality?: (Quality & { checkedAt?: number }) | null;
+  /** Favourite team / league playing on this channel now. */
+  match?: { team?: string | null; league?: string | null } | null;
 }
 
 export interface Connection {

@@ -58,7 +58,7 @@ export function LiveTv() {
     liveGroups().then((a) => {
       if (a.status !== 200 || !a.data) return setErr(errorText(a));
       // "Guide" (the server's default view) always stays; other groups only with channels in them
-      const gs = a.data.groups.filter((g) => g.default || (g.count ?? 0) > 0);
+      const gs = a.data.groups.filter((g) => g.default || g.hidden || (g.count ?? 0) > 0);
       setGroups(gs.some((g) => !g.default) ? gs : []);
       const def = a.data.defaultGroup ?? gs.find((g) => g.default)?.id;
       setGroup((cur) => (cur && gs.some((g) => g.id === cur) ? cur : def ?? gs[0]?.id ?? null));
@@ -223,7 +223,10 @@ export function LiveTv() {
                       {!phone && (
                         <span className="livetv-chan-text">
                           {ch.num != null && <span className="livetv-num">{ch.num}</span>}
-                          <span className="livetv-chan-name">{ch.name}</span>
+                          <span className="livetv-chan-name">
+                            {ch.match && (ch.match.team || ch.match.league) && <span className="sport-star" title={`Your ${ch.match.team ? "team" : "league"}: ${ch.match.team ?? ch.match.league}`}>★ </span>}
+                            {ch.name}
+                          </span>
                           <SportBadges quality={ch.quality} size="sm" />
                         </span>
                       )}

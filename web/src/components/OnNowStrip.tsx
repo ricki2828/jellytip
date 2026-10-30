@@ -67,7 +67,10 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
                 <Logo o={o} />
                 {o.info.kind ? <SportBadges kind={o.info.kind} sport={o.sport} size="sm" /> : <span className="onnow-live">Live</span>}
               </span>
-              <span className="onnow-title">{o.title}</span>
+              <span className="onnow-title">
+                {o.info.match && (o.info.match.team || o.info.match.league) && <span className="sport-star" title={`Your ${o.info.match.team ? "team" : "league"}: ${o.info.match.team ?? o.info.match.league}`}>★ </span>}
+                {o.title}
+              </span>
               <span className="onnow-channel">{o.channel}</span>
               <SportBadges quality={o.info.quality} size="sm" />
               <span className="onnow-progress" aria-hidden>
