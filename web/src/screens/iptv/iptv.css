@@ -1082,3 +1082,79 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   font-weight: 600;
 }
+.page-back {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-right: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--vanilla);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.page-back svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.page-back:hover,
+.page-back:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+.page-head {
+  display: flex;
+  align-items: center;
+}
+.page-head .page-title {
+  margin: 0;
+}
+.livetv-sheet {
+  position: relative;
+}
+.sheet-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--vanilla);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sheet-x:hover,
+.sheet-x:focus-visible {
+  background: rgba(255, 255, 255, 0.22);
+}
+.livetv-sheet > p:first-child,
+.livetv-sheet > h2:first-child {
+  padding-right: 40px;
+}
+@media (max-width: 700px) {
+  .page-back {
+    width: 44px;
+    height: 44px;
+  }
+  .sheet-x {
+    width: 44px;
+    height: 44px;
+  }
+}
+.onnow-alts .onnow-alts-close {
+  align-self: flex-start;
+  background: none;
+  font-weight: 700;
+  color: var(--dim);
+}

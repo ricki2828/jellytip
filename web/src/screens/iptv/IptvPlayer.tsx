@@ -2,6 +2,7 @@
 // for a 4 h stream link, plays .ts through mpegts.js, .m3u8 through hls.js and files natively. A link answering 410
 // stale or 403 expired gets one fresh /play and a retry; 409 shows who holds the connection. Leaving tears the stream
 // down at once (the provider may allow a single connection).
+import { BackArrow } from "../../components/BackArrow";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
@@ -496,9 +497,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         </div>
       )}
       <div className="player-top">
-        <button className="btn ghost" data-nav onClick={exit} aria-label="Back">
-          ‹ Back
-        </button>
+        <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
         {kickoff && state.kind === "playing" && (
@@ -717,9 +716,7 @@ function NativeIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; t
         </div>
       )}
       <div className="player-top">
-        <button className="btn ghost" data-nav onClick={exit} aria-label="Back">
-          ‹ Back
-        </button>
+        <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
         <span className="player-method">via IPTV</span>
       </div>

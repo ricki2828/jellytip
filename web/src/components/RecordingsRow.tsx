@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cancelRecording } from "../api/iptv";
 import { refreshRecs, useRecs } from "../api/recStore";
+import { SheetClose, useEscapeClose } from "./BackArrow";
 import { StopRecordingSheet } from "./StopRecordingSheet";
 import { chipFor, resumeAt, lengthText, orderRecs, type Rec } from "../lib/recs";
 import { targetPath } from "../lib/iptvPlay";
@@ -35,6 +36,7 @@ export function RecordingsRow() {
   const recs = useRecs();
   const [sheet, setSheet] = useState<Rec | null>(null);
   const [stopping, setStopping] = useState<Rec | null>(null);
+  useEscapeClose(() => setSheet(null), !!sheet && !stopping);
   const list = recs ? orderRecs(recs) : [];
   if (!list.length) return null;
   const open = (r: Rec) => (r.state === "recording" ? setStopping(r) : r.playable ? go(playPath(r)) : r.state === "scheduled" ? setSheet(r) : go("/recordings"));
@@ -57,6 +59,7 @@ export function RecordingsRow() {
       {sheet && (
         <div className="livetv-sheet-back" onClick={() => setSheet(null)}>
           <div className="livetv-sheet" role="dialog" aria-label={sheet.title} onClick={(e) => e.stopPropagation()}>
+            <SheetClose onClose={() => setSheet(null)} />
             <p className="iptv-hint">
               {sheet.channel} · {chipFor(sheet).text}
             </p>

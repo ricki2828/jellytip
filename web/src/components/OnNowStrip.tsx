@@ -6,6 +6,7 @@ import { progressOf, type OnNow } from "../lib/onNow";
 import { afterStartup } from "../lib/startup";
 import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
+import { useEscapeClose } from "./BackArrow";
 import { MuteButton } from "./SportMute";
 import { MUTED_EVENT } from "../api/sportTaste";
 import { SportBadges } from "./SportBadges";
@@ -53,6 +54,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
   }, [sportOnly, checkProvider]);
 
   const [openAlt, setOpenAlt] = useState<string | null>(null);
+  useEscapeClose(() => setOpenAlt(null), openAlt != null);
   const live = (items ?? []).filter((o) => o.stop > now);
   if (live.length < min) return null;
   // Kick-off (when the channel has catch-up) and the other channels of the same event, for the player's "From kick-off" and stall prompt
@@ -102,6 +104,9 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
                 </button>
                 {openAlt === o.channelId && (
                   <div className="onnow-alts">
+                    <button className="onnow-alts-close" data-nav onClick={() => setOpenAlt(null)} aria-label="Close">
+                      ‹ Back
+                    </button>
                     {alts(o).map((a) => (
                       <button key={a.id} data-nav onClick={() => play(a.id, a.name, extrasOf(o, a.id))}>
                         <Logo o={{ ...o, logo: a.logo, channel: a.name }} />

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { cancelRecording, errorText } from "../api/iptv";
 import { blockerText, canStop, type Blocker } from "../lib/holders";
 import { refreshRecs } from "../api/recStore";
+import { SheetClose } from "./BackArrow";
 import "../screens/iptv/iptv.css";
 
 const WAIT_MS = 3000;
@@ -36,6 +37,7 @@ export function StreamBusy({ blocker, onRetry, onClose }: { blocker: Blocker; on
   return (
     <div className="livetv-sheet-back" onClick={() => !busy && onClose()}>
       <div className="livetv-sheet" role="alertdialog" aria-label="Stream in use" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
+        {!busy && <SheetClose onClose={onClose} />}
         <h2>{blockerText(blocker)}</h2>
         {busy && <p className="iptv-hint">Stopping the recording and freeing the stream…</p>}
         {err && <p className="iptv-err">{err}</p>}

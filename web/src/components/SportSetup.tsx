@@ -9,6 +9,7 @@ import { useRoute } from "../lib/router";
 import { toggleName } from "../lib/sport";
 import { hasSportPrefs } from "../lib/sportMute";
 import type { Suggestion } from "../lib/sport";
+import { SheetClose } from "./BackArrow";
 import { SportsPicker } from "./SportPicker";
 
 const seenKey = () => `jellytip.sportSetup.${getSession()?.userId ?? ""}`;
@@ -68,6 +69,7 @@ export function SportSetup() {
           }
         }}
       >
+        <SheetClose onClose={() => void finish()} />
         <h2>Make live sport yours</h2>
         {step === 1 ? (
           <>

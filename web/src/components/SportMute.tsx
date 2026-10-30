@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { prefsNow, usePrefs } from "../api/me";
 import { setMuted } from "../api/sportTaste";
 import { muteChoices } from "../lib/sportMute";
+import { SheetClose } from "./BackArrow";
 import { flashNote } from "./TasteButtons";
 
 interface Target {
@@ -98,6 +99,7 @@ export function SportMuteHost() {
   return (
     <div className="livetv-sheet-back" onClick={close}>
       <div className="livetv-sheet" role="dialog" aria-label={t.title} onClick={(e) => e.stopPropagation()}>
+        <SheetClose onClose={close} />
         <p className="iptv-hint">{t.title}</p>
         {choices.length === 0 && <p className="iptv-hint">Already muted. Change it in Settings → Live sport.</p>}
         <div className="buttons">

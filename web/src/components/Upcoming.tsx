@@ -8,6 +8,7 @@ import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
 import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { isLive, timeChip, type UpChannel, type UpEvent } from "../lib/upcoming";
+import { SheetClose, useEscapeClose } from "./BackArrow";
 import { MuteButton } from "./SportMute";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
@@ -68,6 +69,7 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
     setMsg(err ?? (remId != null ? "Reminder removed." : "We'll remind you before it starts."));
     void refreshUpcoming(true);
   };
+  useEscapeClose(onClose);
   const when = `${timeChip(e)} · ${new Date(e.start * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}–${new Date(e.stop * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
   const record = async () => {
     const a = await addRecording(best.id, e.start);
@@ -81,6 +83,7 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
   return (
     <div className="livetv-sheet-back" onClick={onClose}>
       <div className="livetv-sheet" role="dialog" aria-label={e.title} onClick={(ev) => ev.stopPropagation()}>
+        <SheetClose onClose={onClose} />
         <p className="iptv-hint">
           {e.favourite && <span className="sport-star">★ </span>}
           {[e.league, when].filter(Boolean).join(" · ")}

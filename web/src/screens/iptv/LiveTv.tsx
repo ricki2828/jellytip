@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
+import { BackArrow, SheetClose, useEscapeClose } from "../../components/BackArrow";
 import { liveExtrasQuery, targetPath, type LiveExtras, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
@@ -165,13 +166,17 @@ export function LiveTv() {
     if (a.status === 200) setChannels((cs) => cs?.map((c) => (c.id === ch.id ? { ...c, favourite: !c.favourite } : c)) ?? null);
   };
 
+  useEscapeClose(() => setSheet(null), !!sheet);
   const nowX = (now - from) * pps;
   const empty = groups && groups.length === 0;
 
   return (
     <div className="livetv">
       <div className="livetv-head">
-        <h1 className="page-title">Live TV</h1>
+        <div className="page-head">
+          <BackArrow />
+          <h1 className="page-title">Live TV</h1>
+        </div>
         <div className="livetv-window">
           {upcoming && (
             <button className="btn small" data-nav onClick={() => go("/upcoming")}>
@@ -281,6 +286,7 @@ export function LiveTv() {
       {sheet && (
         <div className="livetv-sheet-back" onClick={() => setSheet(null)}>
           <div className="livetv-sheet" role="dialog" aria-label={sheet.prog.title} onClick={(e) => e.stopPropagation()}>
+            <SheetClose onClose={() => setSheet(null)} />
             <p className="iptv-hint">
               {sheet.ch.name} · {new Date(sheet.prog.start * 1000).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(sheet.prog.start)}–{clock(sheet.prog.stop)}
             </p>
