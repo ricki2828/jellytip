@@ -122,6 +122,8 @@ class JellytipSearchViewModel
                     if (!immediate) delay(DEBOUNCE_MS)
                     _state.update { it.copy(searching = true) }
                     val a = service.search(q.trim())
+                    // A newer query took over while this one was out: drop the stale answer
+                    if (_state.value.query.trim() != q.trim()) return@launch
                     if (service.available == false) {
                         _state.update { it.copy(available = false) }
                         return@launch
@@ -165,7 +167,7 @@ class JellytipSearchViewModel
         }
 
         companion object {
-            private const val DEBOUNCE_MS = 200L
+            private const val DEBOUNCE_MS = 150L
             private const val PENDING_MS = 300L
         }
     }
@@ -275,7 +277,13 @@ private fun SearchContent(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusRestorer().onFocusChanged { if (it.hasFocus) resultsTouched = true },
                 ) {
-                    SearchRules.displayOrder(answer.groups).forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                    if (answer.results != null) {
+                        // Newer server: the top hit, one ranked row of films and shows, then people, collections, not available
+                        answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top, viewModel) } }
+                        answer.rankedGroups.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                    } else {
+                        SearchRules.displayOrder(answer.groups).forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                    }
                 }
         }
     }
@@ -312,6 +320,7 @@ private fun groupTitle(g: SearchGroup): String {
             "people" -> "People"
             "collections" -> "Collections"
             "iptv" -> "On your IPTV"
+            "results" -> "Results"
             "discover" -> "Not in the library"
             "lists" -> "Letterboxd lists"
             else -> g.type
@@ -351,6 +360,31 @@ private fun ResultGroup(
             }
 
         "people" -> PeopleRow(g, viewModel)
+
+        "results" -> {
+            // Films and shows in rank order, library and IPTV mixed (IPTV tiles carry the cue)
+            val row =
+                remember(q, g.ids, g.iptv, g.order) {
+                    JellytipServerRow(
+                        id = "search:results:${q.hashCode()}",
+                        source = "search",
+                        family = "search",
+                        title = groupTitle(g),
+                        layout = "standard",
+                        mediaType = "movie",
+                        itemIds = g.ids,
+                        collection = null,
+                        iptvItems = g.iptv.map { it.toVodItem() },
+                        order = g.order,
+                    )
+                }
+            JellytipServerRowView(
+                row = row,
+                onFocusItem = { _, _ -> },
+                onLongClickItem = null,
+                focusModifier = Modifier.focusGroup(),
+            )
+        }
 
         else ->
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -493,3 +527,138 @@ private fun Chip(
         Text(label, fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
     }
 }
+
+private fun SearchIptv.toVodItem() =
+    com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem(
+        id = id,
+        kind = kind,
+        tmdbId = tmdbId,
+        title = name,
+        year = year,
+        quality = quality,
+        poster = poster,
+        backdrop = backdrop,
+        overview = "",
+        rating = rating,
+        providerName = null,
+        progress = null,
+        tech = tech,
+    )
+
+/** The best hit as a wide card: its art, title, facts (kind · year · seasons · rating · where), OK opens it. */
+@Composable
+private fun TopHit(
+    r: SearchResult,
+    viewModel: JellytipSearchViewModel,
+) {
+    val images = LocalImageUrlService.current
+    val density = LocalDensity.current
+    val image =
+        remember(r.key, density) {
+            with(density) {
+                val w = TOP_W.roundToPx()
+                val h = TOP_H.roundToPx()
+                when {
+                    r.kind == "person" && r.personId != null -> images.getItemImageUrl(itemId = r.personId, imageType = ImageType.PRIMARY, fillWidth = h * 2 / 3, fillHeight = h, tag = r.imageTag)
+                    r.source == "library" && r.id != null -> images.getItemImageUrl(itemId = r.id, imageType = ImageType.BACKDROP, fillWidth = w, fillHeight = h)
+                    r.source == "discover" -> r.posterUrl
+                    else -> r.backdrop ?: r.poster
+                }
+            }
+        }
+    val facts =
+        listOfNotNull(
+            when (r.kind) {
+                "series" -> "Series"
+                "person" -> r.role?.replaceFirstChar { it.uppercase() } ?: "Person"
+                "collection" -> "Collection"
+                else -> "Film"
+            },
+            r.year?.toString(),
+            r.seasons?.let { if (it == 1) "1 season" else "$it seasons" },
+            r.filmCount.takeIf { r.kind == "person" && it > 0 }?.let { "$it films" },
+            r.total.takeIf { r.kind == "collection" && it > 0 }?.let { "${r.inLibrary} of $it in the library" },
+            r.rating?.let { String.format(java.util.Locale.US, "★ %.1f", it) },
+            when (r.source) {
+                "iptv" -> "via IPTV"
+                "discover" -> "Not in the library"
+                else -> null
+            },
+        ).joinToString("  ·  ")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp)) {
+        ItemRowTitle("Top hit")
+        Surface(
+            onClick = { openResult(r, viewModel) },
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+            colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
+            border =
+                ClickableSurfaceDefaults.border(
+                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
+                ),
+            modifier = Modifier.size(TOP_W, TOP_H),
+        ) {
+            var failed by remember(image) { mutableStateOf(false) }
+            if (image != null && !failed) {
+                AsyncImage(
+                    model = image,
+                    contentDescription = r.title,
+                    contentScale = ContentScale.Crop,
+                    onError = { failed = true },
+                    modifier = if (r.kind == "person") Modifier.align(Alignment.CenterEnd).size(TOP_H * 2f / 3f, TOP_H) else Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            0f to Color.Black.copy(alpha = 0.85f),
+                            0.7f to Color.Black.copy(alpha = 0.2f),
+                        ),
+                    ),
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp).width(TOP_W * 0.7f),
+            ) {
+                Text(r.title, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (r.source == "iptv") com.github.damontecres.wholphin.jellytip.iptv.IptvCornerMark(r.quality.firstOrNull()?.uppercase())
+                    Text(facts, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+private fun openResult(
+    r: SearchResult,
+    viewModel: JellytipSearchViewModel,
+) {
+    viewModel.opened("top ${r.kind}")
+    val nav = viewModel.navigationManager
+    when {
+        r.kind == "person" && r.personId != null -> nav.navigateTo(Destination.MediaItem(r.personId, BaseItemKind.PERSON), "search top person")
+        r.kind == "collection" && r.collectionId != null -> nav.navigateTo(Destination.JellytipCollection(r.collectionId, r.title), "search top collection")
+        r.source == "library" && r.id != null ->
+            nav.navigateTo(Destination.MediaItem(r.id, if (r.kind == "series") BaseItemKind.SERIES else BaseItemKind.MOVIE), "search top library")
+        r.source == "iptv" && r.iptvId != null -> nav.navigateTo(Destination.JellytipIptvDetails(r.iptvId, r.title), "search top iptv")
+        r.source == "discover" && r.tmdbId != null ->
+            nav.navigateTo(
+                Destination.JellytipDiscover(
+                    com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
+                        tmdbId = r.tmdbId,
+                        mediaType = if (r.kind == "series") "tv" else "movie",
+                        title = r.title,
+                        year = r.year,
+                        posterUrl = r.posterUrl,
+                    ),
+                ),
+                "search top discover",
+            )
+    }
+}
+
+private val TOP_W = 520.dp
+private val TOP_H = 190.dp

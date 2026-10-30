@@ -53,7 +53,50 @@ data class SearchIptv(
     val tech: List<String>,
     /** Poster link (resolved to absolute by the service); null = title card. */
     val poster: String? = null,
+    val backdrop: String? = null,
+    val quality: List<String> = emptyList(),
+    val tmdbId: Int? = null,
+    val rating: Double? = null,
 )
+
+/**
+ * One entry of the ranked `results` list (plan jellytip-search-10x "A2/A3"): [kind] film | series | person |
+ * collection, [source] library | iptv | discover. Only the fields of its kind/source are set.
+ */
+data class SearchResult(
+    val kind: String,
+    val source: String,
+    val title: String,
+    val year: Int? = null,
+    val tmdbId: Int? = null,
+    val rating: Double? = null,
+    /** Library film/series. */
+    val id: UUID? = null,
+    val seasons: Int? = null,
+    val episodes: Int? = null,
+    /** IPTV film/series. */
+    val iptvId: String? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val quality: List<String> = emptyList(),
+    val tech: List<String> = emptyList(),
+    /** Discover (admins). */
+    val posterUrl: String? = null,
+    /** Person. */
+    val personId: UUID? = null,
+    val role: String? = null,
+    val imageTag: String? = null,
+    val filmCount: Int = 0,
+    /** Collection. */
+    val collectionId: Int? = null,
+    val inLibrary: Int = 0,
+    val total: Int = 0,
+) {
+    val isTitle get() = kind == "film" || kind == "series"
+
+    /** Same entry (the top hit is also first in results). */
+    val key get() = "$kind:$source:${id ?: iptvId ?: personId ?: collectionId ?: tmdbId ?: title}"
+}
 
 /** A result group in the server's order; only the list matching [type] is filled. */
 data class SearchGroup(
@@ -65,6 +108,8 @@ data class SearchGroup(
     val iptv: List<SearchIptv> = emptyList(),
     val discover: List<DiscoverTitle> = emptyList(),
     val lists: List<SearchList> = emptyList(),
+    /** `results` group: library ids (dashless) and IPTV ids in rank order. */
+    val order: List<String> = emptyList(),
 )
 
 data class SearchAnswer(
@@ -74,9 +119,67 @@ data class SearchAnswer(
     val groups: List<SearchGroup>,
     /** Groups still coming (admins' discover): ask again with `types=<them>` ~300 ms later. */
     val pending: List<String>,
+    /** The ranked list (newer servers); null = only [groups]. */
+    val results: List<SearchResult>? = null,
+    val top: SearchResult? = null,
 ) {
-    val isEmpty get() = groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() && it.lists.isEmpty() }
+    val isEmpty
+        get() =
+            (results == null || results.isEmpty()) &&
+                groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() && it.lists.isEmpty() }
+
+    /**
+     * What the page shows after the top hit when [results] exists: one ranked "results" row (library and IPTV films
+     * and shows, top hit left out), then people, collections, "not available" (discover), then the old Letterboxd
+     * lists group if any.
+     */
+    val rankedGroups: List<SearchGroup>
+        get() {
+            val r = results ?: return emptyList()
+            val media = r.filter { it.isTitle && it.source != "discover" && it.key != top?.key }
+            val people = r.filter { it.kind == "person" && it.personId != null }
+            val collections = r.filter { it.kind == "collection" && it.collectionId != null }
+            val discover = r.filter { it.isTitle && it.source == "discover" && (it.tmdbId ?: 0) > 0 && it.key != top?.key }
+            return listOfNotNull(
+                media.takeIf { it.isNotEmpty() }?.let { m ->
+                    SearchGroup(
+                        type = "results",
+                        total = m.size,
+                        ids = m.mapNotNull { it.id },
+                        iptv = m.filter { it.id == null && it.iptvId != null }.map { it.toIptv() },
+                        order = m.mapNotNull { it.id?.toString()?.replace("-", "") ?: it.iptvId },
+                    )
+                },
+                people.takeIf { it.isNotEmpty() }?.let { p ->
+                    SearchGroup("people", p.size, people = p.map { SearchPerson(it.personId!!, it.title, it.role ?: "actor", it.imageTag, it.filmCount) })
+                },
+                collections.takeIf { it.isNotEmpty() }?.let { c ->
+                    SearchGroup("collections", c.size, collections = c.map { SearchCollection(it.collectionId!!, it.title, it.inLibrary, it.total) })
+                },
+                discover.takeIf { it.isNotEmpty() }?.let { d ->
+                    SearchGroup(
+                        "discover",
+                        d.size,
+                        discover = d.map { DiscoverTitle(tmdbId = it.tmdbId!!, mediaType = if (it.kind == "series") "tv" else "movie", title = it.title, year = it.year, posterUrl = it.posterUrl) },
+                    )
+                },
+            ) + groups.filter { it.type == "lists" && it.lists.isNotEmpty() }
+        }
 }
+
+fun SearchResult.toIptv() =
+    SearchIptv(
+        id = iptvId.orEmpty(),
+        name = title,
+        year = year,
+        kind = if (kind == "series") "series" else "movie",
+        tech = tech,
+        poster = poster,
+        backdrop = backdrop,
+        quality = quality,
+        tmdbId = tmdbId,
+        rating = rating,
+    )
 
 data class SearchSuggest(
     val recent: List<String>,
@@ -197,13 +300,58 @@ object SearchParse {
                     else -> null
                 }
             }
+        val results = root.optJSONArray("results")?.let { a -> (0 until a.length()).mapNotNull { result(a.optJSONObject(it)) } }
         return SearchAnswer(
             q = root.str("q").orEmpty(),
             text = parsed?.str("text").orEmpty(),
             chips = chips(parsed?.optJSONObject("filters")),
             groups = groups,
             pending = strings(root.optJSONArray("pending")),
+            results = results,
+            top = result(root.optJSONObject("top")) ?: results?.firstOrNull(),
         )
+    }
+
+    fun result(o: JSONObject?): SearchResult? {
+        o ?: return null
+        val kind = o.str("kind") ?: return null
+        val title = o.str("title") ?: o.str("name") ?: return null
+        val r =
+            SearchResult(
+                kind = kind,
+                source = o.str("source") ?: "library",
+                title = title,
+                year = o.optInt("year", 0).takeIf { it > 0 },
+                tmdbId = o.optInt("tmdbId", 0).takeIf { it > 0 },
+                rating = if (o.isNull("rating")) null else o.optDouble("rating").takeIf { !it.isNaN() && it > 0 },
+                id = uuid(o.str("id")),
+                seasons = o.optInt("seasons", 0).takeIf { it > 0 },
+                episodes = o.optInt("episodes", 0).takeIf { it > 0 },
+                iptvId = o.str("iptvId"),
+                poster = o.str("poster"),
+                backdrop = o.str("backdrop"),
+                quality = strings(o.optJSONArray("quality")),
+                tech = strings(o.optJSONArray("tech")),
+                posterUrl = o.str("posterUrl"),
+                personId = uuid(o.str("personId")),
+                role = o.str("role"),
+                imageTag = o.str("imageTag"),
+                filmCount = o.optInt("filmCount", 0),
+                collectionId = o.optInt("tmdbCollectionId", 0).takeIf { it > 0 },
+                inLibrary = o.optInt("inLibrary", 0),
+                total = o.optInt("total", 0),
+            )
+        // An entry the client can't open is dropped
+        val openable =
+            when {
+                kind == "person" -> r.personId != null
+                kind == "collection" -> r.collectionId != null
+                r.source == "library" -> r.id != null
+                r.source == "iptv" -> r.iptvId != null
+                r.source == "discover" -> r.tmdbId != null
+                else -> false
+            }
+        return r.takeIf { openable }
     }
 
     fun suggest(json: String): SearchSuggest {
@@ -320,11 +468,15 @@ class JellytipSearchService
             }
             if (code != 200) return null
             val a = runCatching { SearchParse.answer(body) }.getOrNull() ?: return null
+            suspend fun img(u: String?) = u?.let { api.resolveUrl(it) }
+            suspend fun SearchResult.resolved() = if (source == "iptv" || kind == "collection") copy(poster = img(poster), backdrop = img(backdrop)) else this
             return a.copy(
                 groups =
                     a.groups.map { g ->
-                        if (g.iptv.none { it.poster != null }) g else g.copy(iptv = g.iptv.map { it.copy(poster = it.poster?.let { p -> api.resolveUrl(p) }) })
+                        if (g.iptv.none { it.poster != null }) g else g.copy(iptv = g.iptv.map { it.copy(poster = img(it.poster)) })
                     },
+                results = a.results?.map { it.resolved() },
+                top = a.top?.resolved(),
             )
         }
 
