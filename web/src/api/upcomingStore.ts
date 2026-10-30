@@ -28,6 +28,9 @@ export function refreshUpcoming(force = false): Promise<void> {
   return inflight;
 }
 
+// Muting or unmuting a sport changes what the server lists: look again
+window.addEventListener("jellytip-sport-muted", () => void refreshUpcoming(true));
+
 window.addEventListener("jellytip-session", () => {
   state = null;
   unavailable = false;

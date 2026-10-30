@@ -221,3 +221,26 @@ test("double feature: IPTV halves parse, pairs missing a half drop", () => {
   assert.equal(pairs[1].a, "lib2");
   assert.deepEqual(parseFeaturePairs(null), []);
 });
+
+import { muteChoices, parseLearned, withMuted } from "../src/lib/sportMute.ts";
+import { parsePrefs } from "../src/lib/prefs.ts";
+
+test("not interested: choices, add/remove, prefs shape", () => {
+  const m = { sports: ["speedway"], leagues: ["NBL"], tags: [] };
+  assert.deepEqual(muteChoices({ league: "NRLW", sportName: "Rugby League" }, m).map((c) => c.label), ["Not interested in NRLW", "Not interested in Rugby League"]);
+  assert.deepEqual(muteChoices({ league: "nbl", sportName: "speedway" }, m), []);
+  assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
+  assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
+  assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], muted: { sports: ["golf"], leagues: [], tags: [] } });
+  assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
+});
+
+test("learned taste: strongest first, keys read, negatives and junk dropped", () => {
+  const l = parseLearned({ affinities: [{ key: "sport:cricket", score: 9 }, { key: "team:BLACKCAPS", score: 12 }, { key: "league:NFL", score: -2 }, { key: "weird", score: 3 }, { key: "sport:horse_racing", score: 0 }] });
+  assert.deepEqual(l.map((x) => x.key), ["team:BLACKCAPS", "sport:cricket"]);
+  assert.equal(l[1].label, "Cricket");
+  assert.equal(l[0].label, "BLACKCAPS (team)");
+  assert.deepEqual(parseLearned({ "sport:cricket": 2 }).map((x) => x.key), ["sport:cricket"]);
+  assert.deepEqual(parseLearned(null), []);
+});

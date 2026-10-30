@@ -7,8 +7,14 @@ export interface Prefs {
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   /** Favourite teams and leagues: Live TV puts what is on now first (the server does the ranking). */
-  sport: { teams: string[]; leagues: string[] };
+  sport: { teams: string[]; leagues: string[]; muted: Muted };
   version: number | null;
+}
+
+export interface Muted {
+  sports: string[];
+  leagues: string[];
+  tags: string[];
 }
 
 export const SPECIALS_MAX = 6;
@@ -37,7 +43,7 @@ export function parsePrefs(raw: unknown): Prefs {
       audioLangs: strs(p.audioLangs),
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
-    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues) },
+    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) } },
     version: typeof r.version === "number" ? r.version : null,
   };
 }

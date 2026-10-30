@@ -6,6 +6,8 @@ import { progressOf, type OnNow } from "../lib/onNow";
 import { afterStartup } from "../lib/startup";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
+import { MuteButton } from "./SportMute";
+import { MUTED_EVENT } from "../api/sportTaste";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
 
@@ -40,7 +42,11 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     // No provider (no Live TV): stop asking
     t = window.setInterval(load, REFRESH_MS);
     void load();
+    // Something was muted or unmuted: look again now
+    const onMuted = () => void load();
+    window.addEventListener(MUTED_EVENT, onMuted);
     return () => {
+      window.removeEventListener(MUTED_EVENT, onMuted);
       alive = false;
       clearInterval(t);
     };
@@ -61,7 +67,8 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
       <div className="row-scroll">
         {live.map((o) => (
           <div key={o.channelId} className="onnow-item">
-            <button
+            <MuteButton
+              target={{ title: o.title, league: o.info.league, sportName: o.info.sportName }}
               className={`onnow-card${artClass(o.info.art)}`}
               data-nav
               aria-label={`${o.title} on ${o.channel}, ${o.info.kind === "replay" || o.info.kind === "highlights" ? "replay" : "live"}`}
@@ -82,7 +89,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               <span className="onnow-progress" aria-hidden>
                 <span style={{ width: `${progressOf(o, now) * 100}%` }} />
               </span>
-            </button>
+            </MuteButton>
             {alts(o).length > 0 && (
               <>
                 <button className="onnow-also" data-nav aria-expanded={openAlt === o.channelId} onClick={() => setOpenAlt(openAlt === o.channelId ? null : o.channelId)}>

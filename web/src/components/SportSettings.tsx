@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getSession } from "../api/jellyfin";
 import { hasLiveTv, probeNow, qualitySummary, sportSuggest } from "../api/iptv";
 import { savePrefs } from "../api/me";
+import { forgetLearned, learnedTaste, setMuted } from "../api/sportTaste";
+import type { Learned } from "../lib/sportMute";
 import type { Prefs } from "../lib/prefs";
 import { BUCKET_NAME, toggleName, type ProviderQuality, type QualitySummary, type Suggestion } from "../lib/sport";
 
@@ -27,7 +29,8 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [summary, setSummary] = useState<QualitySummary | null>(null);
   const [checking, setChecking] = useState(false);
-  const { teams, leagues } = prefs.sport;
+  const [learned, setLearned] = useState<Learned[] | null>(null);
+  const { teams, leagues, muted } = prefs.sport;
   const admin = !!getSession()?.isAdmin;
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
       if (!alive || !v) return;
       setLive(true);
       void qualitySummary().then((s) => alive && setSummary(s));
+      void learnedTaste().then((l) => alive && setLearned(l));
     });
     return () => {
       alive = false;
@@ -97,6 +101,45 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           </div>
         )}
       </div>
+
+      <div className="settings-block settings-pad">
+        <strong>Not interested</strong>
+        <span className="settings-sub">Hidden from live sport, Home and upcoming. They stay in the full guide.</span>
+        <div className="chips settings-chips-gap" aria-label="Not interested">
+          {muted.sports.length + muted.leagues.length + muted.tags.length === 0 && <span className="settings-sub">Nothing hidden. Use the menu on a live sport tile (right-click, long-press or M).</span>}
+          {(["sports", "leagues", "tags"] as const).flatMap((f) =>
+            muted[f].map((n) => (
+              <button key={`${f}:${n}`} className="chip on" data-nav aria-label={`Show ${n} again`} onClick={async () => setMsg(await setMuted(f, n, false))}>
+                {n} <span aria-hidden>×</span>
+              </button>
+            )),
+          )}
+        </div>
+      </div>
+
+      {learned && learned.length > 0 && (
+        <div className="settings-block settings-pad">
+          <strong>Learned from your viewing</strong>
+          <span className="settings-sub">Jellytip thinks you like these, so they rank higher. Remove one to start fresh.</span>
+          <div className="chips settings-chips-gap" aria-label="Learned from your viewing">
+            {learned.slice(0, 20).map((l) => (
+              <button
+                key={l.key}
+                className="chip on"
+                data-nav
+                aria-label={`Forget ${l.label}`}
+                onClick={async () => {
+                  const err = await forgetLearned(l.key);
+                  if (!err) setLearned((cur) => cur?.filter((x) => x.key !== l.key) ?? null);
+                  setMsg(err);
+                }}
+              >
+                {l.label} <span aria-hidden>×</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {summary && (
         <div className="settings-block settings-pad">

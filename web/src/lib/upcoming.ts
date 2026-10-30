@@ -15,6 +15,7 @@ export interface UpEvent {
   key: string;
   title: string;
   league: string | null;
+  sportName?: string | null;
   /** The person's team or league that matched (the ★). */
   favourite: boolean;
   start: number;
@@ -63,6 +64,7 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       key,
       title,
       league: str(e.league) ?? str(m?.league),
+      sportName: str(e.sportName) ?? str(e.sport),
       favourite: !!(str(m?.team) || str(m?.league)),
       start,
       stop,

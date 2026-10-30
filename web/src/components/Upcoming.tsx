@@ -8,6 +8,7 @@ import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { isLive, timeChip, type UpChannel, type UpEvent } from "../lib/upcoming";
+import { MuteButton } from "./SportMute";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
 import "../screens/iptv/iptv.css";
@@ -16,7 +17,7 @@ export function UpTile({ e, onOpen }: { e: UpEvent; onOpen: () => void }) {
   const live = isLive(e);
   const best = e.channels[0];
   return (
-    <button className={`up-tile${live ? " live" : ""}${artClass(e.art)}`} data-nav onClick={onOpen} aria-label={`${e.title}, ${timeChip(e)}`} title={e.title}>
+    <MuteButton target={{ title: e.title, league: e.league, sportName: e.sportName }} className={`up-tile${live ? " live" : ""}${artClass(e.art)}`} data-nav onClick={onOpen} aria-label={`${e.title}, ${timeChip(e)}`} title={e.title}>
       <SportArt art={e.art} />
       <span className="up-top">
         <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>
@@ -25,7 +26,7 @@ export function UpTile({ e, onOpen }: { e: UpEvent; onOpen: () => void }) {
       <span className="rec-title">{e.title}</span>
       <span className="rec-sub">{[e.league, best?.name].filter(Boolean).join(" · ")}</span>
       <SportBadges quality={best?.quality} size="sm" />
-    </button>
+    </MuteButton>
   );
 }
 
