@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
@@ -107,6 +107,21 @@ export function Home() {
 
   const onFocusItem = useCallback((i: Item) => setFocused(i), []);
 
+  // Hovering or focusing a tile changes `focused` (the hero follows): unchanged elements keep React from re-rendering every row
+  const body = useMemo(
+    () =>
+      withSpecials(
+        rows
+          ? rows.map((r) => serverRowElement(r, { onFocusItem }))
+          : [
+              ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
+              ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
+            ],
+        rowsReady ? specials : [],
+      ),
+    [rows, carousels, lists, specials, rowsReady, onFocusItem],
+  );
+
   return (
     <div className="home">
       <Hero item={focused} />
@@ -122,15 +137,7 @@ export function Home() {
             }}
           />
         )}
-        {!rowsFailed && withSpecials(
-          rows
-            ? rows.map((r) => serverRowElement(r, { onFocusItem }))
-            : [
-                ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
-                ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
-              ],
-          rowsReady ? specials : [],
-        )}
+        {!rowsFailed && body}
         {personal && prefs && rows && rows.length > 0 && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
             Edit Home
