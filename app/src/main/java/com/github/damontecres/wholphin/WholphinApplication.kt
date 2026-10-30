@@ -54,6 +54,7 @@ class WholphinApplication :
 
     override fun onCreate() {
         super.onCreate()
+        com.github.damontecres.wholphin.jellytip.jellytipInitGlobalState()
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy
