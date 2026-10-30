@@ -5,7 +5,8 @@ import { withSpecials } from "../components/specials/Specials";
 import { Hero } from "../components/Hero";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
-import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
+import { rememberRowTitles } from "../lib/rowTitles";
+import { HomeEdit } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
@@ -146,16 +147,16 @@ export function Home() {
       </div>
       {editing && prefs && rows && (
         <HomeEdit
-          rows={rows}
-          prefs={prefs}
-          onClose={(saved) => {
-            setEditing(false);
-            if (saved) {
-              dropPersonalCaches();
-              setReload((n) => n + 1);
-            }
-          }}
-        />
+            rows={rows}
+            prefs={prefs}
+            onClose={(saved) => {
+              setEditing(false);
+              if (saved) {
+                dropPersonalCaches();
+                setReload((n) => n + 1);
+              }
+            }}
+          />
       )}
     </div>
   );
