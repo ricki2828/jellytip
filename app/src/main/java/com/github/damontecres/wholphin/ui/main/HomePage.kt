@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -487,15 +488,29 @@ fun HomePageContent(
         }
         lastFocusedIndex = key to index
     }
+    // Jellytip: on Continue Watching / Next Up the hero rotates a featured mix (new releases, just added, specials)
+    // instead of showing the focused tile; other rows keep the hero on the focused tile
+    val heroMix =
+        if (heroComposable != null && specialsPage != null) {
+            com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroMix(homeRows, specials, serverRows)
+        } else {
+            emptyList()
+        }
+    val onLeadingRow = specialFocus == null && homeRows.getOrNull(position.row).isContinueWatchingNextUp
+    val heroSlide = com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroSlide(heroMix, onLeadingRow)
+    val heroTarget = heroSlide?.item ?: focusedItem
+    val heroHeaderTarget = heroSlide?.item ?: headerItem
     // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
-    var heroItem by remember { mutableStateOf(focusedItem) }
-    var heroHeaderItem by remember { mutableStateOf(headerItem) }
-    LaunchedEffect(focusedItem, headerItem) {
+    var heroItem by remember { mutableStateOf(heroTarget) }
+    var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
+    LaunchedEffect(heroTarget, heroHeaderTarget) {
         delay(HERO_DEBOUNCE_MS)
-        heroItem = focusedItem
-        heroHeaderItem = headerItem
+        com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(heroSlide)
+        heroItem = heroTarget
+        heroHeaderItem = heroHeaderTarget
         JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
     }
+    DisposableEffect(Unit) { onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(null) } }
 
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }

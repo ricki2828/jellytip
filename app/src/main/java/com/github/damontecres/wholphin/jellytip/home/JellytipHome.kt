@@ -75,6 +75,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipQuote
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId
+import com.github.damontecres.wholphin.jellytip.specials.Kicker
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
 import com.github.damontecres.wholphin.jellytip.LetterboxdInline
 import com.github.damontecres.wholphin.jellytip.scoreLine as jellytipScoreLine
@@ -231,7 +232,9 @@ fun JellytipHomeHero(
         if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
-            JellytipTrailerControl.start(item, url, trailerId, sound = settings.trailerSound)
+            // A featured-mix slide (focus is on a Continue Watching tile) always starts muted
+            val sound = settings.trailerSound && JellytipHeroMix.kickerFor(item) == null
+            JellytipTrailerControl.start(item, url, trailerId, sound = sound)
         }
     }
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
@@ -509,6 +512,8 @@ fun JellytipHomeHeader(
                             bottom = JellytipHomeTokens.BOTTOM_PAD_PX.toDp(),
                         ).width(JellytipHomeTokens.TEXT_BLOCK_W_PX.toDp()),
             ) {
+                // Featured-mix slide: where it came from ("New release", "Just added", ...)
+                JellytipHeroMix.kickerFor(item)?.let { Kicker(it) }
                 val logoUrl = rememberLogoUrl(item)
                 var logoFailed by remember(logoUrl) { mutableStateOf(false) }
                 if (showLogo && logoUrl != null && !logoFailed) {
