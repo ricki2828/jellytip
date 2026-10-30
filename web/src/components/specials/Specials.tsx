@@ -30,6 +30,7 @@ import { Backdrop } from "../Backdrop";
 import { Card } from "../Card";
 import { ScoreLine } from "../ScoreLine";
 import { infoLine, TitleLogo } from "../TitleBlock";
+import { IptvPoster } from "../IptvTile";
 import { PosterCard } from "../PosterCard";
 import { GetItSheet } from "../GetItSheet";
 import { filmCount, PersonTile } from "../PersonTile";
@@ -249,7 +250,8 @@ function PersonSpotlightBlock({ s }: { s: PersonSpotlight }) {
   const items = useItems(s.itemIds);
   const phone = useIsPhone();
   const untitled = untitledSet(s);
-  if (!items || items.length === 0) return null;
+  const iptv = s.iptvItems ?? [];
+  if (!items || (items.length === 0 && iptv.length === 0)) return null;
   return (
     <section className="special row person-spotlight">
       <SpecialHeader kicker={s.role === "director" ? "Director spotlight" : "Actor spotlight"} title={s.title ?? s.name} />
@@ -263,6 +265,9 @@ function PersonSpotlightBlock({ s }: { s: PersonSpotlight }) {
         />
         {items.map((i) => (
           <PosterCard key={i.Id} item={i} onOpen={() => go(`/item/${i.Id}`)} untitled={untitled.has(i.Id)} />
+        ))}
+        {iptv.map((v) => (
+          <IptvPoster key={v.id} item={v} width={150} />
         ))}
       </div>
     </section>

@@ -3,6 +3,7 @@
 
 import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
+import { parseVodItems, type VodItem } from "../lib/iptvVod";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
@@ -415,6 +416,8 @@ export interface PersonSpotlight extends SpecialBase {
   filmCount: number;
   unwatchedCount: number;
   itemIds: string[];
+  /** The person's films missing from the library but on the viewer's IPTV (after the library items). */
+  iptvItems?: VodItem[];
 }
 export interface TonightsPick extends SpecialBase {
   layout: "tonights_pick";
@@ -481,6 +484,7 @@ const specialsCache = cached<Special[]>(async (key, job) => {
       ...s,
       position: Math.max(0, Number(s.position) || 0),
       untitled: Array.isArray(s.untitled) ? s.untitled.filter((x) => typeof x === "string") : undefined,
+      ...(s.layout === "person_spotlight" ? { iptvItems: parseVodItems((s as { iptvItems?: unknown }).iptvItems) } : {}),
     }));
 });
 
