@@ -5,6 +5,9 @@ import { useTileMenu } from "./TasteButtons";
 import { techOf, tileBadges } from "../lib/techBadges";
 import "./PosterCard.css";
 
+const POSTER_IMG_W = 300;
+const POSTER_IMG_H = 450;
+
 /**
  * 2:3 poster tile. Primary posters carry their title, so nothing is drawn below or over them; the title sits on the
  * dark tile until the picture loads (never blank), stays when there is no picture, and is drawn over art known to have
@@ -31,8 +34,8 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   tech?: readonly string[];
 }) {
   const tag = item?.ImageTags?.Primary;
-  const w = width || 160; // 0 = fluid (grid cell sets the size)
-  const url = src ?? (item && tag ? imageUrl(item.Id, "Primary", { tag, fillWidth: Math.round(w * 2), fillHeight: Math.round(w * 3), quality: 85 }) : null);
+  // One size for every poster tile (rows, grids, phone): the seedbox resizes on first request and caches per size
+  const url = src ?? (item && tag ? imageUrl(item.Id, "Primary", { tag, fillWidth: POSTER_IMG_W, fillHeight: POSTER_IMG_H, quality: 85 }) : null);
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const name = nameProp ?? item?.Name ?? label ?? "";
