@@ -35,8 +35,6 @@ fun PersonRow(
     @StringRes title: Int = R.string.people_title,
     onLongClick: ((Int, Person) -> Unit)? = null,
 ) {
-    // Jellytip kids profile: no Cast (person pages are closed in kids mode)
-    if (com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) return
     val firstFocus = remember { FocusRequester() }
     var position by rememberInt()
     Column(

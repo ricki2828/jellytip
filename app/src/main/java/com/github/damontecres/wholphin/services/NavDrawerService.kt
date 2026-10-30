@@ -63,9 +63,7 @@ class NavDrawerService
                 serverRepository.currentUserFlow,
                 serverRepository.currentUserDtoFlow,
                 seerrServerRepository.active,
-                // Jellytip: the kids profile turning on/off rebuilds the drawer
-                com.github.damontecres.wholphin.jellytip.me.JellytipKids.state,
-            ) { user, userDto, discoverActive, _ ->
+            ) { user, userDto, discoverActive ->
                 Triple(user, userDto, discoverActive)
             }.collectLatestIn(coroutineScope) { (user, userDto, discoverActive) ->
                 Timber.d(
@@ -195,12 +193,6 @@ class NavDrawerService
             userDto: ServerUserConfig,
             discoverActive: Boolean,
         ) {
-            // Jellytip kids profile: libraries, Favorites, Discover and Live TV all read Jellyfin or the provider directly
-            // (outside the server's kids filter), so the drawer keeps only Home and Search
-            if (com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) {
-                _state.update { it.copy(items = emptyList(), moreItems = emptyList()) }
-                return
-            }
             val builtins =
                 buildList {
                     add(NavDrawerItem.Favorites)

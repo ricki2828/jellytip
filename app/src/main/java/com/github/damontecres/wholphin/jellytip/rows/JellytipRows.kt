@@ -282,22 +282,6 @@ class JellytipRowsService
         private fun startOfToday(): Long =
             LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-        /**
-         * Kids mode: always ask the server (its kids filter applies), never fall back to a cached or on-disk answer that
-         * may predate kids mode. Null on any failure (including 503: the server couldn't tell who is asking).
-         */
-        suspend fun loadFresh(page: String): JellytipRowsAnswer? =
-            try {
-                jellytipApi
-                    .getJson("/v1/home/carousels?rows=1&page=$page", timeoutMs = TIMEOUT_MS, asUser = true)
-                    ?.let { JellytipRowsParser.parse(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Timber.w(e, "Jellytip kids rows unavailable for %s", page)
-                null
-            }
-
         suspend fun load(page: String): JellytipRowsAnswer? {
             val key = pageKey(page) ?: return null
             answers[key]?.takeIf { System.currentTimeMillis() - it.at < PAGE_FRESH_MS }?.let { return it.value }

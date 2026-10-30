@@ -2,8 +2,6 @@ package com.github.damontecres.wholphin.ui.nav
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -63,47 +61,6 @@ import timber.log.Timber
  */
 @Composable
 fun DestinationContent(
-    destination: Destination,
-    preferences: UserPreferences,
-    onClearBackdrop: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Jellytip kids profile (defence in depth): screens that read Jellyfin or the IPTV provider directly are closed, and
-    // titles above the age limit refuse details and playback
-    val kids by com.github.damontecres.wholphin.jellytip.me.JellytipKids.state
-        .collectAsState()
-    if (kids.active) {
-        if (com.github.damontecres.wholphin.jellytip.me.JellytipKids.blocked(destination)) {
-            LaunchedEffect(destination) {
-                com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("kids", "blocked ${destination::class.simpleName}")
-            }
-            com.github.damontecres.wholphin.jellytip.me.KidsNotAvailable(modifier)
-            return
-        }
-        val gated =
-            when (destination) {
-                is Destination.Playback -> destination.itemId
-                is Destination.MediaItem -> destination.itemId.takeIf { destination.type in KIDS_RATED_KINDS }
-                else -> null
-            }
-        if (gated != null) {
-            com.github.damontecres.wholphin.jellytip.me.KidsRatingGate(itemId = gated, modifier = modifier) {
-                DestinationContentInner(destination, preferences, onClearBackdrop, modifier)
-            }
-            return
-        }
-    }
-    DestinationContentInner(destination, preferences, onClearBackdrop, modifier)
-}
-
-private val KIDS_RATED_KINDS =
-    setOf(
-        BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE, BaseItemKind.VIDEO, BaseItemKind.MUSIC_VIDEO,
-        BaseItemKind.TRAILER,
-    )
-
-@Composable
-private fun DestinationContentInner(
     destination: Destination,
     preferences: UserPreferences,
     onClearBackdrop: () -> Unit,

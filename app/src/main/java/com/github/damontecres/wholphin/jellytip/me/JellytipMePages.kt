@@ -146,46 +146,6 @@ class JellytipMeViewModel
             patch(JSONObject().put("letterboxd", JSONObject().put("username", user.trim().ifBlank { JSONObject.NULL })), "Saved. Linking can take a few minutes.")
         }
 
-        fun enableKids(
-            maxAge: Int,
-            pin: String,
-        ) {
-            viewModelScope.launch {
-                if (!JellytipMe.setKidsPin(pin)) {
-                    message.value = "Couldn't set the PIN."
-                    return@launch
-                }
-                val (code, err) = JellytipMe.patch(JSONObject().put("kids", JSONObject().put("enabled", true).put("maxAge", maxAge)))
-                message.value = if (code == 200) "Kids profile on. Home changes the next time it loads." else "Couldn't turn it on (${err ?: code})."
-            }
-        }
-
-        /**
-         * Change the age limit while kids mode is on. Lowering needs nothing; raising (any loosening) must carry the PIN
-         * in the same PATCH, or the server answers 403 {"error":"pin"}.
-         */
-        fun setKidsAge(
-            maxAge: Int,
-            pin: String?,
-        ) {
-            viewModelScope.launch {
-                val kids = JSONObject().put("maxAge", maxAge)
-                if (pin != null) kids.put("pin", pin)
-                val (code, err) = JellytipMe.patch(JSONObject().put("kids", kids))
-                message.value =
-                    when (code) {
-                        200 -> "Age limit saved. Home changes the next time it loads."
-                        403 -> "That PIN isn't right."
-                        429 -> "Too many wrong PINs. Try again in 5 minutes."
-                        else -> "Couldn't change it (${err ?: code})."
-                    }
-            }
-        }
-
-        fun leaveKids(pin: String) {
-            viewModelScope.launch { message.value = JellytipMe.leaveKids(pin) ?: "Kids profile off." }
-        }
-
         companion object {
             /** Jellyfin wants ISO 639-2 ("eng"). */
             fun iso3(code: String): String = runCatching { java.util.Locale(code).isO3Language }.getOrDefault(code)
@@ -193,7 +153,6 @@ class JellytipMeViewModel
     }
 
 private val LANGUAGES = listOf("en" to "English", "fr" to "French", "es" to "Spanish", "de" to "German", "it" to "Italian", "ja" to "Japanese", "ko" to "Korean", "zh" to "Chinese", "mi" to "Māori")
-private val AGES = listOf(0 to "All ages", 7 to "7+", 10 to "10+", 13 to "13+", 16 to "16+")
 
 private fun langName(code: String?) = LANGUAGES.firstOrNull { it.first == code }?.second ?: code ?: "Off"
 
@@ -232,19 +191,9 @@ fun JellytipMePage(
                     Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipTaste, "personalise: taste") }, modifier = Modifier.focusRequester(first)) {
                         Text("Your taste")
                     }
-                    if (!p.kidsEnabled) {
-                        Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipHomeEdit, "personalise: edit home") }) { Text("Edit Home") }
-                    }
+                    Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipHomeEdit, "personalise: edit home") }) { Text("Edit Home") }
                 }
             }
-            if (p.kidsEnabled) {
-                item {
-                    SettingRow("Age limit", "${AGES.firstOrNull { it.first == p.kidsMaxAge }?.second ?: "${p.kidsMaxAge}+"} · OK to change") { dialog = "kidsChange" }
-                }
-                item {
-                    SettingRow("Kids profile", "On · ${AGES.firstOrNull { it.first == p.kidsMaxAge }?.second ?: "${p.kidsMaxAge}+"} · OK to leave (PIN)") { dialog = "leaveKids" }
-                }
-            } else {
                 item { SettingRow("Hide watched (rows update overnight)", if (p.hideWatched) "On" else "Off") { viewModel.patch(JSONObject().put("hideWatched", !p.hideWatched)) } }
                 item { SettingRow("Intro", if (p.intro) "On" else "Off") { viewModel.setPlaybackToggle("intro", !p.intro) } }
                 item { SettingRow("Trailers play by themselves", if (p.trailerAutoplay) "On" else "Off") { viewModel.setPlaybackToggle("trailerAutoplay", !p.trailerAutoplay) } }
@@ -255,8 +204,6 @@ fun JellytipMePage(
                     val lb = p.letterboxdUser?.let { "$it · ${p.letterboxdStatus}" } ?: "Not linked"
                     SettingRow("Your Letterboxd", lb) { dialog = "letterboxd" }
                 }
-                item { SettingRow("Kids profile", "Off · OK to set up (needs a PIN to leave)") { dialog = "kidsAge" } }
-            }
             if (JellytipMe.follows.isNotEmpty()) {
                 item { Text("Following", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp)) }
                 items(JellytipMe.follows.values.toList(), key = { it.personId.toString() }) { f ->
@@ -284,55 +231,7 @@ fun JellytipMePage(
 
         "letterboxd" -> LetterboxdDialog(prefs?.letterboxdUser.orEmpty(), onSave = { viewModel.saveLetterboxd(it) }, onDismiss = { dialog = null })
 
-        "kidsAge" ->
-            DialogPopup(
-                showDialog = true,
-                title = "Kids profile: what can they watch?",
-                dialogItems = AGES.map { (age, name) -> DialogItem(name, dismissOnClick = false) { dialog = "kidsPin:$age" } },
-                onDismissRequest = { dialog = null },
-                waitToLoad = false,
-            )
-
-        "kidsChange" ->
-            DialogPopup(
-                showDialog = true,
-                title = "Age limit (a higher limit needs the PIN)",
-                dialogItems =
-                    AGES.map { (age, name) ->
-                        DialogItem(name, dismissOnClick = false) {
-                            val current = prefs?.kidsMaxAge ?: 0
-                            if (age > current) {
-                                dialog = "kidsRaise:$age"
-                            } else {
-                                dialog = null
-                                viewModel.setKidsAge(age, null)
-                            }
-                        }
-                    },
-                onDismissRequest = { dialog = null },
-                waitToLoad = false,
-            )
-
-        "leaveKids" ->
-            PinDialog("Enter the PIN to leave the kids profile", onPin = { pin ->
-                dialog = null
-                viewModel.leaveKids(pin)
-            }, onDismiss = { dialog = null })
-
-        else ->
-            dialog?.takeIf { it.startsWith("kidsRaise:") }?.let { d ->
-                val age = d.substringAfter(':').toIntOrNull() ?: 0
-                PinDialog("Enter the PIN to raise the age limit", onPin = { pin ->
-                    dialog = null
-                    viewModel.setKidsAge(age, pin)
-                }, onDismiss = { dialog = null })
-            } ?: dialog?.takeIf { it.startsWith("kidsPin:") }?.let { d ->
-                val age = d.substringAfter(':').toIntOrNull() ?: 13
-                PinDialog("Choose a 4-digit PIN (needed to leave the kids profile)", onPin = { pin ->
-                    dialog = null
-                    viewModel.enableKids(age, pin)
-                }, onDismiss = { dialog = null })
-            }
+        else -> {}
     }
 }
 
@@ -381,45 +280,6 @@ private fun LetterboxdDialog(
                     onDismiss()
                 }) { Text("Save") }
                 Button(onClick = onDismiss) { Text("Cancel") }
-            }
-        }
-    }
-}
-
-/** A D-pad PIN pad (no keyboard): four dots, digits 1-9, 0, delete. */
-@Composable
-private fun PinDialog(
-    title: String,
-    onPin: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val digits = remember { mutableStateListOf<Int>() }
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.tryRequestFocus() }
-    com.github.damontecres.wholphin.ui.components.BasicDialog(onDismissRequest = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-            Text(title, fontFamily = JellytipFontFamily, fontSize = 15.sp)
-            Text((0 until 4).joinToString("  ") { if (it < digits.size) "●" else "○" }, fontSize = 22.sp)
-            val keys = listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9), listOf(-1, 0, -2))
-            keys.forEachIndexed { r, row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.focusGroup()) {
-                    row.forEachIndexed { c, k ->
-                        Button(
-                            onClick = {
-                                when (k) {
-                                    -1 -> onDismiss()
-                                    -2 -> if (digits.isNotEmpty()) digits.removeAt(digits.size - 1)
-                                    else ->
-                                        if (digits.size < 4) {
-                                            digits += k
-                                            if (digits.size == 4) onPin(digits.joinToString(""))
-                                        }
-                                }
-                            },
-                            modifier = Modifier.width(72.dp).then(if (r == 0 && c == 0) Modifier.focusRequester(first) else Modifier),
-                        ) { Text(if (k == -1) "Cancel" else if (k == -2) "⌫" else "$k") }
-                    }
-                }
             }
         }
     }

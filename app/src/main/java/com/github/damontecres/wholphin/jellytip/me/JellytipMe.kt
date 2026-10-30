@@ -16,7 +16,7 @@ import java.util.UUID
 
 /*
  * Personalisation (companion `/v1/me/...`, contract "Personalisation API" in ~/ai/plans/jellytip-10x.md): prefs that
- * follow the person across TV/web/phone, reactions, follows, taste, kids profile. The server applies the effects to
+ * follow the person across TV/web/phone, reactions, follows, taste. The server applies the effects to
  * rows/specials/search; the app only renders. A 404 hides every personalisation feature.
  */
 
@@ -26,10 +26,6 @@ data class MePrefs(
     val order: List<String>,
     val specialsPerDay: Int?,
     val hideWatched: Boolean,
-    val kidsEnabled: Boolean,
-    /** 0, 7, 10, 13 or 16 (18 = no limit). */
-    val kidsMaxAge: Int,
-    val kidsPinSet: Boolean,
     val intro: Boolean,
     val trailerAutoplay: Boolean,
     val trailerSound: Boolean,
@@ -71,29 +67,14 @@ object MeParse {
     fun prefs(json: String): MePrefs {
         val o = JSONObject(json)
         val home = o.optJSONObject("home") ?: JSONObject()
-        val kids = o.optJSONObject("kids") ?: JSONObject()
         val pb = o.optJSONObject("playback") ?: JSONObject()
         val lb = o.optJSONObject("letterboxd") ?: JSONObject()
-        val maxAge =
-            if (kids.has("maxAge") && !kids.isNull("maxAge")) {
-                kids.optInt("maxAge", 18)
-            } else {
-                when (kids.str("maxRating")?.uppercase()) {
-                    "G", "U", "E" -> 0
-                    "PG" -> 7
-                    "PG-13", "12A", "M" -> 13
-                    else -> 16
-                }
-            }
         return MePrefs(
             pinned = strings(home.optJSONArray("pinned")),
             hidden = strings(home.optJSONArray("hidden")),
             order = strings(home.optJSONArray("order")),
             specialsPerDay = if (home.has("specialsPerDay") && !home.isNull("specialsPerDay")) home.optInt("specialsPerDay") else null,
             hideWatched = o.optBoolean("hideWatched", false),
-            kidsEnabled = kids.optBoolean("enabled", false),
-            kidsMaxAge = maxAge,
-            kidsPinSet = kids.optBoolean("pinSet", false),
             intro = pb.optBoolean("intro", true),
             trailerAutoplay = pb.optBoolean("trailerAutoplay", true),
             trailerSound = pb.optBoolean("trailerSound", false),
@@ -289,19 +270,5 @@ object JellytipMe {
         val res = api?.userCall("v1/me/taste") ?: return null
         if (res.first != 200) return null
         return runCatching { MeParse.taste(res.second) }.getOrNull()
-    }
-
-    /** Set (or change) the kids PIN; stored hashed on the server. */
-    suspend fun setKidsPin(pin: String): Boolean = (api?.userCall("v1/me/kids/pin", JSONObject().put("pin", pin).toString())?.first ?: 0) in 200..299
-
-    /** Leaving kids mode needs the PIN: 403 wrong, 429 too many tries (5 min). */
-    suspend fun leaveKids(pin: String): String? {
-        val (code, _) = patch(JSONObject().put("kids", JSONObject().put("enabled", false).put("pin", pin)))
-        return when (code) {
-            200 -> null
-            403 -> "That PIN isn't right."
-            429 -> "Too many wrong PINs. Try again in 5 minutes."
-            else -> "Couldn't leave the kids profile (server said $code)."
-        }
     }
 }

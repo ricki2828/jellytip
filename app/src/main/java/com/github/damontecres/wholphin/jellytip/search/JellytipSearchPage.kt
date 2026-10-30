@@ -128,8 +128,7 @@ class JellytipSearchViewModel
                         _state.update { it.copy(available = false) }
                         return@launch
                     }
-                    // A failed answer (503: the server couldn't tell who is asking) never leaves older results up in kids mode
-                    _state.update { it.copy(answer = a ?: if (com.github.damontecres.wholphin.jellytip.me.JellytipKids.active) null else it.answer, searching = false, failed = a == null) }
+                    _state.update { it.copy(answer = a ?: it.answer, searching = false, failed = a == null) }
                     JellytipTrace.log("search", "q='${q.trim()}' groups=${a?.groups?.map { "${it.type}:${it.total}" }} pending=${a?.pending}")
                     // Discover (admins) can come a moment later: ask once more for just that group
                     if (a != null && a.pending.isNotEmpty()) {
@@ -143,12 +142,6 @@ class JellytipSearchViewModel
                         }
                     }
                 }
-        }
-
-        fun retry() {
-            started = false
-            _state.update { it.copy(available = null, failed = false) }
-            start(_state.value.query)
         }
 
         fun removeChip(chip: SearchChip) {
@@ -192,10 +185,8 @@ fun JellytipSearchPage(
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(Unit) { viewModel.start(initialQuery) }
-    val kids by com.github.damontecres.wholphin.jellytip.me.JellytipKids.state.collectAsState()
     when (state.available) {
-        // Kids mode never falls back to the app's own search: it reads Jellyfin outside the server's kids filter
-        false -> if (kids.active) com.github.damontecres.wholphin.jellytip.me.KidsRetry("Search isn't available right now.", onRetry = { viewModel.retry() }, modifier = modifier) else fallback()
+        false -> fallback()
         null -> Box(modifier.fillMaxSize().background(JellytipPalette.Night))
         true -> SearchContent(state, viewModel, modifier)
     }
@@ -277,12 +268,6 @@ private fun SearchContent(
                 }
             }
         }
-        if (state.failed && !state.searching) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Search didn't answer.", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                Chip("Try again") { viewModel.setQuery(state.query, immediate = true) }
-            }
-        }
         when {
             answer == null -> Suggestions(state, viewModel)
             answer.isEmpty -> Text("Nothing found for “${state.query.trim()}”.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
@@ -292,10 +277,7 @@ private fun SearchContent(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusRestorer().onFocusChanged { if (it.hasFocus) resultsTouched = true },
                 ) {
-                    // Kids mode: only films and shows (the server drops the rest too; this is defence in depth)
-                    answer.groups
-                        .filter { !com.github.damontecres.wholphin.jellytip.me.JellytipKids.active || it.type == "films" || it.type == "shows" }
-                        .forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                    answer.groups.forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
                 }
         }
     }

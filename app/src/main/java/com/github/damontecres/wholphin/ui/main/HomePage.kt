@@ -28,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.withFrameNanos
 import com.github.damontecres.wholphin.jellytip.JellytipSession
@@ -378,35 +377,6 @@ fun HomePageContent(
     /** Long press on a server-row tile (context menu); null = open details. */
     onLongClickExtraItem: ((BaseItem) -> Unit)? = null,
 ) {
-    // Jellytip kids profile: Home = the server's kids-filtered rows (always fresh; failure = error + Try again, never
-    // unfiltered rows) plus Continue Watching / Next Up filtered by rating. The app's own Jellyfin rows are not shown.
-    val kids by com.github.damontecres.wholphin.jellytip.me.JellytipKids.state.collectAsState()
-    val kidsMode = kids.active && specialsPage != null
-    var kidsRetry by remember { mutableIntStateOf(0) }
-    val kidsRows = if (kidsMode) com.github.damontecres.wholphin.jellytip.me.rememberKidsRows(specialsPage!!, kidsRetry) else null
-    if (kidsMode && kidsRows !is com.github.damontecres.wholphin.jellytip.me.KidsRows.Loaded) {
-        if (kidsRows is com.github.damontecres.wholphin.jellytip.me.KidsRows.Failed) {
-            com.github.damontecres.wholphin.jellytip.me.KidsRetry("Couldn't load Home right now.", onRetry = { kidsRetry++ }, modifier = modifier)
-        } else {
-            Box(modifier.fillMaxSize())
-        }
-        return
-    }
-    val kidsGate: com.github.damontecres.wholphin.jellytip.me.KidsGateViewModel? = if (kidsMode) hiltViewModel() else null
-    @Suppress("NAME_SHADOWING")
-    val homeRows =
-        if (kidsMode) {
-            val lead = specialsLeadingRows ?: homeRows.indexOfFirst { !it.isContinueWatchingNextUp }.let { if (it < 0) homeRows.size else it }
-            val leading = homeRows.take(lead)
-            // Episodes usually carry no rating: they take their series' (asked once)
-            val needSeries = leading.flatMap { (it as? HomeRowLoadingState.Success)?.items.orEmpty() }.mapNotNull { i -> i?.takeIf { it.data.officialRating.isNullOrBlank() }?.data?.seriesId }
-            kidsGate?.let { g -> LaunchedEffect(needSeries) { com.github.damontecres.wholphin.jellytip.me.JellytipKids.fetchSeriesRatings(g.api, needSeries) } }
-            leading.map { row ->
-                if (row is HomeRowLoadingState.Success) row.copy(items = row.items.filter { it != null && com.github.damontecres.wholphin.jellytip.me.JellytipKids.allows(it) }) else row
-            }
-        } else {
-            homeRows
-        }
     var hasFocus by remember { mutableStateOf(false) }
     val rowFocusedItem =
         remember(homeRows, position) {
@@ -415,15 +385,15 @@ fun HomePageContent(
             )
         }
     // Jellytip specials: rows of their own between the normal rows; a focused special tile drives the hero instead
-    val liveSpecials = if (kidsMode) null else specialsPage?.let { rememberJellytipSpecials(it) }
+    val liveSpecials = specialsPage?.let { rememberJellytipSpecials(it) }
     // Server rows (rows=1 manifest) replace the old carousel rows; old manifest / unavailable = today's rows
-    val liveServerRows = if (kidsRows is com.github.damontecres.wholphin.jellytip.me.KidsRows.Loaded) kidsRows.answer else specialsPage?.let { rememberJellytipRows(it) }
+    val liveServerRows = specialsPage?.let { rememberJellytipRows(it) }
     // What is on screen. Starts with today's cached copies (disk), so specials/rows are in place on the first frame;
     // a late answer is taken only if it does not move the focused row, otherwise it waits for the next visit.
     var specials by remember { mutableStateOf(liveSpecials) }
     var serverRows by remember { mutableStateOf(liveServerRows) }
     // Jellytip IPTV: "Live sport on now" on Home only (people with a provider and 2+ live sport channels)
-    val liveSportNow = if (specialsPage == "home" && !kidsMode) com.github.damontecres.wholphin.jellytip.iptv.rememberLiveSportOnNow() else null
+    val liveSportNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberLiveSportOnNow() else null
     var liveSport by remember { mutableStateOf(liveSportNow) }
     val hiddenRows =
         remember(serverRows, rowConfigs) {
