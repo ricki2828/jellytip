@@ -299,6 +299,8 @@ public class PlayerActivity extends AppCompatActivity {
                     endedAt = player.getDuration();
                     jumpToLive();
                 }
+                // From kick-off caught up (the catch-up ends where the button was pressed): back to live
+                else if (state == Player.STATE_ENDED && live && fromKickOff && !closing) backToLiveAfterKickOff();
                 else if (state == Player.STATE_ENDED && !live) close("ended", null);
             }
 
@@ -475,6 +477,25 @@ public class PlayerActivity extends AppCompatActivity {
             }
         );
         return true;
+    }
+
+    private void backToLiveAfterKickOff() {
+        requestUrl(
+            "live",
+            channelId,
+            0,
+            0,
+            (url, mime, error) -> {
+                if (url == null) {
+                    close("ended", null);
+                    return;
+                }
+                fromKickOff = false;
+                if (kickOffButton != null) kickOffButton.setText("From kick-off");
+                switchTo(url, mime, false);
+                android.widget.Toast.makeText(this, "Back to live", android.widget.Toast.LENGTH_SHORT).show();
+            }
+        );
     }
 
     /** "From kick-off" (catch-up from the programme's start) or "Back to live". */
