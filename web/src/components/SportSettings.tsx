@@ -104,9 +104,13 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
       </div>
 
       <div className="settings-block settings-pad">
-        <strong>Sports I follow</strong>
-        <span className="settings-sub">Tap once to follow, again to hide, again to clear.</span>
-        <SportsPicker prefs={prefs} onMsg={setMsg} />
+        {prefs.sportsSupported && (
+          <>
+            <strong>Sports I follow</strong>
+            <span className="settings-sub">Tap once to follow, again to hide, again to clear.</span>
+            <SportsPicker prefs={prefs} onMsg={setMsg} />
+          </>
+        )}
         <SportTagToggles prefs={prefs} onMsg={setMsg} />
       </div>
 

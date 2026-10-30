@@ -24,7 +24,7 @@ export function SportSetup() {
   const eligibleRoute = route.name === "livetv" || route.name === "home";
 
   useEffect(() => {
-    if (!eligibleRoute || !prefs || open || localStorage.getItem(seenKey()) || hasSportPrefs(prefs.sport)) return;
+    if (!eligibleRoute || !prefs || !prefs.sportsSupported || open || localStorage.getItem(seenKey()) || hasSportPrefs(prefs.sport)) return;
     let alive = true;
     // Let the page settle first, and only for people who have live channels
     const t = window.setTimeout(() => void hasLiveTv().then((v) => alive && v && setOpen(true)), 3500);
@@ -44,7 +44,7 @@ export function SportSetup() {
     };
   }, [open, step, q]);
 
-  if (!open || !prefs) return null;
+  if (!open || !prefs || !prefs.sportsSupported) return null;
   const finish = async () => {
     localStorage.setItem(seenKey(), "1");
     setOpen(false);

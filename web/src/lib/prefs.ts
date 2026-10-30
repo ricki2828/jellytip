@@ -8,6 +8,8 @@ export interface Prefs {
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   /** Favourite teams and leagues: Live TV puts what is on now first (the server does the ranking). */
   sport: { teams: string[]; leagues: string[]; /** Followed sports (the server's sportName vocabulary). */ sports: string[]; muted: Muted; setup: boolean };
+  /** The server returns `sport.sports` (an array, even empty): only then can followed sports and the first-run sheet be saved. */
+  sportsSupported: boolean;
   version: number | null;
 }
 
@@ -44,6 +46,7 @@ export function parsePrefs(raw: unknown): Prefs {
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
     sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true },
+    sportsSupported: Array.isArray(sp.sports),
     version: typeof r.version === "number" ? r.version : null,
   };
 }

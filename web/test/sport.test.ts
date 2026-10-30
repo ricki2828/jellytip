@@ -80,3 +80,10 @@ test("settings parsers tolerate odd input", () => {
   assert.deepEqual(toggleName(["Warriors"], "warriors"), []);
   assert.deepEqual(parsePrefs({ sport: { teams: ["A", "A", 1], leagues: "x" } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: [], leagues: [], tags: [] }, setup: false });
 });
+
+test("sports picker is offered only when the server returns sport.sports", () => {
+  assert.equal(parsePrefs({ sport: { sports: [] } }).sportsSupported, true);
+  assert.equal(parsePrefs({ sport: { sports: ["cricket"] } }).sportsSupported, true);
+  assert.equal(parsePrefs({ sport: { teams: [] } }).sportsSupported, false);
+  assert.equal(parsePrefs({}).sportsSupported, false);
+});
