@@ -67,6 +67,8 @@ class JellytipIptvVodViewModel
     constructor(
         val vod: JellytipIptvVodService,
         val navigationManager: NavigationManager,
+        /** The library trailer player's client (the trailer cache is the same). */
+        @param:com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient val httpClient: okhttp3.OkHttpClient,
     ) : ViewModel()
 
 /** The IPTV cue: a small jelly dot, with the quality next to it ("● 4K"). */
@@ -226,9 +228,36 @@ fun JellytipIptvDetailsPage(
             "iptv episode OK",
         )
     }
+    // Trailer from the companion's cache plays in-app behind the text, as on the library details page
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var trailerPlaying by remember(id) { mutableStateOf(false) }
+    val trailerUrl = d?.trailer
+    val playTrailer: () -> Unit = {
+        val url = trailerUrl
+        if (url != null) {
+            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+            if (IptvVodParse.isYouTube(url)) {
+                // Fallback only: a full YouTube URL goes to YouTube, like the library's remote trailers
+                com.github.damontecres.wholphin.services.TrailerService.onClick(
+                    context,
+                    com.github.damontecres.wholphin.data.model.RemoteTrailer("${item?.title ?: title} trailer", url, null),
+                ) { dest -> viewModel.navigationManager.navigateTo(dest, "iptv details trailer") }
+            } else {
+                trailerPlaying = !trailerPlaying
+            }
+        }
+    }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         (item?.backdrop ?: item?.poster)?.let {
             AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        if (trailerPlaying && trailerUrl != null) {
+            com.github.damontecres.wholphin.jellytip.TrailerLayer(
+                url = trailerUrl,
+                sound = true,
+                httpClient = viewModel.httpClient,
+                onEnded = { trailerPlaying = false },
+            )
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.7f to Color.Transparent)))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
@@ -328,12 +357,12 @@ fun JellytipIptvDetailsPage(
                             },
                         ) { Text("Play both") }
                     }
-                    TrailerButton(d.trailer, item.title, viewModel)
+                    TrailerButton(d.trailer, trailerPlaying, playTrailer)
                     MyListButton(item, viewModel)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TrailerButton(d.trailer, item.title, viewModel)
+                    TrailerButton(d.trailer, trailerPlaying, playTrailer)
                     MyListButton(item, viewModel)
                 }
             }
@@ -404,24 +433,15 @@ fun JellytipIptvDetailsPage(
     }
 }
 
-/** Trailer, played like the library details page's remote trailers (TrailerService); nothing when there is none. */
+/** Trailer: plays the companion's mp4 in-app behind the page (OK again stops it); a YouTube URL opens YouTube. */
 @Composable
 private fun TrailerButton(
     url: String?,
-    title: String,
-    viewModel: JellytipIptvVodViewModel,
+    playing: Boolean,
+    onClick: () -> Unit,
 ) {
     url ?: return
-    val context = androidx.compose.ui.platform.LocalContext.current
-    Button(
-        onClick = {
-            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-            com.github.damontecres.wholphin.services.TrailerService.onClick(
-                context,
-                com.github.damontecres.wholphin.data.model.RemoteTrailer("$title trailer", url, null),
-            ) { viewModel.navigationManager.navigateTo(it, "iptv details trailer") }
-        },
-    ) { Text("Trailer") }
+    Button(onClick = onClick) { Text(if (playing) "Stop trailer" else "Trailer") }
 }
 
 /** The TMDB cast with photos (initials when there is none), name and character; focusable so the row scrolls. */

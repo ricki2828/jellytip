@@ -79,7 +79,7 @@ data class IptvVodDetail(
     val logo: String? = null,
     val people: List<IptvCastMember> = emptyList(),
     val genres: List<String> = emptyList(),
-    /** Trailer link (YouTube or other), resolved; null = none. */
+    /** Trailer: the companion's mp4 (resolved), or a YouTube URL as a fallback; null = none. */
     val trailer: String? = null,
 )
 
@@ -108,17 +108,16 @@ object IptvVodParse {
             else -> "$base/${raw.trimStart('/')}"
         }
 
-    /** A trailer link: absolute URLs as they are, a bare YouTube key as a watch URL, companion paths resolved. */
+    /**
+     * A trailer link: the companion's H.264 mp4 from the trailer cache (relative, resolved like images; pinned), or
+     * as a fallback a full https YouTube URL.
+     */
     fun trailer(
         base: String,
         raw: String?,
-    ): String? =
-        when {
-            raw.isNullOrBlank() -> null
-            raw.startsWith("https://") || raw.startsWith("http://") -> raw
-            Regex("^[A-Za-z0-9_-]{11}$").matches(raw) -> "https://www.youtube.com/watch?v=$raw"
-            else -> image(base, raw)
-        }
+    ): String? = image(base, raw)
+
+    fun isYouTube(url: String) = Regex("^https?://(www\\.|m\\.)?(youtube\\.com|youtu\\.be)/", RegexOption.IGNORE_CASE).containsMatchIn(url)
 
     fun progress(o: JSONObject?): IptvProgress? {
         o ?: return null

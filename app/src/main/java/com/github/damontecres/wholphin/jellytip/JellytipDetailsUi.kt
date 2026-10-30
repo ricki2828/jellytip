@@ -262,7 +262,7 @@ private fun KenBurnsImage(
 }
 
 @Composable
-private fun TrailerLayer(
+internal fun TrailerLayer(
     url: String,
     sound: Boolean,
     httpClient: okhttp3.OkHttpClient,
