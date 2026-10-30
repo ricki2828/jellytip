@@ -55,6 +55,7 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_LIVE = "live";
     static final String EXTRA_RESUME_MS = "resumeMs";
     static final String EXTRA_NOTE = "note";
+    static final String EXTRA_GROWING = "growing";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -67,6 +68,10 @@ public class PlayerActivity extends AppCompatActivity {
     private static final long PROGRESS_MS = 30_000;
     private static final int MAX_RECONNECTS = 5;
     private static final long NOTE_MS = 6_000;
+    private static final long SEEK_BACK_MS = 10_000;
+    private static final long SEEK_FORWARD_MS = 30_000;
+    /** "Live" on a growing recording lands this far before the end of what is recorded so far. */
+    private static final long LIVE_EDGE_MS = 10_000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExoPlayer player;
@@ -74,6 +79,11 @@ public class PlayerActivity extends AppCompatActivity {
     private ProgressBar spinner;
     private TextView titleView;
     private boolean live;
+    private boolean growing;
+    /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
+    private boolean toLiveEdge;
+    /** Length at the last end of a growing recording: no growth since = it has finished, so close. */
+    private long endedAt = -1;
     private boolean closing;
     private int reconnects;
     private MediaItem item;
@@ -94,6 +104,7 @@ public class PlayerActivity extends AppCompatActivity {
         String url = in.getStringExtra(EXTRA_URL);
         String mime = in.getStringExtra(EXTRA_MIME);
         live = in.getBooleanExtra(EXTRA_LIVE, false);
+        growing = in.getBooleanExtra(EXTRA_GROWING, false);
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
@@ -165,12 +176,19 @@ public class PlayerActivity extends AppCompatActivity {
         player =
             new ExoPlayer.Builder(this, renderers)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(http, extractors))
+                .setSeekBackIncrementMs(SEEK_BACK_MS)
+                .setSeekForwardIncrementMs(SEEK_FORWARD_MS)
                 .build();
         view.setPlayer(player);
         if (live) {
             view.setShowFastForwardButton(false);
             view.setShowRewindButton(false);
+        } else {
+            // Films, episodes, recordings: the default controller's seek bar plus -10 s / +30 s
+            view.setShowFastForwardButton(true);
+            view.setShowRewindButton(true);
         }
+        if (growing) addLiveButton(root);
 
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
@@ -189,8 +207,20 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 spinner.setVisibility(state == Player.STATE_BUFFERING || state == Player.STATE_IDLE ? View.VISIBLE : View.GONE);
-                if (state == Player.STATE_READY) reconnects = 0;
-                if (state == Player.STATE_ENDED && !live) close("ended", null);
+                if (state == Player.STATE_READY) {
+                    reconnects = 0;
+                    if (toLiveEdge) {
+                        toLiveEdge = false;
+                        long d = player.getDuration();
+                        if (d != C.TIME_UNSET && d > LIVE_EDGE_MS) player.seekTo(d - LIVE_EDGE_MS);
+                    }
+                }
+                // A growing recording "ends" at what was recorded when it opened: reload to pick up the rest
+                if (state == Player.STATE_ENDED && growing && !closing && player.getDuration() > endedAt) {
+                    endedAt = player.getDuration();
+                    jumpToLive();
+                }
+                else if (state == Player.STATE_ENDED && !live) close("ended", null);
             }
 
             @Override
@@ -198,6 +228,39 @@ public class PlayerActivity extends AppCompatActivity {
                 onError(error);
             }
         };
+
+    /**
+     * "Live" for a recording still being written: the file's length is fixed when it is opened, so reload it and seek
+     * near the new end.
+     */
+    private void jumpToLive() {
+        if (player == null || closing) return;
+        toLiveEdge = true;
+        player.setMediaItem(item);
+        player.prepare();
+        player.setPlayWhenReady(true);
+    }
+
+    private void addLiveButton(FrameLayout root) {
+        TextView liveButton = new TextView(this);
+        liveButton.setText("● Live");
+        liveButton.setTextColor(Color.WHITE);
+        liveButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        liveButton.setBackgroundColor(0xCCB3261E);
+        liveButton.setPadding(dp(14), dp(8), dp(14), dp(8));
+        liveButton.setOnClickListener(v -> jumpToLive());
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        lp.topMargin = dp(16);
+        lp.rightMargin = dp(24);
+        root.addView(liveButton, lp);
+        // Shows and hides with the controls, like the title
+        view.setControllerVisibilityListener(
+            (PlayerView.ControllerVisibilityListener) visibility -> {
+                titleView.setVisibility(visibility);
+                liveButton.setVisibility(visibility);
+            }
+        );
+    }
 
     private void onError(PlaybackException error) {
         HttpDataSource.InvalidResponseCodeException http = httpError(error);

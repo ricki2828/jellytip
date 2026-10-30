@@ -27,7 +27,7 @@ public class PlayerPlugin extends Plugin {
         current = this;
     }
 
-    /** {url, title, mime?, live, resumeMs?, note?}: open the player; resolves when it closes. */
+    /** {url, title, mime?, live, growing?, resumeMs?, note?}: open the player; resolves when it closes. */
     @PluginMethod
     public void open(PluginCall call) {
         String url = call.getString("url");
@@ -43,6 +43,7 @@ public class PlayerPlugin extends Plugin {
         i.putExtra(PlayerActivity.EXTRA_LIVE, Boolean.TRUE.equals(call.getBoolean("live", false)));
         i.putExtra(PlayerActivity.EXTRA_RESUME_MS, call.getLong("resumeMs", 0L));
         i.putExtra(PlayerActivity.EXTRA_NOTE, call.getString("note", ""));
+        i.putExtra(PlayerActivity.EXTRA_GROWING, Boolean.TRUE.equals(call.getBoolean("growing", false)));
         startActivityForResult(call, i, "onPlayerClosed");
     }
 

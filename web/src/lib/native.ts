@@ -75,7 +75,7 @@ export interface NativePlayerResult {
 
 export interface JellytipPlayerPlugin {
   /** Full-screen ExoPlayer for an IPTV link; resolves when it closes. */
-  open(o: { url: string; title: string; mime?: string; live: boolean; resumeMs?: number; note?: string }): Promise<NativePlayerResult>;
+  open(o: { url: string; title: string; mime?: string; live: boolean; growing?: boolean; resumeMs?: number; note?: string }): Promise<NativePlayerResult>;
   addListener(event: "progress", cb: (e: { positionMs: number; durationMs: number }) => void): Promise<{ remove: () => Promise<void> }>;
   addListener(event: "playerError", cb: (e: Record<string, unknown>) => void): Promise<{ remove: () => Promise<void> }>;
 }

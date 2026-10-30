@@ -575,7 +575,7 @@ function NativeIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; t
       ];
       let r: NativePlayerResult;
       try {
-        r = await NativePlayer.open({ url: link.url, title, mime: a.mime, live, resumeMs, note: link.direct ? DIRECT_NOTE : undefined });
+        r = await NativePlayer.open({ url: link.url, title, mime: a.mime, live, growing: !live && !!a.growing, resumeMs, note: link.direct ? DIRECT_NOTE : undefined });
       } catch (e) {
         r = { reason: "error", positionMs: 0, durationMs: 0, error: String((e as Error).message ?? e) };
       } finally {
