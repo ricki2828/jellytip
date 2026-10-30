@@ -7,7 +7,6 @@ import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { serverRowElement } from "../components/ServerRow";
 import { RowsError } from "../components/RowsError";
-import { prefsNow, useKids } from "../api/me";
 import { carouselLoader, LETTERBOXD_PREFIX, letterboxdLoader } from "./Home";
 
 const PAGE = 60;
@@ -37,7 +36,6 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
   const [rows, setRows] = useState<ServerRow[] | null>(null);
   const [specials, setSpecials] = useState<Special[]>([]);
   const [rowsFailed, setRowsFailed] = useState(false);
-  const kids = useKids();
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -47,8 +45,8 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     serverRows(kind === "movie" ? "movies" : "shows")
       .then((r) => {
         if (r?.length) return r;
-        // A 503 (or any failure in a kids profile) must not fall back to the unfiltered carousels
-        if (rowsBlocked(kind === "movie" ? "movies" : "shows") || prefsNow()?.kids.enabled) {
+        // A 503 (the server couldn't tell who is asking) must not fall back to the unpersonalised carousels
+        if (rowsBlocked(kind === "movie" ? "movies" : "shows")) {
           if (alive) setRowsFailed(true);
           return null;
         }
@@ -145,8 +143,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
             ],
         rowsReady ? specials : [],
       )}
-      {/* Kids profile: the browse grid reads Jellyfin directly (no kids filter): rows only */}
-      {kids == null && <section className="grid-section">
+      <section className="grid-section">
         <div className="grid-head">
           <h2 className="row-title">
             All {kind === "movie" ? "movies" : "shows"}
@@ -179,7 +176,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
             </span>
           )}
         </div>
-      </section>}
+      </section>
     </div>
   );
 }

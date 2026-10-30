@@ -164,25 +164,9 @@ export async function setFollow(personId: string, on: boolean): Promise<string |
   return null;
 }
 
-// ---------- taste / kids ----------
+// ---------- taste ----------
 
 export async function taste(): Promise<{ status: number; taste: Taste | null }> {
   const a = await companionCall("GET", "v1/me/taste");
   return { status: a.status, taste: a.status === 200 ? parseTaste(a.data) : null };
 }
-
-export async function setKidsPin(pin: string): Promise<string | null> {
-  const a = await companionCall("POST", "v1/me/kids/pin", { pin });
-  if (a.status === 200 || a.status === 201 || a.status === 204) {
-    if (state.prefs) set({ ...state, prefs: { ...state.prefs, kids: { ...state.prefs.kids, pinSet: true } } });
-    return null;
-  }
-  return errText(a.status, a.data);
-}
-
-/** The kids ceiling (max age) while a kids profile is on; null otherwise (or before prefs are known). */
-export function useKids(): number | null {
-  const { prefs } = usePrefs();
-  return prefs?.kids.enabled ? prefs.kids.maxAge : null;
-}
-export const kidsNow = (): number | null => (state.prefs?.kids.enabled ? state.prefs.kids.maxAge : null);

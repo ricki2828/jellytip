@@ -4,20 +4,11 @@
 export interface Prefs {
   home: { pinned: string[]; hidden: string[]; order: string[]; specialsPerDay: number };
   hideWatched: boolean;
-  kids: { enabled: boolean; maxAge: number; pinSet: boolean };
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   version: number | null;
 }
 
-/** Kids profile ceilings (the server maps every rating scheme to an age; unknown ratings count as 18). */
-export const KIDS_AGES: [number, string][] = [
-  [0, "All ages"],
-  [7, "7+"],
-  [10, "10+"],
-  [13, "13+"],
-  [16, "16+"],
-];
 export const SPECIALS_MAX = 6;
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -29,14 +20,12 @@ const LB = ["none", "pending", "linked", "error"] as const;
 export function parsePrefs(raw: unknown): Prefs {
   const r = obj(raw);
   const h = obj(r.home);
-  const k = obj(r.kids);
   const p = obj(r.playback);
   const l = obj(r.letterboxd);
   const spd = typeof h.specialsPerDay === "number" && isFinite(h.specialsPerDay) ? Math.max(0, Math.min(SPECIALS_MAX, Math.round(h.specialsPerDay))) : 3;
   return {
     home: { pinned: strs(h.pinned), hidden: strs(h.hidden), order: strs(h.order), specialsPerDay: spd },
     hideWatched: bool(r.hideWatched, false),
-    kids: { enabled: bool(k.enabled, false), maxAge: KIDS_AGES.some(([a]) => a === k.maxAge) ? (k.maxAge as number) : 7, pinSet: bool(k.pinSet, false) },
     playback: {
       intro: bool(p.intro, true),
       trailerAutoplay: bool(p.trailerAutoplay, true),

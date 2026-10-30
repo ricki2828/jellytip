@@ -66,7 +66,7 @@ async function throttled<T>(job: Job, fn: () => Promise<T>): Promise<T | typeof 
   }
 }
 
-// Last HTTP status per path: a 503 on rows / specials means the server couldn't tell who is asking (kids filtering
+// Last HTTP status per path: a 503 on rows / specials means the server couldn't tell who is asking (personal filtering
 // can't be applied), and the page must show its error, never an unfiltered fallback
 const lastStatus = new Map<string, number>();
 
@@ -630,7 +630,7 @@ export async function discoverSearch(q: string, page = 1): Promise<DiscoverPage 
   return discoverList(DISCOVER_PATHS.search(q, page), "movie");
 }
 
-/** Personal prefs changed (Home edit, hide watched, kids): rows and specials are asked for again. */
+/** Personal prefs changed (Home edit, hide watched): rows and specials are asked for again. */
 export function dropPersonalCaches() {
   rowsCache.clear();
   specialsCache.clear();

@@ -1,10 +1,10 @@
 // Settings (#/settings): Live TV / IPTV, and — when the server has personalisation — the person's own preferences
-// (they follow the person to the TV and phone): hide watched, playback, Letterboxd, kids profile, "Your taste".
+// (they follow the person to the TV and phone): hide watched, playback, Letterboxd, "Your taste".
 import { useEffect, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
-import { savePrefs, setKidsPin, usePrefs } from "../api/me";
+import { savePrefs, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
-import { KIDS_AGES, type Prefs } from "../lib/prefs";
+import type { Prefs } from "../lib/prefs";
 import { go } from "../lib/router";
 
 const LANGS: [string, string][] = [
@@ -22,8 +22,6 @@ const LANGS: [string, string][] = [
   ["zh", "Chinese"],
   ["hi", "Hindi"],
 ];
-
-const ageLabel = (age: number) => KIDS_AGES.find(([a]) => a === age)?.[1] ?? `${age}+`;
 
 function Toggle({ label, sub, on, onChange, disabled }: { label: string; sub?: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -57,44 +55,9 @@ function Langs({ label, value, onChange }: { label: string; value: string[]; onC
   );
 }
 
-function PinForm({ title, onPin, onCancel }: { title: string; onPin: (pin: string) => Promise<string | null>; onCancel: () => void }) {
-  const [pin, setPin] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  return (
-    <form
-      className="settings-block"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!/^\d{4,8}$/.test(pin)) return setErr("4 to 8 digits.");
-        setBusy(true);
-        const r = await onPin(pin);
-        setBusy(false);
-        setPin("");
-        if (r) setErr(r);
-      }}
-    >
-      <strong>{title}</strong>
-      <input className="settings-input pin" data-nav data-autofocus type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="PIN" />
-      {err && <span className="settings-err">{err}</span>}
-      <div className="buttons">
-        <button className="btn small primary" data-nav disabled={busy}>
-          OK
-        </button>
-        <button type="button" className="btn small" data-nav onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
 function Personal({ prefs }: { prefs: Prefs }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [lb, setLb] = useState(prefs.letterboxd.username ?? "");
-  const [pinFor, setPinFor] = useState<"set" | "exit" | "raise" | null>(null);
-  // Kids profile on: raising the age is a loosening, so it needs the PIN in the same change (server rule)
-  const [raiseTo, setRaiseTo] = useState<number | null>(null);
   useEffect(() => setLb(prefs.letterboxd.username ?? ""), [prefs.letterboxd.username]);
 
   const save = async (patch: Record<string, unknown>, reloadRows = false) => {
@@ -161,103 +124,6 @@ function Personal({ prefs }: { prefs: Prefs }) {
         {lbStatus && <span className={`settings-sub${prefs.letterboxd.status === "error" ? " settings-err" : ""}`}>{lbStatus}</span>}
       </form>
 
-      <h2 className="settings-head">Kids profile</h2>
-      <ul className="settings-list">
-        <li>
-          <Toggle
-            label="Kids profile"
-            sub={
-              prefs.kids.enabled
-                ? `On: ${ageLabel(prefs.kids.maxAge)} titles only, a simpler Home. The PIN turns it off.`
-                : "Only titles for an age, a simpler Home; a PIN to leave it"
-            }
-            on={prefs.kids.enabled}
-            onChange={(v) => {
-              if (v && !prefs.kids.pinSet) setPinFor("set");
-              else if (v) void save({ kids: { enabled: true } }, true);
-              else setPinFor("exit");
-            }}
-          />
-        </li>
-        {pinFor === "set" && (
-          <li>
-            <PinForm
-              title="Choose a PIN, 4 to 8 digits (needed to leave the kids profile)"
-              onCancel={() => setPinFor(null)}
-              onPin={async (pin) => {
-                const e = (await setKidsPin(pin)) ?? (prefs.kids.enabled ? null : await save({ kids: { enabled: true } }, true));
-                if (!e) setPinFor(null);
-                return e;
-              }}
-            />
-          </li>
-        )}
-        {pinFor === "exit" && (
-          <li>
-            <PinForm
-              title="PIN to leave the kids profile"
-              onCancel={() => setPinFor(null)}
-              onPin={async (pin) => {
-                // The server checks the PIN with the change (403 {"error":"pin"} when wrong, 429 after 5 tries)
-                const e = await save({ kids: { enabled: false, pin } }, true);
-                if (!e) setPinFor(null);
-                return e;
-              }}
-            />
-          </li>
-        )}
-        <li className="settings-block">
-          <strong>Suitable for</strong>
-          <div className="chips">
-            {KIDS_AGES.map(([age, label]) => (
-              <button
-                key={age}
-                className={`chip${prefs.kids.maxAge === age ? " on" : ""}`}
-                data-nav
-                aria-pressed={prefs.kids.maxAge === age}
-                onClick={() => {
-                  if (age === prefs.kids.maxAge) return;
-                  if (prefs.kids.enabled && age > prefs.kids.maxAge) {
-                    setRaiseTo(age);
-                    setPinFor("raise");
-                  } else void save({ kids: { maxAge: age } }, true);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {prefs.kids.enabled && <span className="settings-sub">Raising the age needs the PIN.</span>}
-        </li>
-        {pinFor === "raise" && raiseTo != null && (
-          <li>
-            <PinForm
-              title={`PIN to allow ${ageLabel(raiseTo)}`}
-              onCancel={() => {
-                setPinFor(null);
-                setRaiseTo(null);
-              }}
-              onPin={async (pin) => {
-                const e = await save({ kids: { maxAge: raiseTo, pin } }, true);
-                if (!e) {
-                  setPinFor(null);
-                  setRaiseTo(null);
-                }
-                return e;
-              }}
-            />
-          </li>
-        )}
-        {prefs.kids.pinSet && !prefs.kids.enabled && pinFor === null && (
-          <li>
-            <button className="settings-item" data-nav onClick={() => setPinFor("set")}>
-              <span>
-                <strong>Change PIN</strong>
-              </span>
-            </button>
-          </li>
-        )}
-      </ul>
       {msg && <p className="settings-err settings-pad">{msg}</p>}
     </>
   );
@@ -269,7 +135,7 @@ export function Settings() {
   return (
     <div className="settings-page">
       <h1 className="page-title">Settings</h1>
-      {!prefs?.kids.enabled && <ul className="settings-list">
+      <ul className="settings-list">
         <li>
           <button className="settings-item" data-nav data-autofocus onClick={() => go("/iptv")}>
             <span>
@@ -279,7 +145,7 @@ export function Settings() {
             <span aria-hidden>›</span>
           </button>
         </li>
-      </ul>}
+      </ul>
       {available && prefs && <Personal prefs={prefs} />}
       <h2 className="settings-head">Account</h2>
       <ul className="settings-list">

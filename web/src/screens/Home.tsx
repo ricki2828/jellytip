@@ -7,8 +7,7 @@ import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { HomeEdit, rememberRowTitles } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
-import { kidsNow, prefsNow, prefsSoon, usePrefs } from "../api/me";
-import { kidsMayOpen } from "../components/KidsGate";
+import { usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 
@@ -64,25 +63,15 @@ export function Home() {
       // Continue Watching first, then Next Up episodes of shows not already in it
       const seen = new Set(resume.map((i) => i.SeriesId ?? i.Id));
       const merged = [...resume, ...next.filter((n) => !seen.has(n.SeriesId ?? n.Id))];
-      // Kids profile: Continue Watching (straight from Jellyfin) keeps only titles within the age
-      const keep = async () => {
-        const maxAge = (await prefsSoon()) ? kidsNow() : null;
-        if (maxAge == null) return merged;
-        const ok = await Promise.all(merged.map((i) => kidsMayOpen(i, maxAge)));
-        return merged.filter((_, i) => ok[i]);
-      };
-      return keep().then((list) => {
-        if (!alive) return;
-        setContinue(list);
-        if (list[0]) setFocused((f) => f ?? list[0]);
-      });
+      setContinue(merged);
+      if (merged[0]) setFocused((f) => f ?? merged[0]);
     });
     setRowsFailed(false);
     serverRows("home")
       .then((r) => {
         if (r?.length) return r;
-        // A 503 (or any failure in a kids profile) must not fall back to the unfiltered carousels
-        if (rowsBlocked("home") || prefsNow()?.kids.enabled) {
+        // A 503 (the server couldn't tell who is asking) must not fall back to the unpersonalised carousels
+        if (rowsBlocked("home")) {
           if (alive) setRowsFailed(true);
           return null;
         }

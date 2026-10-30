@@ -6,8 +6,7 @@ import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
-import { kidsNow, prefsSoon } from "../api/me";
-import { kidsMayOpen } from "../components/KidsGate";
+import { prefsSoon } from "../api/me";
 import { pickAudio, pickSubtitle } from "../lib/tracks";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
@@ -287,11 +286,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         // The person's language prefs pick the first tracks (a choice made in the player menu wins after that)
         const pb = (await prefsSoon())?.playback;
         if (!alive) return;
-        // Kids profile: nothing above the age plays, whatever link got here
-        if (!(await kidsMayOpen(it, kidsNow()))) {
-          if (alive) setError("This title isn't available in kids mode.");
-          return;
-        }
         const fileSrc = it.MediaSources?.[0];
         const wantAudio = pb?.audioLangs.length ? pickAudio(fileSrc?.MediaStreams ?? [], pb.audioLangs, null) : null;
         const otherAudio = wantAudio != null && wantAudio !== fileSrc?.DefaultAudioStreamIndex;

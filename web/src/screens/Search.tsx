@@ -4,7 +4,6 @@
 import { useEffect, useRef, useState } from "react";
 import { search, type Item } from "../api/jellyfin";
 import { clearRecent, recordRecent, searchAll, suggestions, type Suggestions } from "../api/search";
-import { prefsNow } from "../api/me";
 import { filterChips, isEmpty, withoutFilter, type DiscoverHit, type LibHit, type SearchResult } from "../lib/search";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
@@ -220,8 +219,8 @@ export function Search({ initial }: { initial: string }) {
       const r = await searchAll(term, ctl.signal);
       if (ctl.signal.aborted) return;
       setBlocked(false);
-      // 503 (can't tell who is asking), or any failure in a kids profile: no unfiltered Jellyfin fallback
-      if (r === "blocked" || (!r && prefsNow()?.kids.enabled)) {
+      // 503 (the server can't tell who is asking): no Jellyfin fallback, an error with Try again
+      if (r === "blocked") {
         setUnified(null);
         setFallback(null);
         setBlocked(true);

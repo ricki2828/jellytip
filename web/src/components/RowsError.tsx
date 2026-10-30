@@ -1,5 +1,5 @@
-// Rows couldn't be personalised (the server answered 503: it couldn't tell who is asking, or a kids profile is on and
-// the rows failed). Never show unfiltered rows instead: say so and offer a retry.
+// Rows couldn't be personalised (the server answered 503: it couldn't tell who is asking). Never show unpersonalised
+// rows instead: say so and offer a retry.
 export function RowsError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="rows-error" role="alert">

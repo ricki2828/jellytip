@@ -16,9 +16,6 @@ import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
 import { Taste } from "./screens/Taste";
 import { TileMenuHost } from "./components/TasteButtons";
-import { KidsBlocked } from "./components/KidsGate";
-import { KIDS_BLOCKED_ROUTES } from "./lib/kids";
-import { useKids } from "./api/me";
 import { parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
 import { isNative } from "./lib/native";
@@ -33,9 +30,6 @@ const IptvPlayer = lazy(() => import("./screens/iptv/IptvPlayer").then((m) => ({
 export function App() {
   const [session, setSessionState] = useState(getSession);
   const route = useRoute();
-  const kids = useKids();
-  // Kids profile: screens that read Jellyfin directly (outside the server's kids filter) don't open
-  const kidsBlocked = kids != null && KIDS_BLOCKED_ROUTES.has(route.name);
 
   useEffect(() => {
     const on = () => setSessionState(getSession());
@@ -59,7 +53,7 @@ export function App() {
     go("/home", true);
     return null;
   }
-  if (route.name === "iptvplay" && !kidsBlocked) {
+  if (route.name === "iptvplay") {
     const target = parseTarget(route.query);
     if (!target) {
       go("/livetv", true);
@@ -79,23 +73,22 @@ export function App() {
       <Nav current={route.name} />
       <TileMenuHost />
       <main>
-        {kidsBlocked && <KidsBlocked />}
         {route.name === "home" && <Home />}
         {route.name === "movies" && <Library key="movie" kind="movie" />}
         {route.name === "shows" && <Library key="tv" kind="tv" />}
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "downloads" && isNative && <Downloads />}
-        {!kidsBlocked && route.name === "person" && <Person key={route.params.id} id={route.params.id} name={route.query.get("name")} />}
-        {!kidsBlocked && route.name === "discover" && session.isAdmin && <Discover />}
-        {!kidsBlocked && route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
+        {route.name === "person" && <Person key={route.params.id} id={route.params.id} name={route.query.get("name")} />}
+        {route.name === "discover" && session.isAdmin && <Discover />}
+        {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
         {route.name === "settings" && <Settings />}
         {route.name === "taste" && <Taste />}
-        {!kidsBlocked && route.name === "list" && <ListPage key={route.params.id} slug={route.params.id} />}
+        {route.name === "list" && <ListPage key={route.params.id} slug={route.params.id} />}
         <Suspense fallback={null}>
-          {!kidsBlocked && route.name === "iptv" && <IptvSettings />}
-          {!kidsBlocked && route.name === "livetv" && <LiveTv />}
-          {!kidsBlocked && route.name === "iptvitem" && VOD_ID_RE.test(route.query.get("id") ?? "") && <IptvDetails key={route.query.get("id")} id={route.query.get("id")!} />}
+          {route.name === "iptv" && <IptvSettings />}
+          {route.name === "livetv" && <LiveTv />}
+          {route.name === "iptvitem" && VOD_ID_RE.test(route.query.get("id") ?? "") && <IptvDetails key={route.query.get("id")} id={route.query.get("id")!} />}
         </Suspense>
       </main>
     </>

@@ -5,11 +5,8 @@ import { editRows, homeFrom, move, parseFollows, parsePrefs, parseReactions, par
 const J = "0123456789abcdef0123456789abcdef";
 
 test("prefs: defaults fill gaps, junk ignored, specials clamped", () => {
-  const p = parsePrefs({ home: { pinned: ["a", "a", 3], specialsPerDay: 99 }, kids: { enabled: true }, playback: { trailerSound: true }, letterboxd: { status: "weird" }, version: 3 });
+  const p = parsePrefs({ home: { pinned: ["a", "a", 3], specialsPerDay: 99 }, playback: { trailerSound: true }, letterboxd: { status: "weird" }, version: 3 });
   assert.deepEqual(p.home, { pinned: ["a"], hidden: [], order: [], specialsPerDay: 6 });
-  assert.deepEqual(p.kids, { enabled: true, maxAge: 7, pinSet: false });
-  assert.equal(parsePrefs({ kids: { maxAge: 13 } }).kids.maxAge, 13);
-  assert.equal(parsePrefs({ kids: { maxAge: 12 } }).kids.maxAge, 7);
   assert.equal(p.playback.intro, true);
   assert.equal(p.playback.trailerSound, true);
   assert.equal(p.letterboxd.status, "none");
