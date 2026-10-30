@@ -589,7 +589,7 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
-function NativeIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
+function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);
@@ -612,10 +612,41 @@ function NativeIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; t
           debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, ...e });
           void sendDebugReport();
         }),
+        // The player asks for a link when it fails over, starts over from kick-off or goes back to live; links never travel up front
+        await NativePlayer.addListener("needUrl", (e) => {
+          void (async () => {
+            const t: PlayTarget = e.reason === "kickoff" ? { channel: e.channelId, start: e.start, stop: e.stop } : { channel: e.channelId };
+            const r2 = await play(playQuery(t, iptvDevice(), "ts", true));
+            if (r2.status === 200 && r2.data?.url) {
+              await NativePlayer.provideUrl({ requestId: e.requestId, url: nativeLink(r2.data, streamUrl).url, mime: r2.data.mime });
+            } else {
+              const full = linkFailure(r2.status, r2.data?.code) === "full";
+              await NativePlayer.provideUrl({ requestId: e.requestId, error: full ? "full" : (r2.data?.error ?? `Server said ${r2.status}`) });
+            }
+          })().catch(() => NativePlayer.provideUrl({ requestId: e.requestId, error: "unreachable" }).catch(() => undefined));
+        }),
+        await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
       try {
-        r = await NativePlayer.open({ url: link.url, title, mime: a.mime, live, growing: !live && !!a.growing, resumeMs, note: link.direct ? DIRECT_NOTE : undefined });
+        r = await NativePlayer.open({
+          url: link.url,
+          title,
+          mime: a.mime,
+          live,
+          growing: !live && !!a.growing,
+          resumeMs,
+          note: link.direct ? DIRECT_NOTE : undefined,
+          // Live: the channel, its event's other channels and the programme on now (kick-off); the player asks for links itself
+          ...(live && target.channel
+            ? {
+                channelId: target.channel,
+                alternates: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })),
+                programmeStart: extras?.kickoff?.start,
+                programmeStop: extras?.kickoff?.stop,
+              }
+            : {}),
+        });
       } catch (e) {
         r = { reason: "error", positionMs: 0, durationMs: 0, error: String((e as Error).message ?? e) };
       } finally {
