@@ -71,6 +71,7 @@ class JellytipLiveTvPlayerViewModel
 
 private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
+private const val STALL_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
 
 /**
@@ -138,19 +139,47 @@ fun JellytipLiveTvPlayerPage(
         if (playback.state.value.target != target) delay(ZAP_SETTLE_MS)
         playback.play(target, "full screen settle")
     }
-    // The stream failed: try the same event on its next-best channel (each alternate once per zap)
-    LaunchedEffect(playState) {
-        val failed = playState as? IptvPlayState.Failed ?: return@LaunchedEffect
-        if (failed.target != current || !current.isLive) return@LaunchedEffect
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    /** Same event on its next-best channel (each alternate once per zap), with a toast; false = none left. */
+    fun failover(why: String): Boolean {
         val base = lineup[index]
-        val next = playback.alternates[base.id].orEmpty().firstOrNull { it.id !in tried } ?: return@LaunchedEffect
+        val next = playback.alternates[base.id].orEmpty().firstOrNull { it.id !in tried } ?: return false
         tried += next.id
-        JellytipTrace.player("iptv", "full screen ${current.channelId} failed: alternate ${next.id} ${next.name}")
+        JellytipTrace.player("iptv", "full screen ${current.channelId} $why: alternate ${next.id} ${next.name}")
         fallback = next
         val target = IptvTarget(next.id, next.name)
         current = target
         bannerTick++
-        playback.play(target, "alternate after failure")
+        playback.play(target, "alternate after $why")
+        val name = next.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), "")
+        android.widget.Toast.makeText(context, "Switched to $name", android.widget.Toast.LENGTH_SHORT).show()
+        return true
+    }
+    // The stream failed: try the same event on its next-best channel
+    LaunchedEffect(playState) {
+        val failed = playState as? IptvPlayState.Failed ?: return@LaunchedEffect
+        if (failed.target != current || !current.isLive) return@LaunchedEffect
+        failover("failed")
+    }
+    // A live stream that stalls (buffering while meant to play) for 10 s is treated like a failure (plan "8h Block 3")
+    LaunchedEffect(current) {
+        if (!current.isLive) return@LaunchedEffect
+        var stalledSince = 0L
+        while (true) {
+            delay(1_000)
+            val p = playback.player ?: continue
+            val playing = playback.state.value is IptvPlayState.Playing && playback.state.value.target == current
+            if (playing && p.playWhenReady && p.playbackState == androidx.media3.common.Player.STATE_BUFFERING) {
+                if (stalledSince == 0L) stalledSince = System.currentTimeMillis()
+                if (System.currentTimeMillis() - stalledSince >= STALL_MS) {
+                    if (failover("stalled 10 s")) return@LaunchedEffect
+                    stalledSince = System.currentTimeMillis() // nothing to switch to: keep waiting
+                }
+            } else {
+                stalledSince = 0L
+            }
+        }
     }
     LaunchedEffect(bannerTick) {
         bannerVisible = true
@@ -191,6 +220,31 @@ fun JellytipLiveTvPlayerPage(
                         true
                     }
 
+                    // From kick-off: restart what is on now (catch-up from its start); Right goes back to live
+                    Key.DirectionLeft, Key.MediaRewind -> {
+                        val prog = nowNext?.now?.takeIf { it.canStartOver && it.isOn(nowSec()) }
+                        if (current.isLive && prog != null) {
+                            JellytipTrace.player("iptv", "from kick-off ${channel.id} ${prog.title}")
+                            current = IptvTarget(channel.id, prog.title, prog.start, prog.stop)
+                            playback.play(current, "from kick-off")
+                            bannerTick++
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    Key.DirectionRight, Key.MediaFastForward -> {
+                        if (!current.isLive && current.channelId == channel.id) {
+                            current = IptvTarget(channel.id, channel.name)
+                            playback.play(current, "back to live")
+                            bannerTick++
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
                     else -> false
                 }
             }.focusable(),
@@ -225,6 +279,26 @@ fun JellytipLiveTvPlayerPage(
             val cu = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
             val shown = if (cu != null) IptvNowNext(IptvProg(cu.start!!, cu.stop!!, cu.label, null, true), null) else nowNext
             NowNextBanner(channel, shown, now, Modifier.align(Alignment.BottomStart), catchUp = cu != null)
+            val hint =
+                when {
+                    cu != null -> "▶  Right: back to live"
+                    nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true -> "◀  From kick-off"
+                    else -> null
+                }
+            hint?.let {
+                Text(
+                    it,
+                    color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 14.sp,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 32.dp, end = 48.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
         }
     }
 }

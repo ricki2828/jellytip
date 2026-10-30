@@ -67,9 +67,10 @@ class JellytipOnNowViewModel
             all: List<IptvOnNow>,
             reason: String,
             channel: IptvChannel = o.channel,
+            fromKickOff: Boolean = false,
         ) {
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-            playback.openOnNow(o, all, channel, reason)
+            playback.openOnNow(o, all, channel, reason, fromKickOff)
             navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(channel.id), reason)
         }
     }
@@ -264,7 +265,16 @@ fun JellytipLiveSportRow(
             o,
             onPick = { ch -> viewModel.open(o, shown, "home live sport alternate", ch) },
             onDismiss = { menu = null },
-            extra = rememberSportMuteItems(o.league, o.sportName),
+            extra =
+                listOfNotNull(
+                    if (o.startOver) {
+                        com.github.damontecres.wholphin.ui.components.DialogItem("From kick-off", dismissOnClick = true) {
+                            viewModel.open(o, shown, "home live sport from kick-off", fromKickOff = true)
+                        }
+                    } else {
+                        null
+                    },
+                ) + rememberSportMuteItems(o.league, o.sportName),
         )
     }
 }

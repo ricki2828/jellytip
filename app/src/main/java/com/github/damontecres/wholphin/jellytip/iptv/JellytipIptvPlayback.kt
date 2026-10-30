@@ -116,6 +116,7 @@ class JellytipIptvPlayback
             all: List<IptvOnNow>,
             channel: IptvChannel,
             reason: String,
+            fromKickOff: Boolean = false,
         ) {
             lineup = all.map { if (it === card) channel else it.channel }
             alternates =
@@ -123,7 +124,8 @@ class JellytipIptvPlayback
                     val main = if (o === card) channel else o.channel
                     main.id to (listOf(o.channel) + o.alternates).filter { it.id != main.id }
                 }
-            play(IptvTarget(channel.id, channel.name), reason)
+            // From kick-off: the programme on now, from its start (catch-up); the player shows it as such
+            play(if (fromKickOff) IptvTarget(channel.id, card.title, card.start, card.stop) else IptvTarget(channel.id, channel.name), reason)
         }
 
         /** Channel the full-screen player was on when it closed: the guide lands on it (and keeps it playing). */

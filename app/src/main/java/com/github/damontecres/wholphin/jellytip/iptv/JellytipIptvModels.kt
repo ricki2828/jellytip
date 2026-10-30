@@ -108,8 +108,13 @@ data class IptvProg(
     /** live | replay | highlights | other (server, live-sport plan §2); null = old server. */
     val kind: String? = null,
     val sport: Boolean? = null,
+    /** A live programme that can be restarted (catch-up of what is on now, plan "8h Block 3"). */
+    val startOver: Boolean = false,
 ) {
     fun isOn(at: Long) = at in start until stop
+
+    /** "From kick-off" is offered: the server says so, or the programme has catch-up. */
+    val canStartOver get() = startOver || catchup
 }
 
 data class IptvNowNext(
@@ -218,6 +223,8 @@ data class IptvOnNow(
     /** League / sport names when the server knows them ("Not interested in ‹league›"); null = unknown. */
     val league: String? = null,
     val sportName: String? = null,
+    /** The programme can be watched from its start (catch-up of what is on now). */
+    val startOver: Boolean = false,
 )
 
 /**
@@ -457,6 +464,7 @@ object IptvParse {
                     kind,
                     art = art,
                     league = c.str("league") ?: p.str("league") ?: match?.str("league"),
+                    startOver = p.optBoolean("startOver", false) || c.optBoolean("startOver", false) || p.optBoolean("catchup", false),
                     sportName = c.str("sportName") ?: p.str("sportName") ?: match?.str("sportName"),
                 )
         }
@@ -548,6 +556,7 @@ object IptvParse {
             o.optBoolean("catchup", false),
             kind = o.str("kind"),
             sport = if (o.has("sport") && !o.isNull("sport")) o.optBoolean("sport") else null,
+            startOver = o.optBoolean("startOver", false),
         )
     }
 
