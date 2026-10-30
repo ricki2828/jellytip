@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], muted: { sports: ["golf"], leagues: [], tags: [] } });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -243,4 +243,24 @@ test("learned taste: strongest first, keys read, negatives and junk dropped", ()
   assert.equal(l[0].label, "BLACKCAPS (team)");
   assert.deepEqual(parseLearned({ "sport:cricket": 2 }).map((x) => x.key), ["sport:cricket"]);
   assert.deepEqual(parseLearned(null), []);
+});
+
+import { applySportState, hasSportPrefs, nextSportState, sportState } from "../src/lib/sportMute.ts";
+
+test("sports I follow: tap cycles neutral, follow, mute; never both lists", () => {
+  const m = { sports: ["Golf"], leagues: [], tags: [] };
+  assert.equal(sportState("cricket", ["Cricket"], m), "follow");
+  assert.equal(sportState("golf", [], m), "mute");
+  assert.equal(sportState("Tennis", [], m), "neutral");
+  assert.equal(nextSportState("neutral"), "follow");
+  assert.equal(nextSportState("follow"), "mute");
+  assert.equal(nextSportState("mute"), "neutral");
+  const f = applySportState("Golf", "follow", ["Cricket"], m);
+  assert.deepEqual(f.leagues, ["Cricket", "Golf"]);
+  assert.deepEqual(f.muted.sports, []);
+  const x = applySportState("Cricket", "mute", ["Cricket"], m);
+  assert.deepEqual(x.leagues, []);
+  assert.deepEqual(x.muted.sports, ["Golf", "Cricket"]);
+  assert.equal(hasSportPrefs({ teams: [], leagues: [], muted: { sports: [], leagues: [], tags: [] }, setup: false }), false);
+  assert.equal(hasSportPrefs({ teams: [], leagues: [], muted: { sports: [], leagues: [], tags: ["womens"] }, setup: false }), true);
 });

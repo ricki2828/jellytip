@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { getSession } from "./api/jellyfin";
 import { useRoute } from "./lib/router";
+import { SportSetup } from "./components/SportSetup";
 import { SportMuteHost } from "./components/SportMute";
 import { ReminderNudge } from "./components/Reminders";
 import { Nav } from "./components/Nav";
@@ -77,6 +78,7 @@ export function App() {
       <Nav current={route.name} />
       <TileMenuHost />
       {session && <SportMuteHost />}
+      {session && <SportSetup />}
       {session && <ReminderNudge />}
       <main>
         {route.name === "home" && <Home />}

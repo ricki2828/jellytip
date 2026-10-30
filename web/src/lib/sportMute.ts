@@ -54,3 +54,41 @@ export function parseLearned(raw: unknown): Learned[] {
   }
   return out.sort((a, b) => b.score - a.score);
 }
+
+// ---------- "Sports I follow" ----------
+
+/** Sports offered in the picker (the server's league / sport names). */
+export const SPORTS = ["Rugby League", "Rugby Union", "Cricket", "NFL", "College Football", "NBA", "Football", "AFL", "Motorsport", "Tennis", "Golf", "Horse Racing", "Combat Sports"] as const;
+
+export type SportState = "follow" | "mute" | "neutral";
+
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** Followed sports live in sport.leagues, muted ones in sport.muted.sports. */
+export function sportState(name: string, follows: string[], muted: Muted): SportState {
+  if (follows.some((x) => same(x, name))) return "follow";
+  if (muted.sports.some((x) => same(x, name))) return "mute";
+  return "neutral";
+}
+
+/** Tap cycle: neutral → follow → mute → neutral. */
+export const nextSportState = (s: SportState): SportState => (s === "neutral" ? "follow" : s === "follow" ? "mute" : "neutral");
+
+/** The new follow list and muted lists after setting a sport's state (a sport is never in both). */
+export function applySportState(name: string, state: SportState, follows: string[], muted: Muted): { leagues: string[]; muted: Muted } {
+  const leagues = follows.filter((x) => !same(x, name));
+  const sports = muted.sports.filter((x) => !same(x, name));
+  return { leagues: state === "follow" ? [...leagues, name] : leagues, muted: { ...muted, sports: state === "mute" ? [...sports, name] : sports } };
+}
+
+/** Women's competitions and replays/highlights are muted by tag. */
+export const TAG_WOMENS = "womens";
+export const TAG_REPLAYS = "replays";
+export const hasTag = (muted: Muted, tag: string) => muted.tags.some((t) => same(t, tag));
+
+/** muted.tags with a tag added or removed. */
+export const withMutedTag = (muted: Muted, tag: string, on: boolean): Muted => withMuted(muted, "tags", tag, on);
+
+/** The person has already told us something about sport (so the first-run prompt isn't for them). */
+export const hasSportPrefs = (s: { teams: string[]; leagues: string[]; muted: Muted; setup: boolean }) =>
+  s.setup || s.teams.length + s.leagues.length + s.muted.sports.length + s.muted.leagues.length + s.muted.tags.length > 0;
