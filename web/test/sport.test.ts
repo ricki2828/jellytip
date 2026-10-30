@@ -29,6 +29,15 @@ test("alternate channels carry name and quality when the server sends them", () 
   assert.equal(parseSport({ eventGroup: { key: "k", alternates: ["1:2"] } }).alternateChannels.length, 0);
 });
 
+test("art: parts are optional; nothing to draw is null", () => {
+  assert.equal(parseSport({}).art, null);
+  const a = parseSport({ art: { league: { badge: "v1/iptv/img/l.png", fanart: "v1/iptv/img/f.jpg" }, home: { name: "Warriors", badge: "v1/iptv/img/w.png" }, away: { name: "Broncos" } } }).art;
+  assert.equal(a?.fanart, "v1/iptv/img/f.jpg");
+  assert.equal(a?.home?.name, "Warriors");
+  assert.equal(a?.away, null);
+  assert.equal(parseSport({ art: {} }).art, null);
+});
+
 test("labels: quality chips, pills and the buffer hint", () => {
   assert.equal(qualityLabel({ bucket: "uhd", height: 2160, fps: 50, audio: null, hint: null }), "UHD");
   assert.equal(qualityLabel({ bucket: "fhd50", height: 1080, fps: 50, audio: null, hint: null }), "1080 50fps");

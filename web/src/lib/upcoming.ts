@@ -1,7 +1,7 @@
 // Upcoming sport (GET v1/iptv/sport/upcoming; contract: ~/ai/plans/jellytip-live-sport.md "Upcoming sport"). Events in
 // the server's order (favourite teams, favourite leagues, the rest; by start within a tier). Pure; tested in
 // web/test/upcoming.test.ts.
-import { parseQuality, type Kind, type Quality } from "./sport.ts";
+import { parseArt, parseQuality, type Kind, type Quality, type SportArt } from "./sport.ts";
 
 export interface UpChannel {
   id: string;
@@ -22,6 +22,7 @@ export interface UpEvent {
   kind: Kind | null;
   /** Best channel first, then the alternates. */
   channels: UpChannel[];
+  art: SportArt | null;
   recordable: boolean;
   recordingId: string | number | null;
 }
@@ -65,6 +66,7 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       stop,
       kind: kinds.includes(e.kind as string) ? (e.kind as Kind) : null,
       channels: [best, ...alts],
+      art: parseArt(e.art),
       recordable: e.recordable !== false,
       recordingId: typeof e.recordingId === "string" || typeof e.recordingId === "number" ? e.recordingId : null,
     });

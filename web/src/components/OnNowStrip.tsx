@@ -7,6 +7,7 @@ import { afterStartup } from "../lib/startup";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { SportBadges } from "./SportBadges";
+import { artClass, SportArt } from "./SportArt";
 
 const REFRESH_MS = 60_000;
 
@@ -61,12 +62,13 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
         {live.map((o) => (
           <div key={o.channelId} className="onnow-item">
             <button
-              className="onnow-card"
+              className={`onnow-card${artClass(o.info.art)}`}
               data-nav
               aria-label={`${o.title} on ${o.channel}, ${o.info.kind === "replay" || o.info.kind === "highlights" ? "replay" : "live"}`}
               title={`${o.title} · ${o.channel}`}
               onClick={() => play(o.channelId, o.channel)}
             >
+              <SportArt art={o.info.art} />
               <span className="onnow-top">
                 <Logo o={o} />
                 {o.info.kind ? <SportBadges kind={o.info.kind} sport={o.sport} size="sm" /> : <span className="onnow-live">Live</span>}

@@ -263,7 +263,7 @@ export function iptvChanged() {
 
 /** Channel logo / provider poster the page may load: only companion-proxied (relative `v1/iptv/img/…`) paths; raw
  * provider URLs are refused by the CSP and would hand the viewer's address to the panel. */
-export const logoSrc = (logo?: string | null, size?: 96 | 192) =>
+export const logoSrc = (logo?: string | null, size?: 96 | 192 | 480 | 960) =>
   logo && !/^[a-z][a-z0-9+.-]*:/i.test(logo) && !logo.startsWith("//") ? streamUrl(size ? `${logo}${logo.includes("?") ? "&" : "?"}s=${size}` : logo) : null;
 
 // ---------- IPTV films / series ----------

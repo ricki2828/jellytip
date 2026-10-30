@@ -15,7 +15,16 @@ export interface Quality {
   audio: "atmos" | "5.1" | "stereo" | null;
 }
 
+/** Real artwork the server resolved for a sport event (paths on the companion's art proxy); every part is optional. */
+export interface SportArt {
+  leagueBadge: string | null;
+  fanart: string | null;
+  home: { name: string; badge: string } | null;
+  away: { name: string; badge: string } | null;
+}
+
 export interface SportInfo {
+  art: SportArt | null;
   kind: Kind | null;
   sport: boolean;
   quality: Quality | null;
@@ -42,6 +51,21 @@ export function parseQuality(raw: unknown): Quality | null {
   return { bucket: q.bucket as Bucket, height: num(q.height), fps: num(q.fps), hint, audio: a === "atmos" ? "atmos" : a === "5.1" ? "5.1" : a === "stereo" ? "stereo" : null };
 }
 
+function team(raw: unknown): { name: string; badge: string } | null {
+  const t = obj(raw);
+  const badge = str(t?.badge);
+  return t && badge ? { name: str(t.name) ?? "", badge } : null;
+}
+
+/** `art: {league?: {badge, fanart}, home?: {name, badge}, away?: …}` → art, or null when there is nothing to draw. */
+export function parseArt(raw: unknown): SportArt | null {
+  const a = obj(raw);
+  if (!a) return null;
+  const league = obj(a.league);
+  const art = { leagueBadge: str(league?.badge), fanart: str(league?.fanart), home: team(a.home), away: team(a.away) };
+  return art.leagueBadge || art.fanart || art.home || art.away ? art : null;
+}
+
 /** Reads the sport fields off an on-now / guide / channel object (`programme` is where kind and sport live). */
 export function parseSport(raw: unknown, programme?: unknown): SportInfo {
   const r = obj(raw) ?? {};
@@ -51,6 +75,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
   const ev = obj(r.eventGroup);
   const m = obj(r.match);
   return {
+    art: parseArt(r.art ?? p.art),
     kind,
     sport: p.sport === true || r.sport === true,
     quality: parseQuality(r.quality),
