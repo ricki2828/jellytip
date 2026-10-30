@@ -5,6 +5,7 @@ import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
 import { parseVodDetail, type VodDetail } from "../lib/iptvVod";
 import { parseOnNow, type OnNow } from "../lib/onNow";
+import { parseQualitySummary, parseSuggest, type Quality, type QualitySummary, type Suggestion } from "../lib/sport";
 
 export interface IptvError {
   error?: string;
@@ -208,6 +209,8 @@ export interface Channel {
   guide?: "epg" | "name" | "event" | "none";
   guideNote?: string | null;
   region?: string | null;
+  /** Stream check result (live-sport smarts); missing until the server has probed it. */
+  quality?: (Quality & { checkedAt?: number }) | null;
 }
 
 export interface Connection {
@@ -273,3 +276,20 @@ export async function onNow(limit = 40, sportOnly = false): Promise<OnNow[]> {
   if (a.status !== 200) return [];
   return parseOnNow(a.data, Math.floor(Date.now() / 1000));
 }
+
+// ---------- live sport (contract: ~/ai/plans/jellytip-live-sport.md) ----------
+
+/** Team and league names matching what was typed; [] when the server has no sport routes. */
+export async function sportSuggest(q: string): Promise<Suggestion[]> {
+  const a = await iptvGet<unknown>(`v1/iptv/sport/suggest?q=${encodeURIComponent(q)}`);
+  return a.status === 200 ? parseSuggest(a.data) : [];
+}
+
+/** Counts per quality bucket and the onboarding pass; null when the server doesn't have them. */
+export async function qualitySummary(): Promise<QualitySummary | null> {
+  const a = await iptvGet<unknown>("v1/iptv/quality");
+  return a.status === 200 ? parseQualitySummary(a.data) : null;
+}
+
+/** Admin: check every opted channel now (the server only probes when nobody is watching). */
+export const probeNow = () => iptvPost<{ queued?: number }>("v1/iptv/quality/probe", {});

@@ -6,6 +6,8 @@ export interface Prefs {
   hideWatched: boolean;
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
+  /** Favourite teams and leagues: Live TV puts what is on now first (the server does the ranking). */
+  sport: { teams: string[]; leagues: string[] };
   version: number | null;
 }
 
@@ -22,6 +24,7 @@ export function parsePrefs(raw: unknown): Prefs {
   const h = obj(r.home);
   const p = obj(r.playback);
   const l = obj(r.letterboxd);
+  const sp = obj(r.sport);
   const spd = typeof h.specialsPerDay === "number" && isFinite(h.specialsPerDay) ? Math.max(0, Math.min(SPECIALS_MAX, Math.round(h.specialsPerDay))) : 3;
   return {
     home: { pinned: strs(h.pinned), hidden: strs(h.hidden), order: strs(h.order), specialsPerDay: spd },
@@ -34,6 +37,7 @@ export function parsePrefs(raw: unknown): Prefs {
       audioLangs: strs(p.audioLangs),
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
+    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues) },
     version: typeof r.version === "number" ? r.version : null,
   };
 }

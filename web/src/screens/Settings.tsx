@@ -6,6 +6,7 @@ import { savePrefs, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
 import type { Prefs } from "../lib/prefs";
 import { go } from "../lib/router";
+import { SportSettings } from "../components/SportSettings";
 
 const LANGS: [string, string][] = [
   ["en", "English"],
@@ -123,6 +124,8 @@ function Personal({ prefs }: { prefs: Prefs }) {
         </div>
         {lbStatus && <span className={`settings-sub${prefs.letterboxd.status === "error" ? " settings-err" : ""}`}>{lbStatus}</span>}
       </form>
+
+      <SportSettings prefs={prefs} />
 
       {msg && <p className="settings-err settings-pad">{msg}</p>}
     </>

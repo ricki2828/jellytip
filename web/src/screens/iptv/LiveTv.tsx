@@ -7,6 +7,7 @@ import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from ".
 import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
+import { SportBadges } from "../../components/SportBadges";
 import { go } from "../../lib/router";
 import "./iptv.css";
 
@@ -222,6 +223,7 @@ export function LiveTv() {
                         <span className="livetv-chan-text">
                           {ch.num != null && <span className="livetv-num">{ch.num}</span>}
                           <span className="livetv-chan-name">{ch.name}</span>
+                          <SportBadges quality={ch.quality} size="sm" />
                         </span>
                       )}
                       {ch.favourite && <span className="livetv-fav" aria-label="favourite">★</span>}
@@ -239,6 +241,11 @@ export function LiveTv() {
                           title={`${b.prog.title} · ${clock(b.prog.start)}–${clock(b.prog.stop)}`}
                         >
                           <span className="livetv-prog-title">{b.prog.title}</span>
+                          {b.width > 70 && (b.prog.kind === "live" || b.prog.kind === "replay" || b.prog.kind === "highlights") && (
+                            <span className="livetv-prog-badges">
+                              <SportBadges kind={b.prog.kind} sport={b.prog.sport} size="sm" />
+                            </span>
+                          )}
                           {b.width > 90 && (
                             <span className="livetv-prog-time">
                               {short(b.prog.start)}–{short(b.prog.stop)}

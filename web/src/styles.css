@@ -2060,7 +2060,7 @@ button.overview.open {
   position: relative;
   flex: none;
   width: 220px;
-  height: 116px;
+  height: 132px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -2081,6 +2081,12 @@ button.overview.open {
   outline: none;
   transform: scale(1.03);
   box-shadow: inset 0 0 0 2px var(--vanilla);
+}
+.onnow-item {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 220px;
 }
 .onnow-top {
   display: flex;

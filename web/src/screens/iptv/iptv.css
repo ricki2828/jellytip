@@ -674,3 +674,89 @@
   font-size: 12.5px;
   color: var(--dim);
 }
+
+/* ---- live sport badges ---- */
+.sport-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.sport-pill {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+.sport-pill.live {
+  background: var(--jelly);
+}
+.sport-pill.replay {
+  background: #555;
+  color: #ddd;
+}
+.sport-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--dim);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.sport-q {
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--vanilla);
+  white-space: nowrap;
+}
+.sport-buffer {
+  font-size: 10px;
+  color: #e0a43a;
+  white-space: nowrap;
+}
+.sport-badges.sm .sport-pill,
+.sport-badges.sm .sport-q,
+.sport-badges.sm .sport-buffer {
+  font-size: 9px;
+}
+.onnow-also {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--vanilla);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.onnow-alts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.onnow-alts button {
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--vanilla);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.livetv-prog-badges {
+  display: flex;
+  margin-top: 1px;
+}
+.settings-chips-gap {
+  margin-top: 8px;
+}

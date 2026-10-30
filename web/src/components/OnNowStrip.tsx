@@ -6,6 +6,7 @@ import { progressOf, type OnNow } from "../lib/onNow";
 import { afterStartup } from "../lib/startup";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
+import { SportBadges } from "./SportBadges";
 
 const REFRESH_MS = 60_000;
 
@@ -44,31 +45,52 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     };
   }, [sportOnly, checkProvider]);
 
+  const [openAlt, setOpenAlt] = useState<string | null>(null);
   const live = (items ?? []).filter((o) => o.stop > now);
   if (live.length < min) return null;
+  const play = (id: string, name: string) => go(`${targetPath({ channel: id })}&t=${encodeURIComponent(name)}`);
+  const nameOf = (id: string) => (items ?? []).find((o) => o.channelId === id)?.channel ?? "Another channel";
   return (
     <section className="row onnow-row">
       <h2 className="row-title">{title}</h2>
       <div className="row-scroll">
         {live.map((o) => (
-          <button
-            key={o.channelId}
-            className="onnow-card"
-            data-nav
-            aria-label={`${o.title} on ${o.channel}, live`}
-            title={`${o.title} · ${o.channel}`}
-            onClick={() => go(`${targetPath({ channel: o.channelId })}&t=${encodeURIComponent(o.channel)}`)}
-          >
-            <span className="onnow-top">
-              <Logo o={o} />
-              <span className="onnow-live">Live</span>
-            </span>
-            <span className="onnow-title">{o.title}</span>
-            <span className="onnow-channel">{o.channel}</span>
-            <span className="onnow-progress" aria-hidden>
-              <span style={{ width: `${progressOf(o, now) * 100}%` }} />
-            </span>
-          </button>
+          <div key={o.channelId} className="onnow-item">
+            <button
+              className="onnow-card"
+              data-nav
+              aria-label={`${o.title} on ${o.channel}, ${o.info.kind === "replay" || o.info.kind === "highlights" ? "replay" : "live"}`}
+              title={`${o.title} · ${o.channel}`}
+              onClick={() => play(o.channelId, o.channel)}
+            >
+              <span className="onnow-top">
+                <Logo o={o} />
+                {o.info.kind ? <SportBadges kind={o.info.kind} sport={o.sport} size="sm" /> : <span className="onnow-live">Live</span>}
+              </span>
+              <span className="onnow-title">{o.title}</span>
+              <span className="onnow-channel">{o.channel}</span>
+              <SportBadges quality={o.info.quality} size="sm" />
+              <span className="onnow-progress" aria-hidden>
+                <span style={{ width: `${progressOf(o, now) * 100}%` }} />
+              </span>
+            </button>
+            {o.info.alternates.length > 0 && (
+              <>
+                <button className="onnow-also" data-nav aria-expanded={openAlt === o.channelId} onClick={() => setOpenAlt(openAlt === o.channelId ? null : o.channelId)}>
+                  Also on {o.info.alternates.length}
+                </button>
+                {openAlt === o.channelId && (
+                  <div className="onnow-alts">
+                    {o.info.alternates.map((id) => (
+                      <button key={id} data-nav onClick={() => play(id, nameOf(id))}>
+                        {nameOf(id)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         ))}
       </div>
     </section>

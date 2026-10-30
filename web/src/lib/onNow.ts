@@ -2,6 +2,8 @@
 // first, then group order). Pure; tested in web/test/onNow.test.ts. Shape: {now, channels:[Channel + {sport, now, next}]};
 // the server's `sport` flag decides, keywords only when a server leaves it out.
 
+import { hasServerRanking, parseSport, type SportInfo } from "./sport.ts";
+
 export interface OnNow {
   channelId: string;
   channel: string;
@@ -10,6 +12,8 @@ export interface OnNow {
   start: number;
   stop: number;
   sport: boolean;
+  /** Live/replay, stream quality and other channels with the same event (all optional on older servers). */
+  info: SportInfo;
 }
 
 const SPORT_RE = /\b(sports?|football|soccer|rugby|cricket|nrl|afl|nfl|nba|nhl|mlb|ncaa[fb]?|f1|formula|golf|tennis|boxing|ufc|racing|motogp|super ?rugby|premier league|kayo|espn|bein|tnt sports|fox sports|sky sport)\b/i;
@@ -21,6 +25,7 @@ export function parseOnNow(raw: unknown, now: number): OnNow[] {
   const list = Array.isArray(raw) ? raw : Array.isArray(r?.channels) ? (r!.channels as unknown[]) : Array.isArray(r?.items) ? (r!.items as unknown[]) : [];
   const out: OnNow[] = [];
   const seen = new Set<string>();
+  const events = new Set<string>();
   for (const x of list) {
     const c = obj(x);
     if (!c) continue;
@@ -32,6 +37,11 @@ export function parseOnNow(raw: unknown, now: number): OnNow[] {
     const stop = Number(p.stop);
     const title = typeof p.title === "string" ? p.title : "";
     if (!title || !(start <= now && now < stop)) continue;
+    const info = parseSport(c, p);
+    if (!info.quality) info.quality = parseSport(ch).quality;
+    // One card per event: the server lists the best channel first and the rest as alternates
+    if (info.eventKey && events.has(info.eventKey)) continue;
+    if (info.eventKey) events.add(info.eventKey);
     seen.add(id);
     const name = typeof ch.name === "string" ? ch.name : "";
     const hint = [c.genre, c.category, ch.groupName, ch.group, name, title].filter((v) => typeof v === "string").join(" ");
@@ -42,10 +52,12 @@ export function parseOnNow(raw: unknown, now: number): OnNow[] {
       title,
       start,
       stop,
-      sport: c.sport === true || ch.sport === true || (c.sport !== false && ch.sport !== false && SPORT_RE.test(hint)),
+      info,
+      sport: info.sport || c.sport === true || ch.sport === true || (c.sport !== false && ch.sport !== false && SPORT_RE.test(hint)),
     });
   }
-  // Live sport first, otherwise the server's order
+  // A server that ranks (live-sport smarts) has the final say; an older one gets sport first, then its own order
+  if (out.some((o) => hasServerRanking(o.info))) return out;
   return [...out.filter((o) => o.sport), ...out.filter((o) => !o.sport)];
 }
 
