@@ -62,7 +62,9 @@ object JellytipPerf {
             it.start()
             metricsThread = it
         }
-        runCatching { activity.window.addOnFrameMetricsAvailableListener(listener, Handler(thread.looper)) }
+        val ok = runCatching { activity.window.addOnFrameMetricsAvailableListener(listener, Handler(thread.looper)) }
+        // One line per activity start, so a trace without [perf] lines is "idle", never "not installed"
+        JellytipTrace.log("perf", "frame stats ${if (ok.isSuccess) "on" else "unavailable: ${ok.exceptionOrNull()?.javaClass?.simpleName}"} (${refreshHz.toInt()} Hz)")
     }
 
     fun detach(activity: Activity) {
