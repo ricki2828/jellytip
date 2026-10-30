@@ -346,9 +346,16 @@ class RecommendedViewModel
             }
         }
 
+        /**
+         * Jellytip: the hero panel draws the focused item's art itself, so the app backdrop is cleared rather than set.
+         * Setting it left an older image behind the tab bar and the side margins around the inset hero (30-Oct, Ricki:
+         * "top banner is stuck on old background"); clearing on every focus also drops what Library/Genres or a
+         * details page left there.
+         */
+        @Suppress("UNUSED_PARAMETER")
         fun updateBackdrop(item: BaseItem) {
             viewModelScope.launchIO {
-                backdropService.submit(item)
+                backdropService.clearBackdrop()
             }
         }
 

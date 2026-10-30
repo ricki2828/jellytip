@@ -402,6 +402,13 @@ class HomeViewModel
             }
         }
 
+        /** Jellytip: Home's hero owns the art; clear what another page (details, Library) left in the app backdrop. */
+        fun clearBackdrop() {
+            viewModelScope.launchIO {
+                backdropService.clearBackdrop()
+            }
+        }
+
         fun deleteItem(
             position: RowColumn,
             item: BaseItem,

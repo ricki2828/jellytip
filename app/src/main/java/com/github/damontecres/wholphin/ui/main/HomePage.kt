@@ -268,7 +268,9 @@ fun HomePage(
                     }
                 }
 
-            val noBackdropUpdate = remember { { _: BaseItem -> } }
+            // Jellytip: the hero owns the art; keep the app backdrop clear (nothing stale behind the tab bar or margins)
+            LaunchedEffect(Unit) { viewModel.clearBackdrop() }
+            val noBackdropUpdate = remember(viewModel) { { _: BaseItem -> viewModel.clearBackdrop() } }
             val showLogos = preferences.appPreferences.interfacePreferences.showLogos
             JellytipHomeTheme {
                 HomePageContent(
