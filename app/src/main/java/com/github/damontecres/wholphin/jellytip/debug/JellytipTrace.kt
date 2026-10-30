@@ -32,7 +32,15 @@ object JellytipTrace {
     private val events = ArrayDeque<String>(MAX_EVENTS)
     private val writer = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "jellytip-trace").apply { isDaemon = true } }
     private val flushQueued = AtomicBoolean(false)
-    private val time = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ROOT)
+    // Thread-safe (SimpleDateFormat is not, and log() runs on main, IO and player threads)
+    private val time =
+        java.time.format.DateTimeFormatter
+            .ofPattern("MM-dd HH:mm:ss.SSS", Locale.ROOT)
+            .withZone(java.time.ZoneId.systemDefault())
+
+    /** Lines not yet in the file: flushes append them instead of rewriting the whole ring every burst. */
+    private val pending = ArrayList<String>()
+    private const val REWRITE_BYTES = 512 * 1024L
     private val tokenPattern = Regex("(api_key|ApiKey|Token)=[^&\\s\"]+")
 
     @Volatile
@@ -68,10 +76,13 @@ object JellytipTrace {
         kind: String,
         message: String,
     ) {
-        val line = "${time.format(Date())} [$kind] ${message.replace(tokenPattern, "$1=…")}"
+        // Token scrubbing only where a token could be (key=value)
+        val safe = if (message.indexOf('=') >= 0) message.replace(tokenPattern, "$1=…") else message
+        val line = "${time.format(java.time.Instant.now())} [$kind] $safe"
         synchronized(events) {
             if (events.size >= MAX_EVENTS) events.removeFirst()
             events.addLast(line)
+            pending.add(line)
         }
         Log.i(TAG, line)
         if (flushQueued.compareAndSet(false, true)) {
@@ -85,9 +96,15 @@ object JellytipTrace {
         flushQueued.set(false)
         val f = file ?: return
         try {
-            val tmp = File(f.parentFile, "$FILE_NAME.tmp")
-            tmp.writeText(snapshot().joinToString("\n"))
-            tmp.renameTo(f)
+            val fresh = synchronized(events) { pending.toList().also { pending.clear() } }
+            if (f.exists() && f.length() < REWRITE_BYTES) {
+                if (fresh.isNotEmpty()) f.appendText(fresh.joinToString("\n", postfix = "\n"))
+            } else {
+                // Grown too big (or missing): rewrite with just the ring
+                val tmp = File(f.parentFile, "$FILE_NAME.tmp")
+                tmp.writeText(snapshot().joinToString("\n", postfix = "\n"))
+                tmp.renameTo(f)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "trace not written", e)
         }
