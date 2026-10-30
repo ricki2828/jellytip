@@ -58,3 +58,28 @@ export interface JellytipDownloadsPlugin {
 }
 
 export const NativeDownloads = registerPlugin<JellytipDownloadsPlugin>("JellytipDownloads");
+
+/** What the native IPTV player reports when it closes (android/app/src/main/java/com/jellytip/phone/PlayerPlugin.java). */
+export interface NativePlayerResult {
+  reason: "back" | "ended" | "error";
+  positionMs: number;
+  durationMs: number;
+  error?: string;
+  /** Media3 error code name, e.g. ERROR_CODE_IO_BAD_HTTP_STATUS. */
+  errorCode?: string;
+  /** HTTP status of a refused stream link (0 = none). */
+  httpStatus?: number;
+  /** The companion's X-Iptv-Error on that refusal. */
+  iptvError?: string;
+}
+
+export interface JellytipPlayerPlugin {
+  /** Full-screen ExoPlayer for an IPTV link; resolves when it closes. */
+  open(o: { url: string; title: string; mime?: string; live: boolean; resumeMs?: number; note?: string }): Promise<NativePlayerResult>;
+  addListener(event: "progress", cb: (e: { positionMs: number; durationMs: number }) => void): Promise<{ remove: () => Promise<void> }>;
+  addListener(event: "playerError", cb: (e: Record<string, unknown>) => void): Promise<{ remove: () => Promise<void> }>;
+}
+
+/** The phone app plays all IPTV natively (mpegts.js can't pass AC-3 through MSE and dies on long live streams). */
+export const NativePlayer = registerPlugin<JellytipPlayerPlugin>("JellytipPlayer");
+export const nativeIptvPlayer = isNative && Capacitor.getPlatform() === "android";

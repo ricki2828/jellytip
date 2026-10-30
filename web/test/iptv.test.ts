@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chunks, layoutRow, ticks, visibleRows, windowStart } from "../src/lib/epg.ts";
-import { engineFor, linkFailure, parseTarget, playQuery, targetPath } from "../src/lib/iptvPlay.ts";
+import { engineFor, linkFailure, nativeLink, parseTarget, playQuery, targetPath } from "../src/lib/iptvPlay.ts";
 
 const H = 3600;
 
@@ -58,6 +58,7 @@ test("play query: live gets a format, catch-up and recordings don't; device alwa
   assert.equal(playQuery({ channel: "3:77" }, "web-ab"), "v1/iptv/play?channel=3%3A77&format=ts&device=web-ab");
   assert.equal(playQuery({ channel: "3:77", start: 5, stop: 9 }, "d"), "v1/iptv/play?channel=3%3A77&start=5&stop=9&device=d");
   assert.equal(playQuery({ recording: "4" }, "d"), "v1/iptv/play?recording=4&device=d");
+  assert.equal(playQuery({ channel: "3:77" }, "d", "ts", true), "v1/iptv/play?channel=3%3A77&format=ts&device=d&client=native");
 });
 
 test("engine by link extension or mime", () => {
@@ -173,4 +174,12 @@ test("reminders: nudge once at soon and once at kick-off", () => {
   assert.equal(dueNudges(items, seen, 9600).length, 0);
   assert.deepEqual(dueNudges(items, seen, 10_100).map((n) => n.at), ["live"]);
   assert.equal(dueNudges(items, seen, 10_200).length, 0);
+});
+
+test("native link: direct answers keep the provider URL, companion links become absolute", () => {
+  const abs = (rel: string) => `https://c.example/${rel}`;
+  assert.deepEqual(nativeLink({ url: "v1/iptv/s/abc.ts" }, abs), { url: "https://c.example/v1/iptv/s/abc.ts", direct: false });
+  assert.deepEqual(nativeLink({ url: "http://p.example:8080/live/u/p/1.ts", direct: true }, abs), { url: "http://p.example:8080/live/u/p/1.ts", direct: true });
+  // A direct flag on a relative link is not trusted as a provider URL
+  assert.deepEqual(nativeLink({ url: "v1/iptv/s/x.ts", direct: true }, abs), { url: "https://c.example/v1/iptv/s/x.ts", direct: false });
 });

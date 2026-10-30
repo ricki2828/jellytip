@@ -35,13 +35,26 @@ export function targetPath(t: PlayTarget): string {
   return `/iptv/play?${q}`;
 }
 
-/** /play query for a target; live TV goes as TS unless the browser can only do HLS. */
-export function playQuery(t: PlayTarget, device: string, format: "ts" | "m3u8" = "ts"): string {
+/**
+ * /play query for a target; live TV goes as TS unless the browser can only do HLS. [native]: the phone's ExoPlayer
+ * (`client=native`), which may get a direct-from-provider link.
+ */
+export function playQuery(t: PlayTarget, device: string, format: "ts" | "m3u8" = "ts", native = false): string {
   const q = new URLSearchParams();
   for (const k of KEYS) if (t[k] != null) q.set(k, String(t[k]));
   if (t.channel && t.start == null) q.set("format", format);
   q.set("device", device);
+  if (native) q.set("client", "native");
   return `v1/iptv/play?${q}`;
+}
+
+/**
+ * The link the phone's native player opens: a direct-from-provider answer's own absolute URL (plan part C), else the
+ * companion's relative link made absolute by [absolute].
+ */
+export function nativeLink(a: { url: string; direct?: boolean }, absolute: (rel: string) => string): { url: string; direct: boolean } {
+  if (a.direct && /^https?:\/\//i.test(a.url)) return { url: a.url, direct: true };
+  return { url: absolute(a.url), direct: false };
 }
 
 export type Engine = "mpegts" | "hls" | "native";
