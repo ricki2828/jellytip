@@ -184,11 +184,35 @@ fun AlternatesMenu(
 ) {
     val items =
         (listOf(o.channel) + o.alternates).map { ch ->
-            val q = listOfNotNull(ch.quality?.label, ch.quality?.audioLabel, if (ch.quality?.slow == true) "may buffer" else null)
             com.github.damontecres.wholphin.ui.components.DialogItem(
-                listOf(ch.name, q.joinToString(" ")).filter { it.isNotBlank() }.joinToString("  ·  "),
+                headlineContent = {
+                    Text(
+                        listOfNotNull(ch.num?.toString(), ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), "")).joinToString("  "),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                leadingContent = {
+                    Box(Modifier.size(40.dp, 26.dp), contentAlignment = Alignment.Center) {
+                        var failed by remember(ch.logo) { mutableStateOf(false) }
+                        val logo = ch.logo
+                        if (logo != null && !failed) {
+                            AsyncImage(
+                                model = if (logo.contains('?')) logo else "$logo?s=96",
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                onError = { failed = true },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Text(initials(ch.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                        }
+                    }
+                },
+                trailingContent = { QualityChips(ch.quality) },
+                onClick = { onPick(ch) },
                 dismissOnClick = true,
-            ) { onPick(ch) }
+            )
         }
     com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = o.title, dialogItems = items, onDismissRequest = onDismiss)
 }

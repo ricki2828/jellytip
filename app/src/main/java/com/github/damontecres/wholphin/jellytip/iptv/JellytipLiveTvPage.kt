@@ -460,8 +460,9 @@ fun JellytipLiveTvPage(
         // Same-event alternates the server named (plan §4); ones outside this tab get a minimal channel to tune
         val byId = chans.associateBy { it.id }
         playback.alternates =
-            chans.filter { it.alternates.isNotEmpty() }.associate { c ->
-                c.id to c.alternates.filter { it != c.id }.map { id -> byId[id] ?: IptvParse.altChannel(id, c) }
+            chans.filter { it.alternates.isNotEmpty() || it.alternateChannels.isNotEmpty() }.associate { c ->
+                val ids = (c.alternates + c.alternateChannels.map { it.id }).distinct().filter { it != c.id }
+                c.id to ids.map { id -> IptvParse.resolveAlternate(id, c, byId) }
             }
         playback.play(target, if (target.start != null) "guide OK (catch-up)" else "guide OK")
         viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide OK on ${ch.name}")
@@ -859,7 +860,7 @@ private fun FocusInfo(
             if (prog?.kind != "live" || prog?.isOn(now) == true) KindPill(prog?.kind)
             if (ch?.sport == true || prog?.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.7f), 13.dp)
             Text(
-                text = listOfNotNull(ch?.num?.toString(), ch?.name, ch?.let { alsoOnText(it.alternates.size) }).joinToString("  "),
+                text = listOfNotNull(ch?.num?.toString(), ch?.name, ch?.let { alsoOnText((it.alternates + it.alternateChannels.map { a -> a.id }).distinct().size) }).joinToString("  "),
                 color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
                 fontFamily = JellytipFontFamily,
                 fontSize = 13.sp,

@@ -39,6 +39,8 @@ data class IptvChannel(
     val sport: Boolean? = null,
     /** Same event on other channels, best first (`event.alternates`); empty = none known. */
     val alternates: List<String> = emptyList(),
+    /** The same alternates described (`eventGroup.alternateChannels`: name, num, logo, quality), best first. */
+    val alternateChannels: List<IptvChannel> = emptyList(),
 )
 
 /** "also on 2 channels" for a card that stands for an event shown on several channels. */
@@ -243,6 +245,7 @@ object IptvParse {
                     else -> null
                 },
             alternates = alternates(eventGroup(o)),
+            alternateChannels = alternateChannels(eventGroup(o), resolve),
         )
     }
 
@@ -262,6 +265,22 @@ object IptvParse {
      * an `event` object is accepted only for the draft contract.
      */
     private fun eventGroup(o: JSONObject): JSONObject? = o.optJSONObject("eventGroup") ?: o.optJSONObject("event")
+
+    /** `eventGroup.alternateChannels: [{id, name, num, logo, quality}]` as channels (group/provider from the id). */
+    fun alternateChannels(
+        event: JSONObject?,
+        resolve: (String) -> String?,
+    ): List<IptvChannel> {
+        val a = event?.optJSONArray("alternateChannels") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { channel(it, resolve) } }
+    }
+
+    /** Alternate [id] of [main]: described by the server, else found in [known] (the lineup), else a bare channel to tune. */
+    fun resolveAlternate(
+        id: String,
+        main: IptvChannel,
+        known: Map<String, IptvChannel>,
+    ): IptvChannel = main.alternateChannels.firstOrNull { it.id == id } ?: known[id] ?: altChannel(id, main)
 
     private fun alternates(event: JSONObject?): List<String> {
         val a = event?.optJSONArray("alternates") ?: return emptyList()
@@ -311,6 +330,7 @@ object IptvParse {
                 base.copy(
                     quality = base.quality ?: quality(c.optJSONObject("quality")),
                     alternates = base.alternates.ifEmpty { alternates(event) },
+                    alternateChannels = base.alternateChannels.ifEmpty { alternateChannels(event, resolve) },
                 )
             byId[ch.id] = ch
             if (!seen.add(ch.id)) continue
@@ -341,7 +361,12 @@ object IptvParse {
             if (key != null) events[key] = out.size
             out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint), kind)
         }
-        val resolved = out.map { o -> o.copy(alternates = o.channel.alternates.filter { it != o.channel.id }.map { id -> byId[id] ?: altChannel(id, o.channel) }) }
+        val resolved =
+            out.map { o ->
+                // Ids only in `alternates` (older answer) still get the described channel when alternateChannels has it
+                val ids = (o.channel.alternates + o.channel.alternateChannels.map { it.id }).distinct().filter { it != o.channel.id }
+                o.copy(alternates = ids.map { id -> resolveAlternate(id, o.channel, byId) })
+            }
         return if (ranked) resolved else resolved.filter { it.sport } + resolved.filter { !it.sport }
     }
 
