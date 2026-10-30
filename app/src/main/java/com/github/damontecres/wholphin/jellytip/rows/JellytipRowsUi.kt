@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -159,6 +161,17 @@ fun JellytipServerRowView(
     val loaded = items
     Box(modifier.fillMaxWidth()) {
         when {
+            row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ItemRowTitle(row.title)
+                    Spacer(Modifier.height(SpecialTokens.POSTER_H + 16.dp))
+                }
+            }
+
+            row.isTop10 -> {
+                TrendingTop10Row(row, loaded.orEmpty(), onFocusItem, click, longClick, play, focusModifier, viewModel)
+            }
+
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
                 MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
@@ -855,4 +868,172 @@ private fun MixedRow(
             }
         }
     }
+}
+
+private sealed interface TrendTile {
+    val rank: Int
+    val key: String
+
+    data class Lib(
+        val item: BaseItem,
+        override val rank: Int,
+    ) : TrendTile {
+        override val key get() = "l:${item.id}"
+    }
+
+    data class Vod(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+        override val rank: Int,
+    ) : TrendTile {
+        override val key get() = "v:${item.id}"
+    }
+
+    data class Missing(
+        val m: JellytipServerRow.Missing,
+    ) : TrendTile {
+        override val rank get() = m.rank
+        override val key get() = "m:${m.tmdbId}:${m.title}"
+    }
+}
+
+/**
+ * Trending Top 10 (plan "Trending Top 10"): library and IPTV titles plus "Not available" ones, ordered by rank, in the
+ * Top 10 style (big numerals). A missing title opens Discover's Get it for admins and is not focusable for others.
+ * Entries without a rank keep their display order after the ranked ones.
+ */
+@Composable
+private fun TrendingTop10Row(
+    row: JellytipServerRow,
+    library: List<BaseItem>,
+    onFocusItem: (item: BaseItem?, showHeader: Boolean) -> Unit,
+    click: (BaseItem) -> Unit,
+    longClick: (BaseItem) -> Unit,
+    play: (BaseItem) -> Unit,
+    focusModifier: Modifier,
+    viewModel: JellytipHomeViewModel,
+) {
+    val isAdmin by rememberIsJellytipAdmin()
+    val tiles =
+        remember(row.id, row.order, row.ranks, row.missing, library, row.iptvItems) {
+            val shown =
+                com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<TrendTile>(
+                    row.order,
+                    library,
+                    row.iptvItems,
+                    { TrendTile.Lib(it, row.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
+                    { TrendTile.Vod(it, row.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
+                )
+            val all = shown + row.missing.map { TrendTile.Missing(it) }
+            val (ranked, unranked) = all.partition { it.rank > 0 }
+            (ranked.sortedBy { it.rank } + unranked).distinctBy { it.key }
+        }
+    if (tiles.isEmpty()) return
+    val mediaType = if (row.mediaType == "tv" || row.id.endsWith("series")) "tv" else "movie"
+    ItemRow(
+        title = row.title,
+        items = tiles,
+        onClickItem = { _, t ->
+            when (t) {
+                is TrendTile.Lib -> click(t.item)
+                is TrendTile.Vod -> {
+                    JellytipTrailerControl.stop()
+                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "trending IPTV OK")
+                }
+                is TrendTile.Missing ->
+                    if (isAdmin && t.m.tmdbId > 0) {
+                        JellytipTrailerControl.stop()
+                        viewModel.navigationManager.navigateTo(
+                            Destination.JellytipDiscover(
+                                com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
+                                    tmdbId = t.m.tmdbId,
+                                    mediaType = mediaType,
+                                    title = t.m.title,
+                                    year = t.m.year,
+                                    posterUrl = t.m.poster,
+                                ),
+                            ),
+                            "trending missing OK",
+                        )
+                    }
+            }
+        },
+        onLongClickItem = { _, t -> if (t is TrendTile.Lib) longClick(t.item) },
+        horizontalPadding = SpecialTokens.SPACING,
+        modifier = focusModifier,
+        cardContent = { index, t, cardModifier, onClick, onLongClick ->
+            if (t != null) {
+                // Ranks the server did not send: the slot's position
+                com.github.damontecres.wholphin.jellytip.specials.RankedPoster(if (t.rank > 0) t.rank else index + 1) { boxModifier ->
+                    when (t) {
+                        is TrendTile.Lib ->
+                            PosterCard(
+                                t.item,
+                                onClick,
+                                onLongClick,
+                                cardModifier.then(boxModifier).onFocusChanged { if (it.isFocused) onFocusItem(t.item, true) }.playKey(t.item, play),
+                            )
+
+                        is TrendTile.Vod ->
+                            com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                                item = t.item,
+                                width = SpecialTokens.POSTER_W,
+                                height = SpecialTokens.POSTER_H,
+                                poster = true,
+                                onClick = onClick,
+                                modifier = cardModifier.then(boxModifier).onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                            )
+
+                        is TrendTile.Missing ->
+                            if (isAdmin && t.m.tmdbId > 0) {
+                                SpecialCard(
+                                    width = SpecialTokens.POSTER_W,
+                                    height = SpecialTokens.POSTER_H,
+                                    onClick = onClick,
+                                    onLongClick = onClick,
+                                    modifier = cardModifier.then(boxModifier).onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                                ) { MissingTrendArt(t.m) }
+                            } else {
+                                Box(
+                                    Modifier
+                                        .then(boxModifier)
+                                        .size(SpecialTokens.POSTER_W, SpecialTokens.POSTER_H)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF141414)),
+                                ) { MissingTrendArt(t.m) }
+                            }
+                    }
+                }
+            }
+        },
+    )
+}
+
+/** A trending title that is nowhere: its poster dimmed, the title when there is none, and "Not available". */
+@Composable
+private fun BoxScope.MissingTrendArt(m: JellytipServerRow.Missing) {
+    var failed by remember(m.poster) { mutableStateOf(false) }
+    if (m.poster != null && !failed) {
+        AsyncImage(
+            model = m.poster,
+            contentDescription = m.title,
+            contentScale = ContentScale.Crop,
+            alpha = SpecialTokens.NOT_YET_ALPHA * 0.6f,
+            onError = { failed = true },
+            modifier = Modifier.fillMaxSize(),
+        )
+    } else {
+        Caption(m.title, alpha = 0.6f, maxLines = 4, modifier = Modifier.align(Alignment.Center).padding(8.dp))
+    }
+    Text(
+        "Not available",
+        color = Color.White.copy(alpha = 0.85f),
+        fontFamily = JellytipFontFamily,
+        fontSize = 11.sp,
+        modifier =
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }

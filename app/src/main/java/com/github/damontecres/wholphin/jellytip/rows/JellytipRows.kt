@@ -56,7 +56,22 @@ data class JellytipServerRow(
      * first. Empty = library items, then IPTV titles.
      */
     val order: List<String> = emptyList(),
+    /**
+     * Trending Top 10 rows (plan "Trending Top 10"): rank per entry, keyed by [rankKey] of the library id or IPTV vod
+     * id. Empty = the display order is the rank.
+     */
+    val ranks: Map<String, Int> = emptyMap(),
+    /** Trending titles that are nowhere (not in the library, not on IPTV): dimmed "Not available" tiles. */
+    val missing: List<Missing> = emptyList(),
 ) {
+    data class Missing(
+        val tmdbId: Int,
+        val title: String,
+        val year: Int?,
+        val poster: String?,
+        val rank: Int,
+    )
+
     data class Person(
         val id: UUID,
         val name: String,
@@ -67,9 +82,16 @@ data class JellytipServerRow(
     val isPoster get() = layout == LAYOUT_POSTER
     val isFranchise get() = layout == LAYOUT_FRANCHISE && collection != null
 
+    /** `trending-top10-series` / `trending-top10-movies` (or any row the server lays out as `top10`). */
+    val isTop10 get() = layout == LAYOUT_TOP10 || id.startsWith("trending-top10")
+
     companion object {
         const val LAYOUT_POSTER = "poster"
         const val LAYOUT_FRANCHISE = "franchise"
+        const val LAYOUT_TOP10 = "top10"
+
+        /** Library ids with or without dashes and IPTV ids compare the same way. */
+        fun rankKey(id: String) = id.replace("-", "").lowercase()
     }
 }
 
@@ -144,11 +166,55 @@ object JellytipRowsParser {
         return JellytipRowsAnswer(rows, carousels.toSet())
     }
 
+    /**
+     * Rank per entry, read from whichever form the server sends: `ranks: {id: n}`, `ranks: [n…]` parallel to `order`,
+     * or `rank` on each `iptvItems` / `entries` object.
+     */
+    private fun ranks(o: JSONObject): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        o.optJSONObject("ranks")?.let { r -> r.keys().forEach { k -> r.optInt(k, 0).takeIf { it > 0 }?.let { out[JellytipServerRow.rankKey(k)] = it } } }
+        val order = o.optJSONArray("order")
+        o.optJSONArray("ranks")?.let { r ->
+            if (order != null) {
+                for (i in 0 until minOf(r.length(), order.length())) {
+                    val id = order.optString(i).takeIf { it.isNotBlank() } ?: continue
+                    r.optInt(i, 0).takeIf { it > 0 }?.let { out[JellytipServerRow.rankKey(id)] = it }
+                }
+            }
+        }
+        listOf("iptvItems", "entries").forEach { key ->
+            val a = o.optJSONArray(key) ?: return@forEach
+            for (i in 0 until a.length()) {
+                val e = a.optJSONObject(i) ?: continue
+                val id = e.str("id") ?: e.str("itemId") ?: continue
+                e.optInt("rank", 0).takeIf { it > 0 }?.let { out[JellytipServerRow.rankKey(id)] = it }
+            }
+        }
+        return out
+    }
+
+    private fun missing(a: org.json.JSONArray?): List<JellytipServerRow.Missing> =
+        if (a == null) {
+            emptyList()
+        } else {
+            (0 until a.length()).mapNotNull { i ->
+                val m = a.optJSONObject(i) ?: return@mapNotNull null
+                JellytipServerRow.Missing(
+                    tmdbId = m.optInt("tmdbId", 0),
+                    title = m.str("title") ?: return@mapNotNull null,
+                    year = m.optInt("year", 0).takeIf { it > 0 },
+                    poster = m.str("poster"),
+                    rank = m.optInt("rank", 0),
+                )
+            }
+        }
+
     private fun row(o: JSONObject): JellytipServerRow? {
         val id = o.str("id") ?: return null
         val itemIds = o.uuids("itemIds")
         val iptv = com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.items(o.optJSONArray("iptvItems"), com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
-        if (itemIds.isEmpty() && iptv.isEmpty()) return null
+        val missing = missing(o.optJSONArray("missing"))
+        if (itemIds.isEmpty() && iptv.isEmpty() && missing.isEmpty()) return null
         JellytipThumbTitles.markUntitled(o.uuids("untitled"))
         com.github.damontecres.wholphin.jellytip.JellytipLogoTint.setStyles(o.optJSONObject("logoStyles"))
         com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(o.optJSONObject("techs"))
@@ -162,6 +228,8 @@ object JellytipRowsParser {
             itemIds = itemIds,
             iptvItems = iptv,
             order = o.optJSONArray("order")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
+            ranks = ranks(o),
+            missing = missing,
             collection = o.optJSONObject("collection")?.let { collection(it) },
             person =
                 o.optJSONObject("person")?.let { p ->

@@ -463,7 +463,6 @@ private fun Top10Row(
     actions: SpecialActions,
 ) {
     val ranked = remember(special, items) { special.ranked.mapNotNull { items[it] } }
-    val sizes = rememberJellytipSizes()
     ItemRow(
         title = special.title,
         items = ranked,
@@ -473,31 +472,46 @@ private fun Top10Row(
         modifier = focusModifier,
         cardContent = { index, item, cardModifier, onClick, onLongClick ->
             if (item != null) {
-                val numeral = (index + 1).toString()
-                val numeralWidth = if (numeral.length > 1) 104.dp else 58.dp
-                Box(Modifier.width(numeralWidth + SpecialTokens.POSTER_W).height(SpecialTokens.POSTER_H)) {
-                    Text(
-                        text = numeral,
-                        color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
-                        fontFamily = JellytipFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = sizes.sp(SpecialTokens.NUMERAL_PX),
-                        letterSpacing = (-0.06).em,
-                        maxLines = 1,
-                        softWrap = false,
-                        style = TextStyle(drawStyle = Stroke(width = 4f, join = StrokeJoin.Round)),
-                        modifier = Modifier.align(Alignment.BottomStart),
-                    )
+                RankedPoster(index + 1) { boxModifier ->
                     PosterCard(
                         item,
                         onClick,
                         onLongClick,
-                        cardModifier.align(Alignment.CenterEnd).onFocusChanged { if (it.isFocused) onFocusItem(item, true) },
+                        cardModifier.then(boxModifier).onFocusChanged { if (it.isFocused) onFocusItem(item, true) },
                     )
                 }
             }
         },
     )
+}
+
+/**
+ * A Top 10 slot: the big outlined [rank] numeral behind, the poster at the right ([poster] gets the modifier that
+ * aligns it). Shared by the Top 10 special and the trending Top 10 server rows.
+ */
+@Composable
+internal fun RankedPoster(
+    rank: Int,
+    poster: @Composable BoxScope.(Modifier) -> Unit,
+) {
+    val sizes = rememberJellytipSizes()
+    val numeral = rank.toString()
+    val numeralWidth = if (numeral.length > 1) 104.dp else 58.dp
+    Box(Modifier.width(numeralWidth + SpecialTokens.POSTER_W).height(SpecialTokens.POSTER_H)) {
+        Text(
+            text = numeral,
+            color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
+            fontFamily = JellytipFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = sizes.sp(SpecialTokens.NUMERAL_PX),
+            letterSpacing = (-0.06).em,
+            maxLines = 1,
+            softWrap = false,
+            style = TextStyle(drawStyle = Stroke(width = 4f, join = StrokeJoin.Round)),
+            modifier = Modifier.align(Alignment.BottomStart),
+        )
+        poster(Modifier.align(Alignment.CenterEnd))
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
