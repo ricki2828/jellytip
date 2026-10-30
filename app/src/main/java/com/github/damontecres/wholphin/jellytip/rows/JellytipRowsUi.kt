@@ -124,6 +124,8 @@ fun JellytipServerRowView(
     onLongClickItem: ((BaseItem) -> Unit)?,
     focusModifier: Modifier,
     modifier: Modifier = Modifier,
+    /** Told the opened entry's id (library item id or IPTV vod id) before navigating; search logs clicks with it. */
+    onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
     val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) {
@@ -143,7 +145,12 @@ fun JellytipServerRowView(
                 viewModel.navigationManager.navigateTo(item.destination(), "server row OK")
             }
         }
-    val click: (BaseItem) -> Unit = { item -> if (!JellytipTrailerControl.onOk(item)) open(item) }
+    val click: (BaseItem) -> Unit = { item ->
+        if (!JellytipTrailerControl.onOk(item)) {
+            onOpened?.invoke(item.id.toString())
+            open(item)
+        }
+    }
     val play: (BaseItem) -> Unit =
         remember(viewModel) {
             { item ->
@@ -186,7 +193,7 @@ fun JellytipServerRowView(
 
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
-                MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
+                MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel, onOpened)
             }
 
             row.iptvItems.isNotEmpty() -> {
@@ -198,6 +205,7 @@ fun JellytipServerRowView(
                     heightDp = options.heightDp,
                     onFocusTile = { onFocusItem(null, false) },
                     modifier = focusModifier,
+                    onOpened = onOpened,
                 )
             }
 
@@ -838,6 +846,7 @@ private fun MixedRow(
     play: (BaseItem) -> Unit,
     focusModifier: Modifier,
     viewModel: JellytipHomeViewModel,
+    onOpened: ((String) -> Unit)? = null,
 ) {
     val tiles =
         remember(row.id, row.order, library, row.iptvItems) {
@@ -879,6 +888,7 @@ private fun MixedRow(
                             poster = row.isPoster,
                             onClick = {
                                 JellytipTrailerControl.stop()
+                                onOpened?.invoke(t.item.id)
                                 viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "my list IPTV OK")
                             },
                             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },

@@ -4,6 +4,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle
 import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONArray
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Locale
@@ -478,6 +479,33 @@ class JellytipSearchService
                 results = a.results?.map { it.resolved() },
                 top = a.top?.resolved(),
             )
+        }
+
+        private val clickScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+        /**
+         * Click log (plan jellytip-search-10x, "Click log"): `POST v1/search/click {q, kind, id, pos, source?, tmdbId?}`,
+         * [pos] 1-based in `results` (the top hit = 1). Fire-and-forget: never awaited, failures ignored.
+         */
+        fun logClick(
+            q: String,
+            r: SearchResult,
+            pos: Int,
+        ) {
+            val id = r.id?.toString() ?: r.iptvId ?: r.personId?.toString() ?: r.collectionId?.toString() ?: r.tmdbId?.toString() ?: return
+            val body =
+                JSONObject()
+                    .put("q", q)
+                    .put("kind", r.kind)
+                    .put("id", id)
+                    .put("pos", pos)
+                    .put("source", r.source)
+                    .apply { r.tmdbId?.let { put("tmdbId", it) } }
+                    .toString()
+            clickScope.launch {
+                val res = runCatching { api.userCall("v1/search/click", body, timeoutMs = 5_000) }.getOrNull()
+                com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("search", "click ${r.kind} pos=$pos -> ${res?.first}")
+            }
         }
 
         suspend fun recordRecent(q: String) {

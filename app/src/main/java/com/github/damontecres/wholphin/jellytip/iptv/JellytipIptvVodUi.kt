@@ -163,6 +163,7 @@ fun IptvVodRow(
     heightDp: Int,
     onFocusTile: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
     val h = heightDp.dp
@@ -180,7 +181,10 @@ fun IptvVodRow(
                     width = w,
                     height = h,
                     poster = poster,
-                    onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "iptv row OK") },
+                    onClick = {
+                        onOpened?.invoke(item.id)
+                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "iptv row OK")
+                    },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusTile() },
                 )
             }

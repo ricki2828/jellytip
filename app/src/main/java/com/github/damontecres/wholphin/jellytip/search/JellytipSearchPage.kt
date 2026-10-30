@@ -151,6 +151,27 @@ class JellytipSearchViewModel
             setQuery(q, immediate = true)
         }
 
+        /**
+         * A ranked result was opened: log its 1-based position in `results` ([match] picks the entry). Nothing when
+         * the answer has no `results` (older server) or the entry isn't in it.
+         */
+        fun clicked(match: (SearchResult) -> Boolean) {
+            val a = _state.value.answer ?: return
+            val results = a.results ?: return
+            val i = results.indexOfFirst(match)
+            if (i < 0) return
+            service.logClick(a.q.ifBlank { _state.value.query.trim() }, results[i], i + 1)
+        }
+
+        /** By any id the rows know (library id with or without dashes, IPTV id, person id, collection or TMDB id). */
+        fun clickedId(id: String) {
+            val k = id.replace("-", "").lowercase()
+            clicked { r ->
+                listOfNotNull(r.id?.toString(), r.iptvId, r.personId?.toString(), r.collectionId?.toString(), r.tmdbId?.toString())
+                    .any { it.replace("-", "").lowercase() == k }
+            }
+        }
+
         /** "Client calls on result open." */
         fun opened(reason: String) {
             val q = _state.value.query.trim()
@@ -383,6 +404,7 @@ private fun ResultGroup(
                 onFocusItem = { _, _ -> },
                 onLongClickItem = null,
                 focusModifier = Modifier.focusGroup(),
+                onOpened = { id -> viewModel.clickedId(id) },
             )
         }
 
@@ -397,6 +419,7 @@ private fun ResultGroup(
                     items(g.collections, key = { "c${it.tmdbId}" }) { c ->
                         TextCard(c.name, "${c.inLibrary} of ${c.total} in the library") {
                             viewModel.opened("collection")
+                            viewModel.clicked { it.kind == "collection" && it.collectionId == c.tmdbId }
                             viewModel.navigationManager.navigateTo(Destination.JellytipCollection(c.tmdbId, c.name), "search collection OK")
                         }
                     }
@@ -415,6 +438,7 @@ private fun ResultGroup(
                     items(g.discover, key = { "d${it.key}" }) { t ->
                         PosterCard(t.posterUrl, listOfNotNull(t.title, t.year?.toString()).joinToString(" · ")) {
                             viewModel.opened("discover")
+                            viewModel.clicked { it.source == "discover" && it.tmdbId == t.tmdbId }
                             viewModel.navigationManager.navigateTo(Destination.JellytipDiscover(t), "search discover OK")
                         }
                     }
@@ -446,6 +470,7 @@ private fun PeopleRow(
                     }
                 PosterCard(url, "${p.name}" + if (p.filmCount > 0) " · ${p.filmCount}" else "") {
                     viewModel.opened("person")
+                    viewModel.clicked { it.personId == p.personId }
                     viewModel.navigationManager.navigateTo(Destination.MediaItem(p.personId, BaseItemKind.PERSON), "search person OK")
                 }
             }
@@ -637,6 +662,7 @@ private fun openResult(
     viewModel: JellytipSearchViewModel,
 ) {
     viewModel.opened("top ${r.kind}")
+    viewModel.clicked { it.key == r.key }
     val nav = viewModel.navigationManager
     when {
         r.kind == "person" && r.personId != null -> nav.navigateTo(Destination.MediaItem(r.personId, BaseItemKind.PERSON), "search top person")
