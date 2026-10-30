@@ -58,6 +58,8 @@ data class IptvQuality(
     val height: Int?,
     val fps: Double?,
     val audio: String?,
+    /** Server hint, e.g. "may buffer" (slow, or below real time but not yet confirmed). */
+    val hint: String? = null,
 ) {
     /** Tile chip: UHD / 1080 50fps / 1080 / 720 / SD; a slow channel is labelled by its resolution. Null = no chip. */
     val label: String?
@@ -91,7 +93,7 @@ data class IptvQuality(
             }
 
     /** Delivered below real time on recent checks: show "may buffer". */
-    val slow get() = bucket == "slow"
+    val slow get() = bucket == "slow" || hint?.contains("buffer", ignoreCase = true) == true
 }
 
 /** One guide programme; times are epoch seconds. */
@@ -233,8 +235,14 @@ object IptvParse {
             event = if (o.has("event") && !o.isNull("event") && o.opt("event") is Boolean) o.optBoolean("event") else null,
             guideNote = o.str("guideNote"),
             quality = quality(o.optJSONObject("quality")),
-            sport = if (o.has("sport") && !o.isNull("sport")) o.optBoolean("sport") else null,
-            alternates = alternates(o.optJSONObject("event")),
+            // Guide default list: `nowSport` says whether what is on now is sport
+            sport =
+                when {
+                    o.has("sport") && !o.isNull("sport") -> o.optBoolean("sport")
+                    o.has("nowSport") && !o.isNull("nowSport") -> o.optBoolean("nowSport")
+                    else -> null
+                },
+            alternates = alternates(eventGroup(o)),
         )
     }
 
@@ -245,8 +253,15 @@ object IptvParse {
             height = if (o.isNull("height")) null else o.optInt("height", 0).takeIf { it > 0 },
             fps = if (o.isNull("fps")) null else o.optDouble("fps").takeIf { !it.isNaN() && it > 0 },
             audio = o.str("audio"),
+            hint = o.str("hint"),
         )
     }
+
+    /**
+     * Same-event group: `eventGroup: {key, alternates}` (server as built). `event` on a channel is the PPV-feed boolean;
+     * an `event` object is accepted only for the draft contract.
+     */
+    private fun eventGroup(o: JSONObject): JSONObject? = o.optJSONObject("eventGroup") ?: o.optJSONObject("event")
 
     private fun alternates(event: JSONObject?): List<String> {
         val a = event?.optJSONArray("alternates") ?: return emptyList()
@@ -291,7 +306,7 @@ object IptvParse {
             val p = c.optJSONObject("now") ?: c.optJSONObject("programme") ?: c.optJSONObject("program") ?: continue
             val base = channel(chObj, resolve) ?: continue
             // Quality / event may sit on the item instead of the channel object
-            val event = c.optJSONObject("event") ?: chObj.optJSONObject("event")
+            val event = eventGroup(c) ?: eventGroup(chObj)
             val ch =
                 base.copy(
                     quality = base.quality ?: quality(c.optJSONObject("quality")),

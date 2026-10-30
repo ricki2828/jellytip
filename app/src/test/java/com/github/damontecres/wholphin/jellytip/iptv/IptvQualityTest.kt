@@ -31,6 +31,9 @@ class IptvQualityTest {
         assertNull(q("slow").label)
         assertTrue(q("slow", 1080).slow)
         assertFalse(q("fhd").slow)
+        // Server hint before the second check confirms slow
+        assertTrue(IptvQuality("fhd50", 1080, 50.0, null, "may buffer").slow)
+        assertEquals("1080 50fps", IptvQuality("fhd50", 1080, 50.0, null, "may buffer").label)
     }
 
     @Test
