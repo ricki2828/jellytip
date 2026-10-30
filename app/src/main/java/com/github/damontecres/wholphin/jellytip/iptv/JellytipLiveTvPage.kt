@@ -57,9 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
@@ -405,7 +403,9 @@ fun JellytipLiveTvPage(
         playback.setVolume(0f)
         onDispose { playback.detach("guide") }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playback.stop("app hidden (guide)") }
+    // No ON_STOP stop here: this is the nav entry's lifecycle, which also stops when the guide's scene is disposed after
+    // OK opened full screen, i.e. after the full page asked for the stream (30-Oct P1, stuck on "Tuning"). The app being
+    // hidden is handled by JellytipIptvPlayback's activity callback.
 
     // Only the rows on screen (and a few around) ask for programmes; re-asked when the window moves
     LaunchedEffect(state.channels) {

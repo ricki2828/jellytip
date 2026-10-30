@@ -47,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.Text
@@ -69,6 +70,7 @@ class JellytipLiveTvPlayerViewModel
 
 private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
+private const val IDLE_RETUNE_MS = 600L
 
 /**
  * An IPTV channel full screen. Up/Down zap through the guide tab it was opened from: the banner follows at once, the
@@ -106,8 +108,19 @@ fun JellytipLiveTvPlayerPage(
             playback.detach("full")
         }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playback.stop("app hidden (full screen)") }
+    // App hidden = JellytipIptvPlayback's activity callback stops the stream; no nav-entry ON_STOP stop here (it also
+    // fires on Back, while the guide is meant to keep this channel playing)
     LifecycleEventEffect(Lifecycle.Event.ON_START) { playback.play(current, "app shown (full screen)") }
+    // Never sit on "Tuning" with nothing asked for: if the stream is stopped while this page is showing (by anything),
+    // ask for the current channel again
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(playState is IptvPlayState.Idle) {
+        if (playState !is IptvPlayState.Idle) return@LaunchedEffect
+        delay(IDLE_RETUNE_MS)
+        if (playback.state.value !is IptvPlayState.Idle || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@LaunchedEffect
+        JellytipTrace.player("iptv", "full screen idle while shown: retune ${current.channelId}")
+        playback.play(current, "full screen retune after stop")
+    }
 
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
     // Zap: open the stream once the choice has settled

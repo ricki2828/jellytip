@@ -149,7 +149,7 @@ class JellytipIptvPlayback
                     val t = _state.value.target ?: return
                     JellytipTrace.player("iptv", "state=$playbackState ${t.channelId}")
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening) {
-                        _state.value = IptvPlayState.Playing(t)
+                        setState(IptvPlayState.Playing(t), "ready")
                     }
                 }
 
@@ -211,7 +211,10 @@ class JellytipIptvPlayback
             reason: String,
         ) {
             val s = _state.value
-            if (s.target == target && (s is IptvPlayState.Opening || s is IptvPlayState.Playing)) return
+            if (s.target == target && (s is IptvPlayState.Opening || s is IptvPlayState.Playing)) {
+                JellytipTrace.player("iptv", "play ${target.channelId} skipped: already ${describe(s)} ($reason)")
+                return
+            }
             renewed = false
             launchOpen(target, reason)
         }
@@ -221,7 +224,7 @@ class JellytipIptvPlayback
             reason: String,
         ) {
             job?.cancel()
-            _state.value = IptvPlayState.Opening(target)
+            setState(IptvPlayState.Opening(target), reason)
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} ($reason)")
             job =
                 scope.launch {
@@ -248,7 +251,7 @@ class JellytipIptvPlayback
                         is IptvPlayResult.Full -> {
                             stopPlayer()
                             JellytipTrace.player("iptv", "full ${target.channelId}: ${r.message}")
-                            _state.value = IptvPlayState.Full(target, r.message)
+                            setState(IptvPlayState.Full(target, r.message), "409")
                         }
 
                         is IptvPlayResult.Failed -> fail(target, r.message)
@@ -262,7 +265,7 @@ class JellytipIptvPlayback
         ) {
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
-            _state.value = IptvPlayState.Failed(target, message)
+            setState(IptvPlayState.Failed(target, message), "failed")
         }
 
         private fun stopPlayer() {
@@ -277,8 +280,27 @@ class JellytipIptvPlayback
             job?.cancel()
             if (_state.value !is IptvPlayState.Idle) JellytipTrace.player("iptv", "stop ($reason)")
             stopPlayer()
-            _state.value = IptvPlayState.Idle
+            setState(IptvPlayState.Idle, reason)
         }
+
+        /** Every state change goes through here, so `[player] iptv state` traces show the whole story. */
+        private fun setState(
+            next: IptvPlayState,
+            reason: String,
+        ) {
+            val prev = _state.value
+            _state.value = next
+            if (prev != next) JellytipTrace.player("iptv", "state ${describe(prev)} -> ${describe(next)} ($reason)")
+        }
+
+        private fun describe(s: IptvPlayState): String =
+            when (s) {
+                IptvPlayState.Idle -> "Idle"
+                is IptvPlayState.Opening -> "Opening(${s.target.channelId})"
+                is IptvPlayState.Playing -> "Playing(${s.target.channelId})"
+                is IptvPlayState.Full -> "Full(${s.target.channelId})"
+                is IptvPlayState.Failed -> "Failed(${s.target.channelId})"
+            }
 
         /** Save [target]'s resume point (recordings, films, episodes) from where the player is now. */
         fun saveProgress(target: IptvTarget) {
@@ -297,7 +319,9 @@ class JellytipIptvPlayback
         /** A Live TV screen is showing (guide, full screen). */
         fun attach(owner: String) {
             owners += owner
+            if (releaseJob?.isActive == true) JellytipTrace.player("iptv", "release cancelled by $owner")
             releaseJob?.cancel()
+            JellytipTrace.player("iptv", "attach $owner owners=$owners ${describe(_state.value)}")
         }
 
         /**
@@ -306,6 +330,7 @@ class JellytipIptvPlayback
          */
         fun detach(owner: String) {
             owners -= owner
+            JellytipTrace.player("iptv", "detach $owner owners=$owners ${describe(_state.value)}")
             if (owners.isNotEmpty()) return
             releaseJob?.cancel()
             releaseJob =
@@ -318,6 +343,7 @@ class JellytipIptvPlayback
                             it.release()
                         }
                         player = null
+                        JellytipTrace.player("iptv", "player released")
                     }
                 }
         }
