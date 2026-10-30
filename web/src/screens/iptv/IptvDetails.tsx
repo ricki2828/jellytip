@@ -1,7 +1,8 @@
 // Details for an IPTV film or series (#/iptv/item?id=<pid>:m|s:<sid>): TMDB backdrop, title, facts, "via IPTV", Play /
 // Resume through the IPTV player; series get season chips and an episode list.
 import { useEffect, useState } from "react";
-import { errorText, vodItem } from "../../api/iptv";
+import { errorText, vodFavourite, vodItem } from "../../api/iptv";
+import { dropPersonalCaches } from "../../api/companion";
 import { Backdrop } from "../../components/Backdrop";
 import { IptvDot } from "../../components/IptvTile";
 import { tmdbSized } from "../../components/FranchiseRow";
@@ -25,6 +26,9 @@ export function IptvDetails({ id }: { id: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [season, setSeason] = useState<number | null>(null);
   const phone = useIsPhone();
+  // My list: null = the server does not offer it (no button)
+  const [fav, setFav] = useState<boolean | null>(null);
+  const [favBusy, setFavBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +38,7 @@ export function IptvDetails({ id }: { id: string }) {
       if (!alive) return;
       if (a.status === 200 && a.data) {
         setD(a.data);
+        setFav(a.data.favourite ?? null);
         // Open on the season of the first unfinished episode
         const s = a.data.seasons?.find((x) => x.episodes.some((e) => !e.progress?.played)) ?? a.data.seasons?.[0];
         setSeason(s?.season ?? null);
@@ -105,6 +110,26 @@ export function IptvDetails({ id }: { id: string }) {
                   </button>
                 )}
               </>
+            )}
+            {fav !== null && (
+              <button
+                className={`btn${fav ? " on" : ""}`}
+                data-nav
+                disabled={favBusy}
+                aria-pressed={fav}
+                onClick={async () => {
+                  setFavBusy(true);
+                  const a = await vodFavourite(d.id, !fav);
+                  setFavBusy(false);
+                  if (a.status === 404) return setFav(null);
+                  if (a.status === 200 || a.status === 201 || a.status === 204) {
+                    setFav(typeof a.data?.favourite === "boolean" ? a.data.favourite : !fav);
+                    dropPersonalCaches(); // Home's My list rows change
+                  }
+                }}
+              >
+                {fav ? "✓ In my list" : "+ My list"}
+              </button>
             )}
           </div>
         </div>

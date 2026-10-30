@@ -275,6 +275,9 @@ export async function vodItem(id: string): Promise<Answer<VodDetail>> {
   return d ? { status: 200, data: d } : { status: 502, data: { error: "The server sent something unexpected." } as VodDetail & IptvError };
 }
 
+/** Add or remove an IPTV film / series from My list; the answer says where it stands, status 404 = the server has no My list. */
+export const vodFavourite = (id: string, on: boolean) => iptvPost<{ favourite?: boolean }>(`v1/iptv/vod/${encodeURIComponent(id)}/favourite`, { on });
+
 /** Channels with something on now (live sport first); [] when none or IPTV isn't set up. */
 export async function onNow(limit = 40, sportOnly = false): Promise<OnNow[]> {
   const a = await iptvGet<unknown>(`v1/iptv/live/onnow?limit=${limit}${sportOnly ? "&sport=1" : ""}`);

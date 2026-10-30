@@ -26,6 +26,8 @@ interface Props {
   onTitle?: () => void;
   /** Person rows: a portrait tile first (same height as the row's tiles), opening the filmography. */
   person?: { id: string; name: string; imageTag?: string | null; count?: number } | null;
+  /** More tiles after the items (My list: IPTV titles beside library ones). */
+  extra?: React.ReactNode;
 }
 
 /** Calls `load` once the element nears the viewport; null while waiting, [] when it failed or came back empty. */
@@ -72,7 +74,7 @@ export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => vo
   );
 }
 
-export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person }: Props) {
+export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person, extra }: Props) {
   const ref = useRef<HTMLElement>(null);
   const lazy = useLazyItems(ref, items, load);
   // "Not interested" takes a title out of the row at once (the server drops it from tomorrow's rows)
@@ -88,7 +90,7 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
   const posterW = phone ? PHONE_POSTER_W : POSTER_W;
   const cardH = Math.round(((phone ? PHONE_CARD_W : CARD_W) * 9) / 16);
 
-  if (loaded && loaded.length === 0) return null;
+  if (loaded && loaded.length === 0 && !extra) return null;
   return (
     <section className={poster ? "row poster-row" : "row"} ref={ref}>
       <RowTitle title={title} onTitle={onTitle} />
@@ -121,6 +123,7 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
           : Array.from({ length: 6 }, (_, i) => (
               <div key={i} className={poster ? "poster card-skeleton" : "card card-skeleton"} style={poster ? { width: phone ? PHONE_POSTER_W : POSTER_W } : undefined} />
             ))}
+        {extra}
       </div>
     </section>
   );

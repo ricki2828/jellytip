@@ -9,6 +9,16 @@ import { IptvCard, IptvPoster } from "./IptvTile";
 import { useIsPhone } from "../lib/device";
 import type { VodItem } from "../lib/iptvVod";
 
+/** IPTV titles as tiles in a row's scroller (My list: beside the library items). */
+function IptvTiles({ items, poster }: { items: VodItem[]; poster: boolean }) {
+  const phone = useIsPhone();
+  return (
+    <>
+      {items.map((it) => (poster ? <IptvPoster key={it.id} item={it} width={phone ? 112 : 150} /> : <IptvCard key={it.id} item={it} />))}
+    </>
+  );
+}
+
 /** A source "iptv" row: the person's IPTV titles, already in the manifest (no Jellyfin call). */
 function IptvRow({ title, items, poster, autoFocusFirst }: { title: string; items: VodItem[]; poster: boolean; autoFocusFirst?: boolean }) {
   const phone = useIsPhone();
@@ -72,6 +82,8 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
   if (r.layout === "franchise" && r.collection)
     return <FranchiseRow key={r.id} title={r.title} collection={r.collection} load={load} untitled={untitled} {...opts} />;
   const person = r.person;
+  // My list and other mixed rows: library items first, then the IPTV titles
+  const extra = r.iptvItems.length ? <IptvTiles items={r.iptvItems} poster={r.layout === "poster"} /> : undefined;
   return (
     <Row
       key={r.id}
@@ -81,6 +93,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
       untitled={untitled}
       onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : undefined}
       person={person ? { ...person, count: r.itemIds.length } : null}
+      extra={extra}
       {...opts}
     />
   );

@@ -51,3 +51,10 @@ test("badge formats: server tech first, else the quality tokens", () => {
   assert.deepEqual(vodTech({ quality: ["4k", "hdr"] }), ["4K", "HDR"]);
   assert.deepEqual(vodTech({ quality: ["1080p"] }), []);
 });
+
+import { parseVodItem as pvi } from "../src/lib/iptvVod.ts";
+test("favourite flag is read only when the server sends a boolean", () => {
+  assert.equal(pvi({ id: "1:m:2", title: "A", favourite: true })?.favourite, true);
+  assert.equal(pvi({ id: "1:m:2", title: "A" })?.favourite, null);
+  assert.equal(pvi({ id: "1:m:2", title: "A", favourite: "yes" })?.favourite, null);
+});

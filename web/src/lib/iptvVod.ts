@@ -26,6 +26,8 @@ export interface VodItem {
   providerName?: string;
   category?: string | null;
   progress?: VodProgress | null;
+  /** On the person's My list; null/absent when the server doesn't say (no toggle then). */
+  favourite?: boolean | null;
 }
 
 export interface VodEpisode {
@@ -98,6 +100,7 @@ export function parseVodItem(raw: unknown): VodItem | null {
     providerName: str(r.providerName) ?? undefined,
     category: str(r.category),
     progress: progress(r.progress),
+    favourite: typeof r.favourite === "boolean" ? r.favourite : null,
   };
 }
 
