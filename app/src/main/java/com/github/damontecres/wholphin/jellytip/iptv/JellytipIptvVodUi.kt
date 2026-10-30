@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -244,16 +245,30 @@ fun JellytipIptvDetailsPage(
                     fontSize = 13.sp,
                 )
             }
-            Text(
-                text = item?.title ?: title,
-                color = JellytipPalette.Vanilla,
-                fontFamily = JellytipFontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 30.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.width(560.dp),
-            )
+            // TMDB title logo like the library details page; the text title when there is none (or it fails)
+            var logoFailed by remember(d?.logo) { mutableStateOf(false) }
+            val logo = d?.logo
+            if (logo != null && !logoFailed) {
+                AsyncImage(
+                    model = logo,
+                    contentDescription = item?.title ?: title,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.BottomStart,
+                    onError = { logoFailed = true },
+                    modifier = Modifier.width(380.dp).height(120.dp),
+                )
+            } else {
+                Text(
+                    text = item?.title ?: title,
+                    color = JellytipPalette.Vanilla,
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 30.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(560.dp),
+                )
+            }
             if (d == null || item == null) {
                 Text(
                     text = if (failed) "This title isn't available right now." else "Loading…",
@@ -273,7 +288,7 @@ fun JellytipIptvDetailsPage(
                         .takeIf { it.isNotEmpty() }
                         ?: item.quality.joinToString(" ") { it.uppercase(Locale.ROOT) }.takeIf { it.isNotEmpty() },
                     item.rating?.let { String.format(Locale.US, "TMDB %.1f", it) },
-                    d.genre,
+                    d.genres.take(3).joinToString(", ").takeIf { it.isNotEmpty() } ?: d.genre,
                 ).joinToString("  ·  ")
             Text(meta, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1)
             if (item.overview.isNotBlank()) {
@@ -313,11 +328,16 @@ fun JellytipIptvDetailsPage(
                             },
                         ) { Text("Play both") }
                     }
+                    TrailerButton(d.trailer, item.title, viewModel)
                     MyListButton(item, viewModel)
                 }
             } else {
-                MyListButton(item, viewModel)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TrailerButton(d.trailer, item.title, viewModel)
+                    MyListButton(item, viewModel)
+                }
             }
+            if (d.people.isNotEmpty()) CastRow(d.people)
             if (!item.isSeries) {
                 Unit // films: the buttons above are all
             } else if (d.seasons.isEmpty()) {
@@ -383,6 +403,70 @@ fun JellytipIptvDetailsPage(
         }
     }
 }
+
+/** Trailer, played like the library details page's remote trailers (TrailerService); nothing when there is none. */
+@Composable
+private fun TrailerButton(
+    url: String?,
+    title: String,
+    viewModel: JellytipIptvVodViewModel,
+) {
+    url ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Button(
+        onClick = {
+            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+            com.github.damontecres.wholphin.services.TrailerService.onClick(
+                context,
+                com.github.damontecres.wholphin.data.model.RemoteTrailer("$title trailer", url, null),
+            ) { viewModel.navigationManager.navigateTo(it, "iptv details trailer") }
+        },
+    ) { Text("Trailer") }
+}
+
+/** The TMDB cast with photos (initials when there is none), name and character; focusable so the row scrolls. */
+@Composable
+private fun CastRow(people: List<IptvCastMember>) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
+        modifier = Modifier.focusGroup().focusRestorer(),
+    ) {
+        items(people.take(MAX_CAST).size) { i ->
+            val p = people[i]
+            Surface(
+                onClick = {},
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                colors =
+                    ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        focusedContainerColor = Color.White.copy(alpha = 0.12f),
+                        contentColor = JellytipPalette.Vanilla,
+                        focusedContentColor = Color.White,
+                    ),
+                modifier = Modifier.width(92.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(6.dp)) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                        var failed by remember(p.profile) { mutableStateOf(false) }
+                        if (p.profile != null && !failed) {
+                            AsyncImage(model = p.profile, contentDescription = p.name, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Text(p.name.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString(""), fontFamily = JellytipFontFamily, fontSize = 16.sp)
+                        }
+                    }
+                    Text(p.name, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                    p.character?.let {
+                        Text(it, fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = JellytipPalette.Vanilla.copy(alpha = 0.6f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val MAX_CAST = 12
 
 /**
  * My list toggle for an IPTV title (plan "My list"), next to Play like the library favourite. Flips at once; goes

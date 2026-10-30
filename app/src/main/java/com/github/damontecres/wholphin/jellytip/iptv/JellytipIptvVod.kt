@@ -72,8 +72,21 @@ data class IptvVodDetail(
     val runtimeMin: Int?,
     val genre: String?,
     val director: String?,
+    /** Cast as plain text (older answers); [people] when the server sends the TMDB cast. */
     val cast: String?,
     val seasons: List<IptvSeason>,
+    /** TMDB title logo (absolute, or the companion's signed proxy resolved); null = text title. */
+    val logo: String? = null,
+    val people: List<IptvCastMember> = emptyList(),
+    val genres: List<String> = emptyList(),
+    /** Trailer link (YouTube or other), resolved; null = none. */
+    val trailer: String? = null,
+)
+
+data class IptvCastMember(
+    val name: String,
+    val character: String?,
+    val profile: String?,
 )
 
 object IptvVodParse {
@@ -93,6 +106,18 @@ object IptvVodParse {
             raw.startsWith("https://") || raw.startsWith("http://") -> raw
             Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(raw) || raw.startsWith("//") -> null
             else -> "$base/${raw.trimStart('/')}"
+        }
+
+    /** A trailer link: absolute URLs as they are, a bare YouTube key as a watch URL, companion paths resolved. */
+    fun trailer(
+        base: String,
+        raw: String?,
+    ): String? =
+        when {
+            raw.isNullOrBlank() -> null
+            raw.startsWith("https://") || raw.startsWith("http://") -> raw
+            Regex("^[A-Za-z0-9_-]{11}$").matches(raw) -> "https://www.youtube.com/watch?v=$raw"
+            else -> image(base, raw)
         }
 
     fun progress(o: JSONObject?): IptvProgress? {
@@ -159,13 +184,29 @@ object IptvVodParse {
                     )
                 }
             }.orEmpty()
+        val castArray = o.optJSONArray("cast")
+        val people =
+            castArray?.let { a ->
+                (0 until a.length()).mapNotNull { i ->
+                    val c = a.optJSONObject(i) ?: return@mapNotNull null
+                    IptvCastMember(c.str("name") ?: return@mapNotNull null, c.str("character"), image(base, c.str("profile")))
+                }
+            }.orEmpty()
+        val genres =
+            o.optJSONArray("genres")?.let { a ->
+                (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.str("name") ?: a.optString(i).takeIf { it.isNotBlank() && !it.startsWith("{") } }
+            }.orEmpty()
         return IptvVodDetail(
             item = item,
             runtimeMin = o.optInt("runtime", 0).takeIf { it > 0 },
             genre = o.str("genre"),
             director = o.str("director"),
-            cast = o.str("cast"),
+            cast = if (castArray == null) o.str("cast") else null,
             seasons = seasons,
+            logo = image(base, o.str("logo")),
+            people = people,
+            genres = genres,
+            trailer = trailer(base, o.str("trailer")),
         )
     }
 }
