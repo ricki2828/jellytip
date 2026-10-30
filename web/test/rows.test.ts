@@ -44,12 +44,12 @@ test("trending row: ranks from the server, order as fallback, missing slotted in
       iptvItems: [{ id: "3:m:9", title: "Léon", rank: 2 }],
       order: ["bbbb2222", "aaaa1111", "3:m:9"],
       rank: { "AAAA-1111": 4, bbbb2222: 1 },
-      missing: [{ tmdbId: 5, title: "Gone", poster: "https://x/p.jpg", rank: 3 }, { title: "no id" }],
+      missing: [{ tmdbId: 5, title: "Gone", poster: "https://x/p.jpg", rank: 3 }, { tmdbId: null, title: "Unresolved", rank: 9 }, { tmdbId: 6 }],
     },
   ])![0];
-  assert.deepEqual(row.missing.map((m) => m.tmdbId), [5]);
+  assert.deepEqual(row.missing.map((m) => m.tmdbId), [5, null]);
   const e = trendEntries(row, ["aaaa-1111", "bbbb2222"]);
-  assert.deepEqual(e.map((x) => [x.kind, x.rank]), [["lib", 1], ["iptv", 2], ["missing", 3], ["lib", 4]]);
+  assert.deepEqual(e.map((x) => [x.kind, x.rank]), [["lib", 1], ["iptv", 2], ["missing", 3], ["lib", 4], ["missing", 9]]);
   const bare = parseRows([{ id: "trending-top10-series", title: "T", itemIds: ["a", "b"], order: ["b", "a"] }])![0];
   assert.deepEqual(trendEntries(bare, ["a", "b"]).map((x) => (x.kind === "lib" ? x.id : "")), ["b", "a"]);
 });

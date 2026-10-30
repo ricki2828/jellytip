@@ -36,7 +36,7 @@ export function TrendingRow({ row }: { row: ServerRow }) {
       <RowTitle title={row.title} />
       <div className="row-scroll">
         {entries.map((e) => (
-          <div key={e.kind === "lib" ? e.id : e.kind === "iptv" ? e.item.id : `m${e.title.tmdbId}`} className="top10-entry">
+          <div key={e.kind === "lib" ? e.id : e.kind === "iptv" ? e.item.id : `m${e.title.tmdbId ?? e.title.title}`} className="top10-entry">
             <span className="top10-num" aria-hidden>
               {e.rank}
             </span>
@@ -55,7 +55,7 @@ export function TrendingRow({ row }: { row: ServerRow }) {
                 faded
                 tag="Not available"
                 label={`${e.rank}. ${e.title.title}, not available`}
-                onOpen={admin ? () => setGetIt({ title: e.title.title, year: e.title.year, tmdbId: e.title.tmdbId, mediaType: row.mediaType, posterUrl: e.title.poster }) : undefined}
+                onOpen={admin && e.title.tmdbId != null ? () => setGetIt({ title: e.title.title, year: e.title.year, tmdbId: e.title.tmdbId, mediaType: row.mediaType, posterUrl: e.title.poster }) : undefined}
               />
             )}
           </div>

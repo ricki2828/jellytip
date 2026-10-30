@@ -53,7 +53,8 @@ export interface ServerRow {
 }
 
 export interface MissingTitle {
-  tmdbId: number;
+  /** null: the server couldn't resolve it, so there is nothing for Get it to open. */
+  tmdbId: number | null;
   title: string;
   year?: number | null;
   poster?: string | null;
@@ -96,8 +97,8 @@ export function parseMissing(raw: unknown): MissingTitle[] {
   if (!Array.isArray(raw)) return [];
   const out: MissingTitle[] = [];
   for (const m of raw as Record<string, unknown>[]) {
-    if (!m || typeof m.tmdbId !== "number" || typeof m.title !== "string" || !m.title) continue;
-    out.push({ tmdbId: m.tmdbId, title: m.title, year: typeof m.year === "number" ? m.year : null, poster: typeof m.poster === "string" ? m.poster : typeof m.posterUrl === "string" ? m.posterUrl : null, rank: typeof m.rank === "number" ? m.rank : null });
+    if (!m || typeof m.title !== "string" || !m.title) continue;
+    out.push({ tmdbId: typeof m.tmdbId === "number" ? m.tmdbId : null, title: m.title, year: typeof m.year === "number" ? m.year : null, poster: typeof m.poster === "string" ? m.poster : typeof m.posterUrl === "string" ? m.posterUrl : null, rank: typeof m.rank === "number" ? m.rank : null });
   }
   return out;
 }
