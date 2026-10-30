@@ -1,8 +1,9 @@
 // Upcoming sport: a tile, the overlay it opens (matchup, time, channels best first with quality, Record, Watch when
 // live) and the Home row. The page (screens/iptv/UpcomingPage) reuses the tile and overlay.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addRecording, errorText, logoSrc } from "../api/iptv";
 import { refreshRecs } from "../api/recStore";
+import { addReminder, refreshReminders, removeReminder, useReminders } from "../api/reminderStore";
 import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
@@ -49,6 +50,17 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
   const [recorded, setRecorded] = useState(e.recordingId != null);
   const live = isLive(e);
   const best = e.channels[0];
+  const { items: rems, available } = useReminders();
+  const [busyRem, setBusyRem] = useState(false);
+  const remId = rems?.find((r) => r.event.key === e.key)?.id ?? e.reminderId ?? null;
+  useEffect(() => void refreshReminders(), []);
+  const toggleRemind = async () => {
+    setBusyRem(true);
+    const err = remId != null ? await removeReminder(remId) : await addReminder(e);
+    setBusyRem(false);
+    setMsg(err ?? (remId != null ? "Reminder removed." : "We'll remind you before it starts."));
+    void refreshUpcoming(true);
+  };
   const when = `${timeChip(e)} · ${new Date(e.start * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}–${new Date(e.stop * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
   const record = async () => {
     const a = await addRecording(best.id, e.start);
@@ -82,6 +94,11 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
           {e.recordable && !recorded && e.stop > Date.now() / 1000 && (
             <button className={`btn${live ? "" : " primary"}`} data-nav data-autofocus={!live || undefined} onClick={() => void record()}>
               Record
+            </button>
+          )}
+          {available && !live && e.start > Date.now() / 1000 && (
+            <button className="btn" data-nav disabled={busyRem} aria-pressed={remId != null} onClick={() => void toggleRemind()}>
+              {remId != null ? "Reminder set ✓" : "Remind me"}
             </button>
           )}
           {recorded && (

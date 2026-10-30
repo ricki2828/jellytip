@@ -25,6 +25,8 @@ export interface UpEvent {
   art: SportArt | null;
   recordable: boolean;
   recordingId: string | number | null;
+  /** The person's reminder for this event, when they have one. */
+  reminderId?: string | number | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -69,6 +71,7 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       art: parseArt(e.art),
       recordable: e.recordable !== false,
       recordingId: typeof e.recordingId === "string" || typeof e.recordingId === "number" ? e.recordingId : null,
+      reminderId: typeof e.reminderId === "string" || typeof e.reminderId === "number" ? e.reminderId : null,
     });
   }
   return out;

@@ -142,3 +142,35 @@ test("server field: scheme added, tails and spaces stripped", () => {
   assert.equal(normaliseServer("hello"), null);
   assert.equal(normaliseWebUrl("p.example/a.m3u"), "http://p.example/a.m3u");
 });
+
+import { countdown, dueNudges, parseReminders, stateOf } from "../src/lib/reminders.ts";
+
+const rem = (id: number, start: number, stop: number) => ({ id, key: `k${id}`, title: `Match ${id}`, league: "NRL", start, stop, state: "upcoming", channel: { id: "1:c:1", name: "Sport 1" }, alternateChannels: [] });
+
+test("reminders: parse, order, drop unusable", () => {
+  const r = parseReminders({ items: [rem(2, 2000, 3000), rem(1, 1000, 2000), { id: 3, title: "no channel", start: 1, stop: 2 }, { title: "no id" }] });
+  assert.deepEqual(r.map((x) => x.id), [1, 2]);
+  assert.equal(r[0].event.reminderId, 1);
+  assert.deepEqual(parseReminders(null), []);
+});
+
+test("reminders: state and countdown follow the clock", () => {
+  const e = { start: 10_000, stop: 17_000 };
+  assert.equal(stateOf(e, 1000), "upcoming");
+  assert.equal(stateOf(e, 10_000 - 600), "soon");
+  assert.equal(stateOf(e, 10_000), "live");
+  assert.equal(stateOf(e, 17_000), "ended");
+  assert.deepEqual(countdown(e, 10_000 - 7800), { text: "in 2h 10m", tone: "time" });
+  assert.deepEqual(countdown(e, 10_000 - 300), { text: "Starting soon", tone: "soon" });
+  assert.deepEqual(countdown(e, 11_000), { text: "LIVE", tone: "rec" });
+});
+
+test("reminders: nudge once at soon and once at kick-off", () => {
+  const items = parseReminders({ items: [rem(1, 10_000, 17_000)] });
+  const seen = new Set<string>();
+  assert.equal(dueNudges(items, seen, 1000).length, 0);
+  assert.deepEqual(dueNudges(items, seen, 9500).map((n) => n.at), ["soon"]);
+  assert.equal(dueNudges(items, seen, 9600).length, 0);
+  assert.deepEqual(dueNudges(items, seen, 10_100).map((n) => n.at), ["live"]);
+  assert.equal(dueNudges(items, seen, 10_200).length, 0);
+});

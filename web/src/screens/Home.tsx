@@ -10,6 +10,7 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
+import { RemindersRow } from "../components/Reminders";
 import { UpcomingRow } from "../components/Upcoming";
 import { usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
@@ -184,6 +185,7 @@ export function Home() {
       <HomeHero focused={focused} slides={slides} engaged={engaged} />
       <div className="rows">
         {continueItems && continueItems.length > 0 && <Row title="Continue Watching" items={continueItems} onFocusItem={onFocusItem} autoFocusFirst />}
+        <RemindersRow />
         {/* Recordings: ready, recording now and scheduled, right after Continue Watching */}
         <RecordingsRow />
         {/* People with an IPTV provider: live sport right now, only when there are at least two */}

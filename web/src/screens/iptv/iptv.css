@@ -997,3 +997,24 @@
   flex: 1;
   min-width: 0;
 }
+.rec-chip.soon {
+  background: #d98a1c;
+  color: #1a1100;
+}
+.remind-toast {
+  position: fixed;
+  top: calc(var(--safe-t, 0px) + 12px);
+  left: 50%;
+  z-index: 60;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100% - 24px));
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #1c1c1c;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  font-weight: 600;
+}
