@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.jellytip.cards
 
-import androidx.compose.runtime.mutableStateMapOf
 import java.util.UUID
 
 /**
@@ -9,18 +8,14 @@ import java.util.UUID
  * drawn as they are. Snapshot state, so tiles already on screen pick up a late answer.
  */
 object JellytipThumbTitles {
-    private val untitled = mutableStateMapOf<UUID, Boolean>()
+    private val untitled = com.github.damontecres.wholphin.jellytip.JellytipKeyedState<UUID, Boolean>()
 
     /** Record the companion's answer for [itemId]: false = textless, true = titled, null = unknown (forget). */
     fun set(
         itemId: UUID,
         titled: Boolean?,
     ) {
-        if (titled == false) {
-            if (untitled[itemId] != true) com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { untitled[itemId] = true }
-        } else if (untitled.containsKey(itemId)) {
-            com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { untitled.remove(itemId) }
-        }
+        untitled[itemId] = if (titled == false) true else null
     }
 
     fun markUntitled(ids: Collection<UUID>) {

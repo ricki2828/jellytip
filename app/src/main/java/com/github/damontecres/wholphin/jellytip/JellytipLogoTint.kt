@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.jellytip
 
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -39,21 +38,21 @@ object JellytipLogoTint {
     }
 
     /** true = flat silhouette, false = duotone; decided once per logo URL after it has decoded. */
-    private val flat = mutableStateMapOf<String, Boolean>()
+    private val flat = JellytipKeyedState<String, Boolean>()
 
     /**
      * Per-item treatment chosen by the companion (`logoStyle` on /backdrops, `logoStyles` maps in specials/rows):
      * "white" = the white treatment below, "mono" = greyscale with the shading kept, "original" = untouched.
      * Items it has not answered for keep the white treatment.
      */
-    private val styles = mutableStateMapOf<UUID, String>()
+    private val styles = JellytipKeyedState<UUID, String>()
 
     fun setStyle(
         itemId: UUID,
         style: String?,
     ) {
         when (style) {
-            STYLE_WHITE, STYLE_MONO, STYLE_ORIGINAL -> if (styles[itemId] != style) jellytipGlobalWrite { styles[itemId] = style }
+            STYLE_WHITE, STYLE_MONO, STYLE_ORIGINAL -> styles[itemId] = style
             else -> {}
         }
     }
@@ -109,7 +108,7 @@ object JellytipLogoTint {
         url: String?,
         image: Image,
     ) {
-        if (url == null || !JellytipHomeTokens.WHITE_LOGO || flat.containsKey(url)) return
+        if (url == null || !JellytipHomeTokens.WHITE_LOGO || flat.has(url)) return
         val value: Boolean =
             try {
                 val w = 64
@@ -135,6 +134,6 @@ object JellytipLogoTint {
             } catch (e: Exception) {
                 true
             }
-        jellytipGlobalWrite { flat[url] = value }
+        flat[url] = value
     }
 }

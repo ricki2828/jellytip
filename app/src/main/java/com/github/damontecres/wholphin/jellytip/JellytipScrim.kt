@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.jellytip
 
-import androidx.compose.runtime.mutableStateMapOf
 import coil3.Image
 import coil3.toBitmap
 import kotlin.math.sqrt
@@ -11,7 +10,7 @@ import kotlin.math.sqrt
  * (bottom-left 45% x 45%). Bright pastel or busy art (e.g. Moonbeam City) gets a much denser, wider vignette.
  */
 object JellytipScrim {
-    private val strengths = mutableStateMapOf<String, Float>()
+    private val strengths = JellytipKeyedState<String, Float>()
 
     fun strength(url: String?): Float = url?.let { strengths[it] } ?: 0f
 
@@ -35,7 +34,7 @@ object JellytipScrim {
         url: String?,
         image: Image,
     ) {
-        if (url == null || strengths.containsKey(url)) return
+        if (url == null || strengths.has(url)) return
         val value: Float =
             try {
                 val w = 64
@@ -58,6 +57,6 @@ object JellytipScrim {
             } catch (e: Exception) {
                 0f
             }
-        jellytipGlobalWrite { strengths[url] = value }
+        strengths[url] = value
     }
 }

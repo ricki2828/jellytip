@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.jellytip.cards
 
-import androidx.compose.runtime.mutableStateMapOf
 import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,7 +14,7 @@ import java.util.UUID
  * Nothing here asks the server: it only keeps what payloads already carried.
  */
 object JellytipTech {
-    private val techs = mutableStateMapOf<UUID, Set<String>>()
+    private val techs = com.github.damontecres.wholphin.jellytip.JellytipKeyedState<UUID, Set<String>>()
 
     fun set(
         itemId: UUID,
@@ -29,8 +28,8 @@ object JellytipTech {
         itemId: UUID,
         tags: List<String>,
     ) {
-        val set = tags.flatMap(::normalize).toSet()
-        if (techs[itemId] != set) com.github.damontecres.wholphin.jellytip.jellytipGlobalWrite { techs[itemId] = set }
+        // No badges = nothing stored: most /backdrops answers carry an empty list and must not write anything
+        techs[itemId] = tags.flatMap(::normalize).toSet().takeIf { it.isNotEmpty() }
     }
 
     /** A `{"<itemId>": [...]}` object from a payload (ids with or without dashes). */
