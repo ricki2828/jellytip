@@ -180,6 +180,25 @@ class JellytipIptvService
         }
 
         @Volatile
+        private var upcomingCache: Pair<Long, List<IptvUpcoming>>? = null
+
+        /** Last upcoming-sport answer if younger than 10 minutes (Home draws its row on the first frame). */
+        fun peekUpcoming(): List<IptvUpcoming>? = upcomingCache?.takeIf { System.currentTimeMillis() - it.first < UPCOMING_TTL_MS }?.second
+
+        /** Upcoming sport (next [days] days), server order; null = route missing (older server) or unreachable. */
+        suspend fun upcoming(
+            days: Int = 3,
+            limit: Int = 60,
+        ): List<IptvUpcoming>? {
+            val b = base()
+            val (code, body) = get("v1/iptv/sport/upcoming?days=$days&limit=$limit") ?: return null
+            if (code != 200) return null
+            val list = runCatching { IptvParse.upcoming(body) { resolve(b, it) } }.getOrNull() ?: return null
+            upcomingCache = System.currentTimeMillis() to list
+            return list
+        }
+
+        @Volatile
         private var recordingsCache: List<IptvRecording>? = null
 
         /** True once a recordings answer had any live recording (scheduled, recording, done): sidebar "Recordings". */
@@ -237,5 +256,6 @@ class JellytipIptvService
             private const val EPG_BATCH = 300
             private const val LIVE_CHECK_TTL_MS = 10 * 60_000L
             private const val ON_NOW_TTL_MS = 2 * 60_000L
+            private const val UPCOMING_TTL_MS = 10 * 60_000L
         }
     }

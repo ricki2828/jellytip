@@ -42,6 +42,13 @@ sealed interface JellytipHomeEntry {
         override val key get() = "recordings"
     }
 
+    /** "Coming up in sport" (Home, after live sport). */
+    data class UpcomingSport(
+        val items: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>,
+    ) : JellytipHomeEntry {
+        override val key get() = "upcoming-sport"
+    }
+
     /** A server-built row (rows=1 manifest). */
     data class Server(
         val row: JellytipServerRow,
@@ -70,12 +77,14 @@ fun jellytipHomeEntries(
     hiddenRows: Set<Int> = emptySet(),
     liveSport: List<com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow>? = null,
     recordings: List<com.github.damontecres.wholphin.jellytip.iptv.IptvRecording>? = null,
+    upcoming: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>? = null,
 ): List<JellytipHomeEntry> {
     val base = baseEntries(rows, specials, leadingRows, serverRows, hiddenRows)
     val extra =
         listOfNotNull(
             recordings?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.Recordings(it) },
             liveSport?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.LiveSport(it) },
+            upcoming?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.UpcomingSport(it) },
         )
     if (extra.isEmpty()) return base
     // Right after the leading Continue Watching / Next Up block

@@ -203,6 +203,27 @@ data class IptvOnNow(
     val alternates: List<IptvChannel> = emptyList(),
 )
 
+/**
+ * One upcoming sport event (`GET /v1/iptv/sport/upcoming`, plan "Upcoming sport"): the best channel and the others
+ * showing it, whether it matches a favourite team/league, and whether it can be (or already is) recorded.
+ */
+data class IptvUpcoming(
+    val key: String,
+    val title: String,
+    val league: String?,
+    /** Matches a favourite team or league (★, sorted first by the server). */
+    val favourite: Boolean,
+    val start: Long,
+    val stop: Long,
+    val kind: String?,
+    val channel: IptvChannel,
+    val alternateChannels: List<IptvChannel>,
+    val recordable: Boolean,
+    val recordingId: String?,
+) {
+    fun isLive(now: Long) = now in start until stop
+}
+
 /** What a `/play` call came back with. */
 sealed interface IptvPlayResult {
     data class Ok(
@@ -392,6 +413,42 @@ object IptvParse {
         id: String,
         main: IptvChannel,
     ): IptvChannel = IptvChannel(id, id.substringBefore(':'), null, "${main.name} (alt)", null, main.group, null, 0, false)
+
+    /** `{items: [...]}` (or `events`, or a bare array); entries without a channel or times are dropped. Server order kept. */
+    fun upcoming(
+        json: String,
+        resolve: (String) -> String?,
+    ): List<IptvUpcoming> {
+        val t = json.trimStart()
+        val a =
+            if (t.startsWith("[")) {
+                JSONArray(json)
+            } else {
+                JSONObject(json).let { it.optJSONArray("items") ?: it.optJSONArray("events") ?: JSONArray() }
+            }
+        return (0 until a.length()).mapNotNull { i ->
+            val o = a.optJSONObject(i) ?: return@mapNotNull null
+            val ch = o.optJSONObject("channel")?.let { channel(it, resolve) } ?: return@mapNotNull null
+            val start = o.longOrNull("start") ?: return@mapNotNull null
+            val stop = o.longOrNull("stop") ?: (start + 2 * 3600)
+            val match = o.optJSONObject("match")
+            val alts =
+                o.optJSONArray("alternateChannels")?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let { c -> channel(c, resolve) } } }.orEmpty()
+            IptvUpcoming(
+                key = o.str("key") ?: "${ch.id}@$start",
+                title = o.str("title") ?: return@mapNotNull null,
+                league = o.str("league") ?: match?.str("league"),
+                favourite = match != null && (match.str("team") != null || match.str("league") != null),
+                start = start,
+                stop = stop,
+                kind = o.str("kind"),
+                channel = ch,
+                alternateChannels = alts.filter { it.id != ch.id },
+                recordable = o.optBoolean("recordable", true),
+                recordingId = o.str("recordingId"),
+            )
+        }
+    }
 
     fun prog(o: JSONObject?): IptvProg? {
         o ?: return null

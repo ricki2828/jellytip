@@ -197,6 +197,10 @@ sealed class Destination(
     @Serializable
     data object JellytipRecordings : Destination(false)
 
+    /** Jellytip: upcoming sport over the next days, grouped by day (sidebar, Live TV). */
+    @Serializable
+    data object JellytipUpcomingSport : Destination(false)
+
     /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
     @Serializable
     data class JellytipLiveTvPlayer(

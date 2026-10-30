@@ -280,9 +280,12 @@ class NavDrawerService
         private fun applyRecordings(has: Boolean) {
             _state.update { st ->
                 fun place(list: List<NavDrawerItem>): List<NavDrawerItem> {
-                    val without = list.filter { it !is NavDrawerItem.Recordings }
+                    val without = list.filter { it !is NavDrawerItem.Recordings && it !is NavDrawerItem.UpcomingSport }
                     val at = without.indexOfFirst { it is NavDrawerItem.LiveTv }
-                    return if (has && at >= 0) without.subList(0, at + 1) + NavDrawerItem.Recordings + without.subList(at + 1, without.size) else without
+                    if (at < 0) return without
+                    // Live TV, then Recordings (once any exist), then Upcoming sport (everyone with Live TV)
+                    val extra = listOfNotNull(NavDrawerItem.Recordings.takeIf { has }, NavDrawerItem.UpcomingSport)
+                    return without.subList(0, at + 1) + extra + without.subList(at + 1, without.size)
                 }
                 val items = place(st.items)
                 val more = place(st.moreItems)

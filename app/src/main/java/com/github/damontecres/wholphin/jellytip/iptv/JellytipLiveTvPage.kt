@@ -164,10 +164,11 @@ class JellytipLiveTvViewModel
                             .filter { it.id != JellytipIptvService.FAV && !it.isDefault && it.count > 0 }
                             .forEach { add(LiveTvTab(it.id, cleanGroupName(it.name))) }
                         add(LiveTvTab(RECORDINGS, "Recordings"))
+                        add(LiveTvTab(UPCOMING, "Upcoming sport"))
                     }
                 _state.update { it.copy(tabs = tabs) }
                 loadRecordings()
-                (wantedTab ?: default?.id ?: tabs.firstOrNull { it.id != RECORDINGS }?.id)?.let { selectTab(it, if (it == wantedTab) "requested" else "first tab") }
+                (wantedTab ?: default?.id ?: tabs.firstOrNull { it.id != RECORDINGS && it.id != UPCOMING }?.id)?.let { selectTab(it, if (it == wantedTab) "requested" else "first tab") }
                     ?: _state.update { it.copy(channels = emptyList(), message = "No channels are opted in yet (Settings › Live TV on the web).") }
             }
         }
@@ -176,6 +177,11 @@ class JellytipLiveTvViewModel
             id: String,
             reason: String,
         ) {
+            if (id == UPCOMING) {
+                // Not a guide tab: its own screen, grouped by day
+                navigationManager.navigateTo(Destination.JellytipUpcomingSport, "live tv upcoming tab")
+                return
+            }
             if (id == _state.value.tab && _state.value.channels != null) return
             JellytipTrace.log("iptv", "guide tab $id ($reason)")
             tabJob?.cancel()
@@ -340,6 +346,7 @@ class JellytipLiveTvViewModel
 
         companion object {
             const val RECORDINGS = "recordings"
+            const val UPCOMING = "upcoming-sport"
             private const val BACK_SECS = 2 * 60 * 60L
             private const val MAX_CATCHUP_DAYS = 7
             private const val AHEAD_SECS = 3 * 24 * 60 * 60L - IptvRules.WINDOW_SECS

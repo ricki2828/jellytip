@@ -146,6 +146,11 @@ class NavDrawerViewModel
                     navigationManager.navigateToFromDrawer(Destination.JellytipRecordings)
                 }
 
+                NavDrawerItem.UpcomingSport -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipUpcomingSport)
+                }
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -179,6 +184,7 @@ class NavDrawerViewModel
                             is NavDrawerItem.Discover -> Destination.Discover
                             is NavDrawerItem.LiveTv -> Destination.JellytipLiveTv
                             is NavDrawerItem.Recordings -> Destination.JellytipRecordings
+                            is NavDrawerItem.UpcomingSport -> Destination.JellytipUpcomingSport
                             else -> null
                         }
                     }
@@ -268,6 +274,14 @@ sealed interface NavDrawerItem {
             get() = "a_jellytip_recordings"
 
         override fun name(context: Context): String = context.getString(R.string.jellytip_recordings)
+    }
+
+    /** Jellytip: upcoming sport (next 3 days), under Live TV for people with IPTV. */
+    object UpcomingSport : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_upcoming_sport"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_upcoming_sport)
     }
 }
 
@@ -705,6 +719,10 @@ fun NavigationDrawerScope.NavItem(
 
                 NavDrawerItem.Recordings -> {
                     R.string.fa_video
+                }
+
+                NavDrawerItem.UpcomingSport -> {
+                    R.string.fa_clock
                 }
 
                 is ServerNavDrawerItem -> {
