@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +17,8 @@ import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.rememberDrawerState
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipReminderBanner
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipReminderBannerViewModel
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -55,8 +58,10 @@ fun ApplicationContent(
     viewModel: ApplicationContentViewModel = hiltViewModel(),
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    // Jellytip: the reminder nudge banner takes OK (Watch) and Back while it shows
+    val reminderBanner: JellytipReminderBannerViewModel = hiltViewModel()
     Box(
-        modifier = modifier,
+        modifier = modifier.onPreviewKeyEvent { reminderBanner.reminders.onKey(it.nativeKeyEvent) },
     ) {
         val backdropStyle = preferences.appPreferences.interfacePreferences.backdropStyle
         Backdrop(
@@ -102,5 +107,6 @@ fun ApplicationContent(
                 }
             },
         )
+        JellytipReminderBanner(reminderBanner.reminders)
     }
 }

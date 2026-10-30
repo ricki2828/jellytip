@@ -35,6 +35,13 @@ sealed interface JellytipHomeEntry {
         override val key get() = "live-sport"
     }
 
+    /** "Your reminders" (Home, right after Continue Watching / Next Up, before recordings). */
+    data class Reminders(
+        val items: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>,
+    ) : JellytipHomeEntry {
+        override val key get() = "reminders"
+    }
+
     /** IPTV recordings (Home, right after Continue Watching / Next Up, before live sport). */
     data class Recordings(
         val items: List<com.github.damontecres.wholphin.jellytip.iptv.IptvRecording>,
@@ -78,10 +85,12 @@ fun jellytipHomeEntries(
     liveSport: List<com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow>? = null,
     recordings: List<com.github.damontecres.wholphin.jellytip.iptv.IptvRecording>? = null,
     upcoming: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>? = null,
+    reminders: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>? = null,
 ): List<JellytipHomeEntry> {
     val base = baseEntries(rows, specials, leadingRows, serverRows, hiddenRows)
     val extra =
         listOfNotNull(
+            reminders?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.Reminders(it) },
             recordings?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.Recordings(it) },
             liveSport?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.LiveSport(it) },
             upcoming?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.UpcomingSport(it) },

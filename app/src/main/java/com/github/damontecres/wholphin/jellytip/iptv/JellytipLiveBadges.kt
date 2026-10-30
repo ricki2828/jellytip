@@ -50,6 +50,10 @@ fun KindPill(
     }
 }
 
+/** Amber "STARTING SOON" (plan "Remind me": a reminder within 15 minutes of kick-off). */
+@Composable
+fun SoonPill() = Pill("STARTING SOON", Color.Black, MayBuffer)
+
 @Composable
 private fun Pill(
     text: String,

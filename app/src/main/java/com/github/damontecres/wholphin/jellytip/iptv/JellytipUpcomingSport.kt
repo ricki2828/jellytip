@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -43,7 +44,6 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
-import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.DialogItem
@@ -74,6 +74,7 @@ class JellytipUpcomingSportViewModel
         val service: JellytipIptvService,
         val playback: JellytipIptvPlayback,
         val navigationManager: NavigationManager,
+        val reminders: JellytipReminders,
     ) : ViewModel() {
         /** Message after Record ("Recording scheduled…" or the server's reason); null = none. */
         var recordResult by mutableStateOf<Pair<Boolean, String>?>(null)
@@ -96,14 +97,7 @@ class JellytipUpcomingSportViewModel
         fun watch(
             u: IptvUpcoming,
             ch: IptvChannel,
-        ) {
-            JellytipTrailerControl.stop()
-            val all = listOf(u.channel) + u.alternateChannels
-            playback.lineup = all
-            playback.alternates = all.associate { c -> c.id to all.filter { it.id != c.id } }
-            playback.play(IptvTarget(ch.id, ch.name), "upcoming watch")
-            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "upcoming watch ${ch.name}")
-        }
+        ) = reminders.watch(u, ch)
     }
 
 /** Upcoming sport for Home: the cached answer at once, then the fresh one; null = none or no route. */
@@ -146,14 +140,76 @@ fun JellytipUpcomingSportRow(
     UpcomingOverlays(overlay, now, onDismiss = { overlay = null }, viewModel)
 }
 
+/** "in 2h 10m", "in 25m"; a day or more away = the day and time. */
+private fun countdownLabel(
+    start: Long,
+    now: Long,
+): String {
+    val mins = ((start - now + 59) / 60).coerceAtLeast(1)
+    return when {
+        mins >= 24 * 60 -> whenLabel(start)
+        mins >= 60 -> "in ${mins / 60}h" + if (mins % 60 > 0) " ${mins % 60}m" else ""
+        else -> "in ${mins}m"
+    }
+}
+
+/**
+ * Home: "Your reminders" (plan "Remind me"), right after Continue Watching. Countdown, STARTING SOON or LIVE on each
+ * tile; OK on a live or soon one watches the best channel, otherwise opens the overlay (with Remove).
+ */
+@Composable
+fun JellytipRemindersRow(
+    items: List<IptvUpcoming>,
+    onFocus: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: JellytipUpcomingSportViewModel = hiltViewModel(),
+) {
+    var overlay by remember { mutableStateOf<IptvUpcoming?>(null) }
+    val now by produceState(nowSec()) {
+        while (true) {
+            delay(15_000)
+            value = nowSec()
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ItemRowTitle("Your reminders")
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            items(items.filter { it.stop > now }, key = { it.key }) { u ->
+                UpcomingTile(
+                    u,
+                    now,
+                    onClick = { if (u.isLive(now) || u.isSoon(now)) viewModel.reminders.watch(u) else overlay = u },
+                    modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
+                    countdown = true,
+                )
+            }
+        }
+    }
+    UpcomingOverlays(overlay, now, onDismiss = { overlay = null }, viewModel, fromReminders = true)
+}
+
+/** Home's reminders (starts the 60 s poll); null = none, not loaded, or no route on this server. */
+@Composable
+fun rememberReminders(viewModel: JellytipUpcomingSportViewModel = hiltViewModel()): List<IptvUpcoming>? {
+    LaunchedEffect(Unit) { viewModel.reminders.start() }
+    val on by viewModel.reminders.available.collectAsState()
+    val items by viewModel.reminders.items.collectAsState()
+    return items?.takeIf { on == true && it.isNotEmpty() }
+}
+
 @Composable
 private fun UpcomingOverlays(
     overlay: IptvUpcoming?,
     now: Long,
     onDismiss: () -> Unit,
     viewModel: JellytipUpcomingSportViewModel,
+    fromReminders: Boolean = false,
 ) {
-    overlay?.let { u -> UpcomingOverlay(u, now, onDismiss, viewModel) }
+    overlay?.let { u -> UpcomingOverlay(u, now, onDismiss, viewModel, fromReminders) }
     viewModel.recordResult?.let { (ok, text) ->
         DialogPopup(
             showDialog = true,
@@ -182,7 +238,10 @@ private fun UpcomingOverlay(
     now: Long,
     onDismiss: () -> Unit,
     viewModel: JellytipUpcomingSportViewModel,
+    fromReminders: Boolean = false,
 ) {
+    val remindersOn by viewModel.reminders.available.collectAsState()
+    val reminderList by viewModel.reminders.items.collectAsState()
     val live = u.isLive(now)
     val channels = listOf(u.channel) + u.alternateChannels
     val items =
@@ -208,6 +267,15 @@ private fun UpcomingOverlay(
                 u.recordingId != null -> add(DialogItem("Recording scheduled", dismissOnClick = true) {})
                 u.recordable && u.stop > now -> add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
             }
+            // Remind me (plan "Remind me"): hidden until the server answers the reminders route (404 = never)
+            if (remindersOn == true && u.stop > now) {
+                val rid = viewModel.reminders.reminderIdFor(u, reminderList)
+                when {
+                    rid == null -> add(DialogItem("Remind me", dismissOnClick = true) { viewModel.reminders.add(u) })
+                    fromReminders -> add(DialogItem("Remove reminder", dismissOnClick = true) { viewModel.reminders.remove(rid) })
+                    else -> add(DialogItem("Reminder set ✓", dismissOnClick = true) { viewModel.reminders.remove(rid) })
+                }
+            }
         }
     val title =
         listOfNotNull(
@@ -224,6 +292,7 @@ private fun UpcomingTile(
     now: Long,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    countdown: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     Surface(
@@ -263,9 +332,11 @@ private fun UpcomingTile(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (u.isLive(now)) {
                         KindPill("live")
+                    } else if (countdown && u.isSoon(now)) {
+                        SoonPill()
                     } else {
                         Text(
-                            text = whenLabel(u.start),
+                            text = if (countdown) countdownLabel(u.start, now) else whenLabel(u.start),
                             color = Color.White.copy(alpha = 0.9f),
                             fontFamily = JellytipFontFamily,
                             fontWeight = FontWeight.SemiBold,

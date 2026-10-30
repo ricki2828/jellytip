@@ -249,8 +249,17 @@ data class IptvUpcoming(
     val recordable: Boolean,
     val recordingId: String?,
     val art: IptvArt? = null,
+    /** The person's reminder for this event (plan "Remind me"); null = none. */
+    val reminderId: String? = null,
 ) {
     fun isLive(now: Long) = now in start until stop
+
+    /** Starts within 15 minutes (plan "Remind me": `soon`). */
+    fun isSoon(now: Long) = !isLive(now) && start > now && start - now <= SOON_SECS
+
+    companion object {
+        const val SOON_SECS = 15 * 60L
+    }
 }
 
 /** What a `/play` call came back with. */
@@ -464,8 +473,10 @@ object IptvParse {
     }
 
     /** `{items: [...]}` (or `events`, or a bare array); entries without a channel or times are dropped. Server order kept. */
+    /** [reminders] = a `GET /v1/iptv/reminders` answer (same item shape; the item's `id` is the reminder's id). */
     fun upcoming(
         json: String,
+        reminders: Boolean = false,
         resolve: (String) -> String?,
     ): List<IptvUpcoming> {
         val t = json.trimStart()
@@ -496,6 +507,7 @@ object IptvParse {
                 recordable = o.optBoolean("recordable", true),
                 recordingId = o.str("recordingId"),
                 art = art(o.optJSONObject("art"), resolve),
+                reminderId = o.str("reminderId") ?: if (reminders) o.str("id") else null,
             )
         }
     }

@@ -198,6 +198,37 @@ class JellytipIptvService
             return list
         }
 
+        /**
+         * The person's reminders (plan "Remind me"), soonest first; first = HTTP code (404 = older server, hide the
+         * feature). Null = unreachable or unreadable.
+         */
+        suspend fun reminders(): Pair<Int, List<IptvUpcoming>>? {
+            val b = base()
+            val (code, body) = get("v1/iptv/reminders") ?: return null
+            if (code != 200) return code to emptyList()
+            val list = runCatching { IptvParse.upcoming(body, reminders = true) { resolve(b, it) } }.getOrNull() ?: return null
+            return code to list
+        }
+
+        /** Remind me for [u]; the new reminder's id, null = failed. */
+        suspend fun addReminder(u: IptvUpcoming): String? {
+            val body =
+                JSONObject()
+                    .put("key", u.key)
+                    .put("channelId", u.channel.id)
+                    .put("start", u.start)
+                    .put("stop", u.stop)
+                    .put("title", u.title)
+                    .apply { u.league?.let { put("league", it) } }
+                    .toString()
+            val res = api.userCall("v1/iptv/reminders", body) ?: return null
+            JellytipTrace.log("iptv", "reminder ${u.key} -> ${res.first}")
+            if (res.first != 200 && res.first != 201) return null
+            return runCatching { JSONObject(res.second).optString("id").takeIf { it.isNotBlank() } }.getOrNull()
+        }
+
+        suspend fun deleteReminder(id: String): Boolean = api.userCall("v1/iptv/reminders/${enc(id)}/delete", "{}")?.first == 200
+
         @Volatile
         private var recordingsCache: List<IptvRecording>? = null
 
