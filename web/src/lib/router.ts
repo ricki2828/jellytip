@@ -36,6 +36,7 @@ function parse(): Route {
     case "settings":
     case "taste":
     case "livetv":
+    case "recordings":
     case "discover":
     case "movies":
     case "shows":
@@ -66,7 +67,7 @@ let restoring = false;
 let lastFocus: string | undefined;
 let saveTimer: number | null = null;
 
-const ROOTS = new Set(["home", "movies", "shows", "search", "downloads", "discover", "livetv"]);
+const ROOTS = new Set(["home", "movies", "shows", "search", "downloads", "discover", "livetv", "recordings"]);
 /** Root tabs (Home, Movies, Shows, Search, Downloads, admins' Discover, Live TV) have no back arrow; everything else does. */
 export const isRootRoute = (name: string) => ROOTS.has(name);
 

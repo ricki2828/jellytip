@@ -7,6 +7,7 @@ import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from ".
 import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
+import { refreshRecs } from "../../api/recStore";
 import { SportBadges } from "../../components/SportBadges";
 import { go } from "../../lib/router";
 import "./iptv.css";
@@ -52,6 +53,7 @@ export function LiveTv() {
   const [width, setWidth] = useState(0);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastView, setToastView] = useState(false);
 
   // ---- data ----
   useEffect(() => {
@@ -150,8 +152,11 @@ export function LiveTv() {
   const record = async (s: Sheet) => {
     const a = await addRecording(s.ch.id, s.prog.start);
     setSheet(null);
-    setToast(a.status === 201 || a.status === 200 ? a.data?.warning || `Recording “${s.prog.title}”.` : errorText(a));
-    window.setTimeout(() => setToast(null), 5000);
+    const ok = a.status === 201 || a.status === 200;
+    setToast(ok ? [a.data?.warning, "Recording scheduled. It'll appear on Home."].filter(Boolean).join(" ") : errorText(a));
+    setToastView(ok);
+    if (ok) void refreshRecs(true);
+    window.setTimeout(() => setToast(null), 7000);
   };
   const fav = async (ch: Channel) => {
     const a = await setFavourite(ch.id, !ch.favourite);
@@ -298,6 +303,11 @@ export function LiveTv() {
       {toast && (
         <p className="livetv-toast" role="status">
           {toast}
+          {toastView && (
+            <button data-nav onClick={() => go("/recordings")}>
+              View
+            </button>
+          )}
         </p>
       )}
     </div>

@@ -100,7 +100,8 @@ img {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.nav-livetv {
+.nav-livetv,
+.nav-recs {
   display: none;
 }
 /* Desktop: the cog carries its name, so Settings is easy to find */
@@ -1252,7 +1253,8 @@ button.overview.open {
     color: var(--dim);
   }
   .nav-icon,
-  .nav-livetv {
+  .nav-livetv,
+  .nav-recs {
     display: grid;
     width: 44px;
     height: 44px;

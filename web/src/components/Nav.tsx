@@ -4,6 +4,8 @@ import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
 import { hasLiveTv, iptvChanged } from "../api/iptv";
 import { afterStartup } from "../lib/startup";
+import { useRecs } from "../api/recStore";
+import { shown, unwatchedCount } from "../lib/recs";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
@@ -83,7 +85,11 @@ export function Nav({ current }: { current: string }) {
   const s = getSession();
   // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
   const liveTv = useLiveTv();
-  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  // Recordings: a link once there are any, with the count of ready, unwatched ones
+  const recs = useRecs();
+  const hasRecs = !!recs && shown(recs).length > 0;
+  const ready = recs ? unwatchedCount(recs) : 0;
+  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -109,6 +115,7 @@ export function Nav({ current }: { current: string }) {
         {links.map(([k, label]) => (
           <a key={k} href={`#/${k}`} data-nav className={current === k ? "active" : ""}>
             {label}
+            {k === "recordings" && ready > 0 && <span className="nav-badge" aria-label={`${ready} ready to watch`}>{ready}</span>}
           </a>
         ))}
       </div>
@@ -129,6 +136,15 @@ export function Nav({ current }: { current: string }) {
               <path d="M8.5 2.5 12 6l3.5-3.5" />
               <circle cx="17.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
             </svg>
+          </a>
+        )}
+        {hasRecs && (
+          <a href="#/recordings" className={`nav-icon nav-recs${current === "recordings" ? " active" : ""}`} aria-label="Recordings" title="Recordings">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="12" r="8.5" />
+              <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
+            </svg>
+            {ready > 0 && <span className="nav-badge">{ready}</span>}
           </a>
         )}
         <a href="#/settings" className={`nav-icon nav-settings${current === "settings" || current === "iptv" ? " active" : ""}`} aria-label="Settings" title="Settings" data-nav>
