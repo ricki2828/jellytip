@@ -458,6 +458,42 @@ function StatusLine({ p }: { p: Provider }) {
   );
 }
 
+/** "Direct streaming" (owner): TV and phone apps play straight from the provider. Offered loudly when the server saw streams blocked. */
+function DirectSwitch({ p, onChange }: { p: Provider; onChange: (p: Provider) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const sug = p.status.directSuggested;
+  const suggested = !!sug && !p.direct;
+  const set = async (direct: boolean) => {
+    setBusy(true);
+    setErr(null);
+    const a = await editProvider(p.id, { direct });
+    setBusy(false);
+    if (a.status >= 200 && a.status < 300 && a.data) onChange(a.data);
+    else setErr(errorText(a));
+  };
+  return (
+    <div className={`iptv-direct${suggested ? " suggested" : ""}`}>
+      {suggested && (
+        <div className="iptv-direct-banner" role="alert">
+          <p>
+            <strong>{typeof sug === "string" && sug ? sug : p.status.message || "This provider blocks server streaming. Enable Direct to play from it."}</strong>
+          </p>
+          <button className="btn primary" data-nav disabled={busy} onClick={() => void set(true)}>
+            Enable Direct
+          </button>
+        </div>
+      )}
+      <label className="iptv-check">
+        <input type="checkbox" data-nav checked={!!p.direct} disabled={busy} onChange={(e) => void set(e.target.checked)} />
+        <span>Direct streaming</span>
+      </label>
+      <p className="iptv-hint">Plays straight from your provider on the TV and phone apps. Needed when your provider blocks server streaming. The web player can't use it.</p>
+      {err && <p className="iptv-err">{err}</p>}
+    </div>
+  );
+}
+
 function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: Provider) => void; onRemoved: () => void }) {
   const [panel, setPanel] = useState<"groups" | "edit" | "share" | "delete" | null>(p.counts.opted_live || p.counts.opted_vod || p.counts.opted_series ? null : "groups");
   const [msg, setMsg] = useState<string | null>(null);
@@ -499,6 +535,7 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
         )}
       </div>
       <StatusLine p={p} />
+      {p.owner && <DirectSwitch p={p} onChange={onChange} />}
       <p className="iptv-hint">
         {n(p.counts.opted_live)} live groups · {n(p.counts.opted_vod)} film groups · {n(p.counts.opted_series)} series groups picked · {n(p.counts.channels)} channels, {n(p.counts.movies)} films,{" "}
         {n(p.counts.series)} series, {n(p.counts.programmes)} guide entries

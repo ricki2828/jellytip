@@ -1039,3 +1039,24 @@
     padding-right: 10px;
   }
 }
+.iptv-direct {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+.iptv-direct-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(217, 138, 28, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(217, 138, 28, 0.5);
+}
+.iptv-direct-banner p {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}

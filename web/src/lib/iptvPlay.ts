@@ -43,6 +43,8 @@ export function playQuery(t: PlayTarget, device: string, format: "ts" | "m3u8" =
   const q = new URLSearchParams();
   for (const k of KEYS) if (t[k] != null) q.set(k, String(t[k]));
   if (t.channel && t.start == null) q.set("format", format);
+  // Live and catch-up on the web: the server re-encodes audio to AAC (browsers can't play AC-3 through MSE)
+  if (t.channel && !native) q.set("compat", "web");
   q.set("device", device);
   if (native) q.set("client", "native");
   return `v1/iptv/play?${q}`;

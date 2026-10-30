@@ -55,9 +55,11 @@ test("route query ↔ target; nothing playable → null", () => {
 });
 
 test("play query: live gets a format, catch-up and recordings don't; device always", () => {
-  assert.equal(playQuery({ channel: "3:77" }, "web-ab"), "v1/iptv/play?channel=3%3A77&format=ts&device=web-ab");
-  assert.equal(playQuery({ channel: "3:77", start: 5, stop: 9 }, "d"), "v1/iptv/play?channel=3%3A77&start=5&stop=9&device=d");
+  assert.equal(playQuery({ channel: "3:77" }, "web-ab"), "v1/iptv/play?channel=3%3A77&format=ts&compat=web&device=web-ab");
+  assert.equal(playQuery({ channel: "3:77", start: 5, stop: 9 }, "d"), "v1/iptv/play?channel=3%3A77&start=5&stop=9&compat=web&device=d");
   assert.equal(playQuery({ recording: "4" }, "d"), "v1/iptv/play?recording=4&device=d");
+  // The native player never asks for the web re-encode
+  assert.equal(playQuery({ channel: "3:77" }, "d", "ts", true), "v1/iptv/play?channel=3%3A77&format=ts&device=d&client=native");
   assert.equal(playQuery({ channel: "3:77" }, "d", "ts", true), "v1/iptv/play?channel=3%3A77&format=ts&device=d&client=native");
 });
 

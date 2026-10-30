@@ -78,6 +78,8 @@ export interface Provider {
   kind: "xtream" | "m3u";
   owner: boolean;
   englishOnly: boolean;
+  /** Owner's switch: TV and phone apps play straight from the provider. */
+  direct?: boolean;
   server?: string;
   sharedWith?: string[];
   status: {
@@ -91,6 +93,8 @@ export interface Provider {
     checkedAt?: number;
     message?: string | null;
     authFailed?: boolean;
+    /** The server saw streams blocked while the API works: it suggests Direct (message says why). */
+    directSuggested?: boolean | string | null;
   };
   sync: Partial<Record<"lists" | "optin" | "match" | "epg", SyncStage>>;
   syncing: boolean;
