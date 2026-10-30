@@ -32,3 +32,24 @@ test("mixed rows follow the server order; unnamed tiles keep their place at the 
   assert.deepEqual(inOrder(tiles, []).map((t) => t.id), ["a", "b", "1:m:9", "z"]);
   assert.deepEqual(parseRows([{ id: "r", title: "T", itemIds: ["a"], order: ["a", 3] }])?.[0].order, ["a"]);
 });
+
+import { trendEntries } from "../src/lib/rows.ts";
+
+test("trending row: ranks from the server, order as fallback, missing slotted in, capped at 10", () => {
+  const row = parseRows([
+    {
+      id: "trending-top10-movies",
+      title: "Top 10 trending films",
+      itemIds: ["aaaa-1111", "bbbb2222"],
+      iptvItems: [{ id: "3:m:9", title: "Léon", rank: 2 }],
+      order: ["bbbb2222", "aaaa1111", "3:m:9"],
+      rank: { "AAAA-1111": 4, bbbb2222: 1 },
+      missing: [{ tmdbId: 5, title: "Gone", poster: "https://x/p.jpg", rank: 3 }, { title: "no id" }],
+    },
+  ])![0];
+  assert.deepEqual(row.missing.map((m) => m.tmdbId), [5]);
+  const e = trendEntries(row, ["aaaa-1111", "bbbb2222"]);
+  assert.deepEqual(e.map((x) => [x.kind, x.rank]), [["lib", 1], ["iptv", 2], ["missing", 3], ["lib", 4]]);
+  const bare = parseRows([{ id: "trending-top10-series", title: "T", itemIds: ["a", "b"], order: ["b", "a"] }])![0];
+  assert.deepEqual(trendEntries(bare, ["a", "b"]).map((x) => (x.kind === "lib" ? x.id : "")), ["b", "a"]);
+});

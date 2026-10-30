@@ -3,6 +3,7 @@
 import { getItems, type Item } from "../api/jellyfin";
 import type { ServerRow } from "../api/companion";
 import { go } from "../lib/router";
+import { TrendingRow } from "./TrendingRow";
 import { FranchiseRow } from "./FranchiseRow";
 import { Row, RowTitle } from "./Row";
 import { IptvCard, IptvPoster } from "./IptvTile";
@@ -72,6 +73,7 @@ export function itemsByIds(ids: string[]): Promise<Item[]> {
 window.addEventListener("jellytip-session", () => known.clear());
 
 export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item) => void; autoFocusFirst?: boolean } = {}) {
+  if (r.id.startsWith("trending-top10")) return <TrendingRow key={r.id} row={r} />;
   if (r.iptvItems.length && !r.itemIds.length) return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
   const load = () => itemsByIds(r.itemIds);
   const untitled = r.untitled.length ? new Set(r.untitled) : undefined;

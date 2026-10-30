@@ -46,6 +46,18 @@ export interface ServerRow {
   iptvItems: VodItem[];
   /** Mixed rows (My list): every id (library undashed, vod ids) in display order, newest first. */
   order: string[];
+  /** Trending Top 10 rows: rank (1-10) per id, ids as in `order` with dashes stripped. */
+  ranks: Record<string, number>;
+  /** Trending Top 10 rows: titles that are nowhere (library, IPTV), shown dimmed "Not available". */
+  missing: MissingTitle[];
+}
+
+export interface MissingTitle {
+  tmdbId: number;
+  title: string;
+  year?: number | null;
+  poster?: string | null;
+  rank: number | null;
 }
 
 const ROW_LAYOUTS: RowLayout[] = ["standard", "poster", "franchise"];
@@ -65,6 +77,46 @@ export function parseCollection(c: Partial<Collection> | null | undefined): Coll
   };
 }
 
+
+const undash = (id: string) => id.replace(/-/g, "").toLowerCase();
+
+/** rank per id from `rank` / `ranks` ({id: n}) and from a `rank` on each IPTV entry. */
+export function parseRanks(r: unknown, iptvRaw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  const o = r as { rank?: unknown; ranks?: unknown } | null;
+  for (const m of [o?.rank, o?.ranks]) {
+    if (m && typeof m === "object" && !Array.isArray(m)) for (const [k, v] of Object.entries(m)) if (typeof v === "number" && isFinite(v)) out[undash(k)] = v;
+  }
+  if (Array.isArray(iptvRaw))
+    for (const x of iptvRaw as { id?: unknown; rank?: unknown }[]) if (typeof x?.id === "string" && typeof x.rank === "number" && isFinite(x.rank)) out[undash(x.id)] = x.rank;
+  return out;
+}
+
+export function parseMissing(raw: unknown): MissingTitle[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MissingTitle[] = [];
+  for (const m of raw as Record<string, unknown>[]) {
+    if (!m || typeof m.tmdbId !== "number" || typeof m.title !== "string" || !m.title) continue;
+    out.push({ tmdbId: m.tmdbId, title: m.title, year: typeof m.year === "number" ? m.year : null, poster: typeof m.poster === "string" ? m.poster : typeof m.posterUrl === "string" ? m.posterUrl : null, rank: typeof m.rank === "number" ? m.rank : null });
+  }
+  return out;
+}
+
+/** One tile of a trending row, in rank order. */
+export type TrendEntry = { rank: number } & ({ kind: "lib"; id: string } | { kind: "iptv"; item: VodItem } | { kind: "missing"; title: MissingTitle });
+
+/** Library ids (given in `libIds`, already loaded and visible), IPTV titles and missing titles merged and sorted by rank.
+ * Entries without a rank take their place in `order` (1-based); the numeral shown is the entry's rank. */
+export function trendEntries(row: Pick<ServerRow, "order" | "ranks" | "iptvItems" | "missing">, libIds: string[]): TrendEntry[] {
+  const pos = new Map(row.order.map((id, i) => [undash(id), i + 1]));
+  const rankOf = (id: string, fallback: number) => row.ranks[undash(id)] ?? pos.get(undash(id)) ?? fallback;
+  const all: TrendEntry[] = [
+    ...libIds.map((id, i) => ({ kind: "lib" as const, id, rank: rankOf(id, 100 + i) })),
+    ...row.iptvItems.map((item, i) => ({ kind: "iptv" as const, item, rank: rankOf(item.id, 200 + i) })),
+    ...row.missing.map((title, i) => ({ kind: "missing" as const, title, rank: title.rank ?? 300 + i })),
+  ];
+  return all.sort((a, b) => a.rank - b.rank).slice(0, 10);
+}
 
 /** Rows in server order; rows without an id, title or items are dropped. null = no `rows` field (old server). */
 export function parseRows(raw: unknown): ServerRow[] | null {
@@ -93,6 +145,8 @@ export function parseRows(raw: unknown): ServerRow[] | null {
       collection,
       iptvItems,
       order: strings((r as { order?: unknown }).order),
+      ranks: parseRanks(r, (r as { iptvItems?: unknown }).iptvItems),
+      missing: parseMissing((r as { missing?: unknown }).missing),
     });
   }
   return out;
