@@ -1,16 +1,16 @@
 // "Your reminders": the Home row, and the toast that nudges at "starting soon" and at kick-off while the app is open.
 import { useEffect, useRef, useState } from "react";
 import { useReminders } from "../api/reminderStore";
-import { targetPath } from "../lib/iptvPlay";
+import { livePath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { countdown, dueNudges, nudgeText, stateOf, type Nudge } from "../lib/reminders";
-import { UpcomingSheet } from "./Upcoming";
+import { UpcomingSheet, watchExtras } from "./Upcoming";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
 import type { UpEvent } from "../lib/upcoming";
 import "../screens/iptv/iptv.css";
 
-const watchPath = (e: UpEvent) => `${targetPath({ channel: e.channels[0].id })}&t=${encodeURIComponent(e.channels[0].name)}`;
+const watchPath = (e: UpEvent) => livePath(e.channels[0].id, e.channels[0].name, watchExtras(e, e.channels[0].id));
 
 /** Re-render every 30 s so chips and states follow the clock between polls. */
 function useNow() {

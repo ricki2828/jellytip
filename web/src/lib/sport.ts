@@ -33,6 +33,8 @@ export interface SportInfo {
   /** The same, with names and stream quality (newer servers); empty when only ids came. */
   alternateChannels: { id: string; name: string; num: number | null; logo: string | null; quality: Quality | null }[];
   eventKey: string | null;
+  /** The programme can be played from its start (catch-up): /play with start=. */
+  startOver: boolean;
   /** The programme's league / sport by name (for "Not interested"); null when the server doesn't say. */
   league: string | null;
   sportName: string | null;
@@ -89,6 +91,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     }),
     alternates: Array.isArray(ev?.alternates) ? (ev!.alternates as unknown[]).filter((x): x is string => typeof x === "string") : [],
     eventKey: str(ev?.key),
+    startOver: p.startOver === true || r.startOver === true,
     league: str(p.league) ?? str(r.league) ?? str(m?.league),
     sportName: str(p.sportName) ?? str(r.sportName) ?? str(p.sport) ?? str(r.sport),
     match: m ? { team: str(m.team), league: str(m.league) } : null,

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { hasLiveTv, logoSrc, onNow } from "../api/iptv";
 import { progressOf, type OnNow } from "../lib/onNow";
 import { afterStartup } from "../lib/startup";
-import { targetPath } from "../lib/iptvPlay";
+import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { MuteButton } from "./SportMute";
 import { MUTED_EVENT } from "../api/sportTaste";
@@ -55,7 +55,12 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
   const [openAlt, setOpenAlt] = useState<string | null>(null);
   const live = (items ?? []).filter((o) => o.stop > now);
   if (live.length < min) return null;
-  const play = (id: string, name: string) => go(`${targetPath({ channel: id })}&t=${encodeURIComponent(name)}`);
+  // Kick-off (when the channel has catch-up) and the other channels of the same event, for the player's "From kick-off" and stall prompt
+  const extrasOf = (o: OnNow, via?: string): LiveExtras => ({
+    kickoff: !via && o.info.startOver ? { start: o.start, stop: o.stop } : null,
+    alternates: [{ id: o.channelId, name: o.channel }, ...alts(o)].filter((a) => a.id !== (via ?? o.channelId)),
+  });
+  const play = (id: string, name: string, x?: LiveExtras) => go(livePath(id, name, x));
   // Newer servers send names and quality for each alternate; older ones only ids (names then come from the list, if there)
   const alts = (o: OnNow) =>
     o.info.alternateChannels.length
@@ -73,7 +78,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               data-nav
               aria-label={`${o.title} on ${o.channel}, ${o.info.kind === "replay" || o.info.kind === "highlights" ? "replay" : "live"}`}
               title={`${o.title} · ${o.channel}`}
-              onClick={() => play(o.channelId, o.channel)}
+              onClick={() => play(o.channelId, o.channel, extrasOf(o))}
             >
               <SportArt art={o.info.art} />
               <span className="onnow-top">
@@ -98,7 +103,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
                 {openAlt === o.channelId && (
                   <div className="onnow-alts">
                     {alts(o).map((a) => (
-                      <button key={a.id} data-nav onClick={() => play(a.id, a.name)}>
+                      <button key={a.id} data-nav onClick={() => play(a.id, a.name, extrasOf(o, a.id))}>
                         <Logo o={{ ...o, logo: a.logo, channel: a.name }} />
                         <span className="onnow-alt-name">{a.name}</span>
                         <SportBadges quality={a.quality} size="sm" />

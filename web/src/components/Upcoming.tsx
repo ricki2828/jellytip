@@ -5,7 +5,7 @@ import { addRecording, errorText, logoSrc } from "../api/iptv";
 import { refreshRecs } from "../api/recStore";
 import { addReminder, refreshReminders, removeReminder, useReminders } from "../api/reminderStore";
 import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
-import { targetPath } from "../lib/iptvPlay";
+import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { isLive, timeChip, type UpChannel, type UpEvent } from "../lib/upcoming";
 import { MuteButton } from "./SportMute";
@@ -46,6 +46,12 @@ function ChannelLine({ c, live, onWatch }: { c: UpChannel; live: boolean; onWatc
   );
 }
 
+/** Kick-off (only on the best channel) and the event's other channels, carried into the player. */
+export const watchExtras = (e: UpEvent, via: string): LiveExtras => ({
+  kickoff: e.startOver && via === e.channels[0]?.id ? { start: e.start, stop: e.stop } : null,
+  alternates: e.channels.filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })),
+});
+
 export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [recorded, setRecorded] = useState(e.recordingId != null);
@@ -82,13 +88,13 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
         <h2>{e.title}</h2>
         <ul className="up-chans">
           {e.channels.map((c) => (
-            <ChannelLine key={c.id} c={c} live={live} onWatch={() => go(`${targetPath({ channel: c.id })}&t=${encodeURIComponent(c.name)}`)} />
+            <ChannelLine key={c.id} c={c} live={live} onWatch={() => go(livePath(c.id, c.name, watchExtras(e, c.id)))} />
           ))}
         </ul>
         {msg && <p className="iptv-hint">{msg}</p>}
         <div className="buttons">
           {live && (
-            <button className="btn primary" data-nav data-autofocus onClick={() => go(`${targetPath({ channel: best.id })}&t=${encodeURIComponent(best.name)}`)}>
+            <button className="btn primary" data-nav data-autofocus onClick={() => go(livePath(best.id, best.name, watchExtras(e, best.id)))}>
               Watch now
             </button>
           )}

@@ -9,12 +9,12 @@ import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
 import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
-import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
-import { back } from "../../lib/router";
+import { back, go } from "../../lib/router";
 import "./iptv.css";
 
 const PROGRESS_MS = 30_000;
@@ -45,11 +45,13 @@ function progressKey(t: PlayTarget): string | null {
   return null;
 }
 
-export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number }) {
+export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
   return nativeIptvPlayer ? <NativeIptvPlayer {...props} /> : <WebIptvPlayer {...props} />;
 }
 
-function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; title: string; resume?: number }) {
+const STALL_MS = 10_000;
+
+function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -71,6 +73,10 @@ function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; titl
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
   const growRef = useRef(false);
+  // Live stall: no picture moving for 10 s offers the same event on another channel
+  const lastMove = useRef(Date.now());
+  const quietUntil = useRef(0);
+  const [stalled, setStalled] = useState(false);
   // Where to start once the media is known: the resume point, then (after a renewed link) where the old one stopped
   const seekTo = useRef(resume);
 
@@ -290,6 +296,23 @@ function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; titl
     };
   }, [poke]);
 
+  const alt = extras?.alternates?.[0];
+  useEffect(() => {
+    if (!isLive || !alt || state.kind !== "playing") return;
+    lastMove.current = Date.now();
+    const t = setInterval(() => {
+      const v = videoRef.current;
+      if (v && !v.paused && Date.now() - lastMove.current >= STALL_MS && Date.now() > quietUntil.current) setStalled(true);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [isLive, alt, state.kind]);
+  const switchTo = () => {
+    if (!alt) return;
+    const rest = [...(extras?.alternates ?? []).slice(1), { id: target.channel!, name: title }];
+    go(livePath(alt.id, alt.name, { alternates: rest }), true);
+  };
+  const kickoff = isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop ? extras.kickoff : null;
+
   const growing = !!answer?.growing || meta?.state === "recording";
   growRef.current = growing;
   const length = isLive ? 0 : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
@@ -435,7 +458,11 @@ function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; titl
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
         onPause={() => setPaused(true)}
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          lastMove.current = Date.now();
+          setStalled(false);
+          setTime(e.currentTarget.currentTime);
+        }}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
         onLoadedMetadata={(e) => applyResume(e.currentTarget)}
         onCanPlay={(e) => applyResume(e.currentTarget)}
@@ -474,9 +501,32 @@ function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; titl
         </button>
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
+        {kickoff && state.kind === "playing" && (
+          <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}`, true)}>
+            From kick-off
+          </button>
+        )}
         <span className="player-method">via IPTV</span>
       </div>
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      {stalled && alt && state.kind === "playing" && (
+        <div className="iptv-stall" role="alert">
+          <span>Not loading.</span>
+          <button className="btn primary small" data-nav data-autofocus onClick={switchTo}>
+            Switch to {alt.name}
+          </button>
+          <button
+            className="btn small"
+            data-nav
+            onClick={() => {
+              quietUntil.current = Date.now() + 30_000;
+              setStalled(false);
+            }}
+          >
+            Keep waiting
+          </button>
+        </div>
+      )}
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (

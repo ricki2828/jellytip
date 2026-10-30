@@ -19,7 +19,7 @@ import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
 import { Taste } from "./screens/Taste";
 import { TileMenuHost } from "./components/TasteButtons";
-import { parseTarget } from "./lib/iptvPlay";
+import { parseLiveExtras, parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
 import { isNative } from "./lib/native";
 import { go, isRestoring } from "./lib/router";
@@ -66,7 +66,7 @@ export function App() {
     }
     return (
       <Suspense fallback={null}>
-        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} />
+        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} />
       </Suspense>
     );
   }

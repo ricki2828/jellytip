@@ -7,6 +7,8 @@ export interface Prog {
   title: string;
   desc?: string;
   catchup?: boolean;
+  /** Live and playable from its start. */
+  startOver?: boolean;
   /** Live-sport smarts from the server (may be missing). */
   kind?: "live" | "replay" | "highlights" | "other";
   sport?: boolean;

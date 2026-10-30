@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
-import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
+import { liveExtrasQuery, targetPath, type LiveExtras, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
 import { refreshRecs } from "../../api/recStore";
@@ -146,9 +146,9 @@ export function LiveTv() {
   const rows = useMemo(() => (channels ?? []).slice(range[0], range[1]), [channels, range]);
 
   // ---- actions ----
-  const playChannel = (ch: Channel, t: Partial<PlayTarget> = {}, label = ch.name) => go(`${targetPath({ channel: ch.id, ...t })}&t=${encodeURIComponent(label)}`);
+  const playChannel = (ch: Channel, t: Partial<PlayTarget> = {}, label = ch.name, x?: LiveExtras) => go(`${targetPath({ channel: ch.id, ...t })}&t=${encodeURIComponent(label)}${liveExtrasQuery(x)}`);
   const open = (ch: Channel, p: Prog) => {
-    if (p.start <= now && now < p.stop) playChannel(ch);
+    if (p.start <= now && now < p.stop) playChannel(ch, {}, ch.name, p.startOver ? { kickoff: { start: p.start, stop: p.stop } } : undefined);
     else setSheet({ ch, prog: p });
   };
   const record = async (s: Sheet) => {

@@ -289,3 +289,16 @@ test("continue: library and IPTV by recency, next up only for shows not above", 
   const names = m.map((x) => (x.kind === "lib" ? x.item.Id : x.entry.id));
   assert.deepEqual(names, ["a", "3:m:1", "b", "c", "n1", "3:e:3"]);
 });
+
+import { liveExtrasQuery, livePath, parseLiveExtras } from "../src/lib/iptvPlay.ts";
+
+test("live extras: kick-off and alternates round-trip through the play link", () => {
+  const x = { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }] };
+  const path = livePath("3:76", "Sky Sport 1", x);
+  const q = new URLSearchParams(path.split("?")[1]);
+  assert.equal(q.get("channel"), "3:76");
+  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }] });
+  assert.equal(liveExtrasQuery(null), "");
+  assert.equal(liveExtrasQuery({ kickoff: { start: 5, stop: 5 }, alternates: [] }), "");
+  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [] });
+});

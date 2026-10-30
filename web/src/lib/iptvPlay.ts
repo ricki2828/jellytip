@@ -115,3 +115,44 @@ export function playbackFailureText(engine: Engine, detail: string, status: numb
     return `This phone can't play this file${d}. The server has no converted copy to offer; it may play on the TV app or on Plex.`;
   return `This stream connected but the phone couldn't play it${d}.`;
 }
+
+// ---------- live extras: start over from kick-off, and other channels showing the same event ----------
+
+export interface LiveExtras {
+  /** The programme on now, when the channel has catch-up (the server's `startOver`): /play with start= plays it from the beginning. */
+  kickoff?: { start: number; stop: number } | null;
+  /** Other channels with the same event, best first. */
+  alternates?: { id: string; name: string }[];
+}
+
+const MAX_ALTERNATES = 4;
+
+/** "&ko=<start>&kos=<stop>&alt=<id>~<name>…" for a live play link ("" when there is nothing to carry). */
+export function liveExtrasQuery(x: LiveExtras | null | undefined): string {
+  if (!x) return "";
+  const q = new URLSearchParams();
+  if (x.kickoff && x.kickoff.stop > x.kickoff.start) {
+    q.set("ko", String(Math.floor(x.kickoff.start)));
+    q.set("kos", String(Math.floor(x.kickoff.stop)));
+  }
+  for (const a of (x.alternates ?? []).slice(0, MAX_ALTERNATES)) q.append("alt", `${a.id}~${a.name}`);
+  const s = q.toString();
+  return s ? `&${s}` : "";
+}
+
+export function parseLiveExtras(q: URLSearchParams): LiveExtras {
+  const start = Number(q.get("ko"));
+  const stop = Number(q.get("kos"));
+  const alternates = q
+    .getAll("alt")
+    .slice(0, MAX_ALTERNATES)
+    .flatMap((v) => {
+      const at = v.indexOf("~");
+      const id = at < 0 ? v : v.slice(0, at);
+      return /^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_.-]{1,64}$/.test(id) ? [{ id, name: at < 0 ? "Another channel" : v.slice(at + 1) || "Another channel" }] : [];
+    });
+  return { kickoff: start > 0 && stop > start ? { start, stop } : null, alternates };
+}
+
+/** Live play link for a channel with its extras. */
+export const livePath = (channel: string, name: string, x?: LiveExtras | null) => `${targetPath({ channel })}&t=${encodeURIComponent(name)}${liveExtrasQuery(x)}`;
