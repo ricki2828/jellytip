@@ -1,7 +1,7 @@
 // Unified search on the companion (contract "Search API", ~/ai/plans/jellytip-10x.md). Fails soft: `null` result =
 // the route isn't there (older server) or failed, and the Search screen falls back to plain Jellyfin search.
 import { companionCall as call } from "./companionCall";
-import { parseSearch, type SearchResult } from "../lib/search";
+import { parseSearch, type SearchEntry, type SearchResult } from "../lib/search";
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
 
@@ -46,3 +46,10 @@ export async function suggestions(): Promise<Suggestions | null> {
 export const recordRecent = (q: string) => void (q.trim().length >= 2 && call("POST", "v1/search/recent", { q: q.trim() }));
 /** The companion has no DELETE: `{clear: true}` empties the list. */
 export const clearRecent = () => call("POST", "v1/search/recent", { clear: true });
+
+/** A ranked result was opened (fire and forget; never blocks navigation). `pos` is 1-based, the top hit being 1. */
+export function recordClick(q: string, e: SearchEntry, pos: number) {
+  const id = e.kind === "person" ? e.personId : e.kind === "collection" ? e.tmdbCollectionId : e.source === "library" ? e.id : e.source === "iptv" ? e.iptvId : e.tmdbId;
+  if (!q.trim() || id == null || pos < 1) return;
+  void call("POST", "v1/search/click", { q: q.trim(), kind: e.kind, id, pos, source: e.source, ...(e.tmdbId != null ? { tmdbId: e.tmdbId } : {}) }).catch(() => undefined);
+}

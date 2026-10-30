@@ -3,7 +3,7 @@
 // Jellyfin search as before.
 import { useEffect, useRef, useState } from "react";
 import { search, type Item } from "../api/jellyfin";
-import { clearRecent, recordRecent, searchAll, suggestions, type Suggestions } from "../api/search";
+import { clearRecent, recordClick, recordRecent, searchAll, suggestions, type Suggestions } from "../api/search";
 import { filterChips, isEmpty, seasonHint, withoutFilter, type DiscoverHit, type LibHit, type SearchEntry, type SearchResult } from "../lib/search";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
@@ -116,7 +116,7 @@ function TopHit({ e, item, onGetIt }: { e: SearchEntry; item: Item | undefined; 
   };
   const label = playable ? "Play" : e.source === "discover" ? (e.requested ? stateText(e.requested) ?? "Requested" : "Get it") : "Open";
   return (
-    <section className="search-hero" aria-label="Top result">
+    <section className="search-hero" aria-label="Top result" data-key={e.key}>
       {art ? <Backdrop url={art} focal={null} /> : null}
       <div className="search-hero-scrim" />
       <div className="search-hero-text">
@@ -174,11 +174,19 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
           <div className="row-scroll">
             {ranked.map((e) => {
               if (e.source === "iptv") {
-                return <IptvPoster key={e.key} width={posterW} item={{ id: e.iptvId!, title: e.title, year: e.year, quality: e.quality, tech: e.tech, poster: e.poster, backdrop: e.backdrop }} tag={seasonHint(e)?.split(" · ")[0]} />;
+                return (
+                  <span key={e.key} className="search-pos" data-key={e.key}>
+                    <IptvPoster width={posterW} item={{ id: e.iptvId!, title: e.title, year: e.year, quality: e.quality, tech: e.tech, poster: e.poster, backdrop: e.backdrop }} tag={seasonHint(e)?.split(" · ")[0]} />
+                  </span>
+                );
               }
               const it = items?.get(e.id!);
               if (!it) return items ? null : <div key={e.key} className="poster card-skeleton" style={{ width: posterW }} />;
-              return <PosterCard key={e.key} item={it} width={posterW} onOpen={() => go(`/item/${it.Id}`)} untitled={untitled.has(it.Id)} tag={e.season != null ? seasonHint(e) ?? undefined : undefined} />;
+              return (
+                <span key={e.key} className="search-pos" data-key={e.key}>
+                  <PosterCard item={it} width={posterW} onOpen={() => go(`/item/${it.Id}`)} untitled={untitled.has(it.Id)} tag={e.season != null ? seasonHint(e) ?? undefined : undefined} />
+                </span>
+              );
             })}
           </div>
         </section>
@@ -188,7 +196,9 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
           <h2 className="row-title">People</h2>
           <div className="row-scroll">
             {people.map((p) => (
-              <PersonTile key={p.key} id={p.personId!} name={p.title} imageTag={p.imageTag} width={phone ? 112 : 150} sub={p.filmCount ? filmCount(p.filmCount) : p.role} />
+              <span key={p.key} className="search-pos" data-key={p.key}>
+                <PersonTile id={p.personId!} name={p.title} imageTag={p.imageTag} width={phone ? 112 : 150} sub={p.filmCount ? filmCount(p.filmCount) : p.role} />
+              </span>
             ))}
           </div>
         </section>
@@ -198,7 +208,7 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
           <h2 className="row-title">Collections</h2>
           <div className="search-links">
             {colls.map((c) => (
-              <button key={c.key} className="search-link" data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
+              <button key={c.key} className="search-link" data-key={c.key} data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
                 <strong>{c.title}</strong>
                 {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
               </button>
@@ -226,8 +236,8 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
             {missing.map((d) => {
               const state = stateText(d.requested);
               return (
+                <span key={`${d.mediaType}${d.tmdbId}`} className="search-pos" data-key={`d:${d.mediaType === "tv" ? "series" : "film"}:${d.tmdbId}`}>
                 <PosterCard
-                  key={`${d.mediaType}${d.tmdbId}`}
                   width={0}
                   src={d.posterUrl}
                   name={d.title}
@@ -236,6 +246,7 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
                   faded={!!state}
                   onOpen={state ? undefined : () => onGetIt(d)}
                 />
+                </span>
               );
             })}
           </div>
@@ -463,7 +474,15 @@ export function Search({ initial }: { initial: string }) {
         }}
       />
       {/* Opening any result remembers the query (recent searches) */}
-      <div className="search-results" onClickCapture={(e) => (e.target as HTMLElement).closest(".card, .poster, .person-tile, .search-link, .search-hero .btn") && recordRecent(term)}>
+      <div className="search-results" onClickCapture={(e) => {
+          const el = e.target as HTMLElement;
+          if (!el.closest(".card, .poster, .person-tile, .search-link, .search-hero .btn")) return;
+          recordRecent(term);
+          // Ranked layout: log which position was opened (1-based, the top hit is 1)
+          const key = el.closest<HTMLElement>("[data-key]")?.dataset.key;
+          const at = key && unified?.results ? unified.results.findIndex((x) => x.key === key) : -1;
+          if (at >= 0) recordClick(term, unified!.results![at], at + 1);
+        }}>
         {term.length < 2 && sugg && <Suggest s={sugg} onPick={pick} onClear={() => void clearRecent().then(() => setSugg((s) => s && { ...s, recent: [] }))} />}
         {term.length >= 2 && unified && <Unified r={unified} onChip={pick} />}
         {term.length >= 2 && fallback && <Fallback results={fallback} q={term} />}
