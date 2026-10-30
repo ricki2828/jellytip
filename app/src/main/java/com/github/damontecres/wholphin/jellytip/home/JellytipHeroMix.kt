@@ -64,7 +64,7 @@ object JellytipHeroMix {
         val excluded = (leading.map { it.id } + leading.mapNotNull { it.data.seriesId }).toSet()
         val buckets = LinkedHashMap<String, MutableList<BaseItem>>()
 
-        fun add(
+        fun addSource(
             kicker: String,
             items: List<BaseItem?>?,
         ) {
@@ -73,18 +73,20 @@ object JellytipHeroMix {
         homeRows.forEach { row ->
             val s = row as? HomeRowLoadingState.Success ?: return@forEach
             when (s.rowType) {
-                is HomeRowConfig.RecentlyReleased -> add(KICKER_NEW, s.items)
-                is HomeRowConfig.RecentlyAdded -> add(KICKER_ADDED, s.items)
+                is HomeRowConfig.RecentlyReleased -> addSource(KICKER_NEW, s.items)
+                is HomeRowConfig.RecentlyAdded -> addSource(KICKER_ADDED, s.items)
                 else -> {}
             }
         }
-        specials?.specials?.forEach { special ->
-            when (special) {
-                is JellytipSpecial.TonightsPick -> add("Tonight's pick", listOf(specials.items[special.itemId]))
-                is JellytipSpecial.PersonSpotlight -> add("${special.name} spotlight", special.films.map { specials.items[it] })
-                is JellytipSpecial.BecauseLoved -> add("Because you loved it", listOf(specials.items[special.anchorItemId]))
-                is JellytipSpecial.Top10 -> add("Top 10 today", special.ranked.map { specials.items[it] })
-                else -> {}
+        specials?.let { page ->
+            page.specials.forEach { special ->
+                when (special) {
+                    is JellytipSpecial.TonightsPick -> addSource("Tonight's pick", listOf(page.items[special.itemId]))
+                    is JellytipSpecial.PersonSpotlight -> addSource("${special.name} spotlight", special.films.map { page.items[it] })
+                    is JellytipSpecial.BecauseLoved -> addSource("Because you loved it", listOf(page.items[special.anchorItemId]))
+                    is JellytipSpecial.Top10 -> addSource("Top 10 today", special.ranked.map { page.items[it] })
+                    else -> {}
+                }
             }
         }
         serverRows?.rows?.forEach { row ->
@@ -99,7 +101,7 @@ object JellytipHeroMix {
                     else -> null
                 } ?: return@forEach
             if (row.iptvItems.isNotEmpty()) return@forEach
-            add(kicker, serverItems(row))
+            addSource(kicker, serverItems(row))
         }
 
         val queues =
