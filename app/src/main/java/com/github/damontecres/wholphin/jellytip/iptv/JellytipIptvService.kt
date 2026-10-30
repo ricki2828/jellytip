@@ -269,8 +269,15 @@ class JellytipIptvService
             item: String,
             positionSecs: Double,
             durationSecs: Double,
+            series: String? = null,
         ) {
-            val body = JSONObject().put("item", item).put("position", positionSecs).put("duration", durationSecs).toString()
+            val body =
+                JSONObject()
+                    .put("item", item)
+                    .put("position", positionSecs)
+                    .put("duration", durationSecs)
+                    .apply { series?.let { put("series", it) } }
+                    .toString()
             api.userCall("v1/iptv/progress", body)
         }
 

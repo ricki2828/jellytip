@@ -367,7 +367,9 @@ class JellytipIptvPlayback
             if (_state.value.target != target) return
             val pos = p.currentPosition / 1000.0
             val dur = p.duration.takeIf { it > 0 }?.div(1000.0) ?: return
-            scope.launch { service.saveProgress(item, pos, dur) }
+            // Episodes name their series (pid:s:sid) so the server's Next Up works however the episode was opened
+            val series = target.seriesId?.takeIf { target.episodeId != null }
+            scope.launch { service.saveProgress(item, pos, dur, series) }
         }
 
         fun setVolume(volume: Float) {
