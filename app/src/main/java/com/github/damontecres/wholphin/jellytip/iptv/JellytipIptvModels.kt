@@ -144,6 +144,11 @@ data class IptvPlayAnswer(
     val kind: String,
     val expires: Long?,
     val growing: Boolean,
+    /**
+     * Direct from provider (plan "IPTV playback on phones", part C; owner + `client=native` only): [url] is the
+     * provider's own absolute link with the login inside (never trace it); the one-connection guard can't hold.
+     */
+    val direct: Boolean = false,
 )
 
 /** A server-side recording (ffmpeg copy on the seedbox). Times are epoch seconds. */
@@ -635,7 +640,7 @@ object IptvParse {
         if (code == 200 && o != null) {
             val url = o.str("url") ?: return IptvPlayResult.Failed("bad_answer", "The server sent no stream link.")
             return IptvPlayResult.Ok(
-                IptvPlayAnswer(url, o.str("mime"), o.str("kind") ?: "live", o.longOrNull("expires"), o.optBoolean("growing", false)),
+                IptvPlayAnswer(url, o.str("mime"), o.str("kind") ?: "live", o.longOrNull("expires"), o.optBoolean("growing", false), o.optBoolean("direct", false)),
             )
         }
         val errCode = o?.str("code")

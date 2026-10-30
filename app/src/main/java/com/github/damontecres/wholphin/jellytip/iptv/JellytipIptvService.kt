@@ -158,7 +158,7 @@ class JellytipIptvService
                 buildString {
                     append("v1/iptv/play?channel=").append(enc(channelId))
                     if (start != null && stop != null) append("&start=$start&stop=$stop") else append("&format=ts")
-                    append("&device=").append(enc(deviceId))
+                    append("&device=").append(enc(deviceId)).append("&client=native")
                 }
             return play(q)
         }
@@ -174,7 +174,7 @@ class JellytipIptvService
                         target.vodId != null -> append("vod=").append(enc(target.vodId))
                         else -> return playChannel(target.channelId, target.start, target.stop)
                     }
-                    append("&device=").append(enc(deviceId))
+                    append("&device=").append(enc(deviceId)).append("&client=native")
                 }
             return play(q)
         }

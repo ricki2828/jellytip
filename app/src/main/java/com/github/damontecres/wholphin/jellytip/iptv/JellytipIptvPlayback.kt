@@ -253,7 +253,15 @@ class JellytipIptvPlayback
                 scope.launch {
                     when (val r = service.playItem(target)) {
                         is IptvPlayResult.Ok -> {
-                            val url = service.streamUrl(r.answer.url)
+                            // Direct answers carry the provider's own absolute link (credentials inside: not traced)
+                            val direct = r.answer.direct && Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(r.answer.url)
+                            val url = if (direct) r.answer.url else service.streamUrl(r.answer.url)
+                            if (direct) {
+                                JellytipTrace.player("iptv", "direct from provider ${target.channelId}")
+                                android.widget.Toast
+                                    .makeText(context, "Playing straight from your provider: other devices on this connection can't be seen.", android.widget.Toast.LENGTH_LONG)
+                                    .show()
+                            }
                             if (url == null) {
                                 fail(target, "The server sent a stream link the app can't use.")
                                 return@launch
