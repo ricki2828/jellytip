@@ -103,6 +103,8 @@ fun JellytipLiveTvPlayerPage(
     // Same-event alternate in use after the lineup channel's stream failed (plan §4); null = the lineup channel
     var fallback by remember { mutableStateOf<IptvChannel?>(null) }
     val tried = remember { mutableSetOf<String>() }
+    // Epoch s when this page opened: a catch-up ending after it was a programme still on (kick-off)
+    val startedAt = remember { nowSec() - 60 }
     val channel = fallback ?: lineup[index]
 
     DisposableEffect(Unit) {
@@ -161,6 +163,24 @@ fun JellytipLiveTvPlayerPage(
         val failed = playState as? IptvPlayState.Failed ?: return@LaunchedEffect
         if (failed.target != current || !current.isLive) return@LaunchedEffect
         failover("failed")
+    }
+    // From kick-off: the catch-up ends where the button was pressed (server: stop = press time); then back to live.
+    // A programme opened while it was still on (tile "From kick-off") counts as kick-off too.
+    LaunchedEffect(current) {
+        val t = current
+        if (t.isLive || t.start == null || (t.stop ?: 0L) < startedAt) return@LaunchedEffect
+        while (true) {
+            delay(1_000)
+            val p = playback.player ?: continue
+            if (playback.state.value.target == t && p.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                JellytipTrace.player("iptv", "kick-off caught up ${t.channelId}: back to live")
+                current = IptvTarget(t.channelId, channel.name)
+                playback.play(current, "kick-off ended: back to live")
+                bannerTick++
+                android.widget.Toast.makeText(context, "Back to live", android.widget.Toast.LENGTH_SHORT).show()
+                return@LaunchedEffect
+            }
+        }
     }
     // A live stream that stalls (buffering while meant to play) for 10 s is treated like a failure (plan "8h Block 3")
     LaunchedEffect(current) {
