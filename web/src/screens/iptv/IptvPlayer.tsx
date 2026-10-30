@@ -111,7 +111,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     const dur = isFinite(v?.duration ?? NaN) && (v?.duration ?? 0) > 0 ? v!.duration : lenRef.current;
     // An in-progress recording has no final length yet: don't save a half-length as if it were the whole
     if (!key || !v || !(dur > 0) || v.currentTime < 5 || growRef.current) return;
-    void saveProgress(key, Math.floor(v.currentTime), Math.floor(dur));
+    void saveProgress(key, Math.floor(v.currentTime), Math.floor(dur), target.episode ? target.series : undefined);
   }, [target]);
 
   // A stream link failed: work out why, then renew once, show who holds the connection, or give up
@@ -606,7 +606,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       debugEvent("iptv-player", "native attach", { player: "exoplayer", mime: a.mime ?? null, kind: a.kind, direct: link.direct, live }, "info");
       const subs = [
         await NativePlayer.addListener("progress", (e) => {
-          if (key && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000));
+          if (key && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000), target.episode ? target.series : undefined);
         }),
         await NativePlayer.addListener("playerError", (e) => {
           debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, ...e });
@@ -652,7 +652,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       } finally {
         subs.forEach((s) => void s.remove());
       }
-      if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000));
+      if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000), target.episode ? target.series : undefined);
       if (!alive.current) return;
       if (r.reason !== "error") {
         exit();
