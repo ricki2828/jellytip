@@ -81,7 +81,7 @@ object JellytipHeroMix {
         specials?.let { page ->
             page.specials.forEach { special ->
                 when (special) {
-                    is JellytipSpecial.TonightsPick -> addSource("Tonight's pick", listOf(page.items[special.itemId]))
+                    is JellytipSpecial.TonightsPick -> addSource("Tonight's pick", listOf(special.itemId?.let { page.items[it] }))
                     is JellytipSpecial.PersonSpotlight -> addSource("${special.name} spotlight", special.films.map { page.items[it] })
                     is JellytipSpecial.BecauseLoved -> addSource("Because you loved it", listOf(page.items[special.anchorItemId]))
                     is JellytipSpecial.Top10 -> addSource("Top 10 today", special.ranked.map { page.items[it] })

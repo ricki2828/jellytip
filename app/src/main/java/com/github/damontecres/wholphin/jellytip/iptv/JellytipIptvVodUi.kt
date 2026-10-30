@@ -299,6 +299,20 @@ fun JellytipIptvDetailsPage(
                     if (p != null) {
                         Button(onClick = { playMovie(fromStart = true) }) { Text("Play from start") }
                     }
+                    // Opened from a Home double feature: this film, then the other half (library or IPTV)
+                    val partner = remember(item.id) { com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.partnerAfterIptv(item.id) }
+                    if (partner != null) {
+                        Button(
+                            onClick = {
+                                com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.then =
+                                    com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.Then(
+                                        com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.IptvHalf(item),
+                                        partner,
+                                    )
+                                playMovie(fromStart = true)
+                            },
+                        ) { Text("Play both") }
+                    }
                     MyListButton(item, viewModel)
                 }
             } else {

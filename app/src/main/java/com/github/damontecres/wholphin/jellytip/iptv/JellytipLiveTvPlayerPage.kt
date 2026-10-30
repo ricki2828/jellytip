@@ -66,6 +66,7 @@ class JellytipLiveTvPlayerViewModel
     constructor(
         val service: JellytipIptvService,
         val playback: JellytipIptvPlayback,
+        val navigationManager: com.github.damontecres.wholphin.services.NavigationManager,
     ) : ViewModel()
 
 private const val ZAP_SETTLE_MS = 700L

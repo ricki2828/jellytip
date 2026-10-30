@@ -250,7 +250,7 @@ class HomeImagePrefetcher
             page.specials.forEach { special ->
                 when (special) {
                     is JellytipSpecial.TrailerBreak -> still(items[special.itemId], special.heroIndex)
-                    is JellytipSpecial.TonightsPick -> still(items[special.itemId], special.heroIndex)
+                    is JellytipSpecial.TonightsPick -> still(special.itemId?.let { items[it] }, special.heroIndex)
                     is JellytipSpecial.PersonSpotlight -> {
                         val w = px(SpecialTokens.PORTRAIT_W)
                         val h = px(SpecialTokens.POSTER_H)
@@ -262,8 +262,8 @@ class HomeImagePrefetcher
                     is JellytipSpecial.Top10 -> special.ranked.take(n).forEach { poster(items[it]) }
                     is JellytipSpecial.DoubleFeature ->
                         special.pairs.take(n / 2).forEach {
-                            titled(items[it.a], SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
-                            titled(items[it.b], SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
+                            titled(it.a?.let { a -> items[a] }, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
+                            titled(it.b?.let { b -> items[b] }, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H)
                         }
                     is JellytipSpecial.BecauseLoved -> {
                         titled(items[special.anchorItemId], SpecialTokens.QUOTE_W, SpecialTokens.WIDE_H)

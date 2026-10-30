@@ -52,12 +52,14 @@ sealed interface JellytipSpecial {
         override val id: String,
         override val position: Int,
         override val title: String,
-        val itemId: UUID,
+        /** Null when the pick is on IPTV only ([iptvItem]). */
+        val itemId: UUID?,
         val reason: String,
         val kicker: String,
         val heroIndex: Int?,
+        val iptvItem: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
     ) : JellytipSpecial {
-        override val itemIds get() = listOf(itemId)
+        override val itemIds get() = listOfNotNull(itemId)
     }
 
     data class Top10(
@@ -76,14 +78,17 @@ sealed interface JellytipSpecial {
         override val title: String,
         val pairs: List<Pair>,
     ) : JellytipSpecial {
+        /** A half is a library film ([a]/[b]) or, with that id null, an IPTV film ([aIptv]/[bIptv]). */
         data class Pair(
-            val a: UUID,
-            val b: UUID,
+            val a: UUID?,
+            val b: UUID?,
             val reason: String,
             val totalRuntimeMin: Int?,
+            val aIptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
+            val bIptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
         )
 
-        override val itemIds get() = pairs.flatMap { listOf(it.a, it.b) }
+        override val itemIds get() = pairs.flatMap { listOfNotNull(it.a, it.b) }
     }
 
     data class BecauseLoved(
@@ -175,7 +180,7 @@ object JellytipSpecialsParser {
                         val hero = if (o.isNull("heroIndex")) null else o.optInt("heroIndex", -1).takeIf { it >= 0 }
                         when (sp) {
                             is JellytipSpecial.TrailerBreak -> hero?.let { heroIndexes[sp.itemId] = it }
-                            is JellytipSpecial.TonightsPick -> hero?.let { heroIndexes[sp.itemId] = it }
+                            is JellytipSpecial.TonightsPick -> hero?.let { h -> sp.itemId?.let { heroIndexes[it] = h } }
                             else -> {}
                         }
                     }
@@ -194,6 +199,9 @@ object JellytipSpecialsParser {
         } catch (e: Exception) {
             null
         }
+
+    private fun vodItem(o: JSONObject?): com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? =
+        o?.let { com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.item(it, com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase) }
 
     private fun special(o: JSONObject): JellytipSpecial? {
         val id = o.optString("id").ifBlank { return null }
@@ -234,14 +242,18 @@ object JellytipSpecialsParser {
             }
 
             "tonights_pick" -> {
+                val itemId = o.uuid("itemId")
+                val iptv = vodItem(o.optJSONObject("iptvItem"))
+                if (itemId == null && iptv == null) return null
                 JellytipSpecial.TonightsPick(
                     id,
                     position,
                     title,
-                    o.uuid("itemId") ?: return null,
+                    itemId,
                     o.str("reason").orEmpty(),
                     o.str("kicker").orEmpty(),
                     o.index("heroIndex"),
+                    iptvItem = if (itemId == null) iptv else null,
                 )
             }
 
@@ -254,11 +266,17 @@ object JellytipSpecialsParser {
             "double_feature" -> {
                 val pairs =
                     o.objects("pairs").mapNotNull { p ->
+                        val a = p.uuid("a")
+                        val b = p.uuid("b")
+                        val aIptv = if (a == null) vodItem(p.optJSONObject("aIptv")) ?: return@mapNotNull null else null
+                        val bIptv = if (b == null) vodItem(p.optJSONObject("bIptv")) ?: return@mapNotNull null else null
                         JellytipSpecial.DoubleFeature.Pair(
-                            a = p.uuid("a") ?: return@mapNotNull null,
-                            b = p.uuid("b") ?: return@mapNotNull null,
+                            a = a,
+                            b = b,
                             reason = p.str("reason").orEmpty(),
                             totalRuntimeMin = if (p.isNull("totalRuntimeMin")) null else p.optInt("totalRuntimeMin").takeIf { it > 0 },
+                            aIptv = aIptv,
+                            bIptv = bIptv,
                         )
                     }
                 if (pairs.isEmpty()) return null

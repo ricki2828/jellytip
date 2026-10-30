@@ -201,11 +201,20 @@ fun MovieDetails(
                 doubleFeatureWith = JellytipDoubleBill.partnerTitle(movie.id),
                 // Opened from a Home double feature: "Play both" plays this film, then the other one
                 onPlayBoth =
-                    JellytipDoubleBill.nextAfter(movie.id)?.let { next ->
+                    JellytipDoubleBill.partnerAfterLib(movie.id)?.let { next ->
                         {
-                            viewModel.navigateTo(
-                                Destination.Playback(movie.id, 0L, jellytipThenItemId = next.toString()),
-                            )
+                            when (next) {
+                                is JellytipDoubleBill.LibHalf ->
+                                    viewModel.navigateTo(
+                                        Destination.Playback(movie.id, 0L, jellytipThenItemId = next.id.toString()),
+                                    )
+
+                                is JellytipDoubleBill.IptvHalf -> {
+                                    // The IPTV half can't join the player's queue: it starts when this film ends
+                                    JellytipDoubleBill.then = JellytipDoubleBill.Then(JellytipDoubleBill.LibHalf(movie.id, movie.title ?: ""), next)
+                                    viewModel.navigateTo(Destination.Playback(movie.id, 0L))
+                                }
+                            }
                         }
                     },
                 overviewOnClick = {

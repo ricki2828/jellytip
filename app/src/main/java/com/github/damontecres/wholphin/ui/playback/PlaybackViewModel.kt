@@ -1155,6 +1155,14 @@ class PlaybackViewModel
                         null -> {
                             Timber.v("No next up")
                             navigationManager.goBack()
+                            // Jellytip "Play both" whose other half is on IPTV: start it now
+                            val then =
+                                com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill
+                                    .takeThenAfterLib(currentItem.id)
+                            if (then is com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.IptvHalf) {
+                                Timber.v("Play both: IPTV half ${then.item.id}")
+                                navigationManager.navigateTo(Destination.JellytipIptvPlay(title = then.item.title, vodId = then.item.id), "play both IPTV half")
+                            }
                         }
                     }
                 }

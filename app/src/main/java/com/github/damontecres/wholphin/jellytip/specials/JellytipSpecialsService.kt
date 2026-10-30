@@ -163,10 +163,12 @@ class JellytipSpecialsService
 private fun JellytipSpecial.keepVisible(items: Map<UUID, BaseItem>): JellytipSpecial? =
     when (this) {
         is JellytipSpecial.TrailerBreak -> takeIf { itemId in items }
-        is JellytipSpecial.TonightsPick -> takeIf { itemId in items }
+        is JellytipSpecial.TonightsPick -> takeIf { (itemId != null && itemId in items) || iptvItem != null }
         is JellytipSpecial.PersonSpotlight -> copy(films = films.filter { it in items }).takeIf { it.films.isNotEmpty() || it.iptvItems.isNotEmpty() }
         is JellytipSpecial.Top10 -> copy(ranked = ranked.filter { it in items }).takeIf { it.ranked.size >= 3 }
-        is JellytipSpecial.DoubleFeature -> copy(pairs = pairs.filter { it.a in items && it.b in items }).takeIf { it.pairs.isNotEmpty() }
+        is JellytipSpecial.DoubleFeature ->
+            copy(pairs = pairs.filter { (it.a?.let { a -> a in items } ?: (it.aIptv != null)) && (it.b?.let { b -> b in items } ?: (it.bIptv != null)) })
+                .takeIf { it.pairs.isNotEmpty() }
         is JellytipSpecial.BecauseLoved -> copy(similar = similar.filter { it in items }).takeIf { anchorItemId in items && it.similar.isNotEmpty() }
         is JellytipSpecial.AroundHouse -> copy(entries = entries.filter { it.itemId in items }).takeIf { it.entries.isNotEmpty() }
         // A pick whose item went missing is shown like any other not-in-library pick

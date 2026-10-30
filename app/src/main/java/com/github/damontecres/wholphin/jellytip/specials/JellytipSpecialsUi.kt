@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.ui.compose.PlayerSurface
@@ -99,20 +100,61 @@ import java.util.UUID
  * other) and "Double feature with <other>". Set when a half is opened, cleared when Home opens anything else.
  */
 object JellytipDoubleBill {
+    /** One half of a double feature: a library film or an IPTV film. */
+    sealed interface Half {
+        val title: String
+    }
+
+    data class LibHalf(
+        val id: UUID,
+        override val title: String,
+    ) : Half
+
+    data class IptvHalf(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    ) : Half {
+        override val title get() = item.title
+    }
+
     data class Bill(
-        val first: UUID,
-        val second: UUID,
-        val secondTitle: String,
+        val first: Half,
+        val second: Half,
     )
 
     @Volatile
     var pair: Bill? = null
 
-    /** The other film, when [first] was opened from a double feature. */
-    fun nextAfter(first: UUID): UUID? = pair?.takeIf { it.first == first }?.second
+    /**
+     * "Play both" with an IPTV half (the library-only case queues in the player instead): when [after] finishes
+     * playing, [next] starts. Consumed once; ignored for any other title.
+     */
+    data class Then(
+        val after: Half,
+        val next: Half,
+    )
+
+    @Volatile
+    var then: Then? = null
+
+    private fun Half.isLib(id: UUID) = this is LibHalf && this.id == id
+
+    private fun Half.isIptv(vodId: String) = this is IptvHalf && item.id == vodId
+
+    /** The other film, when [first] was opened from a double feature and the other is in the library. */
+    fun nextAfter(first: UUID): UUID? = (pair?.takeIf { it.first.isLib(first) }?.second as? LibHalf)?.id
 
     /** Title of the other film, when [first] was opened from a double feature. */
-    fun partnerTitle(first: UUID): String? = pair?.takeIf { it.first == first }?.secondTitle
+    fun partnerTitle(first: UUID): String? = pair?.takeIf { it.first.isLib(first) }?.second?.title
+
+    /** The other half (library or IPTV) when library film [first] was opened from a double feature. */
+    fun partnerAfterLib(first: UUID): Half? = pair?.takeIf { it.first.isLib(first) }?.second
+
+    /** The other half when IPTV film [vodId] was opened from a double feature. */
+    fun partnerAfterIptv(vodId: String): Half? = pair?.takeIf { it.first.isIptv(vodId) }?.second
+
+    fun takeThenAfterLib(id: UUID): Half? = then?.takeIf { it.after.isLib(id) }?.next?.also { then = null }
+
+    fun takeThenAfterIptv(vodId: String): Half? = then?.takeIf { it.after.isIptv(vodId) }?.next?.also { then = null }
 }
 
 /** Sizes in dp; every special fits the ~230 dp the home leaves below the hero text. Shared with the image prefetcher. */
@@ -159,6 +201,7 @@ fun JellytipSpecialRow(
                     // Free the hero player/decoder before the details page starts
                     JellytipTrailerControl.stop()
                     JellytipDoubleBill.pair = null
+                    JellytipDoubleBill.then = null
                     viewModel.navigationManager.navigateTo(item.destination(), "special OK")
                 },
                 navigate = { destination ->
@@ -426,7 +469,12 @@ private fun TonightsPickRow(
     actions: SpecialActions,
     viewModel: JellytipHomeViewModel,
 ) {
-    val item = items[special.itemId] ?: return
+    val iptv = special.iptvItem
+    if (special.itemId == null && iptv != null) {
+        IptvTonightsPick(special, iptv, onFocusItem, focusModifier, actions)
+        return
+    }
+    val item = special.itemId?.let { items[it] } ?: return
     val pick = rememberDistinctStill(item)
     val heroItem = if (hasDistinctStill(item)) item else null
     val sizes = rememberJellytipSizes()
@@ -462,6 +510,59 @@ private fun TonightsPickRow(
                 ) {
                     KickerUnlessTitled(special.kicker, special.title)
                     LogoOrTitle(item, maxWidthPx = 340, maxHeightPx = 110)
+                    if (special.reason.isNotBlank()) {
+                        Caption(special.reason, alpha = 0.9f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 2)
+                    }
+                }
+            }
+        },
+    )
+}
+
+/** Tonight's pick that is on IPTV only: the same feature card with the IPTV film's art and the IPTV cue; OK = IPTV details. */
+@Composable
+private fun IptvTonightsPick(
+    special: JellytipSpecial.TonightsPick,
+    iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    onFocusItem: (BaseItem?, Boolean) -> Unit,
+    focusModifier: Modifier,
+    actions: SpecialActions,
+) {
+    val sizes = rememberJellytipSizes()
+    val open = { actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title)) }
+    ItemRow(
+        title = special.title,
+        items = listOf(iptv),
+        onClickItem = { _, _ -> open() },
+        onLongClickItem = { _, _ -> open() },
+        horizontalPadding = SpecialTokens.SPACING,
+        modifier = focusModifier,
+        cardContent = { _, _, cardModifier, onClick, onLongClick ->
+            SpecialCard(
+                width = SpecialTokens.FEATURE_W,
+                height = SpecialTokens.FEATURE_H,
+                onClick = onClick,
+                onLongClick = onLongClick,
+                modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                focusScale = LARGE_CARD_SCALE,
+            ) {
+                IptvArt(iptv, showTitle = false)
+                LeftScrim()
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(sizes.px(26)).widthIn(max = SpecialTokens.FEATURE_W * 0.8f),
+                ) {
+                    KickerUnlessTitled(special.kicker, special.title)
+                    Text(
+                        text = iptv.title,
+                        color = Color.White,
+                        fontFamily = JellytipFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = sizes.sp(JellytipHomeTokens.TITLE_PX),
+                        style = TextStyle(shadow = SoftShadow),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     if (special.reason.isNotBlank()) {
                         Caption(special.reason, alpha = 0.9f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 2)
                     }
@@ -537,6 +638,23 @@ internal fun RankedPoster(
 // ---------------------------------------------------------------------------------------------------------------------
 // Double feature: two 16:9 thumbs joined + reason; OK = details of A with "Play both"
 
+/** A double-feature half as drawn: a library film or an IPTV film. */
+private sealed interface PairHalf {
+    val bill: JellytipDoubleBill.Half
+
+    data class Lib(
+        val item: BaseItem,
+    ) : PairHalf {
+        override val bill get() = JellytipDoubleBill.LibHalf(item.id, item.title ?: item.name ?: "")
+    }
+
+    data class Vod(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    ) : PairHalf {
+        override val bill get() = JellytipDoubleBill.IptvHalf(item)
+    }
+}
+
 @Composable
 private fun DoubleFeatureRow(
     special: JellytipSpecial.DoubleFeature,
@@ -546,12 +664,20 @@ private fun DoubleFeatureRow(
     actions: SpecialActions,
 ) {
     val sizes = rememberJellytipSizes()
-    // Each half opens its own film; the details page then offers Play both (that film first, then the other)
-    val openHalf: (BaseItem, BaseItem) -> Unit = { film, other ->
+    // Each half opens its own film (library details or IPTV details); that page then offers Play both
+    val openHalf: (PairHalf, PairHalf) -> Unit = { film, other ->
         JellytipTrailerControl.stop()
-        JellytipDoubleBill.pair = JellytipDoubleBill.Bill(film.id, other.id, other.title ?: other.name ?: "")
-        actions.navigate(film.destination())
+        JellytipDoubleBill.then = null
+        JellytipDoubleBill.pair = JellytipDoubleBill.Bill(film.bill, other.bill)
+        when (film) {
+            is PairHalf.Lib -> actions.navigate(film.item.destination())
+            is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+        }
     }
+    fun half(
+        id: UUID?,
+        iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem?,
+    ): PairHalf? = id?.let { items[it] }?.let { PairHalf.Lib(it) } ?: iptv?.let { PairHalf.Vod(it) }
     ItemRow(
         title = special.title,
         items = special.pairs,
@@ -561,8 +687,8 @@ private fun DoubleFeatureRow(
         horizontalPadding = SpecialTokens.SPACING,
         modifier = focusModifier,
         cardContent = { _, pair, cardModifier, onClick, onLongClick ->
-            val a = pair?.let { items[it.a] }
-            val b = pair?.let { items[it.b] }
+            val a = pair?.let { half(it.a, it.aIptv) }
+            val b = pair?.let { half(it.b, it.bIptv) }
             if (pair != null && a != null && b != null) {
                 // One framed unit, two focusable halves (Right goes A -> B -> next pair's A)
                 var unitFocused by remember { mutableStateOf(false) }
@@ -576,7 +702,7 @@ private fun DoubleFeatureRow(
                                 .border(1.dp, JellytipPalette.Vanilla.copy(alpha = if (unitFocused) 0.35f else 0.15f), RoundedCornerShape(8.dp))
                                 .padding(PAIR_FRAME),
                     ) {
-                        listOf(a to b, b to a).forEachIndexed { half, (film, other) ->
+                        listOf(a to b, b to a).forEachIndexed { index, (film, other) ->
                             SpecialCard(
                                 width = SpecialTokens.PAIR_W,
                                 height = SpecialTokens.PAIR_H,
@@ -586,16 +712,25 @@ private fun DoubleFeatureRow(
                                 },
                                 onLongClick = {
                                     onLongClick()
-                                    actions.open(film)
+                                    when (film) {
+                                        is PairHalf.Lib -> actions.open(film.item)
+                                        is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+                                    }
                                 },
-                                modifier = (if (half == 0) cardModifier else Modifier).onFocusChanged { if (it.isFocused) onFocusItem(film, true) },
+                                modifier =
+                                    (if (index == 0) cardModifier else Modifier).onFocusChanged {
+                                        if (it.isFocused) onFocusItem((film as? PairHalf.Lib)?.item, film is PairHalf.Lib)
+                                    },
                                 focusScale = PAIR_HALF_SCALE,
                                 // The partner half stays at full brightness so the pair still reads as a pair
                                 dimWhenRowFocused = !unitFocused,
                             ) {
-                                JellytipTitledImage(film, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H, fetchRanking = false)
+                                when (film) {
+                                    is PairHalf.Lib -> JellytipTitledImage(film.item, SpecialTokens.PAIR_W, SpecialTokens.PAIR_H, fetchRanking = false)
+                                    is PairHalf.Vod -> IptvArt(film.item)
+                                }
                                 Text(
-                                    text = (half + 1).toString(),
+                                    text = (index + 1).toString(),
                                     color = Color.White,
                                     fontFamily = JellytipFontFamily,
                                     fontWeight = FontWeight.Medium,
@@ -618,6 +753,37 @@ private fun DoubleFeatureRow(
             }
         },
     )
+}
+
+/**
+ * An IPTV film inside a special's card: its backdrop (else poster), the title over a scrim, and the IPTV cue (jelly
+ * dot + quality) in the top-right corner.
+ */
+@Composable
+private fun BoxScope.IptvArt(
+    item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    showTitle: Boolean = true,
+) {
+    val image = item.backdrop ?: item.poster
+    var failed by remember(image) { mutableStateOf(false) }
+    if (image != null && !failed) {
+        AsyncImage(model = image, contentDescription = item.title, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
+    }
+    if (showTitle) {
+        BottomScrim(0.7f)
+        Text(
+            text = item.title,
+            color = Color.White,
+            fontFamily = JellytipFontFamily,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(shadow = SoftShadow),
+            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+        )
+    }
+    com.github.damontecres.wholphin.jellytip.iptv.IptvCornerMark(item.qualityLabel, Modifier.align(Alignment.TopEnd).padding(5.dp))
 }
 
 private val PAIR_GAP = 8.dp

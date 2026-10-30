@@ -172,6 +172,18 @@ fun JellytipServerRowView(
                 TrendingTop10Row(row, loaded.orEmpty(), onFocusItem, click, longClick, play, focusModifier, viewModel)
             }
 
+            // Franchise rows may carry IPTV parts too (`iptvItems` + `order`): before the mixed/IPTV row branches
+            row.isFranchise && row.itemIds.isNotEmpty() && loaded == null -> {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ItemRowTitle(row.title)
+                    Spacer(Modifier.height(options.heightDp.dp + 16.dp))
+                }
+            }
+
+            row.isFranchise && (loaded.orEmpty().isNotEmpty() || row.iptvItems.isNotEmpty()) -> {
+                FranchiseRow(row, row.collection!!, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
+            }
+
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
                 MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
@@ -402,7 +414,14 @@ private fun FranchiseRow(
     val sizes = rememberJellytipSizes()
     // Series order from the parts; IPTV fills the slots the library lacks; library films without a part go last
     val entries =
-        remember(films, collection) {
+        remember(films, collection, row.order, row.iptvItems) {
+            if (row.order.isNotEmpty() || row.iptvItems.isNotEmpty()) {
+                // The server's mixed order (part order): library films and IPTV parts as one list
+                val mixed =
+                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse
+                        .ordered<FranchiseEntry>(row.order, films, row.iptvItems, { FranchiseEntry.Film(it) }, { FranchiseEntry.Iptv(it) })
+                return@remember listOf(FranchiseEntry.Info) + mixed
+            }
             val byId = films.associateBy { it.id }
             val ordered =
                 collection.parts.mapNotNull { part ->

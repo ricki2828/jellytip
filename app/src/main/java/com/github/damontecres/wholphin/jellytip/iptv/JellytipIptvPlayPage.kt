@@ -47,6 +47,7 @@ import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -106,6 +107,27 @@ fun JellytipIptvPlayPage(
                 position = it.currentPosition
                 duration = it.duration.takeIf { d -> d > 0 } ?: 0L
                 playing = it.playWhenReady
+                // "Play both" from a double feature: this IPTV film ended, start the other half
+                if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && target.vodId != null) {
+                    val next =
+                        com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill
+                            .takeThenAfterIptv(target.vodId)
+                    if (next != null) {
+                        JellytipTrace.player("iptv", "play both: next after ${target.label}")
+                        viewModel.navigationManager.goBack()
+                        when (next) {
+                            is com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.LibHalf ->
+                                viewModel.navigationManager.navigateTo(Destination.Playback(next.id, 0L), "play both second half")
+
+                            is com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.IptvHalf ->
+                                viewModel.navigationManager.navigateTo(
+                                    Destination.JellytipIptvPlay(title = next.item.title, vodId = next.item.id),
+                                    "play both second half",
+                                )
+                        }
+                        return@LaunchedEffect
+                    }
+                }
             }
             sinceSave += 500
             if (sinceSave >= SAVE_EVERY_MS) {
