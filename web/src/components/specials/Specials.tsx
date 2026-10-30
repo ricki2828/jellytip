@@ -457,6 +457,7 @@ function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
   const [box, inView] = useInView(0.5);
   const [focused, setFocused] = useState(false);
   const [t, setT] = useState(0);
+  const passedKey = useRef("");
   const [sound, setSound] = useState(false);
   const [getIt, setGetIt] = useState<ClosetPick | null>(null);
   const blocked = useVideoBlocked(s.id);
@@ -502,7 +503,15 @@ function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
             muted
             playsInline
             preload="metadata"
-            onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
+            onTimeUpdate={(e) => {
+              // timeupdate fires ~4x a second: re-render only when a pick's moment has passed (or been sought back over)
+              const at = e.currentTarget.currentTime;
+              const key = s.picks.map((p) => (p.atSec != null && at >= p.atSec ? 1 : 0)).join("");
+              if (key !== passedKey.current) {
+                passedKey.current = key;
+                setT(at);
+              }
+            }}
           />
           <button
             className="closet-hit"
