@@ -86,6 +86,11 @@ class NavDrawerService
                 }
             }
 
+            // Jellytip: "Recordings" under Live TV once the person has any (the flag follows every recordings answer)
+            coroutineScope.launchDefault {
+                jellytipIptv.hasRecordings.collectLatest { applyRecordings(it) }
+            }
+
             // Handle when music is actively playing or not
             coroutineScope.launchDefault {
                 musicService.state.collectLatest { music ->
@@ -265,6 +270,23 @@ class NavDrawerService
                     moreItems = moreItems,
                     allLibraries = allLibraries,
                 )
+            }
+            applyRecordings(jellytipIptv.hasRecordings.value)
+            // Ask once so the entry appears without visiting Live TV or Home first
+            if (liveTv) coroutineScope.launchDefault { runCatching { jellytipIptv.recordings() } }
+        }
+
+        /** Put "Recordings" right after "Live TV" (in whichever list Live TV is), or take it out. */
+        private fun applyRecordings(has: Boolean) {
+            _state.update { st ->
+                fun place(list: List<NavDrawerItem>): List<NavDrawerItem> {
+                    val without = list.filter { it !is NavDrawerItem.Recordings }
+                    val at = without.indexOfFirst { it is NavDrawerItem.LiveTv }
+                    return if (has && at >= 0) without.subList(0, at + 1) + NavDrawerItem.Recordings + without.subList(at + 1, without.size) else without
+                }
+                val items = place(st.items)
+                val more = place(st.moreItems)
+                if (items == st.items && more == st.moreItems) st else st.copy(items = items, moreItems = more)
             }
         }
     }

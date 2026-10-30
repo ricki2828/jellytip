@@ -141,6 +141,11 @@ class NavDrawerViewModel
                     navigationManager.navigateToFromDrawer(Destination.JellytipLiveTv)
                 }
 
+                NavDrawerItem.Recordings -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipRecordings)
+                }
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -173,6 +178,7 @@ class NavDrawerViewModel
                             is NavDrawerItem.Favorites -> Destination.Favorites
                             is NavDrawerItem.Discover -> Destination.Discover
                             is NavDrawerItem.LiveTv -> Destination.JellytipLiveTv
+                            is NavDrawerItem.Recordings -> Destination.JellytipRecordings
                             else -> null
                         }
                     }
@@ -254,6 +260,14 @@ sealed interface NavDrawerItem {
             get() = "a_jellytip_live_tv"
 
         override fun name(context: Context): String = context.getString(R.string.jellytip_live_tv)
+    }
+
+    /** Jellytip: IPTV recordings (the Live TV page on its Recordings tab), right under Live TV once any exist. */
+    object Recordings : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_recordings"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_recordings)
     }
 }
 
@@ -687,6 +701,10 @@ fun NavigationDrawerScope.NavItem(
 
                 NavDrawerItem.LiveTv -> {
                     R.drawable.gf_dvr
+                }
+
+                NavDrawerItem.Recordings -> {
+                    R.string.fa_video
                 }
 
                 is ServerNavDrawerItem -> {

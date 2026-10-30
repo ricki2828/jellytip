@@ -179,11 +179,24 @@ class JellytipIptvService
             return play(q)
         }
 
+        @Volatile
+        private var recordingsCache: List<IptvRecording>? = null
+
+        /** True once a recordings answer had any live recording (scheduled, recording, done): sidebar "Recordings". */
+        val hasRecordings = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+        /** Last recordings answer of this process (Home draws its row on the first frame). */
+        fun peekRecordings(): List<IptvRecording>? = recordingsCache
+
         /** Recordings and the server's space; null = unavailable. */
         suspend fun recordings(): Pair<IptvSpace?, List<IptvRecording>>? {
+            val b = base()
             val (code, body) = get("v1/iptv/recordings") ?: return null
             if (code != 200) return null
-            return runCatching { IptvParse.recordings(body) }.getOrNull()
+            val got = runCatching { IptvParse.recordings(body) { resolve(b, it) } }.getOrNull() ?: return null
+            recordingsCache = got.second
+            hasRecordings.value = got.second.any { it.state != "cancelled" && it.state != "failed" }
+            return got
         }
 
         /** Record the guide programme of [channelId] starting at [programmeStart] (epoch s). */

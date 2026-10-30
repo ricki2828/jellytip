@@ -193,6 +193,10 @@ sealed class Destination(
     @Serializable
     data object JellytipLiveTv : Destination(false)
 
+    /** Jellytip: the Live TV page opened on its Recordings tab (sidebar "Recordings", Home recordings sheet). */
+    @Serializable
+    data object JellytipRecordings : Destination(false)
+
     /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
     @Serializable
     data class JellytipLiveTvPlayer(

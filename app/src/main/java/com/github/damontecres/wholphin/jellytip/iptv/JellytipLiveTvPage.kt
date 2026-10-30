@@ -103,6 +103,8 @@ data class LiveTvState(
     /** Guide window start (epoch s, on a half hour); the window is [IptvRules.WINDOW_SECS] wide. */
     val windowStart: Long = IptvRules.windowStart(nowSec()),
     val message: String? = null,
+    /** Set after a successful record: the "Recording scheduled" confirmation with View. */
+    val recordConfirm: String? = null,
     /** Recordings tab: null = loading. */
     val recordings: List<IptvRecording>? = null,
     val space: IptvSpace? = null,
@@ -133,6 +135,15 @@ class JellytipLiveTvViewModel
         /** Last focused cell key, restored when the page comes back. */
         var lastFocusKey: String? = null
 
+        /** Tab to open instead of the default once the tabs are known (sidebar "Recordings"). */
+        private var wantedTab: String? = null
+
+        fun openTab(id: String) {
+            if (_state.value.tabs?.any { it.id == id } == true) selectTab(id, "requested") else wantedTab = id
+        }
+
+        fun dismissRecordConfirm() = _state.update { it.copy(recordConfirm = null) }
+
         init {
             viewModelScope.launch {
                 val groups = service.groups()
@@ -156,7 +167,7 @@ class JellytipLiveTvViewModel
                     }
                 _state.update { it.copy(tabs = tabs) }
                 loadRecordings()
-                (default?.id ?: tabs.firstOrNull { it.id != RECORDINGS }?.id)?.let { selectTab(it, "first tab") }
+                (wantedTab ?: default?.id ?: tabs.firstOrNull { it.id != RECORDINGS }?.id)?.let { selectTab(it, if (it == wantedTab) "requested" else "first tab") }
                     ?: _state.update { it.copy(channels = emptyList(), message = "No channels are opted in yet (Settings › Live TV on the web).") }
             }
         }
@@ -250,7 +261,14 @@ class JellytipLiveTvViewModel
         ) {
             viewModelScope.launch {
                 val r = service.record(ch.id, p.start)
-                _state.update { it.copy(message = if (r.ok) (r.message ?: "Recording “${p.title}”.") else r.message) }
+                _state.update {
+                    if (r.ok) {
+                        // A server warning (e.g. space) stays on the info line; the confirmation says where it will be
+                        it.copy(message = r.message ?: "Recording “${p.title}” scheduled.", recordConfirm = p.title)
+                    } else {
+                        it.copy(message = r.message)
+                    }
+                }
                 if (r.ok) loadRecordings()
             }
         }
@@ -367,9 +385,27 @@ private fun cellsFor(
 @Composable
 fun JellytipLiveTvPage(
     modifier: Modifier = Modifier,
+    /** Open on this tab (e.g. [JellytipLiveTvViewModel.RECORDINGS]) instead of the guide. */
+    initialTab: String? = null,
     viewModel: JellytipLiveTvViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    LaunchedEffect(initialTab) { initialTab?.let(viewModel::openTab) }
+    if (state.recordConfirm != null) {
+        DialogPopup(
+            showDialog = true,
+            title = "Recording scheduled. It'll appear on Home.",
+            dialogItems =
+                listOf(
+                    DialogItem("View recordings", dismissOnClick = true) {
+                        viewModel.dismissRecordConfirm()
+                        viewModel.openTab(JellytipLiveTvViewModel.RECORDINGS)
+                    },
+                    DialogItem("OK", dismissOnClick = true) { viewModel.dismissRecordConfirm() },
+                ),
+            onDismissRequest = { viewModel.dismissRecordConfirm() },
+        )
+    }
     val playback = viewModel.playback
     val playState by playback.state.collectAsState()
     val scope = rememberCoroutineScope()

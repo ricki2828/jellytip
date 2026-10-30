@@ -421,6 +421,14 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)
         }
 
+        Destination.JellytipRecordings -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(
+                modifier = modifier,
+                initialTab = com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvViewModel.RECORDINGS,
+            )
+        }
+
         is Destination.JellytipIptvDetails -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDetailsPage(id = destination.id, title = destination.title, modifier = modifier)

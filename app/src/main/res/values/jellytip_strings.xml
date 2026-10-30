@@ -2,6 +2,7 @@
 <resources>
     <string name="jellytip_settings">Jellytip</string>
     <string name="jellytip_live_tv" translatable="false">Live TV</string>
+    <string name="jellytip_recordings" translatable="false">Recordings</string>
     <string name="jellytip_personalise" translatable="false">Personalise</string>
     <string name="jellytip_personalise_summary" translatable="false">Your taste, Home rows, follows, kids profile and settings that follow you</string>
     <string name="jellytip_follow" translatable="false">Follow</string>

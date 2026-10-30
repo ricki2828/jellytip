@@ -155,8 +155,25 @@ data class IptvRecording(
     val playable: Boolean,
     val positionSecs: Double?,
     val durationSecs: Double?,
+    /** Channel logo (absolute, resolved), when the server sends one; null = initials. */
+    val logo: String? = null,
 ) {
     val upcoming get() = state == "scheduled" || state == "recording"
+
+    /** Finished and playable, not watched yet ("NEW" on Home). */
+    val readyNew get() = state == "done" && playable && !watched
+}
+
+/**
+ * Home "Recordings" row order (plan "Recordings prominent"): recording now, ready and unwatched (newest first),
+ * scheduled (soonest first), watched (newest first). Cancelled and failed ones are left out.
+ */
+fun homeRecordings(list: List<IptvRecording>): List<IptvRecording> {
+    val now = list.filter { it.state == "recording" }.sortedBy { it.start }
+    val fresh = list.filter { it.readyNew }.sortedByDescending { it.start }
+    val scheduled = list.filter { it.state == "scheduled" }.sortedBy { it.start }
+    val watched = list.filter { it.state == "done" && it.watched }.sortedByDescending { it.start }
+    return now + fresh + scheduled + watched
 }
 
 data class IptvSpace(
@@ -418,7 +435,10 @@ object IptvParse {
         }
     }
 
-    fun recording(o: JSONObject?): IptvRecording? {
+    fun recording(
+        o: JSONObject?,
+        resolve: (String) -> String? = { null },
+    ): IptvRecording? {
         o ?: return null
         val id = o.str("id") ?: return null
         val prog = o.optJSONObject("progress")
@@ -437,10 +457,14 @@ object IptvParse {
             playable = o.optBoolean("playable", false),
             positionSecs = prog?.takeUnless { it.isNull("position") }?.optDouble("position"),
             durationSecs = prog?.takeUnless { it.isNull("duration") }?.optDouble("duration"),
+            logo = (o.str("logo") ?: o.optJSONObject("channelInfo")?.str("logo"))?.let(resolve),
         )
     }
 
-    fun recordings(json: String): Pair<IptvSpace?, List<IptvRecording>> {
+    fun recordings(
+        json: String,
+        resolve: (String) -> String? = { null },
+    ): Pair<IptvSpace?, List<IptvRecording>> {
         val root = JSONObject(json)
         val sp = root.optJSONObject("space")
         val space =
@@ -454,7 +478,7 @@ object IptvParse {
                 )
             }
         val a = root.optJSONArray("recordings") ?: JSONArray()
-        return space to (0 until a.length()).mapNotNull { recording(a.optJSONObject(it)) }
+        return space to (0 until a.length()).mapNotNull { recording(a.optJSONObject(it), resolve) }
     }
 
     fun recordResult(
