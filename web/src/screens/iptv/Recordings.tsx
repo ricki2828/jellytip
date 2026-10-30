@@ -1,6 +1,7 @@
 // Recordings: storage against the cap, then each recording with play / cancel / delete.
 import { useCallback, useEffect, useState } from "react";
 import { cancelRecording, deleteRecording, errorText, recordings as getRecordings, type Answer, type Recording, type Space } from "../../api/iptv";
+import { StopRecordingSheet } from "../../components/StopRecordingSheet";
 import { targetPath } from "../../lib/iptvPlay";
 import { go } from "../../lib/router";
 
@@ -24,6 +25,7 @@ const gb = (bytes?: number) => (bytes ? `${(bytes / 1e9).toFixed(bytes > 1e10 ? 
 export function Recordings() {
   const [data, setData] = useState<{ space: Space; recordings: Recording[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [stopping, setStopping] = useState<Recording | null>(null);
   const [confirm, setConfirm] = useState<Recording["id"] | null>(null);
 
   const load = useCallback(async () => {
@@ -87,7 +89,7 @@ export function Recordings() {
                 </button>
               )}
               {(r.state === "scheduled" || r.state === "recording") && (
-                <button className="btn small" data-nav onClick={() => act(() => cancelRecording(r.id))}>
+                <button className="btn small" data-nav onClick={() => (r.state === "recording" ? setStopping(r) : act(() => cancelRecording(r.id)))}>
                   {r.state === "recording" ? "Stop" : "Cancel"}
                 </button>
               )}
@@ -104,6 +106,7 @@ export function Recordings() {
           </li>
         ))}
       </ul>
+      {stopping && <StopRecordingSheet rec={stopping} onClose={() => setStopping(null)} onStopped={load} />}
     </section>
   );
 }

@@ -8,6 +8,8 @@ import type Mpegts from "mpegts.js";
 import { deviceId } from "../../api/jellyfin";
 import { play, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { engineFor, failureText, fallbackFormat, linkFailure, playbackFailureText, playQuery, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { StreamBusy } from "../../components/StreamBusy";
+import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { back } from "../../lib/router";
 import "./iptv.css";
@@ -21,7 +23,7 @@ const loadMpegts = () => import("mpegts.js");
 /** Stable per-browser id for the connection guard (a new /play from the same device replaces its stream = zap). */
 export const iptvDevice = () => `web-${deviceId().replace(/[^A-Za-z0-9]/g, "").slice(0, 16)}`;
 
-type State = { kind: "loading" } | { kind: "playing" } | { kind: "full"; text: string; connection?: Connection } | { kind: "error"; text: string };
+type State = { kind: "loading" } | { kind: "playing" } | { kind: "full"; text: string; connection?: Connection; blocker?: Blocker } | { kind: "error"; text: string };
 
 /** Status + X-Iptv-Error of a stream link, without opening the provider (HEAD never does). */
 async function probe(url: string): Promise<{ status: number; code: string | null }> {
@@ -197,20 +199,27 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
     [onLinkError],
   );
 
-  const start = useCallback(async () => {
-    setState({ kind: "loading" });
+  /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
+  const start = useCallback(async (retry = false): Promise<boolean> => {
+    if (!retry) setState({ kind: "loading" });
     if (isLive && fmtRef.current === "ts" && !(await loadMpegts()).default.getFeatureList().mseLivePlayback) fmtRef.current = "m3u8";
     const a = await play(playQuery(target, iptvDevice(), fmtRef.current));
-    if (!alive.current) return;
+    if (!alive.current) return false;
     if (a.status === 200 && a.data?.url) {
       setAnswer(a.data);
       setState({ kind: "playing" });
       await attach(a.data);
-      return;
+      return true;
     }
     const what = linkFailure(a.status, a.data?.code);
-    if (what === "full") setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection });
-    else setState({ kind: "error", text: failureText(a.data?.code, a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`)) });
+    if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
+    else if (what === "full") {
+      const b = parseBlocker(a.data);
+      // Only a blocker we can say something useful about gets the pop-up; older servers keep today's message
+      const popup = b && (canStop(b) || (b.kind === "viewer" && (b.title || b.channel))) ? b : undefined;
+      setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection, blocker: popup });
+    } else setState({ kind: "error", text: failureText(a.data?.code, a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`)) });
+    return false;
   }, [target, isLive, attach]);
 
   useEffect(() => {
@@ -291,7 +300,8 @@ export function IptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; 
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
       {state.kind === "loading" && <div className="spinner" />}
-      {(state.kind === "error" || state.kind === "full") && (
+      {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
+      {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
         <div className="player-error">
           <p>{state.text}</p>
           {state.kind === "full" && state.connection?.active?.length ? (

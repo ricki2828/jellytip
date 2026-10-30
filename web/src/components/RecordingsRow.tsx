@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cancelRecording } from "../api/iptv";
 import { refreshRecs, useRecs } from "../api/recStore";
+import { StopRecordingSheet } from "./StopRecordingSheet";
 import { chipFor, lengthText, orderRecs, type Rec } from "../lib/recs";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
@@ -33,9 +34,10 @@ function RecTile({ r, onOpen }: { r: Rec; onOpen: () => void }) {
 export function RecordingsRow() {
   const recs = useRecs();
   const [sheet, setSheet] = useState<Rec | null>(null);
+  const [stopping, setStopping] = useState<Rec | null>(null);
   const list = recs ? orderRecs(recs) : [];
   if (!list.length) return null;
-  const open = (r: Rec) => (r.playable ? go(playPath(r)) : r.state === "scheduled" ? setSheet(r) : go("/recordings"));
+  const open = (r: Rec) => (r.state === "recording" ? setStopping(r) : r.playable ? go(playPath(r)) : r.state === "scheduled" ? setSheet(r) : go("/recordings"));
   return (
     <section className="row recs-row">
       <h2 className="row-title">
@@ -51,6 +53,7 @@ export function RecordingsRow() {
           <RecTile key={r.id} r={r} onOpen={() => open(r)} />
         ))}
       </div>
+      {stopping && <StopRecordingSheet rec={stopping} onClose={() => setStopping(null)} onStopped={() => void refreshRecs(true)} onWatch={stopping.playable ? () => go(playPath(stopping)) : undefined} />}
       {sheet && (
         <div className="livetv-sheet-back" onClick={() => setSheet(null)}>
           <div className="livetv-sheet" role="dialog" aria-label={sheet.title} onClick={(e) => e.stopPropagation()}>

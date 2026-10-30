@@ -135,6 +135,8 @@ export interface Recording {
   desc?: string;
   start: number;
   stop: number;
+  /** Stop plus the end padding, when the server sends it. */
+  stopPadded?: number;
   state: "scheduled" | "recording" | "done" | "failed" | "cancelled";
   bytes?: number;
   error?: string | null;

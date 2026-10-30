@@ -9,6 +9,7 @@ export interface Rec {
   desc?: string;
   start: number;
   stop: number;
+  stopPadded?: number;
   state: "scheduled" | "recording" | "done" | "failed" | "cancelled";
   watched?: boolean;
   playable?: boolean;

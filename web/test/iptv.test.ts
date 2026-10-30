@@ -94,3 +94,24 @@ test("failure text names the engine detail and never claims a stop", () => {
 test("debug log drops the signed part of stream links", () => {
   assert.equal(scrub("GET https://h/jellytip-api/v1/iptv/s/abc123.ts?x=1 failed"), "GET https://h/jellytip-api/v1/iptv/s/…?x=1 failed");
 });
+
+import { blockerText, canStop, parseBlocker } from "../src/lib/holders.ts";
+
+test("409 holders: recording wins and is stoppable", () => {
+  const b = parseBlocker({ connection: { active: [{ kind: "viewer", title: "Ch 5" }, { kind: "recording", recordingId: 7, title: "Final", endsAt: 1_800_000_000 }] } });
+  assert.equal(b?.kind, "recording");
+  assert.ok(canStop(b));
+  assert.match(blockerText(b!), /^Recording Final is using your stream until \d/);
+});
+
+test("409 holders: viewer cannot be stopped, old server shapes tolerated", () => {
+  const v = parseBlocker({ connection: { active: [{ kind: "viewer", channel: "Sky Sport 1" }] } });
+  assert.equal(canStop(v), false);
+  assert.equal(blockerText(v!), "Sky Sport 1 is being watched on another device.");
+  const old = parseBlocker({ connection: { active: [{ kind: "recording", label: "Match" }] } });
+  assert.equal(canStop(old), false);
+  assert.equal(blockerText(old!), "Recording Match is using your stream.");
+  assert.equal(parseBlocker({ connection: { active: [{ kind: "watch", userName: "Sam" }] } })?.kind, "viewer");
+  assert.equal(parseBlocker(null), null);
+  assert.equal(parseBlocker({ error: "x" }), null);
+});
