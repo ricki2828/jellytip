@@ -51,6 +51,8 @@ data class SearchIptv(
     val year: Int?,
     val kind: String,
     val tech: List<String>,
+    /** Poster link (resolved to absolute by the service); null = title card. */
+    val poster: String? = null,
 )
 
 /** A result group in the server's order; only the list matching [type] is filled. */
@@ -167,6 +169,7 @@ object SearchParse {
                                         it.optInt("year", 0).takeIf { y -> y > 0 },
                                         it.str("kind") ?: "movie",
                                         strings(it.optJSONArray("tech")),
+                                        it.str("poster") ?: it.str("posterUrl"),
                                     )
                                 },
                         )
@@ -211,6 +214,19 @@ object SearchParse {
 
 /** Removing a chip: drop the words that produced it from the query (pure; unit tested). */
 object SearchRules {
+    /**
+     * Display order (Ricki 30-Oct: "iptv content should be in search below standard stuff"): library groups in the
+     * server's order, then "On your IPTV", then "Not in the library". Stable, so server order holds within a band.
+     */
+    fun displayOrder(groups: List<SearchGroup>): List<SearchGroup> =
+        groups.sortedBy {
+            when (it.type) {
+                "iptv" -> 1
+                "discover" -> 2
+                else -> 0
+            }
+        }
+
     private val decadeWords = Regex("""\b(?:19|20)?\d0'?s\b""", RegexOption.IGNORE_CASE)
     private val techWords = Regex("""\b(?:4k|uhd|dolby atmos|atmos|dolby vision|dv|hdr10\+?|hdr|imax)\b""", RegexOption.IGNORE_CASE)
     private val runtimeWords = Regex("""\b(?:under|less than|shorter than)\s+\d+\s*(?:h|hrs?|hours?|m|mins?|minutes?)\b|\bshort\b""", RegexOption.IGNORE_CASE)
@@ -303,7 +319,13 @@ class JellytipSearchService
                 return null
             }
             if (code != 200) return null
-            return runCatching { SearchParse.answer(body) }.getOrNull()
+            val a = runCatching { SearchParse.answer(body) }.getOrNull() ?: return null
+            return a.copy(
+                groups =
+                    a.groups.map { g ->
+                        if (g.iptv.none { it.poster != null }) g else g.copy(iptv = g.iptv.map { it.copy(poster = it.poster?.let { p -> api.resolveUrl(p) }) })
+                    },
+            )
         }
 
         suspend fun recordRecent(q: String) {

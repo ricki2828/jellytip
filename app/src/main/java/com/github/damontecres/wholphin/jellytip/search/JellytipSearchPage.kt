@@ -52,8 +52,6 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
-import com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem
-import com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRowView
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -277,7 +275,7 @@ private fun SearchContent(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusRestorer().onFocusChanged { if (it.hasFocus) resultsTouched = true },
                 ) {
-                    answer.groups.forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                    SearchRules.displayOrder(answer.groups).forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
                 }
         }
     }
@@ -313,7 +311,7 @@ private fun groupTitle(g: SearchGroup): String {
             "shows" -> "Shows"
             "people" -> "People"
             "collections" -> "Collections"
-            "iptv" -> "On IPTV"
+            "iptv" -> "On your IPTV"
             "discover" -> "Not in the library"
             "lists" -> "Letterboxd lists"
             else -> g.type
@@ -375,31 +373,10 @@ private fun ResultGroup(
                         }
                     }
                     items(g.iptv, key = { "i${it.id}" }) { i ->
-                        IptvVodTile(
-                            item =
-                                IptvVodItem(
-                                    id = i.id,
-                                    kind = if (i.kind == "series") "series" else "movie",
-                                    tmdbId = null,
-                                    title = listOfNotNull(i.name, i.year?.toString()).joinToString(" · "),
-                                    year = i.year,
-                                    quality = i.tech.take(1).map { it.lowercase() },
-                                    poster = null,
-                                    backdrop = null,
-                                    overview = "",
-                                    rating = null,
-                                    providerName = null,
-                                    progress = null,
-                                    tech = i.tech,
-                                ),
-                            width = 240.dp,
-                            height = 135.dp,
-                            poster = false,
-                            onClick = {
-                                viewModel.opened("iptv")
-                                viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(i.id, i.name), "search iptv OK")
-                            },
-                        )
+                        PosterCard(i.poster, listOfNotNull(i.name, i.year?.toString()).joinToString(" · ")) {
+                            viewModel.opened("iptv")
+                            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(i.id, i.name), "search iptv OK")
+                        }
                     }
                     items(g.discover, key = { "d${it.key}" }) { t ->
                         PosterCard(t.posterUrl, listOfNotNull(t.title, t.year?.toString()).joinToString(" · ")) {
