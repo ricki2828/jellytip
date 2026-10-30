@@ -1020,15 +1020,37 @@ button.overview.open {
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
+.seek-wrap {
+  position: relative;
+  margin: 0 0 6px;
+}
+.seek-tip {
+  position: absolute;
+  bottom: 30px;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.8);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+/* A tall invisible box to grab (a 4 px bar is not touchable), the visible bar drawn in its middle */
 .seek {
   -webkit-appearance: none;
   appearance: none;
+  display: block;
   width: 100%;
-  height: 4px;
-  margin: 0 0 12px;
-  border-radius: 2px;
-  background: linear-gradient(to right, var(--jelly) var(--p), rgba(255, 255, 255, 0.25) var(--p));
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(to right, var(--jelly) var(--p), rgba(255, 255, 255, 0.25) var(--p)) center / 100% 4px no-repeat;
   cursor: pointer;
+  touch-action: none;
+}
+.seek::-webkit-slider-runnable-track {
+  background: transparent;
 }
 .seek::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1549,8 +1571,11 @@ button.overview.open {
     padding: 10px 11px;
   }
   .seek {
-    height: 6px;
-    margin-bottom: 8px;
+    height: 36px;
+    background-size: 100% 6px;
+  }
+  .seek-tip {
+    bottom: 38px;
   }
   .seek::-webkit-slider-thumb {
     width: 22px;

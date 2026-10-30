@@ -2,6 +2,7 @@
 // for a 4 h stream link, plays .ts through mpegts.js, .m3u8 through hls.js and files natively. A link answering 410
 // stale or 403 expired gets one fresh /play and a retry; 409 shows who holds the connection. Leaving tears the stream
 // down at once (the provider may allow a single connection).
+import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
@@ -479,17 +480,7 @@ function WebIptvPlayer({ target, title, resume = 0 }: { target: PlayTarget; titl
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
-            <input
-              className="seek"
-              type="range"
-              min={0}
-              max={length}
-              step={1}
-              value={Math.min(time, length)}
-              onChange={(e) => seekTo_(Number(e.target.value))}
-              style={{ ["--p" as string]: `${Math.min(100, (time / length) * 100)}%` }}
-              aria-label="Seek"
-            />
+            <Scrubber time={time} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
           )}
           <div className="player-row iptv-controls">
             <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">

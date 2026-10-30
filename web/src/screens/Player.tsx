@@ -1,5 +1,6 @@
 // Player: direct play when the browser can, else Jellyfin HLS via hls.js (one automatic retry as a plain H.264 transcode).
 // Reports start / progress (10 s) / stop so resume works with the TV; text subtitles with a delay control; next episode.
+import { Scrubber } from "../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
@@ -392,10 +393,15 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     if (v.paused) tryPlay(v);
     else v.pause();
   };
+  // Repeated skips (double-tap, held arrow) add up from where the last one is going, not from where playback still is:
+  // a transcode seek takes a moment, and currentTime has not moved yet when the next tap lands
+  const seekTarget = useRef<number | null>(null);
   const seekBy = (s: number) => {
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = Math.min(Math.max(v.currentTime + s, 0), (v.duration || duration) - 1);
+    const to = Math.min(Math.max((seekTarget.current ?? v.currentTime) + s, 0), (v.duration || duration) - 1);
+    seekTarget.current = to;
+    v.currentTime = to;
   };
   const nativeFs = useRef(true); // the app enters player mode on mount
   const toggleFs = () => {
@@ -525,7 +531,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu, controls, duration, exit, playNext, poke]);
 
-  const v = videoRef.current;
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
   const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
@@ -561,7 +566,10 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           }
         }}
         onWaiting={() => setBuffering(true)}
-        onSeeked={() => startedRef.current && progress()}
+        onSeeked={() => {
+          seekTarget.current = null;
+          if (startedRef.current) progress();
+        }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND)}
         onEnded={() => {
@@ -627,19 +635,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
       )}
 
       <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
-        <input
-          className="seek"
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={1}
-          value={Math.min(time, duration || 0)}
-          onChange={(e) => {
-            if (v) v.currentTime = Number(e.target.value);
-          }}
-          style={{ ["--p" as string]: `${duration ? (time / duration) * 100 : 0}%` }}
-          aria-label="Seek"
-        />
+        <Scrubber time={time} max={duration || 0} fmt={clock} onActivity={poke} onSeek={(t) => videoRef.current && (videoRef.current.currentTime = t)} />
         <div className="player-row">
           <button className="btn ghost" data-nav onClick={togglePlay}>
             {paused ? "Play" : "Pause"}
