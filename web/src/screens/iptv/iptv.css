@@ -886,3 +886,64 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+/* ---- upcoming sport ---- */
+.up-tile {
+  position: relative;
+  flex: none;
+  width: 240px;
+  height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #1a2024, #121212);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  color: var(--vanilla);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.up-tile.live {
+  box-shadow: inset 0 0 0 1.5px var(--jelly);
+}
+.up-tile:hover,
+.up-tile:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--vanilla);
+}
+.up-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.up-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 var(--pad);
+}
+.up-chans {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.up-chan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.up-chan-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}

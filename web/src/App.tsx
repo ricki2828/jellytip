@@ -24,6 +24,7 @@ import { go, isRestoring } from "./lib/router";
 // IPTV screens (and mpegts.js / hls.js behind them) load only when someone opens them
 const IptvSettings = lazy(() => import("./screens/iptv/IptvSettings").then((m) => ({ default: m.IptvSettings })));
 const RecordingsPage = lazy(() => import("./screens/iptv/RecordingsPage").then((m) => ({ default: m.RecordingsPage })));
+const UpcomingPage = lazy(() => import("./screens/iptv/UpcomingPage").then((m) => ({ default: m.UpcomingPage })));
 const LiveTv = lazy(() => import("./screens/iptv/LiveTv").then((m) => ({ default: m.LiveTv })));
 const IptvDetails = lazy(() => import("./screens/iptv/IptvDetails").then((m) => ({ default: m.IptvDetails })));
 const IptvPlayer = lazy(() => import("./screens/iptv/IptvPlayer").then((m) => ({ default: m.IptvPlayer })));
@@ -90,6 +91,7 @@ export function App() {
           {route.name === "iptv" && <IptvSettings />}
           {route.name === "livetv" && <LiveTv />}
           {route.name === "recordings" && <RecordingsPage />}
+          {route.name === "upcoming" && <UpcomingPage />}
           {route.name === "iptvitem" && VOD_ID_RE.test(route.query.get("id") ?? "") && <IptvDetails key={route.query.get("id")} id={route.query.get("id")!} />}
         </Suspense>
       </main>

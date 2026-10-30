@@ -6,6 +6,7 @@ import { hasLiveTv, iptvChanged } from "../api/iptv";
 import { afterStartup } from "../lib/startup";
 import { useRecs } from "../api/recStore";
 import { shown, unwatchedCount } from "../lib/recs";
+import { useUpcoming } from "../api/upcomingStore";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
@@ -89,7 +90,8 @@ export function Nav({ current }: { current: string }) {
   const recs = useRecs();
   const hasRecs = !!recs && shown(recs).length > 0;
   const ready = recs ? unwatchedCount(recs) : 0;
-  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  const hasUpcoming = (useUpcoming()?.length ?? 0) > 0;
+  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);

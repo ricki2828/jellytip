@@ -8,6 +8,7 @@ import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
 import { refreshRecs } from "../../api/recStore";
+import { useUpcoming } from "../../api/upcomingStore";
 import { SportBadges } from "../../components/SportBadges";
 import { go } from "../../lib/router";
 import "./iptv.css";
@@ -54,6 +55,7 @@ export function LiveTv() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [toastView, setToastView] = useState(false);
+  const upcoming = (useUpcoming(false)?.length ?? 0) > 0;
 
   // ---- data ----
   useEffect(() => {
@@ -171,6 +173,11 @@ export function LiveTv() {
       <div className="livetv-head">
         <h1 className="page-title">Live TV</h1>
         <div className="livetv-window">
+          {upcoming && (
+            <button className="btn small" data-nav onClick={() => go("/upcoming")}>
+              Upcoming sport
+            </button>
+          )}
           <button className="btn small" data-nav onClick={() => setFrom((f) => f - 3600)} aria-label="Earlier">
             ‹
           </button>
