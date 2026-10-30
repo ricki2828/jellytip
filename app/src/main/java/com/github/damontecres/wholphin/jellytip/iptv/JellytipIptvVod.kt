@@ -35,6 +35,8 @@ data class IptvVodItem(
     val progress: IptvProgress?,
     /** Premium formats from the title/category ("4K", "DV", "HDR10+", "HDR", "ATMOS", "DTSX"). */
     val tech: List<String> = emptyList(),
+    /** In the person's My list (`favourite`, plan "My list"); false = not, or an older server. */
+    val favourite: Boolean = false,
 ) {
     val isSeries get() = kind == "series"
 
@@ -120,6 +122,7 @@ object IptvVodParse {
             providerName = o.str("providerName"),
             progress = progress(o.optJSONObject("progress")),
             tech = o.optJSONArray("tech")?.let { t -> (0 until t.length()).mapNotNull { t.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
+            favourite = o.optBoolean("favourite", false),
         )
     }
 
@@ -185,6 +188,24 @@ class JellytipIptvVodService
 
         /** Base already known (rows parse after the first companion call); null before that. */
         fun baseOrNull(): String? = base
+
+        /**
+         * My list on/off for an IPTV title (`POST /v1/iptv/vod/{id}/favourite {on}`). Returns the server's state, or null
+         * when it could not be changed (route not deployed yet = 404, offline).
+         */
+        suspend fun setFavourite(
+            id: String,
+            on: Boolean,
+        ): Boolean? {
+            val (code, body) =
+                api.userCall("v1/iptv/vod/${URLEncoder.encode(id, "UTF-8")}/favourite", body = """{"on":$on}""") ?: return null
+            if (code !in 200..299) {
+                com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+                    .log("iptv", "favourite $id on=$on failed: $code")
+                return null
+            }
+            return runCatching { org.json.JSONObject(body).optBoolean("favourite", on) }.getOrDefault(on)
+        }
 
         suspend fun detail(id: String): IptvVodDetail? {
             val b = base()

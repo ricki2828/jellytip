@@ -51,6 +51,11 @@ data class JellytipServerRow(
     val person: Person? = null,
     /** IPTV rows (`source:"iptv"`): the titles come with the row, there are no library ids. */
     val iptvItems: List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem> = emptyList(),
+    /**
+     * Mixed rows (My list: library + IPTV): library item ids (dashless or not) and IPTV vod ids in display order, newest
+     * first. Empty = library items, then IPTV titles.
+     */
+    val order: List<String> = emptyList(),
 ) {
     data class Person(
         val id: UUID,
@@ -156,6 +161,7 @@ object JellytipRowsParser {
             mediaType = o.optString("mediaType", "movie"),
             itemIds = itemIds,
             iptvItems = iptv,
+            order = o.optJSONArray("order")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
             collection = o.optJSONObject("collection")?.let { collection(it) },
             person =
                 o.optJSONObject("person")?.let { p ->

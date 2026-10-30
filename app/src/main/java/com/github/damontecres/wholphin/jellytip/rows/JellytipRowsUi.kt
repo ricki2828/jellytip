@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.rows
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
 import com.github.damontecres.wholphin.ui.playback.isPlayKeyUp
@@ -156,6 +158,11 @@ fun JellytipServerRowView(
     val loaded = items
     Box(modifier.fillMaxWidth()) {
         when {
+            row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
+                // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
+                MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
+            }
+
             row.iptvItems.isNotEmpty() -> {
                 // IPTV rows: the titles came with the row (no library ids), tiles carry the IPTV dot + quality
                 com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
@@ -765,6 +772,85 @@ private fun MissingPoster(
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
             )
+        }
+    }
+}
+
+/** One tile of a mixed (library + IPTV) row. */
+private sealed interface MixedTile {
+    val key: String
+
+    data class Lib(
+        val item: BaseItem,
+    ) : MixedTile {
+        override val key get() = "l:${item.id}"
+    }
+
+    data class Vod(
+        val item: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem,
+    ) : MixedTile {
+        override val key get() = "v:${item.id}"
+    }
+}
+
+/** A row of library cards and IPTV tiles (the IPTV dot marks the latter), same height and spacing as a standard row. */
+@Composable
+private fun MixedRow(
+    row: JellytipServerRow,
+    library: List<BaseItem>,
+    options: HomeRowViewOptions,
+    onFocusItem: (item: BaseItem?, showHeader: Boolean) -> Unit,
+    click: (BaseItem) -> Unit,
+    longClick: (BaseItem) -> Unit,
+    play: (BaseItem) -> Unit,
+    focusModifier: Modifier,
+    viewModel: JellytipHomeViewModel,
+) {
+    val tiles =
+        remember(row.id, row.order, library, row.iptvItems) {
+            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse
+                .ordered<MixedTile>(row.order, library, row.iptvItems, { MixedTile.Lib(it) }, { MixedTile.Vod(it) })
+        }
+    if (tiles.isEmpty()) return
+    val h = options.heightDp.dp
+    val w = if (row.isPoster) h * 2f / 3f else h * 16f / 9f
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = focusModifier) {
+        ItemRowTitle(row.title)
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = options.spacing.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusGroup()
+                    .focusRestorer(),
+        ) {
+            items(tiles.size, key = { tiles[it].key }) { i ->
+                when (val t = tiles[i]) {
+                    is MixedTile.Lib ->
+                        HomePageCardContent(
+                            index = i,
+                            item = t.item,
+                            onClick = { click(t.item) },
+                            onLongClick = { longClick(t.item) },
+                            viewOptions = options,
+                            modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(t.item, true) }.playKey(t.item, play),
+                        )
+
+                    is MixedTile.Vod ->
+                        com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                            item = t.item,
+                            width = w,
+                            height = h,
+                            poster = row.isPoster,
+                            onClick = {
+                                JellytipTrailerControl.stop()
+                                viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "my list IPTV OK")
+                            },
+                            modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
+                        )
+                }
+            }
         }
     }
 }

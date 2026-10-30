@@ -26,6 +26,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -298,7 +299,13 @@ fun JellytipIptvDetailsPage(
                     if (p != null) {
                         Button(onClick = { playMovie(fromStart = true) }) { Text("Play from start") }
                     }
+                    MyListButton(item, viewModel)
                 }
+            } else {
+                MyListButton(item, viewModel)
+            }
+            if (!item.isSeries) {
+                Unit // films: the buttons above are all
             } else if (d.seasons.isEmpty()) {
                 Text("No episodes are available.", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
             } else {
@@ -359,6 +366,48 @@ fun JellytipIptvDetailsPage(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * My list toggle for an IPTV title (plan "My list"), next to Play like the library favourite. Flips at once; goes
+ * back with a short note when the server can't change it (older server without the route, offline).
+ */
+@Composable
+private fun MyListButton(
+    item: IptvVodItem,
+    viewModel: JellytipIptvVodViewModel,
+) {
+    var on by remember(item.id) { mutableStateOf(item.favourite) }
+    var busy by remember(item.id) { mutableStateOf(false) }
+    var note by remember(item.id) { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+            onClick = {
+                if (busy) return@Button
+                val want = !on
+                on = want
+                busy = true
+                note = null
+                JellytipTrace.log("iptv", "my list ${item.id} on=$want")
+                scope.launch {
+                    val result = viewModel.vod.setFavourite(item.id, want)
+                    if (result == null) {
+                        on = !want
+                        note = "Couldn't update My list"
+                    } else {
+                        on = result
+                    }
+                    busy = false
+                }
+            },
+        ) {
+            Text(if (on) "\u2665  In My list" else "\u2661  My list")
+        }
+        note?.let {
+            Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
     }
 }

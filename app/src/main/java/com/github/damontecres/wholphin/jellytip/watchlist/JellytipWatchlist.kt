@@ -13,6 +13,7 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHeader
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeHero
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
@@ -63,11 +64,30 @@ class JellytipWatchlistViewModel
         private val api: ApiClient,
         private val serverRepository: ServerRepository,
         val navigationManager: NavigationManager,
+        private val myList: com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListService,
     ) : ViewModel() {
         private val _state = MutableStateFlow<WatchlistState>(WatchlistState.Loading)
         val state: StateFlow<WatchlistState> = _state
 
+        /** IPTV favourites (films, shows) from `/v1/me/list`; empty while loading or when the server has no such route. */
+        private val _iptv = MutableStateFlow<Pair<List<IptvVodItem>, List<IptvVodItem>>>(emptyList<IptvVodItem>() to emptyList())
+        val iptv: StateFlow<Pair<List<IptvVodItem>, List<IptvVodItem>>> = _iptv
+
+        private fun loadIptv() {
+            viewModelScope.launch(Dispatchers.IO) {
+                fun iptvOf(entries: List<com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListEntry>?) =
+                    entries.orEmpty().filterIsInstance<com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListEntry.Iptv>().map { it.item }
+                val films = myList.list("movie", MAX_IPTV)
+                val shows = myList.list("series", MAX_IPTV)
+                // A failed call keeps what is on screen
+                if (films != null || shows != null) {
+                    _iptv.value = (if (films != null) iptvOf(films) else _iptv.value.first) to (if (shows != null) iptvOf(shows) else _iptv.value.second)
+                }
+            }
+        }
+
         fun load() {
+            loadIptv()
             viewModelScope.launch(Dispatchers.IO) {
                 try {
                     val userId = serverRepository.currentUser?.id
@@ -115,6 +135,7 @@ class JellytipWatchlistViewModel
 
         companion object {
             private const val MAX_ITEMS = 600
+            private const val MAX_IPTV = 100
 
             /** Row order and labels. */
             private val KINDS =
@@ -146,7 +167,31 @@ fun JellytipWatchlistPage(
         onStopOrDispose { }
     }
     val state by viewModel.state.collectAsState()
-    when (val s = state) {
+    val iptv by viewModel.iptv.collectAsState()
+    val (iptvFilms, iptvShows) = iptv
+    // IPTV favourites (plan "My list") as rows after the library ones, with the IPTV dot on each tile
+    val iptvRows: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? =
+        if (iptvFilms.isEmpty() && iptvShows.isEmpty()) {
+            null
+        } else {
+            {
+                listOf("Films via IPTV" to iptvFilms, "Shows via IPTV" to iptvShows).forEach { (label, list) ->
+                    if (list.isNotEmpty()) {
+                        item(key = "iptv-$label") {
+                            com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
+                                title = "$label (${list.size})",
+                                items = list,
+                                poster = false,
+                                heightDp = com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions(HomeRowViewOptions()).heightDp,
+                                onFocusTile = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    val shown = if (state is WatchlistState.Fallback && iptvRows != null) WatchlistState.Loaded(emptyList()) else state
+    when (val s = shown) {
         WatchlistState.Loading -> LoadingPage(modifier)
         WatchlistState.Fallback -> fallback()
         is WatchlistState.Loaded -> {
@@ -183,6 +228,7 @@ fun JellytipWatchlistPage(
                     modifier = modifier,
                     heroComposable = { focusedItem, hasFocus -> JellytipHomeHero(item = focusedItem, hasFocus = hasFocus) },
                     headerComposable = { focusedItem -> JellytipHomeHeader(item = focusedItem, showLogo = showLogos) },
+                    extraRows = iptvRows,
                 )
             }
         }
