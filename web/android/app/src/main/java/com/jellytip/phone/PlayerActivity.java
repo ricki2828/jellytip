@@ -31,6 +31,7 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
@@ -192,6 +193,14 @@ public class PlayerActivity extends AppCompatActivity {
 
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
+        if (!live) {
+            // Seeks land on the nearest keyframe: one range request instead of decoding forward to the exact frame
+            player.setSeekParameters(SeekParameters.CLOSEST_SYNC);
+            // Indexed files (MP4 recordings, MKV/MP4 films) show the picture under the finger while dragging the bar.
+            // MPEG-TS can only seek by binary search over HTTP, so there the bar seeks once, on release.
+            boolean ts = MimeTypes.VIDEO_MP2T.equals(type);
+            view.setTimeBarScrubbingEnabled(!ts && !growing);
+        }
         if (type != null) b.setMimeType(type);
         item = b.build();
         player.addListener(listener);
