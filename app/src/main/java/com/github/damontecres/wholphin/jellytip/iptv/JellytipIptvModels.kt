@@ -201,7 +201,27 @@ data class IptvOnNow(
     val kind: String? = null,
     /** Other channels showing the same event, best first (already collapsed into this one card). */
     val alternates: List<IptvChannel> = emptyList(),
+    val art: IptvArt? = null,
 )
+
+/**
+ * Sport artwork (`art: {league?: {badge, fanart}, home?: {name, badge}, away?: {name, badge}}`, plan "Sport artwork"):
+ * real TheSportsDB art served by the companion. Links are absolute (resolved); null = not known.
+ */
+data class IptvArt(
+    val leagueBadge: String?,
+    val leagueFanart: String?,
+    val homeName: String?,
+    val homeBadge: String?,
+    val awayName: String?,
+    val awayBadge: String?,
+) {
+    val hasTeams get() = homeBadge != null && awayBadge != null
+
+    /** A badge takes the tile's logo slot (the channel logo moves to a corner). */
+    val hasBadge get() = hasTeams || leagueBadge != null
+    val isEmpty get() = leagueBadge == null && leagueFanart == null && !hasTeams
+}
 
 /**
  * One upcoming sport event (`GET /v1/iptv/sport/upcoming`, plan "Upcoming sport"): the best channel and the others
@@ -220,6 +240,7 @@ data class IptvUpcoming(
     val alternateChannels: List<IptvChannel>,
     val recordable: Boolean,
     val recordingId: String?,
+    val art: IptvArt? = null,
 ) {
     fun isLive(now: Long) = now in start until stop
 }
@@ -397,7 +418,8 @@ object IptvParse {
             }
             val hint = listOfNotNull(c.str("genre"), c.str("category"), chObj.str("groupName"), ch.group, ch.name, title).joinToString(" ")
             if (key != null) events[key] = out.size
-            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint), kind)
+            val art = art(c.optJSONObject("art") ?: p.optJSONObject("art"), resolve)
+            out += IptvOnNow(ch, title, start, stop, explicit ?: IptvRules.looksLikeSport(hint), kind, art = art)
         }
         val resolved =
             out.map { o ->
@@ -413,6 +435,25 @@ object IptvParse {
         id: String,
         main: IptvChannel,
     ): IptvChannel = IptvChannel(id, id.substringBefore(':'), null, "${main.name} (alt)", null, main.group, null, 0, false)
+
+    fun art(
+        o: JSONObject?,
+        resolve: (String) -> String?,
+    ): IptvArt? {
+        o ?: return null
+        fun img(v: String?) = v?.let { if (it.startsWith("https://")) it else resolve(it) }
+        val league = o.optJSONObject("league")
+        val home = o.optJSONObject("home")
+        val away = o.optJSONObject("away")
+        return IptvArt(
+            leagueBadge = img(league?.str("badge")),
+            leagueFanart = img(league?.str("fanart")),
+            homeName = home?.str("name"),
+            homeBadge = img(home?.str("badge")),
+            awayName = away?.str("name"),
+            awayBadge = img(away?.str("badge")),
+        ).takeIf { !it.isEmpty }
+    }
 
     /** `{items: [...]}` (or `events`, or a bare array); entries without a channel or times are dropped. Server order kept. */
     fun upcoming(
@@ -446,6 +487,7 @@ object IptvParse {
                 alternateChannels = alts.filter { it.id != ch.id },
                 recordable = o.optBoolean("recordable", true),
                 recordingId = o.str("recordingId"),
+                art = art(o.optJSONObject("art"), resolve),
             )
         }
     }

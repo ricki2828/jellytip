@@ -84,38 +84,39 @@ fun OnNowCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        colors =
-            ClickableSurfaceDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.07f),
-                focusedContainerColor = Color.White,
-                contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
-            ),
-        modifier = modifier.size(width, height),
+        colors = liveTileColors(o.art),
+        border = liveTileBorder(o.art),
+        modifier = modifier.size(width, height).onFocusChanged { focused = it.isFocused },
     ) {
+        SportArtBackdrop(o.art, focused)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
-            Box(Modifier.size(height * 0.75f, height * 0.55f), contentAlignment = Alignment.Center) {
-                var failed by remember(o.channel.logo) { mutableStateOf(false) }
-                val logo = o.channel.logo
-                if (logo != null && !failed) {
-                    AsyncImage(
-                        model = if (logo.contains('?')) logo else "$logo?s=96",
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        onError = { failed = true },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Text(initials(o.channel.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+            Box(Modifier.height(height * 0.55f), contentAlignment = Alignment.Center) {
+                SportArtSlot(o.art, height * 0.55f) {
+                    Box(Modifier.size(height * 0.75f, height * 0.55f), contentAlignment = Alignment.Center) {
+                        var failed by remember(o.channel.logo) { mutableStateOf(false) }
+                        val logo = o.channel.logo
+                        if (logo != null && !failed) {
+                            AsyncImage(
+                                model = if (logo.contains('?')) logo else "$logo?s=96",
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                onError = { failed = true },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Text(initials(o.channel.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
@@ -144,6 +145,7 @@ fun OnNowCard(
                 }
             }
         }
+        if (o.art?.hasBadge == true) CornerLogo(o.channel.logo, Modifier.align(Alignment.BottomEnd).padding(6.dp))
     }
 }
 

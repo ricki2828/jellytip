@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -224,37 +225,38 @@ private fun UpcomingTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        colors =
-            ClickableSurfaceDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.07f),
-                focusedContainerColor = Color.White,
-                contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
-            ),
-        modifier = modifier.size(300.dp, 84.dp),
+        colors = liveTileColors(u.art),
+        border = liveTileBorder(u.art),
+        modifier = modifier.size(300.dp, 84.dp).onFocusChanged { focused = it.isFocused },
     ) {
+        SportArtBackdrop(u.art, focused)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
-            Box(Modifier.size(56.dp, 40.dp), contentAlignment = Alignment.Center) {
-                var failed by remember(u.channel.logo) { mutableStateOf(false) }
-                val logo = u.channel.logo
-                if (logo != null && !failed) {
-                    AsyncImage(
-                        model = if (logo.contains('?')) logo else "$logo?s=96",
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        onError = { failed = true },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Text(initials(u.channel.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+            Box(Modifier.height(40.dp), contentAlignment = Alignment.Center) {
+                SportArtSlot(u.art, 40.dp) {
+                    Box(Modifier.size(56.dp, 40.dp), contentAlignment = Alignment.Center) {
+                        var failed by remember(u.channel.logo) { mutableStateOf(false) }
+                        val logo = u.channel.logo
+                        if (logo != null && !failed) {
+                            AsyncImage(
+                                model = if (logo.contains('?')) logo else "$logo?s=96",
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                onError = { failed = true },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Text(initials(u.channel.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
@@ -290,6 +292,7 @@ private fun UpcomingTile(
                 }
             }
         }
+        if (u.art?.hasBadge == true) CornerLogo(u.channel.logo, Modifier.align(Alignment.BottomEnd).padding(6.dp))
     }
 }
 
