@@ -9,22 +9,22 @@ const MARK = { follow: "★ ", mute: "⊘ ", neutral: "" } as const;
 const HINT = { follow: "following", mute: "hidden", neutral: "not set" } as const;
 
 export function SportsPicker({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: string | null) => void }) {
-  const { leagues, muted } = prefs.sport;
+  const { sports, muted } = prefs.sport;
   const cycle = async (name: string) => {
-    const to = nextSportState(sportState(name, leagues, muted));
-    const next = applySportState(name, to, leagues, muted);
-    const err = await savePrefs({ sport: { leagues: next.leagues, muted: next.muted } });
+    const to = nextSportState(sportState(name, sports, muted));
+    const next = applySportState(name, to, sports, muted);
+    const err = await savePrefs({ sport: { sports: next.sports, muted: next.muted } });
     onMsg(err);
     if (!err) window.dispatchEvent(new Event(MUTED_EVENT));
   };
   return (
     <div className="chips settings-chips-gap" aria-label="Sports I follow">
-      {SPORTS.map((n) => {
-        const st = sportState(n, leagues, muted);
+      {SPORTS.map(({ value, label }) => {
+        const st = sportState(value, sports, muted);
         return (
-          <button key={n} className={`chip${st === "follow" ? " on" : ""}${st === "mute" ? " muted" : ""}`} data-nav aria-label={`${n}: ${HINT[st]}. Tap to change.`} onClick={() => void cycle(n)}>
+          <button key={value} className={`chip${st === "follow" ? " on" : ""}${st === "mute" ? " muted" : ""}`} data-nav aria-label={`${label}: ${HINT[st]}. Tap to change.`} onClick={() => void cycle(value)}>
             {MARK[st]}
-            {n}
+            {label}
           </button>
         );
       })}

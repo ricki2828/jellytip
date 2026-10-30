@@ -57,14 +57,28 @@ export function parseLearned(raw: unknown): Learned[] {
 
 // ---------- "Sports I follow" ----------
 
-/** Sports offered in the picker (the server's league / sport names). */
-export const SPORTS = ["Rugby League", "Rugby Union", "Cricket", "NFL", "College Football", "NBA", "Football", "AFL", "Motorsport", "Tennis", "Golf", "Horse Racing", "Combat Sports"] as const;
+/** Sports offered in the picker: the server's sportName vocabulary (what is saved) and a display label. */
+export const SPORTS: { value: string; label: string }[] = [
+  { value: "rugby league", label: "Rugby league" },
+  { value: "rugby union", label: "Rugby union" },
+  { value: "cricket", label: "Cricket" },
+  { value: "nfl", label: "NFL" },
+  { value: "college football", label: "College football" },
+  { value: "nba", label: "NBA" },
+  { value: "football", label: "Football / soccer" },
+  { value: "afl", label: "AFL" },
+  { value: "motorsport", label: "Motorsport" },
+  { value: "tennis", label: "Tennis" },
+  { value: "golf", label: "Golf" },
+  { value: "horse racing", label: "Horse racing" },
+  { value: "combat", label: "Combat sports" },
+];
 
 export type SportState = "follow" | "mute" | "neutral";
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-/** Followed sports live in sport.leagues, muted ones in sport.muted.sports. */
+/** Followed sports live in sport.sports, muted ones in sport.muted.sports. */
 export function sportState(name: string, follows: string[], muted: Muted): SportState {
   if (follows.some((x) => same(x, name))) return "follow";
   if (muted.sports.some((x) => same(x, name))) return "mute";
@@ -74,11 +88,11 @@ export function sportState(name: string, follows: string[], muted: Muted): Sport
 /** Tap cycle: neutral → follow → mute → neutral. */
 export const nextSportState = (s: SportState): SportState => (s === "neutral" ? "follow" : s === "follow" ? "mute" : "neutral");
 
-/** The new follow list and muted lists after setting a sport's state (a sport is never in both). */
-export function applySportState(name: string, state: SportState, follows: string[], muted: Muted): { leagues: string[]; muted: Muted } {
-  const leagues = follows.filter((x) => !same(x, name));
+/** The new followed-sports list and muted lists after setting a sport's state (a sport is never in both). */
+export function applySportState(name: string, state: SportState, follows: string[], muted: Muted): { sports: string[]; muted: Muted } {
+  const kept = follows.filter((x) => !same(x, name));
   const sports = muted.sports.filter((x) => !same(x, name));
-  return { leagues: state === "follow" ? [...leagues, name] : leagues, muted: { ...muted, sports: state === "mute" ? [...sports, name] : sports } };
+  return { sports: state === "follow" ? [...kept, name] : kept, muted: { ...muted, sports: state === "mute" ? [...sports, name] : sports } };
 }
 
 /** Women's competitions and replays/highlights are muted by tag. */
@@ -90,5 +104,5 @@ export const hasTag = (muted: Muted, tag: string) => muted.tags.some((t) => same
 export const withMutedTag = (muted: Muted, tag: string, on: boolean): Muted => withMuted(muted, "tags", tag, on);
 
 /** The person has already told us something about sport (so the first-run prompt isn't for them). */
-export const hasSportPrefs = (s: { teams: string[]; leagues: string[]; muted: Muted; setup: boolean }) =>
-  s.setup || s.teams.length + s.leagues.length + s.muted.sports.length + s.muted.leagues.length + s.muted.tags.length > 0;
+export const hasSportPrefs = (s: { teams: string[]; leagues: string[]; sports: string[]; muted: Muted; setup: boolean }) =>
+  s.setup || s.teams.length + s.leagues.length + s.sports.length + s.muted.sports.length + s.muted.leagues.length + s.muted.tags.length > 0;

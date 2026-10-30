@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -256,11 +256,11 @@ test("sports I follow: tap cycles neutral, follow, mute; never both lists", () =
   assert.equal(nextSportState("follow"), "mute");
   assert.equal(nextSportState("mute"), "neutral");
   const f = applySportState("Golf", "follow", ["Cricket"], m);
-  assert.deepEqual(f.leagues, ["Cricket", "Golf"]);
+  assert.deepEqual(f.sports, ["Cricket", "Golf"]);
   assert.deepEqual(f.muted.sports, []);
   const x = applySportState("Cricket", "mute", ["Cricket"], m);
-  assert.deepEqual(x.leagues, []);
+  assert.deepEqual(x.sports, []);
   assert.deepEqual(x.muted.sports, ["Golf", "Cricket"]);
-  assert.equal(hasSportPrefs({ teams: [], leagues: [], muted: { sports: [], leagues: [], tags: [] }, setup: false }), false);
-  assert.equal(hasSportPrefs({ teams: [], leagues: [], muted: { sports: [], leagues: [], tags: ["womens"] }, setup: false }), true);
+  assert.equal(hasSportPrefs({ teams: [], leagues: [], sports: [], muted: { sports: [], leagues: [], tags: [] }, setup: false }), false);
+  assert.equal(hasSportPrefs({ teams: [], leagues: [], sports: [], muted: { sports: [], leagues: [], tags: ["womens"] }, setup: false }), true);
 });

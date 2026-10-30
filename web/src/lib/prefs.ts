@@ -7,7 +7,7 @@ export interface Prefs {
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   /** Favourite teams and leagues: Live TV puts what is on now first (the server does the ranking). */
-  sport: { teams: string[]; leagues: string[]; muted: Muted; setup: boolean };
+  sport: { teams: string[]; leagues: string[]; /** Followed sports (the server's sportName vocabulary). */ sports: string[]; muted: Muted; setup: boolean };
   version: number | null;
 }
 
@@ -43,7 +43,7 @@ export function parsePrefs(raw: unknown): Prefs {
       audioLangs: strs(p.audioLangs),
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
-    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true },
+    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true },
     version: typeof r.version === "number" ? r.version : null,
   };
 }
