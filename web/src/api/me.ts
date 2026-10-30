@@ -3,6 +3,7 @@
 // leaves `available` false and every personalisation control stays hidden.
 import { useEffect, useState } from "react";
 import { companionCall } from "./companionCall";
+import { afterStartup } from "../lib/startup";
 import { parseFollows, parsePrefs, parseReactions, parseTaste, type Prefs, type Taste } from "../lib/prefs";
 
 export interface PrefsState {
@@ -37,15 +38,23 @@ window.addEventListener("jellytip-session", () => {
   set({ available: undefined, prefs: null });
 });
 
-export function usePrefs(): PrefsState {
+/** Load the prefs once the first screen has its content (Home, tiles: nothing waits on them). */
+function loadSoon() {
+  void afterStartup().then(load);
+}
+
+/** `defer`: don't compete with the first screen's requests (Home, tiles); screens that need prefs to render ask now. */
+export function usePrefs(opts: { defer?: boolean } = {}): PrefsState {
   const [s, setS] = useState(state);
+  const defer = !!opts.defer;
   useEffect(() => {
     const on = () => setS(state);
     window.addEventListener(EVENT, on);
-    void load();
+    if (defer) loadSoon();
+    else void load();
     on();
     return () => window.removeEventListener(EVENT, on);
-  }, []);
+  }, [defer]);
   return s;
 }
 
@@ -55,7 +64,7 @@ export const prefsSoon = (ms = 1500): Promise<Prefs | null> =>
   Promise.race([load(), new Promise((r) => setTimeout(r, ms))]).then(() => state.prefs);
 /** Personalisation is on (sync; for many tiles at once without a hook each). Asks the server the first time. */
 export const personalOn = () => {
-  void load();
+  loadSoon();
   return state.available === true;
 };
 

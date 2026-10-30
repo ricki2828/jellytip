@@ -52,7 +52,7 @@ export function Home() {
   const [rowsReady, setRowsReady] = useState(false);
   const [specials, setSpecials] = useState<Special[]>([]);
   // Personal prefs (Home edit) when the server has them; a save reloads rows + specials
-  const { available: personal, prefs } = usePrefs();
+  const { available: personal, prefs } = usePrefs({ defer: true });
   const [editing, setEditing] = useState(false);
   const [reload, setReload] = useState(0);
   const [rowsFailed, setRowsFailed] = useState(false);

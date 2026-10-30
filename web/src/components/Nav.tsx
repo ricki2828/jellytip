@@ -3,13 +3,15 @@ import { getSession, logout } from "../api/jellyfin";
 import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
 import { hasLiveTv, iptvChanged } from "../api/iptv";
+import { afterStartup } from "../lib/startup";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
   const [on, setOn] = useState(false);
   useEffect(() => {
     let alive = true;
-    const check = () => void hasLiveTv().then((v) => alive && setOn(v));
+    // After the first screen's requests: the Live TV link can appear a moment later
+    const check = () => void afterStartup().then(hasLiveTv).then((v) => alive && setOn(v));
     const onSession = () => iptvChanged();
     check();
     window.addEventListener("jellytip-iptv", check);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { hasLiveTv, logoSrc, onNow } from "../api/iptv";
 import { progressOf, type OnNow } from "../lib/onNow";
+import { afterStartup } from "../lib/startup";
 import { targetPath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 
@@ -20,15 +21,23 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {
     let alive = true;
+    let t: number | undefined;
     const load = async () => {
-      if (checkProvider && !(await hasLiveTv())) return alive && setItems([]);
+      // Home: after the page's own rows and art have started
+      if (checkProvider) await afterStartup();
+      if (!alive) return;
+      if (checkProvider && !(await hasLiveTv())) {
+        clearInterval(t);
+        return alive && setItems([]);
+      }
       const list = await onNow(sportOnly ? 20 : 30, sportOnly);
       if (!alive) return;
       setItems(sportOnly ? list.filter((o) => o.sport) : list);
       setNow(Date.now() / 1000);
     };
+    // No provider (no Live TV): stop asking
+    t = window.setInterval(load, REFRESH_MS);
     void load();
-    const t = setInterval(load, REFRESH_MS);
     return () => {
       alive = false;
       clearInterval(t);
