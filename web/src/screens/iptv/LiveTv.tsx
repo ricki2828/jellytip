@@ -219,6 +219,7 @@ export function LiveTv() {
                   <div key={ch.id} className="livetv-row" style={{ top: idx * ROW_H }}>
                     <button className="livetv-chan" data-nav onClick={() => playChannel(ch)} onContextMenu={(e) => (e.preventDefault(), void fav(ch))} title={`${ch.name} · play`}>
                       <ChannelLogo ch={ch} />
+                      {phone && ch.quality && <SportBadges quality={ch.quality} size="sm" />}
                       {!phone && (
                         <span className="livetv-chan-text">
                           {ch.num != null && <span className="livetv-num">{ch.num}</span>}

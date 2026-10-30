@@ -9,6 +9,8 @@ export interface Quality {
   bucket: Bucket;
   height: number | null;
   fps: number | null;
+  /** Best audio the stream carries; stereo and unprobed show nothing. */
+  audio: "atmos" | "5.1" | "stereo" | null;
 }
 
 export interface SportInfo {
@@ -31,7 +33,8 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 export function parseQuality(raw: unknown): Quality | null {
   const q = obj(raw);
   if (!q || !BUCKETS.includes(q.bucket as Bucket)) return null;
-  return { bucket: q.bucket as Bucket, height: num(q.height), fps: num(q.fps) };
+  const a = typeof q.audio === "string" ? q.audio.toLowerCase() : "";
+  return { bucket: q.bucket as Bucket, height: num(q.height), fps: num(q.fps), audio: a === "atmos" ? "atmos" : a === "5.1" ? "5.1" : a === "stereo" ? "stereo" : null };
 }
 
 /** Reads the sport fields off an on-now / guide / channel object (`programme` is where kind and sport live). */
@@ -75,6 +78,9 @@ export function qualityLabel(q: Quality | null): string | null {
       return null;
   }
 }
+
+/** Chip text for the audio: ATMOS or 5.1; nothing for stereo or unknown. */
+export const audioLabel = (q: Quality | null): string | null => (q?.audio === "atmos" ? "ATMOS" : q?.audio === "5.1" ? "5.1" : null);
 
 export const mayBuffer = (q: Quality | null) => q?.bucket === "slow";
 

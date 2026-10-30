@@ -1,15 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hasServerRanking, kindPill, mayBuffer, parseQualitySummary, parseSport, parseSuggest, qualityLabel, toggleName } from "../src/lib/sport.ts";
+import { audioLabel, hasServerRanking, kindPill, mayBuffer, parseQualitySummary, parseSport, parseSuggest, qualityLabel, toggleName } from "../src/lib/sport.ts";
 import { parseOnNow } from "../src/lib/onNow.ts";
 import { parsePrefs } from "../src/lib/prefs.ts";
 
 const N = 1_000_000;
 test("sport fields are read when present and absent otherwise", () => {
-  const s = parseSport({ quality: { bucket: "fhd50", height: 1080, fps: 50 }, event: { key: "a-b", alternates: ["1:2", 3] }, match: { team: "Warriors" } }, { kind: "live", sport: true });
+  const s = parseSport({ quality: { bucket: "fhd50", height: 1080, fps: 50, audio: "Atmos" }, event: { key: "a-b", alternates: ["1:2", 3] }, match: { team: "Warriors" } }, { kind: "live", sport: true });
   assert.equal(s.kind, "live");
   assert.equal(s.sport, true);
   assert.equal(s.quality?.bucket, "fhd50");
+  assert.equal(audioLabel(s.quality), "ATMOS");
+  assert.equal(audioLabel({ bucket: "hd", height: 720, fps: 25, audio: "5.1" }), "5.1");
+  assert.equal(audioLabel({ bucket: "hd", height: 720, fps: 25, audio: "stereo" }), null);
+  assert.equal(audioLabel(null), null);
   assert.deepEqual(s.alternates, ["1:2"]);
   assert.equal(s.match?.team, "Warriors");
   const none = parseSport({ name: "x" });
@@ -18,12 +22,12 @@ test("sport fields are read when present and absent otherwise", () => {
 });
 
 test("labels: quality chips, pills and the buffer hint", () => {
-  assert.equal(qualityLabel({ bucket: "uhd", height: 2160, fps: 50 }), "UHD");
-  assert.equal(qualityLabel({ bucket: "fhd50", height: 1080, fps: 50 }), "1080 50fps");
-  assert.equal(qualityLabel({ bucket: "hd", height: 720, fps: 25 }), "720");
-  assert.equal(qualityLabel({ bucket: "dead", height: null, fps: null }), null);
-  assert.equal(qualityLabel({ bucket: "slow", height: 1080, fps: 25 }), "1080");
-  assert.equal(mayBuffer({ bucket: "slow", height: 1080, fps: 25 }), true);
+  assert.equal(qualityLabel({ bucket: "uhd", height: 2160, fps: 50, audio: null }), "UHD");
+  assert.equal(qualityLabel({ bucket: "fhd50", height: 1080, fps: 50, audio: null }), "1080 50fps");
+  assert.equal(qualityLabel({ bucket: "hd", height: 720, fps: 25, audio: null }), "720");
+  assert.equal(qualityLabel({ bucket: "dead", height: null, fps: null, audio: null }), null);
+  assert.equal(qualityLabel({ bucket: "slow", height: 1080, fps: 25, audio: null }), "1080");
+  assert.equal(mayBuffer({ bucket: "slow", height: 1080, fps: 25, audio: null }), true);
   assert.deepEqual(kindPill("highlights"), { text: "REPLAY", tone: "replay" });
   assert.equal(kindPill("other"), null);
 });

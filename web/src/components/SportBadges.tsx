@@ -1,6 +1,6 @@
 // Live-sport badges for a programme / channel: red LIVE, grey REPLAY, a sport icon, the stream's quality and "may buffer".
 // Shows nothing for fields the server did not send.
-import { kindPill, mayBuffer, qualityLabel, type Kind, type Quality } from "../lib/sport";
+import { audioLabel, kindPill, mayBuffer, qualityLabel, type Kind, type Quality } from "../lib/sport";
 
 export function SportIcon() {
   return (
@@ -14,13 +14,15 @@ export function SportIcon() {
 export function SportBadges({ kind, sport, quality, size = "md" }: { kind?: Kind | null; sport?: boolean; quality?: Quality | null; size?: "sm" | "md" }) {
   const pill = kindPill(kind);
   const q = qualityLabel(quality ?? null);
+  const au = audioLabel(quality ?? null);
   const buffer = mayBuffer(quality ?? null);
-  if (!pill && !sport && !q && !buffer) return null;
+  if (!pill && !sport && !q && !au && !buffer) return null;
   return (
     <span className={`sport-badges ${size}`}>
       {pill && <span className={`sport-pill ${pill.tone}`}>{pill.text}</span>}
       {sport && <SportIcon />}
       {q && <span className="sport-q">{q}</span>}
+      {au && <span className="sport-q">{au}</span>}
       {buffer && <span className="sport-buffer">may buffer</span>}
     </span>
   );
