@@ -65,6 +65,40 @@ export interface DiscoverHit {
   requested?: string | null;
 }
 
+/** One entry of the server's ranked `results` list (contract: ~/ai/plans/jellytip-search-10x.md "Pinned response fields"). */
+export interface SearchEntry {
+  key: string;
+  kind: "film" | "series" | "person" | "collection";
+  source: "library" | "iptv" | "discover";
+  title: string;
+  score: number;
+  /** Library: Jellyfin item id (lower-case hex). */
+  id?: string;
+  iptvId?: string;
+  tmdbId?: number | null;
+  year?: number | null;
+  rating?: number | null;
+  played?: boolean;
+  /** Series: TMDB counts, and the season / episode the query named. */
+  seasons?: number | null;
+  episodes?: number | null;
+  season?: number | null;
+  episode?: number | null;
+  poster?: string | null;
+  backdrop?: string | null;
+  posterUrl?: string | null;
+  quality: string[];
+  tech: string[];
+  requested?: string | null;
+  personId?: string;
+  role?: string;
+  imageTag?: string | null;
+  filmCount?: number | null;
+  tmdbCollectionId?: number;
+  inLibrary?: number;
+  total?: number;
+}
+
 export interface SearchResult {
   q: string;
   text: string;
@@ -79,6 +113,9 @@ export interface SearchResult {
   techs: unknown;
   logoStyles: unknown;
   untitled: string[];
+  /** The ranked mixed list and its best hit; null when the server doesn't send `results` (then the groups are shown). */
+  results: SearchEntry[] | null;
+  top: SearchEntry | null;
   /** Groups the server is still fetching (Discover waits at most 40 ms for TMDB): ask again for just those. */
   pending: string[];
 }
@@ -102,6 +139,79 @@ const lib = (r: Record<string, unknown>): LibHit | null => {
   const name = str(r.name);
   return id && /^[0-9a-f]{32}$/i.test(id) && name ? { id: id.toLowerCase(), name, year: num(r.year), kind: str(r.kind) ?? "" } : null;
 };
+
+const HEX = /^[0-9a-f]{32}$/i;
+const IPTV_ID = /^[A-Za-z0-9_-]{1,40}:[ms]:[A-Za-z0-9_.-]{1,64}$/;
+
+/** One ranked entry; null when it lacks what its kind and source need to open. */
+export function parseEntry(raw: unknown): SearchEntry | null {
+  const x = obj(raw);
+  if (!x) return null;
+  const kind = x.kind === "film" || x.kind === "series" || x.kind === "person" || x.kind === "collection" ? x.kind : null;
+  const source = x.source === "library" || x.source === "iptv" || x.source === "discover" ? x.source : null;
+  const title = str(x.title) ?? str(x.name);
+  if (!kind || !source || !title) return null;
+  const base: SearchEntry = {
+    key: "",
+    kind,
+    source,
+    title,
+    score: num(x.score) ?? 0,
+    year: num(x.year),
+    rating: num(x.rating),
+    played: x.played === true,
+    seasons: num(x.seasons),
+    episodes: num(x.episodes),
+    season: num(x.season),
+    episode: num(x.episode),
+    tmdbId: num(x.tmdbId),
+    poster: str(x.poster),
+    backdrop: str(x.backdrop),
+    posterUrl: str(x.posterUrl),
+    quality: strs(x.quality),
+    tech: strs(x.tech),
+    requested: str(x.requested),
+  };
+  if (kind === "person") {
+    const id = str(x.personId);
+    return id && HEX.test(id) ? { ...base, key: `p:${id}`, personId: id, role: str(x.role) ?? undefined, imageTag: str(x.imageTag), filmCount: num(x.filmCount) } : null;
+  }
+  if (kind === "collection") {
+    const id = num(x.tmdbCollectionId);
+    return id != null ? { ...base, key: `c:${id}`, tmdbCollectionId: id, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined, poster: str(x.poster) } : null;
+  }
+  if (source === "library") {
+    const id = str(x.id);
+    return id && HEX.test(id) ? { ...base, key: `l:${id.toLowerCase()}`, id: id.toLowerCase() } : null;
+  }
+  if (source === "iptv") {
+    const id = str(x.iptvId);
+    return id && IPTV_ID.test(id) ? { ...base, key: `i:${id}`, iptvId: id } : null;
+  }
+  return base.tmdbId != null ? { ...base, key: `d:${kind}:${base.tmdbId}` } : null;
+}
+
+/** `results` (best first, deduplicated by key) and `top`; null results when the field is absent (older server). */
+export function parseResults(results: unknown, top: unknown): { results: SearchEntry[] | null; top: SearchEntry | null } {
+  if (!Array.isArray(results)) return { results: null, top: null };
+  const seen = new Set<string>();
+  const list = results
+    .map(parseEntry)
+    .filter((e): e is SearchEntry => !!e && !seen.has(e.key) && !!seen.add(e.key))
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => b.e.score - a.e.score || a.i - b.i)
+    .map((x) => x.e);
+  const t = parseEntry(top);
+  return { results: list, top: (t && list.find((e) => e.key === t.key)) ?? list[0] ?? null };
+}
+
+/** "Season 2" / "S2 E3" hint when the query named one, else "N seasons" for a show. */
+export function seasonHint(e: Pick<SearchEntry, "kind" | "season" | "episode" | "seasons" | "episodes">): string | null {
+  if (e.kind !== "series") return null;
+  if (e.season != null) return e.episode != null ? `S${e.season} E${e.episode}` : `Season ${e.season}`;
+  if (e.seasons) return `${e.seasons} season${e.seasons === 1 ? "" : "s"}${e.episodes ? ` · ${e.episodes} episodes` : ""}`;
+  return null;
+}
 
 /** Server answer → typed groups; anything malformed drops out. null when it isn't a search answer at all. */
 export function parseSearch(raw: unknown): SearchResult | null {
@@ -166,10 +276,14 @@ export function parseSearch(raw: unknown): SearchResult | null {
     logoStyles: r.logoStyles,
     untitled: strs(r.untitled),
     pending: strs(r.pending),
+    ...parseResults(r.results, r.top),
   };
 }
 
-export const isEmpty = (s: SearchResult) => !(s.films.length + s.shows.length + s.people.length + s.collections.length + s.lists.length + s.iptv.length + s.discover.length);
+export const isEmpty = (s: SearchResult) =>
+  s.results
+    ? !(s.results.length + s.lists.length + s.discover.length)
+    : !(s.films.length + s.shows.length + s.people.length + s.collections.length + s.lists.length + s.iptv.length + s.discover.length);
 
 // ---------- filter chips ----------
 

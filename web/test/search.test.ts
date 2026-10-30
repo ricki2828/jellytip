@@ -69,3 +69,34 @@ test("formats: a list (or an old single string); removing one keeps the other", 
   assert.equal(withoutFilter("", s.filters, "tech:4K"), "atmos");
   assert.deepEqual(parseSearch({ parsed: { filters: { tech: "DV" } }, groups: [] })!.filters.tech, ["DV"]);
 });
+
+import { parseResults, seasonHint } from "../src/lib/search.ts";
+
+const HEXID = "a".repeat(32);
+
+test("ranked results: parsed, sorted by score, top kept, unusable entries dropped", () => {
+  const { results, top } = parseResults(
+    [
+      { kind: "film", source: "iptv", iptvId: "3:m:9", title: "Léon", score: 5, year: 1994, quality: ["1080p"] },
+      { kind: "series", source: "library", id: HEXID.toUpperCase(), title: "The Bear", score: 9, seasons: 3, episodes: 28, season: 2 },
+      { kind: "person", source: "library", personId: "b".repeat(32), name: "Jean Reno", score: 7, filmCount: 12 },
+      { kind: "film", source: "library", id: "nope", title: "Bad id", score: 99 },
+      { kind: "film", source: "discover", tmdbId: 5, title: "Gone", score: 1, posterUrl: "https://x/p.jpg" },
+      { kind: "film", source: "discover", title: "No tmdb", score: 1 },
+      { kind: "collection", source: "library", title: "Saga", score: 2 },
+    ],
+    { kind: "film", source: "iptv", iptvId: "3:m:9", title: "Léon", score: 5 },
+  );
+  assert.deepEqual(results!.map((e) => e.key), [`l:${HEXID}`, `p:${"b".repeat(32)}`, "i:3:m:9", "d:film:5"]);
+  assert.equal(top?.key, "i:3:m:9");
+  assert.equal(parseResults([], null).top, null);
+  assert.equal(parseResults(undefined, null).results, null);
+  assert.equal(parseResults([{ kind: "film", source: "iptv", iptvId: "3:m:9", title: "A", score: 1 }], null).top?.title, "A");
+});
+
+test("season hint: the named season, else the counts", () => {
+  assert.equal(seasonHint({ kind: "series", season: 2, episode: 3 }), "S2 E3");
+  assert.equal(seasonHint({ kind: "series", season: 2 }), "Season 2");
+  assert.equal(seasonHint({ kind: "series", seasons: 3, episodes: 28 }), "3 seasons · 28 episodes");
+  assert.equal(seasonHint({ kind: "film", seasons: 3 }), null);
+});
