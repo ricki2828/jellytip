@@ -420,6 +420,16 @@ fun HomePageContent(
     // Jellytip IPTV: "Your reminders" first after Continue Watching (Home only; nothing on 404)
     val remindersNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberReminders() else null
     var reminders by remember { mutableStateOf(remindersNow) }
+    // Jellytip IPTV (8h Block 1): IPTV-only Continue Watching / Next Up rows when Jellyfin has none here (Home only),
+    // decided once every row has loaded so the layout doesn't jump
+    val iptvResumeCont by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.continueItems.collectAsState()
+    val iptvResumeNext by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.nextItems.collectAsState()
+    if (specialsPage == "home") LaunchedEffect(Unit) { com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.refresh() }
+    val rowsSettled = homeRows.none { it is HomeRowLoadingState.Loading || it is HomeRowLoadingState.Pending }
+    val hasContinueRow = homeRows.any { (it as? HomeRowLoadingState.Success)?.rowType.let { t -> t is HomeRowConfig.ContinueWatching || t is HomeRowConfig.ContinueWatchingCombined } }
+    val hasNextRow = homeRows.any { (it as? HomeRowLoadingState.Success)?.rowType.let { t -> t is HomeRowConfig.NextUp || t is HomeRowConfig.ContinueWatchingCombined } }
+    val iptvOnlyContinue = specialsPage == "home" && rowsSettled && !hasContinueRow && iptvResumeCont.isNotEmpty()
+    val iptvOnlyNext = specialsPage == "home" && rowsSettled && !hasNextRow && iptvResumeNext.isNotEmpty()
     val hiddenRows =
         remember(serverRows, rowConfigs) {
             val shown = serverRows
@@ -436,8 +446,8 @@ fun HomePageContent(
     var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
     val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val entries =
-        remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders) {
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders)
+        remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext) {
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         }
     val focusedEntry =
         remember(entries, specialFocus?.id, position.row) {
@@ -456,7 +466,7 @@ fun HomePageContent(
         // A late live-sport answer is taken only if it does not move the focused row (else next visit)
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow, recordings, upcoming, reminders)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred live sport row: would move focused $key")
@@ -469,7 +479,7 @@ fun HomePageContent(
         // Same rule as live sport: a late answer that would move the focused row waits for the next visit
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordingsNow, upcoming, reminders)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordingsNow, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred recordings row: would move focused $key")
@@ -481,7 +491,7 @@ fun HomePageContent(
         if (upcomingNow == upcoming) return@LaunchedEffect
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcomingNow, reminders)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcomingNow, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred upcoming sport row: would move focused $key")
@@ -493,7 +503,7 @@ fun HomePageContent(
         if (remindersNow == reminders) return@LaunchedEffect
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, remindersNow)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, remindersNow, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred reminders row: would move focused $key")
@@ -519,6 +529,8 @@ fun HomePageContent(
                 recordings,
                 upcoming,
                 reminders,
+                iptvOnlyContinue,
+                iptvOnlyNext,
             )
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
@@ -718,6 +730,28 @@ fun HomePageContent(
                                             .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
                                 )
                             }
+                            return@items
+                        }
+                        if (entry is JellytipHomeEntry.IptvResumeOnly) {
+                            val id = entry.key
+                            com.github.damontecres.wholphin.jellytip.iptv.JellytipResumeRow(
+                                title = stringResource(if (entry.continueRow) R.string.continue_watching else R.string.next_up),
+                                library = emptyList(),
+                                iptv = if (entry.continueRow) iptvResumeCont else iptvResumeNext.filter { n -> iptvResumeCont.none { it.key == n.key } || !iptvOnlyContinue },
+                                viewOptions = jellytipRowOptions(HomeRowViewOptions()),
+                                onClickLibrary = { _, _ -> },
+                                onLongClickLibrary = { _, _ -> },
+                                onFocusLibrary = { },
+                                onFocusIptv = {
+                                    specialFocus = JellytipSpecialFocus(id, null, false)
+                                    savedSpecialId = id
+                                },
+                                modifier =
+                                    rowModifier
+                                        .fillMaxWidth()
+                                        .focusGroup()
+                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                            )
                             return@items
                         }
                         if (entry is JellytipHomeEntry.Reminders) {

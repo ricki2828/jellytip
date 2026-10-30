@@ -10,6 +10,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
 import com.github.damontecres.wholphin.jellytip.rows.JellytipRowsAnswer
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow
 import com.github.damontecres.wholphin.ui.main.isContinueWatchingNextUp
+import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 
 /** One entry of the home list: a normal row (index into the page's rows) or a special inserted between them. */
@@ -33,6 +34,16 @@ sealed interface JellytipHomeEntry {
         val items: List<com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow>,
     ) : JellytipHomeEntry {
         override val key get() = "live-sport"
+    }
+
+    /**
+     * IPTV-only Continue Watching ([continueRow]) or Next Up: Jellyfin has no such row on this page but the IPTV
+     * continue / next lists have items (plan "8h Block 1"). Placed where that row would be: first / after it.
+     */
+    data class IptvResumeOnly(
+        val continueRow: Boolean,
+    ) : JellytipHomeEntry {
+        override val key get() = if (continueRow) "iptv-continue" else "iptv-next"
     }
 
     /** "Your reminders" (Home, right after Continue Watching / Next Up, before recordings). */
@@ -86,8 +97,11 @@ fun jellytipHomeEntries(
     recordings: List<com.github.damontecres.wholphin.jellytip.iptv.IptvRecording>? = null,
     upcoming: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>? = null,
     reminders: List<com.github.damontecres.wholphin.jellytip.iptv.IptvUpcoming>? = null,
+    /** Add the IPTV-only Continue Watching / Next Up rows (see [JellytipHomeEntry.IptvResumeOnly]). */
+    iptvContinue: Boolean = false,
+    iptvNext: Boolean = false,
 ): List<JellytipHomeEntry> {
-    val base = baseEntries(rows, specials, leadingRows, serverRows, hiddenRows)
+    val base = withIptvResumeRows(baseEntries(rows, specials, leadingRows, serverRows, hiddenRows), rows, iptvContinue, iptvNext)
     val extra =
         listOfNotNull(
             reminders?.takeIf { it.isNotEmpty() }?.let { JellytipHomeEntry.Reminders(it) },
@@ -100,6 +114,27 @@ fun jellytipHomeEntries(
     val lead = leadingRows ?: rows.indexOfFirst { !it.isContinueWatchingNextUp }.let { if (it < 0) rows.size else it }
     val at = base.indexOfFirst { !(it is JellytipHomeEntry.Row && it.index < lead) }.let { if (it < 0) base.size else it }
     return base.subList(0, at) + extra + base.subList(at, base.size)
+}
+
+/** Continue first; Next Up right after the (real or IPTV-only) Continue Watching row, else first. */
+private fun withIptvResumeRows(
+    base: List<JellytipHomeEntry>,
+    rows: List<HomeRowLoadingState>,
+    iptvContinue: Boolean,
+    iptvNext: Boolean,
+): List<JellytipHomeEntry> {
+    if (!iptvContinue && !iptvNext) return base
+    val out = base.toMutableList()
+    if (iptvContinue) out.add(0, JellytipHomeEntry.IptvResumeOnly(true))
+    if (iptvNext) {
+        val cw =
+            out.indexOfLast { e ->
+                e is JellytipHomeEntry.IptvResumeOnly ||
+                    (e is JellytipHomeEntry.Row && (rows.getOrNull(e.index) as? HomeRowLoadingState.Success)?.rowType.let { it is HomeRowConfig.ContinueWatching })
+            }
+        out.add(cw + 1, JellytipHomeEntry.IptvResumeOnly(false))
+    }
+    return out
 }
 
 private fun baseEntries(

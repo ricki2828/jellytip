@@ -239,7 +239,9 @@ object JellytipDebugReport {
         // Contract (jellytip-specials.md "Debug reports"): {app, version, device, user, createdAt, events:[{t, type, msg}]};
         // the server names the user from the token, so no user name (or token) is sent
         val events = JSONArray()
-        JellytipTrace.snapshot().forEach { line ->
+        // A "perf" report carries frame stats only: no trace events (they hold titles, focus labels and search
+        // queries), just screen names and the device model
+        if (reason != "perf") JellytipTrace.snapshot().forEach { line ->
             val m = LINE.matchEntire(line)
             events.put(
                 if (m == null) {
