@@ -351,6 +351,8 @@ export interface Review {
   text: string;
   spoiler: boolean;
   source: string;
+  /** Rotten Tomatoes: "rt_fresh" | "rt_rotten". */
+  mark?: string | null;
   url: string | null;
 }
 
@@ -358,10 +360,11 @@ export interface Quote {
   text: string;
   author: string;
   source: string;
+  mark?: string | null;
 }
 
 export interface Reviews {
-  /** "letterboxd" | "tmdb" | "none" */
+  /** "letterboxd" | "tmdb" | "rottentomatoes" | "none" */
   source: string;
   quote: Quote | null;
   reviews: Review[];

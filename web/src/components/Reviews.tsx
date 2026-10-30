@@ -1,10 +1,12 @@
 // Reviews, as on the TV (JellytipReviews.kt): a Details row of short pull-quote cards, Ricki's own first (warm accent),
-// then the most-liked; a card opens the full text. Plus the home hero's one-line Letterboxd pull-quote.
+// then the most-liked; a card opens the full text. Plus the home hero's one-line pull-quote.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Item } from "../api/jellyfin";
 import { reviewQuote, reviews as getReviews, type Quote, type Review, type Reviews } from "../api/companion";
 import { pickPullQuote } from "../lib/pullQuote";
+import { bylineText, isRt, markOf, siteName } from "../lib/attribution";
+import { RtMark } from "./RtMark";
 import "./Reviews.css";
 
 const QUOTE_MAX = 120;
@@ -37,7 +39,7 @@ export function ReviewsRow({ item }: { item: Item }) {
   }, [item.Id, item.Type]);
 
   if (!data || data.reviews.length === 0) return null;
-  const label = data.source === "tmdb" ? "TMDB" : data.source === "letterboxd" ? "Letterboxd" : null;
+  const label = data.source === "none" ? null : siteName(data.source) ? (isRt(data.source) ? "Rotten Tomatoes" : siteName(data.source)) : null;
 
   return (
     <section className="row reviews">
@@ -59,7 +61,9 @@ export function ReviewsRow({ item }: { item: Item }) {
               }}
             >
               <span className="review-head">
-                <span className="review-author">{r.own ? `${r.author} · you` : r.author}</span>
+                <span className="review-author">
+                  {isRt(r.source) && <RtMark mark={markOf(r.mark)} />} {r.own ? `${r.author} · you` : isRt(r.source) ? siteName(r.source) : r.author}
+                </span>
                 {r.rating != null && <span className="review-stars">{stars(r.rating)}</span>}
               </span>
               <span className={`review-body${r.spoiler || !r.excerpt ? " quiet" : ""}`}>{body}</span>
@@ -108,7 +112,7 @@ function ReviewModal({ review, onClose }: { review: Review; onClose: () => void 
   const meta = [
     review.rating != null ? stars(review.rating) : null,
     review.likes ? `♥ ${likes(review.likes)}` : null,
-    review.source === "tmdb" ? "TMDB" : "Letterboxd",
+    isRt(review.source) ? null : siteName(review.source) || null,
   ]
     .filter(Boolean)
     .join("   ");
@@ -119,7 +123,9 @@ function ReviewModal({ review, onClose }: { review: Review; onClose: () => void 
       <div className={`review-sheet${review.own ? " own" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="review-sheet-head">
           <div>
-            <div className="review-sheet-author">{review.own ? `${review.author} · your review` : review.author}</div>
+            <div className="review-sheet-author">
+              {isRt(review.source) && <RtMark mark={markOf(review.mark)} size={16} />} {review.own ? `${review.author} · your review` : isRt(review.source) ? siteName(review.source) : review.author}
+            </div>
             <div className="review-sheet-meta">{meta}</div>
           </div>
           <button ref={closeRef} className="btn" data-nav onClick={onClose}>
@@ -150,7 +156,9 @@ export function HeroQuote({ item }: { item: Item }) {
   if (!quote || quote.text.length > QUOTE_MAX) return null;
   return (
     <p className="hero-quote">
-      “{quote.text}” <span className="hero-quote-by">— {quote.author} on Letterboxd</span>
+      “{quote.text}” <span className="hero-quote-by">
+        — {isRt(quote.source) && <RtMark mark={markOf(quote.mark)} />} {bylineText(quote.source, quote.author)}
+      </span>
     </p>
   );
 }
@@ -176,7 +184,7 @@ export function DetailsQuote({ item, phone }: { item: Item; phone: boolean }) {
   if (!q) return phone && data === undefined ? <div className="details-quote phone pending" aria-hidden /> : null;
   const by = (
     <span className="details-quote-by">
-      {q.rating != null && <span className="details-quote-stars">{stars(q.rating)}</span>} — {q.own ? `${q.author} (you)` : q.author} on {q.site}
+      {q.rating != null && <span className="details-quote-stars">{stars(q.rating)}</span>} — <RtMark mark={q.mark} /> {q.own ? `${q.author} (you)${q.site ? ` on ${q.site}` : ""}` : q.by}
     </span>
   );
   if (!phone)
