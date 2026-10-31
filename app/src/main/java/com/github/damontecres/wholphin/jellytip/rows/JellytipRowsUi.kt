@@ -25,6 +25,7 @@ import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -159,6 +160,18 @@ fun JellytipServerRowView(
             }
         }
     val longClick: (BaseItem) -> Unit = onLongClickItem ?: open
+    // "See all" (Collections hub): the row id opens as a hub collection; one index request for all rows
+    LaunchedEffect(Unit) { JellytipHubIndex.ensureLoaded() }
+    val hubIds by JellytipHubIndex.ids.collectAsState()
+    val seeAll: (() -> Unit)? =
+        if (row.id in hubIds) {
+            {
+                JellytipTrailerControl.stop()
+                viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(row.id, row.title), "row See all")
+            }
+        } else {
+            null
+        }
     val options =
         when {
             row.isFranchise -> FranchiseOptions
@@ -176,7 +189,7 @@ fun JellytipServerRowView(
             }
 
             row.isTop10 -> {
-                TrendingTop10Row(row, loaded.orEmpty(), onFocusItem, click, longClick, play, focusModifier, viewModel)
+                TrendingTop10Row(row, loaded.orEmpty(), onFocusItem, click, longClick, play, focusModifier, viewModel, seeAll)
             }
 
             // Franchise rows may carry IPTV parts too (`iptvItems` + `order`): before the mixed/IPTV row branches
@@ -193,7 +206,7 @@ fun JellytipServerRowView(
 
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
-                MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel, onOpened)
+                MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel, onOpened, seeAll)
             }
 
             row.iptvItems.isNotEmpty() -> {
@@ -235,6 +248,11 @@ fun JellytipServerRowView(
                     onLongClickItem = { _, item -> longClick(item) },
                     horizontalPadding = options.spacing.dp,
                     modifier = focusModifier,
+                    showViewMore = seeAll != null,
+                    viewMoreCardContent = { mod ->
+                        val h = options.heightDp.dp
+                        SeeAllCard(if (row.isPoster) h * 2f / 3f else h * 16f / 9f, h, onClick = { seeAll?.invoke() }, modifier = mod)
+                    },
                     cardContent = { index, item, cardModifier, onClick, onLongClick ->
                         HomePageCardContent(
                             index = index,
@@ -847,6 +865,7 @@ private fun MixedRow(
     focusModifier: Modifier,
     viewModel: JellytipHomeViewModel,
     onOpened: ((String) -> Unit)? = null,
+    seeAll: (() -> Unit)? = null,
 ) {
     val tiles =
         remember(row.id, row.order, library, row.iptvItems) {
@@ -895,6 +914,7 @@ private fun MixedRow(
                         )
                 }
             }
+            if (seeAll != null) item(key = "see-all") { SeeAllCard(w, h, onClick = seeAll) }
         }
     }
 }
@@ -940,6 +960,7 @@ private fun TrendingTop10Row(
     play: (BaseItem) -> Unit,
     focusModifier: Modifier,
     viewModel: JellytipHomeViewModel,
+    seeAll: (() -> Unit)? = null,
 ) {
     val isAdmin by rememberIsJellytipAdmin()
     val tiles =
@@ -989,6 +1010,8 @@ private fun TrendingTop10Row(
         onLongClickItem = { _, t -> if (t is TrendTile.Lib) longClick(t.item) },
         horizontalPadding = SpecialTokens.SPACING,
         modifier = focusModifier,
+        showViewMore = seeAll != null,
+        viewMoreCardContent = { mod -> SeeAllCard(SpecialTokens.POSTER_W, SpecialTokens.POSTER_H, onClick = { seeAll?.invoke() }, modifier = mod) },
         cardContent = { index, t, cardModifier, onClick, onLongClick ->
             if (t != null) {
                 // Ranks the server did not send: the slot's position

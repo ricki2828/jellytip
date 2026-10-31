@@ -55,6 +55,7 @@ import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /*
@@ -110,6 +111,50 @@ object HubParse {
                 }
             HubSection(s.str("key") ?: return@mapNotNull null, s.str("title") ?: s.optString("key"), list).takeIf { it.items.isNotEmpty() }
         }
+    }
+}
+
+/**
+ * Which row ids open as a hub collection ("See all" on Home rows): one `GET /v1/collections` per process (retried after
+ * 10 min on failure), started by the first server row drawn and delayed so it never competes with Home loading. A plain
+ * StateFlow (snapshot rule).
+ */
+object JellytipHubIndex {
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    private val _ids = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    val ids: kotlinx.coroutines.flow.StateFlow<Set<String>> = _ids
+
+    @Volatile
+    private var nextTry = 0L
+
+    fun ensureLoaded() {
+        val now = System.currentTimeMillis()
+        if (now < nextTry) return
+        nextTry = now + RETRY_MS
+        scope.launch {
+            kotlinx.coroutines.delay(START_DELAY_MS)
+            val sections = loadSections()
+            if (sections == null) return@launch
+            _ids.value = sections.flatMap { s -> s.items.map { it.id } }.toSet()
+            nextTry = Long.MAX_VALUE // loaded: once per process
+        }
+    }
+
+    private const val RETRY_MS = 10 * 60_000L
+    private const val START_DELAY_MS = 5_000L
+}
+
+/** The last card of a Home row whose id is a hub collection: opens it as a full grid. */
+@Composable
+internal fun SeeAllCard(
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SpecialCard(width = width, height = height, onClick = onClick, onLongClick = onClick, modifier = modifier) {
+        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.06f)))
+        Text("See all  ›", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.align(Alignment.Center))
     }
 }
 
