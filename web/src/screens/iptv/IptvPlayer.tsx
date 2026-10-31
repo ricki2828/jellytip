@@ -14,7 +14,9 @@ import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
-import { deviceId } from "../../api/jellyfin";
+import { deviceId, getSession } from "../../api/jellyfin";
+import { COMPANION_BASE } from "../../api/companion";
+import { openMatchInfo } from "../../components/MatchInfo";
 import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
@@ -716,6 +718,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
   const alive = useRef(true);
   const renewed = useRef(false);
   const switchTo = useRef<string | null>(null);
+  const infoFor = useRef<string | null>(null);
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
 
@@ -756,6 +759,10 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
             );
           } else if (e.action === "channel" && e.channelId) switchTo.current = e.channelId;
         }),
+        // The player's ⓘ: it stays open; the match info shows when it closes
+        await NativePlayer.addListener("matchInfo", (e) => {
+          infoFor.current = e.matchId;
+        }),
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
@@ -775,6 +782,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
                 alternates: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })),
                 programmeStart: extras?.kickoff?.start,
                 programmeStop: extras?.kickoff?.stop,
+                // The match behind the listing: ⓘ, and the native Live drawer (which polls the companion itself)
+                ...(extras?.matchId && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
                 // Before the real start the native overlay shows the pre-game card
                 ...(isPre(extras?.startsAt, Date.now() / 1000)
                   ? { phase: "pre" as const, startsAt: new Date(extras!.startsAt! * 1000).toISOString(), altChannels: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })) }
@@ -800,6 +809,10 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       }
       if (r.reason !== "error") {
         exit();
+        // ⓘ was tapped in the player: show the match now that the web app is back
+        const mid = infoFor.current;
+        infoFor.current = null;
+        if (mid) window.setTimeout(() => openMatchInfo(mid), 350);
         return;
       }
       const what = linkFailure(r.httpStatus ?? 0, r.iptvError);
