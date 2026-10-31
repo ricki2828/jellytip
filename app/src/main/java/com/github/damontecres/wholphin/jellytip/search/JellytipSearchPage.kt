@@ -130,19 +130,39 @@ class JellytipSearchViewModel
                     }
                     _state.update { it.copy(answer = a ?: it.answer, searching = false, failed = a == null) }
                     JellytipTrace.log("search", "q='${q.trim()}' groups=${a?.groups?.map { "${it.type}:${it.total}" }} pending=${a?.pending}")
-                    // Discover (admins), or live while the caller's index builds, can come a moment later: ask once more for those
-                    if (a != null && a.pending.isNotEmpty()) {
-                        delay(PENDING_MS)
-                        val types = (a.pending + if ("live" in a.pending) listOf("channels") else emptyList()).distinct()
+                    // Discover (admins), live while the caller's index builds, or IPTV copies being verified come a moment later:
+                    // ask again for those. IPTV (search-api: 6/7 titles at +1 s, 7/7 at +2 s): at ~1 s, then once more at ~2.5 s
+                    // if still pending. The verified IPTV titles are appended (keys stable: focus stays where it is).
+                    var pending = a?.pending.orEmpty()
+                    var waited = 0L
+                    var tries = 0
+                    while (a != null && pending.isNotEmpty() && tries < 2) {
+                        val iptvAgain = "iptv" in pending
+                        if (tries == 1 && !iptvAgain) break
+                        val wait = if (iptvAgain) (if (tries == 0) PENDING_IPTV_MS else PENDING_IPTV_LAST_MS - waited) else PENDING_MS
+                        delay(wait)
+                        waited += wait
+                        tries++
+                        val types = (pending + if ("live" in pending) listOf("channels") else emptyList()).distinct()
                         val more = service.search(q.trim(), types = types.joinToString(",")) ?: return@launch
+                        if (_state.value.query.trim() != q.trim()) return@launch
                         _state.update { st ->
                             val cur = st.answer ?: return@update st
                             if (cur.q != a.q) return@update st
-                            val known = cur.groups.map { it.type }.toSet()
+                            // The IPTV group is replaced by the verified one; other groups only fill in what was missing
+                            val known = cur.groups.map { it.type }.filter { !(iptvAgain && it == "iptv") }.toSet()
+                            val mergedResults =
+                                if (iptvAgain && cur.results != null && more.results != null) {
+                                    val have = cur.results.map { it.key }.toSet()
+                                    cur.results + more.results.filter { it.source == "iptv" && it.key !in have }
+                                } else {
+                                    cur.results
+                                }
                             st.copy(
                                 answer =
                                     cur.copy(
-                                        groups = cur.groups + more.groups.filter { it.type !in known },
+                                        groups = cur.groups.filter { it.type in known } + more.groups.filter { it.type !in known },
+                                        results = mergedResults,
                                         pending = emptyList(),
                                         live = cur.live.ifEmpty { more.live },
                                         channels = cur.channels.ifEmpty { more.channels },
@@ -150,6 +170,8 @@ class JellytipSearchViewModel
                                     ),
                             )
                         }
+                        JellytipTrace.log("search", "pending re-ask ${types.joinToString(",")} #$tries -> pending=${more.pending}")
+                        pending = more.pending.filter { it == "iptv" }
                     }
                 }
         }
@@ -200,6 +222,8 @@ class JellytipSearchViewModel
         companion object {
             private const val DEBOUNCE_MS = 150L
             private const val PENDING_MS = 300L
+            private const val PENDING_IPTV_MS = 1_000L
+            private const val PENDING_IPTV_LAST_MS = 2_500L
         }
     }
 
