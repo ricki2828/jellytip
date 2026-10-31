@@ -1287,6 +1287,11 @@
   right: 6px;
   z-index: 3;
 }
+/* live cards: bottom right, clear of the LIVE / PRE-GAME pill in the top corner */
+.onnow-item > .info-fab {
+  top: auto;
+  bottom: 22px;
+}
 .onnow-item,
 .up-wrap {
   position: relative;

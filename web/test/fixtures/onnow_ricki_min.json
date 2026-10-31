@@ -1,0 +1,715 @@
+{
+ "now": 1793418184,
+ "channels": [
+  {
+   "phase": "live",
+   "startsAt": "2026-10-31T02:00:00Z",
+   "startsAtSource": "channel",
+   "id": "11dd6d87:303215",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "303215",
+   "num": 10565,
+   "name": "Phoenix Suns vs Denver Nuggets @ Oct 30 10:00 PM :NBA  10",
+   "logo": "v1/iptv/img/11dd6d87:c:303215.SIG",
+   "group": "11dd6d87:688",
+   "epgId": null,
+   "catchupDays": 0,
+   "favourite": false,
+   "event": true,
+   "guide": "event",
+   "guideNote": "Event feed, live when on",
+   "region": "us",
+   "quality": {
+    "bucket": "fhd",
+    "height": 1080,
+    "fps": 25.0,
+    "audio": "stereo",
+    "checkedAt": 1793353133
+   },
+   "sport": true,
+   "tier": 2,
+   "match": {
+    "league": "NBA"
+   },
+   "now": {
+    "start": 1793412000,
+    "stop": 1793421900,
+    "title": "Phoenix Suns vs Denver Nuggets",
+    "kind": "live",
+    "sport": true,
+    "sportName": "nba",
+    "league": "NBA",
+    "liveConfidence": "likely",
+    "phase": "live",
+    "startsAt": "2026-10-31T02:00:00Z",
+    "startsAtSource": "channel",
+    "art": {
+     "home": {
+      "name": "Phoenix Suns",
+      "badge": "v1/iptv/img/art/76b.SIG"
+     },
+     "away": {
+      "name": "Denver Nuggets",
+      "badge": "v1/iptv/img/art/77b.SIG"
+     },
+     "league": {
+      "badge": "v1/iptv/img/art/17b.SIG",
+      "fanart": "v1/iptv/img/art/76f2.SIG"
+     }
+    },
+    "synthetic": true,
+    "matchInfo": {
+     "id": "espn:basketball~nba:401909286",
+     "league": "NBA",
+     "home": {
+      "name": "Phoenix Suns",
+      "short": "PHX",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/phx.png",
+      "record": "1-2"
+     },
+     "away": {
+      "name": "Denver Nuggets",
+      "short": "DEN",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/den.png",
+      "record": "2-2"
+     },
+     "startsAt": 1793412000,
+     "status": "in",
+     "source": "espn",
+     "leagueKey": "nba",
+     "venue": {
+      "name": "Mortgage Matchup Center",
+      "city": "Phoenix"
+     },
+     "inferred": false,
+     "tier": "full"
+    }
+   },
+   "next": null,
+   "art": {
+    "home": {
+     "name": "Phoenix Suns",
+     "badge": "v1/iptv/img/art/76b.SIG"
+    },
+    "away": {
+     "name": "Denver Nuggets",
+     "badge": "v1/iptv/img/art/77b.SIG"
+    },
+    "league": {
+     "badge": "v1/iptv/img/art/17b.SIG",
+     "fanart": "v1/iptv/img/art/76f2.SIG"
+    }
+   },
+   "sportName": "nba",
+   "league": "NBA",
+   "eventGroup": {
+    "key": "v:nuggets|suns",
+    "alternates": [
+     "11dd6d87:276123",
+     "11dd6d87:276139",
+     "11dd6d87:1254942",
+     "11dd6d87:1254941"
+    ],
+    "alternateChannels": [
+     {
+      "id": "11dd6d87:276123",
+      "name": "NBA | DENVER NUGGETS",
+      "num": 10611,
+      "logo": "v1/iptv/img/11dd6d87:c:276123.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793338717
+      }
+     },
+     {
+      "id": "11dd6d87:276139",
+      "name": "NBA | PHOENIX SUNS",
+      "num": 10627,
+      "logo": "v1/iptv/img/11dd6d87:c:276139.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793339282
+      }
+     },
+     {
+      "id": "11dd6d87:1254942",
+      "name": "|US| ALTITUDE SPORTS ALTERNATE",
+      "num": 9227,
+      "logo": "v1/iptv/img/11dd6d87:c:1254942.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     },
+     {
+      "id": "11dd6d87:1254941",
+      "name": "|US| ALTITUDE SPORTS HD",
+      "num": 9226,
+      "logo": "v1/iptv/img/11dd6d87:c:1254941.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     }
+    ],
+    "phase": "live",
+    "startsAt": "2026-10-31T02:00:00Z",
+    "startsAtSource": "channel"
+   }
+  },
+  {
+   "id": "11dd6d87:579814",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "579814",
+   "num": 27461,
+   "name": "|NZ| SKY ESPN 2 \u1d41\u1d34\u1d30",
+   "logo": "v1/iptv/img/11dd6d87:c:579814.SIG",
+   "group": "11dd6d87:1282",
+   "epgId": "espn2.nz",
+   "catchupDays": 0,
+   "favourite": false,
+   "event": false,
+   "guide": "epg",
+   "guideNote": null,
+   "region": "nz",
+   "quality": {
+    "bucket": "fhd",
+    "height": 1080,
+    "fps": 30.0,
+    "audio": "stereo",
+    "checkedAt": 1793342314
+   },
+   "sport": true,
+   "tier": 3,
+   "match": {},
+   "now": {
+    "start": 1793413800,
+    "stop": 1793424600,
+    "title": "Live: College Football",
+    "desc": "Sacramento State Hornets meets Kent State Golden Flashes in College Football. The match is played at Hornet Stadium, Sacramento, CA.",
+    "kind": "live",
+    "sport": true,
+    "sportName": "college football",
+    "league": "NCAAF",
+    "liveConfidence": "likely",
+    "phase": "live",
+    "startsAt": "2026-10-31T02:30:00Z",
+    "startsAtSource": "epg",
+    "art": {
+     "league": {
+      "badge": "v1/iptv/img/art/14b.SIG",
+      "fanart": "v1/iptv/img/art/14f1.SIG"
+     }
+    },
+    "matchInfo": {
+     "id": "espn:football~college-football:401866451",
+     "league": "NCAAF",
+     "home": {
+      "name": "Sacramento State Hornets",
+      "short": "SAC",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/16.png",
+      "record": "1-7"
+     },
+     "away": {
+      "name": "Kent State Golden Flashes",
+      "short": "KENT",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png",
+      "record": "3-5"
+     },
+     "startsAt": 1793413800,
+     "status": "in",
+     "source": "espn",
+     "leagueKey": "ncaaf",
+     "venue": {
+      "name": "Hornet Stadium",
+      "city": "Sacramento"
+     },
+     "inferred": true,
+     "inferredBy": "broadcast espn = channel '|NZ| SKY ESPN 2 \u1d41\u1d34\u1d30'",
+     "tier": "basic"
+    }
+   },
+   "next": {
+    "start": 1793424600,
+    "stop": 1793431800,
+    "title": "NCAA Men's Soccer Championship",
+    "desc": "UCF Knights meets Baylor Bears in College gridiron. The match is played at Acrisure Bounce House, Orlando, FL.",
+    "kind": "other",
+    "sport": true,
+    "sportName": "football",
+    "art": {
+     "home": {
+      "name": "Newcastle Knights",
+      "badge": "v1/iptv/img/art/57b.SIG"
+     },
+     "away": {
+      "name": "Chicago Bears",
+      "badge": "v1/iptv/img/art/109b.SIG"
+     },
+     "league": {
+      "fanart": "v1/iptv/img/art/57f1.SIG"
+     }
+    }
+   },
+   "art": {
+    "league": {
+     "badge": "v1/iptv/img/art/14b.SIG",
+     "fanart": "v1/iptv/img/art/14f1.SIG"
+    }
+   },
+   "sportName": "college football",
+   "league": "NCAAF"
+  },
+  {
+   "id": "11dd6d87:280167",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "280167",
+   "num": 11145,
+   "name": "NCAAF 02: ESPN2",
+   "logo": "v1/iptv/img/11dd6d87:c:280167.SIG",
+   "group": "11dd6d87:792",
+   "epgId": null,
+   "catchupDays": 0,
+   "favourite": false,
+   "event": false,
+   "guide": "ext",
+   "guideNote": null,
+   "region": "us",
+   "quality": {
+    "bucket": "fhd",
+    "height": 1080,
+    "fps": 25.0,
+    "audio": "stereo",
+    "checkedAt": 1793353618
+   },
+   "sport": true,
+   "tier": 3,
+   "match": {},
+   "now": {
+    "start": 1793413800,
+    "stop": 1793424600,
+    "title": "Live: College Football",
+    "desc": "The Kent State Golden Flashes visit the Sacramento State Hornets for a college football game. The Kent State Golden Flashes defeated the Akron Zips 35-20 guided by quarterback Dru DeShields, while the Sacramento State Hornets fell 34-17 last week.",
+    "kind": "live",
+    "sport": true,
+    "sportName": "college football",
+    "league": "NCAAF",
+    "liveConfidence": "likely",
+    "phase": "live",
+    "startsAt": "2026-10-31T02:30:00Z",
+    "startsAtSource": "epg",
+    "art": {
+     "league": {
+      "badge": "v1/iptv/img/art/14b.SIG",
+      "fanart": "v1/iptv/img/art/14f2.SIG"
+     }
+    },
+    "matchInfo": {
+     "id": "espn:football~college-football:401866451",
+     "league": "NCAAF",
+     "home": {
+      "name": "Sacramento State Hornets",
+      "short": "SAC",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/16.png",
+      "record": "1-7"
+     },
+     "away": {
+      "name": "Kent State Golden Flashes",
+      "short": "KENT",
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png",
+      "record": "3-5"
+     },
+     "startsAt": 1793413800,
+     "status": "in",
+     "source": "espn",
+     "leagueKey": "ncaaf",
+     "venue": {
+      "name": "Hornet Stadium",
+      "city": "Sacramento"
+     },
+     "inferred": true,
+     "inferredBy": "broadcast espn = channel 'NCAAF 02: ESPN2'; channel region us",
+     "tier": "basic"
+    }
+   },
+   "next": {
+    "start": 1793424600,
+    "stop": 1793428200,
+    "title": "Nothing But Net",
+    "desc": "Host Dalen Cuff and analysts Carlos Boozer and Luke Hancock keep fans apprised of the latest news and notes around the ACC and break down some of the conference's top matchups.",
+    "kind": "other",
+    "sport": true,
+    "sportName": "college football",
+    "league": "NCAAF",
+    "art": {
+     "league": {
+      "badge": "v1/iptv/img/art/14b.SIG",
+      "fanart": "v1/iptv/img/art/14f3.SIG"
+     }
+    }
+   },
+   "art": {
+    "league": {
+     "badge": "v1/iptv/img/art/14b.SIG",
+     "fanart": "v1/iptv/img/art/14f2.SIG"
+    }
+   },
+   "sportName": "college football",
+   "league": "NCAAF",
+   "eventGroup": {
+    "key": "t:college football|the kent state golden flashes visit the ",
+    "alternates": [
+     "11dd6d87:1236463",
+     "11dd6d87:11204"
+    ],
+    "alternateChannels": [
+     {
+      "id": "11dd6d87:1236463",
+      "name": "|US| ESPN 2 \u1d34\u1d30",
+      "num": 6870,
+      "logo": "v1/iptv/img/11dd6d87:c:1236463.SIG",
+      "quality": {
+       "bucket": "hd",
+       "height": 720,
+       "fps": 59.94,
+       "audio": "stereo",
+       "checkedAt": 1793416542
+      }
+     },
+     {
+      "id": "11dd6d87:11204",
+      "name": "|US| ESPN 2 \u1d34\u1d30",
+      "num": 9271,
+      "logo": "v1/iptv/img/11dd6d87:c:11204.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     }
+    ],
+    "phase": "live",
+    "startsAt": "2026-10-31T02:30:00Z",
+    "startsAtSource": "epg"
+   }
+  },
+  {
+   "phase": "live",
+   "startsAt": "2026-10-31T01:58:00Z",
+   "startsAtSource": "channel",
+   "id": "11dd6d87:1945164",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "1945164",
+   "num": 9570,
+   "name": "PRIME US 038|  Lakers vs. Warriors (2026-10-31 01:58:00)",
+   "logo": "v1/iptv/img/11dd6d87:c:1945164.SIG",
+   "group": "11dd6d87:2452",
+   "epgId": null,
+   "catchupDays": 0,
+   "favourite": false,
+   "event": true,
+   "guide": "event",
+   "guideNote": "Event feed, live when on",
+   "region": "us",
+   "quality": {
+    "bucket": "unknown",
+    "height": null,
+    "fps": null,
+    "audio": null,
+    "checkedAt": null
+   },
+   "sport": true,
+   "tier": 1,
+   "match": {
+    "team": "New Zealand Warriors",
+    "league": "NRL"
+   },
+   "now": {
+    "start": 1793411880,
+    "stop": 1793421780,
+    "title": "Lakers vs. Warriors",
+    "kind": "live",
+    "sport": true,
+    "art": {
+     "league": {
+      "fanart": "v1/iptv/img/art/88f3.SIG"
+     }
+    },
+    "phase": "live",
+    "startsAt": "2026-10-31T01:58:00Z",
+    "startsAtSource": "channel",
+    "synthetic": true
+   },
+   "next": null,
+   "art": {
+    "league": {
+     "fanart": "v1/iptv/img/art/88f3.SIG"
+    }
+   },
+   "eventGroup": {
+    "key": "v:lakers|warriors",
+    "alternates": [
+     "11dd6d87:303214",
+     "11dd6d87:276125",
+     "11dd6d87:276129",
+     "11dd6d87:276131"
+    ],
+    "alternateChannels": [
+     {
+      "id": "11dd6d87:303214",
+      "name": "Golden State Warriors vs Los Angeles Lakers @ Oct 30 10:00 PM :NBA  09",
+      "num": 10564,
+      "logo": "v1/iptv/img/11dd6d87:c:303214.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793353116
+      }
+     },
+     {
+      "id": "11dd6d87:276125",
+      "name": "NBA | GOLDEN STATE WARRIORS",
+      "num": 10614,
+      "logo": "v1/iptv/img/11dd6d87:c:276125.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793338797
+      }
+     },
+     {
+      "id": "11dd6d87:276129",
+      "name": "NBA | LOS ANGELES LAKERS",
+      "num": 10617,
+      "logo": "v1/iptv/img/11dd6d87:c:276129.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793338900
+      }
+     },
+     {
+      "id": "11dd6d87:276131",
+      "name": "NBA | LOS ANGELES LAKERS",
+      "num": 10619,
+      "logo": "v1/iptv/img/11dd6d87:c:276131.SIG",
+      "quality": {
+       "bucket": "fhd",
+       "height": 1080,
+       "fps": 25.0,
+       "audio": "stereo",
+       "checkedAt": 1793338969
+      }
+     }
+    ],
+    "phase": "live",
+    "startsAt": "2026-10-31T01:58:00Z",
+    "startsAtSource": "channel"
+   }
+  },
+  {
+   "id": "11dd6d87:276115",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "276115",
+   "num": 10622,
+   "name": "NBA |  NBA TV",
+   "logo": "v1/iptv/img/11dd6d87:c:276115.SIG",
+   "group": "11dd6d87:1266",
+   "epgId": null,
+   "catchupDays": 0,
+   "favourite": false,
+   "event": false,
+   "guide": "ext",
+   "guideNote": null,
+   "region": "us",
+   "quality": {
+    "bucket": "fhd",
+    "height": 1080,
+    "fps": 29.97,
+    "audio": "stereo",
+    "checkedAt": 1793339073
+   },
+   "sport": true,
+   "tier": 2,
+   "match": {
+    "league": "NBA"
+   },
+   "now": {
+    "start": 1793406600,
+    "stop": 1793421000,
+    "title": "Live: The Association",
+    "desc": "\"The Association\" celebrates the game, players and the culture of the NBA; informing and entertaining viewers with league news, analysis and storylines; guiding fans to the action across the league in real time.",
+    "kind": "live",
+    "sport": true,
+    "sportName": "nba",
+    "league": "NBA",
+    "liveConfidence": "likely",
+    "phase": "live",
+    "startsAt": "2026-10-31T00:30:00Z",
+    "startsAtSource": "epg",
+    "art": {
+     "league": {
+      "badge": "v1/iptv/img/art/17b.SIG",
+      "fanart": "v1/iptv/img/art/17f1.SIG"
+     }
+    }
+   },
+   "next": {
+    "start": 1793421000,
+    "stop": 1793422800,
+    "title": "Full Court",
+    "desc": "Catch up on the night's NBA action with a fast-paced recap featuring game highlights, standout performances and postgame sound.",
+    "kind": "other",
+    "sport": true,
+    "sportName": "nba",
+    "league": "NBA",
+    "art": {
+     "league": {
+      "badge": "v1/iptv/img/art/17b.SIG",
+      "fanart": "v1/iptv/img/art/17f2.SIG"
+     }
+    }
+   },
+   "art": {
+    "league": {
+     "badge": "v1/iptv/img/art/17b.SIG",
+     "fanart": "v1/iptv/img/art/17f1.SIG"
+    }
+   },
+   "sportName": "nba",
+   "league": "NBA",
+   "eventGroup": {
+    "key": "t:the association|the association celebrates the game play",
+    "alternates": [
+     "11dd6d87:1236522",
+     "11dd6d87:12355",
+     "11dd6d87:191301"
+    ],
+    "alternateChannels": [
+     {
+      "id": "11dd6d87:1236522",
+      "name": "|US| NBA \u1d34\u1d30",
+      "num": 6933,
+      "logo": "v1/iptv/img/11dd6d87:c:1236522.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     },
+     {
+      "id": "11dd6d87:12355",
+      "name": "|US| NBA \u1d34\u1d30",
+      "num": 10543,
+      "logo": "v1/iptv/img/11dd6d87:c:12355.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     },
+     {
+      "id": "11dd6d87:191301",
+      "name": "|US| NBA Network (US)",
+      "num": 10544,
+      "logo": "v1/iptv/img/11dd6d87:c:191301.SIG",
+      "quality": {
+       "bucket": "unknown",
+       "height": null,
+       "fps": null,
+       "audio": null,
+       "checkedAt": null
+      }
+     }
+    ],
+    "phase": "live",
+    "startsAt": "2026-10-31T00:30:00Z",
+    "startsAtSource": "epg"
+   }
+  },
+  {
+   "id": "11dd6d87:197185",
+   "providerId": "11dd6d87",
+   "providerName": "Provider",
+   "streamId": "197185",
+   "num": 38247,
+   "name": "|AU|  Fox Sports 501",
+   "logo": "v1/iptv/img/11dd6d87:c:197185.SIG",
+   "group": "11dd6d87:396",
+   "epgId": null,
+   "catchupDays": 0,
+   "favourite": false,
+   "event": false,
+   "guide": "ext",
+   "guideNote": null,
+   "region": "au",
+   "quality": {
+    "bucket": "hd",
+    "height": 720,
+    "fps": 50.0,
+    "audio": "stereo",
+    "checkedAt": 1793346088
+   },
+   "sport": true,
+   "tier": 2,
+   "match": {
+    "league": "Cricket"
+   },
+   "now": {
+    "start": 1793414100,
+    "stop": 1793419200,
+    "title": "LIVE: Sheffield Shield - QLD v VIC Day 1",
+    "desc": "QLD v VIC Day 1. Victoria travels to Brisbane in search of their first win of the Sheffield Shield season against Queensland.",
+    "kind": "live",
+    "sport": true,
+    "sportName": "cricket",
+    "league": "Sheffield Shield",
+    "liveConfidence": "likely",
+    "phase": "live",
+    "startsAt": "2026-10-31T02:35:00Z",
+    "startsAtSource": "epg"
+   },
+   "next": {
+    "start": 1793419200,
+    "stop": 1793421600,
+    "title": "LIVE: Women's Big Bash League - WBBL Adelaide Strikers v Melbourne Stars Pre Game",
+    "desc": "WBBL Adelaide Strikers v Melbourne Stars Pre Game. Action from the Women's Big Bash League.",
+    "kind": "replay",
+    "sport": true,
+    "sportName": "cricket",
+    "league": "Big Bash League"
+   },
+   "sportName": "cricket",
+   "league": "Sheffield Shield"
+  }
+ ]
+}

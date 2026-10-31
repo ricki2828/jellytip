@@ -594,3 +594,31 @@ test("match routes: 404 is the route, 403 no access, unknown only that match", (
   assert.equal(matchOutcome(500, null), null);
   assert.equal(matchOutcome(0, null), null);
 });
+
+import { readFileSync } from "node:fs";
+import { parseOnNow } from "../src/lib/onNow.ts";
+import { parseUpcoming } from "../src/lib/upcoming.ts";
+
+const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}`, import.meta.url), "utf8"));
+
+test("Ricki's real on-now and upcoming payloads: match info reaches the tiles (the info button's input)", () => {
+  const on = fx("onnow_ricki_min.json");
+  const items = parseOnNow(on, on.now);
+  const withFixture = items.filter((o) => o.info.fixture);
+  assert.equal(withFixture.length, 3);
+  assert.equal(withFixture[0].info.fixture?.id, "espn:basketball~nba:401909286");
+  assert.equal(withFixture[0].info.fixture?.home.name, "Phoenix Suns");
+  assert.equal(withFixture[0].info.fixture?.leagueKey, "nba");
+  assert.equal(withFixture[0].info.fixture?.status, "in");
+  // the favourite marker `match: {league}` on the item is not a fixture
+  assert.equal(items.filter((o) => !o.info.fixture).length, items.length - 3);
+  const up = parseUpcoming(fx("upcoming_ricki_min.json"));
+  assert.equal(up.filter((e) => e.fixture).length, 2);
+  assert.ok(up.every((e) => !e.fixture || (e.fixture.id && e.fixture.home.name && e.fixture.away.name)));
+  // a fixture put on the event group instead of the programme still counts
+  const moved = JSON.parse(JSON.stringify(on));
+  const c = moved.channels.find((x: { now?: { matchInfo?: unknown } }) => x.now?.matchInfo);
+  c.eventGroup = { ...(c.eventGroup ?? {}), matchInfo: c.now.matchInfo };
+  delete c.now.matchInfo;
+  assert.equal(parseOnNow(moved, moved.now).filter((o) => o.info.fixture).length, 3);
+});

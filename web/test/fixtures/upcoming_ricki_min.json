@@ -1,0 +1,403 @@
+{
+ "items": [
+  {
+   "key": "v:chelsea|united@1793444400",
+   "title": "Live Premier League",
+   "start": 1793444400,
+   "stop": 1793458800,
+   "kind": "live",
+   "liveConfidence": "likely",
+   "channel": {
+    "id": "11dd6d87:303270",
+    "providerId": "11dd6d87",
+    "providerName": "Provider",
+    "streamId": "303270",
+    "num": 26032,
+    "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30 50FPS",
+    "logo": "v1/iptv/img/11dd6d87:c:303270.SIG",
+    "group": "11dd6d87:548",
+    "epgId": "tntsports1.uk",
+    "catchupDays": 0,
+    "favourite": false,
+    "event": false,
+    "guide": "epg",
+    "guideNote": null,
+    "region": "uk",
+    "quality": {
+     "bucket": "fhd50",
+     "height": 1080,
+     "fps": 50.0,
+     "audio": "stereo",
+     "checkedAt": 1793349205
+    }
+   },
+   "alternateChannels": [
+    {
+     "id": "11dd6d87:309615",
+     "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30",
+     "num": 26033,
+     "logo": "v1/iptv/img/11dd6d87:c:309615.SIG",
+     "quality": {
+      "bucket": "fhd50",
+      "height": 1080,
+      "fps": 50.0,
+      "audio": "stereo",
+      "checkedAt": 1793349225
+     }
+    },
+    {
+     "id": "11dd6d87:77413",
+     "name": "|UK|  TNT SPORT 1",
+     "num": 26034,
+     "logo": "v1/iptv/img/11dd6d87:c:77413.SIG",
+     "quality": {
+      "bucket": "hd",
+      "height": 720,
+      "fps": 25.0,
+      "audio": "stereo",
+      "checkedAt": 1793349310
+     }
+    }
+   ],
+   "recordable": true,
+   "phase": "pre",
+   "startsAt": "2026-10-31T12:30:00Z",
+   "startsAtSource": "channel",
+   "league": "Premier League",
+   "sportName": "football",
+   "art": {
+    "home": {
+     "name": "Chelsea",
+     "badge": "v1/iptv/img/art/64b.SIG"
+    },
+    "away": {
+     "name": "Manchester United",
+     "badge": "v1/iptv/img/art/28b.SIG"
+    },
+    "league": {
+     "badge": "v1/iptv/img/art/21b.SIG",
+     "fanart": "v1/iptv/img/art/64f3.SIG"
+    }
+   },
+   "matchInfo": {
+    "id": "espn:soccer~eng.1:401879248",
+    "league": "Premier League",
+    "home": {
+     "name": "Chelsea",
+     "short": "CHE",
+     "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/363.png",
+     "record": "4-1-3"
+    },
+    "away": {
+     "name": "Manchester United",
+     "short": "MAN",
+     "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/360.png",
+     "record": "1-4-3"
+    },
+    "startsAt": 1793449800,
+    "status": "pre",
+    "source": "espn",
+    "leagueKey": "epl",
+    "venue": {
+     "name": "Stamford Bridge",
+     "city": "London"
+    },
+    "inferred": true,
+    "inferredBy": "channel region uk",
+    "tier": "full"
+   }
+  },
+  {
+   "key": "v:stormers|ulster@1793448900",
+   "title": "Live United Rugby Championship",
+   "start": 1793448900,
+   "stop": 1793457900,
+   "kind": "live",
+   "liveConfidence": "likely",
+   "channel": {
+    "id": "11dd6d87:303257",
+    "providerId": "11dd6d87",
+    "providerName": "Provider",
+    "streamId": "303257",
+    "num": 26060,
+    "name": "|UK| PREMIER SPORTS 2 \u1d41\u1d34\u1d30",
+    "logo": "v1/iptv/img/11dd6d87:c:303257.SIG",
+    "group": "11dd6d87:548",
+    "epgId": "premiersports2.uk",
+    "catchupDays": 0,
+    "favourite": false,
+    "event": false,
+    "guide": "epg",
+    "guideNote": null,
+    "region": "uk",
+    "quality": {
+     "bucket": "fhd50",
+     "height": 1080,
+     "fps": 50.0,
+     "audio": "stereo",
+     "checkedAt": 1793350078
+    }
+   },
+   "alternateChannels": [
+    {
+     "id": "11dd6d87:54879",
+     "name": "|UK| PREMIER SPORTS 2 \u1d41\u1d34\u1d30",
+     "num": 26061,
+     "logo": "v1/iptv/img/11dd6d87:c:54879.SIG",
+     "quality": {
+      "bucket": "hd",
+      "height": 720,
+      "fps": 25.0,
+      "audio": "stereo",
+      "checkedAt": 1793350108
+     }
+    }
+   ],
+   "recordable": true,
+   "phase": "pre",
+   "startsAt": "2026-10-31T12:45:00Z",
+   "startsAtSource": "channel",
+   "league": "United Rugby Championship",
+   "sportName": "rugby union",
+   "art": {
+    "league": {
+     "badge": "v1/iptv/img/art/10b.SIG",
+     "fanart": "v1/iptv/img/art/10f.SIG"
+    }
+   },
+   "matchInfo": {
+    "id": "espn:rugby~270557:604066",
+    "league": "United Rugby Championship",
+    "home": {
+     "name": "Stormers",
+     "short": "STO",
+     "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25962.png",
+     "record": "WWWLW"
+    },
+    "away": {
+     "name": "Ulster",
+     "short": "ULS",
+     "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25926.png",
+     "record": "LWTTL"
+    },
+    "startsAt": 1793450700,
+    "status": "pre",
+    "source": "espn",
+    "leagueKey": "urc",
+    "venue": {
+     "name": "DHL Stadium",
+     "city": "Cape Town"
+    },
+    "inferred": true,
+    "inferredBy": "channel region uk",
+    "tier": "basic"
+   }
+  },
+  {
+   "key": "v:newcastle jets|wellington phoenix@1793418300",
+   "title": "Live A-League",
+   "start": 1793418300,
+   "stop": 1793426400,
+   "kind": "live",
+   "liveConfidence": "likely",
+   "channel": {
+    "id": "11dd6d87:303270",
+    "providerId": "11dd6d87",
+    "providerName": "Provider",
+    "streamId": "303270",
+    "num": 26032,
+    "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30 50FPS",
+    "logo": "v1/iptv/img/11dd6d87:c:303270.SIG",
+    "group": "11dd6d87:548",
+    "epgId": "tntsports1.uk",
+    "catchupDays": 0,
+    "favourite": false,
+    "event": false,
+    "guide": "epg",
+    "guideNote": null,
+    "region": "uk",
+    "quality": {
+     "bucket": "fhd50",
+     "height": 1080,
+     "fps": 50.0,
+     "audio": "stereo",
+     "checkedAt": 1793349205
+    }
+   },
+   "alternateChannels": [
+    {
+     "id": "11dd6d87:309615",
+     "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30",
+     "num": 26033,
+     "logo": "v1/iptv/img/11dd6d87:c:309615.SIG",
+     "quality": {
+      "bucket": "fhd50",
+      "height": 1080,
+      "fps": 50.0,
+      "audio": "stereo",
+      "checkedAt": 1793349225
+     }
+    },
+    {
+     "id": "11dd6d87:77413",
+     "name": "|UK|  TNT SPORT 1",
+     "num": 26034,
+     "logo": "v1/iptv/img/11dd6d87:c:77413.SIG",
+     "quality": {
+      "bucket": "hd",
+      "height": 720,
+      "fps": 25.0,
+      "audio": "stereo",
+      "checkedAt": 1793349310
+     }
+    }
+   ],
+   "recordable": true,
+   "phase": "pre",
+   "startsAt": "2026-10-31T04:00:00Z",
+   "startsAtSource": "channel",
+   "league": "A-League",
+   "sportName": "football"
+  },
+  {
+   "key": "v:france|scotland@1793418900",
+   "title": "Live Wheelchair RLWC26",
+   "start": 1793418900,
+   "stop": 1793426400,
+   "kind": "live",
+   "liveConfidence": "likely",
+   "channel": {
+    "id": "11dd6d87:303258",
+    "providerId": "11dd6d87",
+    "providerName": "Provider",
+    "streamId": "303258",
+    "num": 26058,
+    "name": "|UK| PREMIER SPORTS 1 \u1d41\u1d34\u1d30",
+    "logo": "v1/iptv/img/11dd6d87:c:303258.SIG",
+    "group": "11dd6d87:548",
+    "epgId": "premiersports.uk",
+    "catchupDays": 0,
+    "favourite": false,
+    "event": false,
+    "guide": "epg",
+    "guideNote": null,
+    "region": "uk",
+    "quality": {
+     "bucket": "fhd50",
+     "height": 1080,
+     "fps": 50.0,
+     "audio": "stereo",
+     "checkedAt": 1793350031
+    }
+   },
+   "alternateChannels": [
+    {
+     "id": "11dd6d87:54878",
+     "name": "|UK| PREMIER SPORTS 1 \u1d41\u1d34\u1d30",
+     "num": 26059,
+     "logo": "v1/iptv/img/11dd6d87:c:54878.SIG",
+     "quality": {
+      "bucket": "fhd50",
+      "height": 1080,
+      "fps": 50.0,
+      "audio": "stereo",
+      "checkedAt": 1793350054
+     }
+    }
+   ],
+   "recordable": true,
+   "phase": "pre",
+   "startsAt": "2026-10-31T04:00:00Z",
+   "startsAtSource": "channel",
+   "league": "Rugby League World Cup",
+   "sportName": "rugby league",
+   "match": {
+    "league": "Rugby League World Cup"
+   },
+   "art": {
+    "league": {
+     "badge": "v1/iptv/img/art/3b.SIG"
+    }
+   }
+  },
+  {
+   "key": "t:tennis wta pan pacific open 2026|from ariake coliseum in tokyo@1793419200",
+   "title": "Live Tennis: WTA Pan Pacific Open 2026",
+   "start": 1793419200,
+   "stop": 1793419200,
+   "kind": "live",
+   "liveConfidence": "likely",
+   "channel": {
+    "id": "11dd6d87:605469",
+    "providerId": "11dd6d87",
+    "providerName": "Provider",
+    "streamId": "605469",
+    "num": 26022,
+    "name": "UK Sky Sports Tennis \u1d41\u1d34\u1d30",
+    "logo": "v1/iptv/img/11dd6d87:c:605469.SIG",
+    "group": "11dd6d87:548",
+    "epgId": "skysportstennis.uk",
+    "catchupDays": 0,
+    "favourite": false,
+    "event": false,
+    "guide": "epg",
+    "guideNote": null,
+    "region": "uk",
+    "quality": {
+     "bucket": "fhd",
+     "height": 1080,
+     "fps": 25.0,
+     "audio": "stereo",
+     "checkedAt": 1793348897
+    }
+   },
+   "alternateChannels": [
+    {
+     "id": "11dd6d87:605472",
+     "name": "UK Sky Sports Tennis \u1d41\u1d34\u1d30",
+     "num": 26023,
+     "logo": "v1/iptv/img/11dd6d87:c:605472.SIG",
+     "quality": {
+      "bucket": "fhd",
+      "height": 1080,
+      "fps": 25.0,
+      "audio": "stereo",
+      "checkedAt": 1793348936
+     }
+    },
+    {
+     "id": "11dd6d87:605470",
+     "name": "UK Sky Sports Tennis \u1d34\u1d30",
+     "num": 26024,
+     "logo": "v1/iptv/img/11dd6d87:c:605470.SIG",
+     "quality": {
+      "bucket": "hd",
+      "height": 720,
+      "fps": 50.0,
+      "audio": "stereo",
+      "checkedAt": 1793348960
+     }
+    },
+    {
+     "id": "11dd6d87:605471",
+     "name": "UK Sky Sports Tennis \u02e2\u1d30",
+     "num": 26025,
+     "logo": "v1/iptv/img/11dd6d87:c:605471.SIG",
+     "quality": {
+      "bucket": "sd",
+      "height": 576,
+      "fps": 25.0,
+      "audio": "stereo",
+      "checkedAt": 1793348997
+     }
+    }
+   ],
+   "recordable": true,
+   "phase": "pre",
+   "startsAt": "2026-10-31T04:00:00Z",
+   "startsAtSource": "epg",
+   "league": "Tennis",
+   "sportName": "tennis"
+  }
+ ]
+}
