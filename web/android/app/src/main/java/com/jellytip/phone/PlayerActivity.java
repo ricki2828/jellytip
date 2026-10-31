@@ -149,6 +149,8 @@ public class PlayerActivity extends AppCompatActivity {
     private MatchPanel matchPanel;
     private LiveAlerts liveAlerts;
     private TextView infoButton;
+    /** Match info said 403 / unknown: no ⓘ for this match. */
+    private boolean matchHidden;
     /** The opening note (bottom centre in landscape; a banner at the top of the panel in portrait). */
     private TextView noteView;
     private TextView liveButton;
@@ -253,6 +255,10 @@ public class PlayerActivity extends AppCompatActivity {
                 liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
                 liveDrawer = new LiveStatsDrawer(this, root, liveFeed);
                 liveDrawer.onOpenChanged = this::updateFeedSpeed;
+                // 403 / unknown match: the Live button goes
+                liveFeed.addListener(() -> {
+                    if (liveFeed.hidden) root.post(this::applyLayout);
+                });
                 liveButton = pill("Live", 0xCC333333);
                 liveButton.setContentDescription("Live stats");
                 liveButton.setOnClickListener(v -> {
@@ -952,8 +958,9 @@ public class PlayerActivity extends AppCompatActivity {
             spinner.setLayoutParams(sp);
         }
         // Portrait has the panel's Info and live tabs; landscape keeps ⓘ and the Live drawer
-        if (infoButton != null) infoButton.setVisibility(portrait ? View.GONE : View.VISIBLE);
-        if (liveButton != null) liveButton.setVisibility(portrait ? View.GONE : View.VISIBLE);
+        if (infoButton != null) infoButton.setVisibility(portrait || matchHidden ? View.GONE : View.VISIBLE);
+        boolean liveHidden = liveFeed != null && liveFeed.hidden;
+        if (liveButton != null) liveButton.setVisibility(portrait || liveHidden ? View.GONE : View.VISIBLE);
         if ((portrait || pip) && liveDrawer != null) liveDrawer.hideNow();
         updateFeedSpeed();
     }
@@ -1003,6 +1010,12 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPanelTabChanged() {
                 updateFeedSpeed();
+            }
+
+            @Override
+            public void onMatchHidden() {
+                matchHidden = true;
+                root.post(PlayerActivity.this::applyLayout);
             }
         };
 

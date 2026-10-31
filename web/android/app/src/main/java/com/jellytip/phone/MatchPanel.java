@@ -39,11 +39,15 @@ final class MatchPanel implements LiveFeed.Listener {
 
         /** The selected tab changed (the feed polls faster on a live tab). */
         void onPanelTabChanged();
+
+        /** Match info said 403 (no IPTV) or `{unknown: true}`: hide ⓘ for this match. */
+        void onMatchHidden();
     }
 
     private static final long FANTASY_MS = 60_000;
     private static final long FANTASY_LOOK_MS = 300_000;
     private static final long INFO_STALE_MS = 120_000;
+    private static final long INFO_MISSING_RETRY_MS = 10 * 60_000;
     private static final String NFL_PREFIX = "espn:football~nfl:";
 
     private final Activity activity;
@@ -180,8 +184,21 @@ final class MatchPanel implements LiveFeed.Listener {
 
     @Override
     public void onLive() {
+        if (feed.hidden) {
+            hideLiveTabs();
+            return;
+        }
         updateChatTab();
         if (shown && showsLive()) render();
+    }
+
+    /** No live data for this match (403 / unknown): Stats · Plays · Odds · Chat go; Info and Fantasy stay. */
+    private void hideLiveTabs() {
+        for (String t : LiveRender.TABS) {
+            int i = tabs.indexOf(t);
+            if (i >= 0) tabViews.get(i).setVisibility(View.GONE);
+        }
+        if (tab != null && java.util.Arrays.asList(LiveRender.TABS).contains(tab)) selectTab("Info");
     }
 
     /** Chat shows only while the feed has a chat block; selected and gone = back to Stats. */
@@ -232,8 +249,9 @@ final class MatchPanel implements LiveFeed.Listener {
         infoAt = System.currentTimeMillis();
         io.execute(() -> {
             CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/sport/match/" + CompanionHttp.enc(matchId) + "?score=1");
+            final int verdict = CompanionHttp.verdict(a);
             JSONObject got = null;
-            if (a.body != null) {
+            if (verdict == CompanionHttp.OK) {
                 try {
                     JSONObject root = new JSONObject(a.body);
                     JSONObject m = root.optJSONObject("matchInfo");
@@ -244,11 +262,21 @@ final class MatchPanel implements LiveFeed.Listener {
                 }
             }
             final JSONObject result = got;
-            final int code = a.code;
             handler.post(() -> {
                 if (released) return;
-                if (result != null) info = result;
-                else if (info == null) infoNote = code == 404 ? "No match info for this event." : "Match info isn't available right now.";
+                if (verdict == CompanionHttp.NO_IPTV || verdict == CompanionHttp.UNKNOWN) {
+                    info = null;
+                    infoNote = "No match info for this match.";
+                    infoAt = Long.MAX_VALUE / 2; // never asked again
+                    host.onMatchHidden();
+                } else if (result != null) {
+                    info = result;
+                } else if (verdict == CompanionHttp.MISSING) {
+                    if (info == null) infoNote = "Match info isn't available on this server yet.";
+                    infoAt = System.currentTimeMillis() + INFO_MISSING_RETRY_MS - INFO_STALE_MS; // again in 10 min
+                } else if (info == null) {
+                    infoNote = "Match info isn't available right now.";
+                }
                 if ("Info".equals(tab)) render();
             });
         });
