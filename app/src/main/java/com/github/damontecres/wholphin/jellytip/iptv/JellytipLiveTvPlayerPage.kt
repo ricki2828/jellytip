@@ -248,7 +248,7 @@ fun JellytipLiveTvPlayerPage(
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
     var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
-    val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing }
+    val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
@@ -333,6 +333,7 @@ fun JellytipLiveTvPlayerPage(
                 LivePanelRoute.missing = true
                 return@LaunchedEffect
             }
+            if (MatchHidden.hides(m.id)) return@LaunchedEffect
             got?.second?.let { liveHasChat = it.hasChat }
             val mk = got?.second?.market
             val at = mk?.flipAt
@@ -388,7 +389,7 @@ fun JellytipLiveTvPlayerPage(
                     }
                 }
                 // Match info (plan "Match info"): the remote's Info key, or holding OK, on a programme with a fixture
-                val matchNow = nowNext?.now?.match?.takeIf { !MatchInfoRoute.missing }
+                val matchNow = nowNext?.now?.match?.takeIf { !MatchInfoRoute.missing && !MatchHidden.hides(it.id) }
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                 if (matchNow != null && (e.key == Key.Info || (isOk && e.nativeKeyEvent.repeatCount > 0))) {
                     matchModal = matchNow
@@ -630,7 +631,7 @@ fun JellytipLiveTvPlayerPage(
                     cu != null -> "▶  Right: back to live"
                     else -> {
                         val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
-                        val info = nowNext?.now?.match != null && !MatchInfoRoute.missing
+                        val info = nowNext?.now?.match?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
                         listOfNotNull(
                             if (kick) "◀  From kick-off" else null,
                             if (panelMatch != null) "→  Live stats" else null,

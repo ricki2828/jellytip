@@ -60,6 +60,41 @@ object MatchInfoRoute {
     private const val RETRY_AFTER_MS = 10 * 60_000L
 }
 
+/**
+ * Match routes' status codes (plan live-sport, "Pinned 31-Oct (match routes' status codes)"): `200 {unknown: true}`
+ * hides that one match (modal, live panel, ⓘ); 403 = no IPTV provider, so match features hide for this user (until
+ * the app restarts); 404 stays "route missing" ([MatchInfoRoute] / [LivePanelRoute], tried again after 10 min).
+ * Plain sets, not snapshot state: read in composition like [MatchInfoRoute.missing].
+ */
+object MatchHidden {
+    private val unknown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    @Volatile
+    var noIptv = false
+        private set
+
+    fun hides(id: String?): Boolean = noIptv || (id != null && id in unknown)
+
+    /** Reads a match route answer: 403 = no IPTV; 200 with `unknown: true` = this match only. True = hide it. */
+    fun note(
+        id: String,
+        code: Int,
+        body: String?,
+    ): Boolean {
+        if (code == 403) {
+            noIptv = true
+            JellytipTrace.log("iptv", "match routes 403: no IPTV, hidden")
+            return true
+        }
+        if (code == 200 && body != null && runCatching { org.json.JSONObject(body).optBoolean("unknown", false) }.getOrDefault(false)) {
+            unknown.add(id)
+            JellytipTrace.log("iptv", "match $id unknown: hidden")
+            return true
+        }
+        return false
+    }
+}
+
 private sealed interface MatchLoad {
     data object Loading : MatchLoad
 
@@ -78,7 +113,7 @@ private suspend fun fetchMatch(
     val base = runCatching { api.companionBase() }.getOrNull() ?: IptvVodParse.imageBase
     val q = if (withScore) "?score=1" else ""
     val (code, body) = api.userCall("v1/sport/match/${java.net.URLEncoder.encode(id, "UTF-8")}$q", timeoutMs = 8_000) ?: return null
-    if (code != 200) return code to null
+    if (MatchHidden.note(id, code, body) || code != 200) return code to null
     return code to runCatching { MatchParse.detail(body) { IptvVodParse.image(base, it) } }.getOrNull()
 }
 
@@ -90,7 +125,7 @@ fun matchInfoItem(
     onOpen: (IptvMatch) -> Unit,
 ): DialogItem? {
     val m = match ?: return null
-    if (MatchInfoRoute.missing) return null
+    if (MatchInfoRoute.missing || MatchHidden.hides(m.id)) return null
     return DialogItem("ⓘ  Match info", dismissOnClick = dismissOnClick) { onOpen(m) }
 }
 
@@ -156,6 +191,9 @@ fun JellytipMatchModal(
     LaunchedEffect(load) {
         if (load is MatchLoad.Failed && MatchInfoRoute.missing) {
             android.widget.Toast.makeText(context, "Match info isn't available on this server yet.", android.widget.Toast.LENGTH_SHORT).show()
+            onDismiss()
+        } else if (load is MatchLoad.Failed && MatchHidden.hides(initial.id)) {
+            android.widget.Toast.makeText(context, "No match info for this one.", android.widget.Toast.LENGTH_SHORT).show()
             onDismiss()
         }
     }

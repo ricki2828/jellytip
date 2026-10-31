@@ -164,7 +164,7 @@ object LiveParse {
 internal suspend fun fetchLive(id: String): Pair<Int, MatchLive?>? {
     val api = JellytipApi.shared ?: return null
     val (code, body) = api.userCall("v1/sport/match/${java.net.URLEncoder.encode(id, "UTF-8")}/live", timeoutMs = 8_000) ?: return null
-    if (code != 200) return code to null
+    if (MatchHidden.note(id, code, body) || code != 200) return code to null
     return code to runCatching { LiveParse.live(body) }.getOrNull()
 }
 
@@ -195,6 +195,11 @@ fun JellytipLivePanel(
             val got = fetchLive(match.id)
             if (got?.first == 404) {
                 LivePanelRoute.missing = true
+                onRouteMissing()
+                return@produceState
+            }
+            // 403 (no IPTV) or this match unknown: the panel closes and stays hidden for it
+            if (MatchHidden.hides(match.id)) {
                 onRouteMissing()
                 return@produceState
             }
