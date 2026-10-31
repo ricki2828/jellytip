@@ -953,6 +953,7 @@ final class LiveContent {
             if (str(m, "source") != null) meta.add(str(m, "source"));
             if (m.has("volume") && !m.isNull("volume")) meta.add(money(m.optDouble("volume")) + " traded");
             if (!meta.isEmpty()) note("odds:meta", android.text.TextUtils.join(", ", meta));
+            if (m.optBoolean("thin", false)) thinPill("odds:thin");
             if (str(m, "question") != null) note("odds:q", str(m, "question"));
             return;
         }
@@ -987,12 +988,29 @@ final class LiveContent {
         if (str(m, "source") != null) meta.add(str(m, "source"));
         if (m.has("volume") && !m.isNull("volume")) meta.add(money(m.optDouble("volume")) + " traded");
         if (!meta.isEmpty()) note("odds:meta", android.text.TextUtils.join(", ", meta));
+            if (m.optBoolean("thin", false)) thinPill("odds:thin");
         if (str(m, "question") != null) note("odds:q", str(m, "question"));
     }
 
+    /** Grey caps "THIN MARKET" (plan "thin markets", decided 31-Oct): little money behind these odds. */
+    private void thinPill(String key) {
+        TextView v = (TextView) holder(key, () -> {
+            TextView t = Broadcast.cond(a, "Thin market", 11, Broadcast.SECONDARY, 600);
+            t.setLetterSpacing(0.06f);
+            android.graphics.drawable.GradientDrawable b = new android.graphics.drawable.GradientDrawable();
+            b.setStroke(Math.max(1, dp(1)), 0xFF5A6372);
+            t.setBackground(b);
+            t.setPadding(dp(4), 0, dp(4), 0);
+            t.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            return t;
+        });
+        order.add(v);
+    }
+
     /** Only the ranked outcomes into the box (match info's "To win"). */
-    void renderWinners(JSONArray outcomes, LiveTeams t) {
+    void renderWinners(JSONArray outcomes, LiveTeams t, boolean thin) {
         order.clear();
+        if (thin) thinPill("w:thin");
         winners("w:", outcomes, t);
         sync();
     }
