@@ -182,6 +182,20 @@ data class GolfRow(
     val today: String?,
 )
 
+/** One game of a whip-around programme (RedZone, `layout: "multi"`). */
+data class MultiGame(
+    val matchId: String,
+    val home: MatchTeam?,
+    val away: MatchTeam?,
+    val scoreHome: String?,
+    val scoreAway: String?,
+    val clock: String?,
+    val period: String?,
+    val downDistance: String?,
+    val yardLine: String?,
+    val redZone: Boolean,
+)
+
 data class LiveBatter(
     val name: String,
     val runs: String?,
@@ -270,6 +284,8 @@ data class MatchLive(
     val moments: List<LiveMoment> = emptyList(),
     /** The answer had a `moments` key (else moments are inferred from score changes). */
     val hasMoments: Boolean = false,
+    /** RedZone: every live game, red-zone ones first (server order). */
+    val games: List<MultiGame> = emptyList(),
 )
 
 /** Unchanged parts keep the previous answer's instances, so their rows skip recomposition (strong skipping). */
@@ -284,6 +300,7 @@ fun MatchLive.reuse(prev: MatchLive?): MatchLive {
         comments = comments.reuse(prev.comments),
         situation = if (situation == prev.situation) prev.situation else situation,
         moments = moments.reuse(prev.moments),
+        games = games.reuse(prev.games),
     )
 }
 
@@ -379,7 +396,33 @@ object LiveParse {
             situation = situation(o.optJSONObject("situation")),
             moments = moments,
             hasMoments = o.has("moments"),
+            games =
+                o.optJSONArray("games").objects().mapNotNull { g ->
+                    val sc = g.optJSONObject("score")
+                    val sit = situation(g.optJSONObject("situation"))
+                    MultiGame(
+                        matchId = g.str("matchId") ?: return@mapNotNull null,
+                        home = gameTeam(g, "home"),
+                        away = gameTeam(g, "away"),
+                        scoreHome = sc?.str("home"),
+                        scoreAway = sc?.str("away"),
+                        clock = g.str("clock") ?: sc?.str("clock"),
+                        period = g.str("period") ?: sc?.str("period"),
+                        downDistance = sit?.downDistance,
+                        yardLine = sit?.yardLine,
+                        redZone = g.optBoolean("redZone", false) || sit?.redZone == true,
+                    )
+                },
         )
+    }
+
+    /** A game's team: an object like matchInfo's, or just a name. */
+    private fun gameTeam(
+        g: JSONObject,
+        side: String,
+    ): MatchTeam? {
+        g.optJSONObject(side)?.let { t -> return MatchTeam(t.str("name") ?: t.str("short") ?: return null, t.str("short"), t.str("logo"), null, t.str("color"), t.str("altColor")) }
+        return g.str(side)?.let { MatchTeam(it, null, null, null) }
     }
 
     private val consumed =
@@ -807,6 +850,12 @@ private fun StatsTab(
     m: IptvMatch,
     pal: MatchPalette,
 ) {
+    // RedZone: the multi-game scoreboard instead
+    if (d.layout == "multi" || d.games.isNotEmpty()) {
+        if (d.games.isEmpty()) Note("No games on right now.")
+        d.games.take(9).forEach { g -> key(g.matchId) { GameRow(g) } }
+        return
+    }
     d.situation?.let { ContextBlock(d.layout, it, m, d, pal) }
     d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
     if (d.stats.isEmpty() && d.leaders.isEmpty() && d.situation == null && d.winProbHome == null) {
@@ -927,6 +976,38 @@ private fun ContextBlock(
     }
     // Everything paired (possession, territory, fouls, shots, xG, cards, penalties…)
     s.pairs.take(5).forEach { p -> key(p.label) { StatBar(p, pal) } }
+}
+
+/** RedZone scoreboard row: two compact slabs (team colour, short name, score), the clock, red-zone flag, down & distance. */
+@Composable
+private fun GameRow(g: MultiGame) {
+    val p = remember(g.home?.color, g.away?.color) { matchPalette(IptvMatch(g.matchId, null, "nfl", g.home, g.away, null, null, null, false, null)) }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth().height(28.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f).fillMaxHeight().clip(SlabLeft).background(p.home).padding(start = 6.dp, end = 10.dp),
+            ) {
+                Cond(g.home?.short ?: g.home?.name ?: "", 14.sp, p.onHome, modifier = Modifier.weight(1f))
+                g.scoreHome?.let { Odometer(it, 17.sp, p.onHome) }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f).offset(x = (-4).dp).fillMaxHeight().clip(SlabRight).background(p.away).padding(start = 10.dp, end = 6.dp),
+            ) {
+                g.scoreAway?.let { Odometer(it, 17.sp, p.onAway) }
+                Cond(g.away?.short ?: g.away?.name ?: "", 14.sp, p.onAway, modifier = Modifier.weight(1f), align = TextAlign.End)
+            }
+            Cond(listOfNotNull(g.period, g.clock).joinToString(" "), 13.sp, Broadcast.Secondary, modifier = Modifier.width(62.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+        }
+        if (g.redZone || g.downDistance != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (g.redZone) Cond("Red zone", 12.sp, Color.White, modifier = Modifier.background(Color(0xFFD64545)).padding(horizontal = 5.dp))
+                g.downDistance?.let { Cond(it, 12.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 5.dp)) }
+                g.yardLine?.let { BodyText("Ball on $it", 12.sp, maxLines = 1) }
+            }
+        }
+    }
 }
 
 /** F1 timing tower: position, team colour bar, driver code, gap (interval when no gap), tyre chip, fastest-lap dot. */

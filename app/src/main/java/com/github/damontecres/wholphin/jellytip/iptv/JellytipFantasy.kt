@@ -2,12 +2,17 @@ package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -184,7 +189,11 @@ object JellytipFantasy {
     fun myStartersIn(
         live: FantasyLive?,
         matchId: String?,
-    ): Int = live?.leagues?.sumOf { l -> l.starters.count { it.side == "me" && sameGame(it.matchId, matchId) } } ?: 0
+    ): Int =
+        live?.leagues?.sumOf { l ->
+            // RedZone (kind "multi"): every starter of yours playing now, from every game
+            l.starters.count { it.side == "me" && if (isMulti(matchId)) it.gameState == "in" else sameGame(it.matchId, matchId) }
+        } ?: 0
 
     /** The league to show for [matchId]: one with starters in that game, else the first. */
     fun leagueFor(
@@ -195,15 +204,22 @@ object JellytipFantasy {
     private const val RETRY_AFTER_MS = 10 * 60_000L
 }
 
-/** The live panel's Fantasy tab: each league's matchup score, then "In this game" (yours and your opponent's). */
+/** A whip-around programme (RedZone; plan "RedZone / whip-around mode"): fantasy covers every game. */
+fun isMulti(matchId: String?) = matchId?.startsWith("multi:") == true
+
+/**
+ * The live panel's Fantasy tab (Broadcast): each league's matchup on a dark chip with a green edge, then "In this game"
+ * (yours and your opponent's); in RedZone mode (a multi id) "Live now" across every game instead.
+ */
 @Composable
 fun FantasyTab(
     live: FantasyLive,
     matchId: String?,
 ) {
+    val multi = isMulti(matchId)
     // "In this game" from /v1/fantasy/game/{matchId} (60 s), else the live answer's starters for that match
     val game by androidx.compose.runtime.produceState<List<FantasyLeague>?>(null, matchId) {
-        val id = matchId ?: return@produceState
+        val id = matchId?.takeIf { !multi } ?: return@produceState
         while (true) {
             JellytipFantasy.game(id)?.let { value = it }
             kotlinx.coroutines.delay(60_000)
@@ -211,25 +227,34 @@ fun FantasyTab(
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         live.leagues.forEach { l ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(l.name, color = JellytipPalette.Vanilla.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(l.scoreLine, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().background(Broadcast.Sub),
+            ) {
+                Box(Modifier.width(4.dp).height(28.dp).background(Broadcast.Win))
+                BodyText(l.name, 13.sp, Broadcast.Body, modifier = Modifier.weight(1f).padding(horizontal = 8.dp), weight = FontWeight.SemiBold, maxLines = 1)
+                Cond(l.scoreLine, 16.sp, modifier = Modifier.padding(end = 8.dp))
             }
-            val here = game?.firstOrNull { it.id == l.id }?.starters ?: l.starters.filter { sameGame(it.matchId, matchId) }
+            val here =
+                if (multi) {
+                    l.starters.filter { it.gameState == "in" }
+                } else {
+                    game?.firstOrNull { it.id == l.id }?.starters ?: l.starters.filter { sameGame(it.matchId, matchId) }
+                }
             if (here.isNotEmpty()) {
-                Text("In this game", color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
-                here.sortedBy { if (it.side == "me") 0 else 1 }.forEach { s ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            listOfNotNull(if (s.side == "me") "You" else "Opp", s.name, s.pos).joinToString(" · "),
-                            color = if (s.side == "me") Color.White else JellytipPalette.Vanilla.copy(alpha = 0.75f),
-                            fontFamily = JellytipFontFamily,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                Cond(if (multi) "Live now" else "In this game", 12.sp, Broadcast.Secondary, weight = FontWeight.SemiBold, tracking = 0.06f)
+                here.sortedWith(compareBy({ if (it.side == "me") 0 else 1 }, { -(it.points ?: 0.0) })).forEach { st ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.width(3.dp).height(14.dp).background(if (st.side == "me") Broadcast.Win else Color(0xFFE5534B)))
+                        BodyText(
+                            listOfNotNull(st.name, st.pos, st.nflTeam?.takeIf { multi }).joinToString(" · "),
+                            13.sp,
+                            if (st.side == "me") Color.White else Broadcast.Body,
                             modifier = Modifier.weight(1f),
+                            weight = if (st.side == "me") FontWeight.SemiBold else FontWeight.Medium,
+                            maxLines = 1,
                         )
-                        Text(pts(s.points), color = Color.White, fontFamily = JellytipFontFamily, fontSize = 12.sp)
+                        Cond(pts(st.points), 15.sp)
                     }
                 }
             }

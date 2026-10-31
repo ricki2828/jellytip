@@ -299,6 +299,9 @@ fun JellytipLiveTvPlayerPage(
     val liveTabs = if (liveHasChat) LIVE_TABS else LIVE_TABS - "Chat"
     val panelTabs = if (nflMatch != null && fantasy != null) liveTabs + "Fantasy" else liveTabs
     LaunchedEffect(panelTabs.size) { if (panelTab >= panelTabs.size) panelTab = 0 }
+    // RedZone (plan "RedZone / whip-around mode"): the Fantasy tab is the default
+    val fantasyIndex = panelTabs.indexOf("Fantasy")
+    LaunchedEffect(panelMatch?.id, fantasyIndex) { if (panelMatch?.isMulti == true && fantasyIndex >= 0) panelTab = fantasyIndex }
     // Scoring events: toasts like the flip one (fantasy.alerts); events already there when watching starts are skipped
     val seenEvents = remember { HashSet<String>() }
     val eventsPrimed = remember { booleanArrayOf(false) }

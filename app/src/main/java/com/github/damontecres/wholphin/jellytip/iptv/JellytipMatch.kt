@@ -50,7 +50,10 @@ data class IptvMatch(
     /** "Mexico City GP · Race", "Zozo Championship · Round 3" (events). */
     val title: String? = null,
 ) {
-    val isEvent get() = kind == "event"
+    /** F1 / golf events and whip-around programmes (RedZone, kind "multi") have no home/away: the title is the hero. */
+    val isEvent get() = kind == "event" || kind == "multi"
+
+    val isMulti get() = kind == "multi"
 
     /** "Crusaders v Blues" when both teams are known; an event's title. */
     val matchup: String?
@@ -113,7 +116,7 @@ object MatchParse {
     /** A fixture: an id and both teams, or an event (`kind: "event"`) with an id and a title. */
     fun isFixture(o: JSONObject?): Boolean =
         o != null && o.str("id") != null &&
-            ((o.optJSONObject("home") != null && o.optJSONObject("away") != null) || (o.str("kind") == "event" && o.str("title") != null))
+            ((o.optJSONObject("home") != null && o.optJSONObject("away") != null) || ((o.str("kind") == "event" || o.str("kind") == "multi") && o.str("title") != null))
 
     /** `matchInfo` (needs id + home + away, or an event with a title). */
     fun match(

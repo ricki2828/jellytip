@@ -123,6 +123,7 @@ fun seriesColor(leagueKey: String?): Color? =
     when {
         leagueKey == null -> null
         leagueKey == "f1" -> Color(0xFFE10600)
+        leagueKey == "nfl" -> Color(0xFF013369)
         leagueKey.startsWith("golf") -> Color(0xFF0B6E4F)
         else -> null
     }
