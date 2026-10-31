@@ -2,13 +2,11 @@ package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,7 +34,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
@@ -197,6 +194,15 @@ fun JellytipMatchModal(
             onDismiss()
         }
     }
+    // Entry (plan "more pop"): the modal scales and fades in (220 ms), the crests slide in from either side
+    val entry = remember(initial.id) { androidx.compose.animation.core.Animatable(0f) }
+    val crestIn = remember(initial.id) { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(initial.id) { entry.animateTo(1f, androidx.compose.animation.core.tween(220)) }
+    LaunchedEffect(initial.id) {
+        delay(60)
+        crestIn.animateTo(1f, androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
+    val (homeC, awayC) = remember(m.home?.color, m.away?.color, m.away?.altColor) { matchColors(m) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -204,33 +210,18 @@ fun JellytipMatchModal(
                 Modifier
                     .width(860.dp)
                     .height(500.dp)
-                    .background(Color(0xF2101014), RoundedCornerShape(14.dp))
+                    .graphicsLayer {
+                        val p = entry.value
+                        scaleX = 0.94f + 0.06f * p
+                        scaleY = 0.94f + 0.06f * p
+                        alpha = p
+                    }.background(Color(0xF2101014), RoundedCornerShape(14.dp))
                     .verticalScroll(rememberScrollState())
                     .padding(28.dp),
         ) {
-            // Header
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                TeamBlock(m.home, Modifier.weight(1f))
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    m.league?.let { Text(it.uppercase(), color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 11.sp, letterSpacing = 1.sp) }
-                    val sc = revealed ?: m.score
-                    when {
-                        sc != null && showScore ->
-                            Text("${sc.home} – ${sc.away}", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 30.sp)
-                        m.status == "in" -> KindPill("live")
-                        m.status == "post" -> Text("FT", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        else -> m.startsAt?.let { Text(startsLabel(it, nowSec()), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontSize = 14.sp) }
-                    }
-                    if (sc != null && showScore) {
-                        listOfNotNull(sc.period, sc.clock).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
-                            Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
-                        }
-                    }
-                    m.venue?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    if (m.inferred) Text("identified from the fixtures", color = JellytipPalette.Vanilla.copy(alpha = 0.45f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
-                }
-                TeamBlock(m.away, Modifier.weight(1f))
-            }
+            // Header: the split hero in the team colours
+            val sc = (revealed ?: m.score)?.takeIf { showScore }
+            MatchHero(m, detail?.venueImage, sc, crestIn = { crestIn.value })
             // Actions
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val channels = detail?.channels.orEmpty()
@@ -266,6 +257,7 @@ fun JellytipMatchModal(
                 // Odds
                 d.odds?.let { o ->
                     Section("Odds" + listOfNotNull(o.provider, o.updatedAt?.let { "updated ${hhmm(it)}" }).joinToString(" · ").let { if (it.isEmpty()) "" else "  ·  $it" }) {
+                        OddsBar(o, m)
                         Line(m.home?.name ?: "Home", listOfNotNull(o.home?.moneyline, o.home?.spread?.let { "spread $it" }).joinToString("  "))
                         Line(m.away?.name ?: "Away", listOfNotNull(o.away?.moneyline, o.away?.spread?.let { "spread $it" }).joinToString("  "))
                         o.draw?.let { Line("Draw", it) }
@@ -279,8 +271,8 @@ fun JellytipMatchModal(
                             Muted("Not announced yet")
                         } else {
                             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                                LineupColumn(m.home?.name, d.homeLineup, Modifier.weight(1f))
-                                LineupColumn(m.away?.name, d.awayLineup, Modifier.weight(1f))
+                                LineupColumn(m.home?.name, d.homeLineup, homeC, Modifier.weight(1f))
+                                LineupColumn(m.away?.name, d.awayLineup, awayC, Modifier.weight(1f))
                             }
                         }
                     }
@@ -288,8 +280,8 @@ fun JellytipMatchModal(
                 // Form and head-to-head
                 if (d.homeForm.isNotEmpty() || d.awayForm.isNotEmpty() || d.h2h.isNotEmpty()) {
                     Section("Form and head-to-head") {
-                        if (d.homeForm.isNotEmpty()) Line(m.home?.name ?: "Home", d.homeForm.joinToString(" "))
-                        if (d.awayForm.isNotEmpty()) Line(m.away?.name ?: "Away", d.awayForm.joinToString(" "))
+                        if (d.homeForm.isNotEmpty()) FormChips(m.home?.name ?: "Home", d.homeForm)
+                        if (d.awayForm.isNotEmpty()) FormChips(m.away?.name ?: "Away", d.awayForm)
                         d.h2h.take(5).forEach { Muted(it) }
                     }
                 }
@@ -297,23 +289,6 @@ fun JellytipMatchModal(
         }
     }
     LaunchedEffect(initial.id) { JellytipTrace.log("iptv", "match info ${initial.id}") }
-}
-
-@Composable
-private fun TeamBlock(
-    t: MatchTeam?,
-    modifier: Modifier,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
-            var failed by remember(t?.logo) { mutableStateOf(false) }
-            if (t?.logo != null && !failed) {
-                AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(72.dp))
-            }
-        }
-        Text(t?.name ?: "TBC", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        t?.record?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp) }
-    }
 }
 
 /** A titled section, focusable as a whole so D-pad Down scrolls through the modal on a TV. */
@@ -346,9 +321,14 @@ private fun Section(
 private fun LineupColumn(
     team: String?,
     players: List<MatchPlayer>,
+    tint: Color,
     modifier: Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = modifier) {
+    // Tinted with the team colour
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier.background(tint.copy(alpha = 0.18f), RoundedCornerShape(8.dp)).padding(10.dp),
+    ) {
         team?.let { Text(it, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp) }
         val (starters, bench) = players.partition { it.starter }
         starters.forEach { p -> Text(listOfNotNull(p.num, p.name, p.pos?.let { "($it)" }).joinToString(" "), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1) }

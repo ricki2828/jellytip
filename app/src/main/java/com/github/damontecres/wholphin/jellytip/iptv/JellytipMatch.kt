@@ -15,6 +15,9 @@ data class MatchTeam(
     val short: String?,
     val logo: String?,
     val record: String?,
+    /** Team colours, hex ("#0B2265" or "0B2265"; plan "match info: more pop"); null = neutral greys. */
+    val color: String? = null,
+    val altColor: String? = null,
 )
 
 data class MatchScore(
@@ -81,6 +84,8 @@ data class MatchDetail(
     val broadcasts: List<String>,
     val channels: List<IptvChannel>,
     val pending: Boolean,
+    /** Stadium photo (`venue.image`), shown faint behind the hero; null = none. */
+    val venueImage: String? = null,
 )
 
 object MatchParse {
@@ -94,7 +99,7 @@ object MatchParse {
     ): MatchTeam? {
         o ?: return null
         val name = o.str("name") ?: return null
-        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"))
+        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"), o.str("color"), o.str("altColor"))
     }
 
     fun isFixture(o: JSONObject?): Boolean = o != null && o.str("id") != null && o.optJSONObject("home") != null && o.optJSONObject("away") != null
@@ -178,6 +183,7 @@ object MatchParse {
             broadcasts = strings(o.optJSONArray("broadcasts")),
             channels = channels,
             pending = root.optBoolean("pending", false) || o.optBoolean("pending", false),
+            venueImage = o.optJSONObject("venue")?.str("image")?.let { if (it.startsWith("http")) it else resolve(it) },
         )
     }
 }
