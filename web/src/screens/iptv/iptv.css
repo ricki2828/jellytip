@@ -3033,3 +3033,7 @@
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
+.iptv-live-pill.replay {
+  background: #3a3f4a;
+  color: #e6e8ec;
+}

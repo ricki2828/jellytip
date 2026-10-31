@@ -588,7 +588,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       <div className="player-top">
         <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
-        {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
+        {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
         {isLive && <MatchInfoButton id={extras?.matchId} />}
         <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />
         {extras?.matchId && state.kind === "playing" && (
@@ -825,7 +825,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
                 programmeStart: extras?.kickoff?.start,
                 programmeStop: extras?.kickoff?.stop,
                 // The match behind the listing: ⓘ, and the native Live drawer (which polls the companion itself)
-                ...(extras?.matchId && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
+                // A replay of an earlier game: no match id, or the phone would poll live stats and alert for the old game
+                ...(extras?.matchId && !extras.replay && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
                 // Before the real start the native overlay shows the pre-game card
                 ...(isPre(extras?.startsAt, Date.now() / 1000)
                   ? { phase: "pre" as const, startsAt: new Date(extras!.startsAt! * 1000).toISOString(), altChannels: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })) }
