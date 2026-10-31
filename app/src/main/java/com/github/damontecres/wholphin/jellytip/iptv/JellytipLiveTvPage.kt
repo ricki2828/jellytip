@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -376,6 +377,9 @@ private val ROW_H = 46.dp
 private val RULER_H = 22.dp
 private val PREVIEW_W = 224.dp
 private val PREVIEW_H = 126.dp
+/** "Back again to leave" shows once per app run. */
+private var backHintShown = false
+
 private const val PREVIEW_REST_MS = 800L
 private const val ON_NOW_REFRESH_MS = 2 * 60_000L
 
@@ -430,6 +434,10 @@ fun JellytipLiveTvPage(
     var pending by remember { mutableStateOf<String?>(null) }
     var focusedChannel by remember { mutableStateOf<IptvChannel?>(null) }
     var focusedProg by remember { mutableStateOf<IptvProg?>(null) }
+    /** Row of the focused programme (-1 = focus is not in the grid). */
+    var focusedRow by remember { mutableIntStateOf(-1) }
+    var backHint by remember { mutableStateOf(false) }
+    var gridFocused by remember { mutableStateOf(false) }
     var focusTime by remember { mutableStateOf(nowSec()) }
     var placed by remember { mutableStateOf(false) }
     var tabsFocused by remember { mutableStateOf(false) }
@@ -484,12 +492,19 @@ fun JellytipLiveTvPage(
         playback.lastFullScreenChannel = null
         val ci = chans.indexOfFirst { it.id == back }.takeIf { it >= 0 } ?: 0
         val ch = chans[ci]
-        val restore = viewModel.lastFocusKey?.takeIf { back == null && it.substringBefore('|') in chans.map { c -> c.id } }
-        if (ci > 0) listState.scrollToItem((ci - 2).coerceAtLeast(0))
+        // Ricki 31-Oct: opening the guide always starts at the top with the now column visible; only coming back from
+        // full screen lands on that channel
+        if (back == null) {
+            viewModel.setWindowStart(IptvRules.windowStart(nowSec()))
+            focusTime = nowSec()
+            listState.scrollToItem(0)
+        } else if (ci > 0) {
+            listState.scrollToItem((ci - 2).coerceAtLeast(0))
+        }
         withFrameNanos { }
-        val target =
-            restore ?: cellKey(ch.id, IptvRules.progAt(cellsFor(viewModel.epg[ch.id].orEmpty(), state.windowStart), now)?.start ?: state.windowStart)
-        JellytipTrace.focus("guide: place ${if (back != null) "full-screen channel $back" else if (restore != null) "restore" else "first channel"}")
+        val ws0 = viewModel.state.value.windowStart
+        val target = cellKey(ch.id, IptvRules.progAt(cellsFor(viewModel.epg[ch.id].orEmpty(), ws0), now)?.start ?: ws0)
+        JellytipTrace.focus("guide: place ${if (back != null) "full-screen channel $back" else "first channel, now"}")
         pending = target
     }
 
@@ -538,11 +553,33 @@ fun JellytipLiveTvPage(
     }
 
     /** D-pad inside the grid: moves by programme (left/right) and by channel at the same time (up/down). */
+    /** Rows that fit on screen (at least 1). */
+    fun pageRows(): Int = (listState.layoutInfo.visibleItemsInfo.count { it.offset >= 0 && it.offset + it.size <= listState.layoutInfo.viewportEndOffset } - 1).coerceAtLeast(1)
+
+    /** Move focus [by] rows (clamped), keeping the time column; at the first row a further Up goes to the tabs. */
+    fun jumpRows(
+        ci: Int,
+        by: Int,
+    ): Boolean {
+        val chans = state.channels ?: return false
+        if (chans.isEmpty()) return false
+        if (by < 0 && ci == 0) return false
+        val ti = (ci + by).coerceIn(0, chans.size - 1)
+        val target = chans[ti]
+        val ws = state.windowStart
+        val c = IptvRules.progAt(cellsFor(viewModel.epg[target.id].orEmpty(), ws), focusTime)
+        scope.launch { listState.scrollToItem(if (by < 0) ti else (ti - (pageRows() - 1)).coerceAtLeast(0)) }
+        pending = cellKey(target.id, c?.start ?: ws)
+        JellytipTrace.focus("guide: jump ${if (by < 0) "up" else "down"} to row $ti")
+        return true
+    }
+
     fun onGridKey(
         ci: Int,
         ch: IptvChannel,
         p: IptvProg,
         key: Key,
+        repeat: Int = 0,
     ): Boolean {
         val chans = state.channels ?: return false
         val ws = state.windowStart
@@ -589,7 +626,14 @@ fun JellytipLiveTvPage(
                 return false // the edge of the guide: Left goes on to the sidebar, as everywhere
             }
 
+            // A page of rows: Channel/Page Up/Down, or holding Up/Down (key repeat)
+            Key.PageUp, Key.PageDown, Key.ChannelUp, Key.ChannelDown -> {
+                val up = key == Key.PageUp || key == Key.ChannelUp
+                return jumpRows(ci, if (up) -pageRows() else pageRows())
+            }
+
             Key.DirectionUp, Key.DirectionDown -> {
+                if (repeat > 0) return jumpRows(ci, if (key == Key.DirectionUp) -pageRows() else pageRows())
                 val ti = ci + if (key == Key.DirectionUp) -1 else 1
                 if (ti < 0) return false // up to the tabs
                 if (ti >= chans.size) return state.darkCount == 0 // down to the "off-air event channels" chip
@@ -672,7 +716,7 @@ fun JellytipLiveTvPage(
                     chans == null -> Text("Loading the guide…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(12.dp))
                     chans.isEmpty() -> Text(state.message ?: "No channels here.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(12.dp))
                     else ->
-                        Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().onFocusChanged { gridFocused = it.hasFocus }) {
                             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                                 itemsIndexed(chans, key = { _, c -> c.id }) { ci, ch ->
                                     val cells = cellsFor(viewModel.epg[ch.id].orEmpty(), ws)
@@ -708,6 +752,7 @@ fun JellytipLiveTvPage(
                                                             .focusRequester(req)
                                                             .onFocusChanged {
                                                                 if (it.isFocused) {
+                                                                    focusedRow = ci
                                                                     focusedChannel = ch
                                                                     focusedProg = p.takeIf { pr -> pr.title.isNotEmpty() }
                                                                     viewModel.lastFocusKey = key
@@ -716,7 +761,7 @@ fun JellytipLiveTvPage(
                                                                 if (e.type != KeyEventType.KeyDown) {
                                                                     false
                                                                 } else {
-                                                                    onGridKey(ci, ch, p, e.key)
+                                                                    onGridKey(ci, ch, p, e.key, e.nativeKeyEvent.repeatCount)
                                                                 }
                                                             },
                                                 )
@@ -735,6 +780,20 @@ fun JellytipLiveTvPage(
                                     }
                                 }
                             }
+                            if (backHint) {
+                                Text(
+                                    "Back again to leave",
+                                    color = JellytipPalette.Vanilla,
+                                    fontFamily = JellytipFontFamily,
+                                    fontSize = 15.sp,
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(bottom = 24.dp)
+                                            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
                             // Now line across the rows
                             if (now in ws until ws + IptvRules.WINDOW_SECS) {
                                 Box(
@@ -748,6 +807,20 @@ fun JellytipLiveTvPage(
                         }
                 }
             }
+        }
+    }
+    // Back below the first row: to the top of the guide (same time column); Back at the top leaves as before
+    androidx.activity.compose.BackHandler(enabled = gridFocused && focusedRow > 0 && actions == null) {
+        jumpRows(focusedRow, -focusedRow)
+        if (!backHintShown) {
+            backHintShown = true
+            backHint = true
+        }
+    }
+    LaunchedEffect(backHint) {
+        if (backHint) {
+            delay(2_000)
+            backHint = false
         }
     }
     ProgrammeActions(
