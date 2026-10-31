@@ -137,6 +137,8 @@ export interface JellytipPlayerPlugin {
   addListener(event: "matchAction", cb: (e: { action: "remind" | "record"; matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
   /** The player now plays another channel (picked in Where to watch); the result's channelId follows it too. */
   addListener(event: "channelSwitch", cb: (e: { from?: string; to: string; name: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  /** The mini player (picture-in-picture) opened or closed back to full screen; closing it still resolves open() with "back". */
+  addListener(event: "pipChanged", cb: (e: { active: boolean }) => void): Promise<{ remove: () => Promise<void> }>;
   /** Diagnostic: the player switched channel ({from, to, why}). */
   addListener(event: "failover", cb: (e: { from: string; to: string; why: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }

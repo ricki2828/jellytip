@@ -1201,6 +1201,13 @@ public class PlayerActivity extends AppCompatActivity {
     /** The mini player shows only the picture: no controls, buttons, drawer or panel. */
     private void onPipChanged(boolean pip) {
         if (closing || view == null) return;
+        // The web app leaves the player route while the mini player floats (the app underneath stays usable)
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p != null) {
+            JSObject o = new JSObject();
+            o.put("active", pip);
+            p.emit("pipChanged", o);
+        }
         if (pip) {
             view.hideController();
             view.setUseController(false);
