@@ -409,7 +409,7 @@ final class MatchPanel implements LiveFeed.Listener {
             card.addView(Broadcast.sectionHead(activity, "To win" + (str(market, "source") != null ? " · " + str(market, "source") : "")));
             LinearLayout box = new LinearLayout(activity);
             box.setOrientation(LinearLayout.VERTICAL);
-            new LiveContent(activity, box, apiBase, token).renderWinners(market.optJSONArray("outcomes"), t);
+            new LiveContent(activity, box, apiBase, token).renderWinners(market.optJSONArray("outcomes"), t, market.optBoolean("thin", false));
             card.addView(box);
         }
         // Odds: the favourite in gold over a split track, then the lines

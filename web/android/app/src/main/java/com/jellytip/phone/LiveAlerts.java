@@ -85,6 +85,11 @@ final class LiveAlerts implements LiveFeed.Listener {
         JSONObject flip = m == null ? null : m.optJSONObject("flip");
         String at = flip == null || flip.isNull("at") ? null : flip.optString("at");
         if (at == null || at.isEmpty() || at.equals(lastFlipAt)) return;
+        // A thin market never fires a flip alert (plan "thin markets", decided 31-Oct)
+        if (m.optBoolean("thin", false)) {
+            lastFlipAt = at;
+            return;
+        }
         lastFlipAt = at;
         String to = flip.isNull("to") ? null : flip.optString("to");
         String name = sink.teamName(to);
