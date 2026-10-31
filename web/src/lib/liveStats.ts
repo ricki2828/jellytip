@@ -122,3 +122,8 @@ export const mayShow = (liveNow: boolean, spoilers: boolean) => liveNow || spoil
 
 /** "📈 Polymarket flip: 76ers now favourites · 54%". */
 export const flipText = (f: Flip, names: { home: string; away: string }) => `📈 Polymarket flip: ${names[f.to]} now favourites · ${pct(f.prob)}`;
+
+/** Tabs for the latest answer: Chat only when it has a `chat` block (Reddit may be off), Fantasy only when there are leagues. */
+export function liveTabs(hasChat: boolean, fantasy: boolean): [string, string][] {
+  return [["stats", "Stats"], ["plays", "Plays"], ["odds", "Odds"], ...(hasChat ? ([["chat", "Chat"]] as [string, string][]) : []), ...(fantasy ? ([["fantasy", "Fantasy"]] as [string, string][]) : [])];
+}

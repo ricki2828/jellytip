@@ -2,7 +2,7 @@
 // right (landscape-friendly) and the video keeps playing. Odds are percentages with their source, never a betting link.
 import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
-import { agoText, maskText, mayShow, pct, volumeText, type LiveStats } from "../lib/liveStats";
+import { agoText, liveTabs, maskText, mayShow, pct, volumeText, type LiveStats } from "../lib/liveStats";
 import type { Fixture } from "../lib/matchInfo";
 import { FantasyTab } from "./Fantasy";
 import { useFantasy } from "../api/fantasy";
@@ -12,12 +12,6 @@ import { SheetClose, useEscapeClose } from "./BackArrow";
 import "../screens/iptv/iptv.css";
 
 type Tab = "stats" | "plays" | "odds" | "chat" | "fantasy";
-const TABS: [Tab, string][] = [
-  ["stats", "Stats"],
-  ["plays", "Plays"],
-  ["odds", "Odds"],
-  ["chat", "Chat"],
-];
 const REFRESH_MS = 15_000;
 const OUT_MS = 200;
 
@@ -70,6 +64,11 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
     window.setTimeout(onClose, OUT_MS);
   };
   useEscapeClose(close);
+  const tabs = liveTabs(!!d?.chat, showFantasy) as [Tab, string][];
+  // The tab being viewed went away (chat disappeared from the answer): back to the first
+  useEffect(() => {
+    if (!tabs.some(([k]) => k === tab)) setTab("stats");
+  }, [tabs.map(([k]) => k).join(), tab]);
   const newPlays = useNewKeys(d?.plays.map((p) => `${p.period}${p.clock}${p.text}`) ?? []);
   const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
@@ -111,7 +110,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
       ) : (
         <>
           <div className="chips" role="tablist" aria-label="Live panel">
-            {(showFantasy ? [...TABS, ["fantasy", "Fantasy"] as [Tab, string]] : TABS).map(([k, label]) => (
+            {tabs.map(([k, label]) => (
               <button key={k} className={`chip${tab === k ? " on" : ""}`} data-nav role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
                 {label}
               </button>
@@ -205,7 +204,6 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
               {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} />}
               {tab === "chat" && (
                 <>
-                  {(!d.chat || d.chat.comments.length === 0) && <p className="iptv-hint">No chat for this match.</p>}
                   {d.chat && d.chat.comments.length > 0 && (
                     <>
                       <ul className="ld-chat">

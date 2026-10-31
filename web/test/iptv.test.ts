@@ -444,7 +444,7 @@ test("match info is read from matchInfo, never from the favourite marker match",
   assert.equal(parseSport({ match: { ...FIX, team: "Chiefs" } }, { title: "x" }).fixture, null);
 });
 
-import { agoText, maskText, mayShow, parseLive, pct, volumeText } from "../src/lib/liveStats.ts";
+import { liveTabs, agoText, maskText, mayShow, parseLive, pct, volumeText } from "../src/lib/liveStats.ts";
 
 test("live panel: parse, odds as percentages, spoiler gate, chat mask", () => {
   const d = parseLive({
@@ -575,4 +575,13 @@ test("live extras carry the description and what is on next (phone panel)", () =
   const p = parseLiveExtras(q);
   assert.equal(p.desc, "Live cricket from Hamilton");
   assert.deepEqual(p.upNext, [{ title: "Highlights", start: 1_900_000_000 }, { title: "News", start: undefined }]);
+});
+
+test("live drawer tabs: Chat only with a chat block", () => {
+  assert.deepEqual(liveTabs(false, false).map(([k]) => k), ["stats", "plays", "odds"]);
+  assert.deepEqual(liveTabs(true, false).map(([k]) => k), ["stats", "plays", "odds", "chat"]);
+  assert.deepEqual(liveTabs(true, true).map(([k]) => k), ["stats", "plays", "odds", "chat", "fantasy"]);
+  assert.deepEqual(liveTabs(false, true).map(([k]) => k), ["stats", "plays", "odds", "fantasy"]);
+  assert.equal(parseLive({ chat: { source: "reddit", comments: [] } })!.chat !== null, true);
+  assert.equal(parseLive({})!.chat, null);
 });
