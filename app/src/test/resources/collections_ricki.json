@@ -1,0 +1,331 @@
+{
+ "sections": [
+  {
+   "key": "collections",
+   "title": "Collections",
+   "count": 123,
+   "items": [
+    {
+     "id": "mood:novels",
+     "title": "From the page",
+     "art": {
+      "itemId": "0f3b79a780191240612c3426c7a86f36"
+     },
+     "total": 145,
+     "libCount": 120,
+     "iptvCount": 25,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "date-night",
+     "title": "Date night",
+     "art": {
+      "itemId": "a36cd7b7004847f565f38033e7bcb443"
+     },
+     "total": 120,
+     "libCount": 120,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "top-lists",
+   "title": "Top lists",
+   "count": 28,
+   "items": [
+    {
+     "id": "lb:best-of-2023-sean-fennessey",
+     "title": "Best of 2023 Sean Fennessey",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/dB6Krk806zeqd0YNp2ngQ9zXteH.jpg",
+      "itemId": "2c9eadc2e1f0dd6f0dfa68ae4e756323"
+     },
+     "total": 30,
+     "libCount": 5,
+     "iptvCount": 25,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "lb:sight-and-sounds-50-best-films-of-2023",
+     "title": "Sight and Sound's 50 best films of 2023",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/dB6Krk806zeqd0YNp2ngQ9zXteH.jpg",
+      "itemId": "6245af4dcf47edeb3ea79eb32bc4603a"
+     },
+     "total": 21,
+     "libCount": 6,
+     "iptvCount": 15,
+     "ranked": true,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "franchises",
+   "title": "Franchises",
+   "count": 288,
+   "items": [
+    {
+     "id": "franchise:645",
+     "title": "James Bond",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/os0V7u6tGAuxINNrHS3LMVJbDa9.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/6VcVl48kNKvdXOZfJPdarlUGOsk.jpg",
+      "itemId": "db242f47095e14395414ba1a17a233b6"
+     },
+     "total": 26,
+     "libCount": 3,
+     "iptvCount": 23,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "franchise:10",
+     "title": "Star Wars",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/pWVLFh4OuejTpUaDQbB1C4zoS2p.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/d8duYyyC9J5T825Hg7grmaabfxQ.jpg",
+      "itemId": "7ae83f9cf3e53e8e29f11e2ae887133d"
+     },
+     "total": 9,
+     "libCount": 9,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "franchise:91361",
+     "title": "Halloween",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/uCIMY95aqKEwIEwNuFq42UQkY9f.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/hUa3JDVZ1L0U7jSfFu4uvzoCJxs.jpg"
+     },
+     "total": 8,
+     "libCount": 0,
+     "iptvCount": 8,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "franchise:1241",
+     "title": "Harry Potter",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/eVPs2Y0LyvTLZn6AP5Z6O2rtiGB.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg",
+      "itemId": "81efb9cf92f897711e1cef0a6fe7237b"
+     },
+     "total": 8,
+     "libCount": 8,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "franchise:87359",
+     "title": "Mission: Impossible",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/geEjCGfdmRAA1skBPwojcdvnZ8A.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/O1pefVMcQbgoJZNgIYbyRnvPUW.jpg",
+      "itemId": "f901f9c4fed47a43b94596e43fbc2836"
+     },
+     "total": 8,
+     "libCount": 1,
+     "iptvCount": 7,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "franchise:9735",
+     "title": "Friday the 13th",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w500/p3fJC9R4pCj5Vw0gP7Di0GZts9Z.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/original/yz9EdlfKU8bpN0hbdJMy6QkFBoN.jpg"
+     },
+     "total": 7,
+     "libCount": 0,
+     "iptvCount": 7,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "countries",
+   "title": "By country",
+   "count": 35,
+   "items": [
+    {
+     "id": "country:gb",
+     "title": "British cinema",
+     "art": {
+      "itemId": "c535dc52f7560e63dfdce81fa811c7b2"
+     },
+     "total": 120,
+     "libCount": 120,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "world-cinema-best",
+     "title": "World cinema essentials",
+     "art": {
+      "itemId": "d835cb9441ec77a4dc3b79562e1f9805"
+     },
+     "total": 116,
+     "libCount": 116,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "decades",
+   "title": "By decade",
+   "count": 11,
+   "items": [
+    {
+     "id": "decade:1960",
+     "title": "The 1960s",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/ve72VxNqjGM69Uky4WTo2bK6rfq.jpg",
+      "itemId": "d835cb9441ec77a4dc3b79562e1f9805"
+     },
+     "total": 64,
+     "libCount": 31,
+     "iptvCount": 33,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "new-hollywood",
+     "title": "New Hollywood (1967–1980)",
+     "art": {
+      "itemId": "24edb02a0bceb6fa809227ffb8f6b0b6"
+     },
+     "total": 37,
+     "libCount": 37,
+     "iptvCount": 0,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "awards",
+   "title": "Awards",
+   "count": 13,
+   "items": [
+    {
+     "id": "award:oscar-best-picture",
+     "title": "Best Picture winners",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/saHP97rTPS5eLmrLQEcANmKrsFl.jpg",
+      "itemId": "36718c33de8834012015528922c82109"
+     },
+     "total": 40,
+     "libCount": 14,
+     "iptvCount": 26,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "award:oscar-best-picture-nom",
+     "title": "Best Picture nominees",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/fai0rspsNeJCS69wHNjOdWxcI7P.jpg",
+      "itemId": "cbfbb16038986a42b9bf8f45c9b3f73c"
+     },
+     "total": 77,
+     "libCount": 51,
+     "iptvCount": 26,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "directors",
+   "title": "Directors",
+   "count": 64,
+   "items": [
+    {
+     "id": "director:ebb9edee028a48d5185291055d0596dd",
+     "title": "Directed by Steven Spielberg",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/gpdVNUaa4LhRMLfJOPj1AZdhAZ3.jpg",
+      "itemId": "09952d09132738d683f565e0eb1e28df",
+      "person": {
+       "id": "e7afabfe1dd357cc9a9af249611c3681"
+      }
+     },
+     "total": 33,
+     "libCount": 7,
+     "iptvCount": 26,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "director:85b13884110d43b61783ce82f3d67a98",
+     "title": "Directed by Steven Soderbergh",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/hQQCdZrsHtZyR6NbKH2YyCqd2fR.jpg",
+      "itemId": "74068f3aea1bfc08a2e0b7541f420ae7",
+      "person": {
+       "id": "3e55a0c258e7a176928c41fb2bff7e5c"
+      }
+     },
+     "total": 31,
+     "libCount": 5,
+     "iptvCount": 26,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  },
+  {
+   "key": "actors",
+   "title": "Actors",
+   "count": 45,
+   "items": [
+    {
+     "id": "actor:31cd7244217b9102a93f6db51da1ec16",
+     "title": "Starring Tom Cruise",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/nBM9MMa2WCwvMG4IJ3eiGUdbPe6.jpg",
+      "itemId": "023555fb277fee639d2e1b3343a46708",
+      "person": {
+       "id": "aecc2ef0cc899d24fbf774fa428c744a"
+      }
+     },
+     "total": 41,
+     "libCount": 8,
+     "iptvCount": 33,
+     "ranked": false,
+     "mediaType": "movie"
+    },
+    {
+     "id": "actor:4003bb8c86f52a116b361db3ff5d6799",
+     "title": "Starring Al Pacino",
+     "art": {
+      "poster": "https://image.tmdb.org/t/p/w342/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+      "itemId": "24edb02a0bceb6fa809227ffb8f6b0b6",
+      "person": {
+       "id": "a10da77d9621d7336d5e10195070c147"
+      }
+     },
+     "total": 39,
+     "libCount": 9,
+     "iptvCount": 30,
+     "ranked": false,
+     "mediaType": "movie"
+    }
+   ]
+  }
+ ]
+}

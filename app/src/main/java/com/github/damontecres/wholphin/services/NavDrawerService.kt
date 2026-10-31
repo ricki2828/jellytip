@@ -224,7 +224,9 @@ class NavDrawerService
                             }
                         ServerNavDrawerItem(
                             itemId = it.itemId,
-                            name = it.name,
+                            // Jellyfin's own "Collections" view (box sets) was a second "Collections" in the drawer, and
+                            // not the Jellytip hub (franchises, top lists, countries…): it gets its own name
+                            name = if (it.collectionType == CollectionType.BOXSETS && it.name.equals("Collections", ignoreCase = true)) "Box sets" else it.name,
                             destination = destination,
                             type = it.collectionType,
                         )
