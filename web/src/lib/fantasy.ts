@@ -148,3 +148,6 @@ export function enqueue<T>(queue: T[], item: T, max = 3): T[] {
   const q = [...queue, item];
   return q.length > max ? q.slice(q.length - max) : q;
 }
+
+/** Whether the answer has anything to show: at least one league, from either source (Sleeper or Yahoo). */
+export const hasLeagues = (d: FantasyLive | null): d is FantasyLive => !!d && d.leagues.length > 0;

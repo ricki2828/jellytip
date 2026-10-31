@@ -47,7 +47,7 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
   const fixture = useFixture(active ? matchId : null);
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const { prefs } = usePrefs({ defer: true });
-  const on = active && nfl && !!prefs?.fantasy.sleeperUsername && prefs.fantasy.alerts;
+  const on = active && nfl && !!prefs?.fantasy.alerts;
   const [shown, setShown] = useState<{ text: string; side: "me" | "opp"; key: number } | null>(null);
   const queue = useRef<{ text: string; side: "me" | "opp" }[]>([]);
   const busy = useRef(false);
@@ -78,12 +78,13 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
     const poll = async () => {
       const d = await fantasyLive(true);
       if (!alive) return;
-      if (d) {
+      // No league from either source: nothing to watch, stop polling
+      if (d && d.leagues.length > 0) {
         const first = seen.current == null;
         seen.current ??= new Set();
         const now = Date.now() / 1000;
         for (const e of d.events) {
-          const k = `${e.at}|${e.name}|${e.side}`;
+          const k = `${e.at}|${e.league}|${e.name}`; // the server keeps events for 15 min
           if (seen.current.has(k)) continue;
           seen.current.add(k);
           // The first answer may carry earlier events: only a recent one is news

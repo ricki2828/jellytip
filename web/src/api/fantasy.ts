@@ -1,8 +1,8 @@
 // Fantasy (Sleeper) live scoring. Hidden when the routes are missing (404) or no account is linked (empty leagues).
 import { useEffect, useState } from "react";
 import { companionCall } from "./companionCall";
-import { prefsNow, savePrefs, usePrefs } from "./me";
-import { parseFantasy, parseStarters, type FantasyLive, type Starter } from "../lib/fantasy";
+import { prefsNow, savePrefs } from "./me";
+import { hasLeagues, parseFantasy, parseStarters, type FantasyLive, type Starter } from "../lib/fantasy";
 
 const EVENT = "jellytip-fantasy";
 const FRESH_MS = 45_000;
@@ -53,13 +53,11 @@ export async function fantasyGame(matchId: string): Promise<{ id: string; league
 /** Whether the person linked a Sleeper account (the server only fetches after that). */
 export const sleeperUsername = () => prefsNow()?.fantasy.sleeperUsername ?? null;
 
-/** Live fantasy data for a component: null until known, when no account is linked, or without the route. */
+/** Live fantasy data for a component: null until known, with no league from any source, or without the route. */
 export function useFantasy(active = true): FantasyLive | null {
-  const { prefs } = usePrefs({ defer: true });
-  const linked = !!prefs?.fantasy.sleeperUsername;
   const [live, setLive] = useState<FantasyLive | null>(state);
   useEffect(() => {
-    if (!active || !linked) return setLive(null);
+    if (!active) return setLive(null);
     let alive = true;
     const on = () => alive && setLive(state);
     window.addEventListener(EVENT, on);
@@ -68,8 +66,8 @@ export function useFantasy(active = true): FantasyLive | null {
       alive = false;
       window.removeEventListener(EVENT, on);
     };
-  }, [active, linked]);
-  return active && linked ? live : null;
+  }, [active]);
+  return active && hasLeagues(live) ? live : null;
 }
 
 /** Start the Yahoo connect: POST with the normal auth header; the answer's url (Yahoo's authorize page) is where to go. Never a token in a URL. */

@@ -491,7 +491,7 @@ test("market flip: parsed with the favourite, text names the new favourite", () 
   assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });
 
-import { chipText, clampAlertMin, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
+import { chipText, clampAlertMin, hasLeagues, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
 
 const FANT = {
   week: 9,
@@ -541,6 +541,9 @@ test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   assert.equal(isNfl("nba"), false);
   assert.equal(parseFixture({ ...FIX, leagueKey: "NFL" })!.leagueKey, "nfl");
   assert.equal(parseFixture(FIX)!.leagueKey, null);
+  assert.equal(hasLeagues(d), true);
+  assert.equal(hasLeagues(parseFantasy({ providers: {} })), false);
+  assert.equal(hasLeagues(null), false);
   assert.equal(parseFantasy({}), null);
   assert.deepEqual(d.providers, { sleeper: { linked: false }, yahoo: { available: false, linked: false } });
   assert.deepEqual(parseFantasy({ providers: { yahoo: { available: true } } })!.leagues, []);
