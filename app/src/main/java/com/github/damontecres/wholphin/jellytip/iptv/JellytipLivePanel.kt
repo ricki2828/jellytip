@@ -170,6 +170,20 @@ data class F1Row(
     val tyreAge: String?,
     val pits: String?,
     val fastest: Boolean,
+    /** Practice / qualifying: the best lap ("1:17.123"); gap is then "BEST" | "+0.123". */
+    val best: String? = null,
+)
+
+/** One match of a tennis tournament event (situation.matches). */
+data class TennisMatch(
+    val id: String,
+    val home: MatchTeam?,
+    val away: MatchTeam?,
+    val status: String?,
+    val round: String?,
+    val court: String?,
+    val sets: List<Triple<String, String, String?>>,
+    val serving: String?,
 )
 
 /** Golf leaderboard row. */
@@ -245,6 +259,8 @@ data class LiveSituation(
     val round: String? = null,
     val leaderboard: List<GolfRow> = emptyList(),
     val favourites: List<GolfRow> = emptyList(),
+    /** Tennis tournament event: up to 8 matches, on court first. */
+    val matches: List<TennisMatch> = emptyList(),
 ) {
     /** One line for under the scoreboard strip. */
     val summary: String?
@@ -426,7 +442,7 @@ object LiveParse {
     }
 
     private val consumed =
-        setOf("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap")
+        setOf("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap", "matches")
 
     fun situation(o: JSONObject?): LiveSituation? {
         o ?: return null
@@ -500,17 +516,42 @@ object LiveParse {
                         r.str("tyreAge"),
                         r.str("pits"),
                         r.optBoolean("fastest", false),
+                        best = r.str("best"),
                     )
                 }.take(20),
-            fastestLap = o.optJSONObject("fastestLap")?.let { f -> listOfNotNull(f.str("driver"), f.str("time")).joinToString(" ").ifBlank { null } } ?: o.str("fastestLap"),
-            sets = o.optJSONArray("sets").objects().mapNotNull { st -> Triple(st.str("home") ?: return@mapNotNull null, st.str("away") ?: return@mapNotNull null, st.str("tb")) },
+            fastestLap = o.optJSONObject("fastestLap")?.let { f -> listOfNotNull(f.str("driver"), f.str("time"), f.str("lap")?.let { "lap $it" }).joinToString(" ").ifBlank { null } } ?: o.str("fastestLap"),
+            sets = sets(o.optJSONArray("sets")),
             gameHome = o.optJSONObject("game")?.str("home"),
             gameAway = o.optJSONObject("game")?.str("away"),
             serving = o.str("serving")?.takeIf { it == "home" || it == "away" },
             round = o.str("round"),
             leaderboard = golfRows(o.optJSONArray("leaderboard")).take(15),
             favourites = golfRows(o.optJSONArray("favourites")),
+            matches =
+                o.optJSONArray("matches").objects().mapNotNull { mt ->
+                    TennisMatch(
+                        id = mt.str("id") ?: return@mapNotNull null,
+                        home = player(mt, "home"),
+                        away = player(mt, "away"),
+                        status = mt.str("status"),
+                        round = mt.str("round"),
+                        court = mt.str("court"),
+                        sets = sets(mt.optJSONArray("sets")),
+                        serving = mt.str("serving")?.takeIf { it == "home" || it == "away" },
+                    )
+                }.take(8),
         )
+    }
+
+    private fun sets(a: JSONArray?) = a.objects().mapNotNull { st -> Triple(st.str("home") ?: return@mapNotNull null, st.str("away") ?: return@mapNotNull null, st.str("tb")) }
+
+    /** A tennis player: {name, short, country, flag} (flag = logo) or just a name. */
+    private fun player(
+        o: JSONObject,
+        side: String,
+    ): MatchTeam? {
+        o.optJSONObject(side)?.let { t -> return MatchTeam(t.str("name") ?: return null, t.str("short"), t.str("flag") ?: t.str("logo"), t.str("rank")?.let { "#$it" }, null, null, t.str("country")) }
+        return o.str(side)?.let { MatchTeam(it, null, null, null) }
     }
 
     private fun golfRows(a: JSONArray?): List<GolfRow> =
@@ -940,6 +981,15 @@ private fun ContextBlock(
 ) {
     if (s.standings.isNotEmpty()) TimingTower(s.standings, s.fastestLap)
     if (s.sets.isNotEmpty() || s.gameHome != null) SetGrid(s, m)
+    // A tennis tournament: its matches (on court first), each a compact set grid under its round and court
+    s.matches.take(6).forEach { mt ->
+        key(mt.id) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                BodyText(listOfNotNull(mt.round, mt.court, mt.status?.takeIf { it != "in" }?.let { if (it == "post") "Final" else it }).joinToString(" · "), 11.5.sp, Broadcast.Secondary, maxLines = 1)
+                SetGrid(mt.home, mt.away, mt.sets, mt.serving, size = 14f)
+            }
+        }
+    }
     if (s.leaderboard.isNotEmpty() || s.favourites.isNotEmpty()) Leaderboard(s)
     // NFL: down & distance in the broadcasters' gold box, the field (drive side, ball, line to gain), the drive
     if (s.downDistance != null || s.fieldPos != null) {
@@ -1024,7 +1074,9 @@ private fun TimingTower(
                     Box(Modifier.width(4.dp).height(16.dp).background(teamColor(r.teamColor, Broadcast.Secondary)))
                     Cond(r.driver, 15.sp, modifier = Modifier.weight(1f))
                     if (r.fastest) Box(Modifier.size(7.dp).background(Color(0xFFA020F0), CircleShape))
-                    Cond((if (r.pos == "1") "Leader" else r.gap ?: r.interval) ?: "", 13.sp, Broadcast.Body, weight = FontWeight.SemiBold)
+                    // Race: gap ("LEADER" for P1) or interval; practice / qualifying: P1's best lap, the others' gap
+                    val gapText = if (r.pos == "1") r.best ?: r.gap ?: "Leader" else r.gap ?: r.interval
+                    Cond(gapText ?: "", 13.sp, Broadcast.Body, weight = FontWeight.SemiBold)
                     TyreChip(r.tyre)
                 }
             }
@@ -1053,19 +1105,30 @@ private fun TyreChip(tyre: String?) {
 private fun SetGrid(
     s: LiveSituation,
     m: IptvMatch,
+) = SetGrid(m.home, m.away, s.sets, s.serving, s.gameHome, s.gameAway)
+
+@Composable
+private fun SetGrid(
+    home: MatchTeam?,
+    away: MatchTeam?,
+    sets: List<Triple<String, String, String?>>,
+    serving: String?,
+    gameHome: String? = null,
+    gameAway: String? = null,
+    size: Float = 15f,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf(Triple("home", m.home, s.gameHome), Triple("away", m.away, s.gameAway)).forEach { (side, p, game) ->
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        listOf(Triple("home", home, gameHome), Triple("away", away, gameAway)).forEach { (side, p, game) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(7.dp).background(if (s.serving == side) Broadcast.Gold else Color.Transparent, CircleShape))
+                Box(Modifier.size(7.dp).background(if (serving == side) Broadcast.Gold else Color.Transparent, CircleShape))
                 flagEmoji(p?.country)?.let { androidx.tv.material3.Text(it, fontSize = 13.sp) }
-                Cond(p?.short ?: p?.name ?: "", 15.sp, modifier = Modifier.weight(1f))
-                s.sets.forEach { (h, a, tb) ->
+                Cond(p?.short ?: p?.name ?: "", size.sp, modifier = Modifier.weight(1f))
+                sets.forEach { (h, a, tb) ->
                     val mine = if (side == "home") h else a
                     val theirs = if (side == "home") a else h
                     val won = (mine.toIntOrNull() ?: 0) > (theirs.toIntOrNull() ?: 0)
                     Row(Modifier.width(22.dp), verticalAlignment = Alignment.Top) {
-                        Cond(mine, 16.sp, if (won) Color.White else Broadcast.Secondary)
+                        Cond(mine, (size + 1).sp, if (won) Color.White else Broadcast.Secondary)
                         if (tb != null && !won) Cond(tb, 9.sp, Broadcast.Secondary)
                     }
                 }
@@ -1083,7 +1146,7 @@ private fun Leaderboard(s: LiveSituation) {
             Cond("Pos", 12.sp, Broadcast.Secondary, modifier = Modifier.width(26.dp), weight = FontWeight.SemiBold)
             Cond("Player", 12.sp, Broadcast.Secondary, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold)
             Cond("To par", 12.sp, Broadcast.Secondary, modifier = Modifier.width(44.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
-            Cond("Thru", 12.sp, Broadcast.Secondary, modifier = Modifier.width(36.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+            Cond("Thru", 12.sp, Broadcast.Secondary, modifier = Modifier.width(40.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
         }
         s.favourites.forEach { r -> key("fav:" + r.player) { GolfLine(r, pinned = true) } }
         if (s.favourites.isNotEmpty()) Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
@@ -1107,8 +1170,17 @@ private fun GolfLine(
         BodyText(r.player, 13.sp, Color.White, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold, maxLines = 1)
         val under = r.toPar?.startsWith("-") == true
         Cond(r.toPar ?: "", 16.sp, if (under) Broadcast.Gold else Color.White, modifier = Modifier.width(44.dp), align = TextAlign.End)
-        Cond(r.thru ?: "", 13.sp, Broadcast.Secondary, modifier = Modifier.width(36.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+        Cond(teeOrThru(r.thru), 13.sp, Broadcast.Secondary, modifier = Modifier.width(40.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
     }
+}
+
+/** Golf "thru": "F", a hole number, or a UTC tee time ("13:05Z") shown in local time. */
+private fun teeOrThru(t: String?): String {
+    t ?: return ""
+    val m = Regex("^(\\d{1,2}):(\\d{2})Z$").find(t) ?: return t
+    val utc = java.time.LocalTime.of(m.groupValues[1].toInt(), m.groupValues[2].toInt())
+    val local = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).with(utc).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime()
+    return String.format(Locale.US, "%02d:%02d", local.hour, local.minute)
 }
 
 /** The field: end zones in the team colours, 10-yard lines, the ball (white) and the line to gain (gold). */
