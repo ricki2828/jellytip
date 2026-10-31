@@ -6,6 +6,10 @@ export interface CollectionCard {
   title: string;
   poster: string | null;
   backdrop: string | null;
+  /** The first library title (Jellyfin art) and, for director / actor rows, the person's portrait. */
+  itemId: string | null;
+  person: { id: string; imageTag: string | null } | null;
+  mediaType: "movie" | "tv" | null;
   total: number;
   libCount: number;
   iptvCount: number;
@@ -41,7 +45,21 @@ export function parseHub(raw: unknown): CollectionSection[] {
       if (!c || !id || !title || seen.has(id)) continue;
       seen.add(id);
       const art = obj(c.art);
-      items.push({ id, title, poster: str(art?.poster), backdrop: str(art?.backdrop), total: num(c.total), libCount: num(c.libCount), iptvCount: num(c.iptvCount), ranked: c.ranked === true });
+      const per = obj(art?.person);
+      const pid = str(per?.id);
+      items.push({
+        id,
+        title,
+        poster: str(art?.poster),
+        backdrop: str(art?.backdrop),
+        itemId: str(art?.itemId),
+        person: pid ? { id: pid, imageTag: str(per?.imageTag) } : null,
+        mediaType: c.mediaType === "tv" ? "tv" : c.mediaType === "movie" ? "movie" : null,
+        total: num(c.total),
+        libCount: num(c.libCount),
+        iptvCount: num(c.iptvCount),
+        ranked: c.ranked === true,
+      });
     }
     if (items.length) out.push({ key, title: str(o.title) ?? key, count: num(o.count) || items.length, items });
   }

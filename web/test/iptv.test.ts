@@ -344,3 +344,10 @@ test("collections hub: sections in order, empty and unusable dropped, card line"
   assert.equal(cardLine({ total: 1, libCount: 1, iptvCount: 0 }), "1 title");
   assert.deepEqual(parseHub(null), []);
 });
+
+test("collections hub: optional art fields", () => {
+  const c = parseHub({ sections: [{ key: "directors", title: "Directors", items: [{ id: "dir:1", title: "Nolan", mediaType: "movie", art: { itemId: "a".repeat(32), person: { id: "b".repeat(32), imageTag: "t" } } }] }] })[0].items[0];
+  assert.equal(c.itemId, "a".repeat(32));
+  assert.deepEqual(c.person, { id: "b".repeat(32), imageTag: "t" });
+  assert.equal(c.mediaType, "movie");
+});

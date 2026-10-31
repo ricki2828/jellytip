@@ -85,3 +85,6 @@
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
+.coll-card img.portrait {
+  object-position: 50% 20%;
+}
