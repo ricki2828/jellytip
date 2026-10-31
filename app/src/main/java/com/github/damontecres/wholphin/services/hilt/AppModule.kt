@@ -99,7 +99,13 @@ object AppModule {
         OkHttpClient
             .Builder()
             .apply {
-                // TODO user agent, timeouts, logging, etc
+                // TODO timeouts, logging, etc
+                // Jellytip: the companion tells devices apart by User-Agent (TV calls were logged as "phone");
+                // requests that set their own keep it
+                addInterceptor { chain ->
+                    val req = chain.request()
+                    chain.proceed(if (req.header("User-Agent") == null) req.newBuilder().header("User-Agent", "Jellytip-TV/${BuildConfig.VERSION_NAME}").build() else req)
+                }
                 // Jellytip: the seedbox is one remote host. OkHttp's default of 5 concurrent calls per host
                 // (HTTP/2 included) would serialise home metadata behind image prefetches.
                 dispatcher(

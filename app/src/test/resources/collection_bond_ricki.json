@@ -1,0 +1,993 @@
+{
+ "id": "franchise:645",
+ "source": "jellytip",
+ "family": "franchise",
+ "title": "James Bond",
+ "layout": "franchise",
+ "mediaType": "movie",
+ "itemIds": [],
+ "untitled": [],
+ "collection": {
+  "tmdbId": 645,
+  "name": "James Bond Collection",
+  "overview": "The James Bond Collection is a legendary spy film series based on Ian Fleming’s novels, following MI6 agent 007, James Bond, as he takes on global threats with style, gadgets, and charm.",
+  "backdrop": "https://image.tmdb.org/t/p/original/6VcVl48kNKvdXOZfJPdarlUGOsk.jpg",
+  "poster": "https://image.tmdb.org/t/p/w500/os0V7u6tGAuxINNrHS3LMVJbDa9.jpg",
+  "partsOrder": [
+   {
+    "tmdbId": 646,
+    "title": "Dr. No",
+    "year": 1962,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324024",
+     "source": "iptv",
+     "title": "Dr. No",
+     "year": 1962,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/9zCOLJmLNst0sCPZlkW1IRoH65E.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/srgq7bzZsuDw7NoGXdazRXp7Hl6.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.986
+    }
+   },
+   {
+    "tmdbId": 657,
+    "title": "From Russia with Love",
+    "year": 1963,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324083",
+     "source": "iptv",
+     "title": "From Russia with Love",
+     "year": 1963,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/zx4V17FP8oclNvOpTgs2iCCtiYk.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/8JMiQa0OqsCYvbNUrQIrMzwV7g2.jpg",
+     "providerName": "PROVIDER",
+     "rating": 7.1
+    }
+   },
+   {
+    "tmdbId": 658,
+    "title": "Goldfinger",
+    "year": 1964,
+    "itemId": null,
+    "libraryItemId": "6e45f7cbe55c8b9e567679ce7ef2224f",
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324108",
+     "source": "iptv",
+     "title": "Goldfinger",
+     "year": 1964,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/aKNFzaqQgPzsGXnsMc4kJH5hFIV.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/mM4WeXqJd2tu1gCF5GYyAZf2Npl.jpg",
+     "providerName": "PROVIDER",
+     "rating": 7.354
+    },
+    "preferIptv": true
+   },
+   {
+    "tmdbId": 660,
+    "title": "Thunderball",
+    "year": 1965,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518296",
+     "source": "iptv",
+     "title": "Thunderball",
+     "year": 1965,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/wCc4qllaTDsQN8zgGkAgQrKO6N9.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/7DLCXCQx52YLle1qTokrjROTwVV.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.668
+    }
+   },
+   {
+    "tmdbId": 667,
+    "title": "You Only Live Twice",
+    "year": 1967,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518361",
+     "source": "iptv",
+     "title": "You Only Live Twice",
+     "year": 1967,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/gIhS0VC7YzI8pj6zfS3KxsxV0dS.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cpZAXIYA0lkZMpAt7d1MmH8ojNV.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.588
+    }
+   },
+   {
+    "tmdbId": 668,
+    "title": "On Her Majesty's Secret Service",
+    "year": 1969,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518673",
+     "source": "iptv",
+     "title": "On Her Majesty's Secret Service",
+     "year": 1969,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/yVzJLLhBwuWJBR9BYEMurShu2WT.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/58pMrmwwcKamJIdjUlinE6QX1Fs.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.56
+    }
+   },
+   {
+    "tmdbId": 681,
+    "title": "Diamonds Are Forever",
+    "year": 1971,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324006",
+     "source": "iptv",
+     "title": "Diamonds Are Forever",
+     "year": 1971,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/ooDT0eKrWCxJCsn9JehPkD0QYNj.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/pyTDtQCn5sG8gi2zkM5ZylSNmtJ.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.397
+    }
+   },
+   {
+    "tmdbId": 253,
+    "title": "Live and Let Die",
+    "year": 1973,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324262",
+     "source": "iptv",
+     "title": "Live and Let Die",
+     "year": 1973,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/39qkrjqMZs6utwNmihVImC3ghas.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/hzmmXx6UeYQeylioNbliFKjSbV7.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.5
+    }
+   },
+   {
+    "tmdbId": 682,
+    "title": "The Man with the Golden Gun",
+    "year": 1974,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518231",
+     "source": "iptv",
+     "title": "The Man with the Golden Gun",
+     "year": 1974,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/xVkbKwGnBVNQ122GN5bCTMyPbWz.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/3tpNEbRahT8smy7RraaWa0xg9Gv.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.467
+    }
+   },
+   {
+    "tmdbId": 691,
+    "title": "The Spy Who Loved Me",
+    "year": 1977,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518261",
+     "source": "iptv",
+     "title": "The Spy Who Loved Me",
+     "year": 1977,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/3ZxHKFxMYvAko680DsRgAZKWcLi.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/lhPq8R8qgoyLNWvVTiqZSkYGLPX.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.822
+    }
+   },
+   {
+    "tmdbId": 698,
+    "title": "Moonraker",
+    "year": 1979,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324306",
+     "source": "iptv",
+     "title": "Moonraker",
+     "year": 1979,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/6LrJdXNmu5uHOVALZxVYd44Lva0.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/mrDC5DLx2wljt4HZGwgkmqlzfcF.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.2
+    }
+   },
+   {
+    "tmdbId": 699,
+    "title": "For Your Eyes Only",
+    "year": 1981,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324074",
+     "source": "iptv",
+     "title": "For Your Eyes Only",
+     "year": 1981,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/xV4Nnr6DjjERlqNikqDQX8LUgua.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/z7Jp7HAsY7MqXzPYzTjJnmOQk2r.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.549
+    }
+   },
+   {
+    "tmdbId": 700,
+    "title": "Octopussy",
+    "year": 1983,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518663",
+     "source": "iptv",
+     "title": "Octopussy",
+     "year": 1983,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/yoosZitM9igSk3Sd0sBXIhKlAh1.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/xTS1qCmhzH3vq7cuextO5vQA6eW.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.36
+    }
+   },
+   {
+    "tmdbId": 36670,
+    "title": "Never Say Never Again",
+    "year": 1983,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1932920",
+     "source": "iptv",
+     "title": "Never Say Never Again",
+     "year": 1983,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/zhoAL4o1STGgLbLxJ9r1ijfyHC9.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/45uCcAUB8Ljz3uKb1y1JHtT5aCT.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.084
+    }
+   },
+   {
+    "tmdbId": 707,
+    "title": "A View to a Kill",
+    "year": 1985,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1323850",
+     "source": "iptv",
+     "title": "A View to a Kill",
+     "year": 1985,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/arJF829RP9cYvh0NU70dC5TtXSa.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/hvGWyyC8wER1I8ExSXNtFBs7Mgd.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.259
+    }
+   },
+   {
+    "tmdbId": 708,
+    "title": "The Living Daylights",
+    "year": 1987,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518226",
+     "source": "iptv",
+     "title": "The Living Daylights",
+     "year": 1987,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/1oRlmWX9hewpn2B44wawBjHd7dx.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/ebaq0ecL1Tu39rIExfHwE4ToFl2.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.555
+    }
+   },
+   {
+    "tmdbId": 709,
+    "title": "Licence to Kill",
+    "year": 1989,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324258",
+     "source": "iptv",
+     "title": "Licence to Kill",
+     "year": 1989,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/8nzJve63EXA79HGAyidZwivZrQ2.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/p6VFbg5lhWj0RCgXf5dj6IDMPvt.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.436
+    }
+   },
+   {
+    "tmdbId": 710,
+    "title": "GoldenEye",
+    "year": 1995,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324107",
+     "source": "iptv",
+     "title": "GoldenEye",
+     "year": 1995,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/z0ljRnNxIO7CRBhLEO0DvLgAFPR.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/fIWsCpYR9iGDMSbMTSAzy8L7Kg5.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.902
+    }
+   },
+   {
+    "tmdbId": 714,
+    "title": "Tomorrow Never Dies",
+    "year": 1997,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518302",
+     "source": "iptv",
+     "title": "Tomorrow Never Dies",
+     "year": 1997,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/gZm002w7q9yLOkltxT76TWGfdZX.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/fesAgiKA0pc04vScDTAQe1f9nd4.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.393
+    }
+   },
+   {
+    "tmdbId": 36643,
+    "title": "The World Is Not Enough",
+    "year": 1999,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518283",
+     "source": "iptv",
+     "title": "The World Is Not Enough",
+     "year": 1999,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/wCb2msgoZPK01WIqry24M4xsM73.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/n2jVDMcBEWsLFooO7W1ZkcMUtWS.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.291
+    }
+   },
+   {
+    "tmdbId": 36669,
+    "title": "Die Another Day",
+    "year": 2002,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1324007",
+     "source": "iptv",
+     "title": "Die Another Day",
+     "year": 2002,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/bZmGqOhMhaLn8AoFMvFDct4tbrL.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/orI5mvpksYIlhJqzdmeipys6sHQ.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.001
+    }
+   },
+   {
+    "tmdbId": 36557,
+    "title": "Casino Royale",
+    "year": 2006,
+    "itemId": null,
+    "libraryItemId": "b04a20e41f1165e02fe77ee7ed5176ff",
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:1323946",
+     "source": "iptv",
+     "title": "Casino Royale",
+     "year": 2006,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/lMrxYKKhd4lqRzwUHAy5gcx9PSO.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/klJMCIblHLFwCuGjKz7tyOpekIC.jpg",
+     "providerName": "PROVIDER",
+     "rating": 7.58
+    },
+    "preferIptv": true
+   },
+   {
+    "tmdbId": 10764,
+    "title": "Quantum of Solace",
+    "year": 2008,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518389",
+     "source": "iptv",
+     "title": "Quantum of Solace",
+     "year": 2008,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/e3DXXLJHGqMx9yYpXsql1XNljmM.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/uGs5Z7dMguf7kxWubGFcp9EhKcy.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.347
+    }
+   },
+   {
+    "tmdbId": 37724,
+    "title": "Skyfall",
+    "year": 2012,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:518463",
+     "source": "iptv",
+     "title": "Skyfall",
+     "year": 2012,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/d0IVecFQvsGdSbnMAHqiYsNYaJT.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/wkA622CCN2X0uwpgqYEOnUYEDf5.jpg",
+     "providerName": "PROVIDER",
+     "rating": 7.3
+    }
+   },
+   {
+    "tmdbId": 206647,
+    "title": "Spectre",
+    "year": 2015,
+    "itemId": null,
+    "libraryItemId": "47b78154a55ca487bd46a4c174315ad7",
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:461798",
+     "source": "iptv",
+     "title": "Spectre",
+     "year": 2015,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/zj8ongFhtWNsVlfjOGo8pSr7PQg.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cCKU3EuiSKt6xsOI6gg5kiFgZYm.jpg",
+     "providerName": "PROVIDER",
+     "rating": 6.6
+    },
+    "preferIptv": true
+   },
+   {
+    "tmdbId": 370172,
+    "title": "No Time to Die",
+    "year": 2021,
+    "itemId": null,
+    "source": "iptv",
+    "iptv": {
+     "id": "11dd6d87:m:810630",
+     "source": "iptv",
+     "title": "No Time to Die",
+     "year": 2021,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/iUgygt3fscRoKWCV1d0C7FbM9TP.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/x9td0NQha0t44K2qgcMipLOGjVi.jpg",
+     "providerName": "PROVIDER",
+     "rating": 7.336
+    }
+   }
+  ],
+  "watchedCount": 2,
+  "total": 26,
+  "inLibrary": 3,
+  "artConsistent": true,
+  "itemIds": [],
+  "iptvCount": 26,
+  "preferIptv": true,
+  "iptvPreferredCount": 3
+ },
+ "iptvItems": [
+  {
+   "id": "11dd6d87:m:1324024",
+   "source": "iptv",
+   "title": "Dr. No",
+   "year": 1962,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/9zCOLJmLNst0sCPZlkW1IRoH65E.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/srgq7bzZsuDw7NoGXdazRXp7Hl6.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.986,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324083",
+   "source": "iptv",
+   "title": "From Russia with Love",
+   "year": 1963,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/zx4V17FP8oclNvOpTgs2iCCtiYk.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/8JMiQa0OqsCYvbNUrQIrMzwV7g2.jpg",
+   "providerName": "PROVIDER",
+   "rating": 7.1,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518296",
+   "source": "iptv",
+   "title": "Thunderball",
+   "year": 1965,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/wCc4qllaTDsQN8zgGkAgQrKO6N9.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/7DLCXCQx52YLle1qTokrjROTwVV.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.668,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518361",
+   "source": "iptv",
+   "title": "You Only Live Twice",
+   "year": 1967,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/gIhS0VC7YzI8pj6zfS3KxsxV0dS.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/cpZAXIYA0lkZMpAt7d1MmH8ojNV.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.588,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518673",
+   "source": "iptv",
+   "title": "On Her Majesty's Secret Service",
+   "year": 1969,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/yVzJLLhBwuWJBR9BYEMurShu2WT.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/58pMrmwwcKamJIdjUlinE6QX1Fs.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.56,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324006",
+   "source": "iptv",
+   "title": "Diamonds Are Forever",
+   "year": 1971,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/ooDT0eKrWCxJCsn9JehPkD0QYNj.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/pyTDtQCn5sG8gi2zkM5ZylSNmtJ.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.397,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324262",
+   "source": "iptv",
+   "title": "Live and Let Die",
+   "year": 1973,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/39qkrjqMZs6utwNmihVImC3ghas.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/hzmmXx6UeYQeylioNbliFKjSbV7.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.5,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518231",
+   "source": "iptv",
+   "title": "The Man with the Golden Gun",
+   "year": 1974,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/xVkbKwGnBVNQ122GN5bCTMyPbWz.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/3tpNEbRahT8smy7RraaWa0xg9Gv.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.467,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518261",
+   "source": "iptv",
+   "title": "The Spy Who Loved Me",
+   "year": 1977,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/3ZxHKFxMYvAko680DsRgAZKWcLi.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/lhPq8R8qgoyLNWvVTiqZSkYGLPX.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.822,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324306",
+   "source": "iptv",
+   "title": "Moonraker",
+   "year": 1979,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/6LrJdXNmu5uHOVALZxVYd44Lva0.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/mrDC5DLx2wljt4HZGwgkmqlzfcF.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.2,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324074",
+   "source": "iptv",
+   "title": "For Your Eyes Only",
+   "year": 1981,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/xV4Nnr6DjjERlqNikqDQX8LUgua.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/z7Jp7HAsY7MqXzPYzTjJnmOQk2r.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.549,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518663",
+   "source": "iptv",
+   "title": "Octopussy",
+   "year": 1983,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/yoosZitM9igSk3Sd0sBXIhKlAh1.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/xTS1qCmhzH3vq7cuextO5vQA6eW.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.36,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1932920",
+   "source": "iptv",
+   "title": "Never Say Never Again",
+   "year": 1983,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/zhoAL4o1STGgLbLxJ9r1ijfyHC9.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/45uCcAUB8Ljz3uKb1y1JHtT5aCT.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.084,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1323850",
+   "source": "iptv",
+   "title": "A View to a Kill",
+   "year": 1985,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/arJF829RP9cYvh0NU70dC5TtXSa.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/hvGWyyC8wER1I8ExSXNtFBs7Mgd.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.259,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518226",
+   "source": "iptv",
+   "title": "The Living Daylights",
+   "year": 1987,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/1oRlmWX9hewpn2B44wawBjHd7dx.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/ebaq0ecL1Tu39rIExfHwE4ToFl2.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.555,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324258",
+   "source": "iptv",
+   "title": "Licence to Kill",
+   "year": 1989,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/8nzJve63EXA79HGAyidZwivZrQ2.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/p6VFbg5lhWj0RCgXf5dj6IDMPvt.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.436,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324107",
+   "source": "iptv",
+   "title": "GoldenEye",
+   "year": 1995,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/z0ljRnNxIO7CRBhLEO0DvLgAFPR.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/fIWsCpYR9iGDMSbMTSAzy8L7Kg5.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.902,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518302",
+   "source": "iptv",
+   "title": "Tomorrow Never Dies",
+   "year": 1997,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/gZm002w7q9yLOkltxT76TWGfdZX.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/fesAgiKA0pc04vScDTAQe1f9nd4.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.393,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518283",
+   "source": "iptv",
+   "title": "The World Is Not Enough",
+   "year": 1999,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/wCb2msgoZPK01WIqry24M4xsM73.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/n2jVDMcBEWsLFooO7W1ZkcMUtWS.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.291,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324007",
+   "source": "iptv",
+   "title": "Die Another Day",
+   "year": 2002,
+   "quality": [
+    "4k"
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/bZmGqOhMhaLn8AoFMvFDct4tbrL.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/orI5mvpksYIlhJqzdmeipys6sHQ.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.001,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518389",
+   "source": "iptv",
+   "title": "Quantum of Solace",
+   "year": 2008,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/e3DXXLJHGqMx9yYpXsql1XNljmM.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/uGs5Z7dMguf7kxWubGFcp9EhKcy.jpg",
+   "providerName": "PROVIDER",
+   "rating": 6.347,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:518463",
+   "source": "iptv",
+   "title": "Skyfall",
+   "year": 2012,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/d0IVecFQvsGdSbnMAHqiYsNYaJT.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/wkA622CCN2X0uwpgqYEOnUYEDf5.jpg",
+   "providerName": "PROVIDER",
+   "rating": 7.3,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:810630",
+   "source": "iptv",
+   "title": "No Time to Die",
+   "year": 2021,
+   "quality": [],
+   "poster": "https://image.tmdb.org/t/p/w342/iUgygt3fscRoKWCV1d0C7FbM9TP.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/x9td0NQha0t44K2qgcMipLOGjVi.jpg",
+   "providerName": "PROVIDER",
+   "rating": 7.336,
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1324108",
+   "source": "iptv",
+   "kind": "movie",
+   "tmdbId": 658,
+   "title": "Goldfinger",
+   "year": 1964,
+   "releaseDate": "1964-09-20",
+   "quality": [
+    "4k"
+   ],
+   "languages": [
+    "en"
+   ],
+   "originalLanguage": "en",
+   "genreIds": [
+    12,
+    28,
+    53
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/aKNFzaqQgPzsGXnsMc4kJH5hFIV.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/mM4WeXqJd2tu1gCF5GYyAZf2Npl.jpg",
+   "overview": "Special agent 007 comes face to face with one of the most notorious villains of all time, and now he must outwit and outgun the powerful tycoon to prevent him from cashing in on a devious scheme to raid Fort Knox -- and obliterate the world's economy.",
+   "rating": 7.354,
+   "votes": 4148,
+   "added": 1744907891,
+   "providerId": "11dd6d87",
+   "providerName": "PROVIDER",
+   "category": "|EN| ✪ 4K Ultra",
+   "copies": 1,
+   "inLibrary": true,
+   "tech": [
+    "4K"
+   ],
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:1323946",
+   "source": "iptv",
+   "kind": "movie",
+   "tmdbId": 36557,
+   "title": "Casino Royale",
+   "year": 2006,
+   "releaseDate": "2006-11-14",
+   "quality": [
+    "4k"
+   ],
+   "languages": [
+    "en"
+   ],
+   "originalLanguage": "en",
+   "genreIds": [
+    12,
+    28,
+    53
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/lMrxYKKhd4lqRzwUHAy5gcx9PSO.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/klJMCIblHLFwCuGjKz7tyOpekIC.jpg",
+   "overview": "Le Chiffre, a banker to the world's terrorists, is scheduled to participate in a high-stakes poker game in Montenegro, where he intends to use his winnings to establish his financial grip on the terrorist market. M sends Bond—on his maiden mission as a 00 Agent—to attend this game and prevent Le Chiffre from winning. With the help of Vesper Lynd and Felix Leiter, Bond enters the most important poker game in his already dangerous career.",
+   "rating": 7.58,
+   "votes": 12162,
+   "added": 1744907874,
+   "providerId": "11dd6d87",
+   "providerName": "PROVIDER",
+   "category": "|EN| ✪ 4K Ultra",
+   "copies": 1,
+   "inLibrary": true,
+   "tech": [
+    "4K"
+   ],
+   "favourite": false,
+   "played": false
+  },
+  {
+   "id": "11dd6d87:m:461798",
+   "source": "iptv",
+   "kind": "movie",
+   "tmdbId": 206647,
+   "title": "Spectre",
+   "year": 2015,
+   "releaseDate": "2015-10-26",
+   "quality": [
+    "4k"
+   ],
+   "languages": [
+    "en"
+   ],
+   "originalLanguage": "en",
+   "genreIds": [
+    28,
+    12,
+    53
+   ],
+   "poster": "https://image.tmdb.org/t/p/w342/zj8ongFhtWNsVlfjOGo8pSr7PQg.jpg",
+   "backdrop": "https://image.tmdb.org/t/p/w780/cCKU3EuiSKt6xsOI6gg5kiFgZYm.jpg",
+   "overview": "A cryptic message from Bond’s past sends him on a trail to uncover a sinister organization. While M battles political forces to keep the secret service alive, Bond peels back the layers of deceit to reveal the terrible truth behind SPECTRE.",
+   "rating": 6.6,
+   "votes": 11595,
+   "added": 1697758951,
+   "providerId": "11dd6d87",
+   "providerName": "PROVIDER",
+   "category": "|EN| ✪ 4K Ultra",
+   "copies": 1,
+   "inLibrary": true,
+   "tech": [
+    "4K"
+   ],
+   "favourite": false,
+   "played": false
+  }
+ ],
+ "order": [
+  "11dd6d87:m:1324024",
+  "11dd6d87:m:1324083",
+  "11dd6d87:m:1324108",
+  "11dd6d87:m:518296",
+  "11dd6d87:m:518361",
+  "11dd6d87:m:518673",
+  "11dd6d87:m:1324006",
+  "11dd6d87:m:1324262",
+  "11dd6d87:m:518231",
+  "11dd6d87:m:518261",
+  "11dd6d87:m:1324306",
+  "11dd6d87:m:1324074",
+  "11dd6d87:m:518663",
+  "11dd6d87:m:1932920",
+  "11dd6d87:m:1323850",
+  "11dd6d87:m:518226",
+  "11dd6d87:m:1324258",
+  "11dd6d87:m:1324107",
+  "11dd6d87:m:518302",
+  "11dd6d87:m:518283",
+  "11dd6d87:m:1324007",
+  "11dd6d87:m:1323946",
+  "11dd6d87:m:518389",
+  "11dd6d87:m:518463",
+  "11dd6d87:m:461798",
+  "11dd6d87:m:810630"
+ ],
+ "logoStyles": {},
+ "techs": {}
+}

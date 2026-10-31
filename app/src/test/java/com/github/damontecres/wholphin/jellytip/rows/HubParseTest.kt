@@ -44,4 +44,26 @@ class HubParseTest {
         assertEquals(listOf("franchise:1"), sections[0].items.map { it.id })
         assertTrue(sections[0].items[0].poster == null)
     }
+
+    @Test
+    fun aCardWithNoLibraryTitlesOrArtStays() {
+        val json = """{"sections":[{"key":"franchises","title":"Franchises","items":[{"id":"franchise:9","title":"All IPTV","total":4,"libCount":0,"iptvCount":4}]}]}"""
+        val c = HubParse.sections(json).single().items.single()
+        assertEquals(0, c.libCount)
+        assertEquals(null, c.artItemId)
+    }
+
+    /** James Bond is IPTV-preferred: 0 library ids, 26 IPTV titles; the collection page must still have every one, in order. */
+    @Test
+    fun bondIsAnAllIptvCollection() {
+        val body = requireNotNull(javaClass.classLoader?.getResource("collection_bond_ricki.json")).readText()
+        val row = requireNotNull(JellytipRowsParser.row(org.json.JSONObject(body)))
+        assertEquals("franchise:645", row.id)
+        assertTrue(row.itemIds.isEmpty())
+        assertEquals(26, row.iptvItems.size)
+        val tiles =
+            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered(row.order, emptyList(), row.iptvItems, { "lib" }, { it.title })
+        assertEquals(26, tiles.size)
+        assertEquals("Dr. No", tiles.first())
+    }
 }
