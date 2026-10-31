@@ -27,6 +27,8 @@ data class MatchScore(
 data class IptvMatch(
     val id: String,
     val league: String?,
+    /** Machine league key ("nfl", "nba"…; plan "fantasy, round 2"). */
+    val leagueKey: String? = null,
     val home: MatchTeam?,
     val away: MatchTeam?,
     /** Epoch s; null = unknown. */
@@ -116,6 +118,7 @@ object MatchParse {
         return IptvMatch(
             id = id,
             league = o.str("league"),
+            leagueKey = o.str("leagueKey"),
             home = team(o.optJSONObject("home"), resolve),
             away = team(o.optJSONObject("away"), resolve),
             startsAt = IptvParse.isoSeconds(o.str("startsAt")),

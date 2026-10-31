@@ -42,6 +42,8 @@ data class MePrefs(
     val sportSpoilers: Boolean = false,
     /** `sport.flipAlerts` (plan "Favourite-flip toast"): the market-flip toast while watching. Default on. */
     val sportFlipAlerts: Boolean = true,
+    /** `fantasy.alerts` (plan "Fantasy live scoring"): scoring toasts while watching. Default on. */
+    val fantasyAlerts: Boolean = true,
 )
 
 data class SportMuted(
@@ -109,6 +111,7 @@ object MeParse {
                 } ?: SportMuted(),
             sportSpoilers = o.optJSONObject("sport")?.optBoolean("spoilers", false) == true,
             sportFlipAlerts = o.optJSONObject("sport")?.optBoolean("flipAlerts", true) != false,
+            fantasyAlerts = o.optJSONObject("fantasy")?.optBoolean("alerts", true) != false,
         )
     }
 

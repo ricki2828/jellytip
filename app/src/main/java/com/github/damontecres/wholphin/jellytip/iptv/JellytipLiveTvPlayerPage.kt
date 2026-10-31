@@ -75,6 +75,7 @@ private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
 private const val STALL_MS = 10_000L
 private const val FLIP_POLL_MS = 30_000L
+private const val FANTASY_POLL_MS = 60_000L
 private const val FLIP_TOAST_MS = 6_000L
 private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
@@ -240,9 +241,47 @@ fun JellytipLiveTvPlayerPage(
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
     androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
+    // Top-right toast shared by market flips and fantasy scoring
+    var flipToast by remember { mutableStateOf<String?>(null) }
+    // Fantasy (plan "Fantasy live scoring for NFL"): while an NFL match plays (not a replay), /v1/fantasy/live every
+    // 60 s feeds the panel's Fantasy tab, the banner chip and scoring toasts; nothing without a linked account
+    val fantasy by JellytipFantasy.live.collectAsState()
+    val nflMatch = nowNext?.now?.match?.takeIf { current.isLive && isNfl(it) && !spoilerNotice }
+    LaunchedEffect(nflMatch?.id) {
+        if (nflMatch == null) return@LaunchedEffect
+        while (true) {
+            JellytipFantasy.refresh(FANTASY_POLL_MS - 5_000)
+            delay(FANTASY_POLL_MS)
+        }
+    }
+    val panelTabs = if (nflMatch != null && fantasy != null) LIVE_TABS + "Fantasy" else LIVE_TABS
+    LaunchedEffect(panelTabs.size) { if (panelTab >= panelTabs.size) panelTab = 0 }
+    // Scoring events: toasts like the flip one (fantasy.alerts); events already there when watching starts are skipped
+    val seenEvents = remember { HashSet<String>() }
+    val eventsPrimed = remember { booleanArrayOf(false) }
+    LaunchedEffect(fantasy, nflMatch?.id) {
+        val f = fantasy ?: return@LaunchedEffect
+        val fresh = f.events.filter { seenEvents.add("${it.at}|${it.league}|${it.name}") }
+        if (!eventsPrimed[0]) {
+            eventsPrimed[0] = true
+            return@LaunchedEffect
+        }
+        if (nflMatch == null || me?.fantasyAlerts == false) return@LaunchedEffect
+        fresh.lastOrNull()?.let { e ->
+            val league = f.leagues.firstOrNull { it.name == e.league || it.id == e.league }
+            val sign = if (e.delta >= 0) "+" else ""
+            val who = if (e.side == "opp") "Opp " else ""
+            val lead =
+                league?.let { l ->
+                    val mine = l.mePoints ?: 0.0
+                    val theirs = l.oppPoints ?: 0.0
+                    " · " + (if (mine >= theirs) "you lead " else "you trail ") + l.scoreLine
+                }.orEmpty()
+            flipToast = "🏈  $who$sign${pts(e.delta)} ${e.name}" + (e.league?.let { " ($it)" } ?: "") + lead
+        }
+    }
     // Favourite-flip toast (plan "Favourite-flip toast"): while watching a live key match (not a replay), /live is
     // polled every 30 s, panel open or not; a new market.flip.at shows a top-right toast for 6 s. sport.flipAlerts.
-    var flipToast by remember { mutableStateOf<String?>(null) }
     val flipMatch = panelMatch?.takeIf { !spoilerNotice && me?.sportFlipAlerts != false }
     LaunchedEffect(flipMatch?.id) {
         val m = flipMatch ?: return@LaunchedEffect
@@ -295,11 +334,11 @@ fun JellytipLiveTvPlayerPage(
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionUp -> {
-                            panelTab = (panelTab - 1 + LIVE_TABS.size) % LIVE_TABS.size
+                            panelTab = (panelTab - 1 + panelTabs.size) % panelTabs.size
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionDown -> {
-                            panelTab = (panelTab + 1) % LIVE_TABS.size
+                            panelTab = (panelTab + 1) % panelTabs.size
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionRight -> return@onPreviewKeyEvent true
@@ -416,6 +455,8 @@ fun JellytipLiveTvPlayerPage(
                 pm,
                 tab = panelTab,
                 spoilerNotice = spoilerNotice,
+                tabs = panelTabs,
+                fantasy = fantasy,
                 onRouteMissing = { panelOpen = false },
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
                 progress = panelProgress,
@@ -553,6 +594,22 @@ fun JellytipLiveTvPlayerPage(
                         ).joinToString("   ·   ").ifEmpty { null }
                     }
                 }
+            // Fantasy chip "🏈 CCP 87.4 – 79.2" (the league with starters in this game, else the first)
+            JellytipFantasy.leagueFor(fantasy, nflMatch?.id)?.takeIf { nflMatch != null }?.let { l ->
+                Text(
+                    "🏈  ${l.short} ${l.scoreLine}",
+                    color = Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(top = 32.dp, start = 48.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
             hint?.let {
                 Text(
                     it,

@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -139,6 +141,11 @@ fun OnNowCard(
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     QualityChips(o.channel.quality)
+                    // NFL games with your fantasy starters (plan "Fantasy live scoring for NFL")
+                    if (isNfl(o.match)) {
+                        val fantasy by JellytipFantasy.live.collectAsState()
+                        FantasyPill(JellytipFantasy.myStartersIn(fantasy, o.match?.id))
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(o.displayTitle, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -256,6 +263,10 @@ fun JellytipLiveSportRow(
     var menu by remember { mutableStateOf<IptvOnNow?>(null) }
     val muted = rememberSportMuted()
     val shown = remember(items, muted) { items.filterNot { muted.mutes(it.league, it.sportName) } }
+    // Fantasy pills on NFL tiles: refreshed at most every 5 min while the row shows
+    LaunchedEffect(shown.any { isNfl(it.match) }) {
+        if (shown.any { isNfl(it.match) }) JellytipFantasy.refresh(5 * 60_000L)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Live sport on now")
         LazyRow(

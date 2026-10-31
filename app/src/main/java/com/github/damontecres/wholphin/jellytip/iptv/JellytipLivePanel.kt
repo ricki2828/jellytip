@@ -176,6 +176,9 @@ fun JellytipLivePanel(
     match: IptvMatch,
     tab: Int,
     spoilerNotice: Boolean,
+    /** The rail's tabs: [LIVE_TABS], plus "Fantasy" for NFL with a linked account. */
+    tabs: List<String> = LIVE_TABS,
+    fantasy: FantasyLive? = null,
     onRouteMissing: () -> Unit,
     modifier: Modifier = Modifier,
     /** 0 = off screen to the right, 1 = in place (the player animates it; plan "Panel motion"). */
@@ -217,7 +220,7 @@ fun JellytipLivePanel(
     ) {
         // Tab rail (Up/Down)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(64.dp)) {
-            LIVE_TABS.forEachIndexed { i, t ->
+            tabs.forEachIndexed { i, t ->
                 Text(
                     t,
                     color = if (i == tab) Color.Black else JellytipPalette.Vanilla.copy(alpha = 0.8f),
@@ -238,6 +241,7 @@ fun JellytipLivePanel(
             val d = data
             when {
                 spoilerNotice -> Note("Live stats would spoil this recording. Turn on spoilers in Settings to see them.")
+                tabs.getOrNull(tab) == "Fantasy" && fantasy != null -> FantasyTab(fantasy, match.id)
                 d == null -> Note("Loading live data…")
                 else -> {
                     if (d.scoreHome != null && d.scoreAway != null) {
