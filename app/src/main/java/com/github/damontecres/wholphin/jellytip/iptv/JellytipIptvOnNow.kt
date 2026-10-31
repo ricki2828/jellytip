@@ -126,7 +126,8 @@ fun OnNowCard(
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // Pre-game (plan "Pre-game state") is neutral, not LIVE; old server (no kind): every card is LIVE, as before
-                    if (o.isPre(now)) PreGamePill() else KindPill(o.kind, legacyLive = true)
+                    // matchInfo.replay: the airing is a replay of that game, never LIVE
+                    if (o.isPre(now)) PreGamePill() else KindPill(if (o.match?.replay == true) "replay" else o.kind, legacyLive = true)
                     if (o.sport) SportMark(androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.8f), 11.dp)
                     Text(
                         text =

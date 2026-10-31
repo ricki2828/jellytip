@@ -182,7 +182,7 @@ private fun SearchLiveCard(
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
-                        o.kind == "replay" -> KindPill("replay")
+                        o.kind == "replay" || o.match?.replay == true -> KindPill("replay")
                         o.isPre(now) -> PreGamePill()
                         now in o.start until o.stop -> KindPill("live")
                         else -> TimePill(whenLabel(o.startsAt ?: o.start))

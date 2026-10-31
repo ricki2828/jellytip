@@ -260,7 +260,8 @@ fun JellytipLiveTvPlayerPage(
     // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
     var panelMenu by remember { mutableStateOf(false) }
     var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
-    val panelMatch = nowNext?.liveMatch?.takeIf { current.isLive && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
+    // A replayed game (matchInfo.replay) gets no live panel, chip, fantasy or alerts
+    val panelMatch = nowNext?.liveMatch?.takeIf { current.isLive && !it.replay && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
@@ -286,7 +287,7 @@ fun JellytipLiveTvPlayerPage(
     // Fantasy (plan "Fantasy live scoring for NFL"): while an NFL match plays (not a replay), /v1/fantasy/live every
     // 60 s feeds the panel's Fantasy tab, the banner chip and scoring toasts; nothing without a linked account
     val fantasy by JellytipFantasy.live.collectAsState()
-    val nflMatch = nowNext?.liveMatch?.takeIf { current.isLive && isNfl(it) && !spoilerNotice }
+    val nflMatch = nowNext?.liveMatch?.takeIf { current.isLive && !it.replay && isNfl(it) && !spoilerNotice }
     LaunchedEffect(nflMatch?.id) {
         if (nflMatch == null) return@LaunchedEffect
         while (true) {

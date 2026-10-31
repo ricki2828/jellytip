@@ -49,6 +49,11 @@ data class IptvMatch(
     val kind: String? = null,
     /** "Mexico City GP · Race", "Zozo Championship · Round 3" (events). */
     val title: String? = null,
+    /**
+     * The airing is a replay of this (earlier) game (search-api: a "College Football" slot with no live game on that
+     * network is matched to the last one); no live chips, panel or alerts for it.
+     */
+    val replay: Boolean = false,
 ) {
     /** F1 / golf events and whip-around programmes (RedZone, kind "multi") have no home/away: the title is the hero. */
     val isEvent get() = kind == "event" || kind == "multi"
@@ -151,6 +156,7 @@ object MatchParse {
             score = sc,
             kind = o.str("kind"),
             title = o.str("title"),
+            replay = o.optBoolean("replay", false),
         )
     }
 
