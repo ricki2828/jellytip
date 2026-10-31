@@ -38,15 +38,15 @@ window.addEventListener("jellytip-session", () => {
 
 export const fantasyMissing = () => unavailable;
 
-/** My and the opponent's starters in one NFL game, per league; [] when none. */
-export async function fantasyGame(gameId: string): Promise<{ league: string; starters: Starter[] }[]> {
-  const a = await companionCall("GET", `v1/fantasy/game/${encodeURIComponent(gameId)}`);
+/** My and the opponent's starters in one NFL game, per league; [] when none. `matchId` is the matchInfo.id, used as is. */
+export async function fantasyGame(matchId: string): Promise<{ id: string; league: string; starters: Starter[] }[]> {
+  const a = await companionCall("GET", `v1/fantasy/game/${encodeURIComponent(matchId)}`);
   if (a.status !== 200 || !a.data || typeof a.data !== "object") return [];
   const leagues = (a.data as { leagues?: unknown }).leagues;
   return (Array.isArray(leagues) ? leagues : []).flatMap((x) => {
     const o = x as { name?: unknown; id?: unknown; starters?: unknown };
     const starters = parseStarters(o?.starters);
-    return starters.length ? [{ league: typeof o.name === "string" ? o.name : String(o.id ?? ""), starters }] : [];
+    return starters.length ? [{ id: String(o.id ?? ""), league: typeof o.name === "string" ? o.name : String(o.id ?? ""), starters }] : [];
   });
 }
 

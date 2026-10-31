@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { fantasyGame, fantasyLive, useFantasy } from "../api/fantasy";
 import { matchDetailCached } from "../api/matchInfo";
 import { usePrefs } from "../api/me";
-import { chipText, eventText, gameIdOf, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
+import { chipText, eventText, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
 import type { Fixture } from "../lib/matchInfo";
 import "../screens/iptv/iptv.css";
 
@@ -104,10 +104,10 @@ function StarterRow({ s }: { s: Starter }) {
 
 /** The drawer's Fantasy tab: each league's matchup score, then my and my opponents' players in the game being watched. */
 export function FantasyTab({ live, fixtureId }: { live: FantasyLive; fixtureId: string }) {
-  const [game, setGame] = useState<{ league: string; starters: Starter[] }[] | null>(null);
+  const [game, setGame] = useState<{ id: string; league: string; starters: Starter[] }[] | null>(null);
   useEffect(() => {
     let alive = true;
-    void fantasyGame(gameIdOf(fixtureId)).then((g) => alive && setGame(g));
+    void fantasyGame(fixtureId).then((g) => alive && setGame(g));
     return () => {
       alive = false;
     };
@@ -115,7 +115,7 @@ export function FantasyTab({ live, fixtureId }: { live: FantasyLive; fixtureId: 
   return (
     <>
       {live.leagues.map((l) => {
-        const here = game?.find((g) => g.league === l.name)?.starters ?? l.starters.filter((s) => s.gameId === gameIdOf(fixtureId));
+        const here = game?.find((g) => g.id === l.id)?.starters ?? l.starters.filter((s) => s.matchId === fixtureId);
         return (
           <section key={l.id}>
             <h4>{l.name}</h4>

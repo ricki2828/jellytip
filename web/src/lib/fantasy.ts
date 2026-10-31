@@ -1,6 +1,6 @@
 // Fantasy live scoring for NFL (plan: ~/ai/plans/jellytip-live-sport.md "Fantasy live scoring for NFL"). Sleeper first.
 // GET /v1/fantasy/live → {week, leagues:[{id, name, me:{team, points, projected?}, opp:{team, points}, starters:[{side, name, pos, nflTeam,
-// points, gameId?, gameState}]}], events:[{at, league, name, delta, side}], updatedAt}. Pure; tested in web/test/iptv.test.ts.
+// points, matchId, gameState}]}], events:[{at, league, name, delta, side}], updatedAt}. Pure; tested in web/test/iptv.test.ts.
 
 export interface Starter {
   side: "me" | "opp";
@@ -8,7 +8,8 @@ export interface Starter {
   pos: string | null;
   nflTeam: string | null;
   points: number;
-  gameId: string | null;
+  /** The matchInfo.id of this player's NFL game (null when unknown): compare it with a match's id directly. */
+  matchId: string | null;
   gameState: "pre" | "in" | "post" | null;
 }
 
@@ -52,7 +53,7 @@ export function parseStarters(raw: unknown): Starter[] {
         pos: str(o.pos),
         nflTeam: str(o.nflTeam),
         points: num(o.points) ?? 0,
-        gameId: str(o.gameId),
+        matchId: str(o.matchId),
         gameState: o.gameState === "pre" || o.gameState === "in" || o.gameState === "post" ? o.gameState : null,
       } as Starter,
     ];
@@ -112,14 +113,10 @@ export function eventText(e: FantasyEvent, live: FantasyLive): string {
   return `${head} · ${state} ${pts(Math.max(l.me.points, l.opp.points))} – ${pts(Math.min(l.me.points, l.opp.points))}`;
 }
 
-/** The ESPN game id inside a fixture id ("nfl:401772" → "401772"). */
-export const gameIdOf = (fixtureId: string) => fixtureId.match(/(\d{5,})\s*$/)?.[1] ?? fixtureId;
-
 /** My starters playing in this game across leagues (the "3 of yours" pill). */
-export function mineInGame(live: FantasyLive | null, fixtureId: string | null | undefined): number {
-  if (!live || !fixtureId) return 0;
-  const g = gameIdOf(fixtureId);
-  return live.leagues.reduce((n, l) => n + l.starters.filter((s) => s.side === "me" && s.gameId != null && (s.gameId === g || s.gameId === fixtureId)).length, 0);
+export function mineInGame(live: FantasyLive | null, matchId: string | null | undefined): number {
+  if (!live || !matchId) return 0;
+  return live.leagues.reduce((n, l) => n + l.starters.filter((s) => s.side === "me" && s.matchId === matchId).length, 0);
 }
 
 export const isNfl = (league: string | null | undefined, fixtureId?: string | null) => /\bnfl\b/i.test(league ?? "") || /^nfl\b/i.test(fixtureId ?? "");

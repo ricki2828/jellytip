@@ -491,7 +491,7 @@ test("market flip: parsed with the favourite, text names the new favourite", () 
   assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });
 
-import { chipText, eventText, gameIdOf, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
+import { chipText, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
 
 const FANT = {
   week: 9,
@@ -503,10 +503,10 @@ const FANT = {
       me: { team: "Ricki", points: 93.8, projected: 120 },
       opp: { team: "Opp", points: 79.2 },
       starters: [
-        { side: "me", name: "Gibbs", pos: "RB", nflTeam: "DET", points: 21.4, gameId: "401772", gameState: "in" },
-        { side: "me", name: "Goff", pos: "QB", nflTeam: "DET", points: 12, gameId: "401772", gameState: "in" },
-        { side: "opp", name: "Barkley", pos: "RB", nflTeam: "PHI", points: 9, gameId: "401772", gameState: "in" },
-        { side: "me", name: "Kelce", pos: "TE", nflTeam: "KC", points: 3, gameId: "999999", gameState: "pre" },
+        { side: "me", name: "Gibbs", pos: "RB", nflTeam: "DET", points: 21.4, matchId: "nfl:401772", gameState: "in" },
+        { side: "me", name: "Goff", pos: "QB", nflTeam: "DET", points: 12, matchId: "nfl:401772", gameState: "in" },
+        { side: "opp", name: "Barkley", pos: "RB", nflTeam: "PHI", points: 9, matchId: "nfl:401772", gameState: "in" },
+        { side: "me", name: "Kelce", pos: "TE", nflTeam: "KC", points: 3, matchId: "nfl:999999", gameState: "pre" },
       ],
     },
     { id: "L2", name: "Fantasy", me: { team: "R", points: 87.4, projected: null }, opp: { team: "O", points: 90.1 }, starters: [] },
@@ -523,7 +523,6 @@ test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   assert.equal(eventText(d.events[0], d), "🏈 +6.4 Gibbs (CCP Dynasty) · you lead 93.8 – 79.2");
   const trail = { ...d, leagues: [{ ...d.leagues[0], me: { ...d.leagues[0].me, points: 70 } }] };
   assert.match(eventText(d.events[0], trail), /you trail 79\.2 – 70\.0$/);
-  assert.equal(gameIdOf("nfl:401772"), "401772");
   assert.equal(mineInGame(d, "nfl:401772"), 2);
   assert.equal(mineInGame(d, "nfl:555555"), 0);
   assert.equal(mineInGame(null, "nfl:401772"), 0);
