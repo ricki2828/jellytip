@@ -15,6 +15,8 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
     "hls.js": "^1.7.4",
     "mpegts.js": "^1.8.2",
     "react": "^19.3.1",

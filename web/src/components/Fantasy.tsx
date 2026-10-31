@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { fantasyGame, fantasyLive, useFantasy } from "../api/fantasy";
 import { matchDetailCached } from "../api/matchInfo";
 import { usePrefs } from "../api/me";
-import { chipText, enqueue, eventText, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
+import { chipText, enqueue, eventParts, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
 import type { Fixture } from "../lib/matchInfo";
+import { BroadcastToast, type ToastData } from "./BroadcastToast";
 import "../screens/iptv/iptv.css";
 
 /** The match behind a match id (null until known, or when the server has none). */
@@ -48,8 +49,8 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const { prefs } = usePrefs({ defer: true });
   const on = active && nfl && !!prefs?.fantasy.alerts;
-  const [shown, setShown] = useState<{ text: string; side: "me" | "opp"; key: number } | null>(null);
-  const queue = useRef<{ text: string; side: "me" | "opp" }[]>([]);
+  const [shown, setShown] = useState<{ t: ToastData; key: number } | null>(null);
+  const queue = useRef<ToastData[]>([]);
   const busy = useRef(false);
   const seen = useRef<Set<string> | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -63,10 +64,10 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
       return setShown(null);
     }
     busy.current = true;
-    setShown({ ...n, key: ++keyN.current });
+    setShown({ t: n, key: ++keyN.current });
     timer.current = window.setTimeout(next, 6000);
   };
-  const push = (n: { text: string; side: "me" | "opp" }) => {
+  const push = (n: ToastData) => {
     queue.current = enqueue(queue.current, n);
     if (!busy.current) next();
   };
@@ -89,7 +90,8 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
           seen.current.add(k);
           // The first answer may carry earlier events: only a recent one is news
           if (first && now - e.at > 90) continue;
-          push({ text: eventText(e, d), side: e.side });
+          const p = eventParts(e, d);
+          push({ color: e.side === "opp" ? "#D9473D" : "#22C55E", kicker: p.kicker, text: p.text, sub: p.sub, icon: "fantasy" });
         }
         t = window.setTimeout(poll, 30_000);
       }
@@ -106,11 +108,7 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on]);
   if (!shown) return null;
-  return (
-    <div key={shown.key} className={`flip-toast fantasy ${shown.side === "opp" ? "opp" : "mine"}`} role="status">
-      {shown.text}
-    </div>
-  );
+  return <BroadcastToast t={shown.t} id={shown.key} level={1} />;
 }
 
 const pts = (n: number) => (Math.round(n * 10) / 10).toFixed(1);

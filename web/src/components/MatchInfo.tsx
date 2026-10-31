@@ -11,6 +11,9 @@ import { formTone, heroColors, matchupTitle, oddsSplit, startsIn, tint, venueLin
 import { logoSrc } from "../api/iptv";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { flashNote } from "./TasteButtons";
+import { onColor, teamColors, washBackground } from "../lib/broadcast";
+import { Odo } from "./Odo";
+import "../fonts";
 import "../screens/iptv/iptv.css";
 
 const EVENT = "jellytip-match-info";
@@ -47,42 +50,6 @@ function Crest({ s, side }: { s: Side; side: "l" | "r" }) {
   const [failed, setFailed] = useState(false);
   const src = failed ? null : artSrc(s.logo, 96);
   return src ? <img className={`mi-crest in-${side}`} src={src} alt="" onError={() => setFailed(true)} /> : <span className={`mi-crest blank in-${side}`}>{s.short ?? s.name.slice(0, 3)}</span>;
-}
-
-function Team({ s, side }: { s: Side; side: "l" | "r" }) {
-  return (
-    <div className="mi-team">
-      <Crest s={s} side={side} />
-      <strong>{s.name}</strong>
-      {s.record && <span className="mi-rec">{s.record}</span>}
-    </div>
-  );
-}
-
-/** Centre of the hero: a pulsing LIVE with the clock, the countdown for a pre-game, or FT; the score when there is one. */
-function Mid({ f, now }: { f: Fixture; now: number }) {
-  return (
-    <div className="mi-mid">
-      {f.score && (
-        <strong className="mi-big">
-          {f.score.home} – {f.score.away}
-        </strong>
-      )}
-      {f.status === "in" ? (
-        <span className="mi-live">
-          <i className="mi-pulse" aria-hidden />
-          LIVE{f.score?.clock ? ` · ${f.score.clock}` : ""}
-          {f.score?.period ? ` · ${f.score.period}` : ""}
-        </span>
-      ) : f.status === "post" ? (
-        <span className="mi-ft">FT</span>
-      ) : f.startsAt ? (
-        <span className="mi-count">{startsIn(f.startsAt, now)}</span>
-      ) : (
-        <span className="mi-v">v</span>
-      )}
-    </div>
-  );
 }
 
 const ago = (at: number | null) => (at ? new Date(at * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : null);
@@ -180,31 +147,53 @@ export function MatchInfoHost() {
   };
   return (
     <div className="livetv-sheet-back" onClick={close}>
-      <div className="livetv-sheet match-info" role="dialog" aria-label="Match info" onClick={(e) => e.stopPropagation()}>
+      <div className="livetv-sheet match-info bc" role="dialog" aria-label="Match info" style={f ? { background: washBackground(teamColors(f)) } : undefined} onClick={(e) => e.stopPropagation()}>
         <SheetClose onClose={close} />
         {state === "loading" && <p className="iptv-hint">Loading…</p>}
         {state === "missing" && <p className="iptv-hint">No more is known about this match yet.</p>}
         {state === "error" && <p className="iptv-err">Couldn't load the match.</p>}
         {f && d && (
           <>
-            <div className="mi-hero" style={{ ["--hc" as string]: heroColors(f)[0], ["--ac" as string]: heroColors(f)[1] }}>
-              {artSrc(f.venue?.image, 480) && <img className="mi-venue-img" src={artSrc(f.venue?.image, 480)!} alt="" loading="lazy" />}
-              {f.league && <span className="mi-league">{f.league}</span>}
-              <div className="mi-head">
-                <Team s={f.home} side="l" />
-                <Mid f={f} now={now} />
-                <Team s={f.away} side="r" />
-              </div>
-              {venueLine(f) && (
-                <p className="mi-venue">
-                  <svg viewBox="0 0 24 24" aria-hidden>
-                    <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
-                    <circle cx="12" cy="10" r="2.3" />
-                  </svg>
-                  {venueLine(f)}
-                </p>
-              )}
-            </div>
+            {(() => {
+              const c = teamColors(f);
+              const tag = f.status === "in" ? `LIVE${f.score?.clock ? ` · ${f.score.clock}` : ""}${f.score?.period ? ` · ${f.score.period}` : ""}` : f.status === "post" ? "FINAL" : f.startsAt ? startsIn(f.startsAt, now).toUpperCase() : "";
+              const slab = (side: "home" | "away", cls: "l" | "r") => (
+                <div className={`bc-mslab ${cls}`} style={{ ["--sc" as string]: side === "home" ? c.home : c.away, ["--sx" as string]: onColor(side === "home" ? c.home : c.away) }}>
+                  <Crest s={f[side]} side={cls} />
+                  <span className="nm">
+                    {f[side].name}
+                    {f[side].record && <small>{f[side].record}</small>}
+                  </span>
+                  <span className="sc">{f.score ? <Odo value={f.score[side]} /> : ""}</span>
+                </div>
+              );
+              return (
+                <>
+                  <div className="bc-mh">
+                    {slab("home", "l")}
+                    {slab("away", "r")}
+                    {tag && (
+                      <span className="bc-tag">
+                        {f.status === "in" && <i className="mi-pulse" aria-hidden />}
+                        {tag}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bc-sub">
+                    {f.league && <b>{f.league}</b>}
+                    {venueLine(f) && (
+                      <span className="bc-venue">
+                        <svg viewBox="0 0 24 24" aria-hidden>
+                          <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
+                          <circle cx="12" cy="10" r="2.3" />
+                        </svg>
+                        {venueLine(f)}
+                      </span>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
             {!f.score && (f.status === "in" || f.status === "post") && (
               <div className="buttons">
                 <button className="btn small" data-nav onClick={() => void reveal()}>

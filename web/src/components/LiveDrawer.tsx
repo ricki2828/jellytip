@@ -5,7 +5,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
 import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, type Block, type LiveStats, type Moment } from "../lib/liveStats";
-import { heroColors, readable, type Fixture } from "../lib/matchInfo";
+import { readable, type Fixture } from "../lib/matchInfo";
+import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
+import { Odo } from "./Odo";
+import { usePrefs } from "../api/me";
+import "../fonts";
 import { logoSrc } from "../api/iptv";
 import { FantasyTab } from "./Fantasy";
 import { useFantasy } from "../api/fantasy";
@@ -31,26 +35,6 @@ const LABEL: Record<Tab, string> = { stats: "Stats", plays: "Plays", odds: "Odds
 const CDN = /^https:\/\/(a\.espncdn\.com|[a-z0-9-]+\.thesportsdb\.com)\//i;
 const imgSrc = (u: string | null | undefined, size: 96 | 192 = 96): string | null => (u ? (CDN.test(u) ? u : /^https?:\/\//i.test(u) ? null : logoSrc(u, size)) : null);
 
-/** A number that pulses once when it changes (not on first render). */
-function Pulse({ value, children }: { value: string | number | null | undefined; children: React.ReactNode }) {
-  const first = useRef(true);
-  const prev = useRef(value);
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    if (prev.current !== value) setN((x) => x + 1);
-    prev.current = value;
-  }, [value]);
-  return (
-    <span key={n} className={n ? "ld-pulse" : undefined}>
-      {children}
-    </span>
-  );
-}
-
 /** Keys seen on earlier renders: what is not in the set is new (the first batch is never new). */
 function useNewKeys(keys: string[]): Set<string> {
   const seen = useRef<Set<string> | null>(null);
@@ -69,33 +53,49 @@ function Crest({ f, side }: { f: Fixture | null; side: "home" | "away" }) {
   return src && !failed ? <img className="ld-crest" src={src} alt="" onError={() => setFailed(true)} /> : <span className="ld-crest blank">{(s?.short ?? s?.name ?? side).slice(0, 3)}</span>;
 }
 
-/** Scoreboard strip: both teams' colours, crests, score, clock / period, a live pulse; flashes the team colour with a label on a moment. */
+/** The score shown, held back while a moment's wipe covers the strip so the swap happens underneath it. */
+function useCoveredScore(score: LiveStats["score"], flashN: number | null) {
+  const [shown, setShown] = useState(score);
+  useEffect(() => {
+    if (flashN == null) return setShown(score);
+    const t = window.setTimeout(() => setShown(score), 350);
+    return () => window.clearTimeout(t);
+  }, [score?.home, score?.away, flashN]);
+  return shown;
+}
+
+/** Scoreboard strip (Broadcast): angled team-colour slabs with crest, name and score, then a clock row; a moment wipes the scoring team's colour across it. */
 function Strip({ d, f, flash }: { d: LiveStats; f: Fixture | null; flash: { label: string; team: "home" | "away" | null; n: number } | null }) {
-  const [hc, ac] = f ? heroColors(f) : ["#3b3f46", "#2a2d33"];
+  const c = teamColors(f);
   const live = d.status === "in" || d.status === "live";
+  const score = useCoveredScore(d.score, flash?.n ?? null);
+  const mc = flash?.team === "away" ? c.away : flash?.team === "home" ? c.home : GOLD;
+  const name = (side: "home" | "away") => (f?.[side].short ?? f?.[side].name ?? (side === "home" ? "HOME" : "AWAY")).toUpperCase();
   return (
-    <div className="ld-strip" style={{ ["--hc" as string]: hc, ["--ac" as string]: ac }}>
-      {flash && <span key={flash.n} className="ld-flash" style={{ background: flash.team === "away" ? ac : flash.team === "home" ? hc : "#fff" }} />}
-      <Crest f={f} side="home" />
-      <div className="ld-mid">
-        {d.score ? (
-          <strong className="ld-big">
-            <Pulse value={d.score.home}>{d.score.home}</Pulse> – <Pulse value={d.score.away}>{d.score.away}</Pulse>
-          </strong>
-        ) : (
-          <strong className="ld-big">v</strong>
+    <div className="bc-stripbox">
+      <div className="bc-strip">
+        <div className="bc-slab l" style={{ ["--sc" as string]: c.home, ["--sx" as string]: onColor(c.home) }}>
+          <Crest f={f} side="home" />
+          <span className="nm">{name("home")}</span>
+          <strong className="sc">{score ? <Odo value={score.home} /> : "–"}</strong>
+        </div>
+        <div className="bc-slab r" style={{ ["--sc" as string]: c.away, ["--sx" as string]: onColor(c.away) }}>
+          <strong className="sc">{score ? <Odo value={score.away} /> : "–"}</strong>
+          <span className="nm">{name("away")}</span>
+          <Crest f={f} side="away" />
+        </div>
+        {flash && (
+          <div key={flash.n} className="bc-moment" style={{ ["--mc" as string]: mc, ["--mx" as string]: onColor(mc) }}>
+            <b>{flash.label}</b>
+            {flash.team && f && <span>{f[flash.team].name}</span>}
+          </div>
         )}
-        <span className="ld-clock">
-          {live && <i className="mi-pulse" aria-hidden />}
-          {[d.period, d.clock].filter(Boolean).join(" · ") || (live ? "LIVE" : d.status === "post" ? "FT" : "")}
-        </span>
       </div>
-      <Crest f={f} side="away" />
-      {flash && (
-        <span key={`l${flash.n}`} className="ld-moment">
-          {flash.label}
-        </span>
-      )}
+      <div className="bc-clock">
+        {d.period && <span className="q">{d.period}</span>}
+        {live && <i className="mi-pulse" aria-hidden />}
+        <span>{d.clock ?? (live ? "LIVE" : d.status === "post" ? "FT" : "")}</span>
+      </div>
     </div>
   );
 }
@@ -119,12 +119,12 @@ const StatRow = memo(function StatRow({ label, home, away, hc, ac }: { label: st
   );
 });
 
-const LeaderCard = memo(function LeaderCard({ name, team, line, headshot }: { name: string; team: string | null; line: string; headshot: string | null }) {
+const LeaderCard = memo(function LeaderCard({ name, team, line, headshot, color }: { name: string; team: string | null; line: string; headshot: string | null; color: string }) {
   const src = imgSrc(headshot);
   const [failed, setFailed] = useState(false);
   return (
     <li className="ld-leader">
-      {src && !failed ? <img src={src} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} /> : <span className="ld-initial">{name.slice(0, 1)}</span>}
+      {src && !failed ? <img src={src} alt="" loading="lazy" decoding="async" style={{ borderColor: color }} onError={() => setFailed(true)} /> : <span className="ld-initial" style={{ borderColor: color }}>{name.slice(0, 1)}</span>}
       <span>
         <strong>{name}</strong>
         <small>{[team, line].filter(Boolean).join(" · ")}</small>
@@ -304,25 +304,25 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
 
   const home = fixture?.home.name ?? "Home";
   const away = fixture?.away.name ?? "Away";
-  const [hc0, ac0] = fixture ? heroColors(fixture) : ["#3b8dff", "#ff7a3b"];
-  // Bars and names sit on the dark panel: a dark team colour is lightened there (the strip keeps the real colours)
-  const [hc, ac] = [readable(hc0), readable(ac0)];
+  const colors = teamColors(fixture);
+  // Bars and names sit on near-black cards: a dark team colour is lightened there (the slabs keep the real colours)
+  const [hc, ac] = [readable(colors.home), readable(colors.away)];
+  const floating = usePrefs({ defer: true }).prefs?.sport.panelStyle === "floating";
   const blocks = useMemo(() => (d ? situationBlocks(d.layout, d.situation, { home, away }) : []), [d?.layout, d?.situation, home, away]);
   const teamColor = (t: "home" | "away" | null) => (t === "away" ? ac : t === "home" ? hc : "rgba(255,255,255,0.5)");
 
   return (
-    <div className={`ld-wrap${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
-      <aside className="live-drawer" role="dialog" aria-label="Live stats">
+    <div className={`ld-wrap${floating ? " floating" : ""}${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
+      <aside className="live-drawer bc" role="dialog" aria-label="Live stats" style={{ background: washBackground(colors) }}>
         <SheetClose onClose={close} />
-        <h3>Live</h3>
         {!allowed ? (
           <p className="iptv-hint">Live stats would spoil this recording. You can turn on "Show scores (spoilers)" in Settings → Live sport.</p>
         ) : (
           <>
             {d && <Strip d={d} f={fixture} flash={flash} />}
-            <div className="ld-tabs" role="tablist" aria-label="Live panel">
+            <div className="bc-tabs" role="tablist" aria-label="Live panel">
               {tabs.map(([k]) => (
-                <button key={k} className={`ld-pill${tab === k ? " on" : ""}`} data-nav role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+                <button key={k} className={`bc-tab${tab === k ? " on" : ""}`} data-nav role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
                   <svg viewBox="0 0 24 24" aria-hidden>
                     <path d={ICON[k]} />
                   </svg>
@@ -354,7 +354,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                       {d.leaders.length > 0 && (
                         <ul className="ld-leaders">
                           {d.leaders.map((l) => (
-                            <LeaderCard key={l.name} name={l.name} team={l.team} line={l.line} headshot={l.headshot} />
+                            <LeaderCard key={l.name} name={l.name} team={l.team} line={l.line} headshot={l.headshot} color={l.team && (l.team === fixture?.home.short || l.team === fixture?.home.name) ? hc : l.team && (l.team === fixture?.away.short || l.team === fixture?.away.name) ? ac : GOLD} />
                           ))}
                         </ul>
                       )}
@@ -378,10 +378,10 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                         <div className="ld-card">
                           <div className="ld-oddsnum">
                             <b style={{ color: hc }}>
-                              {home} <Pulse value={pct(d.market.home)}>{pct(d.market.home)}</Pulse>
+                              {home} <Odo value={pct(d.market.home)} />
                             </b>
                             <b style={{ color: ac }}>
-                              <Pulse value={pct(d.market.away)}>{pct(d.market.away)}</Pulse> {away}
+                              <Odo value={pct(d.market.away)} /> {away}
                             </b>
                           </div>
                           <div className="ld-split big" aria-hidden>

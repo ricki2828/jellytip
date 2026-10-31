@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true, panelStyle: "docked" });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -698,4 +698,28 @@ test("readable team colours on the dark panel", () => {
   assert.equal(readable("#0e2240") !== "#0e2240", true);
   assert.equal(readable("#e56020"), "#e56020");
   assert.equal(readable("nope"), "nope");
+});
+
+import { blend, deltaE, onColor, teamColors, washBackground } from "../src/lib/broadcast.ts";
+
+test("broadcast look: clash rule, contrast text, wash", () => {
+  assert.equal(deltaE("#e31837", "#e31837"), 0);
+  assert.ok(deltaE("#e31837", "#e8203c") < 20);
+  assert.ok(deltaE("#e31837", "#00338d") > 40);
+  assert.equal(onColor("#ffc72c"), "#000000");
+  assert.equal(onColor("#0b0b0b"), "#ffffff");
+  assert.equal(onColor("#1a4fbf"), "#ffffff");
+  assert.equal(onColor("#f58426"), "#000000");
+  // away uses its alt colour when the primaries are close
+  const f = parseFixture({ ...FIX, home: { name: "A", color: "e31837" }, away: { name: "B", color: "e8203c", altColor: "00338d" } })!;
+  assert.deepEqual(teamColors(f), { home: "#e31837", away: "#00338d", known: true });
+  const g = parseFixture({ ...FIX, home: { name: "A", color: "e31837" }, away: { name: "B", color: "e8203c" } })!;
+  assert.equal(teamColors(g).away, "#e8203c");
+  const none = teamColors(parseFixture(FIX));
+  assert.equal(none.known, false);
+  assert.equal(washBackground(none), "#0D1015");
+  assert.match(washBackground(teamColors(f)), /^linear-gradient\(90deg, #[0-9a-f]{6} 0 50%, #[0-9a-f]{6} 50% 100%\)$/);
+  assert.equal(blend("#ffffff", 0, "#0D1015"), "#0d1015");
+  assert.equal(blend("#ffffff", 1), "#ffffff");
+  assert.equal(teamColors(null).known, false);
 });

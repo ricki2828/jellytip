@@ -3,7 +3,9 @@
 // the right; each `at` shows once. Off on replays and recordings, and with sport.flipAlerts off.
 import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
-import { flipText, newMoments, type LiveStats } from "../lib/liveStats";
+import { newMoments, pct, type LiveStats } from "../lib/liveStats";
+import { GOLD, teamColors } from "../lib/broadcast";
+import { BroadcastToast, type ToastData } from "./BroadcastToast";
 import "../screens/iptv/iptv.css";
 
 const EVENT = "jellytip-flip";
@@ -16,30 +18,34 @@ export const announceFlips = (matchId: string, d: LiveStats) => {
 };
 
 export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | null | undefined; active: boolean; drawerOpen: boolean }) {
-  const [text, setText] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ t: ToastData; n: number } | null>(null);
+  const nRef = useRef(0);
   const seen = useRef(new Set<number>());
   const names = useRef({ home: "Home", away: "Away" });
+  const colors = useRef({ home: GOLD, away: GOLD });
   const timer = useRef<number | undefined>(undefined);
   const seenMoment = useRef<number | null>(null);
 
-  const showText = (t: string) => {
-    setText(t);
+  const showToast = (t: ToastData) => {
+    setToast({ t, n: ++nRef.current });
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setText(null), SHOW_MS);
+    timer.current = window.setTimeout(() => setToast(null), SHOW_MS);
   };
   const show = (to: "home" | "away", prob: number, at: number) => {
     if (seen.current.has(at)) return;
     seen.current.add(at);
-    setText(flipText({ at, from: null, to, prob }, names.current));
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setText(null), SHOW_MS);
+    showToast({ color: colors.current[to], kicker: "POLYMARKET FLIP", text: `${names.current[to]} now favourites`, sub: `${pct(prob)} · Polymarket`, icon: "flip" });
   };
 
   useEffect(() => {
     if (!matchId || !active) return;
     let alive = true;
     void matchDetail(matchId).then((m) => {
-      if (alive && m && m !== "missing") names.current = { home: m.fixture.home.name, away: m.fixture.away.name };
+      if (alive && m && m !== "missing") {
+        names.current = { home: m.fixture.home.name, away: m.fixture.away.name };
+        const c = teamColors(m.fixture);
+        colors.current = c.known ? { home: c.home, away: c.away } : { home: GOLD, away: GOLD };
+      }
     });
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ matchId: string; at: number; to: "home" | "away"; prob: number }>).detail;
@@ -73,8 +79,7 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
           seenMoment.current = Math.max(seenMoment.current, latest);
           const m = fresh[fresh.length - 1];
           if (m) {
-            const who = m.team ? names.current[m.team] : null;
-            showText(`⚡ ${m.label}${who ? ` · ${who}` : ""}`);
+            showToast({ color: m.team ? colors.current[m.team] : GOLD, kicker: "MOMENT", text: m.label.toUpperCase(), sub: m.team ? names.current[m.team] : null, icon: "moment" });
           }
         }
       }
@@ -88,10 +93,5 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, active, drawerOpen]);
 
-  if (!text) return null;
-  return (
-    <div className="flip-toast" role="status">
-      {text}
-    </div>
-  );
+  return toast ? <BroadcastToast t={toast.t} id={toast.n} /> : null;
 }

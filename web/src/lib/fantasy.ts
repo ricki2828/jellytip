@@ -151,3 +151,15 @@ export function enqueue<T>(queue: T[], item: T, max = 3): T[] {
 
 /** Whether the answer has anything to show: at least one league, from either source (Sleeper or Yahoo). */
 export const hasLeagues = (d: FantasyLive | null): d is FantasyLive => !!d && d.leagues.length > 0;
+
+/** The toast's pieces: kicker "FANTASY · CCP", the big line "+6.4 Gibbs" ("Opp +7.1 Lamb"), and the sub "TD catch · you lead 93.8 – 79.2". */
+export function eventParts(e: FantasyEvent, live: FantasyLive): { kicker: string; text: string; sub: string } {
+  const l = live.leagues.find((x) => x.name === e.league || x.id === e.league);
+  const text = `${e.side === "opp" ? "Opp " : ""}${e.delta >= 0 ? "+" : ""}${pts(e.delta)} ${e.name}`;
+  let state = "";
+  if (l) {
+    const d = l.me.points - l.opp.points;
+    state = `${Math.abs(d) < 0.05 ? "tied" : d > 0 ? "you lead" : "you trail"} ${pts(l.me.points)} – ${pts(l.opp.points)}`;
+  }
+  return { kicker: `FANTASY${e.league ? ` · ${shortLeague(e.league)}` : ""}`, text, sub: [e.reason, state].filter(Boolean).join(" · ") };
+}
