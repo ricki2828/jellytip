@@ -92,6 +92,7 @@ class JellytipIptvPlayback
     constructor(
         private val service: JellytipIptvService,
         @param:ApplicationContext private val context: Context,
+        private val screensaverService: com.github.damontecres.wholphin.services.ScreensaverService,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private val _state = MutableStateFlow<IptvPlayState>(IptvPlayState.Idle)
@@ -168,8 +169,34 @@ class JellytipIptvPlayback
             )
         }
 
+        /** What was last sent to the screensaver service (null = nothing yet). */
+        private var screenKept: Boolean? = null
+
+        /**
+         * Keep the screen on (Chromecast screensaver off, and the app's own screensaver paused) while the IPTV player
+         * is meant to play: playing or buffering with play-when-ready. Ricki 31-Oct: "Chromecast screensaver comes on
+         * in live tv". A rebuffer doesn't let go (clearing the flag after a long idle would start the screensaver at
+         * once); pause, stop, end and errors do.
+         */
+        private fun updateKeepScreenOn(p: Player?) {
+            val keep = p != null && p.playWhenReady && (p.playbackState == Player.STATE_READY || p.playbackState == Player.STATE_BUFFERING)
+            if (keep == screenKept) return
+            screenKept = keep
+            JellytipTrace.player("iptv", "keep screen on: $keep")
+            screensaverService.keepScreenOn(keep)
+        }
+
         private val listener =
             object : Player.Listener {
+                override fun onEvents(
+                    player: Player,
+                    events: Player.Events,
+                ) {
+                    if (events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAYER_ERROR)) {
+                        updateKeepScreenOn(player)
+                    }
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     val t = _state.value.target ?: return
                     JellytipTrace.player("iptv", "state=$playbackState ${t.channelId}")
@@ -306,6 +333,7 @@ class JellytipIptvPlayback
                 stop()
                 clearMediaItems()
             }
+            updateKeepScreenOn(null)
         }
 
         /**
