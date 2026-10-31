@@ -82,3 +82,19 @@ export function useReminders(): { items: Reminder[] | null; available: boolean }
   }, []);
   return { items: unavailable ? null : state, available: !unavailable };
 }
+
+/** Set a reminder from just the basics (the player knows the event key, start and channel but has no upcoming item). */
+export const addReminderFor = (o: { key: string; title: string; start: number; stop: number; channelId: string; channelName: string }) =>
+  addReminder({
+    key: o.key,
+    title: o.title,
+    league: null,
+    start: o.start,
+    stop: o.stop,
+    channels: [{ id: o.channelId, name: o.channelName, num: null, logo: null, quality: null }],
+    favourite: false,
+    kind: null,
+    art: null,
+    recordable: false,
+    recordingId: null,
+  });

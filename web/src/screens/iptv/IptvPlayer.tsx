@@ -4,7 +4,7 @@
 // down at once (the provider may allow a single connection).
 import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
-import { addReminder, removeReminder, useReminders } from "../../api/reminderStore";
+import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -381,19 +381,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     const err =
       remId != null
         ? await removeReminder(remId)
-        : await addReminder({
-            key: extras.eventKey,
-            title,
-            league: null,
-            start: startsAt,
-            stop: startsAt + 3 * 3600,
-            channels: [{ id: target.channel, name: title, num: null, logo: null, quality: null }],
-            favourite: false,
-            kind: null,
-            art: null,
-            recordable: false,
-            recordingId: null,
-          });
+        : await addReminderFor({ key: extras.eventKey, title, start: startsAt, stop: startsAt + 3 * 3600, channelId: target.channel, channelName: title });
     setRemBusy(false);
     flashNote(err ?? (remId != null ? "Reminder removed" : "We'll remind you before it starts"));
   };
@@ -711,6 +699,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);
+  const switchTo = useRef<string | null>(null);
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
 
@@ -743,6 +732,14 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
             }
           })().catch(() => NativePlayer.provideUrl({ requestId: e.requestId, error: "unreachable" }).catch(() => undefined));
         }),
+        // Pre-game card buttons: Remind me sets the reminder here; Other channels asks to reopen on the pick when the player closes
+        await NativePlayer.addListener("pregameAction", (e) => {
+          if (e.action === "remind" && extras?.eventKey && extras.startsAt) {
+            void addReminderFor({ key: extras.eventKey, title, start: extras.startsAt, stop: extras.startsAt + 3 * 3600, channelId: e.channelId ?? target.channel!, channelName: title }).then((err) =>
+              flashNote(err ?? "We'll remind you before it starts"),
+            );
+          } else if (e.action === "channel" && e.channelId) switchTo.current = e.channelId;
+        }),
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
@@ -762,6 +759,10 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
                 alternates: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })),
                 programmeStart: extras?.kickoff?.start,
                 programmeStop: extras?.kickoff?.stop,
+                // Before the real start the native overlay shows the pre-game card
+                ...(isPre(extras?.startsAt, Date.now() / 1000)
+                  ? { phase: "pre" as const, startsAt: new Date(extras!.startsAt! * 1000).toISOString(), altChannels: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })) }
+                  : {}),
               }
             : {}),
         });
@@ -772,6 +773,15 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       }
       if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000), target.episode ? target.series : undefined);
       if (!alive.current) return;
+      // "Other channels" on the pre-game card: reopen on the one picked (the rest of the event's channels, and this one, stay as alternates)
+      if (switchTo.current && target.channel) {
+        const pick = extras?.alternates?.find((x) => x.id === switchTo.current);
+        switchTo.current = null;
+        if (pick) {
+          go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey }), true);
+          return;
+        }
+      }
       if (r.reason !== "error") {
         exit();
         return;
