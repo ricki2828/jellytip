@@ -219,6 +219,17 @@ final class LiveContent {
     // ---- Per-sport context ---------------------------------------------------------------------------------------
 
     private void context(String layout, JSONObject s, LiveTeams t) {
+        // F1 / tennis / golf (plan "Live coverage round 2")
+        JSONArray standings = s.optJSONArray("standings");
+        if (standings != null && standings.length() > 0) timingTower(standings, s);
+        JSONArray sets = s.optJSONArray("sets");
+        if ((sets != null && sets.length() > 0) || s.optJSONObject("game") != null) {
+            tennisRow("home", sets, s, t);
+            tennisRow("away", sets, s, t);
+        }
+        JSONArray board = s.optJSONArray("leaderboard");
+        JSONArray favs = s.optJSONArray("favourites");
+        if ((board != null && board.length() > 0) || (favs != null && favs.length() > 0)) leaderboard(board, favs);
         // NFL: down & distance, the field with the ball, red zone, drive
         String dd = downDistance(s);
         Double fieldPos = fieldPos(s);
@@ -331,7 +342,252 @@ final class LiveContent {
         }
     }
 
-    private static final Set<String> CONSUMED = new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores"));
+    private static final Set<String> CONSUMED =
+        new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap"));
+
+    // ---- F1: the timing tower ---------------------------------------------------------------------------------------
+
+    private void timingTower(JSONArray rows, JSONObject s) {
+        for (int i = 0; i < Math.min(rows.length(), 20); i++) {
+            JSONObject r = rows.optJSONObject(i);
+            if (r == null || str(r, "driver") == null) continue;
+            String key = "f1:" + str(r, "driver");
+            F1Row h = (F1Row) holders.get(key);
+            if (h == null) {
+                h = new F1Row();
+                holders.put(key, h);
+            }
+            h.bind(r);
+            order.add(h.root);
+        }
+        JSONObject fl = s.optJSONObject("fastestLap");
+        String fast = fl != null ? ((str(fl, "driver") == null ? "" : str(fl, "driver")) + " " + (str(fl, "time") == null ? "" : str(fl, "time"))).trim() : str(s, "fastestLap");
+        if (fast != null && !fast.isEmpty()) text("f1:fastest", "Fastest lap: " + fast, 12, 0xFFC77DFF, false);
+    }
+
+    private final class F1Row {
+        final LinearLayout root = new LinearLayout(a);
+        final TextView pos = Broadcast.cond(a, "", 15, Broadcast.SECONDARY, 700);
+        final View bar = new View(a);
+        final TextView driver = Broadcast.cond(a, "", 15, Broadcast.TEXT, 700);
+        final View fastest = new View(a);
+        final TextView gap = Broadcast.cond(a, "", 13, Broadcast.BODY, 600);
+        final TextView tyre = Broadcast.cond(a, "", 11, Color.WHITE, 700);
+        final GradientDrawable tyreBg = new GradientDrawable();
+
+        F1Row() {
+            root.setOrientation(LinearLayout.HORIZONTAL);
+            root.setGravity(Gravity.CENTER_VERTICAL);
+            root.setPadding(0, dp(2), 0, dp(2));
+            pos.setGravity(Gravity.END);
+            root.addView(pos, new LinearLayout.LayoutParams(dp(22), LinearLayout.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(dp(4), dp(16));
+            blp.leftMargin = dp(6);
+            blp.rightMargin = dp(6);
+            root.addView(bar, blp);
+            root.addView(driver, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(0xFFA020F0);
+            fastest.setBackground(dot);
+            LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(dp(7), dp(7));
+            flp.rightMargin = dp(6);
+            root.addView(fastest, flp);
+            gap.setPadding(0, 0, dp(6), 0);
+            root.addView(gap);
+            tyre.setGravity(Gravity.CENTER);
+            tyreBg.setShape(GradientDrawable.OVAL);
+            tyre.setBackground(tyreBg);
+            root.addView(tyre, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        }
+
+        void bind(JSONObject r) {
+            String p = str(r, "pos") == null ? "" : str(r, "pos");
+            setText(pos, p);
+            pos.setTextColor("1".equals(p) ? Broadcast.GOLD : Broadcast.SECONDARY);
+            bar.setBackgroundColor(MatchStyle.color(str(r, "teamColor"), Broadcast.SECONDARY));
+            setText(driver, str(r, "driver"));
+            fastest.setVisibility(r.optBoolean("fastest", false) ? View.VISIBLE : View.GONE);
+            String g = "1".equals(p) ? "Leader" : str(r, "gap") != null ? str(r, "gap") : str(r, "interval");
+            setText(gap, g == null ? "" : g);
+            String ty = str(r, "tyre") == null ? null : str(r, "tyre").substring(0, 1).toUpperCase(Locale.ROOT);
+            if (ty == null) {
+                tyre.setVisibility(View.GONE);
+            } else {
+                tyre.setVisibility(View.VISIBLE);
+                setText(tyre, ty);
+                int ring = "S".equals(ty) ? 0xFFE10600 : "M".equals(ty) ? 0xFFFFD400 : "H".equals(ty) ? 0xFFFFFFFF : "I".equals(ty) ? 0xFF43B02A : "W".equals(ty) ? 0xFF0067AD : Broadcast.LOSS;
+                tyreBg.setColor(ring);
+                tyre.setTextColor("M".equals(ty) || "H".equals(ty) ? Broadcast.INK : Color.WHITE);
+            }
+        }
+    }
+
+    // ---- Tennis: the set grid -------------------------------------------------------------------------------------
+
+    private void tennisRow(String side, JSONArray sets, JSONObject s, LiveTeams t) {
+        String key = "tn:" + side;
+        TennisRow h = (TennisRow) holders.get(key);
+        if (h == null) {
+            h = new TennisRow();
+            holders.put(key, h);
+        }
+        h.bind(side, sets, s, t);
+        order.add(h.root);
+    }
+
+    private final class TennisRow {
+        final LinearLayout root = new LinearLayout(a);
+        final View serve = new View(a);
+        final GradientDrawable serveBg = new GradientDrawable();
+        final TextView name = Broadcast.cond(a, "", 15, Broadcast.TEXT, 700);
+        final TextView[] setViews = new TextView[5];
+        final TextView game = Broadcast.cond(a, "", 15, Broadcast.INK, 700);
+
+        TennisRow() {
+            root.setOrientation(LinearLayout.HORIZONTAL);
+            root.setGravity(Gravity.CENTER_VERTICAL);
+            root.setPadding(0, dp(3), 0, dp(3));
+            serveBg.setShape(GradientDrawable.OVAL);
+            serve.setBackground(serveBg);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(7), dp(7));
+            slp.rightMargin = dp(6);
+            root.addView(serve, slp);
+            root.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            for (int i = 0; i < setViews.length; i++) {
+                TextView v = Broadcast.cond(a, "", 16, Broadcast.TEXT, 700);
+                v.setGravity(Gravity.CENTER);
+                root.addView(v, new LinearLayout.LayoutParams(dp(22), LinearLayout.LayoutParams.WRAP_CONTENT));
+                setViews[i] = v;
+            }
+            game.setBackgroundColor(Broadcast.GOLD);
+            game.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(dp(30), LinearLayout.LayoutParams.WRAP_CONTENT);
+            glp.leftMargin = dp(4);
+            root.addView(game, glp);
+        }
+
+        void bind(String side, JSONArray sets, JSONObject s, LiveTeams t) {
+            boolean home = "home".equals(side);
+            serveBg.setColor(side.equals(str(s, "serving")) ? Broadcast.GOLD : 0x00000000);
+            String flag = Broadcast.flag(home ? t.homeCountry : t.awayCountry);
+            String n = home ? t.homeShort : t.awayShort;
+            setText(name, flag == null ? n : flag + " " + n);
+            for (int i = 0; i < setViews.length; i++) {
+                JSONObject st = sets == null ? null : sets.optJSONObject(i);
+                TextView v = setViews[i];
+                if (st == null) {
+                    v.setVisibility(View.GONE);
+                    continue;
+                }
+                v.setVisibility(View.VISIBLE);
+                String mine = home ? st.optString("home") : st.optString("away");
+                String theirs = home ? st.optString("away") : st.optString("home");
+                boolean won = parse(mine) > parse(theirs);
+                String tb = str(st, "tb");
+                setText(v, mine + (tb != null && !won ? tbSup(tb) : ""));
+                v.setTextColor(won ? Color.WHITE : Broadcast.SECONDARY);
+            }
+            JSONObject g = s.optJSONObject("game");
+            String gv = g == null ? null : str(g, side);
+            setText(game, gv == null ? "" : gv);
+            game.setVisibility(gv == null ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private static int parse(String v) {
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static String tbSup(String tb) {
+        StringBuilder b = new StringBuilder();
+        String sup = "\u2070\u00B9\u00B2\u00B3\u2074\u2075\u2076\u2077\u2078\u2079";
+        for (char c : tb.toCharArray()) if (c >= '0' && c <= '9') b.append(sup.charAt(c - '0'));
+        return b.toString();
+    }
+
+    // ---- Golf: the leaderboard, favourites pinned -----------------------------------------------------------------
+
+    private void leaderboard(JSONArray board, JSONArray favs) {
+        GolfRow head = (GolfRow) holders.get("golf:head");
+        if (head == null) {
+            head = new GolfRow();
+            holders.put("golf:head", head);
+        }
+        head.header();
+        order.add(head.root);
+        Set<String> pinned = new HashSet<>();
+        for (int i = 0; favs != null && i < favs.length(); i++) {
+            JSONObject r = favs.optJSONObject(i);
+            if (r == null || str(r, "player") == null) continue;
+            pinned.add(str(r, "player"));
+            golfRow("golf:fav:" + str(r, "player"), r, true);
+        }
+        int shown = 0;
+        for (int i = 0; board != null && i < board.length() && shown < 10; i++) {
+            JSONObject r = board.optJSONObject(i);
+            if (r == null || str(r, "player") == null || pinned.contains(str(r, "player"))) continue;
+            golfRow("golf:" + str(r, "player"), r, false);
+            shown++;
+        }
+    }
+
+    private void golfRow(String key, JSONObject r, boolean pinned) {
+        GolfRow h = (GolfRow) holders.get(key);
+        if (h == null) {
+            h = new GolfRow();
+            holders.put(key, h);
+        }
+        h.bind(r, pinned);
+        order.add(h.root);
+    }
+
+    private final class GolfRow {
+        final LinearLayout root = new LinearLayout(a);
+        final TextView pos = Broadcast.cond(a, "", 14, Broadcast.SECONDARY, 600);
+        final TextView player = Broadcast.body(a, "", 13, Color.WHITE, 600);
+        final TextView toPar = Broadcast.cond(a, "", 16, Color.WHITE, 700);
+        final TextView thru = Broadcast.cond(a, "", 13, Broadcast.SECONDARY, 600);
+
+        GolfRow() {
+            root.setOrientation(LinearLayout.HORIZONTAL);
+            root.setGravity(Gravity.CENTER_VERTICAL);
+            root.setPadding(0, dp(2), 0, dp(2));
+            root.addView(pos, new LinearLayout.LayoutParams(dp(30), LinearLayout.LayoutParams.WRAP_CONTENT));
+            player.setMaxLines(1);
+            player.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            root.addView(player, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            toPar.setGravity(Gravity.END);
+            root.addView(toPar, new LinearLayout.LayoutParams(dp(46), LinearLayout.LayoutParams.WRAP_CONTENT));
+            thru.setGravity(Gravity.END);
+            root.addView(thru, new LinearLayout.LayoutParams(dp(38), LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
+
+        void header() {
+            setText(pos, "Pos");
+            Broadcast.styleCond(player, 12, Broadcast.SECONDARY, 600);
+            setText(player, "Player");
+            Broadcast.styleCond(toPar, 12, Broadcast.SECONDARY, 600);
+            setText(toPar, "To par");
+            Broadcast.styleCond(thru, 12, Broadcast.SECONDARY, 600);
+            setText(thru, "Thru");
+        }
+
+        void bind(JSONObject r, boolean pinned) {
+            setText(pos, str(r, "pos") == null ? "" : str(r, "pos"));
+            String flag = Broadcast.flag(str(r, "country"));
+            setText(player, (pinned ? "\u2605 " : "") + (flag == null ? "" : flag + " ") + str(r, "player"));
+            String tp = str(r, "toPar") == null ? "" : str(r, "toPar");
+            setText(toPar, tp);
+            toPar.setTextColor(tp.startsWith("-") ? Broadcast.GOLD : Color.WHITE);
+            setText(thru, str(r, "thru") == null ? "" : str(r, "thru"));
+            root.setBackgroundColor(pinned ? 0x1FFFC72C : 0x00000000);
+        }
+    }
 
     /** One line for the situation row: "Ball on BUF 32 · RED ZONE", "Need 42 off 30", "RRR 8.4", "12-2 run". */
     static String summary(JSONObject s, boolean ddShown) {

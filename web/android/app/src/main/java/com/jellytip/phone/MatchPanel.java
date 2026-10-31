@@ -295,7 +295,7 @@ final class MatchPanel implements LiveFeed.Listener {
                     JSONObject root = new JSONObject(a.body);
                     JSONObject m = root.optJSONObject("matchInfo");
                     if (m == null) m = root.optJSONObject("match");
-                    got = m != null && m.optJSONObject("home") != null ? m : root;
+                    got = m != null && (m.optJSONObject("home") != null || "event".equals(m.optString("kind")) || m.has("title")) ? m : root;
                 } catch (org.json.JSONException ignored) {
                     // shown as unavailable
                 }
@@ -331,7 +331,7 @@ final class MatchPanel implements LiveFeed.Listener {
         JSONObject away = info.optJSONObject("away");
         LiveTeams t = teams();
         applyWash(t);
-        content.addView(header(home, away, t), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(84)));
+        content.addView(t.event ? eventHeader(t) : header(home, away, t), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(84)));
         content.addView(subBar());
 
         // Remind me / Record (the web app does both)
@@ -510,6 +510,38 @@ final class MatchPanel implements LiveFeed.Listener {
         return box;
     }
 
+    /** An event (F1, golf): the title as the hero on the series colour, the gold status tag on the right. */
+    private View eventHeader(LiveTeams t) {
+        FrameLayout box = new FrameLayout(activity);
+        LinearLayout hero = slab(true, t.homeColor);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(14), 0, dp(30), 0);
+        int on = Broadcast.on(t.homeColor);
+        TextView title = Broadcast.cond(activity, t.title != null ? t.title : t.league != null ? t.league : "Event", 24, on, 700);
+        title.setMaxLines(2);
+        hero.addView(title);
+        if (t.title != null && t.league != null) hero.addView(Broadcast.body(activity, t.league, 13, on, 600));
+        box.addView(hero, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        String status = str(info, "status");
+        String tag;
+        if ("in".equals(status)) {
+            tag = "Live";
+        } else if ("post".equals(status)) {
+            tag = "Finished";
+        } else {
+            long starts = PlayerPlugin.isoMs(str(info, "startsAt"));
+            tag = starts > 0 ? MatchStyle.countdown(starts, System.currentTimeMillis()) : "Upcoming";
+        }
+        TextView tg = Broadcast.cond(activity, tag, 12, Broadcast.INK, 700);
+        tg.setBackgroundColor(Broadcast.GOLD);
+        tg.setPadding(dp(7), dp(1), dp(7), dp(1));
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        tlp.topMargin = dp(4);
+        tlp.rightMargin = dp(10);
+        box.addView(tg, tlp);
+        return box;
+    }
+
     private LinearLayout slab(boolean left, int color) {
         LinearLayout s = new LinearLayout(activity);
         s.setOrientation(LinearLayout.HORIZONTAL);
@@ -532,6 +564,15 @@ final class MatchPanel implements LiveFeed.Listener {
 
     private View slabCrest(JSONObject t, int color) {
         String logo = t == null ? null : str(t, "logo");
+        String flag = logo == null && t != null ? Broadcast.flag(str(t, "country")) : null;
+        if (flag != null) {
+            // Tennis: the player's flag instead of a crest
+            TextView f = new TextView(activity);
+            f.setText(flag);
+            f.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 24);
+            f.setGravity(Gravity.CENTER);
+            return f;
+        }
         if (logo != null) {
             ImageView img = new ImageView(activity);
             img.setScaleType(ImageView.ScaleType.FIT_CENTER);

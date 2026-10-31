@@ -49,6 +49,14 @@ final class LiveStrip {
     private String pendingHome;
     private String pendingAway;
     private LiveTeams teams = LiveTeams.NONE;
+    private final LinearLayout slabs;
+    /** Events (F1, golf): one full-width slab in the series colour with the title instead of the two teams. */
+    private final LinearLayout eventSlab;
+    private final Broadcast.Slab eventDrawable = new Broadcast.Slab(0xFF2A303B, true);
+    private final TextView eventTitle;
+    private final TextView eventLeague;
+    /** F1 flag state (yellow, safety car, red, chequered) as a banner under the situation row. */
+    private final TextView flagBanner;
 
     LiveStrip(Activity a, String apiBase, String token) {
         this.a = a;
@@ -58,7 +66,7 @@ final class LiveStrip {
         view.setOrientation(LinearLayout.VERTICAL);
         strip = new FrameLayout(a);
         strip.setClipChildren(true);
-        LinearLayout slabs = new LinearLayout(a);
+        slabs = new LinearLayout(a);
         slabs.setOrientation(LinearLayout.HORIZONTAL);
 
         LinearLayout left = new LinearLayout(a);
@@ -93,6 +101,17 @@ final class LiveStrip {
         rlp.leftMargin = -dp(8);
         slabs.addView(right, rlp);
         strip.addView(slabs, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        eventSlab = new LinearLayout(a);
+        eventSlab.setOrientation(LinearLayout.VERTICAL);
+        eventSlab.setGravity(Gravity.CENTER_VERTICAL);
+        eventSlab.setPadding(dp(12), 0, dp(24), 0);
+        eventSlab.setBackground(eventDrawable);
+        eventTitle = Broadcast.cond(a, "", 20, 0xFFFFFFFF, 700);
+        eventLeague = Broadcast.body(a, "", 12, 0xFFFFFFFF, 600);
+        eventSlab.addView(eventTitle);
+        eventSlab.addView(eventLeague);
+        eventSlab.setVisibility(View.GONE);
+        strip.addView(eventSlab, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         // The moment band: team colour with a gold leading edge, off to the left until a moment
         band = new LinearLayout(a);
@@ -138,6 +157,14 @@ final class LiveStrip {
         sit.addView(dot, new LinearLayout.LayoutParams(dp(7), dp(7)));
         sit.addView(clock);
         view.addView(sit);
+        flagBanner = Broadcast.cond(a, "", 15, Broadcast.INK, 700);
+        flagBanner.setGravity(Gravity.CENTER);
+        flagBanner.setLetterSpacing(0.08f);
+        flagBanner.setPadding(0, dp(3), 0, dp(3));
+        flagBanner.setVisibility(View.GONE);
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        flp.topMargin = dp(6);
+        view.addView(flagBanner, flp);
         bindTeams(LiveTeams.NONE);
     }
 
@@ -157,8 +184,22 @@ final class LiveStrip {
         homeScore.setTextColor(onHome);
         awayName.setTextColor(onAway);
         awayScore.setTextColor(onAway);
-        set(homeName, t.homeShort);
-        set(awayName, t.awayShort);
+        // Tennis: a flag in front of the name when there's no crest
+        String hf = t.homeLogo == null ? Broadcast.flag(t.homeCountry) : null;
+        String af = t.awayLogo == null ? Broadcast.flag(t.awayCountry) : null;
+        set(homeName, hf == null ? t.homeShort : hf + " " + t.homeShort);
+        set(awayName, af == null ? t.awayShort : t.awayShort + " " + af);
+        slabs.setVisibility(t.event ? View.GONE : View.VISIBLE);
+        eventSlab.setVisibility(t.event ? View.VISIBLE : View.GONE);
+        if (t.event) {
+            eventDrawable.setColor(t.homeColor);
+            int on = Broadcast.on(t.homeColor);
+            eventTitle.setTextColor(on);
+            eventLeague.setTextColor(on);
+            set(eventTitle, t.title != null ? t.title : t.league != null ? t.league : "Live");
+            set(eventLeague, t.title != null && t.league != null ? t.league : "");
+            eventLeague.setVisibility(t.title != null && t.league != null ? View.VISIBLE : View.GONE);
+        }
         // The situation row sits on the wash: text picked by contrast with the blended colour
         int washLeft = t.known ? Broadcast.blend(t.homeColor, 0.22f) : Broadcast.BASE;
         int washRight = t.known ? Broadcast.blend(t.awayColor, 0.22f) : Broadcast.BASE;
@@ -189,13 +230,28 @@ final class LiveStrip {
         JSONObject s = live.optJSONObject("situation");
         String dd = s == null ? null : LiveContent.downDistance(s);
         boolean post = "post".equals(status);
-        String boxText = post ? "FT" : dd != null ? dd : period;
+        String lap = str(s, "lap");
+        String laps = str(s, "laps");
+        String round = str(s, "round");
+        String session = str(s, "session");
+        String boxText = post ? "FT" : lap != null ? "Lap " + lap + (laps == null ? "" : "/" + laps) : round != null ? "R" + round : dd != null ? dd : period;
         set(box, boxText == null ? "" : boxText);
         box.setVisibility(boxText == null ? View.GONE : View.VISIBLE);
-        String sum = LiveContent.summary(s, dd != null);
+        String sum = lap != null || round != null ? session : LiveContent.summary(s, dd != null);
         set(situation, sum == null ? "" : sum);
-        String clk = post ? "" : (dd != null && period != null ? period + " " : "") + (c == null ? "LIVE" : c);
+        String clk = post ? "" : lap != null || round != null ? "LIVE" : (dd != null && period != null ? period + " " : "") + (c == null ? "LIVE" : c);
         set(clock, clk);
+        // F1 flag banner
+        String flag = str(s, "flag");
+        if (flag == null || "green".equalsIgnoreCase(flag)) {
+            flagBanner.setVisibility(View.GONE);
+        } else {
+            String f = flag.toLowerCase(java.util.Locale.ROOT);
+            flagBanner.setText("red".equals(f) ? "Red flag" : "sc".equals(f) ? "Safety car" : "vsc".equals(f) ? "Virtual safety car" : "chequered".equals(f) ? "Chequered flag" : "yellow".equals(f) ? "Yellow flag" : f);
+            flagBanner.setBackgroundColor("red".equals(f) ? 0xFFE10600 : "chequered".equals(f) ? 0xFFFFFFFF : 0xFFFFD400);
+            flagBanner.setTextColor("red".equals(f) ? 0xFFFFFFFF : Broadcast.INK);
+            flagBanner.setVisibility(View.VISIBLE);
+        }
         dot.setVisibility(post ? View.GONE : View.VISIBLE);
     }
 
