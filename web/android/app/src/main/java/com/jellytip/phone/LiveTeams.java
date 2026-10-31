@@ -14,6 +14,13 @@ final class LiveTeams {
     final int awayColor;
     /** The server sent team colours (else neutral slabs and no wash). */
     final boolean known;
+    /** An event (F1, golf; plan "Live coverage round 2"): no home/away, [title] is the hero, colours are the series'. */
+    final boolean event;
+    final String title;
+    final String league;
+    /** Tennis: flags instead of crests (ISO 2/3 letters); null = none. */
+    final String homeCountry;
+    final String awayCountry;
 
     static final LiveTeams NONE = new LiveTeams(null);
 
@@ -26,9 +33,16 @@ final class LiveTeams {
         awayShort = s(a, "short", awayName);
         homeLogo = s(h, "logo", null);
         awayLogo = s(a, "logo", null);
-        String hc = s(h, "color", null);
-        String ac = s(a, "color", null);
-        known = hc != null || ac != null;
+        event = info != null && ("event".equals(s(info, "kind", null)) || (h == null && a == null && s(info, "title", null) != null));
+        title = s(info, "title", null);
+        league = s(info, "league", null);
+        homeCountry = s(h, "country", null);
+        awayCountry = s(a, "country", null);
+        String leagueKey = s(info, "leagueKey", null);
+        Integer series = leagueKey == null ? null : "f1".equals(leagueKey) ? Integer.valueOf(0xFFE10600) : leagueKey.startsWith("golf") ? Integer.valueOf(0xFF0B6E4F) : null;
+        String hc = event ? null : s(h, "color", null);
+        String ac = event ? null : s(a, "color", null);
+        known = event ? series != null : hc != null || ac != null;
         int home = MatchStyle.color(hc, 0xFF2A303B);
         int away = MatchStyle.color(ac, 0xFF1C212A);
         // Clash rule: primaries closer than ΔE 20 -> the away side's alt colour (or neutral)
@@ -36,8 +50,8 @@ final class LiveTeams {
             int alt = MatchStyle.color(s(a, "altColor", null), 0xFF1C212A);
             away = Broadcast.deltaE(home, alt) >= 20 ? alt : 0xFF1C212A;
         }
-        homeColor = home;
-        awayColor = away;
+        homeColor = event && series != null ? series : home;
+        awayColor = event && series != null ? series : away;
     }
 
     /** "home" / "away" -> the team colour (bars, ticks); without team colours gold v grey so splits still read. */

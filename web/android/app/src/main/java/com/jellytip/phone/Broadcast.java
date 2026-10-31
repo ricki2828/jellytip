@@ -168,6 +168,37 @@ final class Broadcast {
         return d;
     }
 
+    /** A country's flag (ISO 2 letters, or ISO / IOC 3 letters mapped to 2) as emoji; null = unknown. */
+    static String flag(String country) {
+        if (country == null) return null;
+        String c = country.trim().toUpperCase(Locale.ROOT);
+        String two = null;
+        if (c.length() == 2) {
+            two = c;
+        } else if (c.length() == 3) {
+            for (String iso : Locale.getISOCountries()) {
+                try {
+                    if (new Locale("", iso).getISO3Country().equalsIgnoreCase(c)) {
+                        two = iso;
+                        break;
+                    }
+                } catch (java.util.MissingResourceException ignored) {
+                    // no alpha-3 for it
+                }
+            }
+            if (two == null) two = IOC.get(c);
+        }
+        if (two == null || two.length() != 2 || !Character.isLetter(two.charAt(0)) || !Character.isLetter(two.charAt(1))) return null;
+        return new String(Character.toChars(0x1F1E6 + (two.charAt(0) - 'A'))) + new String(Character.toChars(0x1F1E6 + (two.charAt(1) - 'A')));
+    }
+
+    private static final java.util.Map<String, String> IOC = new java.util.HashMap<>();
+
+    static {
+        String[] pairs = {"GER", "DE", "SUI", "CH", "NED", "NL", "RSA", "ZA", "CRO", "HR", "GRE", "GR", "POR", "PT", "DEN", "DK", "BUL", "BG", "CHI", "CL", "URU", "UY", "PAR", "PY", "TPE", "TW", "INA", "ID", "MAS", "MY", "PHI", "PH", "LAT", "LV", "SLO", "SI", "ZIM", "ZW", "ENG", "GB", "SCO", "GB", "WAL", "GB", "NIR", "GB"};
+        for (int i = 0; i < pairs.length; i += 2) IOC.put(pairs[i], pairs[i + 1]);
+    }
+
     static String caps(String s) {
         return s == null ? "" : s.toUpperCase(Locale.ROOT);
     }
