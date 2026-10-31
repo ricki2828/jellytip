@@ -43,7 +43,8 @@ export interface Market {
   home: number;
   away: number;
   draw: number | null;
-  outcomes: { name: string; p: number }[];
+  /** The server sends the top 6 plus the caller's favourite drivers / golfers (flagged `favourite`). */
+  outcomes: { name: string; p: number; favourite: boolean }[];
   volume: number | null;
   updatedAt: number | null;
   series: { t: number; p: number }[];
@@ -111,10 +112,10 @@ export function parseMarket(m: Record<string, unknown> | null): Market | null {
       const o = obj(x);
       const name = str(o?.name);
       const p = prob(o?.p);
-      return o && name && p != null ? [{ name, p }] : [];
+      return o && name && p != null ? [{ name, p, favourite: o.favourite === true }] : [];
     })
     .sort((a, b) => b.p - a.p)
-    .slice(0, 6);
+    .slice(0, 12);
   const winner = m.kind === "winner" && outcomes.length > 0;
   if (!winner && (mh == null || ma == null)) return null;
   return {

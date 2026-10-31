@@ -883,11 +883,13 @@ test("RedZone channel with no guide: matchInfo on the tile makes it an on-now ca
 
 test("Polymarket winner markets: ranked outcomes, flip to a name, modal detail", () => {
   const d = parseLive({
-    market: { kind: "winner", source: "polymarket", question: "Mexico City GP winner", outcomes: [{ name: "Norris", p: 0.22 }, { name: "Verstappen", p: 0.41 }, { name: "bad", p: 5 }, { p: 0.1 }, { name: "Leclerc", p: 0.18 }, { name: "A", p: 0.05 }, { name: "B", p: 0.04 }, { name: "C", p: 0.03 }, { name: "D", p: 0.02 }], volume: 250000, flip: { at: "2026-10-31T10:00:00Z", from: "Norris", to: "Verstappen", prob: 0.41 }, series: [{ t: 1000, p: 0.3 }, { t: 1600, p: 0.41 }] },
+    market: { kind: "winner", source: "polymarket", question: "Mexico City GP winner", outcomes: [{ name: "Norris", p: 0.22 }, { name: "Verstappen", p: 0.41 }, { name: "bad", p: 5 }, { p: 0.1 }, { name: "Leclerc", p: 0.18 }, { name: "A", p: 0.05 }, { name: "B", p: 0.04 }, { name: "C", p: 0.03 }, { name: "Colapinto", p: 0.01, favourite: true }], volume: 250000, flip: { at: "2026-10-31T10:00:00Z", from: "Norris", to: "Verstappen", prob: 0.41 }, series: [{ t: 1000, p: 0.3 }, { t: 1600, p: 0.41 }] },
   })!;
   assert.equal(d.market!.kind, "winner");
-  assert.deepEqual(d.market!.outcomes.map((o) => o.name), ["Verstappen", "Norris", "Leclerc", "A", "B", "C"]);
-  assert.equal(d.market!.outcomes.length, 6);
+  // the top six plus the caller's favourites (flagged) all come through
+  assert.deepEqual(d.market!.outcomes.map((o) => o.name), ["Verstappen", "Norris", "Leclerc", "A", "B", "C", "Colapinto"]);
+  assert.equal(d.market!.outcomes[6].favourite, true);
+  assert.equal(d.market!.outcomes[0].favourite, false);
   assert.equal(d.market!.flip?.to, "Verstappen");
   assert.equal(flipText(d.market!.flip!, { home: "H", away: "A" }), "📈 Polymarket flip: Verstappen now favourites · 41%");
   assert.equal(flipText({ at: 1, from: "home", to: "away", prob: 0.54 }, { home: "Knicks", away: "76ers" }), "📈 Polymarket flip: 76ers now favourites · 54%");

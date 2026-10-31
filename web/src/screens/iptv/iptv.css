@@ -3021,3 +3021,6 @@
   height: 4px;
   max-width: calc(100% - 16px);
 }
+.wl-star {
+  color: #ffc72c;
+}

@@ -5,11 +5,14 @@ import { pct, volumeText, agoText } from "../lib/liveStats";
 import { Odo } from "./Odo";
 import "../screens/iptv/iptv.css";
 
-const Row = memo(function Row({ rank, name, p, top, color }: { rank: number; name: string; p: number; top: number; color: string }) {
+const Row = memo(function Row({ rank, name, p, top, color, star }: { rank: number; name: string; p: number; top: number; color: string; star: boolean }) {
   return (
     <li className={`wl-row${rank === 1 ? " lead" : ""}`}>
       <b className="rk">{rank}</b>
-      <span className="nm">{name}</span>
+      <span className="nm">
+        {star && <span className="wl-star" aria-label="Your favourite">★ </span>}
+        {name}
+      </span>
       <b className="pc">
         <Odo value={pct(p)} />
       </b>
@@ -25,7 +28,7 @@ export function WinnerList({ market, color, now }: { market: Market; color: stri
       {market.question && <p className="iptv-hint">{market.question}</p>}
       <ol className="wl">
         {market.outcomes.map((o, i) => (
-          <Row key={o.name} rank={i + 1} name={o.name} p={o.p} top={top} color={color} />
+          <Row key={o.name} rank={i + 1} name={o.name} p={o.p} top={top} color={color} star={o.favourite} />
         ))}
       </ol>
       <p className="iptv-hint">{[market.source === "polymarket" ? "Polymarket" : market.source, volumeText(market.volume), agoText(market.updatedAt, now)].filter(Boolean).join(" · ")}</p>
