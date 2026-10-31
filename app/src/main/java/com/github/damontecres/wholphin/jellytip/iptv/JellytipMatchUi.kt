@@ -79,6 +79,7 @@ object MatchHidden {
         id: String,
         code: Int,
         body: String?,
+        matchRoute: Boolean = false,
     ): Boolean {
         if (code == 403) {
             noIptv = true
@@ -86,7 +87,8 @@ object MatchHidden {
             return true
         }
         if (code == 200 && body != null && runCatching { org.json.JSONObject(body).optBoolean("unknown", false) }.getOrDefault(false)) {
-            unknown.add(id)
+            // A whip-around id the match route doesn't know keeps its live panel (RedZone has no single fixture)
+            if (!(matchRoute && id.startsWith("multi:"))) unknown.add(id)
             JellytipTrace.log("iptv", "match $id unknown: hidden")
             return true
         }
@@ -112,7 +114,7 @@ private suspend fun fetchMatch(
     val base = runCatching { api.companionBase() }.getOrNull() ?: IptvVodParse.imageBase
     val q = if (withScore) "?score=1" else ""
     val (code, body) = api.userCall("v1/sport/match/${java.net.URLEncoder.encode(id, "UTF-8")}$q", timeoutMs = 8_000) ?: return null
-    if (MatchHidden.note(id, code, body) || code != 200) return code to null
+    if (MatchHidden.note(id, code, body, matchRoute = true) || code != 200) return code to null
     return code to runCatching { MatchParse.detail(body) { IptvVodParse.image(base, it) } }.getOrNull()
 }
 
