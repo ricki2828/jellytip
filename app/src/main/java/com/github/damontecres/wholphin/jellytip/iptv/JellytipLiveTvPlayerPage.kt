@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -73,6 +74,8 @@ class JellytipLiveTvPlayerViewModel
 private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
 private const val STALL_MS = 10_000L
+private const val FLIP_POLL_MS = 30_000L
+private const val FLIP_TOAST_MS = 6_000L
 private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
 
@@ -231,11 +234,37 @@ fun JellytipLiveTvPlayerPage(
     var panelOpen by remember { mutableStateOf(false) }
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
+    var lastFlipText by remember { mutableStateOf<String?>(null) }
     val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
     androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
+    // Favourite-flip toast (plan "Favourite-flip toast"): while watching a live key match (not a replay), /live is
+    // polled every 30 s, panel open or not; a new market.flip.at shows a top-right toast for 6 s. sport.flipAlerts.
+    var flipToast by remember { mutableStateOf<String?>(null) }
+    val flipMatch = panelMatch?.takeIf { !spoilerNotice && me?.sportFlipAlerts != false }
+    LaunchedEffect(flipMatch?.id) {
+        val m = flipMatch ?: return@LaunchedEffect
+        var lastAt: String? = null
+        while (true) {
+            val got = fetchLive(m.id)
+            if (got?.first == 404) {
+                LivePanelRoute.missing = true
+                return@LaunchedEffect
+            }
+            val mk = got?.second?.market
+            val at = mk?.flipAt
+            if (mk != null && at != null && at != lastAt) {
+                lastAt = at
+                val team = if (mk.flipTo == "away") m.away else m.home
+                val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
+                flipToast = "📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")
+                JellytipTrace.player("iptv", "market flip ${m.id} -> ${mk.flipTo}")
+            }
+            delay(FLIP_POLL_MS)
+        }
+    }
     LaunchedEffect(preStartsAt, channel.id) {
         if (preStartsAt != null) preCardTick++
     }
@@ -390,6 +419,37 @@ fun JellytipLiveTvPlayerPage(
                 onRouteMissing = { panelOpen = false },
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
                 progress = panelProgress,
+            )
+        }
+        // Flip toast: top right, slides in from the right, 6 s, never takes focus
+        val toastText = flipToast
+        val toastIn by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (toastText != null) 1f else 0f,
+            animationSpec = androidx.compose.animation.core.tween(if (toastText != null) 260 else 200),
+            label = "flip-toast",
+        )
+        LaunchedEffect(toastText) {
+            if (toastText != null) {
+                lastFlipText = toastText
+                delay(FLIP_TOAST_MS)
+                flipToast = null
+            }
+        }
+        if (toastIn > 0f) {
+            Text(
+                (toastText ?: lastFlipText).orEmpty(),
+                color = Color.White,
+                fontFamily = JellytipFontFamily,
+                fontSize = 14.sp,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 28.dp, end = 32.dp)
+                        .graphicsLayer {
+                            translationX = (1f - toastIn) * (size.width + 32.dp.toPx())
+                            alpha = toastIn
+                        }.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
         matchModal?.let { m ->

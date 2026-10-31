@@ -62,6 +62,10 @@ data class LiveMarket(
     val draw: Double?,
     val volume: Double?,
     val updatedAt: Long?,
+    /** Favourite flip (plan "Favourite-flip toast"): when it happened (dedupe key), the new favourite (home | away), its probability. */
+    val flipAt: String? = null,
+    val flipTo: String? = null,
+    val flipProb: Double? = null,
 )
 
 data class LiveComment(
@@ -108,7 +112,19 @@ object LiveParse {
             }.orEmpty()
         val market =
             o.optJSONObject("market")?.let { m ->
-                LiveMarket(m.str("source"), m.str("question"), m.dbl("home"), m.dbl("away"), m.dbl("draw"), m.dbl("volume"), IptvParse.isoSeconds(m.str("updatedAt")))
+                val flip = m.optJSONObject("flip")
+                LiveMarket(
+                    m.str("source"),
+                    m.str("question"),
+                    m.dbl("home"),
+                    m.dbl("away"),
+                    m.dbl("draw"),
+                    m.dbl("volume"),
+                    IptvParse.isoSeconds(m.str("updatedAt")),
+                    flipAt = flip?.str("at"),
+                    flipTo = flip?.str("to"),
+                    flipProb = flip?.dbl("prob"),
+                )
             }
         val chat = o.optJSONObject("chat")
         val comments =
@@ -133,7 +149,7 @@ object LiveParse {
     }
 }
 
-private suspend fun fetchLive(id: String): Pair<Int, MatchLive?>? {
+internal suspend fun fetchLive(id: String): Pair<Int, MatchLive?>? {
     val api = JellytipApi.shared ?: return null
     val (code, body) = api.userCall("v1/sport/match/${java.net.URLEncoder.encode(id, "UTF-8")}/live", timeoutMs = 8_000) ?: return null
     if (code != 200) return code to null
@@ -443,7 +459,7 @@ private fun androidx.compose.foundation.layout.RowScope.Cell(
 @Composable
 private fun Note(text: String) = Text(text, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
 
-private fun pct(p: Double) = "${Math.round(p * 100)}%"
+internal fun pct(p: Double) = "${Math.round(p * 100)}%"
 
 private fun money(v: Double): String =
     when {

@@ -40,6 +40,8 @@ data class MePrefs(
     val sportMuted: SportMuted = SportMuted(),
     /** `sport.spoilers` (plan "Match info"): scores and live stats shown on replays too. Default off. */
     val sportSpoilers: Boolean = false,
+    /** `sport.flipAlerts` (plan "Favourite-flip toast"): the market-flip toast while watching. Default on. */
+    val sportFlipAlerts: Boolean = true,
 )
 
 data class SportMuted(
@@ -106,6 +108,7 @@ object MeParse {
                     SportMuted(strings(m.optJSONArray("sports")), strings(m.optJSONArray("leagues")), strings(m.optJSONArray("tags")))
                 } ?: SportMuted(),
             sportSpoilers = o.optJSONObject("sport")?.optBoolean("spoilers", false) == true,
+            sportFlipAlerts = o.optJSONObject("sport")?.optBoolean("flipAlerts", true) != false,
         )
     }
 
