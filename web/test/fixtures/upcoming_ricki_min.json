@@ -8,14 +8,14 @@
    "kind": "live",
    "liveConfidence": "likely",
    "channel": {
-    "id": "11dd6d87:303270",
-    "providerId": "11dd6d87",
+    "id": "pp000001:303270",
+    "providerId": "pp000001",
     "providerName": "Provider",
     "streamId": "303270",
     "num": 26032,
     "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30 50FPS",
-    "logo": "v1/iptv/img/11dd6d87:c:303270.SIG",
-    "group": "11dd6d87:548",
+    "logo": "v1/iptv/img/pp000001:c:303270.SIG",
+    "group": "pp000001:548",
     "epgId": "tntsports1.uk",
     "catchupDays": 0,
     "favourite": false,
@@ -33,10 +33,10 @@
    },
    "alternateChannels": [
     {
-     "id": "11dd6d87:309615",
+     "id": "pp000001:309615",
      "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30",
      "num": 26033,
-     "logo": "v1/iptv/img/11dd6d87:c:309615.SIG",
+     "logo": "v1/iptv/img/pp000001:c:309615.SIG",
      "quality": {
       "bucket": "fhd50",
       "height": 1080,
@@ -46,10 +46,10 @@
      }
     },
     {
-     "id": "11dd6d87:77413",
+     "id": "pp000001:77413",
      "name": "|UK|  TNT SPORT 1",
      "num": 26034,
-     "logo": "v1/iptv/img/11dd6d87:c:77413.SIG",
+     "logo": "v1/iptv/img/pp000001:c:77413.SIG",
      "quality": {
       "bucket": "hd",
       "height": 720,
@@ -115,14 +115,14 @@
    "kind": "live",
    "liveConfidence": "likely",
    "channel": {
-    "id": "11dd6d87:303257",
-    "providerId": "11dd6d87",
+    "id": "pp000001:303257",
+    "providerId": "pp000001",
     "providerName": "Provider",
     "streamId": "303257",
     "num": 26060,
     "name": "|UK| PREMIER SPORTS 2 \u1d41\u1d34\u1d30",
-    "logo": "v1/iptv/img/11dd6d87:c:303257.SIG",
-    "group": "11dd6d87:548",
+    "logo": "v1/iptv/img/pp000001:c:303257.SIG",
+    "group": "pp000001:548",
     "epgId": "premiersports2.uk",
     "catchupDays": 0,
     "favourite": false,
@@ -140,10 +140,10 @@
    },
    "alternateChannels": [
     {
-     "id": "11dd6d87:54879",
+     "id": "pp000001:54879",
      "name": "|UK| PREMIER SPORTS 2 \u1d41\u1d34\u1d30",
      "num": 26061,
-     "logo": "v1/iptv/img/11dd6d87:c:54879.SIG",
+     "logo": "v1/iptv/img/pp000001:c:54879.SIG",
      "quality": {
       "bucket": "hd",
       "height": 720,
@@ -201,14 +201,14 @@
    "kind": "live",
    "liveConfidence": "likely",
    "channel": {
-    "id": "11dd6d87:303270",
-    "providerId": "11dd6d87",
+    "id": "pp000001:303270",
+    "providerId": "pp000001",
     "providerName": "Provider",
     "streamId": "303270",
     "num": 26032,
     "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30 50FPS",
-    "logo": "v1/iptv/img/11dd6d87:c:303270.SIG",
-    "group": "11dd6d87:548",
+    "logo": "v1/iptv/img/pp000001:c:303270.SIG",
+    "group": "pp000001:548",
     "epgId": "tntsports1.uk",
     "catchupDays": 0,
     "favourite": false,
@@ -226,10 +226,10 @@
    },
    "alternateChannels": [
     {
-     "id": "11dd6d87:309615",
+     "id": "pp000001:309615",
      "name": "|UK| TNT SPORTS 1 \u1d41\u1d34\u1d30",
      "num": 26033,
-     "logo": "v1/iptv/img/11dd6d87:c:309615.SIG",
+     "logo": "v1/iptv/img/pp000001:c:309615.SIG",
      "quality": {
       "bucket": "fhd50",
       "height": 1080,
@@ -239,10 +239,10 @@
      }
     },
     {
-     "id": "11dd6d87:77413",
+     "id": "pp000001:77413",
      "name": "|UK|  TNT SPORT 1",
      "num": 26034,
-     "logo": "v1/iptv/img/11dd6d87:c:77413.SIG",
+     "logo": "v1/iptv/img/pp000001:c:77413.SIG",
      "quality": {
       "bucket": "hd",
       "height": 720,
@@ -267,14 +267,14 @@
    "kind": "live",
    "liveConfidence": "likely",
    "channel": {
-    "id": "11dd6d87:303258",
-    "providerId": "11dd6d87",
+    "id": "pp000001:303258",
+    "providerId": "pp000001",
     "providerName": "Provider",
     "streamId": "303258",
     "num": 26058,
     "name": "|UK| PREMIER SPORTS 1 \u1d41\u1d34\u1d30",
-    "logo": "v1/iptv/img/11dd6d87:c:303258.SIG",
-    "group": "11dd6d87:548",
+    "logo": "v1/iptv/img/pp000001:c:303258.SIG",
+    "group": "pp000001:548",
     "epgId": "premiersports.uk",
     "catchupDays": 0,
     "favourite": false,
@@ -292,10 +292,10 @@
    },
    "alternateChannels": [
     {
-     "id": "11dd6d87:54878",
+     "id": "pp000001:54878",
      "name": "|UK| PREMIER SPORTS 1 \u1d41\u1d34\u1d30",
      "num": 26059,
-     "logo": "v1/iptv/img/11dd6d87:c:54878.SIG",
+     "logo": "v1/iptv/img/pp000001:c:54878.SIG",
      "quality": {
       "bucket": "fhd50",
       "height": 1080,
@@ -328,14 +328,14 @@
    "kind": "live",
    "liveConfidence": "likely",
    "channel": {
-    "id": "11dd6d87:605469",
-    "providerId": "11dd6d87",
+    "id": "pp000001:605469",
+    "providerId": "pp000001",
     "providerName": "Provider",
     "streamId": "605469",
     "num": 26022,
     "name": "UK Sky Sports Tennis \u1d41\u1d34\u1d30",
-    "logo": "v1/iptv/img/11dd6d87:c:605469.SIG",
-    "group": "11dd6d87:548",
+    "logo": "v1/iptv/img/pp000001:c:605469.SIG",
+    "group": "pp000001:548",
     "epgId": "skysportstennis.uk",
     "catchupDays": 0,
     "favourite": false,
@@ -353,10 +353,10 @@
    },
    "alternateChannels": [
     {
-     "id": "11dd6d87:605472",
+     "id": "pp000001:605472",
      "name": "UK Sky Sports Tennis \u1d41\u1d34\u1d30",
      "num": 26023,
-     "logo": "v1/iptv/img/11dd6d87:c:605472.SIG",
+     "logo": "v1/iptv/img/pp000001:c:605472.SIG",
      "quality": {
       "bucket": "fhd",
       "height": 1080,
@@ -366,10 +366,10 @@
      }
     },
     {
-     "id": "11dd6d87:605470",
+     "id": "pp000001:605470",
      "name": "UK Sky Sports Tennis \u1d34\u1d30",
      "num": 26024,
-     "logo": "v1/iptv/img/11dd6d87:c:605470.SIG",
+     "logo": "v1/iptv/img/pp000001:c:605470.SIG",
      "quality": {
       "bucket": "hd",
       "height": 720,
@@ -379,10 +379,10 @@
      }
     },
     {
-     "id": "11dd6d87:605471",
+     "id": "pp000001:605471",
      "name": "UK Sky Sports Tennis \u02e2\u1d30",
      "num": 26025,
-     "logo": "v1/iptv/img/11dd6d87:c:605471.SIG",
+     "logo": "v1/iptv/img/pp000001:c:605471.SIG",
      "quality": {
       "bucket": "sd",
       "height": 576,

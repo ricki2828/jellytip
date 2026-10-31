@@ -5,14 +5,14 @@
    "phase": "live",
    "startsAt": "2026-10-31T02:00:00Z",
    "startsAtSource": "channel",
-   "id": "11dd6d87:303215",
-   "providerId": "11dd6d87",
+   "id": "pp000001:303215",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "303215",
    "num": 10565,
    "name": "Phoenix Suns vs Denver Nuggets @ Oct 30 10:00 PM :NBA  10",
-   "logo": "v1/iptv/img/11dd6d87:c:303215.SIG",
-   "group": "11dd6d87:688",
+   "logo": "v1/iptv/img/pp000001:c:303215.SIG",
+   "group": "pp000001:688",
    "epgId": null,
    "catchupDays": 0,
    "favourite": false,
@@ -106,17 +106,17 @@
    "eventGroup": {
     "key": "v:nuggets|suns",
     "alternates": [
-     "11dd6d87:276123",
-     "11dd6d87:276139",
-     "11dd6d87:1254942",
-     "11dd6d87:1254941"
+     "pp000001:276123",
+     "pp000001:276139",
+     "pp000001:1254942",
+     "pp000001:1254941"
     ],
     "alternateChannels": [
      {
-      "id": "11dd6d87:276123",
+      "id": "pp000001:276123",
       "name": "NBA | DENVER NUGGETS",
       "num": 10611,
-      "logo": "v1/iptv/img/11dd6d87:c:276123.SIG",
+      "logo": "v1/iptv/img/pp000001:c:276123.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -126,10 +126,10 @@
       }
      },
      {
-      "id": "11dd6d87:276139",
+      "id": "pp000001:276139",
       "name": "NBA | PHOENIX SUNS",
       "num": 10627,
-      "logo": "v1/iptv/img/11dd6d87:c:276139.SIG",
+      "logo": "v1/iptv/img/pp000001:c:276139.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -139,10 +139,10 @@
       }
      },
      {
-      "id": "11dd6d87:1254942",
+      "id": "pp000001:1254942",
       "name": "|US| ALTITUDE SPORTS ALTERNATE",
       "num": 9227,
-      "logo": "v1/iptv/img/11dd6d87:c:1254942.SIG",
+      "logo": "v1/iptv/img/pp000001:c:1254942.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -152,10 +152,10 @@
       }
      },
      {
-      "id": "11dd6d87:1254941",
+      "id": "pp000001:1254941",
       "name": "|US| ALTITUDE SPORTS HD",
       "num": 9226,
-      "logo": "v1/iptv/img/11dd6d87:c:1254941.SIG",
+      "logo": "v1/iptv/img/pp000001:c:1254941.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -171,14 +171,14 @@
    }
   },
   {
-   "id": "11dd6d87:579814",
-   "providerId": "11dd6d87",
+   "id": "pp000001:579814",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "579814",
    "num": 27461,
    "name": "|NZ| SKY ESPN 2 \u1d41\u1d34\u1d30",
-   "logo": "v1/iptv/img/11dd6d87:c:579814.SIG",
-   "group": "11dd6d87:1282",
+   "logo": "v1/iptv/img/pp000001:c:579814.SIG",
+   "group": "pp000001:1282",
    "epgId": "espn2.nz",
    "catchupDays": 0,
    "favourite": false,
@@ -275,14 +275,14 @@
    "league": "NCAAF"
   },
   {
-   "id": "11dd6d87:280167",
-   "providerId": "11dd6d87",
+   "id": "pp000001:280167",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "280167",
    "num": 11145,
    "name": "NCAAF 02: ESPN2",
-   "logo": "v1/iptv/img/11dd6d87:c:280167.SIG",
-   "group": "11dd6d87:792",
+   "logo": "v1/iptv/img/pp000001:c:280167.SIG",
+   "group": "pp000001:792",
    "epgId": null,
    "catchupDays": 0,
    "favourite": false,
@@ -374,15 +374,15 @@
    "eventGroup": {
     "key": "t:college football|the kent state golden flashes visit the ",
     "alternates": [
-     "11dd6d87:1236463",
-     "11dd6d87:11204"
+     "pp000001:1236463",
+     "pp000001:11204"
     ],
     "alternateChannels": [
      {
-      "id": "11dd6d87:1236463",
+      "id": "pp000001:1236463",
       "name": "|US| ESPN 2 \u1d34\u1d30",
       "num": 6870,
-      "logo": "v1/iptv/img/11dd6d87:c:1236463.SIG",
+      "logo": "v1/iptv/img/pp000001:c:1236463.SIG",
       "quality": {
        "bucket": "hd",
        "height": 720,
@@ -392,10 +392,10 @@
       }
      },
      {
-      "id": "11dd6d87:11204",
+      "id": "pp000001:11204",
       "name": "|US| ESPN 2 \u1d34\u1d30",
       "num": 9271,
-      "logo": "v1/iptv/img/11dd6d87:c:11204.SIG",
+      "logo": "v1/iptv/img/pp000001:c:11204.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -414,14 +414,14 @@
    "phase": "live",
    "startsAt": "2026-10-31T01:58:00Z",
    "startsAtSource": "channel",
-   "id": "11dd6d87:1945164",
-   "providerId": "11dd6d87",
+   "id": "pp000001:1945164",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "1945164",
    "num": 9570,
    "name": "PRIME US 038|  Lakers vs. Warriors (2026-10-31 01:58:00)",
-   "logo": "v1/iptv/img/11dd6d87:c:1945164.SIG",
-   "group": "11dd6d87:2452",
+   "logo": "v1/iptv/img/pp000001:c:1945164.SIG",
+   "group": "pp000001:2452",
    "epgId": null,
    "catchupDays": 0,
    "favourite": false,
@@ -467,17 +467,17 @@
    "eventGroup": {
     "key": "v:lakers|warriors",
     "alternates": [
-     "11dd6d87:303214",
-     "11dd6d87:276125",
-     "11dd6d87:276129",
-     "11dd6d87:276131"
+     "pp000001:303214",
+     "pp000001:276125",
+     "pp000001:276129",
+     "pp000001:276131"
     ],
     "alternateChannels": [
      {
-      "id": "11dd6d87:303214",
+      "id": "pp000001:303214",
       "name": "Golden State Warriors vs Los Angeles Lakers @ Oct 30 10:00 PM :NBA  09",
       "num": 10564,
-      "logo": "v1/iptv/img/11dd6d87:c:303214.SIG",
+      "logo": "v1/iptv/img/pp000001:c:303214.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -487,10 +487,10 @@
       }
      },
      {
-      "id": "11dd6d87:276125",
+      "id": "pp000001:276125",
       "name": "NBA | GOLDEN STATE WARRIORS",
       "num": 10614,
-      "logo": "v1/iptv/img/11dd6d87:c:276125.SIG",
+      "logo": "v1/iptv/img/pp000001:c:276125.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -500,10 +500,10 @@
       }
      },
      {
-      "id": "11dd6d87:276129",
+      "id": "pp000001:276129",
       "name": "NBA | LOS ANGELES LAKERS",
       "num": 10617,
-      "logo": "v1/iptv/img/11dd6d87:c:276129.SIG",
+      "logo": "v1/iptv/img/pp000001:c:276129.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -513,10 +513,10 @@
       }
      },
      {
-      "id": "11dd6d87:276131",
+      "id": "pp000001:276131",
       "name": "NBA | LOS ANGELES LAKERS",
       "num": 10619,
-      "logo": "v1/iptv/img/11dd6d87:c:276131.SIG",
+      "logo": "v1/iptv/img/pp000001:c:276131.SIG",
       "quality": {
        "bucket": "fhd",
        "height": 1080,
@@ -532,14 +532,14 @@
    }
   },
   {
-   "id": "11dd6d87:276115",
-   "providerId": "11dd6d87",
+   "id": "pp000001:276115",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "276115",
    "num": 10622,
    "name": "NBA |  NBA TV",
-   "logo": "v1/iptv/img/11dd6d87:c:276115.SIG",
-   "group": "11dd6d87:1266",
+   "logo": "v1/iptv/img/pp000001:c:276115.SIG",
+   "group": "pp000001:1266",
    "epgId": null,
    "catchupDays": 0,
    "favourite": false,
@@ -606,16 +606,16 @@
    "eventGroup": {
     "key": "t:the association|the association celebrates the game play",
     "alternates": [
-     "11dd6d87:1236522",
-     "11dd6d87:12355",
-     "11dd6d87:191301"
+     "pp000001:1236522",
+     "pp000001:12355",
+     "pp000001:191301"
     ],
     "alternateChannels": [
      {
-      "id": "11dd6d87:1236522",
+      "id": "pp000001:1236522",
       "name": "|US| NBA \u1d34\u1d30",
       "num": 6933,
-      "logo": "v1/iptv/img/11dd6d87:c:1236522.SIG",
+      "logo": "v1/iptv/img/pp000001:c:1236522.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -625,10 +625,10 @@
       }
      },
      {
-      "id": "11dd6d87:12355",
+      "id": "pp000001:12355",
       "name": "|US| NBA \u1d34\u1d30",
       "num": 10543,
-      "logo": "v1/iptv/img/11dd6d87:c:12355.SIG",
+      "logo": "v1/iptv/img/pp000001:c:12355.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -638,10 +638,10 @@
       }
      },
      {
-      "id": "11dd6d87:191301",
+      "id": "pp000001:191301",
       "name": "|US| NBA Network (US)",
       "num": 10544,
-      "logo": "v1/iptv/img/11dd6d87:c:191301.SIG",
+      "logo": "v1/iptv/img/pp000001:c:191301.SIG",
       "quality": {
        "bucket": "unknown",
        "height": null,
@@ -657,14 +657,14 @@
    }
   },
   {
-   "id": "11dd6d87:197185",
-   "providerId": "11dd6d87",
+   "id": "pp000001:197185",
+   "providerId": "pp000001",
    "providerName": "Provider",
    "streamId": "197185",
    "num": 38247,
    "name": "|AU|  Fox Sports 501",
-   "logo": "v1/iptv/img/11dd6d87:c:197185.SIG",
-   "group": "11dd6d87:396",
+   "logo": "v1/iptv/img/pp000001:c:197185.SIG",
+   "group": "pp000001:396",
    "epgId": null,
    "catchupDays": 0,
    "favourite": false,
