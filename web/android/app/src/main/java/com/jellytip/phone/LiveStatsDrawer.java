@@ -10,45 +10,48 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * The phone's in-event drawer in landscape (~/ai/plans/jellytip-live-sport.md, "In-event panel"): a right-hand panel
- * over the native player with Stats · Plays · Odds · Chat from the player's {@link LiveFeed} (15 s while open). It
- * slides in from the right (260 ms) and out (200 ms); the video keeps playing. A missing route (404) shows a note.
- * Portrait uses {@link MatchPanel} below the video instead.
+ * The phone's in-event drawer in landscape (~/ai/plans/jellytip-live-sport.md, "In-event panel" and "Live panel: pop,
+ * context, performance"): a right-hand panel over the native player with the team-colour scoreboard strip, pill tabs
+ * Stats · Plays · Odds · Chat and their content ({@link LiveContent}), fed by the player's {@link LiveFeed} (15 s full
+ * while open). It slides in from the right (260 ms) and out (200 ms); the video keeps playing. Views are built once
+ * and rebound on each answer. Portrait uses {@link MatchPanel} below the video instead.
  */
 final class LiveStatsDrawer implements LiveFeed.Listener {
 
     private final Activity activity;
     private final LiveFeed feed;
+    private final java.util.function.Supplier<LiveTeams> teams;
     private final FrameLayout panel;
-    private final LinearLayout content;
+    private final LiveStrip strip;
+    private final LiveContent content;
     private final TextView[] tabViews = new TextView[LiveRender.TABS.length];
     private int tab = 0;
     private boolean open;
     /** Told when the drawer opens or closes (the feed polls faster while it's open). */
     Runnable onOpenChanged;
 
-    LiveStatsDrawer(Activity activity, FrameLayout root, LiveFeed feed) {
+    LiveStatsDrawer(Activity activity, FrameLayout root, LiveFeed feed, String apiBase, String token, java.util.function.Supplier<LiveTeams> teams) {
         this.activity = activity;
         this.feed = feed;
+        this.teams = teams;
         feed.addListener(this);
 
         panel = new FrameLayout(activity);
-        panel.setBackgroundColor(0xE6101014);
+        panel.setBackgroundColor(0xE60B0C12);
         panel.setClickable(true); // taps on the panel don't reach the player underneath
         LinearLayout col = new LinearLayout(activity);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(16), dp(20), dp(16), dp(16));
+        col.setPadding(dp(14), dp(12), dp(14), dp(14));
 
-        LinearLayout head = new LinearLayout(activity);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = LiveRender.text(activity, "Live", 16, Color.WHITE);
-        head.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView closeView = LiveRender.text(activity, "✕", 20, Color.WHITE);
-        closeView.setPadding(dp(12), dp(4), dp(4), dp(4));
+        TextView closeView = LiveRender.text(activity, "✕", 18, Color.WHITE);
+        closeView.setPadding(dp(12), 0, dp(2), dp(6));
         closeView.setOnClickListener(v -> close());
-        head.addView(closeView);
-        col.addView(head);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.gravity = Gravity.END;
+        col.addView(closeView, clp);
+
+        strip = new LiveStrip(activity, apiBase, token);
+        col.addView(strip.view);
 
         LinearLayout tabs = new LinearLayout(activity);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -56,18 +59,20 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
         for (int i = 0; i < LiveRender.TABS.length; i++) {
             final int index = i;
             TextView t = LiveRender.text(activity, LiveRender.TABS[i], 13, Color.WHITE);
-            t.setPadding(dp(12), dp(6), dp(12), dp(6));
             t.setOnClickListener(v -> selectTab(index));
             tabViews[i] = t;
-            tabs.addView(t);
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            tlp.rightMargin = dp(6);
+            tabs.addView(t, tlp);
         }
         col.addView(tabs);
 
         ScrollView scroll = new ScrollView(activity);
-        content = new LinearLayout(activity);
-        content.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(content);
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(box);
         col.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        content = new LiveContent(activity, box, apiBase, token);
         panel.addView(col);
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
@@ -108,6 +113,7 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
             panel.setTranslationX(panel.getWidth());
             panel.animate().translationX(0).setDuration(260).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
         });
+        strip.setActive(true);
         render();
         if (onOpenChanged != null) onOpenChanged.run();
     }
@@ -115,6 +121,7 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
     void close() {
         if (!open) return;
         open = false;
+        strip.setActive(false);
         if (onOpenChanged != null) onOpenChanged.run();
         panel.animate().translationX(panel.getWidth()).setDuration(200).setInterpolator(new android.view.animation.AccelerateInterpolator())
             .withEndAction(() -> panel.setVisibility(View.GONE)).start();
@@ -127,8 +134,16 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
             onOpenChanged.run();
         }
         open = false;
+        strip.setActive(false);
         panel.animate().cancel();
         panel.setVisibility(View.GONE);
+    }
+
+    /** The strip flashes a moment while the drawer is open; false = not showing. */
+    boolean flash(String label, int color) {
+        if (!open) return false;
+        strip.flash(label, color);
+        return true;
     }
 
     @Override
@@ -143,15 +158,15 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
 
     private void selectTab(int index) {
         tab = index;
-        for (int i = 0; i < tabViews.length; i++) {
-            tabViews[i].setBackgroundColor(i == index ? 0xFFF2F2F0 : Color.TRANSPARENT);
-            tabViews[i].setTextColor(i == index ? Color.BLACK : Color.WHITE);
-        }
+        for (int i = 0; i < tabViews.length; i++) LiveRender.styleTab(activity, tabViews[i], LiveRender.TABS[i], i == index);
         render();
     }
 
     private void render() {
-        LiveRender.render(activity, content, feed, LiveRender.TABS[tab]);
+        LiveTeams t = teams.get();
+        strip.bindTeams(t);
+        strip.bind(feed.last);
+        content.render(feed, LiveRender.TABS[tab], t);
     }
 
     private int dp(int v) {

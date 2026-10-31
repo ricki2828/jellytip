@@ -22,6 +22,9 @@ final class LiveAlerts implements LiveFeed.Listener {
 
         /** The short name of the "home" / "away" team, or null. */
         String teamName(String side);
+
+        /** A big moment ("TOUCHDOWN", "WICKET", "LEAD CHANGE"; [side] home | away | null) with the score line, or null. */
+        void moment(String label, String side, String score);
     }
 
     private static final long FANTASY_MS = 60_000;
@@ -38,6 +41,11 @@ final class LiveAlerts implements LiveFeed.Listener {
     private boolean primed;
     private boolean released;
     private String lastFlipAt;
+    private final boolean nfl;
+    private boolean momentsPrimed;
+    private final Set<String> seenMoments = new HashSet<>();
+    private int lastHome = -1;
+    private int lastAway = -1;
 
     private final Runnable fantasyPoll =
         new Runnable() {
@@ -56,7 +64,8 @@ final class LiveAlerts implements LiveFeed.Listener {
         this.token = token;
         this.flips = flips;
         this.sink = sink;
-        if (feed != null && flips) feed.addListener(this);
+        this.nfl = matchId != null && matchId.startsWith(NFL_PREFIX);
+        if (feed != null) feed.addListener(this);
         if (fantasy && apiBase != null && matchId != null && matchId.startsWith(NFL_PREFIX)) handler.post(fantasyPoll);
     }
 
@@ -68,7 +77,9 @@ final class LiveAlerts implements LiveFeed.Listener {
 
     @Override
     public void onLive() {
-        if (released || !flips || feed.last == null) return;
+        if (released || feed.last == null) return;
+        moments(feed.last);
+        if (!flips) return;
         JSONObject m = feed.last.optJSONObject("market");
         JSONObject flip = m == null ? null : m.optJSONObject("flip");
         String at = flip == null || flip.isNull("at") ? null : flip.optString("at");
@@ -81,6 +92,56 @@ final class LiveAlerts implements LiveFeed.Listener {
         String src = source.isEmpty() ? "Market" : source.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + source.substring(1);
         String prob = flip.has("prob") && !flip.isNull("prob") ? " · " + LiveRender.pct(flip.optDouble("prob")) : "";
         sink.alert("📈  " + src + " flip: " + name + " now favourites" + prob, null);
+    }
+
+    /**
+     * Moments (plan "Live panel: pop, context, performance"): the server's `moments` (de-duplicated on at + label), else
+     * a lead change or an NFL touchdown / field goal from score changes. The first answer only primes.
+     */
+    private void moments(JSONObject d) {
+        boolean first = !momentsPrimed;
+        momentsPrimed = true;
+        JSONObject sc = d.optJSONObject("score");
+        int h = sc == null ? -1 : parseInt(sc.optString("home"));
+        int a = sc == null ? -1 : parseInt(sc.optString("away"));
+        String score = h >= 0 && a >= 0 ? name("home") + " " + h + " – " + a + " " + name("away") : null;
+        JSONArray ms = d.optJSONArray("moments");
+        if (d.has("moments")) {
+            for (int i = 0; ms != null && i < ms.length(); i++) {
+                JSONObject m = ms.optJSONObject(i);
+                if (m == null) continue;
+                String kind = m.isNull("kind") ? null : m.optString("kind");
+                String label = !m.isNull("label") && !m.optString("label").isEmpty() ? m.optString("label") : kind == null ? null : kind.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
+                if (label == null) continue;
+                String at = m.isNull("at") ? label : m.optString("at");
+                if (seenMoments.add(at + "|" + label) && !first) sink.moment(label, m.isNull("team") ? null : m.optString("team"), score);
+            }
+        } else if (h >= 0 && a >= 0 && lastHome >= 0 && lastAway >= 0 && !first && (h != lastHome || a != lastAway)) {
+            int before = Integer.signum(lastHome - lastAway);
+            int now = Integer.signum(h - a);
+            String team = h > lastHome ? "home" : a > lastAway ? "away" : null;
+            int delta = Math.max(h - lastHome, a - lastAway);
+            if (before != 0 && now != 0 && before != now) sink.moment("LEAD CHANGE", team, score);
+            else if (nfl && delta >= 6 && delta <= 8) sink.moment("TOUCHDOWN", team, score);
+            else if (nfl && delta == 3) sink.moment("FIELD GOAL", team, score);
+        }
+        if (h >= 0 && a >= 0) {
+            lastHome = h;
+            lastAway = a;
+        }
+    }
+
+    private String name(String side) {
+        String n = sink.teamName(side);
+        return n == null ? ("home".equals(side) ? "Home" : "Away") : n;
+    }
+
+    private static int parseInt(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     private void fetchFantasy() {

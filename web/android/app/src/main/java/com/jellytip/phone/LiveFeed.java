@@ -9,7 +9,9 @@ import org.json.JSONObject;
 
 /**
  * One poller of GET {apiBase}/v1/sport/match/{id}/live for the whole player: the landscape drawer, the portrait panel
- * and the flip alerts all read it. Every 15 s while something shows it, every 30 s otherwise (flip alerts only).
+ * and the alerts all read it. Every 15 s (full) while something shows it; otherwise every 30 s light
+ * (`?fields=market,moments,score`, merged into the last full answer) for the flip and moment alerts (plan "Live panel:
+ * pop, context, performance"). JSON is parsed on the poll thread.
  */
 final class LiveFeed {
 
@@ -84,7 +86,8 @@ final class LiveFeed {
 
     private void fetch() {
         io.execute(() -> {
-            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/sport/match/" + CompanionHttp.enc(matchId) + "/live");
+            final boolean light = !fast;
+            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/sport/match/" + CompanionHttp.enc(matchId) + "/live" + (light ? "?fields=market,moments,score" : ""));
             final int verdict = CompanionHttp.verdict(a);
             JSONObject got = null;
             if (verdict == CompanionHttp.OK) {
@@ -103,7 +106,20 @@ final class LiveFeed {
                     handler.removeCallbacks(poll);
                     note = "No live stats for this match.";
                 } else if (result != null) {
-                    last = result;
+                    if (light && last != null) {
+                        // Light answer: only market, moments and score are fresh; the rest stays from the last full one
+                        for (String k : new String[] {"market", "moments", "score", "status", "clock", "period"}) {
+                            if (result.has(k)) {
+                                try {
+                                    last.put(k, result.opt(k));
+                                } catch (org.json.JSONException ignored) {
+                                    // keep the old value
+                                }
+                            }
+                        }
+                    } else {
+                        last = result;
+                    }
                     note = null;
                     missing = false;
                 } else if (code == 404) {

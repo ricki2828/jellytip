@@ -75,7 +75,10 @@ final class MatchPanel implements LiveFeed.Listener {
     private boolean heroAnimated;
     /** The LIVE pulse (cancelled on every re-render). */
     private android.animation.AnimatorSet pulse;
-    private final java.util.Map<String, android.graphics.Bitmap> images = new java.util.HashMap<>();
+    private final LiveStrip liveStrip;
+    private final LiveContent liveContent;
+    private LiveTeams teams = LiveTeams.NONE;
+    private JSONObject teamsFrom;
     private String fantasyNote = "Loading fantasy…";
 
     private final Runnable fantasyPoll =
@@ -122,12 +125,19 @@ final class MatchPanel implements LiveFeed.Listener {
         tabRow.setPadding(0, dp(4), 0, dp(10));
         tabScroll.addView(tabRow);
         col.addView(tabScroll);
+        // Live tabs: the team-colour scoreboard strip above them (built once, rebound per answer)
+        liveStrip = new LiveStrip(activity, apiBase, token);
+        liveStrip.view.setVisibility(View.GONE);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        slp.bottomMargin = dp(8);
+        col.addView(liveStrip.view, slp);
         ScrollView scroll = new ScrollView(activity);
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
         col.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         panel.addView(col);
+        liveContent = new LiveContent(activity, content, apiBase, token);
         root.addView(panel, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         panel.setVisibility(View.GONE);
 
@@ -158,6 +168,7 @@ final class MatchPanel implements LiveFeed.Listener {
         if (show == shown) return;
         shown = show;
         panel.setVisibility(show ? View.VISIBLE : View.GONE);
+        liveStrip.setActive(showsLive());
         if (show && "Info".equals(tab) && System.currentTimeMillis() - infoAt > INFO_STALE_MS) fetchInfo();
         if (show && "Fantasy".equals(tab)) {
             handler.removeCallbacks(fantasyPoll);
@@ -185,6 +196,7 @@ final class MatchPanel implements LiveFeed.Listener {
     void release() {
         released = true;
         if (pulse != null) pulse.cancel();
+        liveStrip.setActive(false);
         handler.removeCallbacks(fantasyPoll);
         io.shutdownNow();
     }
@@ -220,20 +232,36 @@ final class MatchPanel implements LiveFeed.Listener {
 
     private void addTab(String name) {
         TextView t = LiveRender.text(activity, name, 13, Color.WHITE);
-        t.setPadding(dp(12), dp(6), dp(12), dp(6));
+        LiveRender.styleTab(activity, t, name, name.equals(tab));
         t.setOnClickListener(v -> selectTab(name));
         tabs.add(name);
         tabViews.add(t);
-        tabRow.addView(t);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(6);
+        tabRow.addView(t, lp);
+    }
+
+    /** The teams for the live views (names, crests, colours from match info; neutral until it loads). */
+    LiveTeams teams() {
+        if (info != teamsFrom) {
+            teamsFrom = info;
+            teams = new LiveTeams(info);
+        }
+        return teams;
+    }
+
+    /** A moment flashes the strip while a live tab shows; false = not on screen. */
+    boolean flash(String label, int color) {
+        if (!showsLive()) return false;
+        liveStrip.flash(label, color);
+        return true;
     }
 
     private void selectTab(String name) {
         tab = name;
-        for (int i = 0; i < tabViews.size(); i++) {
-            boolean on = tabs.get(i).equals(name);
-            tabViews.get(i).setBackgroundColor(on ? 0xFFF2F2F0 : Color.TRANSPARENT);
-            tabViews.get(i).setTextColor(on ? Color.BLACK : Color.WHITE);
-        }
+        for (int i = 0; i < tabViews.size(); i++) LiveRender.styleTab(activity, tabViews.get(i), tabs.get(i), tabs.get(i).equals(name));
+        liveStrip.view.setVisibility(feed != null && LiveRender.isLiveTab(name) ? View.VISIBLE : View.GONE);
+        liveStrip.setActive(showsLive());
         if ("Info".equals(name) && System.currentTimeMillis() - infoAt > INFO_STALE_MS) fetchInfo();
         if ("Fantasy".equals(name)) {
             handler.removeCallbacks(fantasyPoll);
@@ -247,7 +275,12 @@ final class MatchPanel implements LiveFeed.Listener {
         if (tab == null) return;
         if ("Info".equals(tab)) renderInfo();
         else if ("Fantasy".equals(tab)) renderFantasy();
-        else if (feed != null) LiveRender.render(activity, content, feed, tab);
+        else if (feed != null) {
+            LiveTeams t = teams();
+            liveStrip.bindTeams(t);
+            liveStrip.bind(feed.last);
+            liveContent.render(feed, tab, t);
+        }
     }
 
     // ---- Info -------------------------------------------------------------------------------------------------
@@ -652,22 +685,9 @@ final class MatchPanel implements LiveFeed.Listener {
         return col;
     }
 
-    /** Crest / venue images: companion paths resolved against the API base; small in-memory cache. */
+    /** Crest / venue images through the shared cache (display size, companion paths resolved). */
     private void loadImage(String url, ImageView into, int maxPx) {
-        final String abs = url.startsWith("http://") || url.startsWith("https://") ? url : apiBase.replaceAll("/+$", "") + "/" + url.replaceAll("^/+", "");
-        android.graphics.Bitmap cached = images.get(abs);
-        if (cached != null) {
-            into.setImageBitmap(cached);
-            return;
-        }
-        io.execute(() -> {
-            android.graphics.Bitmap bm = MatchStyle.download(abs, token, apiBase.replaceAll("/+$", "") + "/", maxPx);
-            handler.post(() -> {
-                if (released || bm == null) return;
-                images.put(abs, bm);
-                into.setImageBitmap(bm);
-            });
-        });
+        ImageCache.load(into, url, apiBase, token, maxPx);
     }
 
     // ---- Fantasy ----------------------------------------------------------------------------------------------

@@ -149,6 +149,8 @@ public class PlayerActivity extends AppCompatActivity {
     private MatchPanel matchPanel;
     private LiveAlerts liveAlerts;
     private TextView infoButton;
+    /** sport.flipAlerts: flips and moments also alert (toast / notification) while no live view shows. */
+    private boolean flipAlertsOn = true;
     /** Match info said 403 / unknown: no ⓘ for this match. */
     private boolean matchHidden;
     /** The opening note (bottom centre in landscape; a banner at the top of the panel in portrait). */
@@ -253,7 +255,7 @@ public class PlayerActivity extends AppCompatActivity {
             String apiBase = in.getStringExtra(EXTRA_API_BASE);
             if (live && apiBase != null && !apiBase.isEmpty()) {
                 liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
-                liveDrawer = new LiveStatsDrawer(this, root, liveFeed);
+                liveDrawer = new LiveStatsDrawer(this, root, liveFeed, apiBase, in.getStringExtra(EXTRA_TOKEN), () -> matchPanel == null ? LiveTeams.NONE : matchPanel.teams());
                 liveDrawer.onOpenChanged = this::updateFeedSpeed;
                 // 403 / unknown match: the Live button goes
                 liveFeed.addListener(() -> {
@@ -341,10 +343,10 @@ public class PlayerActivity extends AppCompatActivity {
         if (sport && live) {
             boolean fantasyOn = in.getBooleanExtra(EXTRA_FANTASY_ALERTS, true);
             boolean flipOn = in.getBooleanExtra(EXTRA_FLIP_ALERTS, true);
-            if (fantasyOn || flipOn) {
-                liveAlerts = new LiveAlerts(handler, liveFeed, apiBaseForPanel, in.getStringExtra(EXTRA_TOKEN), matchId, fantasyOn, flipOn, alertSink);
-                askForNotificationsOnce();
-            }
+            flipAlertsOn = flipOn;
+            // Always on for a live match: moments flash the strip; fantasy and flips follow the user's settings
+            liveAlerts = new LiveAlerts(handler, liveFeed, apiBaseForPanel, in.getStringExtra(EXTRA_TOKEN), matchId, fantasyOn, flipOn, alertSink);
+            if (fantasyOn || flipOn) askForNotificationsOnce();
         }
         if (liveFeed != null) liveFeed.start();
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
@@ -1083,6 +1085,16 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public String teamName(String side) {
                 return matchPanel == null ? null : matchPanel.teamShortFor(side);
+            }
+
+            @Override
+            public void moment(String label, String side, String score) {
+                if (closing) return;
+                LiveTeams t = matchPanel == null ? LiveTeams.NONE : matchPanel.teams();
+                int color = side == null ? 0xFFB3261E : t.side(side);
+                // The strip flashes where a live view shows; else (closed panel, mini player) an alert
+                boolean shown = !inPip() && ((liveDrawer != null && liveDrawer.flash(label, color)) || (matchPanel != null && matchPanel.flash(label, color)));
+                if (!shown && flipAlertsOn) alert("\u26A1  " + label + (score == null ? "" : " · " + score), side);
             }
         };
 
