@@ -130,15 +130,25 @@ class JellytipSearchViewModel
                     }
                     _state.update { it.copy(answer = a ?: it.answer, searching = false, failed = a == null) }
                     JellytipTrace.log("search", "q='${q.trim()}' groups=${a?.groups?.map { "${it.type}:${it.total}" }} pending=${a?.pending}")
-                    // Discover (admins) can come a moment later: ask once more for just that group
+                    // Discover (admins), or live while the caller's index builds, can come a moment later: ask once more for those
                     if (a != null && a.pending.isNotEmpty()) {
                         delay(PENDING_MS)
-                        val more = service.search(q.trim(), types = a.pending.joinToString(",")) ?: return@launch
+                        val types = (a.pending + if ("live" in a.pending) listOf("channels") else emptyList()).distinct()
+                        val more = service.search(q.trim(), types = types.joinToString(",")) ?: return@launch
                         _state.update { st ->
                             val cur = st.answer ?: return@update st
                             if (cur.q != a.q) return@update st
                             val known = cur.groups.map { it.type }.toSet()
-                            st.copy(answer = cur.copy(groups = cur.groups + more.groups.filter { it.type !in known }, pending = emptyList()))
+                            st.copy(
+                                answer =
+                                    cur.copy(
+                                        groups = cur.groups + more.groups.filter { it.type !in known },
+                                        pending = emptyList(),
+                                        live = cur.live.ifEmpty { more.live },
+                                        channels = cur.channels.ifEmpty { more.channels },
+                                        liveFirst = cur.liveFirst || more.liveFirst,
+                                    ),
+                            )
                         }
                     }
                 }
@@ -298,12 +308,24 @@ private fun SearchContent(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusRestorer().onFocusChanged { if (it.hasFocus) resultsTouched = true },
                 ) {
+                    // Live TV (plan "E"): "Live & upcoming" first for a sport / league / team query, else after the top hit and
+                    // library rows; "Channels" right after it
+                    fun liveRows() {
+                        if (answer.live.isNotEmpty()) item(key = "${answer.q}:live") { SearchLiveRow(answer.live, onOpened = { viewModel.opened("live") }) }
+                        if (answer.channels.isNotEmpty()) item(key = "${answer.q}:channels") { SearchChannelsRow(answer.channels, onOpened = { viewModel.opened("channel") }) }
+                    }
+                    if (answer.liveFirst) liveRows()
                     if (answer.results != null) {
                         // Newer server: the top hit, one ranked row of films and shows, then people, collections, not available
                         answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top, viewModel) } }
-                        answer.rankedGroups.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                        val ranked = answer.rankedGroups
+                        val libraryRows = ranked.takeWhile { it.type == "results-library" }
+                        libraryRows.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                        if (!answer.liveFirst) liveRows()
+                        ranked.drop(libraryRows.size).forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
                     } else {
                         SearchRules.displayOrder(answer.groups).forEach { g -> item(key = "${answer.q}:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
+                        if (!answer.liveFirst) liveRows()
                     }
                 }
         }

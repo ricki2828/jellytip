@@ -2,6 +2,10 @@ package com.github.damontecres.wholphin.jellytip.search
 
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle
+import com.github.damontecres.wholphin.jellytip.iptv.IptvChannel
+import com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow
+import com.github.damontecres.wholphin.jellytip.iptv.IptvParse
+import com.github.damontecres.wholphin.jellytip.iptv.MatchParse
 import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONArray
 import kotlinx.coroutines.launch
@@ -126,10 +130,16 @@ data class SearchAnswer(
     /** The ranked list (newer servers); null = only [groups]. */
     val results: List<SearchResult>? = null,
     val top: SearchResult? = null,
+    /** Programmes airing now or in the next 48 h (plan "E"): live first, then by start; replays carry kind "replay". */
+    val live: List<IptvOnNow> = emptyList(),
+    /** A pure sport / league / team query with live results: "Live & upcoming" goes first. */
+    val liveFirst: Boolean = false,
+    val channels: List<SearchChannel> = emptyList(),
 ) {
     val isEmpty
         get() =
-            (results == null || results.isEmpty()) &&
+            live.isEmpty() && channels.isEmpty() &&
+                (results == null || results.isEmpty()) &&
                 groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() && it.lists.isEmpty() }
 
     /**
@@ -186,6 +196,14 @@ fun SearchResult.toIptv() =
         audio = audio,
     )
 
+/** A channel whose name matched (`channels`, plan jellytip-search-10x "E"): OK tunes it. */
+data class SearchChannel(
+    val channel: IptvChannel,
+    /** What is on now, when the guide knows. */
+    val nowTitle: String?,
+    val nowPhase: String?,
+)
+
 data class SearchSuggest(
     val recent: List<String>,
     val suggested: List<String>,
@@ -227,7 +245,11 @@ object SearchParse {
     private fun languageName(code: String): String =
         if (code.length == 2) Locale(code.lowercase(Locale.ROOT)).getDisplayLanguage(Locale.ENGLISH).ifBlank { code } else code
 
-    fun answer(json: String): SearchAnswer {
+    /** [resolve] turns relative companion paths (channel logos) into absolute links. */
+    fun answer(
+        json: String,
+        resolve: (String) -> String? = { it },
+    ): SearchAnswer {
         val root = JSONObject(json)
         val parsed = root.optJSONObject("parsed")
         com.github.damontecres.wholphin.jellytip.cards.JellytipTech.setAll(root.optJSONObject("techs"))
@@ -314,7 +336,80 @@ object SearchParse {
             pending = strings(root.optJSONArray("pending")),
             results = results,
             top = result(root.optJSONObject("top")) ?: results?.firstOrNull(),
+            live = live(groupItems(root, "live") ?: root.optJSONArray("live"), resolve),
+            liveFirst =
+                if (root.has("liveFirst")) {
+                    root.optBoolean("liveFirst", false)
+                } else {
+                    parsed?.optJSONObject("filters")?.let { it.str("sport") != null || it.str("league") != null } == true
+                },
+            channels = channels(groupItems(root, "channels") ?: root.optJSONArray("channels"), resolve),
         )
+    }
+
+    /** `live` / `channels` are top-level arrays; an older build sent them as groups. */
+    private fun groupItems(
+        root: JSONObject,
+        type: String,
+    ): JSONArray? = root.objects("groups").firstOrNull { it.str("type") == type }?.optJSONArray("items")
+
+    /** `live[]`: `{title, start, stop, phase?, startsAt?, matchInfo?, sportName?, league?, replay?, channel, alternateChannels?}`. */
+    fun live(
+        a: JSONArray?,
+        resolve: (String) -> String?,
+    ): List<IptvOnNow> {
+        a ?: return emptyList()
+        val now = System.currentTimeMillis() / 1000
+        val seen = HashSet<String>()
+        return (0 until a.length())
+            .mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                val ch = o.optJSONObject("channel")?.let { IptvParse.channel(it, resolve) } ?: return@mapNotNull null
+                val title = o.str("title") ?: return@mapNotNull null
+                val start = o.optLong("start", 0L).takeIf { it > 0 } ?: return@mapNotNull null
+                val stop = o.optLong("stop", 0L).takeIf { it > start } ?: return@mapNotNull null
+                if (!seen.add("${ch.id}|$start")) return@mapNotNull null
+                val alts = o.objects("alternateChannels").mapNotNull { IptvParse.channel(it, resolve) }.filter { it.id != ch.id }
+                val match = MatchParse.match(o.optJSONObject("matchInfo"), resolve)
+                val phase = o.str("phase")
+                IptvOnNow(
+                    channel = ch,
+                    title = title,
+                    start = start,
+                    stop = stop,
+                    sport = match != null || o.str("sportName") != null || o.str("league") != null,
+                    kind =
+                        when {
+                            o.optBoolean("replay", false) -> "replay"
+                            now in start until stop -> "live"
+                            else -> null
+                        },
+                    alternates = alts,
+                    league = o.str("league") ?: match?.league,
+                    sportName = o.str("sportName"),
+                    // "live" | "upcoming" from search; "pre" (holding screen before the real start) keeps the pre-game pill
+                    phase = phase?.takeIf { it == "pre" },
+                    startsAt = IptvParse.isoSeconds(o.str("startsAt")),
+                    match = match,
+                )
+            }.take(30)
+    }
+
+    /** `channels[]`: `{id, name, num, logo, group, quality?, now: {title, phase?}}`. */
+    fun channels(
+        a: JSONArray?,
+        resolve: (String) -> String?,
+    ): List<SearchChannel> {
+        a ?: return emptyList()
+        val seen = HashSet<String>()
+        return (0 until a.length())
+            .mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                val ch = IptvParse.channel(o, resolve) ?: return@mapNotNull null
+                if (!seen.add(ch.id)) return@mapNotNull null
+                val now = o.optJSONObject("now")
+                SearchChannel(ch, now?.str("title"), now?.str("phase"))
+            }.take(20)
     }
 
     fun result(o: JSONObject?): SearchResult? {
@@ -473,7 +568,12 @@ class JellytipSearchService
                 return null
             }
             if (code != 200) return null
-            val a = runCatching { SearchParse.answer(body) }.getOrNull() ?: return null
+            // Channel logos are relative companion paths (provider URLs are refused, as in the guide)
+            val base = runCatching { api.companionBase() }.getOrNull()
+            val logo: (String) -> String? = { rel ->
+                if (base == null || Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(rel) || rel.startsWith("//")) null else "$base/${rel.trimStart('/')}"
+            }
+            val a = runCatching { SearchParse.answer(body, logo) }.getOrNull() ?: return null
             suspend fun img(u: String?) = u?.let { api.resolveUrl(it) }
             suspend fun SearchResult.resolved() = if (source == "iptv" || kind == "collection") copy(poster = img(poster), backdrop = img(backdrop)) else this
             return a.copy(

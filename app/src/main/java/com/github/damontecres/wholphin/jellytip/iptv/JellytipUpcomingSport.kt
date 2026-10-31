@@ -205,7 +205,7 @@ fun rememberReminders(viewModel: JellytipUpcomingSportViewModel = hiltViewModel(
 }
 
 @Composable
-private fun UpcomingOverlays(
+internal fun UpcomingOverlays(
     overlay: IptvUpcoming?,
     now: Long,
     onDismiss: () -> Unit,

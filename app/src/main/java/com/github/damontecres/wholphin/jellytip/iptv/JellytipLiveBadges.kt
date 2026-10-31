@@ -66,6 +66,10 @@ fun IdentifiedMark() =
 @Composable
 fun PreGamePill() = Pill("PRE-GAME", Color.White, Color(0xFF5A5F6B))
 
+/** A neutral start-time pill ("19:30", "Sat 19:30") for something not on yet (search "Live & upcoming"). */
+@Composable
+fun TimePill(text: String) = Pill(text, Color.White, Color.White.copy(alpha = 0.2f))
+
 /** "Starts 18:00 · in 35 min" ("· now" once due); local time. */
 fun startsLabel(
     startsAt: Long,
