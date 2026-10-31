@@ -98,7 +98,7 @@ data class MatchDetail(
     /** Stadium photo (`venue.image`), shown faint behind the hero; null = none. */
     val venueImage: String? = null,
     /** A Polymarket winner market on the detail (`market.kind: "winner"`): top outcomes, best first. */
-    val winner: List<Pair<String, Double>> = emptyList(),
+    val winner: List<Outcome> = emptyList(),
     val winnerSource: String? = null,
 )
 

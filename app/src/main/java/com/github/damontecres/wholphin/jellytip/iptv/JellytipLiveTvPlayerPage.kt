@@ -376,7 +376,7 @@ fun JellytipLiveTvPlayerPage(
                     if (me?.sportFlipAlerts != false) {
                         val team = if (mk.flipTo == "away") m.away else m.home
                         // Winner markets: flip.to names the outcome; the toast reads "new favourite"
-                        val name = if (mk.isWinner) mk.flipTo ?: mk.outcomes.first().first else team?.short ?: team?.name ?: mk.flipTo ?: "New"
+                        val name = if (mk.isWinner) mk.flipTo ?: mk.outcomes.first().name else team?.short ?: team?.name ?: mk.flipTo ?: "New"
                         val pal = matchPalette(m)
                         enqueueToast(
                             PlayerToast(

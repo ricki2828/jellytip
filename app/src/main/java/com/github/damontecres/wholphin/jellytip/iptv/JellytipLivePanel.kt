@@ -130,6 +130,13 @@ data class LiveMoment(
     val detail: String? = null,
 )
 
+/** A winner-market outcome; [favourite] = one of the user's favourite drivers / golfers. */
+data class Outcome(
+    val name: String,
+    val p: Double,
+    val favourite: Boolean = false,
+)
+
 data class MarketPoint(
     val t: Long,
     val p: Double,
@@ -151,8 +158,8 @@ data class LiveMarket(
     val series: List<MarketPoint> = emptyList(),
     /** "winner" (plan "Polymarket coverage round 2": F1 race, golf tournament, …) or null (head-to-head). */
     val kind: String? = null,
-    /** Winner markets: the top outcomes, best first. */
-    val outcomes: List<Pair<String, Double>> = emptyList(),
+    /** Winner markets: the top 6 plus the user's favourite drivers / golfers wherever they rank, best first. */
+    val outcomes: List<Outcome> = emptyList(),
 ) {
     val isWinner get() = kind == "winner" && outcomes.isNotEmpty()
 }
@@ -569,9 +576,9 @@ object LiveParse {
         return o.str(side)?.let { MatchTeam(it, null, null, null) }
     }
 
-    /** `outcomes: [{name, p}]`, best first, top 6. */
-    fun outcomes(a: JSONArray?): List<Pair<String, Double>> =
-        a.objects().mapNotNull { o -> (o.str("name") ?: return@mapNotNull null) to (o.dbl("p") ?: return@mapNotNull null) }.sortedByDescending { it.second }.take(6)
+    /** `outcomes: [{name, p, favourite?}]` (the server sends the top 6 plus favourites), best first. */
+    fun outcomes(a: JSONArray?): List<Outcome> =
+        a.objects().mapNotNull { o -> Outcome(o.str("name") ?: return@mapNotNull null, o.dbl("p") ?: return@mapNotNull null, o.optBoolean("favourite", false)) }.sortedByDescending { it.p }.take(10)
 
     private fun golfRows(a: JSONArray?): List<GolfRow> =
         a.objects().mapNotNull { r ->
@@ -1336,12 +1343,12 @@ private fun OddsLine(
     val team = if (homeFav) m.home else m.away
     // Winner markets: the leading outcome
     val leader = mk.outcomes.firstOrNull()?.takeIf { mk.isWinner }
-    val p = leader?.second ?: if (homeFav) mk.home else mk.away
+    val p = leader?.p ?: if (homeFav) mk.home else mk.away
     Column {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
             Icon(BroadcastIcons.Odds, contentDescription = null, tint = Broadcast.Gold, modifier = Modifier.size(14.dp))
-            BodyText(leader?.first ?: team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
+            BodyText(leader?.name ?: team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
             p?.let { Odometer(pct(it), 17.sp, Broadcast.Gold) }
             BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { money(it) }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
         }
@@ -1414,18 +1421,18 @@ private fun OddsTab(
 /** A winner market (plan "Polymarket coverage round 2"): ranked outcomes with their probability and a bar; the leader in gold. */
 @Composable
 internal fun WinnerList(
-    outcomes: List<Pair<String, Double>>,
+    outcomes: List<Outcome>,
     pal: MatchPalette,
 ) {
     val bar = if (pal.known) pal.home else Broadcast.Gold
-    val top = outcomes.maxOfOrNull { it.second }?.takeIf { it > 0 } ?: 1.0
+    val top = outcomes.maxOfOrNull { it.p }?.takeIf { it > 0 } ?: 1.0
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        outcomes.forEachIndexed { i, (name, p) ->
+        outcomes.forEachIndexed { i, (name, p, fav) ->
             key(name) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Cond("${i + 1}", 14.sp, Broadcast.Secondary, modifier = Modifier.width(16.dp), align = TextAlign.End)
-                        BodyText(name, 13.sp, Color.White, modifier = Modifier.weight(1f), weight = if (i == 0) FontWeight.Bold else FontWeight.SemiBold, maxLines = 1)
+                        BodyText((if (fav) "★ " else "") + name, 13.sp, if (fav) Broadcast.Gold else Color.White, modifier = Modifier.weight(1f), weight = if (i == 0 || fav) FontWeight.Bold else FontWeight.SemiBold, maxLines = 1)
                         Odometer(pct(p), 16.sp, if (i == 0) Broadcast.Gold else Color.White)
                     }
                     // The bar is relative to the leader so the order reads at a glance
