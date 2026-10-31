@@ -399,6 +399,7 @@ test("refresh guide: last updated and retry texts", () => {
   assert.equal(retryText(undefined), "Try again in 10 min");
 });
 
+import { parseSport } from "../src/lib/sport.ts";
 import { displayTitle, matchupTitle, parseFixture, parseMatchDetail, statusLabel, venueLine } from "../src/lib/matchInfo.ts";
 
 const FIX = { id: "nfl:401", league: "NFL", home: { name: "Chiefs", short: "KC", record: "6-1" }, away: { name: "Bills", short: "BUF" }, startsAt: "2026-10-31T18:00:00Z", venue: { name: "Arrowhead", city: "Kansas City" }, status: "pre", inferred: true };
@@ -416,7 +417,7 @@ test("match info: fixture, inferred title, detail sections", () => {
   assert.equal(parseFixture({ team: "Chiefs", league: "NFL" }), null);
   assert.equal(parseFixture(null), null);
   const d = parseMatchDetail({
-    match: FIX,
+    matchInfo: FIX,
     lineups: { announced: false, home: [], away: [] },
     odds: { provider: "ESPN BET", home: { moneyline: "-150", spread: "-3.5" }, away: { moneyline: "+130" }, overUnder: "47.5", updatedAt: "2026-10-31T10:00:00Z" },
     form: { home: ["W", "W", "L"], away: ["L"] },
@@ -432,5 +433,13 @@ test("match info: fixture, inferred title, detail sections", () => {
   assert.deepEqual(d.channels, [{ id: "3:7", name: "CBS HD", quality: "fhd" }]);
   assert.equal(d.pending, true);
   assert.equal(parseMatchDetail({}), null);
-  assert.equal(parseMatchDetail({ match: FIX })?.odds, null);
+  assert.equal(parseMatchDetail({ matchInfo: FIX })?.odds, null);
+  assert.equal(parseMatchDetail({ match: FIX }), null);
+});
+
+test("match info is read from matchInfo, never from the favourite marker match", () => {
+  const raw = { match: { team: "Chiefs", league: "NFL" } };
+  assert.equal(parseSport(raw, { title: "x", matchInfo: { ...FIX, id: "nfl:999" } }).fixture?.id, "nfl:999");
+  assert.deepEqual(parseSport(raw, { title: "x", matchInfo: FIX }).match, { team: "Chiefs", league: "NFL" });
+  assert.equal(parseSport({ match: { ...FIX, team: "Chiefs" } }, { title: "x" }).fixture, null);
 });

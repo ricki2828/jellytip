@@ -105,7 +105,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     league: str(p.league) ?? str(r.league) ?? str(m?.league),
     sportName: str(p.sportName) ?? str(r.sportName) ?? str(p.sport) ?? str(r.sport),
     match: m ? { team: str(m.team), league: str(m.league) } : null,
-    fixture: parseFixture(p.match ?? r.match),
+    fixture: parseFixture(p.matchInfo ?? r.matchInfo),
   };
 }
 

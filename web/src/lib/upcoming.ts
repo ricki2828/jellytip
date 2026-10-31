@@ -72,7 +72,7 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       league: str(e.league) ?? str(m?.league),
       sportName: str(e.sportName) ?? str(e.sport),
       startOver: e.startOver === true,
-      fixture: parseFixture(e.match),
+      fixture: parseFixture(e.matchInfo),
       phase: parsePhase(e.phase),
       startsAt: parseStartsAt(e.startsAt),
       favourite: !!(str(m?.team) || str(m?.league)),

@@ -1,4 +1,4 @@
-// Match info (plan: ~/ai/plans/jellytip-live-sport.md "Match info"). A programme / event may carry `match` ({id, league, home,
+// Match info (plan: ~/ai/plans/jellytip-live-sport.md "Match info"). A programme / event may carry `matchInfo` ({id, league, home,
 // away, startsAt, venue?, status, source, inferred, score?}); GET /v1/sport/match/{id} adds line-ups, odds, form, head to head,
 // broadcasts and the caller's channels. Everything is optional. Pure; tested in web/test/iptv.test.ts.
 import { parseStartsAt } from "./preGame.ts";
@@ -70,7 +70,7 @@ function side(raw: unknown): Side | null {
   return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record) } : null;
 }
 
-/** `match` on a programme / item: a fixture, or null when it has no id or either side (the older {team, league} shape is not one). */
+/** `matchInfo` on a programme / item: a fixture, or null when it has no id or either side. (`match` is the favourite marker and is not read here.) */
 export function parseFixture(raw: unknown): Fixture | null {
   const o = obj(raw);
   const id = str(o?.id);
@@ -109,7 +109,7 @@ const money = (v: unknown): string | null => {
 
 export function parseMatchDetail(raw: unknown): MatchDetail | null {
   const r = obj(raw);
-  const fixture = parseFixture(r?.match ?? r);
+  const fixture = parseFixture(r?.matchInfo ?? r);
   if (!r || !fixture) return null;
   const l = obj(r.lineups);
   const od = obj(r.odds);
