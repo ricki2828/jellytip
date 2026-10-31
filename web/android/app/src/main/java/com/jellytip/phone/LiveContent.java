@@ -242,8 +242,24 @@ final class LiveContent {
         if (standings != null && standings.length() > 0) timingTower(standings, s);
         JSONArray sets = s.optJSONArray("sets");
         if ((sets != null && sets.length() > 0) || s.optJSONObject("game") != null) {
-            tennisRow("home", sets, s, t);
-            tennisRow("away", sets, s, t);
+            tennisRow("tn:home", "home", sets, s, t.homeShort, t.homeCountry);
+            tennisRow("tn:away", "away", sets, s, t.awayShort, t.awayCountry);
+        }
+        // A tennis tournament: its matches (on court first), each a compact set grid under its round and court
+        JSONArray matches = s.optJSONArray("matches");
+        for (int i = 0; matches != null && i < Math.min(matches.length(), 6); i++) {
+            JSONObject mt = matches.optJSONObject(i);
+            if (mt == null || str(mt, "id") == null) continue;
+            String id = str(mt, "id");
+            String status = str(mt, "status");
+            List<String> head = new ArrayList<>();
+            if (str(mt, "round") != null) head.add(str(mt, "round"));
+            if (str(mt, "court") != null) head.add(str(mt, "court"));
+            if (status != null && !"in".equals(status)) head.add("post".equals(status) ? "Final" : status);
+            note("tm:" + id + ":head", android.text.TextUtils.join(" · ", head));
+            JSONArray ms = mt.optJSONArray("sets");
+            tennisRow("tm:" + id + ":home", "home", ms, mt, playerName(mt, "home"), playerCountry(mt, "home"));
+            tennisRow("tm:" + id + ":away", "away", ms, mt, playerName(mt, "away"), playerCountry(mt, "away"));
         }
         JSONArray board = s.optJSONArray("leaderboard");
         JSONArray favs = s.optJSONArray("favourites");
@@ -361,7 +377,7 @@ final class LiveContent {
     }
 
     private static final Set<String> CONSUMED =
-        new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap"));
+        new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap", "matches"));
 
     // ---- RedZone: one compact slab row per game ---------------------------------------------------------------------
 
@@ -480,7 +496,7 @@ final class LiveContent {
             order.add(h.root);
         }
         JSONObject fl = s.optJSONObject("fastestLap");
-        String fast = fl != null ? ((str(fl, "driver") == null ? "" : str(fl, "driver")) + " " + (str(fl, "time") == null ? "" : str(fl, "time"))).trim() : str(s, "fastestLap");
+        String fast = fl != null ? ((str(fl, "driver") == null ? "" : str(fl, "driver")) + " " + (str(fl, "time") == null ? "" : str(fl, "time")) + (str(fl, "lap") == null ? "" : " lap " + str(fl, "lap"))).trim() : str(s, "fastestLap");
         if (fast != null && !fast.isEmpty()) text("f1:fastest", "Fastest lap: " + fast, 12, 0xFFC77DFF, false);
     }
 
@@ -527,7 +543,8 @@ final class LiveContent {
             bar.setBackgroundColor(MatchStyle.color(str(r, "teamColor"), Broadcast.SECONDARY));
             setText(driver, str(r, "driver"));
             fastest.setVisibility(r.optBoolean("fastest", false) ? View.VISIBLE : View.GONE);
-            String g = "1".equals(p) ? "Leader" : str(r, "gap") != null ? str(r, "gap") : str(r, "interval");
+            // Race: gap ("LEADER" for P1) or interval; practice / qualifying: P1's best lap, the others' gap
+            String g = "1".equals(p) ? (str(r, "best") != null ? str(r, "best") : str(r, "gap") != null ? str(r, "gap") : "Leader") : str(r, "gap") != null ? str(r, "gap") : str(r, "interval");
             setText(gap, g == null ? "" : g);
             String ty = str(r, "tyre") == null ? null : str(r, "tyre").substring(0, 1).toUpperCase(Locale.ROOT);
             if (ty == null) {
@@ -544,15 +561,25 @@ final class LiveContent {
 
     // ---- Tennis: the set grid -------------------------------------------------------------------------------------
 
-    private void tennisRow(String side, JSONArray sets, JSONObject s, LiveTeams t) {
-        String key = "tn:" + side;
+    private void tennisRow(String key, String side, JSONArray sets, JSONObject s, String name, String country) {
         TennisRow h = (TennisRow) holders.get(key);
         if (h == null) {
             h = new TennisRow();
             holders.put(key, h);
         }
-        h.bind(side, sets, s, t);
+        h.bind(side, sets, s, name, country);
         order.add(h.root);
+    }
+
+    private static String playerName(JSONObject mt, String side) {
+        JSONObject p = mt.optJSONObject(side);
+        if (p == null) return str(mt, side) == null ? "" : str(mt, side);
+        return str(p, "short") != null ? str(p, "short") : str(p, "name") == null ? "" : str(p, "name");
+    }
+
+    private static String playerCountry(JSONObject mt, String side) {
+        JSONObject p = mt.optJSONObject(side);
+        return p == null ? null : str(p, "country");
     }
 
     private final class TennisRow {
@@ -586,11 +613,10 @@ final class LiveContent {
             root.addView(game, glp);
         }
 
-        void bind(String side, JSONArray sets, JSONObject s, LiveTeams t) {
+        void bind(String side, JSONArray sets, JSONObject s, String n, String country) {
             boolean home = "home".equals(side);
             serveBg.setColor(side.equals(str(s, "serving")) ? Broadcast.GOLD : 0x00000000);
-            String flag = Broadcast.flag(home ? t.homeCountry : t.awayCountry);
-            String n = home ? t.homeShort : t.awayShort;
+            String flag = Broadcast.flag(country);
             setText(name, flag == null ? n : flag + " " + n);
             for (int i = 0; i < setViews.length; i++) {
                 JSONObject st = sets == null ? null : sets.optJSONObject(i);
@@ -612,6 +638,17 @@ final class LiveContent {
             setText(game, gv == null ? "" : gv);
             game.setVisibility(gv == null ? View.GONE : View.VISIBLE);
         }
+    }
+
+    /** Golf "thru": "F", a hole number, or a UTC tee time ("13:05Z") shown in local time. */
+    private static String teeOrThru(String t) {
+        if (t == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d{1,2}):(\\d{2})Z$").matcher(t);
+        if (!m.find()) return t;
+        java.util.Calendar c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        c.set(java.util.Calendar.HOUR_OF_DAY, Integer.parseInt(m.group(1)));
+        c.set(java.util.Calendar.MINUTE, Integer.parseInt(m.group(2)));
+        return new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(c.getTime());
     }
 
     private static int parse(String v) {
@@ -703,7 +740,7 @@ final class LiveContent {
             String tp = str(r, "toPar") == null ? "" : str(r, "toPar");
             setText(toPar, tp);
             toPar.setTextColor(tp.startsWith("-") ? Broadcast.GOLD : Color.WHITE);
-            setText(thru, str(r, "thru") == null ? "" : str(r, "thru"));
+            setText(thru, teeOrThru(str(r, "thru")));
             root.setBackgroundColor(pinned ? 0x1FFFC72C : 0x00000000);
         }
     }
