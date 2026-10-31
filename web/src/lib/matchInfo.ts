@@ -225,3 +225,16 @@ export function tint(color: string, alpha: number): string {
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
+
+/** A team colour that reads on the dark panel: a dark colour is lightened towards white (luminance under 0.35 → blended up). */
+export function readable(color: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const lin = c.map((v) => ((v / 255) ** 2.2));
+  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  if (lum >= 0.1) return color;
+  const mix = c.map((v) => Math.round(v + (255 - v) * 0.55));
+  return `#${mix.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}

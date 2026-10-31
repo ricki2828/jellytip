@@ -649,3 +649,53 @@ test("match modal helpers: colours, countdown, odds split, form chips", () => {
   assert.equal(formTone("D"), "d");
   assert.equal(tint("#ff0000", 0.2), "rgba(255, 0, 0, 0.2)");
 });
+
+import { readable } from "../src/lib/matchInfo.ts";
+import { newMoments, situationBlocks, sparkPoints, statNumber, statShare } from "../src/lib/liveStats.ts";
+
+test("live panel redesign: new fields parse, split-bar shares, sparkline, moments, per-sport situation", () => {
+  const d = parseLive({
+    layout: "Cricket",
+    situation: { batters: [{ name: "Williamson", runs: 52, balls: 41, onStrike: true }], bowler: { name: "Bumrah", figures: "2-18" }, rr: "6.1", rrr: "7.4", lastBalls: ["1", "W", "4", "0", "6", "1", "2"] },
+    moments: [{ at: 100, kind: "wicket", team: "away", label: "Wicket" }, { at: 90, kind: "x" }, { label: "no at" }],
+    leaders: [{ name: "Jokic", team: "DEN", line: "28 pts", headshot: "https://a.espncdn.com/i/headshots/nba/players/full/3112335.png" }],
+    plays: [{ text: "Booker 3PT", scoring: true, team: "home", points: 3 }, { text: "Foul" }],
+    market: { home: 0.55, away: 0.45, series: [{ t: 1000, p: 0.5 }, { t: 1600, p: 0.6 }, { t: 1900, p: 7 }] },
+  })!;
+  assert.equal(d.layout, "cricket");
+  assert.equal(d.moments.length, 2);
+  assert.equal(d.leaders[0].headshot?.startsWith("https://a.espncdn.com"), true);
+  assert.equal(d.plays[0].delta, 3);
+  assert.equal(d.plays[0].team, "home");
+  assert.equal(d.plays[1].delta, null);
+  assert.equal(d.market!.series.length, 2);
+  assert.equal(statNumber("47%"), 47);
+  assert.equal(statNumber("1,204 yds"), 1204);
+  assert.equal(statNumber("n/a"), null);
+  assert.equal(statShare("30", "10"), 0.75);
+  assert.equal(statShare("0", "0"), null);
+  assert.equal(statShare("x", "5"), null);
+  assert.equal(sparkPoints([{ t: 0, p: 1 }, { t: 100, p: 0 }], 200, 40), "0,0 200,40");
+  assert.equal(sparkPoints([{ t: 0, p: 1 }], 200, 40), "");
+  assert.deepEqual(newMoments(d.moments, 95).map((m) => m.at), [100]);
+  assert.deepEqual(newMoments(d.moments, 100), []);
+  const cr = situationBlocks("cricket", d.situation, { home: "NZ", away: "IND" });
+  assert.equal(cr[0].kind, "kv");
+  assert.deepEqual((cr[0] as { rows: string[][] }).rows[0], ["Williamson *", "52 (41)"]);
+  assert.deepEqual((cr[cr.length - 1] as { items: string[] }).items, ["W", "4", "0", "6", "1", "2"]);
+  const nfl = situationBlocks("nfl", { down: "2nd", distance: 7, fieldPos: 66, redZone: false, possession: "home", ballOn: "KC 34" }, { home: "KC", away: "BUF" });
+  assert.equal(nfl[0].kind, "kv");
+  assert.deepEqual((nfl[1] as { pos: number; side: string }).pos, 66);
+  const bb = situationBlocks("basketball", { quarters: [{ period: "Q1", home: 28, away: 25 }, { home: 30, away: 33 }], fouls: { home: "5", away: "3" }, run: "12-2 run" }, { home: "PHX", away: "DEN" });
+  assert.equal(bb[0].kind, "grid");
+  assert.equal(bb[1].kind, "bar");
+  assert.deepEqual(situationBlocks("unknown", { a: 1 }, { home: "A", away: "B" }), []);
+  assert.deepEqual(situationBlocks("nfl", null, { home: "A", away: "B" }), []);
+  assert.deepEqual(situationBlocks("football", { possession: { home: "58", away: "42" } }, { home: "A", away: "B" }).map((b) => b.kind), ["bar"]);
+});
+
+test("readable team colours on the dark panel", () => {
+  assert.equal(readable("#0e2240") !== "#0e2240", true);
+  assert.equal(readable("#e56020"), "#e56020");
+  assert.equal(readable("nope"), "nope");
+});

@@ -58,8 +58,9 @@ export async function matchDetail(id: string, score = false): Promise<MatchDetai
 }
 
 /** GET /v1/sport/match/{id}/live: "missing" when there is nothing (route, access or an unknown match), null when it failed. */
-export async function liveStats(id: string): Promise<LiveStats | "missing" | null> {
-  const a = await companionCall("GET", `v1/sport/match/${encodeURIComponent(id)}/live`);
+/** `fields`: ask for part of it ("market,moments,score": the light call used with the panel closed). */
+export async function liveStats(id: string, fields?: string): Promise<LiveStats | "missing" | null> {
+  const a = await companionCall("GET", `v1/sport/match/${encodeURIComponent(id)}/live${fields ? `?fields=${encodeURIComponent(fields)}` : ""}`);
   const g = gate(id, a.status, a.data);
   if (g) return g;
   return a.status === 200 ? parseLive(a.data) : null;

@@ -3,7 +3,7 @@
 // the right; each `at` shows once. Off on replays and recordings, and with sport.flipAlerts off.
 import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
-import { flipText, type LiveStats } from "../lib/liveStats";
+import { flipText, newMoments, type LiveStats } from "../lib/liveStats";
 import "../screens/iptv/iptv.css";
 
 const EVENT = "jellytip-flip";
@@ -20,7 +20,13 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
   const seen = useRef(new Set<number>());
   const names = useRef({ home: "Home", away: "Away" });
   const timer = useRef<number | undefined>(undefined);
+  const seenMoment = useRef<number | null>(null);
 
+  const showText = (t: string) => {
+    setText(t);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setText(null), SHOW_MS);
+  };
   const show = (to: "home" | "away", prob: number, at: number) => {
     if (seen.current.has(at)) return;
     seen.current.add(at);
@@ -54,10 +60,24 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
     let alive = true;
     let t: number | undefined;
     const poll = async () => {
-      const d = await liveStats(matchId);
+      // The light call: only the market (flip), the moments and the score, with the panel closed
+      const d = await liveStats(matchId, "market,moments,score");
       if (!alive) return;
       if (d === "missing") return; // no live route: stop asking
       if (d?.market?.flip) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
+      if (d) {
+        const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);
+        if (seenMoment.current == null) seenMoment.current = latest; // the first answer is the baseline
+        else {
+          const fresh = newMoments(d.moments, seenMoment.current);
+          seenMoment.current = Math.max(seenMoment.current, latest);
+          const m = fresh[fresh.length - 1];
+          if (m) {
+            const who = m.team ? names.current[m.team] : null;
+            showText(`⚡ ${m.label}${who ? ` · ${who}` : ""}`);
+          }
+        }
+      }
       t = window.setTimeout(poll, POLL_MS);
     };
     t = window.setTimeout(poll, 1500);
