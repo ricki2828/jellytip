@@ -77,3 +77,28 @@ test("every row type keeps its IPTV titles; padded rows place missing titles by 
   });
   assert.deepEqual(paddedOrder(p), ["a".repeat(32), "pp:m:80", "pp:m:81", "m:5", "b".repeat(32), "m:Gone B"]);
 });
+
+import { readFileSync } from "node:fs";
+
+test("Ricki's real rows (home, movies, shows): every row type keeps its IPTV titles and padded rows keep their missing ones", () => {
+  const fx = JSON.parse(readFileSync(new URL("./fixtures/rows_ricki_min.json", import.meta.url), "utf8")) as Record<string, { iptvItems?: unknown[]; missing?: unknown[]; itemIds?: string[]; ranks?: Record<string, number> }[]>;
+  let checked = 0;
+  for (const rows of Object.values(fx)) {
+    const parsed = parseRows(rows)!;
+    assert.equal(parsed.length, rows.length);
+    parsed.forEach((p, i) => {
+      assert.equal(p.iptvItems.length, rows[i].iptvItems?.length ?? 0, `${p.id}: IPTV titles kept`);
+      assert.equal(p.missing.length, rows[i].missing?.length ?? 0, `${p.id}: missing titles kept`);
+      if (p.missing.length) {
+        const order = paddedOrder(p);
+        assert.equal(order.length, p.itemIds.length + p.iptvItems.length + p.missing.length, `${p.id}: padded order covers every tile`);
+      }
+      checked++;
+    });
+  }
+  assert.ok(checked >= 8);
+  // the page shapes the server really sends: a "top10" layout (read by id) and mixed rows with an order
+  const all = Object.values(fx).flat();
+  assert.ok(all.some((r) => (r as { layout?: string }).layout === "top10"));
+  assert.ok(all.some((r) => (r as { layout?: string }).layout === "franchise"));
+});

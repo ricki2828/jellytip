@@ -1,0 +1,2414 @@
+{
+ "home": [
+  {
+   "id": "my-list-series",
+   "source": "mylist",
+   "family": "mylist",
+   "title": "My list \u00b7 Shows",
+   "layout": "standard",
+   "mediaType": "tv",
+   "itemIds": [],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:58502",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 236235,
+     "title": "The Gentlemen",
+     "year": 2024,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/tw3tzfXaSpmUZIB8ZNqNEGzMBCy.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/yG1wltFmkX5c5ocACKfpX0tp3SY.jpg",
+     "overview": "When aristocratic Eddie inherits the family estate, he discovers that it's home to an enormous weed empire \u2014 and its proprietors aren't going anywhere.",
+     "rating": 7.882,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [
+      "5.1"
+     ],
+     "catalog": true,
+     "favourite": true,
+     "progress": null,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:40726",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 125988,
+     "title": "Silo",
+     "year": 2023,
+     "releaseDate": "2023-05-04",
+     "quality": [
+      "4k"
+     ],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      10765,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/r2QXomqKjkKHVtYGGtkf2l2Y7go.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/4XccmjsOmQZw8S2iW1wvlvmb5v1.jpg",
+     "overview": "In a ruined and toxic future, thousands live in a giant silo deep underground. After its sheriff breaks a cardinal rule and residents die mysteriously, engineer Juliette starts to uncover shocking secrets and the truth about the silo.",
+     "rating": 8.23,
+     "votes": 2855,
+     "added": 1792265423,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a SERIES 4K",
+     "copies": 2,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "5.1"
+     ],
+     "favourite": true,
+     "progress": null,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:1779",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 1438,
+     "title": "The Wire",
+     "year": 2002,
+     "releaseDate": "2002-06-02",
+     "quality": [],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      80,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/4lbclFySvugI51fwsyxBTOm4DqK.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/aQTtua5pG490fMfeKgtYg5B853e.jpg",
+     "overview": "Told from the points of view of both the Baltimore homicide and narcotics detectives and their targets, the series captures a universe in which the national war on drugs has become a permanent, self-sustaining bureaucracy, and distinctions between good and evil are routinely obliterated.",
+     "rating": 8.636,
+     "votes": 2887,
+     "added": 1682442739,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a HBO",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [],
+     "favourite": true,
+     "progress": null,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:s:58502",
+    "pp000001:s:40726",
+    "pp000001:s:1779"
+   ],
+   "logoStyles": {},
+   "techs": {},
+   "ranks": {},
+   "missing": []
+  },
+  {
+   "id": "trending-top10-series",
+   "title": "Top 10 on IMDb this week: Shows",
+   "source": "trending",
+   "family": "trending",
+   "layout": "top10",
+   "mediaType": "tv",
+   "itemIds": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:59509",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 288673,
+     "title": "Carrie",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+     "overview": "After her father's sudden, untimely death thrusts her into the unforgiving ecosystem of public high school, Carrie is forced to navigate a viral bullying scandal that tears through her community, the relentless pressure and casual cruelty of the social\u2011media age, and the awakening of mysterious telekinetic powers that rise alongside her adolescence.",
+     "rating": 8.267,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59655",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213562,
+     "title": "Crystal Lake",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+     "overview": "Single mother Pam Voorhees has been unable to shake her grief after her young, sickly son Jason tragically drowned in the town lake almost a year before. When two strangers arrive at Pam's door digging into her past, a disturbing chain of events is set into motion, leaving the townspeople of Crystal Lake wondering: just who is Pam Voorhees?",
+     "rating": 8.701,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59608",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213375,
+     "title": "VisionQuest",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+     "overview": "With a bounty on his head, Vision must confront his nature and resist Ultron's influence to survive.",
+     "rating": 8.6,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:14410",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 95480,
+     "title": "Slow Horses",
+     "year": 2022,
+     "releaseDate": "2022-04-01",
+     "quality": [],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      80,
+      18,
+      9648
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/AdYr4DjOgXvDUMwu6vEhZy1Rnxk.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/gPQppUnLx9vqPDLz3WwZ2HJsNbt.jpg",
+     "overview": "Follow a dysfunctional team of MI5 agents\u2014and their obnoxious boss, the notorious Jackson Lamb\u2014as they navigate the espionage world's smoke and mirrors to defend England from sinister forces.",
+     "rating": 8.072,
+     "votes": 1090,
+     "added": 1792596381,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a APPLE TV+",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "untitled": [],
+   "order": [
+    "pp000001:s:59509",
+    "pp000001:s:59655",
+    "pp000001:s:59608",
+    "pp000001:s:14410"
+   ],
+   "ranks": {
+    "pp000001:s:59509": 1,
+    "pp000001:s:59655": 2,
+    "pp000001:s:59608": 3,
+    "pp000001:s:14410": 4
+   },
+   "missing": [],
+   "trendSource": "imdb",
+   "week": null,
+   "logoStyles": {},
+   "techs": {}
+  },
+  {
+   "id": "385347510b25a23fe0d354abe5c81b06",
+   "source": "kometa",
+   "family": "kometa",
+   "title": "Trending Now",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "3c00c801aa0767ebef85430651be8665",
+    "f6cb554657c07092bec8de754d829064",
+    "474592355648078dbd30bd8818137f7d"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:2122795",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1283515,
+     "title": "Verity",
+     "year": 2026,
+     "releaseDate": "2026-09-30",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      9648,
+      53,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/rmaNMA1seHqpjtnYKzyynFAr1g8.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cKetrF2dAnQ0AMV5i4BMOs41I5P.jpg",
+     "overview": "Lowen Ashleigh, hired to ghostwrite for best-selling author Verity Crawford, uncovers Verity's autobiographical notes, and becomes involved in what may prove to be a lethal conspiracy.",
+     "rating": 6.329,
+     "votes": 295,
+     "added": 1793115840,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a New Releases",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2122630",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1384216,
+     "title": "The Dog Stars",
+     "year": 2026,
+     "releaseDate": "2026-08-26",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      28,
+      53,
+      878,
+      10751
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/5O616X9vmRzQdB68PHzBewPittd.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/3k7GzxOdLZkN3eZsuhLi2eRzkXO.jpg",
+     "overview": "After the world's population has been ravaged by a pandemic, a man lives a lonesome existence in a Colorado airplane hangar with his dog and a dour gunman he has befriended. When a mysterious transmission comes through on the radio while he\u2019s flying his old Cessna, it sparks a hunt for the provenance of the sound.",
+     "rating": 6.902,
+     "votes": 493,
+     "added": 1793028300,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a New Releases",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2122790",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1465063,
+     "title": "Forgotten Island",
+     "year": 2026,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/myd1K3gefdNAWFsGNRDdMeiK9Qg.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cNICUho5uiAGkfCAQq1ihyaMla4.jpg",
+     "overview": "While celebrating their last night together, high school graduates and best friends Jo and Raissa stumble upon a mysterious portal that transports them to the fantastical island of Nakali. When they discover that the memories of their entire friendship are the price for returning home, Jo and Raissa must race to find a way to leave the island before they forget each other forever.",
+     "rating": 7.607,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2123191",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1727734,
+     "title": "Ali G: Who Iz I?",
+     "year": 2026,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/uTyVxPeWX8Ai30IQoyDDQONNcq.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/hJcGJLi34zE4RhzsiDR6f7pw50K.jpg",
+     "overview": "After twenty years spent \"chillin', tokin' and bonin'\", Ali G is shocked to discover that his long-term girlfriend, Julie, is 8 months pregnant. Faced with an extra mouth to feed, he gets off his batty and heads to America to reclaim his former glory\u2026 but soon encounters adversaries who will ultimately threaten his and his child's very existence.",
+     "rating": 5.485,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:m:2122795",
+    "pp000001:m:2122630",
+    "pp000001:m:2122790",
+    "pp000001:m:2123191",
+    "3c00c801aa0767ebef85430651be8665",
+    "f6cb554657c07092bec8de754d829064",
+    "474592355648078dbd30bd8818137f7d"
+   ],
+   "missing": [
+    {
+     "tmdbId": 1507696,
+     "title": "Apocalypse Z: New World",
+     "year": 2026,
+     "poster": "https://image.tmdb.org/t/p/w342/plu8tTviVZDO5jP7nzNXsDHLu8P.jpg",
+     "rank": 1
+    },
+    {
+     "tmdbId": 1789549,
+     "title": "The Birthday\u200b Gift\u200b",
+     "year": 2026,
+     "poster": "https://image.tmdb.org/t/p/w342/jqGFILLsEDwsLteNDQextojsYFV.jpg",
+     "rank": 2
+    }
+   ],
+   "padded": true,
+   "ranks": {
+    "pp000001:m:2122795": 4,
+    "pp000001:m:2122630": 5,
+    "pp000001:m:2122790": 10,
+    "pp000001:m:2123191": 12,
+    "3c00c801aa0767ebef85430651be8665": 14,
+    "f6cb554657c07092bec8de754d829064": 40,
+    "474592355648078dbd30bd8818137f7d": 44
+   },
+   "logoStyles": {
+    "3c00c801aa0767ebef85430651be8665": "mono",
+    "f6cb554657c07092bec8de754d829064": "mono",
+    "474592355648078dbd30bd8818137f7d": "mono"
+   },
+   "techs": {
+    "f6cb554657c07092bec8de754d829064": [
+     "4K",
+     "HDR"
+    ]
+   }
+  },
+  {
+   "id": "for-you",
+   "source": "jellytip",
+   "family": "foryou",
+   "title": "For you",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "2ee3854bd6c84d0f003ecc192d3f6345"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:1957207",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 121,
+     "title": "The Lord of the Rings: The Two Towers",
+     "year": 2002,
+     "releaseDate": "2002-12-18",
+     "quality": [],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      14,
+      28
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/5VTN0pR8gcqV3EPUHHfMGnJYN9L.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/6G73mNyooWAEQTpckPSnFxFoNmc.jpg",
+     "overview": "Frodo Baggins and the other members of the Fellowship continue on their sacred quest to destroy the One Ring--but on separate paths. Their destinies lie at two towers--Orthanc Tower in Isengard, where the corrupt wizard Saruman awaits, and Sauron's fortress at Barad-dur, deep within the dark lands of Mordor.",
+     "rating": 8.432,
+     "votes": 24852,
+     "added": 1782158147,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "\u272a ORIGINAL MOVIES DOLBY VISION 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "DV"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:54414",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 339692,
+     "title": "Shot Caller",
+     "year": 2017,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/qLmLz2wtyYvmW8Ult3l2ngOnW8v.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/hehboYLXB3m90x9ybiBsupwuifL.jpg",
+     "overview": "A newly-released prison gangster is forced by the leaders of his gang to orchestrate a major crime with a brutal rival gang on the streets of Southern California.",
+     "rating": 6.977,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:461806",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 188927,
+     "title": "Star Trek Beyond",
+     "year": 2016,
+     "releaseDate": "2016-07-07",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      28,
+      12,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/wI5VghYNYLktDRPUa5rrVcVA1h7.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/nkr43pY7ZzUt9b0kDFwJLVuDP8G.jpg",
+     "overview": "The USS Enterprise crew explores the furthest reaches of uncharted space, where they encounter a mysterious new enemy who puts them and everything the Federation stands for to the test.",
+     "rating": 6.789,
+     "votes": 7338,
+     "added": 1697758952,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1957206",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 122,
+     "title": "The Lord of the Rings: The Return of the King",
+     "year": 2003,
+     "releaseDate": "2003-12-17",
+     "quality": [],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      14,
+      28
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/rCzpDGLbOoPwLjy3OAm5NUPOTrC.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/ctiw6FZK4N36LmkjSklWEbuvlq9.jpg",
+     "overview": "As armies mass for a final battle that will decide the fate of the world--and powerful, ancient forces of Light and Dark compete to determine the outcome--one member of the Fellowship of the Ring is revealed as the noble heir to the throne of the Kings of Men. Yet, the sole hope for triumph over evil lies with a brave hobbit, Frodo, who, accompanied by his loyal friend Sam and the hideous, wretched Gollum, ventures deep into the very dark heart of Mordor on his seemingly impossible quest to destroy the Ring of Power.\u200b",
+     "rating": 8.506,
+     "votes": 27691,
+     "added": 1782158146,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "\u272a ORIGINAL MOVIES DOLBY VISION 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "DV"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "2ee3854bd6c84d0f003ecc192d3f6345",
+    "pp000001:m:1957207",
+    "pp000001:m:54414",
+    "pp000001:m:461806",
+    "pp000001:m:1957206"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {},
+   "techs": {
+    "2ee3854bd6c84d0f003ecc192d3f6345": [
+     "4K"
+    ]
+   },
+   "ranks": {}
+  },
+  {
+   "id": "ce42ece2f4bf21601e0d703a5c56d786",
+   "source": "kometa",
+   "family": "kometa",
+   "title": "Because You Watched Miller's Crossing",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "f729246e88385ad6a05699adc533534e",
+    "8f45d4497f457a677dab01390e4fdfb7",
+    "93f70d04226eadc5cb48ab45d5605c5c"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:461824",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 115,
+     "title": "The Big Lebowski",
+     "year": 1998,
+     "releaseDate": "1998-03-06",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      35,
+      80
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/3bv6WAp6BSxxYvB5ozKFUYuRA8C.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/77ElMccPnTMPouRxSdbJ4nEjf69.jpg",
+     "overview": "Jeffrey 'The Dude' Lebowski, a Los Angeles slacker who only wants to bowl and drink White Russians, is mistaken for another Jeffrey Lebowski, a wheelchair-bound millionaire, and finds himself dragged into a strange series of events involving nihilists, adult film producers, ferrets, errant toes, and large sums of money.",
+     "rating": 7.855,
+     "votes": 12744,
+     "added": 1697758953,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:450245",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 901,
+     "title": "City Lights",
+     "year": 1931,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/bXNvzjULc9jrOVhGfjcc64uKZmZ.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/Ma7mQsldFCaQpsZbm8zolgLfmV.jpg",
+     "overview": "A tramp falls in love with a beautiful blind flower girl. His on-and-off friendship with a wealthy man allows him to be the girl's benefactor and suitor.",
+     "rating": 8.246,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "f729246e88385ad6a05699adc533534e",
+    "pp000001:m:461824",
+    "8f45d4497f457a677dab01390e4fdfb7",
+    "93f70d04226eadc5cb48ab45d5605c5c",
+    "pp000001:m:450245"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {
+    "f729246e88385ad6a05699adc533534e": "mono",
+    "8f45d4497f457a677dab01390e4fdfb7": "mono"
+   },
+   "techs": {
+    "8f45d4497f457a677dab01390e4fdfb7": [
+     "4K"
+    ],
+    "df0bfcac5109b3030faa11dd2887a796": [
+     "4K"
+    ]
+   },
+   "ranks": {}
+  },
+  {
+   "id": "franchise:14246",
+   "source": "jellytip",
+   "family": "franchise",
+   "title": "Sniper",
+   "layout": "franchise",
+   "mediaType": "movie",
+   "itemIds": [],
+   "untitled": [],
+   "collection": {
+    "tmdbId": 14246,
+    "name": "Sniper Collection",
+    "overview": "A series of action and war films that feature the United States Armed Forces. The series portrays MGySgt.",
+    "backdrop": "https://image.tmdb.org/t/p/original/kvuUWjeSFEXmc7DytEFKehlNHo4.jpg",
+    "poster": "https://image.tmdb.org/t/p/w500/2NbhXWB5SKRCdMqEpMz9XieQqxU.jpg",
+    "partsOrder": [],
+    "watchedCount": 0,
+    "total": 12,
+    "inLibrary": 0,
+    "artConsistent": false,
+    "itemIds": [],
+    "iptvCount": 11
+   },
+   "iptvItems": [
+    {
+     "id": "pp000001:m:1776439",
+     "source": "iptv",
+     "title": "Sniper 2",
+     "year": 2002,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/z03X84vKeVSjabMPJE0fQYxYiMp.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/9geJUJTck567rr7VzgtUUiNho0Z.jpg",
+     "providerName": "Provider",
+     "rating": 5.5,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1776440",
+     "source": "iptv",
+     "title": "Sniper 3",
+     "year": 2004,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/pUOUOGL3aqKJ7IyBRYvmZQmsmr9.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/5wno51VyhlbNWcYTRFcQQ2QRpMj.jpg",
+     "providerName": "Provider",
+     "rating": 5.5,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1776441",
+     "source": "iptv",
+     "title": "Sniper: Reloaded",
+     "year": 2011,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/l2Clr2vyzNSptarbVzzdpJozWFg.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/7AE2LdB4QTVY6R2nTromUWQFx7n.jpg",
+     "providerName": "Provider",
+     "rating": 5.8,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1776442",
+     "source": "iptv",
+     "title": "Sniper: Legacy",
+     "year": 2014,
+     "quality": [],
+     "poster": "https://image.tmdb.org/t/p/w342/a9L1t3vRaZRU1Fa0kolfQGiTCnQ.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/oehDm7pwRZE2Tdo4FXGhDkcJTlD.jpg",
+     "providerName": "Provider",
+     "rating": 6.015,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:m:1776439",
+    "pp000001:m:1776440",
+    "pp000001:m:1776441",
+    "pp000001:m:1776442"
+   ],
+   "logoStyles": {},
+   "techs": {},
+   "ranks": {},
+   "missing": []
+  },
+  {
+   "id": "actor:3987c0da3ba8d58e55450860ccce5dbf",
+   "source": "jellytip",
+   "family": "actor",
+   "title": "Starring Carrie Fisher",
+   "layout": "poster",
+   "mediaType": "movie",
+   "itemIds": [],
+   "untitled": [],
+   "person": {
+    "id": "3987c0da3ba8d58e55450860ccce5dbf",
+    "name": "Carrie Fisher",
+    "role": "actor",
+    "imageTag": "72abc56ac4ac99ac46f375d78e5138d4"
+   },
+   "iptvItems": [
+    {
+     "id": "pp000001:m:1867728",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 11,
+     "title": "Star Wars",
+     "year": 1977,
+     "releaseDate": "1977-05-25",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      28,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/fai0rspsNeJCS69wHNjOdWxcI7P.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/zqkmTXzjkAgXmEWLRsY4UpTWCeo.jpg",
+     "overview": "Princess Leia is captured and held hostage by the evil Imperial forces in their effort to take over the galactic Empire. Venturesome Luke Skywalker and dashing captain Han Solo team together with the loveable robot duo R2-D2 and C-3PO to rescue the beautiful princess and restore peace and justice in the Empire.",
+     "rating": 8.207,
+     "votes": 23091,
+     "added": 1770557100,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1867732",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 140607,
+     "title": "Star Wars: The Force Awakens",
+     "year": 2015,
+     "releaseDate": "2015-12-15",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      28,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/wqnLdwVXoBjKibFRR5U3y0aDUhs.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/8BTsTfln4jlQrLXUBquXJ0ASQy9.jpg",
+     "overview": "Thirty years after defeating the Galactic Empire, Han Solo and his allies face a new threat from the evil Kylo Ren and his army of Stormtroopers.",
+     "rating": 7.239,
+     "votes": 21078,
+     "added": 1770557100,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1867730",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1891,
+     "title": "The Empire Strikes Back",
+     "year": 1980,
+     "releaseDate": "1980-05-20",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      28,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/nNAeTmF4CtdSgMDplXTDPOpYzsX.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/k9pshruhCpJAdH9RaGJO6jaWQ4X.jpg",
+     "overview": "The epic saga continues as Luke Skywalker, in hopes of defeating the evil Galactic Empire, learns the ways of the Jedi from aging master Yoda. But Darth Vader is more determined than ever to capture Luke. Meanwhile, rebel leader Princess Leia, cocky Han Solo, Chewbacca, and droids C-3PO and R2-D2 are thrown into various stages of capture, betrayal and despair.",
+     "rating": 8.393,
+     "votes": 19056,
+     "added": 1770557100,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1867731",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1892,
+     "title": "Return of the Jedi",
+     "year": 1983,
+     "releaseDate": "1983-05-25",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      28,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/jQYlydvHm3kUix1f8prMucrplhm.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/ziECpBRIyclmBNaFSWlvCfsKbMD.jpg",
+     "overview": "Luke Skywalker leads a mission to rescue his friend Han Solo from the clutches of Jabba the Hutt, the Emperor prepares to crush the Rebellion with a more powerful Death Star, and the Rebel fleet mounts a massive attack on the space station. Luke Skywalker confronts Darth Vader in a final climactic duel before the evil Emperor.",
+     "rating": 7.912,
+     "votes": 17491,
+     "added": 1770557100,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:m:1867728",
+    "pp000001:m:1867732",
+    "pp000001:m:1867730",
+    "pp000001:m:1867731"
+   ],
+   "missing": [
+    {
+     "tmdbId": 639,
+     "title": "When Harry Met Sally...",
+     "year": 1989,
+     "poster": "https://image.tmdb.org/t/p/w342/rFOiFUhTMtDetqCGClC9PIgnC1P.jpg"
+    },
+    {
+     "tmdbId": 5143,
+     "title": "Hannah and Her Sisters",
+     "year": 1986,
+     "poster": "https://image.tmdb.org/t/p/w342/gARgIRb2QFRFVrsziwWE389u1pK.jpg"
+    }
+   ],
+   "padded": true,
+   "logoStyles": {},
+   "techs": {},
+   "ranks": {}
+  }
+ ],
+ "movies": [
+  {
+   "id": "385347510b25a23fe0d354abe5c81b06",
+   "source": "kometa",
+   "family": "kometa",
+   "title": "Trending Now",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "3c00c801aa0767ebef85430651be8665",
+    "f6cb554657c07092bec8de754d829064",
+    "474592355648078dbd30bd8818137f7d"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:2122795",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1283515,
+     "title": "Verity",
+     "year": 2026,
+     "releaseDate": "2026-09-30",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      9648,
+      53,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/rmaNMA1seHqpjtnYKzyynFAr1g8.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cKetrF2dAnQ0AMV5i4BMOs41I5P.jpg",
+     "overview": "Lowen Ashleigh, hired to ghostwrite for best-selling author Verity Crawford, uncovers Verity's autobiographical notes, and becomes involved in what may prove to be a lethal conspiracy.",
+     "rating": 6.329,
+     "votes": 295,
+     "added": 1793115840,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a New Releases",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2122630",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1384216,
+     "title": "The Dog Stars",
+     "year": 2026,
+     "releaseDate": "2026-08-26",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      28,
+      53,
+      878,
+      10751
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/5O616X9vmRzQdB68PHzBewPittd.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/3k7GzxOdLZkN3eZsuhLi2eRzkXO.jpg",
+     "overview": "After the world's population has been ravaged by a pandemic, a man lives a lonesome existence in a Colorado airplane hangar with his dog and a dour gunman he has befriended. When a mysterious transmission comes through on the radio while he\u2019s flying his old Cessna, it sparks a hunt for the provenance of the sound.",
+     "rating": 6.902,
+     "votes": 493,
+     "added": 1793028300,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a New Releases",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2122790",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1465063,
+     "title": "Forgotten Island",
+     "year": 2026,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/myd1K3gefdNAWFsGNRDdMeiK9Qg.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/cNICUho5uiAGkfCAQq1ihyaMla4.jpg",
+     "overview": "While celebrating their last night together, high school graduates and best friends Jo and Raissa stumble upon a mysterious portal that transports them to the fantastical island of Nakali. When they discover that the memories of their entire friendship are the price for returning home, Jo and Raissa must race to find a way to leave the island before they forget each other forever.",
+     "rating": 7.607,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2123191",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1727734,
+     "title": "Ali G: Who Iz I?",
+     "year": 2026,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/uTyVxPeWX8Ai30IQoyDDQONNcq.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/hJcGJLi34zE4RhzsiDR6f7pw50K.jpg",
+     "overview": "After twenty years spent \"chillin', tokin' and bonin'\", Ali G is shocked to discover that his long-term girlfriend, Julie, is 8 months pregnant. Faced with an extra mouth to feed, he gets off his batty and heads to America to reclaim his former glory\u2026 but soon encounters adversaries who will ultimately threaten his and his child's very existence.",
+     "rating": 5.485,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:m:2122795",
+    "pp000001:m:2122630",
+    "pp000001:m:2122790",
+    "pp000001:m:2123191",
+    "3c00c801aa0767ebef85430651be8665",
+    "f6cb554657c07092bec8de754d829064",
+    "474592355648078dbd30bd8818137f7d"
+   ],
+   "missing": [
+    {
+     "tmdbId": 1507696,
+     "title": "Apocalypse Z: New World",
+     "year": 2026,
+     "poster": "https://image.tmdb.org/t/p/w342/plu8tTviVZDO5jP7nzNXsDHLu8P.jpg",
+     "rank": 1
+    },
+    {
+     "tmdbId": 1789549,
+     "title": "The Birthday\u200b Gift\u200b",
+     "year": 2026,
+     "poster": "https://image.tmdb.org/t/p/w342/jqGFILLsEDwsLteNDQextojsYFV.jpg",
+     "rank": 2
+    }
+   ],
+   "padded": true,
+   "ranks": {
+    "pp000001:m:2122795": 4,
+    "pp000001:m:2122630": 5,
+    "pp000001:m:2122790": 10,
+    "pp000001:m:2123191": 12,
+    "3c00c801aa0767ebef85430651be8665": 14,
+    "f6cb554657c07092bec8de754d829064": 40,
+    "474592355648078dbd30bd8818137f7d": 44
+   },
+   "logoStyles": {
+    "3c00c801aa0767ebef85430651be8665": "mono",
+    "f6cb554657c07092bec8de754d829064": "mono",
+    "474592355648078dbd30bd8818137f7d": "mono"
+   },
+   "techs": {
+    "f6cb554657c07092bec8de754d829064": [
+     "4K",
+     "HDR"
+    ]
+   }
+  },
+  {
+   "id": "iptv:4k-new-en",
+   "source": "iptv",
+   "family": "iptv",
+   "title": "4K new releases",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:2082802",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1504358,
+     "title": "Don't Say Good Luck",
+     "year": 2026,
+     "releaseDate": "2026-08-13",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      35,
+      10402,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/dgTKahWonzVLeN8Lm22WR2S7D0A.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/yzdMGn8IRHSGuV8AIzw19wkRU2W.jpg",
+     "overview": "Sophie Birenbaum is ready for the spotlight as the lead in her high school musical\u2014until she's suddenly facing more drama at home than on the stage.",
+     "rating": 7.287,
+     "votes": 148,
+     "added": 1787263080,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2082829",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1284041,
+     "title": "The Last House",
+     "year": 2026,
+     "releaseDate": "2026-08-06",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      27,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/6JU7E8Vv2M11egkctWVOScxWR75.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/1RhfevWmWCVHtEqxWBEjPOC5KG1.jpg",
+     "overview": "A family suddenly sealed inside their home must work together to survive against dwindling resources and the ominous threat keeping them trapped.",
+     "rating": 6.793,
+     "votes": 1530,
+     "added": 1787263080,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2082801",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1728056,
+     "title": "Big Chicken: A Fast Food Conspiracy",
+     "year": 2026,
+     "releaseDate": "2026-08-05",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      99
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/vNvkzG9HpVbnAPqAgkDJBzYi8be.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/d4p2sqbxC2AYkuyxT7tRBSsP4IM.jpg",
+     "overview": "In a bold 28-day experiment, comedian Mo Gilligan tours the UK and US on a fried chicken diet to uncover the impact of the craving \u2014 and industry behind it.",
+     "rating": 5.6,
+     "votes": 18,
+     "added": 1787263080,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:2082820",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 1307118,
+     "title": "Soulm8te",
+     "year": 2026,
+     "releaseDate": "2026-07-31",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      27,
+      878,
+      53
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/nIkAHDzo9kbG3kDmDckqywo6CE9.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/7t6f6VxA2ZXbbZSVctgt7bZG2DI.jpg",
+     "overview": "After a ruthless tech giant acquires a small robotics company, a grieving engineer is tasked with testing their new AI companion. But when he attempts to reprogram her to be a truly sentient soulmate, she develops needs of her own\u2014unleashing a relentless spree of precision-engineered mayhem.",
+     "rating": 7.5,
+     "votes": 544,
+     "added": 1787263080,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "logoStyles": {},
+   "techs": {},
+   "order": [],
+   "ranks": {},
+   "missing": []
+  },
+  {
+   "id": "ce42ece2f4bf21601e0d703a5c56d786",
+   "source": "kometa",
+   "family": "kometa",
+   "title": "Because You Watched Miller's Crossing",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "f729246e88385ad6a05699adc533534e",
+    "8f45d4497f457a677dab01390e4fdfb7",
+    "93f70d04226eadc5cb48ab45d5605c5c"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:461824",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 115,
+     "title": "The Big Lebowski",
+     "year": 1998,
+     "releaseDate": "1998-03-06",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      35,
+      80
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/3bv6WAp6BSxxYvB5ozKFUYuRA8C.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/77ElMccPnTMPouRxSdbJ4nEjf69.jpg",
+     "overview": "Jeffrey 'The Dude' Lebowski, a Los Angeles slacker who only wants to bowl and drink White Russians, is mistaken for another Jeffrey Lebowski, a wheelchair-bound millionaire, and finds himself dragged into a strange series of events involving nihilists, adult film producers, ferrets, errant toes, and large sums of money.",
+     "rating": 7.855,
+     "votes": 12744,
+     "added": 1697758953,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:450245",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 901,
+     "title": "City Lights",
+     "year": 1931,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/bXNvzjULc9jrOVhGfjcc64uKZmZ.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/Ma7mQsldFCaQpsZbm8zolgLfmV.jpg",
+     "overview": "A tramp falls in love with a beautiful blind flower girl. His on-and-off friendship with a wealthy man allows him to be the girl's benefactor and suitor.",
+     "rating": 8.246,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "f729246e88385ad6a05699adc533534e",
+    "pp000001:m:461824",
+    "8f45d4497f457a677dab01390e4fdfb7",
+    "93f70d04226eadc5cb48ab45d5605c5c",
+    "pp000001:m:450245"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {
+    "f729246e88385ad6a05699adc533534e": "mono",
+    "8f45d4497f457a677dab01390e4fdfb7": "mono"
+   },
+   "techs": {
+    "8f45d4497f457a677dab01390e4fdfb7": [
+     "4K"
+    ],
+    "df0bfcac5109b3030faa11dd2887a796": [
+     "4K"
+    ]
+   },
+   "ranks": {}
+  },
+  {
+   "id": "director:a38e61d237e44a24b4bab192fc3bdb4e",
+   "source": "jellytip",
+   "family": "director",
+   "title": "Directed by Rian Johnson",
+   "layout": "poster",
+   "mediaType": "movie",
+   "itemIds": [
+    "44f52bf973549f6ffaaab9b746e658ca",
+    "243e01dd8cc1f736010231937e241e30"
+   ],
+   "untitled": [],
+   "person": {
+    "id": "a38e61d237e44a24b4bab192fc3bdb4e",
+    "name": "Rian Johnson",
+    "role": "director",
+    "imageTag": "30d25be7ce8d7681618cdb520f855ee1"
+   },
+   "iptvItems": [
+    {
+     "id": "pp000001:m:1324266",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 59967,
+     "title": "Looper",
+     "year": 2012,
+     "releaseDate": "2012-09-26",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      28,
+      53,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/sNjL6SqErDBE8OUZlrDLkexfsCj.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/4GPCnwvTbsDleH5QIOyDLMsK8a2.jpg",
+     "overview": "In the year 2044, time travel has not yet been invented but in 30 years it will have been. When the mob wants to get rid of someone, they will send their target into the past where a looper, a hired gun, like Joe is waiting to mop up. Joe is getting rich and life is good until the day the mob decides to close the loop, sending back Joe's future self for assassination.",
+     "rating": 6.918,
+     "votes": 11310,
+     "added": 1744907906,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1867733",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 181808,
+     "title": "Star Wars: The Last Jedi",
+     "year": 2017,
+     "releaseDate": "2017-12-13",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      12,
+      28,
+      878
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg",
+     "overview": "Rey develops her newly discovered abilities with the guidance of Luke Skywalker, who is unsettled by the strength of her powers. Meanwhile, the Resistance prepares to do battle with the First Order.",
+     "rating": 6.731,
+     "votes": 16828,
+     "added": 1770557100,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1324243",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 546554,
+     "title": "Knives Out",
+     "year": 2019,
+     "releaseDate": "2019-11-27",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      35,
+      80,
+      9648
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/pThyQovXQrw2m0s9x82twj48Jq4.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/4HWAQu28e2yaWrtupFPGFkdNU7V.jpg",
+     "overview": "When renowned crime novelist Harlan Thrombey is found dead at his estate just after his 85th birthday, the inquisitive and debonair Detective Benoit Blanc is mysteriously enlisted to investigate. From Harlan's dysfunctional family to his devoted staff, Blanc sifts through a web of red herrings and self-serving lies to uncover the truth behind Harlan's untimely death.",
+     "rating": 7.843,
+     "votes": 14710,
+     "added": 1744907904,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:279002",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 661374,
+     "title": "Glass Onion: A Knives Out Mystery",
+     "year": 2022,
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/vDGr1YdrlfbU9wxTOdpf3zChmv9.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/y3uOfZAYwLkbvhunswBCskNMrfI.jpg",
+     "overview": "World-famous detective Benoit Blanc heads to Greece to peel back the layers of a mystery surrounding a tech billionaire and his eclectic crew of friends.",
+     "rating": 7.019,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "44f52bf973549f6ffaaab9b746e658ca",
+    "pp000001:m:1324266",
+    "pp000001:m:1867733",
+    "pp000001:m:1324243",
+    "pp000001:m:279002",
+    "243e01dd8cc1f736010231937e241e30"
+   ],
+   "missing": [
+    {
+     "tmdbId": 21755,
+     "title": "The Brothers Bloom",
+     "year": 2009,
+     "poster": "https://image.tmdb.org/t/p/w342/xIz8iwzyjgWGzcIwHKpqhBs77ML.jpg"
+    }
+   ],
+   "padded": true,
+   "logoStyles": {
+    "44f52bf973549f6ffaaab9b746e658ca": "mono"
+   },
+   "techs": {
+    "44f52bf973549f6ffaaab9b746e658ca": [
+     "4K",
+     "DV"
+    ]
+   },
+   "ranks": {}
+  },
+  {
+   "id": "franchise:14890",
+   "source": "jellytip",
+   "family": "franchise",
+   "title": "Bad Boys",
+   "layout": "franchise",
+   "mediaType": "movie",
+   "itemIds": [],
+   "untitled": [],
+   "collection": {
+    "tmdbId": 14890,
+    "name": "Bad Boys Collection",
+    "overview": "A franchise of films about the cop duo Mike Lowrey and Marcus Burnett, blowing stuff up and crazy car chases. They get the job done but at an expensive cost.",
+    "backdrop": "https://image.tmdb.org/t/p/original/mNR3xSPbwpIoAtrsbuafei2YkNm.jpg",
+    "poster": "https://image.tmdb.org/t/p/w500/iB59poJBofg1ciKlu6LzZakf11m.jpg",
+    "partsOrder": [],
+    "watchedCount": 0,
+    "total": 4,
+    "inLibrary": 0,
+    "artConsistent": false,
+    "itemIds": [],
+    "iptvCount": 4
+   },
+   "iptvItems": [
+    {
+     "id": "pp000001:m:1323859",
+     "source": "iptv",
+     "title": "Bad Boys",
+     "year": 1995,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/x1ygBecKHfXX4M2kRhmFKWfWbJc.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/wOLTJxfv98miIQcn0oNXq9fIgXM.jpg",
+     "providerName": "Provider",
+     "rating": 6.83,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1323860",
+     "source": "iptv",
+     "title": "Bad Boys II",
+     "year": 2003,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/yCvB5fG5aEPqa1St7ihY6KEAsHD.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/gxSVZCUlDd8upT1G2wdrUdz2hxG.jpg",
+     "providerName": "Provider",
+     "rating": 6.656,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:946531",
+     "source": "iptv",
+     "title": "Bad Boys for Life",
+     "year": 2020,
+     "quality": [
+      "1080p"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/y95lQLnuNKdPAzw9F9Ab8kJ80c3.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/eAIHqfS3kXm7kZl4j7ZBfdegyEz.jpg",
+     "providerName": "Provider",
+     "rating": 7.102,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1323862",
+     "source": "iptv",
+     "title": "Bad Boys: Ride or Die",
+     "year": 2024,
+     "quality": [
+      "4k"
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/oGythE98MYleE6mZlGs5oBGkux1.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/3q01ACG0MWm0DekhvkPFCXyPZSu.jpg",
+     "providerName": "Provider",
+     "rating": 7.306,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:m:1323859",
+    "pp000001:m:1323860",
+    "pp000001:m:946531",
+    "pp000001:m:1323862"
+   ],
+   "logoStyles": {},
+   "techs": {},
+   "ranks": {},
+   "missing": []
+  },
+  {
+   "id": "mood:prison",
+   "source": "jellytip",
+   "family": "mood",
+   "title": "Behind bars",
+   "layout": "standard",
+   "mediaType": "movie",
+   "itemIds": [
+    "d87f0df238a7e954d032eb77972617aa",
+    "0eee30625c188dc82f0f59f2b4c385a9",
+    "37553856045367825437dd73628b41cd"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:m:519837",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 278,
+     "title": "The Shawshank Redemption",
+     "year": 1994,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/pNjh59JSxChQktamG3LMp9ZoQzp.jpg",
+     "overview": "Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison, where he puts his accounting skills to work for an amoral warden. During his long stretch in prison, Dufresne comes to be admired by the other inmates -- including an older prisoner named Red -- for his integrity and unquenchable sense of hope.",
+     "rating": 8.7,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:461879",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 274,
+     "title": "The Silence of the Lambs",
+     "year": 1991,
+     "releaseDate": "1991-02-14",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      80,
+      53,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/uS9m8OBk1A8eM9I042bx8XXpqAq.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/mbOx1wxMLikzwWUO9TKAcFIy6op.jpg",
+     "overview": "Clarice Starling is a top student at the FBI's training academy.  Jack Crawford wants Clarice to interview Dr. Hannibal Lecter, a brilliant psychiatrist who is also a violent psychopath, serving life behind bars for various acts of murder and cannibalism.  Crawford believes that Lecter may have insight into a case and that Starling, as an attractive young woman, may be just the bait to draw him out.",
+     "rating": 8.346,
+     "votes": 18756,
+     "added": 1697758959,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:1120171",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 809,
+     "title": "Shrek 2",
+     "year": 2004,
+     "releaseDate": "2004-05-19",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      16,
+      35,
+      10751,
+      14,
+      10749
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/2yYP0PQjG8zVqturh1BAqu2Tixl.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/8ohobj5lAIbl5XWw11FywS3IRrS.jpg",
+     "overview": "Happily ever after never seemed so far far away when a trip to meet the in-laws turns into a hilariously twisted adventure for Shrek and Fiona. With the help of ever-faithful Donkey, Shrek takes on the potion-brewing Fairy Godmother, pompous Prince Charming, and infamous ogre-killer Puss In Boots.",
+     "rating": 7.333,
+     "votes": 13918,
+     "added": 1725718035,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a KIDS 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:m:461945",
+     "source": "iptv",
+     "kind": "movie",
+     "tmdbId": 82690,
+     "title": "Wreck-It Ralph",
+     "year": 2012,
+     "releaseDate": "2012-11-01",
+     "quality": [
+      "4k"
+     ],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      10751,
+      16,
+      35,
+      12
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/zWoIgZ7mgmPkaZjG0102BSKFIqQ.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/3IFRjBDwtk0DlIsDfJ2zEzLjUBi.jpg",
+     "overview": "Wreck-It Ralph is the 9-foot-tall, 643-pound villain of an arcade video game named Fix-It Felix Jr., in which the game's titular hero fixes buildings that Ralph destroys. Wanting to prove he can be a good guy and not just a villain, Ralph escapes his game and lands in Hero's Duty, a first-person shooter where he helps the game's hero battle against alien invaders. He later enters Sugar Rush, a kart racing game set on tracks made of candies, cookies and other sweets. There, Ralph meets Vanellope von Schweetz who has learned that her game is faced with a dire threat that could affect the entire arcade, and one that Ralph may have inadvertently started.",
+     "rating": 7.36,
+     "votes": 13434,
+     "added": 1697758965,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a 4K Ultra",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "d87f0df238a7e954d032eb77972617aa",
+    "0eee30625c188dc82f0f59f2b4c385a9",
+    "37553856045367825437dd73628b41cd",
+    "pp000001:m:519837",
+    "pp000001:m:461879",
+    "pp000001:m:1120171",
+    "pp000001:m:461945"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {
+    "d87f0df238a7e954d032eb77972617aa": "original",
+    "d3c72a0df18efae5ce1181cb57e42f43": "original",
+    "a1576a10de105e3d14dd87f3324095f7": "mono"
+   },
+   "techs": {
+    "37553856045367825437dd73628b41cd": [
+     "4K",
+     "HDR"
+    ],
+    "c771d4b8035958a1730b84395030aba9": [
+     "4K"
+    ],
+    "90b886d8b6c65d08c9c5a4ee734faae8": [
+     "4K"
+    ],
+    "b9a6985cea7b2655a1ea4fbb2de985da": [
+     "4K"
+    ],
+    "33cbf297fd2700aa8ba3813fe8bcd1f1": [
+     "4K"
+    ],
+    "295439ab3e36eaacd266b14f575f1c4c": [
+     "4K"
+    ],
+    "83d55c99117c85b067071a1b83c5b6fa": [
+     "4K",
+     "DV"
+    ]
+   },
+   "ranks": {}
+  }
+ ],
+ "shows": [
+  {
+   "id": "trending-top10-series",
+   "title": "Top 10 on IMDb this week: Shows",
+   "source": "trending",
+   "family": "trending",
+   "layout": "top10",
+   "mediaType": "tv",
+   "itemIds": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:59509",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 288673,
+     "title": "Carrie",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+     "overview": "After her father's sudden, untimely death thrusts her into the unforgiving ecosystem of public high school, Carrie is forced to navigate a viral bullying scandal that tears through her community, the relentless pressure and casual cruelty of the social\u2011media age, and the awakening of mysterious telekinetic powers that rise alongside her adolescence.",
+     "rating": 8.267,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59655",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213562,
+     "title": "Crystal Lake",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+     "overview": "Single mother Pam Voorhees has been unable to shake her grief after her young, sickly son Jason tragically drowned in the town lake almost a year before. When two strangers arrive at Pam's door digging into her past, a disturbing chain of events is set into motion, leaving the townspeople of Crystal Lake wondering: just who is Pam Voorhees?",
+     "rating": 8.701,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59608",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213375,
+     "title": "VisionQuest",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+     "overview": "With a bounty on his head, Vision must confront his nature and resist Ultron's influence to survive.",
+     "rating": 8.6,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:14410",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 95480,
+     "title": "Slow Horses",
+     "year": 2022,
+     "releaseDate": "2022-04-01",
+     "quality": [],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      80,
+      18,
+      9648
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/AdYr4DjOgXvDUMwu6vEhZy1Rnxk.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/gPQppUnLx9vqPDLz3WwZ2HJsNbt.jpg",
+     "overview": "Follow a dysfunctional team of MI5 agents\u2014and their obnoxious boss, the notorious Jackson Lamb\u2014as they navigate the espionage world's smoke and mirrors to defend England from sinister forces.",
+     "rating": 8.072,
+     "votes": 1090,
+     "added": 1792596381,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a APPLE TV+",
+     "copies": 1,
+     "inLibrary": true,
+     "tech": [
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "untitled": [],
+   "order": [
+    "pp000001:s:59509",
+    "pp000001:s:59655",
+    "pp000001:s:59608",
+    "pp000001:s:14410"
+   ],
+   "ranks": {
+    "pp000001:s:59509": 1,
+    "pp000001:s:59655": 2,
+    "pp000001:s:59608": 3,
+    "pp000001:s:14410": 4
+   },
+   "missing": [],
+   "trendSource": "imdb",
+   "week": null,
+   "logoStyles": {},
+   "techs": {}
+  },
+  {
+   "id": "tv-genre:drama",
+   "source": "jellytip",
+   "family": "genre",
+   "title": "Drama series",
+   "layout": "standard",
+   "mediaType": "tv",
+   "itemIds": [
+    "7f607fceb2a8148ddcaf954912da0399",
+    "2b34da3ec0e13f63ee789bad2e6a0114",
+    "79126450bcaefe541126fa247e0c11ab"
+   ],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:13584",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 1399,
+     "title": "Game of Thrones",
+     "year": 2011,
+     "releaseDate": "2011-04-17",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      10765,
+      18,
+      10759
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/zZqpAXxVSBtxV9qPBcscfXBcL2w.jpg",
+     "overview": "Seven noble families fight for control of the mythical land of Westeros. Friction between the houses leads to full-scale war. All while a very ancient evil awakens in the farthest north. Amidst the war, a neglected military order of misfits, the Night's Watch, is all that stands between the realms of men and icy horrors beyond.",
+     "rating": 8.5,
+     "votes": 28060,
+     "added": 1790527573,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a HBO",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:11228",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 1396,
+     "title": "Breaking Bad",
+     "year": 2008,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/anFx9aTOOYqgS3v7x3R84Kz67ly.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+     "overview": "Walter White, a New Mexico chemistry teacher, is diagnosed with Stage III cancer and given a prognosis of only two years left to live. He becomes filled with a sense of fearlessness and an unrelenting desire to secure his family's financial future at any cost as he enters the dangerous world of drugs and crime.",
+     "rating": 8.958,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:29102",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 1402,
+     "title": "The Walking Dead",
+     "year": 2010,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/ng3cMtxYKt1OSQYqFlnKWnVsqNO.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/rAOjnEFTuNysY7bot8zonhImGMh.jpg",
+     "overview": "Sheriff's deputy Rick Grimes awakens from a coma to find a post-apocalyptic world dominated by flesh-eating zombies. He sets out to find his family and encounters many other survivors along the way.",
+     "rating": 8.08,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:35515",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 69050,
+     "title": "Riverdale",
+     "year": 2017,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/d8mmn9thQ5dBk2qbv6BCqGUXWK3.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/kb9XvtEnDhBVVit4eeKygqll4EA.jpg",
+     "overview": "Set in the present, the series offers a bold, subversive take on Archie, Betty, Veronica and their friends, exploring the surreality of small-town life, the darkness and weirdness bubbling beneath Riverdale\u2019s wholesome facade.",
+     "rating": 8.393,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "7f607fceb2a8148ddcaf954912da0399",
+    "2b34da3ec0e13f63ee789bad2e6a0114",
+    "79126450bcaefe541126fa247e0c11ab",
+    "pp000001:s:13584",
+    "pp000001:s:11228",
+    "pp000001:s:29102",
+    "pp000001:s:35515"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {},
+   "techs": {
+    "7f607fceb2a8148ddcaf954912da0399": [
+     "ATMOS"
+    ],
+    "79126450bcaefe541126fa247e0c11ab": [
+     "4K",
+     "DV",
+     "ATMOS"
+    ],
+    "d4c9f55a43e015e68e7a08043379d1d3": [
+     "TRUEHD"
+    ],
+    "e9bd13e31ad33aee37d2d3caa59c3557": [
+     "4K",
+     "DV",
+     "ATMOS"
+    ],
+    "cfa5cd1d63132e858d64af62afc0064a": [
+     "ATMOS"
+    ],
+    "276cd2f5338d5b15a19e60e33d10010e": [
+     "ATMOS"
+    ]
+   },
+   "ranks": {}
+  },
+  {
+   "id": "discover:newdramaseries",
+   "source": "kometa",
+   "family": "kometa",
+   "title": "New Drama Series",
+   "layout": "standard",
+   "mediaType": "tv",
+   "itemIds": [],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:59608",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213375,
+     "title": "VisionQuest",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+     "overview": "With a bounty on his head, Vision must confront his nature and resist Ultron's influence to survive.",
+     "rating": 8.6,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59655",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 213562,
+     "title": "Crystal Lake",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+     "overview": "Single mother Pam Voorhees has been unable to shake her grief after her young, sickly son Jason tragically drowned in the town lake almost a year before. When two strangers arrive at Pam's door digging into her past, a disturbing chain of events is set into motion, leaving the townspeople of Crystal Lake wondering: just who is Pam Voorhees?",
+     "rating": 8.701,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:59509",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 288673,
+     "title": "Carrie",
+     "year": 2026,
+     "quality": [],
+     "languages": [],
+     "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+     "overview": "After her father's sudden, untimely death thrusts her into the unforgiving ecosystem of public high school, Carrie is forced to navigate a viral bullying scandal that tears through her community, the relentless pressure and casual cruelty of the social\u2011media age, and the awakening of mysterious telekinetic powers that rise alongside her adolescence.",
+     "rating": 8.267,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "inLibrary": false,
+     "tech": [],
+     "catalog": true,
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:58651",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 95350,
+     "title": "Lanterns",
+     "year": 2026,
+     "releaseDate": "2026-08-16",
+     "quality": [
+      "4k"
+     ],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      18,
+      9648,
+      10765
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/rb94rKVIzLyfWufIN7WqLvadBDH.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/6gqezQJ2mkm4jreWwLyOZy2Vf6i.jpg",
+     "overview": "Two intergalactic cops, new recruit John Stewart and Lantern legend Hal Jordan, are drawn into a dark, Earth-based mystery as they investigate a murder in the American heartland.",
+     "rating": 8.232,
+     "votes": 830,
+     "added": 1791203875,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a SERIES 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "DV",
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "order": [
+    "pp000001:s:59608",
+    "pp000001:s:59655",
+    "pp000001:s:59509",
+    "pp000001:s:58651"
+   ],
+   "missing": [],
+   "padded": true,
+   "logoStyles": {},
+   "techs": {},
+   "ranks": {}
+  },
+  {
+   "id": "iptv:series-en",
+   "source": "iptv",
+   "family": "iptv",
+   "title": "Series on IPTV",
+   "layout": "standard",
+   "mediaType": "tv",
+   "itemIds": [],
+   "untitled": [],
+   "iptvItems": [
+    {
+     "id": "pp000001:s:13584",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 1399,
+     "title": "Game of Thrones",
+     "year": 2011,
+     "releaseDate": "2011-04-17",
+     "quality": [],
+     "languages": [
+      "en"
+     ],
+     "originalLanguage": "en",
+     "genreIds": [
+      10765,
+      18,
+      10759
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/zZqpAXxVSBtxV9qPBcscfXBcL2w.jpg",
+     "overview": "Seven noble families fight for control of the mythical land of Westeros. Friction between the houses leads to full-scale war. All while a very ancient evil awakens in the farthest north. Amidst the war, a neglected military order of misfits, the Night's Watch, is all that stands between the realms of men and icy horrors beyond.",
+     "rating": 8.5,
+     "votes": 28060,
+     "added": 1790527573,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a HBO",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:54802",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 76479,
+     "title": "The Boys",
+     "year": 2019,
+     "releaseDate": "2019-07-25",
+     "quality": [
+      "4k"
+     ],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      10765,
+      10759
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/in1R2dDc421JxsoRWaIIAqVI2KE.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/bq28ajZaoMyzEIm6REelqyqtEDZ.jpg",
+     "overview": "A group of vigilantes known informally as \u201cThe Boys\u201d set out to take down corrupt superheroes with no more than blue-collar grit and a willingness to fight dirty.",
+     "rating": 8.425,
+     "votes": 13600,
+     "added": 1779279885,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a SERIES 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "HDR",
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:39151",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 85271,
+     "title": "WandaVision",
+     "year": 2021,
+     "releaseDate": "2021-01-15",
+     "quality": [
+      "4k"
+     ],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      10765,
+      9648,
+      18
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/ijWWwINc8h71NQ8j1LTJMFSj5wr.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/lOr9NKxh4vMweufMOUDJjJhCRHW.jpg",
+     "overview": "Wanda Maximoff and Vision\u2014two super-powered beings living idealized suburban lives\u2014begin to suspect that everything is not as it seems.",
+     "rating": 8.179,
+     "votes": 13000,
+     "added": 1752709339,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a SERIES 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "HDR",
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    },
+    {
+     "id": "pp000001:s:40720",
+     "source": "iptv",
+     "kind": "series",
+     "tmdbId": 84958,
+     "title": "Loki",
+     "year": 2021,
+     "releaseDate": "2021-06-09",
+     "quality": [
+      "4k"
+     ],
+     "languages": [],
+     "originalLanguage": "en",
+     "genreIds": [
+      18,
+      10765
+     ],
+     "poster": "https://image.tmdb.org/t/p/w342/kEl2t3OhXc3Zb9FBh1AuYzRTgZp.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/w780/q3jHCb4dMfYF6ojikKuHd6LscxC.jpg",
+     "overview": "After stealing the Tesseract during the events of \u201cAvengers: Endgame,\u201d an alternate version of Loki is brought to the mysterious Time Variance Authority, a bureaucratic organization that exists outside of time and space and monitors the timeline. They give Loki a choice: face being erased from existence due to being a \u201ctime variant\u201d or help fix the timeline and stop a greater threat.",
+     "rating": 8.18,
+     "votes": 12858,
+     "added": 1754351783,
+     "providerId": "11dd6d87",
+     "providerName": "Provider",
+     "category": "|EN| \u272a SERIES 4K",
+     "copies": 1,
+     "inLibrary": false,
+     "tech": [
+      "4K",
+      "DV",
+      "5.1"
+     ],
+     "favourite": false,
+     "played": false
+    }
+   ],
+   "logoStyles": {},
+   "techs": {},
+   "order": [],
+   "ranks": {},
+   "missing": []
+  }
+ ]
+}

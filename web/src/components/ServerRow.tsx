@@ -101,7 +101,8 @@ window.addEventListener("jellytip-session", () => known.clear());
 
 export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item) => void; autoFocusFirst?: boolean } = {}) {
   if (r.id.startsWith("trending-top10")) return <TrendingRow key={r.id} row={r} />;
-  if (r.iptvItems.length && !r.itemIds.length && r.layout !== "franchise") return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
+  // IPTV-only rows go straight to the simple row; one with a person tile or not-available titles needs the full row
+  if (r.iptvItems.length && !r.itemIds.length && r.layout !== "franchise" && !r.person && !r.missing.length) return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
   const load = () => itemsByIds(r.itemIds);
   const untitled = r.untitled.length ? new Set(r.untitled) : undefined;
   if (r.layout === "franchise" && r.collection)
