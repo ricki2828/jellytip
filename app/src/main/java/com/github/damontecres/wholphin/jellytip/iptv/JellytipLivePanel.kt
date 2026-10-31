@@ -149,7 +149,13 @@ data class LiveMarket(
     val flipProb: Double? = null,
     /** The favourite's probability over the last 30 min (`market.series`). */
     val series: List<MarketPoint> = emptyList(),
-)
+    /** "winner" (plan "Polymarket coverage round 2": F1 race, golf tournament, …) or null (head-to-head). */
+    val kind: String? = null,
+    /** Winner markets: the top outcomes, best first. */
+    val outcomes: List<Pair<String, Double>> = emptyList(),
+) {
+    val isWinner get() = kind == "winner" && outcomes.isNotEmpty()
+}
 
 data class LiveComment(
     val author: String?,
@@ -386,6 +392,8 @@ object LiveParse {
                         m.optJSONArray("series").objects().mapNotNull { pt ->
                             MarketPoint(IptvParse.isoSeconds(pt.str("t")) ?: return@mapNotNull null, pt.dbl("p") ?: return@mapNotNull null)
                         },
+                    kind = m.str("kind"),
+                    outcomes = outcomes(m.optJSONArray("outcomes")),
                 )
             }
         val chat = o.optJSONObject("chat")
@@ -560,6 +568,10 @@ object LiveParse {
         o.optJSONObject(side)?.let { t -> return MatchTeam(t.str("name") ?: return null, t.str("short"), t.str("flag") ?: t.str("logo"), t.str("rank")?.let { "#$it" }, null, null, t.str("country")) }
         return o.str(side)?.let { MatchTeam(it, null, null, null) }
     }
+
+    /** `outcomes: [{name, p}]`, best first, top 6. */
+    fun outcomes(a: JSONArray?): List<Pair<String, Double>> =
+        a.objects().mapNotNull { o -> (o.str("name") ?: return@mapNotNull null) to (o.dbl("p") ?: return@mapNotNull null) }.sortedByDescending { it.second }.take(6)
 
     private fun golfRows(a: JSONArray?): List<GolfRow> =
         a.objects().mapNotNull { r ->
@@ -912,7 +924,7 @@ private fun StatsTab(
     d.stats.take(7).forEach { s -> key(s.label) { StatBar(s, pal) } }
     d.leaders.take(3).forEach { l -> key(l.name) { LeaderRow(l, pal) } }
     // The market in one line at the foot (as on air)
-    d.market?.takeIf { it.home != null || it.away != null }?.let { mk -> OddsLine(mk, m) }
+    d.market?.takeIf { it.home != null || it.away != null || it.isWinner }?.let { mk -> OddsLine(mk, m) }
 }
 
 private val leadingNumber = Regex("""-?\d+(?:\.\d+)?""")
@@ -1322,12 +1334,14 @@ private fun OddsLine(
 ) {
     val homeFav = (mk.home ?: 0.0) >= (mk.away ?: 0.0)
     val team = if (homeFav) m.home else m.away
-    val p = if (homeFav) mk.home else mk.away
+    // Winner markets: the leading outcome
+    val leader = mk.outcomes.firstOrNull()?.takeIf { mk.isWinner }
+    val p = leader?.second ?: if (homeFav) mk.home else mk.away
     Column {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
             Icon(BroadcastIcons.Odds, contentDescription = null, tint = Broadcast.Gold, modifier = Modifier.size(14.dp))
-            BodyText(team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
+            BodyText(leader?.first ?: team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
             p?.let { Odometer(pct(it), 17.sp, Broadcast.Gold) }
             BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { money(it) }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
         }
@@ -1341,6 +1355,16 @@ private fun OddsTab(
     pal: MatchPalette,
     full: Boolean,
 ) {
+    if (mk != null && mk.isWinner) {
+        WinnerList(mk.outcomes, pal)
+        if (full && mk.series.size >= 2) {
+            SectionHead("Leader · last 30 min")
+            Sparkline(mk.series, if (pal.known) pal.home else Broadcast.Gold)
+        }
+        BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { "${money(it)} traded" }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
+        mk.question?.let { BodyText(it, 12.5.sp) }
+        return
+    }
     if (mk == null || (mk.home == null && mk.away == null)) {
         Note("No market for this match.")
         return
@@ -1385,6 +1409,33 @@ private fun OddsTab(
         maxLines = 1,
     )
     mk.question?.let { BodyText(it, 12.5.sp) }
+}
+
+/** A winner market (plan "Polymarket coverage round 2"): ranked outcomes with their probability and a bar; the leader in gold. */
+@Composable
+internal fun WinnerList(
+    outcomes: List<Pair<String, Double>>,
+    pal: MatchPalette,
+) {
+    val bar = if (pal.known) pal.home else Broadcast.Gold
+    val top = outcomes.maxOfOrNull { it.second }?.takeIf { it > 0 } ?: 1.0
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        outcomes.forEachIndexed { i, (name, p) ->
+            key(name) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Cond("${i + 1}", 14.sp, Broadcast.Secondary, modifier = Modifier.width(16.dp), align = TextAlign.End)
+                        BodyText(name, 13.sp, Color.White, modifier = Modifier.weight(1f), weight = if (i == 0) FontWeight.Bold else FontWeight.SemiBold, maxLines = 1)
+                        Odometer(pct(p), 16.sp, if (i == 0) Broadcast.Gold else Color.White)
+                    }
+                    // The bar is relative to the leader so the order reads at a glance
+                    Box(Modifier.padding(start = 22.dp).fillMaxWidth().height(5.dp).background(Broadcast.Line)) {
+                        Box(Modifier.fillMaxWidth((p / top).toFloat().coerceIn(0.02f, 1f)).fillMaxHeight().background(if (i == 0) bar else bar.copy(alpha = 0.55f)))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** The probability series as a line (drawn, not composed per point); a faint 50% line. */

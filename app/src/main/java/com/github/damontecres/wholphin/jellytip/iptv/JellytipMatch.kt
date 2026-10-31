@@ -97,6 +97,9 @@ data class MatchDetail(
     val pending: Boolean,
     /** Stadium photo (`venue.image`), shown faint behind the hero; null = none. */
     val venueImage: String? = null,
+    /** A Polymarket winner market on the detail (`market.kind: "winner"`): top outcomes, best first. */
+    val winner: List<Pair<String, Double>> = emptyList(),
+    val winnerSource: String? = null,
 )
 
 object MatchParse {
@@ -200,6 +203,8 @@ object MatchParse {
             channels = channels,
             pending = root.optBoolean("pending", false) || o.optBoolean("pending", false),
             venueImage = o.optJSONObject("venue")?.str("image")?.let { if (it.startsWith("http")) it else resolve(it) },
+            winner = (root.optJSONObject("market") ?: o.optJSONObject("market"))?.takeIf { it.str("kind") == "winner" }?.let { LiveParse.outcomes(it.optJSONArray("outcomes")) }.orEmpty(),
+            winnerSource = (root.optJSONObject("market") ?: o.optJSONObject("market"))?.str("source"),
         )
     }
 }

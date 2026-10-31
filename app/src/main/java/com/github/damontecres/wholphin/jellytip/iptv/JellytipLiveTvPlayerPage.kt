@@ -375,14 +375,15 @@ fun JellytipLiveTvPlayerPage(
                     liveSeen.flipAt = at
                     if (me?.sportFlipAlerts != false) {
                         val team = if (mk.flipTo == "away") m.away else m.home
-                        val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
+                        // Winner markets: flip.to names the outcome; the toast reads "new favourite"
+                        val name = if (mk.isWinner) mk.flipTo ?: mk.outcomes.first().first else team?.short ?: team?.name ?: mk.flipTo ?: "New"
                         val pal = matchPalette(m)
                         enqueueToast(
                             PlayerToast(
-                                main = "$name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: ""),
+                                main = (if (mk.isWinner) "$name new favourite" else "$name now favourites") + (mk.flipProb?.let { " · ${pct(it)}" } ?: ""),
                                 kicker = "${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip",
                                 sub = mk.volume?.let { v -> "${if (v >= 1_000_000) String.format(java.util.Locale.US, "$%.1fM", v / 1_000_000) else String.format(java.util.Locale.US, "$%.0fK", v / 1_000)} traded" },
-                                edge = if (pal.known) pal.side(mk.flipTo) else Broadcast.Gold,
+                                edge = if (pal.known && !mk.isWinner) pal.side(mk.flipTo) else if (pal.known) pal.home else Broadcast.Gold,
                             ),
                         )
                     }
