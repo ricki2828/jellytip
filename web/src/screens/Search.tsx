@@ -138,7 +138,7 @@ function TopHit({ e, item, onGetIt }: { e: SearchEntry; item: Item | undefined; 
   );
 }
 
-/** Server `results`: top hit, one ranked row of films and shows, then people, collections, lists and "Not available". */
+/** Server `results`: top hit, "In your library" and "On IPTV" rows (each in rank order), then people, collections, lists and "Not available". */
 function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: Set<string>; posterW: number; onGetIt: (d: DiscoverHit) => void }) {
   const list = r.results ?? [];
   const top = r.top;
@@ -159,7 +159,9 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
     };
   }, [idKey]);
   const rest = list.filter((e) => e !== top);
-  const ranked = rest.filter((e) => (e.kind === "film" || e.kind === "series") && e.source !== "discover");
+  // Library and IPTV shown separately, each in rank order (the top hit has its own card above)
+  const inLib = rest.filter((e) => (e.kind === "film" || e.kind === "series") && e.source === "library");
+  const onIptv = rest.filter((e) => (e.kind === "film" || e.kind === "series") && e.source === "iptv");
   const people = rest.filter((e) => e.kind === "person");
   const colls = rest.filter((e) => e.kind === "collection");
   const seen = new Set(list.filter((e) => e.source === "discover").map((e) => e.tmdbId));
@@ -168,18 +170,11 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
   return (
     <>
       {top && <TopHit e={top} item={top.id ? items?.get(top.id) : undefined} onGetIt={onGetIt} />}
-      {ranked.length > 0 && (
+      {inLib.length > 0 && (
         <section className="row poster-row">
-          <h2 className="row-title">Results</h2>
+          <h2 className="row-title">In your library</h2>
           <div className="row-scroll">
-            {ranked.map((e) => {
-              if (e.source === "iptv") {
-                return (
-                  <span key={e.key} className="search-pos" data-key={e.key}>
-                    <IptvPoster width={posterW} item={{ id: e.iptvId!, title: e.title, year: e.year, quality: e.quality, tech: e.tech, poster: e.poster, backdrop: e.backdrop }} tag={seasonHint(e)?.split(" · ")[0]} />
-                  </span>
-                );
-              }
+            {inLib.map((e) => {
               const it = items?.get(e.id!);
               if (!it) return items ? null : <div key={e.key} className="poster card-skeleton" style={{ width: posterW }} />;
               return (
@@ -188,6 +183,18 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
                 </span>
               );
             })}
+          </div>
+        </section>
+      )}
+      {onIptv.length > 0 && (
+        <section className="row poster-row">
+          <h2 className="row-title">On IPTV</h2>
+          <div className="row-scroll">
+            {onIptv.map((e) => (
+              <span key={e.key} className="search-pos" data-key={e.key}>
+                <IptvPoster width={posterW} item={{ id: e.iptvId!, title: e.title, year: e.year, quality: e.quality, tech: e.tech, poster: e.poster, backdrop: e.backdrop }} tag={seasonHint(e)?.split(" · ")[0]} />
+              </span>
+            ))}
           </div>
         </section>
       )}

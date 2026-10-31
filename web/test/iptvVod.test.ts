@@ -80,3 +80,13 @@ test("vod detail: TMDB art, cast with portraits, genres, trailer", () => {
   assert.equal(old?.cast, "A, B");
   assert.equal(old?.castList, undefined);
 });
+
+import { parseCredits } from "../src/lib/iptvVod.ts";
+
+test("person credits: IPTV titles and the pending flag, tolerant of odd shapes", () => {
+  const c = parseCredits({ person: { id: "x" }, library: { itemIds: [] }, iptv: { iptvItems: [{ id: "3:m:9", title: "Léon" }, { title: "bad" }] }, pending: true, missingCount: 3 });
+  assert.equal(c.iptvItems.length, 1);
+  assert.equal(c.pending, true);
+  assert.deepEqual(parseCredits(null), { iptvItems: [], pending: false });
+  assert.deepEqual(parseCredits({ iptv: [] }), { iptvItems: [], pending: false });
+});

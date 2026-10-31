@@ -4,7 +4,7 @@ import { getSession } from "./jellyfin";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
-import { parseVodDetail, type VodDetail } from "../lib/iptvVod";
+import { parseCredits, parseVodDetail, type VodDetail, type VodItem } from "../lib/iptvVod";
 import { parseContinue, type ContinueEntry } from "../lib/continue";
 import { parseOnNow, type OnNow } from "../lib/onNow";
 import { parseQualitySummary, parseSuggest, type Quality, type QualitySummary, type Suggestion } from "../lib/sport";
@@ -348,4 +348,10 @@ export async function iptvContinue(): Promise<ContinueEntry[]> {
 export async function iptvNext(): Promise<ContinueEntry[]> {
   const a = await companionCall("GET", "v1/me/next");
   return a.status === 200 ? parseContinue(a.data) : [];
+}
+
+/** A person's titles on the caller's IPTV (not in the library); null when the server has no such route. */
+export async function personCredits(jellyfinPersonId: string): Promise<{ iptvItems: VodItem[]; pending: boolean } | null> {
+  const a = await companionCall("GET", `v1/people/${encodeURIComponent(jellyfinPersonId)}/credits`);
+  return a.status === 200 ? parseCredits(a.data) : null;
 }

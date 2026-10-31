@@ -191,3 +191,10 @@ export function vodTech(v: { tech?: string[]; quality?: string[] }): string[] {
 
 /** Route to an IPTV title's details. */
 export const vodPath = (id: string) => `/iptv/item?id=${encodeURIComponent(id)}`;
+
+/** GET /v1/people/{id}/credits → the person's titles the library lacks but the caller's IPTV has, and whether more is still being checked. */
+export function parseCredits(raw: unknown): { iptvItems: VodItem[]; pending: boolean } {
+  const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const iptv = r.iptv && typeof r.iptv === "object" ? (r.iptv as Record<string, unknown>) : {};
+  return { iptvItems: parseVodItems(iptv.iptvItems), pending: r.pending === true };
+}

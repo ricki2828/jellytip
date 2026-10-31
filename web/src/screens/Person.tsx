@@ -2,6 +2,9 @@
 import { useEffect, useState } from "react";
 import { getItems, imageUrl, jf, uid, type Item } from "../api/jellyfin";
 import { go } from "../lib/router";
+import { personCredits } from "../api/iptv";
+import type { VodItem } from "../lib/iptvVod";
+import { IptvPoster } from "../components/IptvTile";
 import { PosterCard } from "../components/PosterCard";
 import { FollowButton } from "../components/FollowButton";
 
@@ -9,6 +12,7 @@ export function Person({ id, name }: { id: string; name: string | null }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [person, setPerson] = useState<{ Name?: string; ImageTags?: Record<string, string>; Overview?: string } | null>(null);
   const [failed, setFailed] = useState(false);
+  const [iptv, setIptv] = useState<VodItem[]>([]);
   useEffect(() => {
     let alive = true;
     getItems({ PersonIds: id, Recursive: true, IncludeItemTypes: "Movie,Series", SortBy: "PremiereDate,SortName", SortOrder: "Descending,Ascending", Limit: 200 })
@@ -17,8 +21,18 @@ export function Person({ id, name }: { id: string; name: string | null }) {
     jf<{ Name?: string; ImageTags?: Record<string, string>; Overview?: string }>(`/Users/${uid()}/Items/${id}`)
       .then((p) => alive && setPerson(p))
       .catch(() => undefined);
+    // Titles they are in that the library lacks but this person's IPTV has. The first answer may be partial: once more after 5 s.
+    let timer: number | undefined;
+    setIptv([]);
+    void personCredits(id).then((c) => {
+      if (!alive || !c) return;
+      setIptv(c.iptvItems);
+      if (c.pending)
+        timer = window.setTimeout(() => void personCredits(id).then((c2) => alive && c2 && setIptv(c2.iptvItems)), 5000);
+    });
     return () => {
       alive = false;
+      window.clearTimeout(timer);
     };
   }, [id]);
   const title = person?.Name ?? name ?? "";
@@ -49,6 +63,16 @@ export function Person({ id, name }: { id: string; name: string | null }) {
           <PosterCard key={i.Id} item={i} width={0} onOpen={() => go(`/item/${i.Id}`)} />
         ))}
       </div>
+      {iptv.length > 0 && (
+        <section className="row poster-row person-iptv">
+          <h2 className="row-title">On IPTV</h2>
+          <div className="poster-grid">
+            {iptv.map((v) => (
+              <IptvPoster key={v.id} item={v} width={0} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
