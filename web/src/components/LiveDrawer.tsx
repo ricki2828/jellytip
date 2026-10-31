@@ -61,7 +61,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
   const allowed = mayShow(liveNow, spoilers);
   // Fantasy: only for an NFL game with a linked Sleeper account and the server's routes
   const fantasy = useFantasy(liveNow);
-  const showFantasy = !!fantasy && fantasy.leagues.length > 0 && !!fixture && isNfl(fixture.league, fixture.id);
+  const showFantasy = !!fantasy && fantasy.leagues.length > 0 && !!fixture && isNfl(fixture.leagueKey);
   // Slides out for 200 ms before it goes
   const [leaving, setLeaving] = useState(false);
   const close = () => {

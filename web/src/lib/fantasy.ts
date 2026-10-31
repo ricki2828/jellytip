@@ -119,4 +119,5 @@ export function mineInGame(live: FantasyLive | null, matchId: string | null | un
   return live.leagues.reduce((n, l) => n + l.starters.filter((s) => s.side === "me" && s.matchId === matchId).length, 0);
 }
 
-export const isNfl = (league: string | null | undefined, fixtureId?: string | null) => /\bnfl\b/i.test(league ?? "") || /^nfl\b/i.test(fixtureId ?? "");
+/** An NFL match: `matchInfo.leagueKey` is "nfl" (the display league name is not used). */
+export const isNfl = (leagueKey: string | null | undefined) => leagueKey === "nfl";

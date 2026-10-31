@@ -526,9 +526,11 @@ test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   assert.equal(mineInGame(d, "nfl:401772"), 2);
   assert.equal(mineInGame(d, "nfl:555555"), 0);
   assert.equal(mineInGame(null, "nfl:401772"), 0);
-  assert.equal(isNfl("NFL", null), true);
-  assert.equal(isNfl(null, "nfl:401772"), true);
-  assert.equal(isNfl("NBA", "nba:1"), false);
+  assert.equal(isNfl("nfl"), true);
+  assert.equal(isNfl(null), false);
+  assert.equal(isNfl("nba"), false);
+  assert.equal(parseFixture({ ...FIX, leagueKey: "NFL" })!.leagueKey, "nfl");
+  assert.equal(parseFixture(FIX)!.leagueKey, null);
   assert.equal(parseFantasy({}), null);
   assert.equal(chipText({ week: null, leagues: [], events: [], updatedAt: null }), null);
   assert.equal(parsePrefs({ fantasy: { sleeper: { username: " ricki28 " } } }).fantasy.sleeperUsername, "ricki28");

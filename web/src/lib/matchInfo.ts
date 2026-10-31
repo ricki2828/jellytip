@@ -13,6 +13,8 @@ export interface Side {
 export interface Fixture {
   id: string;
   league: string | null;
+  /** The league's key ("nfl", "nba"…): what code decides on; `league` is for display. */
+  leagueKey: string | null;
   home: Side;
   away: Side;
   /** Epoch seconds. */
@@ -83,6 +85,7 @@ export function parseFixture(raw: unknown): Fixture | null {
   return {
     id,
     league: str(o.league),
+    leagueKey: str(o.leagueKey)?.toLowerCase() ?? null,
     home,
     away,
     startsAt: parseStartsAt(o.startsAt),

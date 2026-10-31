@@ -25,7 +25,7 @@ export function useFixture(matchId: string | null | undefined): Fixture | null {
 /** "🏈 CCP 87.4 – 79.2": my matchups while an NFL game plays. */
 export function FantasyChip({ matchId, active }: { matchId: string | null | undefined; active: boolean }) {
   const fixture = useFixture(active ? matchId : null);
-  const nfl = !!fixture && isNfl(fixture.league, fixture.id);
+  const nfl = !!fixture && isNfl(fixture.leagueKey);
   const live = useFantasy(active && nfl);
   const text = live ? chipText(live) : null;
   // Keep it fresh while it is on screen
@@ -45,7 +45,7 @@ export function FantasyChip({ matchId, active }: { matchId: string | null | unde
 /** Scoring events (a starter up by 4+) as a top-right toast, like the flip one; off with fantasy.alerts. */
 export function FantasyAlerts({ matchId, active }: { matchId: string | null | undefined; active: boolean }) {
   const fixture = useFixture(active ? matchId : null);
-  const nfl = !!fixture && isNfl(fixture.league, fixture.id);
+  const nfl = !!fixture && isNfl(fixture.leagueKey);
   const { prefs } = usePrefs({ defer: true });
   const on = active && nfl && !!prefs?.fantasy.sleeperUsername && prefs.fantasy.alerts;
   const [text, setText] = useState<string | null>(null);
