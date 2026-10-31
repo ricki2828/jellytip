@@ -403,6 +403,15 @@ final class MatchPanel implements LiveFeed.Listener {
             if (!tv.isEmpty()) card.addView(note("On TV: " + android.text.TextUtils.join(", ", tv)));
         }
 
+        // A winner market (plan "Polymarket coverage round 2"): "To win", ranked
+        JSONObject market = info.optJSONObject("market");
+        if (market != null && "winner".equals(str(market, "kind")) && market.optJSONArray("outcomes") != null) {
+            card.addView(Broadcast.sectionHead(activity, "To win" + (str(market, "source") != null ? " · " + str(market, "source") : "")));
+            LinearLayout box = new LinearLayout(activity);
+            box.setOrientation(LinearLayout.VERTICAL);
+            new LiveContent(activity, box, apiBase, token).renderWinners(market.optJSONArray("outcomes"), t);
+            card.addView(box);
+        }
         // Odds: the favourite in gold over a split track, then the lines
         JSONObject odds = info.optJSONObject("odds");
         if (odds != null) {

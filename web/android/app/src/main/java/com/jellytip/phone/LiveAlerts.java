@@ -92,7 +92,9 @@ final class LiveAlerts implements LiveFeed.Listener {
         String source = m.isNull("source") ? "" : m.optString("source");
         String src = source.isEmpty() ? "Market" : source.substring(0, 1).toUpperCase(java.util.Locale.ROOT) + source.substring(1);
         String prob = flip.has("prob") && !flip.isNull("prob") ? " · " + LiveRender.pct(flip.optDouble("prob")) : "";
-        sink.alert("📈  " + src + " flip: " + name + " now favourites" + prob, null);
+        // Winner markets (plan "Polymarket coverage round 2"): flip.to names the outcome
+        boolean winner = "winner".equals(m.isNull("kind") ? null : m.optString("kind"));
+        sink.alert("📈  " + src + " flip: " + (winner ? (to != null && !to.isEmpty() ? to : "New") + " new favourite" : name + " now favourites") + prob, null);
     }
 
     /**

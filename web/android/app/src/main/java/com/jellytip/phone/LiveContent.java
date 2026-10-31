@@ -935,6 +935,27 @@ final class LiveContent {
 
     private void odds(JSONObject d, LiveTeams t) {
         JSONObject m = d.optJSONObject("market");
+        // Winner markets (plan "Polymarket coverage round 2"): a ranked list of outcomes
+        if (m != null && "winner".equals(str(m, "kind")) && m.optJSONArray("outcomes") != null && m.optJSONArray("outcomes").length() > 0) {
+            winners("odds:w:", m.optJSONArray("outcomes"), t);
+            JSONArray series = m.optJSONArray("series");
+            if (series != null && series.length() >= 2) {
+                label("odds:sparklabel", "Leader · last 30 min");
+                Sparkline s = (Sparkline) holder("odds:spark", () -> {
+                    Sparkline sp = new Sparkline(a);
+                    sp.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)));
+                    return sp;
+                });
+                s.set(series, t.known ? t.homeColor : Broadcast.GOLD);
+                order.add(s);
+            }
+            List<String> meta = new ArrayList<>();
+            if (str(m, "source") != null) meta.add(str(m, "source"));
+            if (m.has("volume") && !m.isNull("volume")) meta.add(money(m.optDouble("volume")) + " traded");
+            if (!meta.isEmpty()) note("odds:meta", android.text.TextUtils.join(", ", meta));
+            if (str(m, "question") != null) note("odds:q", str(m, "question"));
+            return;
+        }
         if (m == null || (m.isNull("home") && m.isNull("away")) || (!m.has("home") && !m.has("away"))) {
             note("note:noodds", "No market for this match.");
             return;
@@ -967,6 +988,82 @@ final class LiveContent {
         if (m.has("volume") && !m.isNull("volume")) meta.add(money(m.optDouble("volume")) + " traded");
         if (!meta.isEmpty()) note("odds:meta", android.text.TextUtils.join(", ", meta));
         if (str(m, "question") != null) note("odds:q", str(m, "question"));
+    }
+
+    /** Only the ranked outcomes into the box (match info's "To win"). */
+    void renderWinners(JSONArray outcomes, LiveTeams t) {
+        order.clear();
+        winners("w:", outcomes, t);
+        sync();
+    }
+
+    /** Ranked outcomes: position, name, probability (the leader in gold), a bar relative to the leader. */
+    void winners(String prefix, JSONArray outcomes, LiveTeams t) {
+        List<JSONObject> rows = new ArrayList<>();
+        for (int i = 0; i < outcomes.length(); i++) {
+            JSONObject o = outcomes.optJSONObject(i);
+            if (o != null && str(o, "name") != null && dbl(o, "p") != null) rows.add(o);
+        }
+        java.util.Collections.sort(rows, (x, y) -> Double.compare(y.optDouble("p"), x.optDouble("p")));
+        double top = rows.isEmpty() ? 1 : Math.max(0.0001, rows.get(0).optDouble("p"));
+        for (int i = 0; i < Math.min(rows.size(), 6); i++) {
+            JSONObject o = rows.get(i);
+            String key = prefix + str(o, "name");
+            WinnerRow r = (WinnerRow) holders.get(key);
+            if (r == null) {
+                r = new WinnerRow();
+                holders.put(key, r);
+            }
+            r.bind(i, str(o, "name"), o.optDouble("p"), top, t.known ? t.homeColor : Broadcast.GOLD);
+            order.add(r.root);
+        }
+    }
+
+    private final class WinnerRow {
+        final LinearLayout root = new LinearLayout(a);
+        final TextView rank = Broadcast.cond(a, "", 14, Broadcast.SECONDARY, 700);
+        final TextView name = Broadcast.body(a, "", 13, Color.WHITE, 600);
+        final TextView pct = Broadcast.cond(a, "", 16, Color.WHITE, 700);
+        final View fill = new View(a);
+        final View rest = new View(a);
+
+        WinnerRow() {
+            root.setOrientation(LinearLayout.VERTICAL);
+            root.setPadding(0, dp(3), 0, dp(3));
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            rank.setGravity(Gravity.END);
+            row.addView(rank, new LinearLayout.LayoutParams(dp(16), LinearLayout.LayoutParams.WRAP_CONTENT));
+            name.setMaxLines(1);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setPadding(dp(6), 0, dp(6), 0);
+            row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(pct);
+            root.addView(row);
+            LinearLayout track = new LinearLayout(a);
+            track.setOrientation(LinearLayout.HORIZONTAL);
+            track.setBackgroundColor(Broadcast.LINE);
+            track.addView(fill, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+            track.addView(rest, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0f));
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(5));
+            tlp.leftMargin = dp(22);
+            tlp.topMargin = dp(2);
+            root.addView(track, tlp);
+        }
+
+        void bind(int i, String n, double p, double top, int color) {
+            setText(rank, String.valueOf(i + 1));
+            setText(name, n);
+            Broadcast.styleBody(name, 13, Color.WHITE, i == 0 ? 700 : 600);
+            setText(pct, LiveRender.pct(p));
+            pct.setTextColor(i == 0 ? Broadcast.GOLD : Color.WHITE);
+            float f = (float) Math.max(0.02, Math.min(1, p / top));
+            ((LinearLayout.LayoutParams) fill.getLayoutParams()).weight = f;
+            ((LinearLayout.LayoutParams) rest.getLayoutParams()).weight = 1 - f;
+            fill.setBackgroundColor(i == 0 ? color : (color & 0x00FFFFFF) | 0x8C000000);
+            fill.requestLayout();
+        }
     }
 
     // ---- Chat ----------------------------------------------------------------------------------------------------
