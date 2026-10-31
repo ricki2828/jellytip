@@ -8,7 +8,7 @@ import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks,
 import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
-import { WinnerList } from "./WinnerList";
+import { ThinPill, WinnerList } from "./WinnerList";
 import { usePrefs } from "../api/me";
 import "../fonts";
 import { logoSrc } from "../api/iptv";
@@ -581,7 +581,10 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                           </div>
                           {d.market.draw != null && <p className="iptv-hint">Draw {pct(d.market.draw)}</p>}
                           <Spark series={d.market.series} color={d.market.favourite === "away" ? ac : hc} />
-                          <p className="iptv-hint">{[d.market.source === "polymarket" ? "Polymarket" : d.market.source, volumeText(d.market.volume), agoText(d.market.updatedAt, now)].filter(Boolean).join(" · ")}</p>
+                          <p className="iptv-hint">
+                            {[d.market.source === "polymarket" ? "Polymarket" : d.market.source, volumeText(d.market.volume), agoText(d.market.updatedAt, now)].filter(Boolean).join(" · ")}
+                            {d.market.thin && <ThinPill />}
+                          </p>
                         </div>
                       )}
                       {d.winProb != null && (

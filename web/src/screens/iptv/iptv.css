@@ -3024,3 +3024,12 @@
 .wl-star {
   color: #ffc72c;
 }
+.thin-pill {
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: #3a3f4a;
+  color: #c9ced6;
+  font: 700 11px "Barlow Condensed", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}

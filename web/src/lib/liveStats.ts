@@ -48,6 +48,8 @@ export interface Market {
   volume: number | null;
   updatedAt: number | null;
   series: { t: number; p: number }[];
+  /** Few dollars behind it: shown as a grey THIN MARKET pill, and never a flip toast. */
+  thin: boolean;
   favourite: "home" | "away" | null;
   flip: Flip | null;
 }
@@ -129,6 +131,7 @@ export function parseMarket(m: Record<string, unknown> | null): Market | null {
     volume: num(m.volume),
     updatedAt: parseStartsAt(m.updatedAt),
     series: series(m.series),
+    thin: m.thin === true,
     favourite: side(m.favourite),
     flip: parseFlip(m.flip),
   };

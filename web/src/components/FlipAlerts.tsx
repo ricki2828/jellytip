@@ -14,7 +14,8 @@ const SHOW_MS = 6000;
 
 /** The Live drawer calls this with each answer it gets, so a flip seen there also toasts. */
 export const announceFlips = (matchId: string, d: LiveStats) => {
-  if (d.market?.flip) window.dispatchEvent(new CustomEvent(EVENT, { detail: { matchId, at: d.market.flip.at, to: d.market.flip.to, prob: d.market.flip.prob } }));
+  // A thin market (little money behind it) never makes a toast
+  if (d.market?.flip && !d.market.thin) window.dispatchEvent(new CustomEvent(EVENT, { detail: { matchId, at: d.market.flip.at, to: d.market.flip.to, prob: d.market.flip.prob } }));
 };
 
 export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | null | undefined; active: boolean; drawerOpen: boolean }) {
@@ -72,7 +73,7 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
       const d = await liveStats(matchId, "market,moments,score");
       if (!alive) return;
       if (d === "missing") return; // no live route: stop asking
-      if (d?.market?.flip) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
+      if (d?.market?.flip && !d.market.thin) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
       if (d) {
         const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);
         if (seenMoment.current == null) seenMoment.current = latest; // the first answer is the baseline

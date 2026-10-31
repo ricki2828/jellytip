@@ -5,6 +5,9 @@ import { pct, volumeText, agoText } from "../lib/liveStats";
 import { Odo } from "./Odo";
 import "../screens/iptv/iptv.css";
 
+/** Grey caps pill next to the source line of a market with little money behind it. */
+export const ThinPill = () => <span className="thin-pill">THIN MARKET</span>;
+
 const Row = memo(function Row({ rank, name, p, top, color, star }: { rank: number; name: string; p: number; top: number; color: string; star: boolean }) {
   return (
     <li className={`wl-row${rank === 1 ? " lead" : ""}`}>
@@ -31,7 +34,10 @@ export function WinnerList({ market, color, now }: { market: Market; color: stri
           <Row key={o.name} rank={i + 1} name={o.name} p={o.p} top={top} color={color} star={o.favourite} />
         ))}
       </ol>
-      <p className="iptv-hint">{[market.source === "polymarket" ? "Polymarket" : market.source, volumeText(market.volume), agoText(market.updatedAt, now)].filter(Boolean).join(" · ")}</p>
+      <p className="iptv-hint">
+        {[market.source === "polymarket" ? "Polymarket" : market.source, volumeText(market.volume), agoText(market.updatedAt, now)].filter(Boolean).join(" · ")}
+        {market.thin && <ThinPill />}
+      </p>
     </>
   );
 }

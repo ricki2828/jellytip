@@ -901,3 +901,9 @@ test("Polymarket winner markets: ranked outcomes, flip to a name, modal detail",
   assert.equal(det.market?.outcomes[0].name, "VER");
   assert.equal(parseMatchDetail({ matchInfo: { id: "m", home: { name: "A" }, away: { name: "B" } }, market: { home: 0.5, away: 0.5 } })!.market, null);
 });
+
+test("thin markets: flagged, so no pill-less odds and no flip toast", () => {
+  assert.equal(parseLive({ market: { home: 0.5, away: 0.5 } })!.market!.thin, false);
+  assert.equal(parseLive({ market: { home: 0.5, away: 0.5, thin: true } })!.market!.thin, true);
+  assert.equal(parseLive({ market: { kind: "winner", outcomes: [{ name: "A", p: 0.4 }], thin: true } })!.market!.thin, true);
+});
