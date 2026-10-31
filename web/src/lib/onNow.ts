@@ -2,6 +2,7 @@
 // first, then group order). Pure; tested in web/test/onNow.test.ts. Shape: {now, channels:[Channel + {sport, now, next}]};
 // the server's `sport` flag decides, keywords only when a server leaves it out.
 
+import { parseFixture } from "./matchInfo.ts";
 import { hasServerRanking, parseSport, type SportInfo } from "./sport.ts";
 
 export interface OnNow {
@@ -41,7 +42,12 @@ export function parseOnNow(raw: unknown, now: number): OnNow[] {
     const c = obj(x);
     if (!c) continue;
     const ch = obj(c.channel) ?? c;
-    const p = obj(c.now) ?? obj(c.programme) ?? obj(c.program);
+    let p = obj(c.now) ?? obj(c.programme) ?? obj(c.program);
+    // A channel with no guide (RedZone) carries its matchInfo on the tile itself: that is its "programme" (title, and on now)
+    if (!p) {
+      const mi = parseFixture(c.matchInfo ?? obj(c.now_next)?.matchInfo);
+      if (mi && mi.kind !== "match" && mi.title) p = { title: mi.title, start: Math.min(mi.startsAt ?? now - 60, now - 60), stop: now + 3 * 3600, kind: "live", sport: true, matchInfo: c.matchInfo ?? obj(c.now_next)?.matchInfo };
+    }
     const id = typeof ch.id === "string" ? ch.id : null;
     if (!id || !/^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_.-]{1,64}$/.test(id) || seen.has(id) || !p) continue;
     const start = Number(p.start);

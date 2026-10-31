@@ -863,3 +863,20 @@ test("RedZone server shapes: games with status, last play; matchInfo on the chan
   const ch = parseChannelHits([{ id: "3:9", name: "NFL RedZone", matchInfo: mi }]);
   assert.equal(ch[0].fixture?.kind, "multi");
 });
+
+test("RedZone channel with no guide: matchInfo on the tile makes it an on-now card with the match id", () => {
+  const now = 1_900_000_000;
+  const mi = { id: "multi:nfl:2026-11-01", kind: "multi", title: "NFL RedZone", leagueKey: "nfl", startsAt: now - 7200 };
+  const tile = { id: "3:900", name: "NFL RedZone HD", sport: true, now: null, next: null, matchInfo: mi };
+  const items = parseOnNow({ now, channels: [tile, { id: "3:901", name: "Plain", now: null }] }, now);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, "NFL RedZone");
+  assert.equal(items[0].info.fixture?.id, "multi:nfl:2026-11-01");
+  assert.equal(items[0].info.fixture?.kind, "multi");
+  assert.equal(items[0].sport, true);
+  // via a now_next entry
+  const nn = parseOnNow({ now, channels: [{ id: "3:902", name: "RZ", now_next: { now: null, next: null, matchInfo: mi } }] }, now);
+  assert.equal(nn[0].info.fixture?.id, "multi:nfl:2026-11-01");
+  // an ordinary match without a programme is still skipped
+  assert.equal(parseOnNow({ now, channels: [{ id: "3:903", name: "X", matchInfo: { id: "m", home: { name: "A" }, away: { name: "B" } } }] }, now).length, 0);
+});

@@ -111,7 +111,7 @@ export function ChannelsRow({ hits }: { hits: ChannelHit[] }) {
       <div className="row-scroll">
         {hits.map((c) => (
           <div key={c.id} className="onnow-item">
-            <button className="onnow-card chan-card" data-nav onClick={() => go(livePath(c.id, c.name))} aria-label={`Tune to ${c.name}`} title={c.name}>
+            <button className="onnow-card chan-card" data-nav onClick={() => go(livePath(c.id, c.name, c.fixture ? { matchId: c.fixture.id } : undefined))} aria-label={`Tune to ${c.name}`} title={c.name}>
               <span className="onnow-top">
                 <ChannelLogo logo={c.logo} name={c.name} />
                 {c.now?.phase === "pre" ? <span className="sport-pill pre">PRE-GAME</span> : c.now ? <span className="onnow-live">On now</span> : null}
