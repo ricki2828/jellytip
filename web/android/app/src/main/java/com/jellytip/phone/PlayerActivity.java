@@ -629,6 +629,8 @@ public class PlayerActivity extends AppCompatActivity {
         if (forChannel != null) o.put("channelId", forChannel);
         else if (channelId != null) o.put("channelId", channelId);
         p.emit("pregameAction", o);
+        // Another channel: the web app reopens the player on it when open() resolves, so this one closes now
+        if ("channel".equals(action)) close("back", null);
     }
 
     private TextView pill(String text, int background) {
