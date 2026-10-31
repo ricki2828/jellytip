@@ -49,6 +49,10 @@ object JellytipPerf {
     private var lastGc = gcCount()
     private var ticking = false
     private var destination: () -> String = { "?" }
+
+    /** A state within the screen measured on its own ("panel" -> perfByDest "JellytipLiveTvPlayer+panel"); null = none. */
+    @Volatile
+    var subState: String? = null
     private var metricsThread: HandlerThread? = null
 
     private val listener =
@@ -101,6 +105,8 @@ object JellytipPerf {
         }
     }
 
+    private fun destKey(): String = (runCatching { destination() }.getOrDefault("?").take(80)) + (subState?.let { "+$it" } ?: "")
+
     private fun summarise() {
         val sorted = synchronized(frameMs) { frameMs.sorted().also { frameMs.clear() } }
         val gc = gcCount()
@@ -121,10 +127,10 @@ object JellytipPerf {
                 pct(0.99f),
                 sorted.last(),
                 gcDelta,
-                runCatching { destination() }.getOrDefault("?").take(80),
+                destKey(),
             )
         JellytipTrace.log("perf", line)
-        val dest = runCatching { destination() }.getOrDefault("?").take(80)
+        val dest = destKey()
         synchronized(byDest) {
             val d = byDest.getOrPut(dest) { DestStats() }
             d.windows++

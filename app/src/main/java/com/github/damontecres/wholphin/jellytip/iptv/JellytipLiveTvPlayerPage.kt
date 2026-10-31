@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,7 @@ private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
 private const val STALL_MS = 10_000L
 private const val FLIP_POLL_MS = 30_000L
+private const val LIVE_OPEN_POLL_MS = 15_000L
 private const val FANTASY_POLL_MS = 60_000L
 private const val FLIP_TOAST_MS = 6_000L
 private const val TOAST_GAP_MS = 250L
@@ -321,31 +323,66 @@ fun JellytipLiveTvPlayerPage(
             )
         }
     }
-    // Favourite-flip toast (plan "Favourite-flip toast"): while watching a live key match (not a replay), /live is
-    // polled every 30 s, panel open or not; a new market.flip.at shows a top-right toast for 6 s. sport.flipAlerts.
-    val flipMatch = panelMatch?.takeIf { !spoilerNotice && me?.sportFlipAlerts != false }
-    LaunchedEffect(flipMatch?.id) {
-        val m = flipMatch ?: return@LaunchedEffect
-        var lastAt: String? = null
+    // One /live poll for the panel, flips and moments (plan "Live panel: pop, context, performance"): 15 s full while
+    // the panel is open, 30 s light (`?fields=market,moments,score`) while it is closed; parsed off the main thread,
+    // unchanged rows keep their instances. A new market.flip.at -> a flip toast (sport.flipAlerts); a new moment -> the
+    // strip flashes while the panel is open, a toast while it is closed.
+    val liveId = panelMatch?.id?.takeIf { !spoilerNotice }
+    val panelIsOpen = panelOpen && panelMatch != null
+    var liveData by remember(liveId) { mutableStateOf<MatchLive?>(null) }
+    var liveFlash by remember(liveId) { mutableStateOf<LiveFlash?>(null) }
+    val liveSeen = remember(liveId) { LiveSeen() }
+    LaunchedEffect(liveId, panelIsOpen) {
+        val id = liveId ?: return@LaunchedEffect
+        val m = panelMatch ?: return@LaunchedEffect
         while (true) {
-            val got = fetchLive(m.id)
+            val got = fetchLive(id, light = !panelIsOpen)
             if (got?.first == 404) {
                 LivePanelRoute.missing = true
+                panelOpen = false
                 return@LaunchedEffect
             }
-            if (MatchHidden.hides(m.id)) return@LaunchedEffect
-            got?.second?.let { liveHasChat = it.hasChat }
-            val mk = got?.second?.market
-            val at = mk?.flipAt
-            if (mk != null && at != null && at != lastAt) {
-                lastAt = at
-                val team = if (mk.flipTo == "away") m.away else m.home
-                val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
-                enqueueToast(PlayerToast("📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")))
-                JellytipTrace.player("iptv", "market flip ${m.id} -> ${mk.flipTo}")
+            if (MatchHidden.hides(id)) {
+                panelOpen = false
+                return@LaunchedEffect
             }
-            delay(FLIP_POLL_MS)
+            val d = got?.second
+            if (d != null) {
+                if (panelIsOpen) {
+                    liveData = d.reuse(liveData)
+                    liveHasChat = d.hasChat
+                }
+                // Flip toast (the first answer counts too, as before)
+                val mk = d.market
+                val at = mk?.flipAt
+                if (mk != null && at != null && at != liveSeen.flipAt) {
+                    liveSeen.flipAt = at
+                    if (me?.sportFlipAlerts != false) {
+                        val team = if (mk.flipTo == "away") m.away else m.home
+                        val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
+                        enqueueToast(PlayerToast("📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")))
+                    }
+                    JellytipTrace.player("iptv", "market flip ${m.id} -> ${mk.flipTo}")
+                }
+                // Moments: the server's, else a lead change / NFL touchdown or field goal from the score
+                liveSeen.newMoments(d, m).forEach { mo ->
+                    JellytipTrace.player("iptv", "moment ${m.id} ${mo.kind ?: mo.label}")
+                    if (panelOpen) {
+                        liveFlash = LiveFlash((liveFlash?.seq ?: 0) + 1, mo)
+                    } else if (me?.sportFlipAlerts != false) {
+                        val team = if (mo.team == "away") m.away else if (mo.team == "home") m.home else null
+                        val score = if (d.scoreHome != null && d.scoreAway != null) " · ${m.home?.short ?: m.home?.name} ${d.scoreHome} – ${d.scoreAway} ${m.away?.short ?: m.away?.name}" else ""
+                        enqueueToast(PlayerToast("⚡  ${mo.label}" + (team?.let { " · ${it.short ?: it.name}" } ?: "") + score))
+                    }
+                }
+            }
+            delay(if (panelIsOpen) LIVE_OPEN_POLL_MS else FLIP_POLL_MS)
         }
+    }
+    // Perf trace: the player with the panel open is measured on its own (perfByDest "…+panel")
+    DisposableEffect(panelIsOpen) {
+        com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.subState = if (panelIsOpen) "panel" else null
+        onDispose { com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.subState = null }
     }
     LaunchedEffect(preStartsAt, channel.id) {
         if (preStartsAt != null) preCardTick++
@@ -482,7 +519,8 @@ fun JellytipLiveTvPlayerPage(
         // Slides in from the right (260 ms, decelerate) and out (200 ms, accelerate); kept composed until it is off screen
         val open = panelOpen && panelMatch != null
         LaunchedEffect(open, panelMatch?.id) { if (open) shownPanelMatch = panelMatch }
-        val panelProgress by androidx.compose.animation.core.animateFloatAsState(
+        // Read in graphicsLayer only (the page must not recompose every animation frame)
+        val panelProgress = androidx.compose.animation.core.animateFloatAsState(
             targetValue = if (open) 1f else 0f,
             animationSpec =
                 if (open) {
@@ -492,38 +530,40 @@ fun JellytipLiveTvPlayerPage(
                 },
             label = "live-panel",
         )
+        val panelShown by remember { derivedStateOf { panelProgress.value > 0f } }
         val pm = if (open) panelMatch else shownPanelMatch
-        if (pm != null && panelProgress > 0f) {
+        if (pm != null && panelShown) {
             JellytipLivePanel(
                 pm,
                 tab = panelTab,
                 spoilerNotice = spoilerNotice,
+                data = liveData,
                 tabs = panelTabs,
                 fantasy = fantasy,
-                onRouteMissing = { panelOpen = false },
+                flash = liveFlash,
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
-                progress = panelProgress,
-                onChatKnown = { liveHasChat = it },
+                progress = { panelProgress.value },
             )
         }
         // Toast: top right, slides in from the right, never takes focus; the queue above times it
         val toast = flipToast
-        val toastIn by androidx.compose.animation.core.animateFloatAsState(
+        val toastIn = androidx.compose.animation.core.animateFloatAsState(
             targetValue = if (toast != null) 1f else 0f,
             animationSpec = androidx.compose.animation.core.tween(if (toast != null) 260 else 200),
             label = "player-toast",
         )
         LaunchedEffect(toast) { if (toast != null) lastToast = toast }
         val shownToast = toast ?: lastToast
-        if (toastIn > 0f && shownToast != null) {
+        val toastShown by remember { derivedStateOf { toastIn.value > 0f } }
+        if (toastShown && shownToast != null) {
             Row(
                 modifier =
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 28.dp, end = 32.dp)
                         .graphicsLayer {
-                            translationX = (1f - toastIn) * (size.width + 32.dp.toPx())
-                            alpha = toastIn
+                            translationX = (1f - toastIn.value) * (size.width + 32.dp.toPx())
+                            alpha = toastIn.value
                         }.widthIn(max = 640.dp)
                         .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
                         .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(8.dp)),
@@ -740,5 +780,47 @@ private fun NowNextBanner(
                 }
             }
         }
+    }
+}
+
+/** What the live poll has already shown: the last flip, moments (server or inferred from the score); the first answer primes. */
+private class LiveSeen {
+    var flipAt: String? = null
+    private var primed = false
+    private val moments = HashSet<String>()
+    private var lastHome: Int? = null
+    private var lastAway: Int? = null
+
+    fun newMoments(
+        d: MatchLive,
+        m: IptvMatch,
+    ): List<LiveMoment> {
+        val first = !primed
+        primed = true
+        val out = ArrayList<LiveMoment>()
+        if (d.hasMoments) {
+            d.moments.forEach { mo -> if (moments.add("${mo.at}|${mo.label}") && !first) out += mo }
+        }
+        val h = d.scoreHome?.toIntOrNull()
+        val a = d.scoreAway?.toIntOrNull()
+        if (h != null && a != null) {
+            val ph = lastHome
+            val pa = lastAway
+            // No `moments` from this server: a lead change, or an NFL touchdown / field goal, from the score
+            if (!d.hasMoments && !first && ph != null && pa != null && (h != ph || a != pa)) {
+                val before = Integer.signum(ph - pa)
+                val now = Integer.signum(h - a)
+                val team = if (h > ph) "home" else if (a > pa) "away" else null
+                val delta = maxOf(h - ph, a - pa)
+                when {
+                    before != 0 && now != 0 && before != now -> out += LiveMoment("score:$h-$a", "lead_change", team, "LEAD CHANGE")
+                    isNfl(m) && delta in 6..8 -> out += LiveMoment("score:$h-$a", "touchdown", team, "TOUCHDOWN")
+                    isNfl(m) && delta == 3 -> out += LiveMoment("score:$h-$a", "field_goal", team, "FIELD GOAL")
+                }
+            }
+            lastHome = h
+            lastAway = a
+        }
+        return out
     }
 }
