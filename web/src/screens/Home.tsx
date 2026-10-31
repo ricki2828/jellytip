@@ -11,6 +11,7 @@ import { HomeEdit } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { IptvCard } from "../components/IptvTile";
+import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
 import { continuePath, continueTitle, mergeContinue, type ContinueEntry } from "../lib/continue";
 import { go } from "../lib/router";
@@ -75,6 +76,7 @@ function ContinueTile({ e, autoFocus }: { e: ContinueEntry; autoFocus?: boolean 
 }
 
 export function Home() {
+  useHubTick();
   const [continueItems, setContinue] = useState<Item[] | null>(null);
   const [iptvTiles, setIptvTiles] = useState<ContinueEntry[]>([]);
   const [continueOrder, setContinueOrder] = useState<string[]>([]);

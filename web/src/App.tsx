@@ -10,6 +10,8 @@ import { Home } from "./screens/Home";
 import { Library } from "./screens/Library";
 import { Details } from "./screens/Details";
 import { Player } from "./screens/Player";
+import { Collections } from "./screens/Collections";
+import { CollectionRow } from "./screens/CollectionRow";
 import { Search } from "./screens/Search";
 import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
@@ -86,6 +88,8 @@ export function App() {
         {route.name === "shows" && <Library key="tv" kind="tv" />}
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "downloads" && isNative && <Downloads />}
+        {route.name === "collections" && <Collections />}
+        {route.name === "collectionrow" && <CollectionRow key={route.params.id} id={route.params.id} />}
         {route.name === "person" && <Person key={route.params.id} id={route.params.id} name={route.query.get("name")} />}
         {route.name === "discover" && session.isAdmin && <Discover />}
         {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}

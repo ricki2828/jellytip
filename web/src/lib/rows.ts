@@ -108,7 +108,7 @@ export type TrendEntry = { rank: number } & ({ kind: "lib"; id: string } | { kin
 
 /** Library ids (given in `libIds`, already loaded and visible), IPTV titles and missing titles merged and sorted by rank.
  * Entries without a rank take their place in `order` (1-based); the numeral shown is the entry's rank. */
-export function trendEntries(row: Pick<ServerRow, "order" | "ranks" | "iptvItems" | "missing">, libIds: string[]): TrendEntry[] {
+export function trendEntries(row: Pick<ServerRow, "order" | "ranks" | "iptvItems" | "missing">, libIds: string[], cap = 10): TrendEntry[] {
   const pos = new Map(row.order.map((id, i) => [undash(id), i + 1]));
   const rankOf = (id: string, fallback: number) => row.ranks[undash(id)] ?? pos.get(undash(id)) ?? fallback;
   const all: TrendEntry[] = [
@@ -116,7 +116,7 @@ export function trendEntries(row: Pick<ServerRow, "order" | "ranks" | "iptvItems
     ...row.iptvItems.map((item, i) => ({ kind: "iptv" as const, item, rank: rankOf(item.id, 200 + i) })),
     ...row.missing.map((title, i) => ({ kind: "missing" as const, title, rank: title.rank ?? 300 + i })),
   ];
-  return all.sort((a, b) => a.rank - b.rank).slice(0, 10);
+  return all.sort((a, b) => a.rank - b.rank).slice(0, cap);
 }
 
 /** Rows in server order; rows without an id, title or items are dropped. null = no `rows` field (old server). */

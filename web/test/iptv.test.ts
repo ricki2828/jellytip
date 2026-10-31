@@ -326,3 +326,21 @@ test("pre-game: phase and start parse, the clock decides, texts", () => {
   assert.match(startsLine(at, at - 600), /^Starts \d\d:\d\d · in 10 min$/);
   assert.match(preGameCard(at, at - 600), /^Pre-game — the event starts at \d\d:\d\d \(in 10 min\)$/);
 });
+
+import { cardLine, parseHub } from "../src/lib/collections.ts";
+
+test("collections hub: sections in order, empty and unusable dropped, card line", () => {
+  const sec = parseHub({
+    sections: [
+      { key: "franchises", title: "Franchises", count: 2, items: [{ id: "tmdb:10", title: "Alien", art: { poster: "p" }, total: 12, libCount: 7, iptvCount: 5, ranked: false }, { id: "tmdb:10", title: "dup" }, { title: "no id" }] },
+      { key: "empty", title: "Empty", items: [] },
+      { key: "top-lists", title: "Top lists", items: [{ id: "imdb-top", title: "IMDb Top", total: 1, libCount: 1, iptvCount: 0, ranked: true }] },
+    ],
+  });
+  assert.deepEqual(sec.map((s) => s.key), ["franchises", "top-lists"]);
+  assert.equal(sec[0].items.length, 1);
+  assert.equal(sec[1].items[0].ranked, true);
+  assert.equal(cardLine(sec[0].items[0]), "12 titles · 5 on IPTV");
+  assert.equal(cardLine({ total: 1, libCount: 1, iptvCount: 0 }), "1 title");
+  assert.deepEqual(parseHub(null), []);
+});

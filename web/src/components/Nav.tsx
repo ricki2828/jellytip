@@ -7,6 +7,7 @@ import { afterStartup } from "../lib/startup";
 import { useRecs } from "../api/recStore";
 import { shown, unwatchedCount } from "../lib/recs";
 import { useUpcoming } from "../api/upcomingStore";
+import { hubNow, loadHub, onHubChange } from "../api/collections";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
@@ -91,7 +92,21 @@ export function Nav({ current }: { current: string }) {
   const hasRecs = !!recs && shown(recs).length > 0;
   const ready = recs ? unwatchedCount(recs) : 0;
   const hasUpcoming = (useUpcoming()?.length ?? 0) > 0;
-  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  // Collections: a link once the server has a hub (a 404 keeps it hidden)
+  const [, hubTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void afterStartup().then(() => {
+      if (alive) void loadHub();
+    });
+    const off = onHubChange(() => hubTick((n) => n + 1));
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+  const hasHub = (hubNow()?.length ?? 0) > 0;
+  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -137,6 +152,16 @@ export function Nav({ current }: { current: string }) {
               <rect x="3" y="6" width="18" height="13" rx="2" />
               <path d="M8.5 2.5 12 6l3.5-3.5" />
               <circle cx="17.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
+            </svg>
+          </a>
+        )}
+        {hasHub && (
+          <a href="#/collections" className={`nav-icon nav-collections${current === "collections" ? " active" : ""}`} aria-label="Collections" title="Collections">
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+              <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+              <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+              <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
             </svg>
           </a>
         )}

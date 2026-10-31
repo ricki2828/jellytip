@@ -101,6 +101,7 @@ img {
   stroke-linejoin: round;
 }
 .nav-livetv,
+.nav-collections,
 .nav-recs {
   display: none;
 }
@@ -1276,6 +1277,7 @@ button.overview.open {
   }
   .nav-icon,
   .nav-livetv,
+  .nav-collections,
   .nav-recs {
     display: grid;
     width: 44px;

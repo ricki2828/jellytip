@@ -1,6 +1,7 @@
 // Movies / Shows: the companion carousels for this media type (Movies also gets the Letterboxd lists), then a sortable grid.
 import { useEffect, useRef, useState } from "react";
 import { getItems, type Item } from "../api/jellyfin";
+import { useHubTick } from "../api/collections";
 import { dropPersonalCaches, manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Card } from "../components/Card";
@@ -19,6 +20,7 @@ const SORTS: [string, string, string][] = [
 ];
 
 export function Library({ kind }: { kind: "movie" | "tv" }) {
+  useHubTick();
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [lists, setLists] = useState<LetterboxdRow[]>([]);
   const [sort, setSort] = useState(0);

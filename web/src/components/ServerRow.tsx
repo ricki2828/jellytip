@@ -3,6 +3,7 @@
 import { getItems, type Item } from "../api/jellyfin";
 import type { ServerRow } from "../api/companion";
 import { go } from "../lib/router";
+import { hubIds } from "../api/collections";
 import { TrendingRow } from "./TrendingRow";
 import { FranchiseRow } from "./FranchiseRow";
 import { Row, RowTitle } from "./Row";
@@ -89,7 +90,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
       load={load}
       layout={r.layout === "poster" ? "poster" : "standard"}
       untitled={untitled}
-      onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : undefined}
+      onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : hubIds()?.has(r.id) ? () => go(`/collections/${encodeURIComponent(r.id)}`) : undefined}
       person={person ? { ...person, count: r.itemIds.length } : null}
       extra={extra}
       order={r.order}

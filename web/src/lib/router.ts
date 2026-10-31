@@ -30,6 +30,11 @@ function parse(): Route {
       // TMDB collection ids are numeric
       if (!/^\d{1,9}$/.test(seg[1] ?? "")) return { name: "home", params: {}, query };
       return { name: "collection", params: { id: seg[1] }, query };
+    case "collections":
+      // #/collections = the hub; #/collections/<id> = one collection (ids are the server's row ids)
+      if (seg[1] == null) return { name: "collections", params: {}, query };
+      if (!/^[A-Za-z0-9:_.-]{1,120}$/.test(seg[1])) return { name: "collections", params: {}, query };
+      return { name: "collectionrow", params: { id: seg[1] }, query };
     case "iptv":
       // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
       return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };
@@ -68,7 +73,7 @@ let restoring = false;
 let lastFocus: string | undefined;
 let saveTimer: number | null = null;
 
-const ROOTS = new Set(["home", "movies", "shows", "search", "downloads", "discover", "livetv", "recordings", "upcoming"]);
+const ROOTS = new Set(["home", "movies", "shows", "search", "downloads", "discover", "livetv", "recordings", "upcoming", "collections"]);
 /** Root tabs (Home, Movies, Shows, Search, Downloads, admins' Discover, Live TV) have no back arrow; everything else does. */
 export const isRootRoute = (name: string) => ROOTS.has(name);
 
