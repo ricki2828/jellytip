@@ -83,6 +83,17 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
             }
         });
         selectTab(0);
+        updateChatTab();
+    }
+
+    /** Chat shows only while the feed has a chat block; selected and gone = back to Stats. */
+    private void updateChatTab() {
+        boolean chat = LiveRender.hasChat(feed);
+        for (int i = 0; i < tabViews.length; i++) {
+            if (!"Chat".equals(LiveRender.TABS[i])) continue;
+            tabViews[i].setVisibility(chat ? View.VISIBLE : View.GONE);
+            if (!chat && tab == i) selectTab(0);
+        }
     }
 
     boolean isOpen() {
@@ -122,6 +133,7 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
 
     @Override
     public void onLive() {
+        updateChatTab();
         if (open) render();
     }
 

@@ -19,6 +19,11 @@ final class LiveRender {
 
     private LiveRender() {}
 
+    /** The last /live answer carries a `chat` block; without one the Chat tab is hidden (no match-thread source). */
+    static boolean hasChat(LiveFeed feed) {
+        return feed.last != null && feed.last.has("chat") && !feed.last.isNull("chat");
+    }
+
     /** Fills [content] (cleared first) with [tab] of [feed]'s last answer, or its note while there is none. */
     static void render(Context ctx, LinearLayout content, LiveFeed feed, String tab) {
         content.removeAllViews();

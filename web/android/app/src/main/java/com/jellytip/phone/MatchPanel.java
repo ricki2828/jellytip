@@ -126,6 +126,7 @@ final class MatchPanel implements LiveFeed.Listener {
             if (feed != null) {
                 feed.addListener(this);
                 for (String t : LiveRender.TABS) addTab(t);
+                updateChatTab();
             }
             selectTab("Info");
             fetchInfo();
@@ -179,7 +180,18 @@ final class MatchPanel implements LiveFeed.Listener {
 
     @Override
     public void onLive() {
+        updateChatTab();
         if (shown && showsLive()) render();
+    }
+
+    /** Chat shows only while the feed has a chat block; selected and gone = back to Stats. */
+    private void updateChatTab() {
+        if (feed == null) return;
+        int i = tabs.indexOf("Chat");
+        if (i < 0) return;
+        boolean chat = LiveRender.hasChat(feed);
+        tabViews.get(i).setVisibility(chat ? View.VISIBLE : View.GONE);
+        if (!chat && "Chat".equals(tab)) selectTab("Stats");
     }
 
     private void addTab(String name) {
