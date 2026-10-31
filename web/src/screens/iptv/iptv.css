@@ -1293,6 +1293,12 @@
 }
 .up-wrap {
   display: block;
+  flex: none;
+}
+/* upcoming tiles: the info button sits bottom right (the top right holds the star and the time chip) */
+.up-wrap .info-fab {
+  top: auto;
+  bottom: 8px;
 }
 .identified {
   margin-left: 6px;

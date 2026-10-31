@@ -400,7 +400,7 @@ test("refresh guide: last updated and retry texts", () => {
 });
 
 import { parseSport } from "../src/lib/sport.ts";
-import { displayTitle, matchupTitle, parseFixture, parseMatchDetail, statusLabel, venueLine } from "../src/lib/matchInfo.ts";
+import { matchOutcome, displayTitle, matchupTitle, parseFixture, parseMatchDetail, statusLabel, venueLine } from "../src/lib/matchInfo.ts";
 
 const FIX = { id: "nfl:401", league: "NFL", home: { name: "Chiefs", short: "KC", record: "6-1" }, away: { name: "Bills", short: "BUF" }, startsAt: "2026-10-31T18:00:00Z", venue: { name: "Arrowhead", city: "Kansas City" }, status: "pre", inferred: true };
 
@@ -584,4 +584,13 @@ test("live drawer tabs: Chat only with a chat block", () => {
   assert.deepEqual(liveTabs(false, true).map(([k]) => k), ["stats", "plays", "odds", "fantasy"]);
   assert.equal(parseLive({ chat: { source: "reddit", comments: [] } })!.chat !== null, true);
   assert.equal(parseLive({})!.chat, null);
+});
+
+test("match routes: 404 is the route, 403 no access, unknown only that match", () => {
+  assert.equal(matchOutcome(404, null), "route-missing");
+  assert.equal(matchOutcome(403, { error: "no IPTV" }), "forbidden");
+  assert.equal(matchOutcome(200, { id: "x", unknown: true }), "unknown");
+  assert.equal(matchOutcome(200, { id: "x", status: "in" }), null);
+  assert.equal(matchOutcome(500, null), null);
+  assert.equal(matchOutcome(0, null), null);
 });

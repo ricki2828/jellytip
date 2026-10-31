@@ -21,7 +21,7 @@ export function MatchInfoButton({ fixture, id, className = "" }: { fixture?: Fix
   const [, tick] = useState(0);
   useEffect(() => onMatchInfoAvailability(() => tick((n) => n + 1)), []);
   const mid = fixture?.id ?? id;
-  if (!mid || !matchInfoAvailable()) return null;
+  if (!mid || !matchInfoAvailable(mid)) return null;
   return (
     <button type="button" className={`info-btn ${className}`.trim()} data-nav onClick={() => openMatchInfo(mid)} aria-label="Match info" title="Match info">
       <svg viewBox="0 0 24 24" aria-hidden>
@@ -119,7 +119,11 @@ export function MatchInfoHost() {
     const load = async () => {
       const a = await matchDetail(id);
       if (!alive) return;
-      if (a === "missing") return setState("missing");
+      // Unknown match, no access or no route: the modal goes away (the icon hides itself)
+      if (a === "missing") {
+        setId(null);
+        return flashNote("No match info for this one.");
+      }
       if (!a) return setState("error");
       setD(a);
       setState("ok");

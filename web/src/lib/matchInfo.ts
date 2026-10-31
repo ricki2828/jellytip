@@ -162,3 +162,12 @@ export function statusLabel(f: Fixture, now: number): string {
 }
 
 export const venueLine = (f: Pick<Fixture, "venue">) => [f.venue?.name, f.venue?.city].filter(Boolean).join(", ");
+
+/** What a match route's answer means (plan "match routes' status codes"): 404 = route missing, 403 = no IPTV for this person,
+ * 200 {unknown: true} = this match only; anything else is an ordinary answer (null). */
+export function matchOutcome(status: number, data: unknown): "route-missing" | "forbidden" | "unknown" | null {
+  if (status === 404) return "route-missing";
+  if (status === 403) return "forbidden";
+  if (status === 200 && data && typeof data === "object" && (data as { unknown?: unknown }).unknown === true) return "unknown";
+  return null;
+}
