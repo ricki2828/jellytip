@@ -124,19 +124,21 @@ function StarterRow({ s }: { s: Starter }) {
 }
 
 /** The drawer's Fantasy tab: each league's matchup score, then my and my opponents' players in the game being watched. */
-export function FantasyTab({ live, fixtureId }: { live: FantasyLive; fixtureId: string }) {
+export function FantasyTab({ live, fixtureId, multi = false }: { live: FantasyLive; fixtureId: string; multi?: boolean }) {
   const [game, setGame] = useState<{ id: string; league: string; starters: Starter[] }[] | null>(null);
   useEffect(() => {
     let alive = true;
-    void fantasyGame(fixtureId).then((g) => alive && setGame(g));
+    // A whip-around (RedZone) has no single game: every live player of yours across games is shown, no per-game route
+    if (!multi) void fantasyGame(fixtureId).then((g) => alive && setGame(g));
     return () => {
       alive = false;
     };
-  }, [fixtureId, live.updatedAt]);
+  }, [fixtureId, live.updatedAt, multi]);
   return (
     <>
       {live.leagues.map((l) => {
-        const here = game?.find((g) => g.id === l.id)?.starters ?? l.starters.filter((s) => s.matchId === fixtureId);
+        // multi: every starter in a game that is on now (mine first), from every game; otherwise this game's players only
+        const here = multi ? [...l.starters.filter((s) => s.gameState === "in")].sort((a, b) => (a.side === b.side ? b.points - a.points : a.side === "me" ? -1 : 1)) : (game?.find((g) => g.id === l.id)?.starters ?? l.starters.filter((s) => s.matchId === fixtureId));
         return (
           <section key={l.id}>
             <h4>{l.name}</h4>
@@ -145,7 +147,7 @@ export function FantasyTab({ live, fixtureId }: { live: FantasyLive; fixtureId: 
             </p>
             {here.length > 0 && (
               <>
-                <p className="iptv-hint">In this game</p>
+                <p className="iptv-hint">{multi ? "Your players on now" : "In this game"}</p>
                 <ul className="mi-list">
                   {here.filter((s) => s.side === "me").map((s, i) => <StarterRow key={`m${i}`} s={s} />)}
                 </ul>
@@ -156,7 +158,7 @@ export function FantasyTab({ live, fixtureId }: { live: FantasyLive; fixtureId: 
                 )}
               </>
             )}
-            {here.length === 0 && <p className="iptv-hint">None of your {shortLeague(l.name)} players are in this game.</p>}
+            {here.length === 0 && <p className="iptv-hint">{multi ? `None of your ${shortLeague(l.name)} players are playing right now.` : `None of your ${shortLeague(l.name)} players are in this game.`}</p>}
           </section>
         );
       })}

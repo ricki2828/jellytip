@@ -491,7 +491,7 @@ test("market flip: parsed with the favourite, text names the new favourite", () 
   assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });
 
-import { chipText, clampAlertMin, hasLeagues, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
+import { mineLive, chipText, clampAlertMin, hasLeagues, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
 
 const FANT = {
   week: 9,
@@ -785,4 +785,35 @@ test("event match info (F1, golf), tennis flags, and the three live layouts", ()
   assert.equal(lb.rows.length, 1);
   assert.equal(lb.pinned[0].player, "Ryan Fox");
   assert.deepEqual(situationBlocks("f1", { standings: [] }, { home: "", away: "" }), []);
+});
+
+test("RedZone (multi): fixture without teams, games board, fantasy gating by leagueKey", () => {
+  const m = parseFixture({ id: "multi:nfl:2026-11-01", kind: "multi", leagueKey: "nfl", title: "NFL RedZone" })!;
+  assert.equal(m.kind, "multi");
+  assert.equal(matchupTitle(m), "NFL RedZone");
+  assert.equal(displayTitle("RedZone", m), "NFL RedZone");
+  assert.equal(isNfl(m.leagueKey), true);
+  assert.equal(teamColors(m).known, false);
+  assert.equal(parseFixture({ id: "x", kind: "multi" }), null);
+  const d = parseLive({
+    layout: "multi",
+    market: null,
+    games: [
+      { matchId: "espn:football~nfl:1", home: { name: "Chiefs", short: "KC" }, away: "Bills", score: { home: 17, away: 14 }, clock: "3:12", period: "Q4", situation: { down: "2nd", distance: 7, yardLine: "BUF 12", redZone: true } },
+      { matchId: "espn:football~nfl:2", home: { name: "Lions" }, away: { name: "Packers", short: "GB" }, score: null },
+      { home: "x" },
+    ],
+  })!;
+  assert.equal(d.layout, "multi");
+  assert.equal(d.games.length, 2);
+  assert.equal(d.games[0].away.name, "Bills");
+  assert.equal(d.games[0].situation, "2nd & 7 · BUF 12");
+  assert.equal(d.games[0].redZone, true);
+  assert.equal(d.games[1].redZone, false);
+  assert.equal(d.market, null);
+  // all my live starters across games (the Fantasy tab in multi mode) are counted from every league's starters
+  const live = parseFantasy({ leagues: [{ id: "L", name: "CCP", me: { team: "R", points: 10 }, opp: { team: "O", points: 8 }, starters: [{ side: "me", name: "A", points: 5, matchId: "g1", gameState: "in" }, { side: "me", name: "B", points: 2, matchId: "g2", gameState: "in" }, { side: "opp", name: "C", points: 1, matchId: "g3", gameState: "post" }] }] })!;
+  assert.equal(live.leagues[0].starters.filter((s) => s.gameState === "in").length, 2);
+  assert.equal(mineLive(live), 2);
+  assert.equal(mineLive(null), 0);
 });

@@ -169,7 +169,7 @@ export function MatchInfoHost() {
                   <span className="sc">{f.score ? <Odo value={f.score[side]} /> : ""}</span>
                 </div>
               );
-              if (f.kind === "event")
+              if (f.kind !== "match")
                 return (
                   <>
                     <div className="bc-mh event">
@@ -242,7 +242,7 @@ export function MatchInfoHost() {
               </section>
             )}
 
-            {f.kind !== "event" && d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
+            {f.kind === "match" && d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
               <section>
                 <h3>Odds</h3>
                 {(() => {
@@ -271,7 +271,7 @@ export function MatchInfoHost() {
               </section>
             )}
 
-            {f.kind !== "event" && <Lineup d={d} />}
+            {f.kind === "match" && <Lineup d={d} />}
 
             {(d.form || d.h2h.length > 0 || d.injuries.length > 0) && (
               <section>

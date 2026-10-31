@@ -66,9 +66,9 @@ export interface TeamColors {
 /** Series colours for events with no teams: F1 red, golf green; others neutral. */
 export const seriesColor = (leagueKey: string | null | undefined): string | null => (/^f1\b/i.test(leagueKey ?? "") ? "#E10600" : /^golf/i.test(leagueKey ?? "") ? "#0B6E4F" : null);
 
-export function teamColors(f: (Pick<Fixture, "home" | "away"> & { kind?: "match" | "event"; leagueKey?: string | null }) | null | undefined): TeamColors {
+export function teamColors(f: (Pick<Fixture, "home" | "away"> & { kind?: "match" | "event" | "multi"; leagueKey?: string | null }) | null | undefined): TeamColors {
   if (!f) return { home: NEUTRAL[0], away: NEUTRAL[1], known: false };
-  if (f.kind === "event") {
+  if (f.kind === "event" || f.kind === "multi") {
     const c = seriesColor(f.leagueKey);
     return c ? { home: c, away: c, known: true } : { home: NEUTRAL[0], away: NEUTRAL[1], known: false };
   }

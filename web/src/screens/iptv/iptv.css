@@ -2895,3 +2895,61 @@
 .ld-lrow .par.under {
   color: #ff6b6b;
 }
+
+/* RedZone / whip-around: the multi-game scoreboard */
+.ld-games {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ld-game-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px 30px 1fr 30px 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(13, 16, 21, 0.85);
+  border-left: 5px solid #3a3f4a;
+  font: 700 18px "Barlow Condensed", system-ui, sans-serif;
+}
+.ld-game-row.rz {
+  border-left-color: #e10600;
+}
+.ld-game-row .tm {
+  letter-spacing: 0.04em;
+}
+.ld-game-row .tm:last-of-type {
+  text-align: right;
+}
+.ld-game-row .sc {
+  font-size: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ld-game-row .mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 13px;
+  color: #a9b0bc;
+  text-transform: uppercase;
+}
+.ld-game-row .mid small {
+  font: 600 12px Barlow, system-ui, sans-serif;
+  color: #ffc72c;
+  text-transform: none;
+}
+.ld-game-row .rzflag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 6px;
+  background: #e10600;
+  font: 700 10px "Barlow Condensed", system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.08em;
+}

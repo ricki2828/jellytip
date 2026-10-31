@@ -10,6 +10,18 @@ export interface Flip {
   prob: number;
 }
 
+export interface Game {
+  matchId: string;
+  home: { name: string; short: string | null; logo: string | null };
+  away: { name: string; short: string | null; logo: string | null };
+  score: { home: number; away: number } | null;
+  clock: string | null;
+  period: string | null;
+  /** "2nd & 7 · KC 34" when the game has a situation. */
+  situation: string | null;
+  redZone: boolean;
+}
+
 export interface Moment {
   at: number;
   kind: string;
@@ -28,6 +40,8 @@ export interface LiveStats {
   /** Sport layout key ("basketball", "nfl", "football", "rugby", "cricket") and its sport-specific `situation`. */
   layout: string | null;
   situation: Record<string, unknown> | null;
+  /** Multi (RedZone): every live game of the league, red-zone games first. */
+  games: Game[];
   /** Big events since the last poll: score change, red card, wicket, TD, lead change, clutch time. */
   moments: Moment[];
   winProb: number | null;
@@ -97,6 +111,21 @@ export function parseLive(raw: unknown): LiveStats | null {
         return o && text ? [{ clock: str(o.clock), period: str(o.period), text, scoring: o.scoring === true, team: side(o.team), delta: num(o.delta) ?? num(o.points), id: str(o.id) }] : [];
       })
       .slice(0, 15),
+    games: arr(r.games).flatMap((x): Game[] => {
+      const o = obj(x);
+      const sd = (v: unknown) => {
+        const so = obj(v);
+        const name = typeof v === "string" ? v : str(so?.name) ?? str(so?.short);
+        return name ? { name, short: str(so?.short), logo: str(so?.logo) } : null;
+      };
+      const home = sd(o?.home);
+      const away = sd(o?.away);
+      const sc = obj(o?.score);
+      if (!o || !home || !away) return [];
+      const sit = obj(o.situation);
+      const dd = str(sit?.down) ? `${str(sit?.down)}${str(sit?.distance) ? ` & ${str(sit?.distance)}` : ""}` : null;
+      return [{ matchId: str(o.matchId) ?? "", home, away, score: sc && num(sc.home) != null && num(sc.away) != null ? { home: num(sc.home)!, away: num(sc.away)! } : null, clock: str(o.clock), period: str(o.period), situation: [dd, str(sit?.yardLine) ?? str(sit?.ballOn)].filter(Boolean).join(" · ") || null, redZone: o.redZone === true || sit?.redZone === true }];
+    }),
     layout: str(r.layout)?.toLowerCase() ?? null,
     situation: obj(r.situation),
     moments: arr(r.moments).flatMap((x) => {

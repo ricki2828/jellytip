@@ -18,7 +18,7 @@ export interface Side {
 export interface Fixture {
   id: string;
   /** "event": F1 and golf have no home / away; `title` is the hero and `home`/`away` are placeholders (home carries the title). */
-  kind: "match" | "event";
+  kind: "match" | "event" | "multi";
   title: string | null;
   participants: string[];
   league: string | null;
@@ -95,7 +95,7 @@ export function parseFixture(raw: unknown): Fixture | null {
   const o = obj(raw);
   const id = str(o?.id);
   if (!o || !id) return null;
-  const event = o.kind === "event";
+  const event = o.kind === "event" || o.kind === "multi"; // no home / away: the title is the hero (a multi is a whip-around like NFL RedZone)
   const title = str(o.title);
   let home = side(o.home);
   let away = side(o.away);
@@ -110,7 +110,7 @@ export function parseFixture(raw: unknown): Fixture | null {
   const v = obj(o.venue);
   return {
     id,
-    kind: event ? "event" : "match",
+    kind: o.kind === "multi" ? "multi" : event ? "event" : "match",
     title,
     participants: arr(o.participants).flatMap((p) => (typeof p === "string" ? [p] : str(obj(p)?.name) ? [str(obj(p)?.name)!] : [])),
     league: str(o.league),
@@ -174,10 +174,10 @@ export function parseMatchDetail(raw: unknown): MatchDetail | null {
 }
 
 /** "Home v Away"; an event (F1, golf) is its title. */
-export const matchupTitle = (f: Pick<Fixture, "home" | "away"> & { kind?: "match" | "event"; title?: string | null }) => (f.kind === "event" && f.title ? f.title : `${f.home.name} v ${f.away.name}`);
+export const matchupTitle = (f: Pick<Fixture, "home" | "away"> & { kind?: "match" | "event" | "multi"; title?: string | null }) => (f.kind !== "match" && f.kind && f.title ? f.title : `${f.home.name} v ${f.away.name}`);
 
 /** The tile title: the matchup when Jellytip identified it, else the listing's own title. */
-export const displayTitle = (title: string, f: Fixture | null | undefined) => (f?.inferred || f?.kind === "event" ? matchupTitle(f) : title);
+export const displayTitle = (title: string, f: Fixture | null | undefined) => (f?.inferred || (f && f.kind !== "match") ? matchupTitle(f) : title);
 
 /** "LIVE" / "FT" / "Today 19:30"-style time for the header. */
 export function statusLabel(f: Fixture, now: number): string {

@@ -163,3 +163,6 @@ export function eventParts(e: FantasyEvent, live: FantasyLive): { kicker: string
   }
   return { kicker: `FANTASY${e.league ? ` · ${shortLeague(e.league)}` : ""}`, text, sub: [e.reason, state].filter(Boolean).join(" · ") };
 }
+
+/** RedZone (a whip-around): my starters playing right now, across every game. */
+export const mineLive = (live: FantasyLive | null): number => (live ? live.leagues.reduce((n, l) => n + l.starters.filter((s) => s.side === "me" && s.gameState === "in").length, 0) : 0);

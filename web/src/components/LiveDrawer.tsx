@@ -4,7 +4,7 @@
 // memoised and keyed so a poll re-renders only what changed; motion is transform and opacity only.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
-import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, FLAG_LABEL, type Block, type LeaderRow, type LiveStats, type Moment, type TowerRow } from "../lib/liveStats";
+import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type TowerRow } from "../lib/liveStats";
 import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
@@ -73,12 +73,12 @@ function Strip({ d, f, flash }: { d: LiveStats; f: Fixture | null; flash: { labe
   const score = useCoveredScore(d.score, flash?.n ?? null);
   const mc = flash?.team === "away" ? c.away : flash?.team === "home" ? c.home : GOLD;
   const name = (side: "home" | "away") => (f?.[side].short ?? f?.[side].name ?? (side === "home" ? "HOME" : "AWAY")).toUpperCase();
-  if (f?.kind === "event") {
-    // F1, golf: no teams. The event title on a series-colour slab
+  if (f && f.kind !== "match") {
+    // F1, golf, RedZone: no teams. The title on a series-colour (RedZone: gold) slab
     return (
       <div className="bc-stripbox">
         <div className="bc-strip event">
-          <div className="bc-slab l" style={{ ["--sc" as string]: c.home, ["--sx" as string]: onColor(c.home) }}>
+          <div className="bc-slab l" style={{ ["--sc" as string]: f.kind === "multi" ? GOLD : c.home, ["--sx" as string]: onColor(f.kind === "multi" ? GOLD : c.home) }}>
             <span className="nm">{f.title}</span>
           </div>
           {flash && (
@@ -183,6 +183,34 @@ function Spark({ series, color }: { series: { t: number; p: number }[]; color: s
     <svg className="ld-spark" viewBox="0 0 200 36" preserveAspectRatio="none" aria-label="Probability over the last 30 minutes" role="img">
       <polyline points={pts} fill="none" stroke={color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
+  );
+}
+
+/** RedZone: every live game as a compact slab row with its score, clock, down and distance and a red-zone flag. */
+const GameRow = memo(function GameRow({ g }: { g: Game }) {
+  return (
+    <li className={`ld-game-row${g.redZone ? " rz" : ""}`}>
+      <span className="tm">{(g.home.short ?? g.home.name).toUpperCase()}</span>
+      <b className="sc">{g.score ? <Odo value={g.score.home} /> : "–"}</b>
+      <span className="mid">
+        {[g.period, g.clock].filter(Boolean).join(" ") || ""}
+        {g.situation && <small>{g.situation}</small>}
+      </span>
+      <b className="sc">{g.score ? <Odo value={g.score.away} /> : "–"}</b>
+      <span className="tm">{(g.away.short ?? g.away.name).toUpperCase()}</span>
+      {g.redZone && <em className="rzflag">RED ZONE</em>}
+    </li>
+  );
+});
+
+function GamesBoard({ games }: { games: Game[] }) {
+  if (!games.length) return <p className="iptv-hint">No games on right now.</p>;
+  return (
+    <ul className="ld-games">
+      {games.map((g) => (
+        <GameRow key={g.matchId || `${g.home.name}${g.away.name}`} g={g} />
+      ))}
+    </ul>
   );
 }
 
@@ -375,7 +403,17 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
     window.setTimeout(onClose, OUT_MS);
   };
   useEscapeClose(close);
-  const tabs = liveTabs(!!d?.chat, showFantasy) as [Tab, string][];
+  const multi = fixture?.kind === "multi";
+  let tabs = liveTabs(!!d?.chat, showFantasy) as [Tab, string][];
+  // RedZone: no single game, no market. Fantasy leads, then the multi-game scoreboard
+  if (multi) tabs = [...tabs.filter(([k]) => k === "fantasy"), ...tabs.filter(([k]) => k !== "fantasy" && k !== "odds")];
+  const defaulted = useRef(false);
+  useEffect(() => {
+    if (multi && showFantasy && !defaulted.current) {
+      defaulted.current = true;
+      setTab("fantasy");
+    }
+  }, [multi, showFantasy]);
   // The tab being viewed went away (chat disappeared from the answer): back to the first
   useEffect(() => {
     if (!tabs.some(([k]) => k === tab)) setTab("stats");
@@ -448,7 +486,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   <svg viewBox="0 0 24 24" aria-hidden>
                     <path d={ICON[k]} />
                   </svg>
-                  {LABEL[k]}
+                  {multi && k === "stats" ? "Games" : LABEL[k]}
                 </button>
               ))}
             </div>
@@ -458,7 +496,8 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
             {d && (
               <div className="ld-body">
                 <div key={tab} className="ld-tab">
-                  {tab === "stats" && (
+                  {tab === "stats" && multi && <GamesBoard games={d.games} />}
+                  {tab === "stats" && !multi && (
                     <>
                       <SituationView blocks={blocks} hc={hc} ac={ac} />
                       {d.stats.length === 0 && d.leaders.length === 0 && blocks.length === 0 && <p className="iptv-hint">No stats yet.</p>}
@@ -522,7 +561,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                       )}
                     </>
                   )}
-                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} />}
+                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} multi={multi} />}
                   {tab === "chat" && d.chat && d.chat.comments.length > 0 && (
                     <>
                       <ul className="ld-chat">
