@@ -25,12 +25,17 @@
 
         </activity>
 
-        <!-- Native IPTV player (PlayerPlugin): full screen, landscape; rotation must not restart the stream -->
+        <!-- Native IPTV player (PlayerPlugin): opens landscape; rotation and the mini player must not restart the stream.
+             Its own task (taskAffinity) so the app behind the picture-in-picture window stays usable. -->
         <activity
             android:name=".PlayerActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:screenOrientation="sensorLandscape"
             android:theme="@style/AppTheme.NoActionBar"
+            android:taskAffinity="com.jellytip.phone.player"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:autoRemoveFromRecents="true"
             android:exported="false" />
 
         <!-- Advances the "Downloads at once" queue when a download ends, even with the app closed -->
@@ -56,4 +61,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Live alerts (fantasy scoring, odds flips) as heads-up notifications while the mini player is open -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

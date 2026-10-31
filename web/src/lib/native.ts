@@ -61,7 +61,8 @@ export const NativeDownloads = registerPlugin<JellytipDownloadsPlugin>("Jellytip
 
 /** What the native IPTV player reports when it closes (android/app/src/main/java/com/jellytip/phone/PlayerPlugin.java). */
 export interface NativePlayerResult {
-  reason: "back" | "ended" | "error";
+  /** "replaced": another open() took over this player (ignore it: the new session carries on). */
+  reason: "back" | "ended" | "error" | "replaced";
   /** The channel playing when it closed (after a failover it differs from the one opened). */
   channelId?: string;
   positionMs: number;
@@ -103,6 +104,12 @@ export interface JellytipPlayerPlugin {
     /** Companion API base (COMPANION_BASE) and the Jellyfin token: the native Live drawer polls /v1/sport/match/{id}/live itself. */
     apiBase?: string;
     token?: string;
+    /** Portrait panel for anything without a matchId: the programme's description and what's on next (start = epoch s). */
+    description?: string;
+    upNext?: { title: string; start?: number }[];
+    /** The user's sport.fantasyAlerts / sport.flipAlerts (default on): toasts on screen, notifications in the mini player. */
+    fantasyAlerts?: boolean;
+    flipAlerts?: boolean;
   }): Promise<NativePlayerResult>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
@@ -110,11 +117,12 @@ export interface JellytipPlayerPlugin {
   addListener(event: "playerError", cb: (e: Record<string, unknown>) => void): Promise<{ remove: () => Promise<void> }>;
   /**
    * The player needs a link: reason "failover" (channelId = the alternate to try), "kickoff" (channelId + start/stop:
-   * /play catch-up of the programme on now) or "live" (channelId: back to live). Answer with provideUrl within 15 s.
+   * /play catch-up of the programme on now), "live" (channelId: back to live) or "switch" (channelId picked in the
+   * portrait Info tab's Where to watch: its live link). Answer with provideUrl within 15 s.
    */
   addListener(
     event: "needUrl",
-    cb: (e: { requestId: number; reason: "failover" | "kickoff" | "live"; channelId: string; start?: number; stop?: number }) => void,
+    cb: (e: { requestId: number; reason: "failover" | "kickoff" | "live" | "switch"; channelId: string; start?: number; stop?: number }) => void,
   ): Promise<{ remove: () => Promise<void> }>;
   /**
    * Pre-game card buttons: "remind" (channelId = the channel playing) or "channel" (channelId = the one picked from
@@ -125,6 +133,10 @@ export interface JellytipPlayerPlugin {
   addListener(event: "matchInfo", cb: (e: { matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
   /** Live tapped: the native drawer opened (informational; it fetches /live itself). */
   addListener(event: "liveStats", cb: (e: { matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  /** Portrait Info tab: Remind me / Record for the match (reuse the web handlers). */
+  addListener(event: "matchAction", cb: (e: { action: "remind" | "record"; matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  /** The player now plays another channel (picked in Where to watch); the result's channelId follows it too. */
+  addListener(event: "channelSwitch", cb: (e: { from?: string; to: string; name: string }) => void): Promise<{ remove: () => Promise<void> }>;
   /** Diagnostic: the player switched channel ({from, to, why}). */
   addListener(event: "failover", cb: (e: { from: string; to: string; why: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }

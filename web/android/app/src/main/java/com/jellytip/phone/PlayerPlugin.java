@@ -1,13 +1,11 @@
 package com.jellytip.phone;
 
 import android.content.Intent;
-import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
@@ -16,12 +14,21 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * streams. The web app asks /play first (409 pop-up, renewals stay in JS), then calls {@link #open} with the link;
  * the call resolves when the player closes ({reason: back|ended|error, positionMs, durationMs, error…}). While it
  * plays, "progress" (films, episodes, recordings) and "playerError" events go to the web app.
+ *
+ * <p>The player runs in its own task (plan live-sport "Phone: portrait match layout plus a mini player"), so the mini
+ * player can float while the app behind it stays usable: open() is answered from {@link #closed}, not an activity
+ * result. A second open() while one plays replaces it (the first resolves with reason "replaced").
  */
 @CapacitorPlugin(name = "JellytipPlayer")
 public class PlayerPlugin extends Plugin {
 
     /** The plugin the open player reports to (one player at a time). */
     static volatile PlayerPlugin current;
+
+    private static final Object lock = new Object();
+    private static int sessionSeq;
+    private static int openSession;
+    private static PluginCall openCall;
 
     @Override
     public void load() {
@@ -37,7 +44,27 @@ public class PlayerPlugin extends Plugin {
             return;
         }
         current = this;
+        // One player at a time: a new open() replaces the playing one (the mini player too)
+        PluginCall replaced;
+        int session;
+        synchronized (lock) {
+            replaced = openCall;
+            openCall = call;
+            session = ++sessionSeq;
+            openSession = session;
+        }
+        if (replaced != null) {
+            JSObject r = new JSObject();
+            r.put("reason", "replaced");
+            r.put("positionMs", 0);
+            r.put("durationMs", 0);
+            replaced.resolve(r);
+        }
+        PlayerActivity old = PlayerActivity.instance.get();
+        if (old != null && !old.isFinishing()) old.runOnUiThread(() -> old.closeReplaced());
         Intent i = new Intent(getContext(), PlayerActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.putExtra(PlayerActivity.EXTRA_SESSION, session);
         i.putExtra(PlayerActivity.EXTRA_URL, url);
         i.putExtra(PlayerActivity.EXTRA_TITLE, call.getString("title", ""));
         i.putExtra(PlayerActivity.EXTRA_MIME, call.getString("mime", ""));
@@ -69,6 +96,24 @@ public class PlayerPlugin extends Plugin {
         i.putExtra(PlayerActivity.EXTRA_MATCH_ID, call.getString("matchId"));
         i.putExtra(PlayerActivity.EXTRA_API_BASE, call.getString("apiBase"));
         i.putExtra(PlayerActivity.EXTRA_TOKEN, call.getString("token"));
+        // Portrait panel for anything that isn't a match: the programme's description and what's on next
+        i.putExtra(PlayerActivity.EXTRA_DESCRIPTION, call.getString("description"));
+        JSArray next = call.getArray("upNext", new JSArray());
+        java.util.List<String> nTitles = new java.util.ArrayList<>();
+        java.util.List<Long> nStarts = new java.util.ArrayList<>();
+        for (int k = 0; k < next.length(); k++) {
+            org.json.JSONObject n = next.optJSONObject(k);
+            if (n == null || n.optString("title").isEmpty()) continue;
+            nTitles.add(n.optString("title"));
+            nStarts.add(n.optLong("start", 0L));
+        }
+        long[] starts = new long[nStarts.size()];
+        for (int k = 0; k < starts.length; k++) starts[k] = nStarts.get(k);
+        i.putExtra(PlayerActivity.EXTRA_UP_NEXT_TITLES, nTitles.toArray(new String[0]));
+        i.putExtra(PlayerActivity.EXTRA_UP_NEXT_STARTS, starts);
+        // Alerts (the user's sport.fantasyAlerts / sport.flipAlerts; on unless false)
+        i.putExtra(PlayerActivity.EXTRA_FANTASY_ALERTS, !Boolean.FALSE.equals(call.getBoolean("fantasyAlerts", true)));
+        i.putExtra(PlayerActivity.EXTRA_FLIP_ALERTS, !Boolean.FALSE.equals(call.getBoolean("flipAlerts", true)));
         if (call.getData().has("altChannels")) {
             JSArray pre = call.getArray("altChannels", new JSArray());
             java.util.List<String> pIds = new java.util.ArrayList<>();
@@ -82,21 +127,18 @@ public class PlayerPlugin extends Plugin {
             i.putExtra(PlayerActivity.EXTRA_PRE_ALT_IDS, pIds.toArray(new String[0]));
             i.putExtra(PlayerActivity.EXTRA_PRE_ALT_NAMES, pNames.toArray(new String[0]));
         }
-        startActivityForResult(call, i, "onPlayerClosed");
+        getContext().startActivity(i);
     }
 
-    @ActivityCallback
-    private void onPlayerClosed(PluginCall call, ActivityResult result) {
-        if (call == null) return;
-        Intent data = result.getData();
-        JSObject ret = new JSObject();
-        if (data == null) {
-            ret.put("reason", "back");
-            ret.put("positionMs", 0);
-            ret.put("durationMs", 0);
-            call.resolve(ret);
-            return;
+    /** From the player as it closes: answers the open() of [session] (a replaced one was answered already). */
+    static void closed(int session, Intent data) {
+        PluginCall call;
+        synchronized (lock) {
+            if (session != openSession || openCall == null) return;
+            call = openCall;
+            openCall = null;
         }
+        JSObject ret = new JSObject();
         ret.put("reason", stringOr(data.getStringExtra(PlayerActivity.RESULT_REASON), "back"));
         String ch = data.getStringExtra(PlayerActivity.RESULT_CHANNEL_ID);
         if (ch != null) ret.put("channelId", ch);
@@ -138,7 +180,7 @@ public class PlayerPlugin extends Plugin {
     }
 
     /** ISO-8601 ("2026-10-31T18:00:00Z", offsets allowed) or epoch seconds -> epoch ms; 0 when absent or unreadable. */
-    private static long isoMs(String v) {
+    static long isoMs(String v) {
         if (v == null || v.isEmpty()) return 0L;
         try {
             return Long.parseLong(v) * 1000L;

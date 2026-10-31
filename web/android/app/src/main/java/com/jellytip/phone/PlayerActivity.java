@@ -70,6 +70,13 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_MATCH_ID = "matchId";
     static final String EXTRA_API_BASE = "apiBase";
     static final String EXTRA_TOKEN = "token";
+    static final String EXTRA_DESCRIPTION = "description";
+    static final String EXTRA_UP_NEXT_TITLES = "upNextTitles";
+    static final String EXTRA_UP_NEXT_STARTS = "upNextStarts";
+    static final String EXTRA_FANTASY_ALERTS = "fantasyAlerts";
+    static final String EXTRA_FLIP_ALERTS = "flipAlerts";
+    /** Which open() this player answers (PlayerPlugin resolves that call when it closes). */
+    static final String EXTRA_SESSION = "session";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -90,6 +97,14 @@ public class PlayerActivity extends AppCompatActivity {
     private static final long SEEK_FORWARD_MS = 30_000;
     /** "Live" on a growing recording lands this far before the end of what is recorded so far. */
     private static final long LIVE_EDGE_MS = 10_000;
+    /** Portrait: the video starts below the status bar / cutout area. */
+    private static final int PORTRAIT_TOP_DP = 28;
+    private static final String ALERT_CHANNEL = "live_alerts";
+    private static final int ALERT_ID_BASE = 7_100;
+    private static final long ALERT_TIMEOUT_MS = 120_000;
+    private static final int PIP_PLAY_PAUSE = 1;
+    private static final int PIP_LIVE = 2;
+    private static final int PIP_CLOSE = 3;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExoPlayer player;
@@ -126,6 +141,18 @@ public class PlayerActivity extends AppCompatActivity {
     private boolean growing;
     /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
     private boolean toLiveEdge;
+    private int session;
+    private FrameLayout root;
+    /** One /live poller for the drawer, the portrait panel and flip alerts; null without a live match. */
+    private LiveFeed liveFeed;
+    /** Portrait: below the 16:9 video (match tabs, or the programme's title, description and up next). */
+    private MatchPanel matchPanel;
+    private LiveAlerts liveAlerts;
+    private TextView infoButton;
+    private TextView liveButton;
+    private TextView pipButton;
+    private boolean pipReceiverOn;
+    private int alertSeq;
     /** Length at the last end of a growing recording: no growth since = it has finished, so close. */
     private long endedAt = -1;
     private boolean closing;
@@ -162,6 +189,7 @@ public class PlayerActivity extends AppCompatActivity {
         programmeStart = in.getLongExtra(EXTRA_PROG_START, 0);
         programmeStop = in.getLongExtra(EXTRA_PROG_STOP, 0);
         instance = new java.lang.ref.WeakReference<>(this);
+        session = in.getIntExtra(EXTRA_SESSION, 0);
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
         // Opens in landscape (either side) whatever way the phone is held; free rotation starts later ([unlockRotation])
@@ -174,7 +202,7 @@ public class PlayerActivity extends AppCompatActivity {
         bars.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         bars.hide(WindowInsetsCompat.Type.systemBars());
 
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         view = new PlayerView(this);
         view.setKeepContentOnPlayerReset(true);
@@ -214,21 +242,30 @@ public class PlayerActivity extends AppCompatActivity {
         matchId = in.getStringExtra(EXTRA_MATCH_ID);
         if (matchId != null && !matchId.isEmpty()) {
             // ⓘ: the web app shows match info (after the player closes, or over it when it can)
-            TextView info = pill("\u24D8", 0xCC333333);
-            info.setContentDescription("Match info");
-            info.setOnClickListener(v -> matchAction("matchInfo"));
-            topRight.addView(info, gap());
+            infoButton = pill("\u24D8", 0xCC333333);
+            infoButton.setContentDescription("Match info");
+            infoButton.setOnClickListener(v -> matchAction("matchInfo"));
+            topRight.addView(infoButton, gap());
             String apiBase = in.getStringExtra(EXTRA_API_BASE);
             if (live && apiBase != null && !apiBase.isEmpty()) {
-                liveDrawer = new LiveStatsDrawer(this, root, handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
-                TextView liveBtn = pill("Live", 0xCC333333);
-                liveBtn.setContentDescription("Live stats");
-                liveBtn.setOnClickListener(v -> {
+                liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
+                liveDrawer = new LiveStatsDrawer(this, root, liveFeed);
+                liveDrawer.onOpenChanged = this::updateFeedSpeed;
+                liveButton = pill("Live", 0xCC333333);
+                liveButton.setContentDescription("Live stats");
+                liveButton.setOnClickListener(v -> {
                     matchAction("liveStats");
                     liveDrawer.open();
                 });
-                topRight.addView(liveBtn, gap());
+                topRight.addView(liveButton, gap());
             }
+        }
+        // Mini player (Android 8+, where the device has picture-in-picture)
+        if (supportsPip()) {
+            pipButton = pill("\u29C9", 0xCC333333);
+            pipButton.setContentDescription("Mini player");
+            pipButton.setOnClickListener(v -> enterPip());
+            topRight.addView(pipButton, gap());
         }
         // From kick-off for a live programme the web app knows the start of (catch-up of what is on now)
         if (live && programmeStart > 0 && channelId != null) {
@@ -266,6 +303,49 @@ public class PlayerActivity extends AppCompatActivity {
             lp.bottomMargin = dp(72);
             root.addView(noteView, lp);
             handler.postDelayed(() -> noteView.setVisibility(View.GONE), NOTE_MS);
+        }
+        // Portrait: the panel below the video (match tabs, or the programme's details)
+        String apiBaseForPanel = in.getStringExtra(EXTRA_API_BASE);
+        boolean sport = matchId != null && !matchId.isEmpty() && apiBaseForPanel != null && !apiBaseForPanel.isEmpty();
+        java.util.List<String[]> upNext = new java.util.ArrayList<>();
+        String[] nextTitles = in.getStringArrayExtra(EXTRA_UP_NEXT_TITLES);
+        long[] nextStarts = in.getLongArrayExtra(EXTRA_UP_NEXT_STARTS);
+        for (int k = 0; nextTitles != null && k < nextTitles.length; k++) {
+            long st = nextStarts != null && k < nextStarts.length ? nextStarts[k] : 0L;
+            String at = st > 0 ? new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(st * 1000L)) : "";
+            upNext.add(new String[] {at, nextTitles[k]});
+        }
+        matchPanel =
+            new MatchPanel(
+                this,
+                root,
+                handler,
+                panelHost,
+                liveFeed,
+                sport ? apiBaseForPanel : null,
+                in.getStringExtra(EXTRA_TOKEN),
+                sport ? matchId : null,
+                channelTitle,
+                in.getStringExtra(EXTRA_DESCRIPTION),
+                upNext
+            );
+        // Alerts: fantasy scoring (NFL) and market flips; toasts on screen, notifications in the mini player
+        if (sport && live) {
+            boolean fantasyOn = in.getBooleanExtra(EXTRA_FANTASY_ALERTS, true);
+            boolean flipOn = in.getBooleanExtra(EXTRA_FLIP_ALERTS, true);
+            if (fantasyOn || flipOn) {
+                liveAlerts = new LiveAlerts(handler, liveFeed, apiBaseForPanel, in.getStringExtra(EXTRA_TOKEN), matchId, fantasyOn, flipOn, alertSink);
+                askForNotificationsOnce();
+            }
+        }
+        if (liveFeed != null) liveFeed.start();
+        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) root.post(this::applyLayout);
+        });
+        addOnPictureInPictureModeChangedListener(info -> onPipChanged(info.isInPictureInPictureMode()));
+        if (supportsPip()) {
+            androidx.core.content.ContextCompat.registerReceiver(this, pipReceiver, new android.content.IntentFilter(pipAction()), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
+            pipReceiverOn = true;
         }
         setContentView(root);
 
@@ -311,6 +391,7 @@ public class PlayerActivity extends AppCompatActivity {
             view.setShowRewindButton(true);
         }
         if (growing) addLiveButton(root);
+        updatePip();
 
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
@@ -359,6 +440,11 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
                 onError(error);
+            }
+
+            @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                updatePip();
             }
         };
 
@@ -545,6 +631,7 @@ public class PlayerActivity extends AppCompatActivity {
                 fromKickOff = false;
                 if (kickOffButton != null) kickOffButton.setText("From kick-off");
                 switchTo(url, mime, false);
+                updatePip();
                 android.widget.Toast.makeText(this, "Back to live", android.widget.Toast.LENGTH_SHORT).show();
             }
         );
@@ -568,6 +655,7 @@ public class PlayerActivity extends AppCompatActivity {
                 fromKickOff = toStart;
                 kickOffButton.setText(toStart ? "\u25CF Back to live" : "From kick-off");
                 switchTo(url, mime, toStart);
+                updatePip();
             }
         );
     }
@@ -736,6 +824,11 @@ public class PlayerActivity extends AppCompatActivity {
         p.emit("progress", o);
     }
 
+    /** A new open() replaced this player (its call was answered already). */
+    void closeReplaced() {
+        close("replaced", null);
+    }
+
     private void close(String reason, PlaybackException error) {
         if (closing) return;
         closing = true;
@@ -759,6 +852,8 @@ public class PlayerActivity extends AppCompatActivity {
             }
         }
         setResult(RESULT_OK, data);
+        // The player runs in its own task (the mini player floats over the app), so open() is answered directly
+        PlayerPlugin.closed(session, data);
         release();
         finish();
     }
@@ -792,7 +887,7 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     private void applyRotationRule() {
-        if (!rotationUnlocked) return;
+        if (!rotationUnlocked || isInPictureInPictureMode()) return;
         boolean autoRotate = android.provider.Settings.System.getInt(getContentResolver(), android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 1;
         setRequestedOrientation(autoRotate ? ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
@@ -811,24 +906,294 @@ public class PlayerActivity extends AppCompatActivity {
         boolean landscape = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
         // The device reported landscape: safe to let it rotate (it won't flip straight back to portrait)
         if (landscape && !rotationUnlocked) unlockRotation();
-        layoutForOrientation(landscape);
+        root.post(this::applyLayout);
     }
 
-    /** Portrait: the picture at the top (letterboxed), the controls at the bottom; landscape: centred full screen. */
-    private void layoutForOrientation(boolean landscape) {
-        View content = view.findViewById(androidx.media3.ui.R.id.exo_content_frame);
-        if (content == null) return;
-        if (content.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
-            lp.gravity = landscape ? Gravity.CENTER : Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            lp.topMargin = landscape ? 0 : dp(56);
-            content.setLayoutParams(lp);
+    // ---- Layout: portrait = 16:9 video on top + panel below; landscape and the mini player = full-screen video ----
+
+    private boolean inPip() {
+        return isInPictureInPictureMode();
+    }
+
+    private void applyLayout() {
+        if (root == null || view == null || closing) return;
+        int w = root.getWidth();
+        int h = root.getHeight();
+        if (w == 0 || h == 0) return;
+        boolean pip = inPip();
+        boolean portrait = h > w && !pip;
+        int top = portrait ? dp(PORTRAIT_TOP_DP) : 0;
+        int height = portrait ? w * 9 / 16 : FrameLayout.LayoutParams.MATCH_PARENT;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) view.getLayoutParams();
+        if (lp.height != height || lp.topMargin != top) {
+            lp.height = height;
+            lp.topMargin = top;
+            lp.gravity = Gravity.TOP;
+            view.setLayoutParams(lp);
+        }
+        if (matchPanel != null) matchPanel.show(portrait, top + (portrait ? height : 0));
+        // The spinner sits on the picture
+        FrameLayout.LayoutParams sp = (FrameLayout.LayoutParams) spinner.getLayoutParams();
+        int spinTop = portrait ? top + height / 2 - dp(24) : 0;
+        int spinGravity = portrait ? Gravity.TOP | Gravity.CENTER_HORIZONTAL : Gravity.CENTER;
+        if (sp.topMargin != spinTop || sp.gravity != spinGravity) {
+            sp.topMargin = spinTop;
+            sp.gravity = spinGravity;
+            spinner.setLayoutParams(sp);
+        }
+        // Portrait has the panel's Info and live tabs; landscape keeps ⓘ and the Live drawer
+        if (infoButton != null) infoButton.setVisibility(portrait ? View.GONE : View.VISIBLE);
+        if (liveButton != null) liveButton.setVisibility(portrait ? View.GONE : View.VISIBLE);
+        if ((portrait || pip) && liveDrawer != null) liveDrawer.hideNow();
+        updateFeedSpeed();
+    }
+
+    private void updateFeedSpeed() {
+        if (liveFeed == null) return;
+        liveFeed.setFast((liveDrawer != null && liveDrawer.isOpen()) || (matchPanel != null && matchPanel.showsLive()));
+    }
+
+    private final MatchPanel.Host panelHost =
+        new MatchPanel.Host() {
+            @Override
+            public String currentChannelId() {
+                return channelId;
+            }
+
+            @Override
+            public void switchChannel(String id, String name) {
+                switchChannelInPlace(id, name);
+            }
+
+            @Override
+            public void matchAction(String action) {
+                emitMatchAction(action);
+            }
+
+            @Override
+            public void onPanelTabChanged() {
+                updateFeedSpeed();
+            }
+        };
+
+    /** "Where to watch" in the portrait Info tab: play [id] here (link via needUrl "switch"), then tell the web app. */
+    private void switchChannelInPlace(String id, String name) {
+        if (closing || id == null || id.equals(channelId)) return;
+        spinner.setVisibility(View.VISIBLE);
+        requestUrl(
+            "switch",
+            id,
+            0,
+            0,
+            (url, mime, error) -> {
+                if (url == null) {
+                    if (player != null) spinner.setVisibility(player.getPlaybackState() == Player.STATE_BUFFERING ? View.VISIBLE : View.GONE);
+                    android.widget.Toast.makeText(this, "Can't play " + name, android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                String from = channelId;
+                channelId = id;
+                channelTitle = name;
+                tried.add(id);
+                titleView.setText(name);
+                fromKickOff = false;
+                if (kickOffButton != null) kickOffButton.setText("From kick-off");
+                switchTo(url, mime, false);
+                updatePip();
+                if (matchPanel != null) matchPanel.onChannelChanged();
+                PlayerPlugin p = PlayerPlugin.current;
+                if (p != null) {
+                    JSObject o = new JSObject();
+                    if (from != null) o.put("from", from);
+                    o.put("to", id);
+                    o.put("name", name);
+                    p.emit("channelSwitch", o);
+                }
+            }
+        );
+    }
+
+    /** Back to the web app: `matchAction {action: remind | record, matchId, channelId?}`. */
+    private void emitMatchAction(String action) {
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p == null) return;
+        JSObject o = new JSObject();
+        o.put("action", action);
+        o.put("matchId", matchId);
+        if (channelId != null) o.put("channelId", channelId);
+        p.emit("matchAction", o);
+        android.widget.Toast.makeText(this, "remind".equals(action) ? "Setting a reminder…" : "Recording…", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    // ---- Alerts: a toast on screen, a heads-up notification in the mini player -------------------------------
+
+    private final LiveAlerts.Sink alertSink =
+        new LiveAlerts.Sink() {
+            @Override
+            public void alert(String text, String side) {
+                if (closing) return;
+                boolean onScreen = !inPip() && getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
+                if (onScreen) android.widget.Toast.makeText(PlayerActivity.this, text, android.widget.Toast.LENGTH_LONG).show();
+                else postAlert(text, side);
+            }
+
+            @Override
+            public String teamName(String side) {
+                return matchPanel == null ? null : matchPanel.teamShortFor(side);
+            }
+        };
+
+    private boolean canNotify() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false;
+        return androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled();
+    }
+
+    private void postAlert(String text, String side) {
+        if (!canNotify()) return;
+        androidx.core.app.NotificationManagerCompat nm = androidx.core.app.NotificationManagerCompat.from(this);
+        nm.createNotificationChannel(
+            new androidx.core.app.NotificationChannelCompat.Builder(ALERT_CHANNEL, androidx.core.app.NotificationManagerCompat.IMPORTANCE_HIGH)
+                .setName("Live alerts")
+                .setDescription("Fantasy scoring and odds flips while the mini player is open")
+                .build()
+        );
+        androidx.core.app.NotificationCompat.Builder b =
+            new androidx.core.app.NotificationCompat.Builder(this, ALERT_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_live)
+                .setContentTitle(channelTitle == null || channelTitle.isEmpty() ? "Live" : channelTitle)
+                .setContentText(text)
+                .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_EVENT)
+                .setAutoCancel(true)
+                .setTimeoutAfter(ALERT_TIMEOUT_MS);
+        if ("me".equals(side)) b.setColor(0xFF4CAF50);
+        else if ("opp".equals(side)) b.setColor(0xFFE5534B);
+        try {
+            nm.notify(ALERT_ID_BASE + (alertSeq++ % 20), b.build());
+        } catch (SecurityException ignored) {
+            // permission withdrawn meanwhile
         }
     }
 
+    /** Android 13+: ask for notifications the first time a live match with alerts plays (alerts in the mini player). */
+    private void askForNotificationsOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("jellytip-player", MODE_PRIVATE);
+        if (prefs.getBoolean("askedNotifications", false)) return;
+        prefs.edit().putBoolean("askedNotifications", true).apply();
+        androidx.core.app.ActivityCompat.requestPermissions(this, new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 41);
+    }
+
+    // ---- Mini player (picture-in-picture, Android 8+) --------------------------------------------------------
+
+    private boolean supportsPip() {
+        return android.os.Build.VERSION.SDK_INT >= 26 && getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE);
+    }
+
+    private String pipAction() {
+        return getPackageName() + ".PIP_CONTROL";
+    }
+
+    private void enterPip() {
+        if (android.os.Build.VERSION.SDK_INT < 26 || !supportsPip() || closing) return;
+        try {
+            enterPictureInPictureMode(pipParams());
+        } catch (IllegalStateException | IllegalArgumentException ignored) {
+            // not allowed right now
+        }
+    }
+
+    /** Home / gesture away while playing: Android 12+ enters by itself (setAutoEnterEnabled); 8-11 do it here. */
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (android.os.Build.VERSION.SDK_INT < 31 && player != null && player.getPlayWhenReady() && !closing) enterPip();
+    }
+
+    private void updatePip() {
+        if (android.os.Build.VERSION.SDK_INT < 26 || !supportsPip() || closing || player == null) return;
+        try {
+            setPictureInPictureParams(pipParams());
+        } catch (IllegalStateException | IllegalArgumentException ignored) {
+            // not now
+        }
+    }
+
+    @androidx.annotation.RequiresApi(26)
+    private android.app.PictureInPictureParams pipParams() {
+        android.app.PictureInPictureParams.Builder b = new android.app.PictureInPictureParams.Builder().setAspectRatio(new android.util.Rational(16, 9));
+        android.graphics.Rect hint = new android.graphics.Rect();
+        if (view != null && view.getGlobalVisibleRect(hint) && hint.width() > 0) b.setSourceRectHint(hint);
+        boolean playing = player != null && player.getPlayWhenReady();
+        java.util.List<android.app.RemoteAction> actions = new java.util.ArrayList<>();
+        actions.add(pipAction(PIP_PLAY_PAUSE, playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, playing ? "Pause" : "Play"));
+        if (fromKickOff || growing) actions.add(pipAction(PIP_LIVE, android.R.drawable.ic_media_next, "Back to live"));
+        actions.add(pipAction(PIP_CLOSE, android.R.drawable.ic_menu_close_clear_cancel, "Close"));
+        int max = getMaxNumPictureInPictureActions();
+        while (actions.size() > max && actions.size() > 1) actions.remove(actions.size() - 2); // keep Close
+        b.setActions(actions);
+        if (android.os.Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(playing && !closing);
+        return b.build();
+    }
+
+    @androidx.annotation.RequiresApi(26)
+    private android.app.RemoteAction pipAction(int control, int icon, String title) {
+        Intent i = new Intent(pipAction()).setPackage(getPackageName()).putExtra("control", control);
+        android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(this, control, i, android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_UPDATE_CURRENT);
+        return new android.app.RemoteAction(android.graphics.drawable.Icon.createWithResource(this, icon), title, title, pi);
+    }
+
+    private final android.content.BroadcastReceiver pipReceiver =
+        new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(android.content.Context context, Intent intent) {
+                if (closing || player == null) return;
+                switch (intent.getIntExtra("control", 0)) {
+                    case PIP_PLAY_PAUSE:
+                        player.setPlayWhenReady(!player.getPlayWhenReady());
+                        break;
+                    case PIP_LIVE:
+                        if (fromKickOff && kickOffButton != null) toggleKickOff();
+                        else if (growing) jumpToLive();
+                        break;
+                    case PIP_CLOSE:
+                        close("back", null);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        };
+
+    /** The mini player shows only the picture: no controls, buttons, drawer or panel. */
+    private void onPipChanged(boolean pip) {
+        if (closing || view == null) return;
+        if (pip) {
+            view.hideController();
+            view.setUseController(false);
+            for (View o : overlays) o.setVisibility(View.GONE);
+            hidePreCard();
+            if (liveDrawer != null) liveDrawer.hideNow();
+        } else {
+            view.setUseController(true);
+            view.showController();
+            applyRotationRule();
+        }
+        root.post(this::applyLayout);
+    }
+
+
     @Override
     protected void onDestroy() {
-        if (liveDrawer != null) liveDrawer.release();
+        // Gone without closing (the system finished it): still answer open()
+        if (!closing && !isChangingConfigurations()) close("back", null);
+        if (liveFeed != null) liveFeed.release();
+        if (matchPanel != null) matchPanel.release();
+        if (liveAlerts != null) liveAlerts.release();
+        if (pipReceiverOn) unregisterReceiver(pipReceiver);
         getContentResolver().unregisterContentObserver(rotationLockObserver);
         handler.removeCallbacksAndMessages(null);
         release();
