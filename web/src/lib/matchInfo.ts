@@ -38,6 +38,10 @@ export interface Fixture {
   source: string | null;
   /** The matchup was worked out by Jellytip (the listing did not name it). */
   inferred: boolean;
+  /** Why it was inferred ("network and time slot"…), when the server says. */
+  inferredBy: string | null;
+  /** The airing is a replay of an earlier game on the same network: no live chips, no live stats. */
+  replay: boolean;
   score: { home: number; away: number; clock: string | null; period: string | null } | null;
 }
 
@@ -132,6 +136,8 @@ export function parseFixture(raw: unknown): Fixture | null {
     status,
     source: str(o.source),
     inferred: o.inferred === true,
+    inferredBy: str(o.inferredBy),
+    replay: o.replay === true,
     score: sc && num(sc.home) != null && num(sc.away) != null ? { home: num(sc.home)!, away: num(sc.away)!, clock: str(sc.clock), period: str(sc.period) } : null,
   };
 }

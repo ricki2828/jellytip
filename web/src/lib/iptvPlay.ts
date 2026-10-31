@@ -128,6 +128,8 @@ export interface LiveExtras {
   eventKey?: string | null;
   /** The match behind the listing (opens match info from the player). */
   matchId?: string | null;
+  /** The airing is a replay of an earlier game: the player shows no live stats or alerts. */
+  replay?: boolean;
   /** The programme's description and what is on next: the phone player's panel for anything that is not a match. */
   desc?: string | null;
   upNext?: { title: string; start?: number }[];
@@ -146,6 +148,7 @@ export function liveExtrasQuery(x: LiveExtras | null | undefined): string {
   if (x.startsAt && x.startsAt > 0) q.set("ps", String(Math.floor(x.startsAt)));
   if (x.eventKey) q.set("ek", x.eventKey.slice(0, 120));
   if (x.matchId) q.set("mi", x.matchId.slice(0, 120));
+  if (x.replay) q.set("rp", "1");
   if (x.desc) q.set("dsc", x.desc.slice(0, 280));
   for (const n of (x.upNext ?? []).slice(0, 3)) q.append("nx", `${n.start ?? 0}~${n.title.slice(0, 80)}`);
   for (const a of (x.alternates ?? []).slice(0, MAX_ALTERNATES)) q.append("alt", `${a.id}~${a.name}`);
@@ -166,6 +169,7 @@ export function parseLiveExtras(q: URLSearchParams): LiveExtras {
     });
   const ps = Number(q.get("ps"));
   return { kickoff: start > 0 && stop > start ? { start, stop } : null, alternates, startsAt: ps > 0 ? ps : null, eventKey: q.get("ek") || null, matchId: q.get("mi") || null,
+    replay: q.get("rp") === "1",
     desc: q.get("dsc") || null,
     upNext: q.getAll("nx").slice(0, 3).flatMap((v) => {
       const at = v.indexOf("~");

@@ -467,7 +467,7 @@ export function withoutFilter(text: string, f: SearchFilters, drop: string): str
 
 /** "LIVE" / "REPLAY" / "PRE-GAME · Starts 18:00 · in 35 min" / "Today 19:30". */
 export function livePill(h: LiveHit, now: number): { text: string; tone: "rec" | "pre" | "time" | "dim" } {
-  if (h.replay) return { text: "REPLAY", tone: "dim" };
+  if (h.replay || h.fixture?.replay) return { text: "REPLAY", tone: "dim" };
   if (isPre(h.startsAt, now, h.phase)) return { text: `PRE-GAME · ${startsLine(h.startsAt!, now)}`, tone: "pre" };
   if (h.start <= now && now < h.stop) return { text: "LIVE", tone: "rec" };
   return { text: timeChip({ start: h.start, stop: h.stop }, new Date(now * 1000)), tone: "time" };

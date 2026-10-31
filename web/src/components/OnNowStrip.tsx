@@ -74,6 +74,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     startsAt: !via && isPre(o.info.startsAt, now, o.info.phase) ? o.info.startsAt : null,
     eventKey: o.info.eventKey,
     matchId: o.info.fixture?.id ?? null,
+    replay: !!o.info.fixture?.replay,
     desc: o.desc,
     upNext: o.next,
     alternates: [{ id: o.channelId, name: o.channel }, ...alts(o)].filter((a) => a.id !== (via ?? o.channelId)),
@@ -101,7 +102,9 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               <SportArt art={o.info.art} />
               <span className="onnow-top">
                 <Logo o={o} />
-                {isPre(o.info.startsAt, now, o.info.phase) ? (
+                {o.info.fixture?.replay ? (
+                  <span className="sport-pill replay">REPLAY</span>
+                ) : isPre(o.info.startsAt, now, o.info.phase) ? (
                   <span className="sport-pill pre">PRE-GAME</span>
                 ) : o.info.kind ? (
                   <SportBadges kind={o.info.kind} sport={o.sport} size="sm" />

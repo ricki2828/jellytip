@@ -291,16 +291,17 @@ test("continue: library and IPTV by recency, next up only for shows not above", 
 });
 
 import { liveExtrasQuery, livePath, parseLiveExtras } from "../src/lib/iptvPlay.ts";
+import { livePill, parseLiveHits } from "../src/lib/search.ts";
 
 test("live extras: kick-off and alternates round-trip through the play link", () => {
   const x = { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }] };
   const path = livePath("3:76", "Sky Sport 1", x);
   const q = new URLSearchParams(path.split("?")[1]);
   assert.equal(q.get("channel"), "3:76");
-  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null, matchId: null, desc: null, upNext: [] });
+  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null, matchId: null, replay: false, desc: null, upNext: [] });
   assert.equal(liveExtrasQuery(null), "");
   assert.equal(liveExtrasQuery({ kickoff: { start: 5, stop: 5 }, alternates: [] }), "");
-  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null, matchId: null, desc: null, upNext: [] });
+  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null, matchId: null, replay: false, desc: null, upNext: [] });
   const p = parseLiveExtras(new URLSearchParams(liveExtrasQuery({ startsAt: 1_900_000_000, eventKey: "nfl:a-v-b" }).slice(1)));
   assert.equal(p.startsAt, 1_900_000_000);
   assert.equal(p.eventKey, "nfl:a-v-b");
@@ -906,4 +907,18 @@ test("thin markets: flagged, so no pill-less odds and no flip toast", () => {
   assert.equal(parseLive({ market: { home: 0.5, away: 0.5 } })!.market!.thin, false);
   assert.equal(parseLive({ market: { home: 0.5, away: 0.5, thin: true } })!.market!.thin, true);
   assert.equal(parseLive({ market: { kind: "winner", outcomes: [{ name: "A", p: 0.4 }], thin: true } })!.market!.thin, true);
+});
+
+test("replays: matchInfo.replay and inferredBy parse, live chips are replaced, the play link carries it", () => {
+  const f = parseFixture({ ...FIX, replay: true, inferred: true, inferredBy: "network and time slot" })!;
+  assert.equal(f.replay, true);
+  assert.equal(f.inferredBy, "network and time slot");
+  assert.equal(parseFixture(FIX)!.replay, false);
+  assert.equal(parseFixture(FIX)!.inferredBy, null);
+  const hit = parseLiveHits([{ title: "College Football", start: 1000, stop: 9000, matchInfo: { ...FIX, replay: true }, channel: { id: "3:77", name: "ESPN" } }])[0];
+  assert.equal(livePill(hit, 5000).text, "REPLAY");
+  const q = new URLSearchParams(liveExtrasQuery({ replay: true, matchId: "m" }).slice(1));
+  assert.equal(parseLiveExtras(q).replay, true);
+  assert.equal(parseLiveExtras(new URLSearchParams("mi=m")).replay, false);
+  assert.equal(liveExtrasQuery({ replay: false }), "");
 });

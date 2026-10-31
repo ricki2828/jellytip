@@ -159,7 +159,7 @@ export function MatchInfoHost() {
           <>
             {(() => {
               const c = teamColors(f);
-              const tag = f.status === "in" ? `LIVE${f.score?.clock ? ` · ${f.score.clock}` : ""}${f.score?.period ? ` · ${f.score.period}` : ""}` : f.status === "post" ? "FINAL" : f.startsAt ? startsIn(f.startsAt, now).toUpperCase() : "";
+              const tag = f.replay ? "REPLAY" : f.status === "in" ? `LIVE${f.score?.clock ? ` · ${f.score.clock}` : ""}${f.score?.period ? ` · ${f.score.period}` : ""}` : f.status === "post" ? "FINAL" : f.startsAt ? startsIn(f.startsAt, now).toUpperCase() : "";
               const slab = (side: "home" | "away", cls: "l" | "r") => (
                 <div className={`bc-mslab ${cls}`} style={{ ["--sc" as string]: side === "home" ? c.home : c.away, ["--sx" as string]: onColor(side === "home" ? c.home : c.away) }}>
                   <Crest s={f[side]} side={cls} />
@@ -179,7 +179,7 @@ export function MatchInfoHost() {
                       </div>
                       {tag && (
                         <span className="bc-tag">
-                          {f.status === "in" && <i className="mi-pulse" aria-hidden />}
+                          {f.status === "in" && !f.replay && <i className="mi-pulse" aria-hidden />}
                           {tag}
                         </span>
                       )}
@@ -199,7 +199,7 @@ export function MatchInfoHost() {
                     {slab("away", "r")}
                     {tag && (
                       <span className="bc-tag">
-                        {f.status === "in" && <i className="mi-pulse" aria-hidden />}
+                        {f.status === "in" && !f.replay && <i className="mi-pulse" aria-hidden />}
                         {tag}
                       </span>
                     )}

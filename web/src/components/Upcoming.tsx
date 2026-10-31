@@ -28,7 +28,7 @@ export function UpTile({ e, onOpen }: { e: UpEvent; onOpen: () => void }) {
     <MuteButton target={{ title: e.title, league: e.league, sportName: e.sportName }} className={`up-tile${live ? " live" : ""}${artClass(e.art)}`} data-nav onClick={onOpen} aria-label={`${e.title}, ${timeChip(e)}`} title={e.title}>
       <SportArt art={e.art} />
       <span className="up-top">
-        {pre ? <span className="rec-chip pre">PRE-GAME · {startsLine(e.startsAt!, nowS)}</span> : <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>}
+        {e.fixture?.replay ? <span className="rec-chip dim">REPLAY</span> : pre ? <span className="rec-chip pre">PRE-GAME · {startsLine(e.startsAt!, nowS)}</span> : <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>}
         {e.favourite && <span className="sport-star" title="Your team or league">★</span>}
       </span>
       <span className="rec-title">
@@ -65,6 +65,7 @@ export const watchExtras = (e: UpEvent, via: string): LiveExtras => ({
   startsAt: isPre(e.startsAt, Date.now() / 1000, e.phase) ? e.startsAt : null,
   eventKey: e.key,
   matchId: e.fixture?.id ?? null,
+  replay: !!e.fixture?.replay,
   alternates: e.channels.filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })),
 });
 

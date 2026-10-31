@@ -20,6 +20,7 @@ const extrasOf = (h: LiveHit, now: number): LiveExtras => ({
   startsAt: isPre(h.startsAt, now, h.phase) ? h.startsAt : null,
   eventKey: h.fixture?.id ?? null,
   matchId: h.fixture?.id ?? null,
+  replay: !!h.fixture?.replay,
   alternates: h.alternates,
 });
 
