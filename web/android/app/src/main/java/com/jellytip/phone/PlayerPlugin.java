@@ -64,6 +64,11 @@ public class PlayerPlugin extends Plugin {
         // Pre-game (plan live-sport "Pinned 31-Oct (native phone player)"): phase, startsAt (ISO UTC), altChannels
         i.putExtra(PlayerActivity.EXTRA_PHASE, call.getString("phase"));
         i.putExtra(PlayerActivity.EXTRA_STARTS_AT, isoMs(call.getString("startsAt")));
+        // Match info / live stats (plan "In-event panel"): the fixture id, and the API base + Jellyfin token for the
+        // native live drawer's own polling
+        i.putExtra(PlayerActivity.EXTRA_MATCH_ID, call.getString("matchId"));
+        i.putExtra(PlayerActivity.EXTRA_API_BASE, call.getString("apiBase"));
+        i.putExtra(PlayerActivity.EXTRA_TOKEN, call.getString("token"));
         if (call.getData().has("altChannels")) {
             JSArray pre = call.getArray("altChannels", new JSArray());
             java.util.List<String> pIds = new java.util.ArrayList<>();

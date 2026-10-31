@@ -67,6 +67,9 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_STARTS_AT = "startsAt";
     static final String EXTRA_PRE_ALT_IDS = "preAltIds";
     static final String EXTRA_PRE_ALT_NAMES = "preAltNames";
+    static final String EXTRA_MATCH_ID = "matchId";
+    static final String EXTRA_API_BASE = "apiBase";
+    static final String EXTRA_TOKEN = "token";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -105,6 +108,9 @@ public class PlayerActivity extends AppCompatActivity {
     /** Watching the programme on now from its start (a catch-up link); "Back to live" returns. */
     private boolean fromKickOff;
     private TextView kickOffButton;
+    /** In-event drawer (plan "In-event panel"); null when the web app passed no match / base. */
+    private LiveStatsDrawer liveDrawer;
+    private String matchId;
     /** Pre-game (plan "Pre-game state"): the event's real start (epoch ms) while the channel shows a holding screen. */
     private long startsAtMs;
     private android.widget.LinearLayout preCard;
@@ -197,15 +203,38 @@ public class PlayerActivity extends AppCompatActivity {
         back.setOnClickListener(v -> close("back", null));
         root.addView(back, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
         overlays.add(back);
+        // Top-right buttons (with the controls): ⓘ match info, Live stats, From kick-off
+        android.widget.LinearLayout topRight = new android.widget.LinearLayout(this);
+        topRight.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        FrameLayout.LayoutParams trp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        trp.topMargin = dp(16);
+        trp.rightMargin = dp(24);
+        root.addView(topRight, trp);
+        overlays.add(topRight);
+        matchId = in.getStringExtra(EXTRA_MATCH_ID);
+        if (matchId != null && !matchId.isEmpty()) {
+            // ⓘ: the web app shows match info (after the player closes, or over it when it can)
+            TextView info = pill("\u24D8", 0xCC333333);
+            info.setContentDescription("Match info");
+            info.setOnClickListener(v -> matchAction("matchInfo"));
+            topRight.addView(info, gap());
+            String apiBase = in.getStringExtra(EXTRA_API_BASE);
+            if (live && apiBase != null && !apiBase.isEmpty()) {
+                liveDrawer = new LiveStatsDrawer(this, root, handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
+                TextView liveBtn = pill("Live", 0xCC333333);
+                liveBtn.setContentDescription("Live stats");
+                liveBtn.setOnClickListener(v -> {
+                    matchAction("liveStats");
+                    liveDrawer.open();
+                });
+                topRight.addView(liveBtn, gap());
+            }
+        }
         // From kick-off for a live programme the web app knows the start of (catch-up of what is on now)
         if (live && programmeStart > 0 && channelId != null) {
             kickOffButton = pill("From kick-off", 0xCC333333);
             kickOffButton.setOnClickListener(v -> toggleKickOff());
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-            lp.topMargin = dp(16);
-            lp.rightMargin = dp(24);
-            root.addView(kickOffButton, lp);
-            overlays.add(kickOffButton);
+            topRight.addView(kickOffButton, gap());
         }
         // Pre-game: a card bottom-left until the event starts; hides after 10 s, any tap brings it back
         String phase = in.getStringExtra(EXTRA_PHASE);
@@ -245,7 +274,8 @@ public class PlayerActivity extends AppCompatActivity {
             new OnBackPressedCallback(true) {
                 @Override
                 public void handleOnBackPressed() {
-                    close("back", null);
+                    if (liveDrawer != null && liveDrawer.isOpen()) liveDrawer.close();
+                    else close("back", null);
                 }
             }
         );
@@ -620,6 +650,22 @@ public class PlayerActivity extends AppCompatActivity {
             .show();
     }
 
+    /** Back to the web app: `matchInfo` / `liveStats` with `{matchId, channelId?}`. */
+    private void matchAction(String event) {
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p == null) return;
+        JSObject o = new JSObject();
+        o.put("matchId", matchId);
+        if (channelId != null) o.put("channelId", channelId);
+        p.emit(event, o);
+    }
+
+    private android.widget.LinearLayout.LayoutParams gap() {
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = dp(10);
+        return lp;
+    }
+
     /** Back to the web app: `pregameAction {action: remind | channel, channelId?}`. */
     private void preGameAction(String action, String forChannel) {
         PlayerPlugin p = PlayerPlugin.current;
@@ -782,6 +828,7 @@ public class PlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (liveDrawer != null) liveDrawer.release();
         getContentResolver().unregisterContentObserver(rotationLockObserver);
         handler.removeCallbacksAndMessages(null);
         release();

@@ -98,6 +98,11 @@ export interface JellytipPlayerPlugin {
     startsAt?: string | null;
     /** Channels offered by the card's "Other channels" (falls back to `alternates`). */
     altChannels?: { id: string; name: string }[];
+    /** Match info / in-event panel (plan live-sport "In-event panel"): the fixture id (matchInfo.id). Shows ⓘ (and Live when live). */
+    matchId?: string;
+    /** Companion API base (COMPANION_BASE) and the Jellyfin token: the native Live drawer polls /v1/sport/match/{id}/live itself. */
+    apiBase?: string;
+    token?: string;
   }): Promise<NativePlayerResult>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
@@ -116,6 +121,10 @@ export interface JellytipPlayerPlugin {
    * Other channels). The web app sets the reminder / switches (e.g. closes and reopens on that channel).
    */
   addListener(event: "pregameAction", cb: (e: { action: "remind" | "channel"; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  /** ⓘ tapped: show match info (the native player stays open; show it when open() resolves, or as you see fit). */
+  addListener(event: "matchInfo", cb: (e: { matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  /** Live tapped: the native drawer opened (informational; it fetches /live itself). */
+  addListener(event: "liveStats", cb: (e: { matchId: string; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
   /** Diagnostic: the player switched channel ({from, to, why}). */
   addListener(event: "failover", cb: (e: { from: string; to: string; why: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }
