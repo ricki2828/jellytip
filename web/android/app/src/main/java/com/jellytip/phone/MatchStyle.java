@@ -62,6 +62,11 @@ final class MatchStyle {
         return mix(c, 0xFF000000, 0.45f);
     }
 
+    /** 18% towards white (bars and dots on the dark glass). */
+    static int brighten(int c) {
+        return mix(c, 0xFFFFFFFF, 0.18f);
+    }
+
     /** 35% towards white (the crest glow). */
     static int lighten(int c) {
         return mix(c, 0xFFFFFFFF, 0.35f);

@@ -12,7 +12,7 @@ import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Stats · Plays · Odds · Chat from a /live answer, for the landscape drawer and the portrait panel alike. */
+/** Small shared helpers for the live views (tab names, text views, chips, percentages). */
 final class LiveRender {
 
     static final String[] TABS = {"Stats", "Plays", "Odds", "Chat"};
@@ -24,111 +24,39 @@ final class LiveRender {
         return feed.last != null && feed.last.has("chat") && !feed.last.isNull("chat");
     }
 
-    /** Fills [content] (cleared first) with [tab] of [feed]'s last answer, or its note while there is none. */
-    static void render(Context ctx, LinearLayout content, LiveFeed feed, String tab) {
-        content.removeAllViews();
-        JSONObject last = feed.last;
-        if (last == null) {
-            content.addView(muted(ctx, feed.note == null ? "Loading live data…" : feed.note));
-            return;
-        }
-        JSONObject sc = last.optJSONObject("score");
-        if (sc != null && !sc.optString("home").isEmpty()) {
-            List<String> parts = new ArrayList<>();
-            parts.add(sc.optString("home") + " – " + sc.optString("away"));
-            if (!last.isNull("period") && !last.optString("period").isEmpty()) parts.add(last.optString("period"));
-            if (!last.isNull("clock") && !last.optString("clock").isEmpty()) parts.add(last.optString("clock"));
-            content.addView(text(ctx, android.text.TextUtils.join("  ·  ", parts), 15, Color.WHITE));
-        }
+    /** A pill tab chip with its icon; the selected one is filled (plan "Live panel: pop, context, performance"). */
+    static void styleTab(Context ctx, TextView t, String name, boolean on) {
+        String label = icon(name) + "  " + name;
+        if (!label.contentEquals(t.getText())) t.setText(label);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(dp(ctx, 14));
+        bg.setColor(on ? 0xFFFFC94A : 0x1AFFFFFF);
+        t.setBackground(bg);
+        t.setTextColor(on ? Color.BLACK : Color.WHITE);
+        t.setPadding(dp(ctx, 10), dp(ctx, 5), dp(ctx, 10), dp(ctx, 5));
+    }
+
+    static boolean isLiveTab(String tab) {
+        for (String t : TABS) if (t.equals(tab)) return true;
+        return false;
+    }
+
+    static String icon(String tab) {
         switch (tab) {
+            case "Info":
+                return "\u24D8";
             case "Stats":
-                renderStats(ctx, content, last);
-                break;
+                return "\uD83D\uDCCA";
             case "Plays":
-                renderPlays(ctx, content, last);
-                break;
+                return "\u23F1";
             case "Odds":
-                renderOdds(ctx, content, last);
-                break;
+                return "\uD83D\uDCC8";
+            case "Chat":
+                return "\uD83D\uDCAC";
+            case "Fantasy":
+                return "\uD83C\uDFC8";
             default:
-                renderChat(ctx, content, last);
-        }
-    }
-
-    private static void renderStats(Context ctx, LinearLayout content, JSONObject last) {
-        JSONArray stats = last.optJSONArray("stats");
-        if (stats == null || stats.length() == 0) {
-            content.addView(muted(ctx, "No stats for this match yet."));
-        } else {
-            for (int i = 0; i < Math.min(stats.length(), 14); i++) {
-                JSONObject s = stats.optJSONObject(i);
-                if (s == null) continue;
-                LinearLayout row = new LinearLayout(ctx);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.addView(text(ctx, s.optString("home"), 13, Color.WHITE), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.3f));
-                TextView label = text(ctx, s.optString("label"), 12, 0x99F2F2F0);
-                label.setGravity(Gravity.CENTER);
-                row.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.4f));
-                TextView away = text(ctx, s.optString("away"), 13, Color.WHITE);
-                away.setGravity(Gravity.END);
-                row.addView(away, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.3f));
-                row.setPadding(0, dp(ctx, 3), 0, dp(ctx, 3));
-                content.addView(row);
-            }
-        }
-        JSONObject wp = last.optJSONObject("winProb");
-        if (wp != null && wp.has("home")) content.addView(muted(ctx, "Win probability (home): " + pct(wp.optDouble("home"))));
-    }
-
-    private static void renderPlays(Context ctx, LinearLayout content, JSONObject last) {
-        JSONArray plays = last.optJSONArray("plays");
-        if (plays == null || plays.length() == 0) {
-            content.addView(muted(ctx, "No plays yet."));
-            return;
-        }
-        for (int i = 0; i < Math.min(plays.length(), 15); i++) {
-            JSONObject p = plays.optJSONObject(i);
-            if (p == null) continue;
-            String when = (p.optString("period", "") + " " + p.optString("clock", "")).trim().replace("null", "").trim();
-            TextView t = text(ctx, (when.isEmpty() ? "" : when + "  ") + p.optString("text"), 13, p.optBoolean("scoring") ? Color.WHITE : 0xCCF2F2F0);
-            if (p.optBoolean("scoring")) t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
-            t.setPadding(0, dp(ctx, 3), 0, dp(ctx, 3));
-            content.addView(t);
-        }
-    }
-
-    private static void renderOdds(Context ctx, LinearLayout content, JSONObject last) {
-        JSONObject m = last.optJSONObject("market");
-        if (m == null || (!m.has("home") && !m.has("away"))) {
-            content.addView(muted(ctx, "No market for this match."));
-            return;
-        }
-        List<String> parts = new ArrayList<>();
-        if (m.has("home") && !m.isNull("home")) parts.add("Home " + pct(m.optDouble("home")));
-        if (m.has("draw") && !m.isNull("draw")) parts.add("Draw " + pct(m.optDouble("draw")));
-        if (m.has("away") && !m.isNull("away")) parts.add("Away " + pct(m.optDouble("away")));
-        content.addView(text(ctx, android.text.TextUtils.join(" · ", parts), 16, Color.WHITE));
-        List<String> meta = new ArrayList<>();
-        if (!m.optString("source").isEmpty()) meta.add(m.optString("source"));
-        if (m.has("volume") && !m.isNull("volume")) meta.add(money(m.optDouble("volume")) + " traded");
-        content.addView(muted(ctx, android.text.TextUtils.join(", ", meta)));
-        if (!m.isNull("question") && !m.optString("question").isEmpty()) content.addView(muted(ctx, m.optString("question")));
-    }
-
-    private static void renderChat(Context ctx, LinearLayout content, JSONObject last) {
-        JSONObject chat = last.optJSONObject("chat");
-        JSONArray comments = chat == null ? null : chat.optJSONArray("comments");
-        if (comments == null || comments.length() == 0) {
-            content.addView(muted(ctx, "No match thread comments."));
-            return;
-        }
-        for (int i = 0; i < Math.min(comments.length(), 25); i++) {
-            JSONObject c = comments.optJSONObject(i);
-            if (c == null) continue;
-            String author = c.optString("author", "");
-            TextView t = text(ctx, (author.isEmpty() || "null".equals(author) ? "" : author + ": ") + c.optString("text"), 13, 0xDDF2F2F0);
-            t.setPadding(0, dp(ctx, 4), 0, dp(ctx, 4));
-            content.addView(t);
+                return "\u2022";
         }
     }
 
