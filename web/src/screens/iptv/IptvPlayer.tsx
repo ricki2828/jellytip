@@ -726,8 +726,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
   const switchTo = useRef<string | null>(null);
   // The user's alert settings go to the native player, which shows its own toasts and notifications
   const userPrefs = usePrefs({ defer: true }).prefs;
-  const sportPrefsRef = useRef<{ fantasyAlerts?: boolean; flipAlerts?: boolean }>({});
-  sportPrefsRef.current = userPrefs ? { fantasyAlerts: userPrefs.fantasy.alerts, flipAlerts: userPrefs.sport.flipAlerts } : {};
+  const sportPrefsRef = useRef<{ fantasyAlerts?: boolean; flipAlerts?: boolean; panelStyle?: "docked" | "floating" }>({});
+  sportPrefsRef.current = userPrefs ? { fantasyAlerts: userPrefs.fantasy.alerts, flipAlerts: userPrefs.sport.flipAlerts, panelStyle: userPrefs.sport.panelStyle } : {};
   const infoFor = useRef<string | null>(null);
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
@@ -816,6 +816,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
           upNext: extras?.upNext,
           fantasyAlerts: sportPrefsRef.current?.fantasyAlerts,
           flipAlerts: sportPrefsRef.current?.flipAlerts,
+          panelStyle: sportPrefsRef.current?.panelStyle,
           // Live: the channel, its event's other channels and the programme on now (kick-off); the player asks for links itself
           ...(live && target.channel
             ? {
