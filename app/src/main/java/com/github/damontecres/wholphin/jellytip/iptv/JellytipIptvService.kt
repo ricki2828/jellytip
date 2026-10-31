@@ -227,6 +227,37 @@ class JellytipIptvService
             return runCatching { JSONObject(res.second).optString("id").takeIf { it.isNotBlank() } }.getOrNull()
         }
 
+        /** The person's own providers (owner only; plan "Refresh guide on demand"); null = no answer / no route. */
+        suspend fun ownProviderIds(): List<String>? {
+            val (code, body) = get("v1/iptv/providers") ?: return null
+            if (code != 200) return null
+            return runCatching {
+                val a = JSONObject(body).optJSONArray("providers") ?: return@runCatching emptyList<String>()
+                (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
+            }.getOrNull()
+        }
+
+        /** Guide refresh status of [pid]: (lastRun epoch s or null, running); null = no answer / old server (no `guide`). */
+        suspend fun guideStatus(pid: String): Pair<Long?, Boolean>? {
+            val (code, body) = get("v1/iptv/providers/${enc(pid)}/status") ?: return null
+            if (code != 200) return null
+            return runCatching {
+                val o = JSONObject(body)
+                val g = o.optJSONObject("guide") ?: return@runCatching null
+                val ch = o.optJSONObject("channels")
+                val last = if (g.isNull("lastRun")) null else IptvParse.isoSeconds(g.optString("lastRun").takeIf { it.isNotBlank() })
+                last to (g.optBoolean("running", false) || ch?.optBoolean("running", false) == true)
+            }.getOrNull()
+        }
+
+        /** `POST .../refresh {what: "all"}`: (http code, retryAfter_s on 429). */
+        suspend fun refreshGuide(pid: String): Pair<Int, Int?> {
+            val res = api.userCall("v1/iptv/providers/${enc(pid)}/refresh", JSONObject().put("what", "all").toString()) ?: return 0 to null
+            val retry = if (res.first == 429) runCatching { JSONObject(res.second).optInt("retryAfter_s", 0).takeIf { it > 0 } }.getOrNull() else null
+            JellytipTrace.log("iptv", "refresh guide $pid -> ${res.first}")
+            return res.first to retry
+        }
+
         suspend fun deleteReminder(id: String): Boolean = api.userCall("v1/iptv/reminders/${enc(id)}/delete", "{}")?.first == 200
 
         @Volatile

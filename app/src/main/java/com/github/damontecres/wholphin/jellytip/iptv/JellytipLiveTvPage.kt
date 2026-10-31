@@ -136,6 +136,82 @@ class JellytipLiveTvViewModel
         /** Last focused cell key, restored when the page comes back. */
         var lastFocusKey: String? = null
 
+        /**
+         * "Refresh guide" (plan "Refresh guide on demand"): null = not offered (no own provider, or an older server
+         * without guide status); else the newest guide run (epoch s, null = never) and whether a run is going.
+         */
+        data class GuideRefresh(
+            val lastRun: Long?,
+            val running: Boolean,
+            val message: String? = null,
+        )
+
+        private val _refresh = MutableStateFlow<GuideRefresh?>(null)
+        val refresh: StateFlow<GuideRefresh?> = _refresh
+        private var providerIds: List<String> = emptyList()
+        private var refreshJob: Job? = null
+
+        fun loadGuideRefresh() {
+            if (refreshJob?.isActive == true) return
+            refreshJob =
+                viewModelScope.launch {
+                    val ids = service.ownProviderIds().orEmpty()
+                    providerIds = ids
+                    if (ids.isEmpty()) return@launch
+                    val st = ids.mapNotNull { service.guideStatus(it) }
+                    if (st.isEmpty()) return@launch
+                    _refresh.value = GuideRefresh(st.mapNotNull { it.first }.maxOrNull(), st.any { it.second })
+                    if (st.any { it.second }) pollUntilDone()
+                }
+        }
+
+        fun startGuideRefresh() {
+            if (providerIds.isEmpty() || _refresh.value?.running == true) return
+            refreshJob?.cancel()
+            refreshJob =
+                viewModelScope.launch {
+                    val results = providerIds.map { service.refreshGuide(it) }
+                    val started = results.any { it.first == 202 || it.first == 200 }
+                    val retry = results.mapNotNull { it.second }.maxOrNull()
+                    _refresh.value =
+                        _refresh.value?.copy(
+                            running = started,
+                            message =
+                                when {
+                                    started -> null
+                                    retry != null -> "Refreshed recently. Try again in ${(retry + 59) / 60} min."
+                                    else -> "Couldn't start a refresh."
+                                },
+                        )
+                    if (started) pollUntilDone()
+                }
+        }
+
+        /** Every 10 s while a run is going; when it ends, the guide is fetched again. */
+        private suspend fun pollUntilDone() {
+            while (true) {
+                delay(REFRESH_POLL_MS)
+                val st = providerIds.mapNotNull { service.guideStatus(it) }
+                if (st.isEmpty()) continue
+                val running = st.any { it.second }
+                _refresh.value = GuideRefresh(st.mapNotNull { it.first }.maxOrNull(), running)
+                if (!running) {
+                    reloadGuide()
+                    return
+                }
+            }
+        }
+
+        /** Forget the loaded programmes and channels and fetch the current tab again. */
+        fun reloadGuide() {
+            val tab = _state.value.tab ?: return
+            JellytipTrace.log("iptv", "guide refreshed: reload tab $tab")
+            loaded.clear()
+            epg.clear()
+            _state.update { it.copy(channels = null) }
+            selectTab(tab, "guide refreshed")
+        }
+
         /** Tab to open instead of the default once the tabs are known (sidebar "Recordings"). */
         private var wantedTab: String? = null
 
@@ -377,10 +453,20 @@ private val ROW_H = 46.dp
 private val RULER_H = 22.dp
 private val PREVIEW_W = 224.dp
 private val PREVIEW_H = 126.dp
+/** "just now", "12 min ago", "2 h ago", "3 days ago". */
+private fun agoText(secs: Long): String =
+    when {
+        secs < 90 -> "just now"
+        secs < 3600 -> "${secs / 60} min ago"
+        secs < 48 * 3600 -> "${secs / 3600} h ago"
+        else -> "${secs / 86400} days ago"
+    }
+
 /** "Back again to leave" shows once per app run. */
 private var backHintShown = false
 
 private const val PREVIEW_REST_MS = 800L
+private const val REFRESH_POLL_MS = 10_000L
 private const val ON_NOW_REFRESH_MS = 2 * 60_000L
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -457,6 +543,7 @@ fun JellytipLiveTvPage(
         }
     }
 
+    LaunchedEffect(Unit) { viewModel.loadGuideRefresh() }
     DisposableEffect(Unit) {
         playback.attach("guide")
         // The guide preview is muted (like home trailers); full screen has the sound
@@ -658,6 +745,23 @@ fun JellytipLiveTvPage(
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(PREVIEW_H)) {
             LivePreview(playback, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
             FocusInfo(focusedChannel, focusedProg, now, state.message, Modifier.weight(1f))
+            // Header action (Up from the group chips): refresh the guide now, with its last-updated status
+            val refresh by viewModel.refresh.collectAsState()
+            refresh?.let { r ->
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TabChip(if (r.running) "Refreshing guide…" else "⟳  Refresh guide", false) {
+                        if (!r.running) viewModel.startGuideRefresh()
+                    }
+                    Text(
+                        r.message ?: r.lastRun?.let { "Updated ${agoText(now - it)}" } ?: "Not updated yet",
+                        color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        modifier = Modifier.width(180.dp),
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         // On now: live sport first, then the server's order; OK = full screen with sound
