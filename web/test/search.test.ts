@@ -133,3 +133,27 @@ test("live search rows: parse hits and channels, sport query, pills", () => {
   assert.equal(livePill(parseLiveHits([LH({ start: 4000 + 3000 * 1, stop: 20000, startsAt: new Date((now + 600) * 1000).toISOString(), phase: "pre" })])[0], now).tone, "pre");
   assert.equal(livePill(parseLiveHits([LH({ start: now + 90_000, stop: now + 100_000 })])[0], now).tone, "time");
 });
+
+import { mergeLate } from "../src/lib/search.ts";
+
+test("late IPTV answer merges into the ranked list without moving other rows", () => {
+  const first = parseSearch({
+    q: "dune",
+    groups: [],
+    pending: ["iptv", "discover"],
+    results: [{ kind: "film", source: "library", id: HEXID, title: "Dune", score: 9 }, { kind: "film", source: "iptv", iptvId: "3:m:1", title: "Dune (old copy)", score: 5 }],
+  })!;
+  const late = parseSearch({ q: "dune", groups: [{ type: "iptv", items: [{ iptvId: "3:m:2", name: "Dune Part Two", kind: "movie", year: 2024 }] }] })!;
+  const m = mergeLate(first, late, "iptv");
+  assert.deepEqual(m.pending, ["discover"]);
+  assert.deepEqual(m.results!.map((e) => e.key), [`l:${HEXID}`, "i:3:m:2"]);
+  assert.equal(m.results![1].title, "Dune Part Two");
+  assert.equal(m.iptv.length, 1);
+  // when the late answer has a ranked list too, its IPTV entries win
+  const late2 = parseSearch({ q: "dune", groups: [], results: [{ kind: "film", source: "iptv", iptvId: "3:m:3", title: "X", score: 4 }, { kind: "film", source: "library", id: HEXID, title: "Dune", score: 9 }] })!;
+  assert.deepEqual(mergeLate(first, late2, "iptv").results!.map((e) => e.key), [`l:${HEXID}`, "i:3:m:3"]);
+  // discover merges its own group and clears its pending flag
+  const d = mergeLate(first, parseSearch({ q: "dune", groups: [{ type: "discover", items: [{ tmdbId: 5, title: "Gone", mediaType: "movie" }] }] })!, "discover");
+  assert.equal(d.discover.length, 1);
+  assert.deepEqual(d.pending, ["iptv"]);
+});

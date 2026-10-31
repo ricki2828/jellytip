@@ -473,3 +473,23 @@ export function livePill(h: LiveHit, now: number): { text: string; tone: "rec" |
   return { text: timeChip({ start: h.start, stop: h.stop }, new Date(now * 1000)), tone: "time" };
 }
 
+
+/** An IPTV group hit as a ranked-list entry (for a late answer that only carries the `iptv` group). */
+const iptvEntry = (h: IptvHit): SearchEntry => ({ key: `i:${h.iptvId}`, kind: h.kind === "series" ? "series" : "film", source: "iptv", title: h.name, score: 0, iptvId: h.iptvId, year: h.year, rating: h.rating, poster: h.poster, backdrop: h.backdrop, quality: h.quality, tech: h.tech });
+
+/**
+ * A late answer for part of a search (`pending` named "iptv" or "discover"; the client re-asks with `types=` that group):
+ * merge it into the answer already on screen. The IPTV copies replace the IPTV entries of the ranked list (and the group);
+ * nothing else on screen changes, so no row jumps.
+ */
+export function mergeLate(r: SearchResult, late: SearchResult, what: "iptv" | "discover"): SearchResult {
+  const pending = r.pending.filter((p) => p !== what);
+  if (what === "discover") return { ...r, discover: late.discover, pending };
+  let results = r.results;
+  if (results) {
+    const fromLate = (late.results ?? late.iptv.map(iptvEntry)).filter((e) => e.source === "iptv");
+    const have = new Set(results.filter((e) => e.source !== "iptv").map((e) => e.key));
+    results = [...results.filter((e) => e.source !== "iptv"), ...fromLate.filter((e) => !have.has(e.key))];
+  }
+  return { ...r, iptv: late.iptv, results, pending };
+}

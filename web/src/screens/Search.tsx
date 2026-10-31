@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { search, type Item } from "../api/jellyfin";
 import { clearRecent, recordClick, recordRecent, searchAll, suggestions, type Suggestions } from "../api/search";
-import { filterChips, isEmpty, seasonHint, withoutFilter, type DiscoverHit, type LibHit, type SearchEntry, type SearchResult } from "../lib/search";
+import { filterChips, isEmpty, mergeLate, seasonHint, withoutFilter, type DiscoverHit, type LibHit, type SearchEntry, type SearchResult } from "../lib/search";
 import { go } from "../lib/router";
 import { useIsPhone } from "../lib/device";
 import { Card } from "../components/Card";
@@ -445,12 +445,14 @@ export function Search({ initial }: { initial: string }) {
       if (r) {
         setUnified(r);
         setFallback(null);
-        // Discover answered late (TMDB slower than 40 ms): it's cached server-side by now, so ask for just that group
-        if (r.pending.includes("discover")) {
-          await new Promise((ok) => setTimeout(ok, 300));
+        // A group answered late (Discover: TMDB slower than 40 ms; IPTV: copies still being verified): ask again for just that
+        // group and merge it into what is on screen. The server sends each at most once per query per 20 s, so this cannot loop.
+        for (const [what, wait] of [["discover", 300], ["iptv", 1500]] as const) {
+          if (!r.pending.includes(what)) continue;
+          await new Promise((ok) => setTimeout(ok, wait));
           if (ctl.signal.aborted) return;
-          const d = await searchAll(term, ctl.signal, "discover");
-          if (!ctl.signal.aborted && d && d !== "blocked" && d.discover.length) setUnified((cur) => (cur === r ? { ...r, discover: d.discover, pending: [] } : cur));
+          const d = await searchAll(term, ctl.signal, what);
+          if (!ctl.signal.aborted && d && d !== "blocked") setUnified((cur) => (cur && cur.q === r.q ? mergeLate(cur, d, what) : cur));
         }
         return;
       }
