@@ -622,3 +622,30 @@ test("Ricki's real on-now and upcoming payloads: match info reaches the tiles (t
   delete c.now.matchInfo;
   assert.equal(parseOnNow(moved, moved.now).filter((o) => o.info.fixture).length, 3);
 });
+
+import { formTone, hex, heroColors, impliedProb, oddsSplit, startsIn, tint } from "../src/lib/matchInfo.ts";
+
+test("match modal helpers: colours, countdown, odds split, form chips", () => {
+  assert.equal(hex("#FFAA00"), "#ffaa00");
+  assert.equal(hex("fa0"), "#ffaa00");
+  assert.equal(hex("red"), null);
+  assert.equal(hex(5), null);
+  const f = parseFixture({ ...FIX, home: { name: "Chiefs", color: "e31837", altColor: "#ffb612" }, away: { name: "Bills", color: "nope" }, venue: { name: "Arrowhead", city: "KC", image: "https://r2.thesportsdb.com/x.jpg" } })!;
+  assert.deepEqual(heroColors(f), ["#e31837", "#2a2d33"]);
+  assert.equal(f.home.altColor, "#ffb612");
+  assert.equal(f.venue?.image, "https://r2.thesportsdb.com/x.jpg");
+  assert.equal(startsIn(1000 + 134 * 60, 1000), "Starts in 2h 14m");
+  assert.equal(startsIn(1000 + 35 * 60, 1000), "Starts in 35 min");
+  assert.equal(startsIn(900, 1000), "Starting now");
+  assert.equal(Math.round(impliedProb("-150")! * 100), 60);
+  assert.equal(Math.round(impliedProb("+130 · +3.5")! * 100), 43);
+  assert.equal(impliedProb("n/a"), null);
+  const sp = oddsSplit("-150", "+130")!;
+  assert.ok(Math.abs(sp.home + sp.away - 1) < 1e-9);
+  assert.ok(sp.home > 0.5);
+  assert.equal(oddsSplit("-150", null), null);
+  assert.equal(formTone("W"), "w");
+  assert.equal(formTone("l"), "l");
+  assert.equal(formTone("D"), "d");
+  assert.equal(tint("#ff0000", 0.2), "rgba(255, 0, 0, 0.2)");
+});

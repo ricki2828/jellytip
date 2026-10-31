@@ -13,7 +13,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data: blob: https://image.tmdb.org", // closet picks not in the library carry TMDB posters
+  "img-src 'self' data: blob: https://image.tmdb.org https://a.espncdn.com https://*.thesportsdb.com", // TMDB posters (closet picks); team crests and venue photos (match info)
   "media-src 'self' blob:",
   "font-src 'self'",
   "connect-src 'self'",

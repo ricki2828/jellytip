@@ -1623,3 +1623,258 @@
 .flip-toast.fantasy.opp {
   box-shadow: inset 4px 0 0 #d9473d, inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.5);
 }
+
+/* Match info: split team-colour hero, big crests, odds bar, form chips (transforms and opacity for motion) */
+.match-info {
+  animation: mi-in 220ms cubic-bezier(0.1, 0.8, 0.2, 1) both;
+  max-width: min(560px, 100%);
+}
+@keyframes mi-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.mi-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 28px -6px 10px;
+  padding: 26px 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(104deg, var(--hc, #3b3f46) 0 50%, var(--ac, #2a2d33) 50% 100%);
+}
+.mi-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.62));
+}
+.mi-venue-img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.2;
+}
+.mi-league {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.mi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.mi-team {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.mi-team strong {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.mi-rec {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+.mi-crest {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.5));
+}
+.mi-crest.blank {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 18px;
+  font-weight: 900;
+  filter: none;
+}
+.mi-crest.in-l {
+  animation: mi-slide-l 360ms cubic-bezier(0.1, 0.8, 0.2, 1) both;
+}
+.mi-crest.in-r {
+  animation: mi-slide-r 360ms cubic-bezier(0.1, 0.8, 0.2, 1) both;
+}
+@keyframes mi-slide-l {
+  from {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes mi-slide-r {
+  from {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.mi-mid {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 78px;
+  text-align: center;
+}
+.mi-big {
+  font-size: 30px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.mi-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.mi-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff4d5a;
+  animation: mi-pulse 1.1s ease-in-out infinite;
+}
+@keyframes mi-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.7);
+    opacity: 0.45;
+  }
+}
+.mi-ft,
+.mi-count,
+.mi-v {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.mi-venue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  opacity: 0.92;
+}
+.mi-venue svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.mi-odds {
+  margin: 4px 0 6px;
+}
+.mi-oddsbar {
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.mi-oddsbar span {
+  display: block;
+  height: 100%;
+}
+.mi-oddsnum {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 13px;
+}
+.mi-formrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0;
+  font-size: 13px;
+}
+.mi-chips {
+  display: inline-flex;
+  gap: 4px;
+}
+.mi-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+}
+.mi-chip.w {
+  background: #2f9e5b;
+}
+.mi-chip.l {
+  background: #d9473d;
+}
+.mi-chip.d {
+  background: #7a7f87;
+}
+.mi-col {
+  padding: 8px 10px 10px;
+  border-radius: 10px;
+}
+@media (max-width: 700px) {
+  .mi-crest {
+    width: 64px;
+    height: 64px;
+  }
+  .mi-team strong {
+    font-size: 15px;
+  }
+  .mi-big {
+    font-size: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .match-info,
+  .mi-crest.in-l,
+  .mi-crest.in-r,
+  .mi-pulse {
+    animation: none !important;
+  }
+}

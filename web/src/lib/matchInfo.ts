@@ -8,6 +8,9 @@ export interface Side {
   short: string | null;
   logo: string | null;
   record: string | null;
+  /** Team colours (hex) when the server has them: the match modal's split hero and tints. */
+  color: string | null;
+  altColor: string | null;
 }
 
 export interface Fixture {
@@ -19,7 +22,7 @@ export interface Fixture {
   away: Side;
   /** Epoch seconds. */
   startsAt: number | null;
-  venue: { name: string | null; city: string | null } | null;
+  venue: { name: string | null; city: string | null; image: string | null } | null;
   status: "pre" | "in" | "post" | null;
   source: string | null;
   /** The matchup was worked out by Jellytip (the listing did not name it). */
@@ -66,10 +69,19 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : v != null && typeo
 const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/** A hex colour ("#aabbcc", "aabbcc" or "#abc") as "#aabbcc"; null for anything else. */
+export function hex(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1];
+  return `#${h.toLowerCase()}`;
+}
+
 function side(raw: unknown): Side | null {
   const o = obj(raw);
   const name = str(o?.name) ?? str(o?.short);
-  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record) } : null;
+  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record), color: hex(o.color), altColor: hex(o.altColor) } : null;
 }
 
 /** `matchInfo` on a programme / item: a fixture, or null when it has no id or either side. (`match` is the favourite marker and is not read here.) */
@@ -89,7 +101,7 @@ export function parseFixture(raw: unknown): Fixture | null {
     home,
     away,
     startsAt: parseStartsAt(o.startsAt),
-    venue: v ? { name: str(v.name), city: str(v.city) } : null,
+    venue: v ? { name: str(v.name), city: str(v.city), image: str(v.image) } : null,
     status,
     source: str(o.source),
     inferred: o.inferred === true,
@@ -170,4 +182,46 @@ export function matchOutcome(status: number, data: unknown): "route-missing" | "
   if (status === 403) return "forbidden";
   if (status === 200 && data && typeof data === "object" && (data as { unknown?: unknown }).unknown === true) return "unknown";
   return null;
+}
+
+// ---------- match modal helpers ----------
+
+const NEUTRAL = ["#3b3f46", "#2a2d33"];
+
+/** The two team colours for the split hero; neutral greys where a side has none. */
+export const heroColors = (f: Pick<Fixture, "home" | "away">): [string, string] => [f.home.color ?? NEUTRAL[0], f.away.color ?? NEUTRAL[1]];
+
+/** "Starts in 2h 14m" / "Starts in 35 min" / "Starting now". */
+export function startsIn(startsAt: number, now: number): string {
+  const m = Math.ceil((startsAt - now) / 60);
+  if (m <= 0) return "Starting now";
+  return m >= 60 ? `Starts in ${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `Starts in ${m} min`;
+}
+
+/** American moneyline ("-150", "+130") → implied probability 0..1; null when it isn't one. */
+export function impliedProb(line: string | null | undefined): number | null {
+  const m = /^\s*([+-]?\d{2,5})/.exec(line ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!n) return null;
+  return n > 0 ? 100 / (n + 100) : -n / (-n + 100);
+}
+
+/** Home / away shares (0..1, summing to 1) for the odds bar, from the two moneylines; null without both. */
+export function oddsSplit(home: string | null | undefined, away: string | null | undefined): { home: number; away: number } | null {
+  const h = impliedProb(home);
+  const a = impliedProb(away);
+  if (h == null || a == null) return null;
+  return { home: h / (h + a), away: a / (h + a) };
+}
+
+/** W / L / D chip class for a form letter. */
+export const formTone = (c: string): "w" | "l" | "d" => (/^w/i.test(c) ? "w" : /^l/i.test(c) ? "l" : "d");
+
+/** "#aabbcc" + alpha → "rgba(170, 187, 204, 0.2)". */
+export function tint(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return `rgba(255, 255, 255, ${alpha})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }

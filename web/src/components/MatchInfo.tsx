@@ -7,7 +7,7 @@ import { matchDetail, matchInfoAvailable, onMatchInfoAvailability } from "../api
 import { refreshRecs } from "../api/recStore";
 import { livePath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
-import { matchupTitle, statusLabel, venueLine, type Fixture, type MatchDetail, type Player, type Side } from "../lib/matchInfo";
+import { formTone, heroColors, matchupTitle, oddsSplit, startsIn, tint, venueLine, type Fixture, type MatchDetail, type Player, type Side } from "../lib/matchInfo";
 import { logoSrc } from "../api/iptv";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { flashNote } from "./TasteButtons";
@@ -39,18 +39,48 @@ export const IdentifiedMark = () => (
   </span>
 );
 
-function Crest({ s }: { s: Side }) {
+/** Crest hosts the page's CSP allows (public CDNs); anything else is a companion-proxied path. */
+const CDN = /^https:\/\/(a\.espncdn\.com|[a-z0-9-]+\.thesportsdb\.com)\//i;
+const artSrc = (u: string | null | undefined, size: 96 | 480): string | null => (u ? (CDN.test(u) ? u : /^https?:\/\//i.test(u) ? null : logoSrc(u, size)) : null);
+
+function Crest({ s, side }: { s: Side; side: "l" | "r" }) {
   const [failed, setFailed] = useState(false);
-  const src = s.logo && !failed ? (/^https?:\/\//i.test(s.logo) ? null : logoSrc(s.logo, 96)) : null;
-  return src ? <img className="mi-crest" src={src} alt="" onError={() => setFailed(true)} /> : <span className="mi-crest blank">{s.short ?? s.name.slice(0, 3)}</span>;
+  const src = failed ? null : artSrc(s.logo, 96);
+  return src ? <img className={`mi-crest in-${side}`} src={src} alt="" onError={() => setFailed(true)} /> : <span className={`mi-crest blank in-${side}`}>{s.short ?? s.name.slice(0, 3)}</span>;
 }
 
-function Team({ s }: { s: Side }) {
+function Team({ s, side }: { s: Side; side: "l" | "r" }) {
   return (
     <div className="mi-team">
-      <Crest s={s} />
+      <Crest s={s} side={side} />
       <strong>{s.name}</strong>
-      {s.record && <span className="iptv-hint">{s.record}</span>}
+      {s.record && <span className="mi-rec">{s.record}</span>}
+    </div>
+  );
+}
+
+/** Centre of the hero: a pulsing LIVE with the clock, the countdown for a pre-game, or FT; the score when there is one. */
+function Mid({ f, now }: { f: Fixture; now: number }) {
+  return (
+    <div className="mi-mid">
+      {f.score && (
+        <strong className="mi-big">
+          {f.score.home} – {f.score.away}
+        </strong>
+      )}
+      {f.status === "in" ? (
+        <span className="mi-live">
+          <i className="mi-pulse" aria-hidden />
+          LIVE{f.score?.clock ? ` · ${f.score.clock}` : ""}
+          {f.score?.period ? ` · ${f.score.period}` : ""}
+        </span>
+      ) : f.status === "post" ? (
+        <span className="mi-ft">FT</span>
+      ) : f.startsAt ? (
+        <span className="mi-count">{startsIn(f.startsAt, now)}</span>
+      ) : (
+        <span className="mi-v">v</span>
+      )}
     </div>
   );
 }
@@ -60,8 +90,9 @@ const ago = (at: number | null) => (at ? new Date(at * 1000).toLocaleTimeString(
 function Lineup({ d }: { d: MatchDetail }) {
   const l = d.lineups;
   if (!l) return null;
-  const col = (name: string, ps: Player[]) => (
-    <div>
+  const [hc, ac] = heroColors(d.fixture);
+  const col = (name: string, ps: Player[], color: string) => (
+    <div className="mi-col" style={{ background: tint(color, 0.18), boxShadow: `inset 0 3px 0 ${color}` }}>
       <h4>{name}</h4>
       <ul className="mi-list">
         {ps.map((p) => (
@@ -79,8 +110,8 @@ function Lineup({ d }: { d: MatchDetail }) {
       <h3>Line-ups</h3>
       {l.announced && (l.home.length || l.away.length) ? (
         <div className="mi-cols">
-          {col(d.fixture.home.name, l.home)}
-          {col(d.fixture.away.name, l.away)}
+          {col(d.fixture.home.name, l.home, hc)}
+          {col(d.fixture.away.name, l.away, ac)}
         </div>
       ) : (
         <p className="iptv-hint">Not announced yet.</p>
@@ -94,7 +125,6 @@ export function MatchInfoHost() {
   const [id, setId] = useState<string | null>(null);
   const [d, setD] = useState<MatchDetail | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
-  const [showScore, setShowScore] = useState(false);
   const [scoreMsg, setScoreMsg] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   useEscapeClose(() => setId(null), id != null);
@@ -103,7 +133,6 @@ export function MatchInfoHost() {
       setId((e as CustomEvent<string>).detail);
       setD(null);
       setState("loading");
-      setShowScore(false);
       setScoreMsg(null);
       setMsg(null);
     };
@@ -146,7 +175,6 @@ export function MatchInfoHost() {
     const a = await matchDetail(id, true);
     if (a && a !== "missing" && a.fixture.score) {
       setD(a);
-      setShowScore(true);
       setScoreMsg(null);
     } else setScoreMsg("No score available.");
   };
@@ -159,19 +187,23 @@ export function MatchInfoHost() {
         {state === "error" && <p className="iptv-err">Couldn't load the match.</p>}
         {f && d && (
           <>
-            <p className="iptv-hint">{[f.league, statusLabel(f, now), venueLine(f)].filter(Boolean).join(" · ")}</p>
-            <div className="mi-head">
-              <Team s={f.home} />
-              <div className="mi-score">
-                {f.score ? (
-                  <strong>
-                    {f.score.home} – {f.score.away}
-                  </strong>
-                ) : (
-                  <span className="iptv-hint">v</span>
-                )}
+            <div className="mi-hero" style={{ ["--hc" as string]: heroColors(f)[0], ["--ac" as string]: heroColors(f)[1] }}>
+              {artSrc(f.venue?.image, 480) && <img className="mi-venue-img" src={artSrc(f.venue?.image, 480)!} alt="" loading="lazy" />}
+              {f.league && <span className="mi-league">{f.league}</span>}
+              <div className="mi-head">
+                <Team s={f.home} side="l" />
+                <Mid f={f} now={now} />
+                <Team s={f.away} side="r" />
               </div>
-              <Team s={f.away} />
+              {venueLine(f) && (
+                <p className="mi-venue">
+                  <svg viewBox="0 0 24 24" aria-hidden>
+                    <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
+                    <circle cx="12" cy="10" r="2.3" />
+                  </svg>
+                  {venueLine(f)}
+                </p>
+              )}
             </div>
             {!f.score && (f.status === "in" || f.status === "post") && (
               <div className="buttons">
@@ -181,7 +213,6 @@ export function MatchInfoHost() {
                 {scoreMsg && <span className="iptv-hint">{scoreMsg}</span>}
               </div>
             )}
-            {f.score && showScore === false && f.status !== "pre" && <p className="iptv-hint">{[f.score.period, f.score.clock].filter(Boolean).join(" · ")}</p>}
             {f.inferred && <p className="iptv-hint">Jellytip matched this listing to the fixture list.</p>}
 
             {(d.channels.length > 0 || d.broadcasts.length > 0) && (
@@ -202,6 +233,22 @@ export function MatchInfoHost() {
             {d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
               <section>
                 <h3>Odds</h3>
+                {(() => {
+                  const split = oddsSplit(d.odds.home, d.odds.away);
+                  const [hc, ac] = heroColors(f);
+                  return split ? (
+                    <div className="mi-odds" aria-label={`${f.home.name} ${Math.round(split.home * 100)}%, ${f.away.name} ${Math.round(split.away * 100)}%`}>
+                      <div className="mi-oddsbar">
+                        <span style={{ width: `${split.home * 100}%`, background: hc }} />
+                        <span style={{ width: `${split.away * 100}%`, background: ac }} />
+                      </div>
+                      <div className="mi-oddsnum">
+                        <strong>{f.home.short ?? f.home.name} {Math.round(split.home * 100)}%</strong>
+                        <strong>{Math.round(split.away * 100)}% {f.away.short ?? f.away.name}</strong>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 <ul className="mi-list">
                   {d.odds.home && <li>{f.home.name}: {d.odds.home}</li>}
                   {d.odds.draw && <li>Draw: {d.odds.draw}</li>}
@@ -218,11 +265,16 @@ export function MatchInfoHost() {
               <section>
                 <h3>Form and head to head</h3>
                 {d.form && (
-                  <p>
-                    {f.home.name}: <span className="mi-form">{d.form.home.join(" ") || "–"}</span>
-                    <br />
-                    {f.away.name}: <span className="mi-form">{d.form.away.join(" ") || "–"}</span>
-                  </p>
+                  <div className="mi-formrows">
+                    {([[f.home.name, d.form.home], [f.away.name, d.form.away]] as [string, string[]][]).map(([n, fm]) => (
+                      <div key={n} className="mi-formrow">
+                        <span>{n}</span>
+                        <span className="mi-chips">
+                          {fm.length ? fm.map((c, i) => <b key={i} className={`mi-chip ${formTone(c)}`}>{c.toUpperCase().slice(0, 1)}</b>) : "–"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 {d.h2h.length > 0 && (
                   <ul className="mi-list">
