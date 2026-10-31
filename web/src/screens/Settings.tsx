@@ -6,6 +6,7 @@ import { savePrefs, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
 import type { Prefs } from "../lib/prefs";
 import { go } from "../lib/router";
+import { IntegrationsSettings } from "../components/IntegrationsSettings";
 import { SportSettings } from "../components/SportSettings";
 
 const LANGS: [string, string][] = [
@@ -126,6 +127,8 @@ function Personal({ prefs }: { prefs: Prefs }) {
       </form>
 
       <SportSettings prefs={prefs} />
+
+      <IntegrationsSettings />
 
       {msg && <p className="settings-err settings-pad">{msg}</p>}
     </>

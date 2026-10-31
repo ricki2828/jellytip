@@ -548,3 +548,17 @@ test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   assert.equal(parsePrefs({}).fantasy.alerts, true);
   assert.equal(parsePrefs({ fantasy: { alerts: false } }).fantasy.alerts, false);
 });
+
+import { parseIntegrations, statusText } from "../src/lib/integrations.ts";
+
+test("integrations: parse statuses, status lines", () => {
+  const l = parseIntegrations([{ service: "yahoo", configured: true, checkedOk: true, updatedAt: 5 }, { service: "reddit", configured: false }, { service: "other", configured: true }, null]);
+  assert.deepEqual(l.map((x) => x.service), ["yahoo", "reddit"]);
+  assert.equal(statusText(l[0]), "Configured · checked OK");
+  assert.equal(statusText(l[1]), "Not configured");
+  assert.equal(statusText({ configured: true, checkedOk: false }), "Configured · the check failed");
+  assert.equal(statusText({ configured: true, checkedOk: null }), "Configured");
+  assert.equal(statusText(undefined), "Not configured");
+  assert.deepEqual(parseIntegrations({ integrations: [{ service: "reddit", configured: true }] }).map((x) => x.configured), [true]);
+  assert.deepEqual(parseIntegrations(null), []);
+});

@@ -1,6 +1,9 @@
 // Settings → Live sport → Fantasy: link a Sleeper username (the server looks the leagues up), the scoring-alert toggle and a
 // "Yahoo: coming soon" line. Hidden when the server has no fantasy route.
 import { useEffect, useState } from "react";
+import { companionMediaUrl } from "../api/companion";
+import { getSession } from "../api/jellyfin";
+import { integrations } from "../api/integrations";
 import { fantasyLive, fantasyMissing, saveAlertMin, saveFantasyAlerts, saveSleeperUsername } from "../api/fantasy";
 import type { Prefs } from "../lib/prefs";
 
@@ -10,6 +13,16 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
   const [busy, setBusy] = useState(false);
   const [leagues, setLeagues] = useState<string[] | null>(null);
   const [missing, setMissing] = useState(false);
+  // Yahoo: the per-user Connect button shows once an admin has configured the Yahoo app (only admins can read that status)
+  const [yahoo, setYahoo] = useState(false);
+  useEffect(() => {
+    if (!getSession()?.isAdmin) return;
+    let alive = true;
+    void integrations().then((l) => alive && setYahoo(!!l?.find((x) => x.service === "yahoo")?.configured));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => setName(linked ?? ""), [linked]);
   // Probe once (and list the leagues when an account is already linked); a 404 hides the whole section
@@ -77,7 +90,16 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
           </button>
         </div>
       )}
-      <span className="settings-sub">Yahoo: coming soon</span>
+      {yahoo ? (
+        <div className="settings-inline">
+          <button className="btn small" data-nav onClick={() => (window.location.href = companionMediaUrl("v1/fantasy/yahoo/start"))}>
+            Connect Yahoo
+          </button>
+          <span className="settings-sub">Sign in with Yahoo to link your Yahoo Fantasy leagues.</span>
+        </div>
+      ) : (
+        <span className="settings-sub">Yahoo: coming soon</span>
+      )}
     </div>
   );
 }
