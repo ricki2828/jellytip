@@ -282,7 +282,10 @@ fun JellytipLiveTvPlayerPage(
             delay(FANTASY_POLL_MS)
         }
     }
-    val panelTabs = if (nflMatch != null && fantasy != null) LIVE_TABS + "Fantasy" else LIVE_TABS
+    // Chat only once a /live answer carries a `chat` block (no Reddit app: none at all)
+    var liveHasChat by remember(panelMatch?.id) { mutableStateOf(false) }
+    val liveTabs = if (liveHasChat) LIVE_TABS else LIVE_TABS - "Chat"
+    val panelTabs = if (nflMatch != null && fantasy != null) liveTabs + "Fantasy" else liveTabs
     LaunchedEffect(panelTabs.size) { if (panelTab >= panelTabs.size) panelTab = 0 }
     // Scoring events: toasts like the flip one (fantasy.alerts); events already there when watching starts are skipped
     val seenEvents = remember { HashSet<String>() }
@@ -330,6 +333,7 @@ fun JellytipLiveTvPlayerPage(
                 LivePanelRoute.missing = true
                 return@LaunchedEffect
             }
+            got?.second?.let { liveHasChat = it.hasChat }
             val mk = got?.second?.market
             val at = mk?.flipAt
             if (mk != null && at != null && at != lastAt) {
@@ -498,6 +502,7 @@ fun JellytipLiveTvPlayerPage(
                 onRouteMissing = { panelOpen = false },
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
                 progress = panelProgress,
+                onChatKnown = { liveHasChat = it },
             )
         }
         // Toast: top right, slides in from the right, never takes focus; the queue above times it

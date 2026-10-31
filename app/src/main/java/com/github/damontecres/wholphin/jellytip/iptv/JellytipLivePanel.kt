@@ -96,6 +96,8 @@ data class MatchLive(
     val market: LiveMarket?,
     val chatSource: String?,
     val comments: List<LiveComment>,
+    /** The answer carries a `chat` block; without one the Chat tab is hidden (no match-thread source). */
+    val hasChat: Boolean = false,
     val updatedAt: Long?,
 )
 
@@ -152,6 +154,7 @@ object LiveParse {
             winProbHome = o.optJSONObject("winProb")?.dbl("home"),
             market = market,
             chatSource = chat?.str("source"),
+            hasChat = chat != null,
             comments = comments,
             updatedAt = IptvParse.isoSeconds(o.str("updatedAt")),
         )
@@ -183,6 +186,8 @@ fun JellytipLivePanel(
     modifier: Modifier = Modifier,
     /** 0 = off screen to the right, 1 = in place (the player animates it; plan "Panel motion"). */
     progress: Float = 1f,
+    /** Each answer says whether it has a `chat` block (the player shows the Chat tab only then). */
+    onChatKnown: (Boolean) -> Unit = {},
 ) {
     val data by produceState<MatchLive?>(null, match.id, spoilerNotice) {
         if (spoilerNotice) return@produceState
@@ -193,7 +198,10 @@ fun JellytipLivePanel(
                 onRouteMissing()
                 return@produceState
             }
-            got?.second?.let { value = it }
+            got?.second?.let {
+                value = it
+                onChatKnown(it.hasChat)
+            }
             delay(REFRESH_MS)
         }
     }
@@ -258,11 +266,11 @@ fun JellytipLivePanel(
                     // Tab switches cross-fade (150 ms)
                     androidx.compose.animation.Crossfade(targetState = tab, animationSpec = androidx.compose.animation.core.tween(150), label = "live-panel-tab") { t ->
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            when (t) {
-                                0 -> StatsTab(d, match)
-                                1 -> PlaysTab(d, match.id)
-                                2 -> OddsTab(d, match)
-                                else -> ChatTab(d, match.id)
+                            when (tabs.getOrNull(t)) {
+                                "Plays" -> PlaysTab(d, match.id)
+                                "Odds" -> OddsTab(d, match)
+                                "Chat" -> ChatTab(d, match.id)
+                                else -> StatsTab(d, match)
                             }
                         }
                     }
