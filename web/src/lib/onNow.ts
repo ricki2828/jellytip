@@ -12,6 +12,9 @@ export interface OnNow {
   start: number;
   stop: number;
   sport: boolean;
+  /** The programme's description and what is on next (for the phone player's panel). */
+  desc: string | null;
+  next: { title: string; start: number }[];
   /** Live/replay, stream quality and other channels with the same event (all optional on older servers). */
   info: SportInfo;
 }
@@ -19,6 +22,14 @@ export interface OnNow {
 const SPORT_RE = /\b(sports?|football|soccer|rugby|cricket|nrl|afl|nfl|nba|nhl|mlb|ncaa[fb]?|f1|formula|golf|tennis|boxing|ufc|racing|motogp|super ?rugby|premier league|kayo|espn|bein|tnt sports|fox sports|sky sport)\b/i;
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+
+const nextList = (c: Record<string, unknown>): { title: string; start: number }[] => {
+  const raw = Array.isArray(c.next) ? c.next : c.next ? [c.next] : [];
+  return raw.flatMap((x) => {
+    const o = obj(x);
+    return o && typeof o.title === "string" && o.title && typeof o.start === "number" ? [{ title: o.title, start: o.start }] : [];
+  });
+};
 
 export function parseOnNow(raw: unknown, now: number): OnNow[] {
   const r = obj(raw);
@@ -53,6 +64,8 @@ export function parseOnNow(raw: unknown, now: number): OnNow[] {
       start,
       stop,
       info,
+      desc: typeof p.desc === "string" && p.desc ? p.desc : typeof p.description === "string" && p.description ? p.description : null,
+      next: nextList(c),
       sport: info.sport || c.sport === true || ch.sport === true || (c.sport !== false && ch.sport !== false && SPORT_RE.test(hint)),
     });
   }

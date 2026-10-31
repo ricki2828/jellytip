@@ -18,7 +18,10 @@ import type Mpegts from "mpegts.js";
 import { deviceId, getSession } from "../../api/jellyfin";
 import { COMPANION_BASE } from "../../api/companion";
 import { openMatchInfo } from "../../components/MatchInfo";
-import { play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
+import { matchDetailCached } from "../../api/matchInfo";
+import { refreshRecs } from "../../api/recStore";
+import { matchupTitle } from "../../lib/matchInfo";
+import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
@@ -721,6 +724,10 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
   const alive = useRef(true);
   const renewed = useRef(false);
   const switchTo = useRef<string | null>(null);
+  // The user's alert settings go to the native player, which shows its own toasts and notifications
+  const userPrefs = usePrefs({ defer: true }).prefs;
+  const sportPrefsRef = useRef<{ fantasyAlerts?: boolean; flipAlerts?: boolean }>({});
+  sportPrefsRef.current = userPrefs ? { fantasyAlerts: userPrefs.fantasy.alerts, flipAlerts: userPrefs.sport.flipAlerts } : {};
   const infoFor = useRef<string | null>(null);
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
@@ -766,6 +773,27 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
         await NativePlayer.addListener("matchInfo", (e) => {
           infoFor.current = e.matchId;
         }),
+        // Portrait Info tab: Remind me / Record for the match (the same handlers as the web modal)
+        await NativePlayer.addListener("matchAction", (e) => {
+          void (async () => {
+            const m = await matchDetailCached(e.matchId);
+            if (!m || m === "missing") return flashNote("Couldn't find that match.");
+            const f = m.fixture;
+            const channel = e.channelId ?? target.channel;
+            if (!channel || !f.startsAt) return flashNote("Nothing to schedule yet.");
+            if (e.action === "remind") {
+              const err = await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt, stop: f.startsAt + 3 * 3600, channelId: channel, channelName: title });
+              flashNote(err ?? "We'll remind you before it starts");
+            } else {
+              const a = await addRecording(channel, f.startsAt);
+              if (a.status === 200 || a.status === 201) {
+                void refreshRecs(true);
+                flashNote("Recording scheduled. It'll appear on Home.");
+              } else flashNote(a.data?.error ?? `Server said ${a.status}`);
+            }
+          })();
+        }),
+        await NativePlayer.addListener("channelSwitch", (e) => debugEvent("iptv-player", "native channel switch", { from: e.from ?? null, to: e.to }, "info")),
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
@@ -778,6 +806,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
           growing: !live && !!a.growing,
           resumeMs,
           note: link.direct ? DIRECT_NOTE : undefined,
+          // The portrait panel for anything that is not a match (description, what's next), and the user's alert settings
+          description: extras?.desc ?? undefined,
+          upNext: extras?.upNext,
+          fantasyAlerts: sportPrefsRef.current?.fantasyAlerts,
+          flipAlerts: sportPrefsRef.current?.flipAlerts,
           // Live: the channel, its event's other channels and the programme on now (kick-off); the player asks for links itself
           ...(live && target.channel
             ? {
@@ -800,6 +833,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
         subs.forEach((s) => void s.remove());
       }
       if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000), target.episode ? target.series : undefined);
+      // Another open() took over this player (a new match, the mini player): that session carries on, so this one ends quietly
+      if (r.reason === "replaced") return;
       if (!alive.current) return;
       // "Other channels" on the pre-game card: reopen on the one picked (the rest of the event's channels, and this one, stay as alternates)
       if (switchTo.current && target.channel) {
@@ -870,10 +905,16 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
     [target, resume, session],
   );
 
+  // Open the native player once per mount. `target` is a new object on every App render, so `start` changes identity often;
+  // re-running it would call open() again and replace (or reopen) a player that is playing, or floating as the mini player.
+  const opened = useRef(false);
   useEffect(() => {
     alive.current = true;
     renewed.current = false;
-    void start();
+    if (!opened.current) {
+      opened.current = true;
+      void start();
+    }
     return () => {
       alive.current = false;
     };

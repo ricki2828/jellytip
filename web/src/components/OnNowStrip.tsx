@@ -74,6 +74,8 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     startsAt: !via && isPre(o.info.startsAt, now, o.info.phase) ? o.info.startsAt : null,
     eventKey: o.info.eventKey,
     matchId: o.info.fixture?.id ?? null,
+    desc: o.desc,
+    upNext: o.next,
     alternates: [{ id: o.channelId, name: o.channel }, ...alts(o)].filter((a) => a.id !== (via ?? o.channelId)),
   });
   const play = (id: string, name: string, x?: LiveExtras) => go(livePath(id, name, x));

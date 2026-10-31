@@ -297,10 +297,10 @@ test("live extras: kick-off and alternates round-trip through the play link", ()
   const path = livePath("3:76", "Sky Sport 1", x);
   const q = new URLSearchParams(path.split("?")[1]);
   assert.equal(q.get("channel"), "3:76");
-  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null, matchId: null });
+  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null, matchId: null, desc: null, upNext: [] });
   assert.equal(liveExtrasQuery(null), "");
   assert.equal(liveExtrasQuery({ kickoff: { start: 5, stop: 5 }, alternates: [] }), "");
-  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null, matchId: null });
+  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null, matchId: null, desc: null, upNext: [] });
   const p = parseLiveExtras(new URLSearchParams(liveExtrasQuery({ startsAt: 1_900_000_000, eventKey: "nfl:a-v-b" }).slice(1)));
   assert.equal(p.startsAt, 1_900_000_000);
   assert.equal(p.eventKey, "nfl:a-v-b");
@@ -568,4 +568,11 @@ test("integrations: parse statuses, status lines", () => {
   assert.equal(statusText(undefined), "Not configured");
   assert.deepEqual(parseIntegrations({ integrations: [{ service: "reddit", configured: true }] }).map((x) => x.configured), [true]);
   assert.deepEqual(parseIntegrations(null), []);
+});
+
+test("live extras carry the description and what is on next (phone panel)", () => {
+  const q = new URLSearchParams(liveExtrasQuery({ desc: "Live cricket from Hamilton", upNext: [{ title: "Highlights", start: 1_900_000_000 }, { title: "News" }] }).slice(1));
+  const p = parseLiveExtras(q);
+  assert.equal(p.desc, "Live cricket from Hamilton");
+  assert.deepEqual(p.upNext, [{ title: "Highlights", start: 1_900_000_000 }, { title: "News", start: undefined }]);
 });
