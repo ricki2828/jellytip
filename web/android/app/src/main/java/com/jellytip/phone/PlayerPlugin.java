@@ -114,6 +114,8 @@ public class PlayerPlugin extends Plugin {
         // Alerts (the user's sport.fantasyAlerts / sport.flipAlerts; on unless false)
         i.putExtra(PlayerActivity.EXTRA_FANTASY_ALERTS, !Boolean.FALSE.equals(call.getBoolean("fantasyAlerts", true)));
         i.putExtra(PlayerActivity.EXTRA_FLIP_ALERTS, !Boolean.FALSE.equals(call.getBoolean("flipAlerts", true)));
+        // Live drawer style (sport.panelStyle: docked | floating; default docked)
+        i.putExtra(PlayerActivity.EXTRA_PANEL_STYLE, call.getString("panelStyle", "docked"));
         if (call.getData().has("altChannels")) {
             JSArray pre = call.getArray("altChannels", new JSArray());
             java.util.List<String> pIds = new java.util.ArrayList<>();

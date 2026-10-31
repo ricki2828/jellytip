@@ -75,6 +75,8 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_UP_NEXT_STARTS = "upNextStarts";
     static final String EXTRA_FANTASY_ALERTS = "fantasyAlerts";
     static final String EXTRA_FLIP_ALERTS = "flipAlerts";
+    /** sport.panelStyle: docked (default) | floating, for the landscape live drawer. */
+    static final String EXTRA_PANEL_STYLE = "panelStyle";
     /** Which open() this player answers (PlayerPlugin resolves that call when it closes). */
     static final String EXTRA_SESSION = "session";
 
@@ -255,7 +257,8 @@ public class PlayerActivity extends AppCompatActivity {
             String apiBase = in.getStringExtra(EXTRA_API_BASE);
             if (live && apiBase != null && !apiBase.isEmpty()) {
                 liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
-                liveDrawer = new LiveStatsDrawer(this, root, liveFeed, apiBase, in.getStringExtra(EXTRA_TOKEN), () -> matchPanel == null ? LiveTeams.NONE : matchPanel.teams());
+                liveDrawer =
+                    new LiveStatsDrawer(this, root, liveFeed, apiBase, in.getStringExtra(EXTRA_TOKEN), () -> matchPanel == null ? LiveTeams.NONE : matchPanel.teams(), "floating".equals(in.getStringExtra(EXTRA_PANEL_STYLE)));
                 liveDrawer.onOpenChanged = this::updateFeedSpeed;
                 // 403 / unknown match: the Live button goes
                 liveFeed.addListener(() -> {
@@ -1088,13 +1091,13 @@ public class PlayerActivity extends AppCompatActivity {
             }
 
             @Override
-            public void moment(String label, String side, String score) {
+            public void moment(String label, String side, String detail) {
                 if (closing) return;
                 LiveTeams t = matchPanel == null ? LiveTeams.NONE : matchPanel.teams();
-                int color = side == null ? 0xFFB3261E : t.side(side);
-                // The strip flashes where a live view shows; else (closed panel, mini player) an alert
-                boolean shown = !inPip() && ((liveDrawer != null && liveDrawer.flash(label, color)) || (matchPanel != null && matchPanel.flash(label, color)));
-                if (!shown && flipAlertsOn) alert("\u26A1  " + label + (score == null ? "" : " · " + score), side);
+                int color = side == null || !t.known ? Broadcast.LIVE : t.side(side);
+                // The strip's 2 s wipe where a live view shows; else (closed panel, mini player) an alert
+                boolean shown = !inPip() && ((liveDrawer != null && liveDrawer.flash(label, detail, color)) || (matchPanel != null && matchPanel.flash(label, detail, color)));
+                if (!shown && flipAlertsOn) alert("\u26A1  " + label + (detail == null ? "" : " · " + detail), side);
             }
         };
 

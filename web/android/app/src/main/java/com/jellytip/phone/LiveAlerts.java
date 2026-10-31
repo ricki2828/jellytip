@@ -23,8 +23,8 @@ final class LiveAlerts implements LiveFeed.Listener {
         /** The short name of the "home" / "away" team, or null. */
         String teamName(String side);
 
-        /** A big moment ("TOUCHDOWN", "WICKET", "LEAD CHANGE"; [side] home | away | null) with the score line, or null. */
-        void moment(String label, String side, String score);
+        /** A big moment ("TOUCHDOWN", "WICKET", "LEAD CHANGE"; [side] home | away | null) with its detail or the score line. */
+        void moment(String label, String side, String detail);
     }
 
     private static final long FANTASY_MS = 60_000;
@@ -114,7 +114,8 @@ final class LiveAlerts implements LiveFeed.Listener {
                 String label = !m.isNull("label") && !m.optString("label").isEmpty() ? m.optString("label") : kind == null ? null : kind.replace('_', ' ').toUpperCase(java.util.Locale.ROOT);
                 if (label == null) continue;
                 String at = m.isNull("at") ? label : m.optString("at");
-                if (seenMoments.add(at + "|" + label) && !first) sink.moment(label, m.isNull("team") ? null : m.optString("team"), score);
+                String detail = !m.isNull("detail") && !m.optString("detail").isEmpty() ? m.optString("detail") : !m.isNull("text") && !m.optString("text").isEmpty() ? m.optString("text") : score;
+                if (seenMoments.add(at + "|" + label) && !first) sink.moment(label, m.isNull("team") ? null : m.optString("team"), detail);
             }
         } else if (h >= 0 && a >= 0 && lastHome >= 0 && lastAway >= 0 && !first && (h != lastHome || a != lastAway)) {
             int before = Integer.signum(lastHome - lastAway);

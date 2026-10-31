@@ -24,16 +24,13 @@ final class LiveRender {
         return feed.last != null && feed.last.has("chat") && !feed.last.isNull("chat");
     }
 
-    /** A pill tab chip with its icon; the selected one is filled (plan "Live panel: pop, context, performance"). */
+    /** A Broadcast tab (mockup A (c)): condensed caps, grey; the selected one white with a gold underline. */
     static void styleTab(Context ctx, TextView t, String name, boolean on) {
-        String label = icon(name) + "  " + name;
-        if (!label.contentEquals(t.getText())) t.setText(label);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setCornerRadius(dp(ctx, 14));
-        bg.setColor(on ? 0xFFFFC94A : 0x1AFFFFFF);
-        t.setBackground(bg);
-        t.setTextColor(on ? Color.BLACK : Color.WHITE);
-        t.setPadding(dp(ctx, 10), dp(ctx, 5), dp(ctx, 10), dp(ctx, 5));
+        Broadcast.styleCond(t, 14, on ? Broadcast.TEXT : Broadcast.SECONDARY, 600);
+        t.setLetterSpacing(0.05f);
+        if (!name.contentEquals(t.getText())) t.setText(name);
+        t.setBackground(on ? new Broadcast.RuleDrawable(Broadcast.GOLD, dp(ctx, 3)) : null);
+        t.setPadding(0, dp(ctx, 4), 0, dp(ctx, 7));
     }
 
     static boolean isLiveTab(String tab) {
