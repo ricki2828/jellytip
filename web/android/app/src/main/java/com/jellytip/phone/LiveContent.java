@@ -460,7 +460,15 @@ final class LiveContent {
             setText(awayScore, sc == null ? "" : sc.optString("away"));
             String period = str(g, "period") != null ? str(g, "period") : sc == null ? null : str(sc, "period");
             String c = str(g, "clock") != null ? str(g, "clock") : sc == null ? null : str(sc, "clock");
-            setText(clock, ((period == null ? "" : period + " ") + (c == null ? "" : c)).trim());
+            String status = str(g, "status");
+            if ("pre".equals(status)) {
+                long ms = PlayerPlugin.isoMs(str(g, "startsAt"));
+                setText(clock, ms > 0 ? new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(ms)) : "Soon");
+            } else if ("post".equals(status)) {
+                setText(clock, "Final");
+            } else {
+                setText(clock, ((period == null ? "" : period + " ") + (c == null ? "" : c)).trim());
+            }
             JSONObject sit = g.optJSONObject("situation");
             boolean rz = g.optBoolean("redZone", false) || (sit != null && (sit.optBoolean("redZone", false) || sit.optBoolean("isRedZone", false)));
             String d = sit == null ? null : downDistance(sit);
@@ -468,9 +476,14 @@ final class LiveContent {
             red.setVisibility(rz ? View.VISIBLE : View.GONE);
             setText(dd, d == null ? "" : d);
             dd.setVisibility(d == null ? View.GONE : View.VISIBLE);
-            setText(ball, yl == null ? "" : "Ball on " + yl);
-            ball.setVisibility(yl == null ? View.GONE : View.VISIBLE);
-            extra.setVisibility(rz || d != null || yl != null ? View.VISIBLE : View.GONE);
+            String last = sit == null || !(status == null || "in".equals(status)) ? null : str(sit, "lastPlay");
+            String spot = yl == null ? null : "Ball on " + yl;
+            String line = spot != null && last != null ? spot + " · " + last : spot != null ? spot : last;
+            setText(ball, line == null ? "" : line);
+            ball.setMaxLines(1);
+            ball.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            ball.setVisibility(line == null ? View.GONE : View.VISIBLE);
+            extra.setVisibility(rz || d != null || line != null ? View.VISIBLE : View.GONE);
         }
 
         private String teamLabel(JSONObject g, JSONObject t, String side) {
