@@ -12,6 +12,8 @@ final class LiveTeams {
     final String awayLogo;
     final int homeColor;
     final int awayColor;
+    /** The server sent team colours (else neutral slabs and no wash). */
+    final boolean known;
 
     static final LiveTeams NONE = new LiveTeams(null);
 
@@ -24,16 +26,25 @@ final class LiveTeams {
         awayShort = s(a, "short", awayName);
         homeLogo = s(h, "logo", null);
         awayLogo = s(a, "logo", null);
-        int[] c = MatchStyle.colors(h, a);
-        homeColor = c[0];
-        awayColor = c[1];
+        String hc = s(h, "color", null);
+        String ac = s(a, "color", null);
+        known = hc != null || ac != null;
+        int home = MatchStyle.color(hc, 0xFF2A303B);
+        int away = MatchStyle.color(ac, 0xFF1C212A);
+        // Clash rule: primaries closer than ΔE 20 -> the away side's alt colour (or neutral)
+        if (hc != null && ac != null && Broadcast.deltaE(home, away) < 20) {
+            int alt = MatchStyle.color(s(a, "altColor", null), 0xFF1C212A);
+            away = Broadcast.deltaE(home, alt) >= 20 ? alt : 0xFF1C212A;
+        }
+        homeColor = home;
+        awayColor = away;
     }
 
-    /** "home" / "away" -> the team colour (brightened for the dark glass); anything else = neutral. */
+    /** "home" / "away" -> the team colour (bars, ticks); without team colours gold v grey so splits still read. */
     int side(String team) {
-        if ("home".equals(team)) return MatchStyle.brighten(homeColor);
-        if ("away".equals(team)) return MatchStyle.brighten(awayColor);
-        return 0xFF8A90A0;
+        if ("home".equals(team)) return known ? homeColor : Broadcast.GOLD;
+        if ("away".equals(team)) return known ? awayColor : Broadcast.SECONDARY;
+        return Broadcast.SECONDARY;
     }
 
     private static String s(JSONObject o, String k, String fallback) {

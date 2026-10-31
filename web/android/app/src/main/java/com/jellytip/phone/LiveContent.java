@@ -127,9 +127,9 @@ final class LiveContent {
 
     private final class StatRow {
         final LinearLayout root = new LinearLayout(a);
-        final TextView home = LiveRender.text(a, "", 12, Color.WHITE);
-        final TextView label = LiveRender.text(a, "", 11, 0xB3F2F2F0);
-        final TextView away = LiveRender.text(a, "", 12, Color.WHITE);
+        final TextView home = Broadcast.cond(a, "", 16, Broadcast.TEXT, 700);
+        final TextView label = Broadcast.cond(a, "", 12, Broadcast.SECONDARY, 600);
+        final TextView away = Broadcast.cond(a, "", 16, Broadcast.TEXT, 700);
         final SplitBar bar = new SplitBar(a);
 
         StatRow() {
@@ -137,11 +137,10 @@ final class LiveContent {
             root.setPadding(0, dp(3), 0, dp(3));
             LinearLayout row = new LinearLayout(a);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            home.setTypeface(home.getTypeface(), android.graphics.Typeface.BOLD);
-            away.setTypeface(away.getTypeface(), android.graphics.Typeface.BOLD);
+            row.setGravity(Gravity.BOTTOM);
             away.setGravity(Gravity.END);
             label.setGravity(Gravity.CENTER);
-            label.setMaxLines(1);
+            label.setLetterSpacing(0.06f);
             row.addView(home, new LinearLayout.LayoutParams(dp(56), LinearLayout.LayoutParams.WRAP_CONTENT));
             row.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(away, new LinearLayout.LayoutParams(dp(56), LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -180,28 +179,23 @@ final class LiveContent {
     private final class LeaderRow {
         final LinearLayout root = new LinearLayout(a);
         final ImageView img = new ImageView(a);
-        final TextView name = LiveRender.text(a, "", 12, Color.WHITE);
-        final TextView line = LiveRender.text(a, "", 11, 0xCCF2F2F0);
-        final GradientDrawable bg = new GradientDrawable();
+        final TextView name = Broadcast.cond(a, "", 15, Broadcast.TEXT, 700);
+        final TextView line = Broadcast.body(a, "", 12.5f, Broadcast.BODY, 500);
+        final GradientDrawable ring = new GradientDrawable();
 
         LeaderRow() {
             root.setOrientation(LinearLayout.HORIZONTAL);
             root.setGravity(Gravity.CENTER_VERTICAL);
-            root.setPadding(dp(6), dp(6), dp(6), dp(6));
-            bg.setCornerRadius(dp(8));
-            root.setBackground(bg);
+            root.setPadding(0, dp(4), 0, dp(4));
             img.setScaleType(ImageView.ScaleType.CENTER_CROP);
             img.setClipToOutline(true);
-            GradientDrawable circle = new GradientDrawable();
-            circle.setShape(GradientDrawable.OVAL);
-            circle.setColor(0x33FFFFFF);
-            img.setBackground(circle);
-            root.addView(img, new LinearLayout.LayoutParams(dp(36), dp(36)));
+            ring.setShape(GradientDrawable.OVAL);
+            img.setBackground(ring);
+            img.setPadding(dp(2), dp(2), dp(2), dp(2));
+            root.addView(img, new LinearLayout.LayoutParams(dp(32), dp(32)));
             LinearLayout col = new LinearLayout(a);
             col.setOrientation(LinearLayout.VERTICAL);
             col.setPadding(dp(8), 0, 0, 0);
-            name.setTypeface(name.getTypeface(), android.graphics.Typeface.BOLD);
-            name.setMaxLines(1);
             line.setMaxLines(1);
             col.addView(name);
             col.addView(line);
@@ -215,8 +209,10 @@ final class LiveContent {
             setText(name, str(l, "name"));
             String ln = str(l, "line") != null ? str(l, "line") : str(l, "stat");
             setText(line, ln == null ? "" : ln);
-            bg.setColor((t.side(str(l, "team")) & 0x00FFFFFF) | 0x38000000);
-            ImageCache.load(img, str(l, "headshot"), apiBase, token, dp(36));
+            int c = t.side(str(l, "team"));
+            ring.setColor((c & 0x00FFFFFF) | 0x59000000);
+            ring.setStroke(dp(2), c);
+            ImageCache.load(img, str(l, "headshot"), apiBase, token, dp(32));
         }
     }
 
@@ -228,12 +224,20 @@ final class LiveContent {
         Double fieldPos = fieldPos(s);
         if (dd != null || fieldPos != null) {
             String yl = str(s, "yardLine") != null ? str(s, "yardLine") : str(s, "possessionText");
+            // Down & distance sits in the strip's gold box; here the field: end zones, the ball, the line to gain
             boolean red = s.optBoolean("redZone", false) || s.optBoolean("isRedZone", false);
-            TextView h = text("ctx:dd", (dd == null ? "" : dd) + (yl == null ? "" : "   " + yl) + (red ? "   RED ZONE" : ""), 15, Color.WHITE, true);
-            h.setTextColor(red ? 0xFFFF6B6B : Color.WHITE);
+            if (red) text("ctx:red", "Red zone", 13, 0xFFFF6B6B, true);
             if (fieldPos != null) {
                 FieldBar f = (FieldBar) holder("ctx:field", () -> new FieldBar(a));
-                f.set(fieldPos.floatValue(), t.side(str(s, "possession")), "away".equals(str(s, "possession")));
+                int dist = -1;
+                if (dd != null && dd.contains("&")) {
+                    try {
+                        dist = Integer.parseInt(dd.substring(dd.indexOf('&') + 1).trim());
+                    } catch (NumberFormatException ignored) {
+                        // "Goal" etc.
+                    }
+                }
+                f.set(fieldPos.floatValue(), t.side("home"), t.side("away"), "away".equals(str(s, "possession")), dist);
                 order.add(f);
             }
             JSONObject drive = s.optJSONObject("drive");
@@ -276,14 +280,15 @@ final class LiveContent {
         JSONObject run = s.optJSONObject("run");
         String runText = run != null ? str(run, "text") : str(s, "run");
         if (runText != null) {
-            TextView c = text("ctx:run", runText, 12, Color.WHITE, true);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(dp(10));
-            bg.setColor(run != null && str(run, "team") != null ? t.side(str(run, "team")) : 0xFFB3261E);
+            // Mockup A: a dark bar with the running team's colour on the left edge
+            TextView c = text("ctx:run", runText, 14, Color.WHITE, true);
+            int bar = run != null && str(run, "team") != null ? t.side(str(run, "team")) : Broadcast.GOLD;
+            android.graphics.drawable.LayerDrawable bg =
+                new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {new android.graphics.drawable.ColorDrawable(Broadcast.CHIP), new android.graphics.drawable.ColorDrawable(bar)});
+            bg.setLayerWidth(1, dp(7));
+            bg.setLayerGravity(1, Gravity.START | Gravity.FILL_VERTICAL);
             c.setBackground(bg);
-            c.setPadding(dp(8), dp(2), dp(8), dp(2));
-            ViewGroup.LayoutParams lp = c.getLayoutParams();
-            if (lp == null || lp.width != ViewGroup.LayoutParams.WRAP_CONTENT) c.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            c.setPadding(dp(15), dp(4), dp(8), dp(4));
         }
         JSONArray periods = s.optJSONArray("periods") != null ? s.optJSONArray("periods") : s.optJSONArray("quarters") != null ? s.optJSONArray("quarters") : s.optJSONArray("linescores");
         if (periods != null && periods.length() > 0) {
@@ -328,14 +333,14 @@ final class LiveContent {
 
     private static final Set<String> CONSUMED = new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores"));
 
-    /** One line under the strip: "3rd & 7 · KC 35 · RED ZONE", "Need 42 off 30", "RRR 8.4", "12-2 run". */
-    static String summary(JSONObject s) {
+    /** One line for the situation row: "Ball on BUF 32 · RED ZONE", "Need 42 off 30", "RRR 8.4", "12-2 run". */
+    static String summary(JSONObject s, boolean ddShown) {
         if (s == null) return null;
         List<String> p = new ArrayList<>();
         String dd = downDistance(s);
-        if (dd != null) p.add(dd);
+        if (dd != null && !ddShown) p.add(dd);
         String yl = str(s, "yardLine") != null ? str(s, "yardLine") : str(s, "possessionText");
-        if (yl != null) p.add(yl);
+        if (yl != null) p.add("Ball on " + yl);
         if (s.optBoolean("redZone", false) || s.optBoolean("isRedZone", false)) p.add("RED ZONE");
         String eq = str(s, "equation") != null ? str(s, "equation") : str(s, "need");
         if (eq != null) p.add(eq);
@@ -347,7 +352,7 @@ final class LiveContent {
         return p.isEmpty() ? null : android.text.TextUtils.join("  ·  ", p);
     }
 
-    private static String downDistance(JSONObject s) {
+    static String downDistance(JSONObject s) {
         String dd = str(s, "downDistance") != null ? str(s, "downDistance") : str(s, "downDistanceText");
         if (dd != null) return dd;
         int down = s.optInt("down", 0);
@@ -400,9 +405,8 @@ final class LiveContent {
             root.setOrientation(LinearLayout.HORIZONTAL);
             root.setPadding(0, dp(2), 0, dp(4));
             for (int i = 0; i < chips.length; i++) {
-                TextView c = LiveRender.text(a, "", 10, Color.WHITE);
+                TextView c = Broadcast.cond(a, "", 12, Color.WHITE, 700);
                 c.setGravity(Gravity.CENTER);
-                c.setTypeface(c.getTypeface(), android.graphics.Typeface.BOLD);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(22), dp(22));
                 lp.rightMargin = dp(4);
                 root.addView(c, lp);
@@ -422,11 +426,9 @@ final class LiveContent {
                 c.setVisibility(View.VISIBLE);
                 String b = balls.optString(j).toUpperCase(Locale.ROOT);
                 setText(c, "0".equals(b) || ".".equals(b) ? "·" : b.length() > 2 ? b.substring(0, 2) : b);
-                int bg = "W".equals(b) ? 0xFFD64545 : "4".equals(b) ? 0xFF2F7DE1 : "6".equals(b) ? 0xFF8E44E0 : "0".equals(b) || ".".equals(b) ? 0x1FFFFFFF : 0x40FFFFFF;
-                GradientDrawable d = new GradientDrawable();
-                d.setShape(GradientDrawable.OVAL);
-                d.setColor(bg);
-                c.setBackground(d);
+                int bg = "W".equals(b) ? 0xFFD64545 : "4".equals(b) ? 0xFF2F7DE1 : "6".equals(b) ? Broadcast.GOLD : "0".equals(b) || ".".equals(b) ? Broadcast.LOSS : Broadcast.CHIP;
+                c.setTextColor("6".equals(b) ? Broadcast.INK : 0xFFFFFFFF);
+                c.setBackgroundColor(bg);
             }
         }
     }
@@ -464,87 +466,43 @@ final class LiveContent {
     private final class PlayRow {
         final LinearLayout root = new LinearLayout(a);
         final View dot = new View(a);
-        final GradientDrawable dotBg = new GradientDrawable();
-        final TextView meta = LiveRender.text(a, "", 10, 0x8CF2F2F0);
-        final TextView text = LiveRender.text(a, "", 12, 0xD9F2F2F0);
-        final TextView points = LiveRender.text(a, "", 11, Color.WHITE);
-        final GradientDrawable pointsBg = new GradientDrawable();
+        final TextView meta = Broadcast.cond(a, "", 13, Broadcast.SECONDARY, 700);
+        final TextView text = Broadcast.body(a, "", 13.5f, 0xFFDADDE3, 500);
+        final TextView points = Broadcast.cond(a, "", 14, Broadcast.INK, 700);
 
         PlayRow() {
+            // Mockup A (c): condensed clock, a team-colour tick, the text; a dark rule under each play
             root.setOrientation(LinearLayout.HORIZONTAL);
-            root.setPadding(0, dp(3), 0, dp(3));
-            root.setBackground(new TimelineLine(dp(5), dp(2)));
-            dotBg.setShape(GradientDrawable.OVAL);
-            dot.setBackground(dotBg);
-            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(10), dp(10));
-            dlp.topMargin = dp(4);
-            dlp.rightMargin = dp(8);
+            root.setPadding(0, dp(5), 0, dp(5));
+            root.setBackground(new Broadcast.RuleDrawable(Broadcast.PLAY_RULE, Math.max(1, dp(1))));
+            root.addView(meta, new LinearLayout.LayoutParams(dp(48), LinearLayout.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(3), dp(15));
+            dlp.topMargin = dp(2);
+            dlp.rightMargin = dp(6);
             root.addView(dot, dlp);
-            LinearLayout col = new LinearLayout(a);
-            col.setOrientation(LinearLayout.VERTICAL);
             text.setMaxLines(2);
             text.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            col.addView(meta);
-            col.addView(text);
-            root.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            pointsBg.setCornerRadius(dp(10));
-            points.setBackground(pointsBg);
-            points.setTypeface(points.getTypeface(), android.graphics.Typeface.BOLD);
-            points.setPadding(dp(8), dp(2), dp(8), dp(2));
+            root.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            points.setBackgroundColor(Broadcast.GOLD);
+            points.setPadding(dp(5), 0, dp(5), 0);
             root.addView(points);
         }
 
         void bind(JSONObject p, LiveTeams t) {
             boolean scoring = p.optBoolean("scoring", false);
-            int color = t.side(str(p, "team"));
-            dotBg.setColor(color);
+            String team = str(p, "team");
+            dot.setBackgroundColor(team == null ? 0x00000000 : t.side(team));
             String m = (str(p, "period") == null ? "" : str(p, "period")) + (str(p, "clock") == null ? "" : " " + str(p, "clock"));
             setText(meta, m.trim());
-            meta.setVisibility(m.trim().isEmpty() ? View.GONE : View.VISIBLE);
             setText(text, str(p, "text"));
-            text.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scoring ? 14 : 12);
-            text.setTextColor(scoring ? Color.WHITE : 0xD9F2F2F0);
-            text.setTypeface(null, scoring ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            Broadcast.styleBody(text, scoring ? 14 : 13.5f, scoring ? Color.WHITE : 0xFFDADDE3, scoring ? 700 : 500);
             int pts = p.has("points") ? p.optInt("points", 0) : p.optInt("delta", 0);
             if (scoring && pts > 0) {
                 setText(points, "+" + pts);
-                pointsBg.setColor(color);
                 points.setVisibility(View.VISIBLE);
             } else {
                 points.setVisibility(View.GONE);
             }
-        }
-    }
-
-    /** The timeline's vertical line at the dots' x (drawn behind each play row). */
-    private static final class TimelineLine extends android.graphics.drawable.Drawable {
-        private final Paint paint = new Paint();
-        private final float x;
-
-        TimelineLine(int x, int width) {
-            this.x = x;
-            paint.setColor(0x26FFFFFF);
-            paint.setStrokeWidth(width);
-        }
-
-        @Override
-        public void draw(Canvas c) {
-            c.drawLine(x, getBounds().top, x, getBounds().bottom, paint);
-        }
-
-        @Override
-        public void setAlpha(int alpha) {
-            paint.setAlpha(alpha);
-        }
-
-        @Override
-        public void setColorFilter(android.graphics.ColorFilter cf) {
-            paint.setColorFilter(cf);
-        }
-
-        @Override
-        public int getOpacity() {
-            return android.graphics.PixelFormat.TRANSLUCENT;
         }
     }
 
@@ -620,29 +578,29 @@ final class LiveContent {
         return (View) o;
     }
 
+    /** Body text (Barlow); [bold] = condensed caps instead (numbers, names, rates). */
     private TextView text(String key, String s, int sp, int color, boolean bold) {
-        TextView v = (TextView) holder(key, () -> LiveRender.text(a, "", sp, color));
+        TextView v = (TextView) holder(key, () -> bold ? Broadcast.cond(a, "", sp, color, 700) : Broadcast.body(a, "", sp, color, 500));
         setText(v, s);
         v.setTextColor(color);
-        if (bold) v.setTypeface(null, android.graphics.Typeface.BOLD);
         order.add(v);
         return v;
     }
 
     private void note(String key, String s) {
-        TextView v = (TextView) holder(key, () -> LiveRender.muted(a, ""));
+        TextView v = (TextView) holder(key, () -> {
+            TextView n = Broadcast.body(a, "", 12.5f, Broadcast.SECONDARY, 500);
+            n.setPadding(0, dp(3), 0, dp(3));
+            return n;
+        });
         setText(v, s);
         order.add(v);
     }
 
+    /** A gold section head with a rule under it. */
     private void label(String key, String s) {
-        TextView v = (TextView) holder(key, () -> {
-            TextView l = LiveRender.text(a, "", 10, 0x8CF2F2F0);
-            l.setLetterSpacing(0.1f);
-            l.setPadding(0, dp(10), 0, dp(2));
-            return l;
-        });
-        setText(v, s.toUpperCase(Locale.ROOT));
+        TextView v = (TextView) holder(key, () -> Broadcast.sectionHead(a, ""));
+        setText(v, s);
         order.add(v);
     }
 
@@ -683,29 +641,35 @@ final class LiveContent {
                 if (seg <= 0) continue;
                 paint.setColor(colors[Math.min(i, colors.length - 1)]);
                 r.set(x + (i > 0 ? gap / 2 : 0), 0, x + seg - (i < values.length - 1 ? gap / 2 : 0), h);
-                canvas.drawRoundRect(r, h / 2, h / 2, paint);
+                canvas.drawRect(r, paint);
                 x += seg;
             }
         }
     }
 
-    /** The field: end zones, 10-yard lines, the ball in the possessing team's colour with a tick towards its target. */
+    /** The field (mockup A (c)): end zones in the team colours, turf with 10-yard lines, the ball (white), the line to gain (gold). */
     static final class FieldBar extends View {
         private float pos = -1;
-        private int color;
+        private int home;
+        private int away;
         private boolean leftward;
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private int dist = -1;
+        private final Paint paint = new Paint();
 
         FieldBar(Context c) {
             super(c);
-            setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.round(16 * c.getResources().getDisplayMetrics().density)));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.round(30 * c.getResources().getDisplayMetrics().density));
+            lp.topMargin = Math.round(4 * c.getResources().getDisplayMetrics().density);
+            setLayoutParams(lp);
         }
 
-        void set(float p, int c, boolean towardsLeft) {
-            if (p == pos && c == color && towardsLeft == leftward) return;
+        void set(float p, int homeColor, int awayColor, boolean towardsLeft, int distance) {
+            if (p == pos && homeColor == home && awayColor == away && towardsLeft == leftward && distance == dist) return;
             pos = p;
-            color = c;
+            home = homeColor;
+            away = awayColor;
             leftward = towardsLeft;
+            dist = distance;
             invalidate();
         }
 
@@ -713,27 +677,29 @@ final class LiveContent {
         protected void onDraw(Canvas canvas) {
             float w = getWidth();
             float h = getHeight();
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0xFF1F5E33);
-            canvas.drawRect(0, 0, w, h, paint);
-            float ez = w * 0.08f;
-            paint.setColor(0xFF17472A);
+            float ez = w / 12f;
+            paint.setColor(home);
             canvas.drawRect(0, 0, ez, h, paint);
+            paint.setColor(away);
             canvas.drawRect(w - ez, 0, w, h, paint);
+            paint.setColor(0xFF24572B);
+            canvas.drawRect(ez, 0, w - ez, h, paint);
             float field = w - 2 * ez;
-            paint.setColor(0x40FFFFFF);
-            paint.setStrokeWidth(1);
+            paint.setColor(0x59FFFFFF);
             for (int i = 1; i <= 9; i++) {
                 float x = ez + field * i / 10f;
-                canvas.drawLine(x, 0, x, h, paint);
+                canvas.drawRect(x, 0, x + 1, h, paint);
             }
             if (pos < 0) return;
-            float x = ez + field * pos;
-            paint.setColor(color);
-            canvas.drawCircle(x, h / 2, h * 0.38f, paint);
-            paint.setStrokeWidth(h * 0.15f);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            canvas.drawLine(x, h / 2, x + (leftward ? -1 : 1) * h * 0.9f, h / 2, paint);
+            float bx = ez + field * pos;
+            float line = 3 * getResources().getDisplayMetrics().density;
+            if (dist > 0) {
+                float gx = Math.max(ez, Math.min(w - ez, bx + (leftward ? -1 : 1) * field * dist / 100f));
+                paint.setColor(Broadcast.GOLD);
+                canvas.drawRect(gx - line / 2, 0, gx + line / 2, h, paint);
+            }
+            paint.setColor(0xFFFFFFFF);
+            canvas.drawRect(bx - line / 2, 0, bx + line / 2, h, paint);
         }
     }
 

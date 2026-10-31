@@ -110,6 +110,8 @@ export interface JellytipPlayerPlugin {
     /** The user's sport.fantasyAlerts / sport.flipAlerts (default on): toasts on screen, notifications in the mini player. */
     fantasyAlerts?: boolean;
     flipAlerts?: boolean;
+    /** sport.panelStyle (plan "In-match visual direction"): the landscape live drawer docked to the edge (default) or floating. */
+    panelStyle?: "docked" | "floating";
   }): Promise<NativePlayerResult>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;

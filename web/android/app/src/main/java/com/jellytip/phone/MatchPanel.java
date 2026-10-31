@@ -73,8 +73,7 @@ final class MatchPanel implements LiveFeed.Listener {
     private JSONArray fantasyLeagues;
     /** The hero's entry animation plays once per panel. */
     private boolean heroAnimated;
-    /** The LIVE pulse (cancelled on every re-render). */
-    private android.animation.AnimatorSet pulse;
+    private LiveTeams washFor;
     private final LiveStrip liveStrip;
     private final LiveContent liveContent;
     private LiveTeams teams = LiveTeams.NONE;
@@ -114,7 +113,7 @@ final class MatchPanel implements LiveFeed.Listener {
         this.matchId = matchId;
 
         panel = new FrameLayout(activity);
-        panel.setBackgroundColor(0xFF101014);
+        panel.setBackgroundColor(Broadcast.BASE);
         LinearLayout col = new LinearLayout(activity);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(16), dp(8), dp(16), dp(16));
@@ -122,7 +121,7 @@ final class MatchPanel implements LiveFeed.Listener {
         tabScroll.setHorizontalScrollBarEnabled(false);
         tabRow = new LinearLayout(activity);
         tabRow.setOrientation(LinearLayout.HORIZONTAL);
-        tabRow.setPadding(0, dp(4), 0, dp(10));
+        tabRow.setBackground(new Broadcast.RuleDrawable(Broadcast.LINE, Math.max(1, dp(1))));
         tabScroll.addView(tabRow);
         col.addView(tabScroll);
         // Live tabs: the team-colour scoreboard strip above them (built once, rebound per answer)
@@ -195,7 +194,6 @@ final class MatchPanel implements LiveFeed.Listener {
 
     void release() {
         released = true;
-        if (pulse != null) pulse.cancel();
         liveStrip.setActive(false);
         handler.removeCallbacks(fantasyPoll);
         io.shutdownNow();
@@ -237,7 +235,7 @@ final class MatchPanel implements LiveFeed.Listener {
         tabs.add(name);
         tabViews.add(t);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.rightMargin = dp(6);
+        lp.rightMargin = dp(14);
         tabRow.addView(t, lp);
     }
 
@@ -251,9 +249,9 @@ final class MatchPanel implements LiveFeed.Listener {
     }
 
     /** A moment flashes the strip while a live tab shows; false = not on screen. */
-    boolean flash(String label, int color) {
+    boolean flash(String label, String detail, int color) {
         if (!showsLive()) return false;
-        liveStrip.flash(label, color);
+        liveStrip.flash(label, detail, color);
         return true;
     }
 
@@ -273,6 +271,7 @@ final class MatchPanel implements LiveFeed.Listener {
 
     private void render() {
         if (tab == null) return;
+        applyWash(teams());
         if ("Info".equals(tab)) renderInfo();
         else if ("Fantasy".equals(tab)) renderFantasy();
         else if (feed != null) {
@@ -323,39 +322,46 @@ final class MatchPanel implements LiveFeed.Listener {
     }
 
     private void renderInfo() {
-        if (pulse != null) {
-            pulse.cancel();
-            pulse = null;
-        }
         content.removeAllViews();
         if (info == null) {
-            content.addView(LiveRender.muted(activity, infoNote));
+            content.addView(note(infoNote));
             return;
         }
         JSONObject home = info.optJSONObject("home");
         JSONObject away = info.optJSONObject("away");
-        int[] colors = MatchStyle.colors(home, away);
-        content.addView(hero(home, away, colors), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
+        LiveTeams t = teams();
+        applyWash(t);
+        content.addView(header(home, away, t), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(84)));
+        content.addView(subBar());
 
         // Remind me / Record (the web app does both)
         LinearLayout buttons = new LinearLayout(activity);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setPadding(0, dp(12), 0, dp(4));
-        TextView remind = button("Remind me");
+        TextView remind = button("Remind me", true);
         remind.setOnClickListener(v -> host.matchAction("remind"));
         buttons.addView(remind);
-        TextView record = button("Record");
+        TextView record = button("Record", false);
         record.setOnClickListener(v -> host.matchAction("record"));
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        rlp.leftMargin = dp(10);
+        rlp.leftMargin = dp(9);
         buttons.addView(record, rlp);
         content.addView(buttons);
+
+        // Body text on a near-black card within the wash
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundColor(Broadcast.CARD);
+        card.setPadding(dp(10), 0, dp(10), dp(10));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(8);
+        content.addView(card, clp);
 
         // Where to watch: tap a channel to play it here
         JSONArray channels = info.optJSONArray("channels");
         JSONArray broadcasts = info.optJSONArray("broadcasts");
         if ((channels != null && channels.length() > 0) || (broadcasts != null && broadcasts.length() > 0)) {
-            section("Where to watch");
+            card.addView(Broadcast.sectionHead(activity, "Where to watch"));
             String playing = host.currentChannelId();
             for (int i = 0; channels != null && i < channels.length(); i++) {
                 JSONObject c = channels.optJSONObject(i);
@@ -363,65 +369,69 @@ final class MatchPanel implements LiveFeed.Listener {
                 final String id = str(c, "id");
                 final String name = str(c, "name") != null ? str(c, "name") : id;
                 boolean now = id.equals(playing);
-                TextView row = LiveRender.text(activity, (now ? "●  " : "▶  ") + name + (now ? "  (playing)" : ""), 14, now ? 0xFF7FD48A : Color.WHITE);
-                row.setPadding(0, dp(6), 0, dp(6));
+                LinearLayout row = new LinearLayout(activity);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(7), 0, dp(7));
+                row.addView(Broadcast.body(activity, name, 14, now ? Broadcast.GOLD : Broadcast.TEXT, 600), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                TextView pill = Broadcast.cond(activity, now ? "Playing" : "Watch", 12, now ? Broadcast.INK : Broadcast.BODY, 700);
+                pill.setBackgroundColor(now ? Broadcast.GOLD : Broadcast.CHIP);
+                pill.setPadding(dp(7), dp(1), dp(7), dp(1));
+                row.addView(pill);
                 if (!now) row.setOnClickListener(v -> host.switchChannel(id, name));
-                content.addView(row);
+                card.addView(row);
             }
             List<String> tv = strings(broadcasts);
-            if (!tv.isEmpty()) content.addView(LiveRender.muted(activity, "On TV: " + android.text.TextUtils.join(", ", tv)));
+            if (!tv.isEmpty()) card.addView(note("On TV: " + android.text.TextUtils.join(", ", tv)));
         }
 
-        // Odds: a split bar in the team colours, then the lines
+        // Odds: the favourite in gold over a split track, then the lines
         JSONObject odds = info.optJSONObject("odds");
         if (odds != null) {
+            View bar = oddsBar(odds, home, away, t);
             List<String> lines = new ArrayList<>();
-            String h = oddsSide(odds.optJSONObject("home"));
-            String a = oddsSide(odds.optJSONObject("away"));
-            if (h != null) lines.add(teamShort(home) + "  " + h);
-            if (a != null) lines.add(teamShort(away) + "  " + a);
-            if (str(odds, "draw") != null) lines.add("Draw  " + str(odds, "draw"));
-            if (str(odds, "overUnder") != null) lines.add("Over/under  " + str(odds, "overUnder"));
-            View bar = oddsBar(odds, home, away, colors);
+            JSONObject hs = odds.optJSONObject("home");
+            if (str(hs, "spread") != null) lines.add(teamShort(home) + " " + str(hs, "spread"));
+            if (str(odds, "draw") != null) lines.add("Draw " + str(odds, "draw"));
+            if (str(odds, "overUnder") != null) lines.add("O/U " + str(odds, "overUnder"));
             if (bar != null || !lines.isEmpty()) {
-                section("Odds" + (str(odds, "provider") != null ? " · " + str(odds, "provider") : ""));
-                if (bar != null) content.addView(bar);
-                for (String l : lines) content.addView(LiveRender.text(activity, l, 13, 0xCCF2F2F0));
+                card.addView(Broadcast.sectionHead(activity, "Odds" + (str(odds, "provider") != null ? " · " + str(odds, "provider") : "")));
+                if (bar != null) card.addView(bar);
+                if (!lines.isEmpty()) card.addView(note(android.text.TextUtils.join("  ·  ", lines)));
             }
         }
 
-        // Line-ups: two columns tinted with the team colours
-        JSONObject lineups = info.optJSONObject("lineups");
-        if (lineups != null) {
-            List<String> hl = players(lineups.optJSONArray("home"));
-            List<String> al = players(lineups.optJSONArray("away"));
-            if (!hl.isEmpty() || !al.isEmpty()) {
-                section(lineups.has("announced") && !lineups.optBoolean("announced") ? "Line-ups (expected)" : "Line-ups");
-                LinearLayout cols = new LinearLayout(activity);
-                cols.setOrientation(LinearLayout.HORIZONTAL);
-                cols.addView(lineupColumn(teamShort(home), hl, colors[0]), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-                LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-                alp.leftMargin = dp(8);
-                cols.addView(lineupColumn(teamShort(away), al, colors[1]), alp);
-                content.addView(cols);
-            }
-        }
-
-        // Form: W / L / D chips
+        // Form: W / L chips
         JSONObject form = info.optJSONObject("form");
         if (form != null) {
             List<String> hf = MatchStyle.formLetters(strings(form.optJSONArray("home")));
             List<String> af = MatchStyle.formLetters(strings(form.optJSONArray("away")));
             if (!hf.isEmpty() || !af.isEmpty()) {
-                section("Form");
-                if (!hf.isEmpty()) content.addView(formRow(teamShort(home), hf));
-                if (!af.isEmpty()) content.addView(formRow(teamShort(away), af));
+                card.addView(Broadcast.sectionHead(activity, "Form · last 5"));
+                if (!hf.isEmpty()) card.addView(formRow(teamShort(home), hf));
+                if (!af.isEmpty()) card.addView(formRow(teamShort(away), af));
+            }
+        }
+
+        // Line-ups: two columns with a team-colour tick
+        JSONObject lineups = info.optJSONObject("lineups");
+        if (lineups != null) {
+            List<String> hl = players(lineups.optJSONArray("home"));
+            List<String> al = players(lineups.optJSONArray("away"));
+            if (!hl.isEmpty() || !al.isEmpty()) {
+                LinearLayout cols = new LinearLayout(activity);
+                cols.setOrientation(LinearLayout.HORIZONTAL);
+                cols.addView(lineupColumn(teamShort(home), hl, t.side("home"), lineups.has("announced") && !lineups.optBoolean("announced")), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                alp.leftMargin = dp(12);
+                cols.addView(lineupColumn(teamShort(away), al, t.side("away"), lineups.has("announced") && !lineups.optBoolean("announced")), alp);
+                card.addView(cols);
             }
         }
 
         JSONArray h2h = info.optJSONArray("h2h");
         if (h2h != null && h2h.length() > 0) {
-            section("Last meetings");
+            card.addView(Broadcast.sectionHead(activity, "Last meetings"));
             for (int i = 0; i < Math.min(h2h.length(), 5); i++) {
                 JSONObject m = h2h.optJSONObject(i);
                 String line;
@@ -435,183 +445,132 @@ final class MatchPanel implements LiveFeed.Listener {
                 } else {
                     line = h2h.optString(i);
                 }
-                if (line != null && !line.isEmpty() && !"null".equals(line)) content.addView(LiveRender.text(activity, line, 13, 0xDDF2F2F0));
+                if (line != null && !line.isEmpty() && !"null".equals(line)) card.addView(Broadcast.body(activity, line, 13, 0xFFDADDE3, 500));
             }
         }
     }
 
-    // ---- The hero (plan "match info: more pop") ---------------------------------------------------------------
+    // ---- The Broadcast header (mockup A (b), phone sizes) -----------------------------------------------------------
 
-    /** Split diagonal hero in the team colours, venue photo faint behind, crests with a glow, the centre state. */
-    private View hero(JSONObject home, JSONObject away, int[] colors) {
-        FrameLayout hero = new FrameLayout(activity);
-        hero.setBackground(new MatchStyle.SplitDrawable(MatchStyle.darken(colors[0]), MatchStyle.darken(colors[1]), dp(12)));
-        hero.setClipToOutline(true);
-        hero.setOutlineProvider(
-            new android.view.ViewOutlineProvider() {
-                @Override
-                public void getOutline(View v, android.graphics.Outline o) {
-                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(12));
-                }
-            }
-        );
-        JSONObject venueObj = info.optJSONObject("venue");
-        String venueImage = venueObj == null ? null : str(venueObj, "image");
-        if (venueImage != null) {
-            ImageView bg = new ImageView(activity);
-            bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            bg.setAlpha(0.16f);
-            hero.addView(bg, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-            loadImage(venueImage, bg, dp(480));
+    /** Two angled full-colour slabs (crest, name, record, score when live or final) and the gold status tag on top. */
+    private View header(JSONObject home, JSONObject away, LiveTeams t) {
+        FrameLayout box = new FrameLayout(activity);
+        LinearLayout slabs = new LinearLayout(activity);
+        slabs.setOrientation(LinearLayout.HORIZONTAL);
+        String status = str(info, "status");
+        JSONObject sc = info.optJSONObject("score");
+        boolean scored = sc != null && str(sc, "home") != null && str(sc, "away") != null && ("in".equals(status) || "post".equals(status));
+        View homeCrest = slabCrest(home, t.homeColor);
+        View awayCrest = slabCrest(away, t.awayColor);
+        LinearLayout l = slab(true, t.homeColor);
+        l.setPadding(dp(10), dp(14), dp(14), 0);
+        l.addView(homeCrest, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        l.addView(slabName(home, Broadcast.on(t.homeColor)), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        if (scored) l.addView(Broadcast.cond(activity, str(sc, "home"), 26, Broadcast.on(t.homeColor), 700));
+        LinearLayout r = slab(false, t.awayColor);
+        r.setPadding(dp(18), dp(14), dp(10), 0);
+        if (scored) r.addView(Broadcast.cond(activity, str(sc, "away"), 26, Broadcast.on(t.awayColor), 700));
+        TextView an = slabName(away, Broadcast.on(t.awayColor));
+        an.setGravity(Gravity.END);
+        r.addView(an, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(awayCrest, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        slabs.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        rlp.leftMargin = -dp(8);
+        slabs.addView(r, rlp);
+        box.addView(slabs, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        String tag;
+        if ("in".equals(status)) {
+            JSONObject s2 = info.optJSONObject("score");
+            tag = "Live" + (s2 != null && str(s2, "period") != null ? " · " + str(s2, "period") : "");
+        } else if ("post".equals(status)) {
+            tag = "Full time";
+        } else {
+            long starts = PlayerPlugin.isoMs(str(info, "startsAt"));
+            tag = starts > 0 ? MatchStyle.countdown(starts, System.currentTimeMillis()) : "Upcoming";
         }
-        View shade = new View(activity);
-        shade.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {0x00000000, 0x73000000}));
-        hero.addView(shade, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        LinearLayout row = new LinearLayout(activity);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(10), dp(10), dp(10));
-        View homeCol = heroTeam(home, colors[0]);
-        View awayCol = heroTeam(away, colors[1]);
-        row.addView(homeCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(heroCentre(), new LinearLayout.LayoutParams(dp(130), LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(awayCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        hero.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        // Entry, once per panel: scale-and-fade (220 ms), the crests slide in from either side
+        TextView tg = Broadcast.cond(activity, tag, 12, Broadcast.INK, 700);
+        tg.setLetterSpacing(0.06f);
+        tg.setBackgroundColor(Broadcast.GOLD);
+        tg.setPadding(dp(7), dp(1), dp(7), dp(1));
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        tlp.topMargin = dp(4);
+        box.addView(tg, tlp);
+        // Entry, once per panel: the crests slide in from either side
         if (!heroAnimated) {
             heroAnimated = true;
-            hero.setAlpha(0f);
-            hero.setScaleX(0.94f);
-            hero.setScaleY(0.94f);
-            hero.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).start();
-            homeCol.setTranslationX(-dp(80));
-            awayCol.setTranslationX(dp(80));
-            homeCol.setAlpha(0f);
-            awayCol.setAlpha(0f);
             android.view.animation.DecelerateInterpolator ease = new android.view.animation.DecelerateInterpolator();
-            homeCol.animate().translationX(0).alpha(1f).setStartDelay(60).setDuration(380).setInterpolator(ease).start();
-            awayCol.animate().translationX(0).alpha(1f).setStartDelay(60).setDuration(380).setInterpolator(ease).start();
+            homeCrest.setTranslationX(-dp(40));
+            awayCrest.setTranslationX(dp(40));
+            homeCrest.setAlpha(0f);
+            awayCrest.setAlpha(0f);
+            homeCrest.animate().translationX(0).alpha(1f).setStartDelay(60).setDuration(380).setInterpolator(ease).start();
+            awayCrest.animate().translationX(0).alpha(1f).setStartDelay(60).setDuration(380).setInterpolator(ease).start();
         }
-        return hero;
+        return box;
     }
 
-    private View heroTeam(JSONObject t, int color) {
-        LinearLayout col = new LinearLayout(activity);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER_HORIZONTAL);
-        FrameLayout crest = new FrameLayout(activity);
-        // Soft glow: a radial fade behind the crest
-        android.graphics.drawable.GradientDrawable glow = new android.graphics.drawable.GradientDrawable();
-        glow.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
-        glow.setColors(new int[] {(MatchStyle.lighten(color) & 0x00FFFFFF) | 0x8C000000, 0x00000000});
-        glow.setGradientRadius(dp(46));
-        crest.setBackground(glow);
+    private LinearLayout slab(boolean left, int color) {
+        LinearLayout s = new LinearLayout(activity);
+        s.setOrientation(LinearLayout.HORIZONTAL);
+        s.setGravity(Gravity.CENTER_VERTICAL);
+        s.setBackground(new Broadcast.Slab(color, left));
+        return s;
+    }
+
+    private TextView slabName(JSONObject t, int color) {
+        String rec = t == null ? null : str(t, "record");
+        TextView n = Broadcast.cond(activity, teamName(t), 18, color, 700);
+        n.setPadding(dp(6), 0, dp(6), 0);
+        if (rec != null) {
+            n.setMaxLines(2);
+            n.setAllCaps(false);
+            n.setText(new android.text.SpannableStringBuilder(Broadcast.caps(teamName(t))).append("\n").append(rec, new android.text.style.RelativeSizeSpan(0.7f), 0));
+        }
+        return n;
+    }
+
+    private View slabCrest(JSONObject t, int color) {
         String logo = t == null ? null : str(t, "logo");
         if (logo != null) {
             ImageView img = new ImageView(activity);
             img.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            crest.addView(img, new FrameLayout.LayoutParams(dp(72), dp(72), Gravity.CENTER));
-            loadImage(logo, img, dp(144));
-        } else {
-            TextView ini = LiveRender.text(activity, MatchStyle.initials(teamName(t)), 22, Color.WHITE);
-            ini.setGravity(Gravity.CENTER);
-            ini.setTypeface(ini.getTypeface(), android.graphics.Typeface.BOLD);
-            android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
-            circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            circle.setColor(color);
-            ini.setBackground(circle);
-            crest.addView(ini, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
+            loadImage(logo, img, dp(72));
+            return img;
         }
-        col.addView(crest, new LinearLayout.LayoutParams(dp(92), dp(92)));
-        TextView name = LiveRender.text(activity, teamName(t), 15, Color.WHITE);
-        name.setTypeface(name.getTypeface(), android.graphics.Typeface.BOLD);
-        name.setGravity(Gravity.CENTER);
-        name.setMaxLines(2);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        col.addView(name);
-        String rec = t == null ? null : str(t, "record");
-        if (rec != null) {
-            TextView r = LiveRender.text(activity, rec, 11, 0xB3FFFFFF);
-            r.setGravity(Gravity.CENTER);
-            col.addView(r);
-        }
-        return col;
+        TextView ini = Broadcast.cond(activity, MatchStyle.initials(teamName(t)), 14, Broadcast.on(color), 700);
+        ini.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(0x40000000);
+        ini.setBackground(circle);
+        return ini;
     }
 
-    private View heroCentre() {
-        LinearLayout c = new LinearLayout(activity);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setGravity(Gravity.CENTER_HORIZONTAL);
+    /** League in gold, when, venue with a pin. */
+    private View subBar() {
+        LinearLayout sub = new LinearLayout(activity);
+        sub.setOrientation(LinearLayout.HORIZONTAL);
+        sub.setGravity(Gravity.CENTER_VERTICAL);
+        sub.setBackgroundColor(Broadcast.SUB);
+        sub.setPadding(dp(10), dp(6), dp(10), dp(6));
         String league = str(info, "league");
-        if (league != null) {
-            TextView l = LiveRender.text(activity, league.toUpperCase(Locale.ROOT), 10, 0xB3FFFFFF);
-            l.setGravity(Gravity.CENTER);
-            l.setLetterSpacing(0.1f);
-            l.setMaxLines(1);
-            c.addView(l);
-        }
-        String status = str(info, "status");
-        JSONObject sc = info.optJSONObject("score");
-        String clock = null;
-        if (sc != null) {
-            List<String> p = new ArrayList<>();
-            if (str(sc, "period") != null) p.add(str(sc, "period"));
-            if (str(sc, "clock") != null) p.add(str(sc, "clock"));
-            clock = p.isEmpty() ? null : android.text.TextUtils.join(" · ", p);
-        }
-        if (sc != null && str(sc, "home") != null && str(sc, "away") != null && ("in".equals(status) || "post".equals(status))) {
-            TextView s = LiveRender.text(activity, str(sc, "home") + " – " + str(sc, "away"), 28, Color.WHITE);
-            s.setTypeface(s.getTypeface(), android.graphics.Typeface.BOLD);
-            c.addView(s);
-            String under = "post".equals(status) ? "FT" : clock;
-            if (under != null) c.addView(LiveRender.text(activity, under, 12, 0xCCFFFFFF));
-        } else if ("in".equals(status)) {
-            TextView live = LiveRender.text(activity, "●  LIVE", 16, Color.WHITE);
-            live.setTypeface(live.getTypeface(), android.graphics.Typeface.BOLD);
-            live.setBackgroundColor(0xFFB3261E);
-            live.setPadding(dp(12), dp(4), dp(12), dp(4));
-            c.addView(live);
-            // A breathing LIVE (scale only)
-            pulse = new android.animation.AnimatorSet();
-            android.animation.ObjectAnimator sx = android.animation.ObjectAnimator.ofFloat(live, View.SCALE_X, 1f, 1.12f);
-            android.animation.ObjectAnimator sy = android.animation.ObjectAnimator.ofFloat(live, View.SCALE_Y, 1f, 1.12f);
-            for (android.animation.ObjectAnimator a : new android.animation.ObjectAnimator[] {sx, sy}) {
-                a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-                a.setRepeatMode(android.animation.ValueAnimator.REVERSE);
-                a.setDuration(700);
-            }
-            pulse.playTogether(sx, sy);
-            pulse.start();
-            if (clock != null) c.addView(LiveRender.text(activity, clock, 12, 0xD9FFFFFF));
-        } else if ("post".equals(status)) {
-            TextView ft = LiveRender.text(activity, "FT", 28, Color.WHITE);
-            ft.setTypeface(ft.getTypeface(), android.graphics.Typeface.BOLD);
-            c.addView(ft);
-        } else {
-            long starts = PlayerPlugin.isoMs(str(info, "startsAt"));
-            if (starts > 0) {
-                TextView cd = LiveRender.text(activity, MatchStyle.countdown(starts, System.currentTimeMillis()), 16, Color.WHITE);
-                cd.setTypeface(cd.getTypeface(), android.graphics.Typeface.BOLD);
-                cd.setGravity(Gravity.CENTER);
-                c.addView(cd);
-                c.addView(LiveRender.text(activity, new java.text.SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault()).format(new java.util.Date(starts)), 11, 0xBFFFFFFF));
-            }
-        }
+        if (league != null) sub.addView(Broadcast.cond(activity, league, 15, Broadcast.GOLD, 700));
+        List<String> p = new ArrayList<>();
+        long starts = PlayerPlugin.isoMs(str(info, "startsAt"));
+        if (starts > 0) p.add(new java.text.SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault()).format(new java.util.Date(starts)));
         String venue = venue(info);
-        if (venue != null) {
-            TextView v = LiveRender.text(activity, "📍 " + venue, 11, 0xBFFFFFFF);
-            v.setGravity(Gravity.CENTER);
-            v.setMaxLines(2);
-            v.setPadding(0, dp(4), 0, 0);
-            c.addView(v);
-        }
-        return c;
+        if (venue != null) p.add("📍 " + venue);
+        TextView rest = Broadcast.body(activity, android.text.TextUtils.join("  ·  ", p), 13, Broadcast.BODY, 600);
+        rest.setMaxLines(1);
+        rest.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        rest.setPadding(dp(10), 0, 0, 0);
+        sub.addView(rest, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return sub;
     }
 
-    /** Implied probabilities from the moneylines as one bar in the team colours (draw grey); null = unreadable. */
-    private View oddsBar(JSONObject odds, JSONObject home, JSONObject away, int[] colors) {
+    /** The favourite's share in gold over a square split track in the team colours; null = unreadable lines. */
+    private View oddsBar(JSONObject odds, JSONObject home, JSONObject away, LiveTeams t) {
         Double h = MatchStyle.impliedProb(str(odds.optJSONObject("home"), "moneyline"));
         Double a = MatchStyle.impliedProb(str(odds.optJSONObject("away"), "moneyline"));
         if (h == null || a == null) return null;
@@ -620,34 +579,31 @@ final class MatchPanel implements LiveFeed.Listener {
         double sum = h + a + d;
         LinearLayout box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(0, dp(4), 0, dp(6));
-        LinearLayout bar = new LinearLayout(activity);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.addView(block(colors[0]), new LinearLayout.LayoutParams(0, dp(12), (float) Math.max(0.01, h / sum)));
-        if (d > 0) bar.addView(block(0xFF6B6F78), new LinearLayout.LayoutParams(0, dp(12), (float) Math.max(0.01, d / sum)));
-        bar.addView(block(colors[1]), new LinearLayout.LayoutParams(0, dp(12), (float) Math.max(0.01, a / sum)));
-        box.addView(bar);
+        box.setPadding(0, dp(2), 0, dp(4));
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.HORIZONTAL);
-        labels.setPadding(0, dp(4), 0, 0);
-        labels.addView(label(teamShort(home) + "  " + LiveRender.pct(h / sum), Gravity.START), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        if (d > 0) labels.addView(label("Draw  " + LiveRender.pct(d / sum), Gravity.CENTER), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        labels.addView(label(LiveRender.pct(a / sum) + "  " + teamShort(away), Gravity.END), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        labels.setGravity(Gravity.BOTTOM);
+        labels.addView(oddsLabel(teamShort(home), LiveRender.pct(h / sum), h >= a), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        if (d > 0) labels.addView(oddsLabel("Draw", LiveRender.pct(d / sum), false), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        View right = oddsLabel(teamShort(away), LiveRender.pct(a / sum), a > h);
+        ((LinearLayout) right).setGravity(Gravity.END | Gravity.BOTTOM);
+        labels.addView(right, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(labels);
+        LiveContent.SplitBar bar = new LiveContent.SplitBar(activity);
+        bar.set(d > 0 ? new float[] {(float) (h / sum), (float) (d / sum), (float) (a / sum)} : new float[] {(float) (h / sum), (float) (a / sum)}, d > 0 ? new int[] {t.side("home"), Broadcast.LOSS, t.side("away")} : new int[] {t.side("home"), t.side("away")});
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6));
+        blp.topMargin = dp(4);
+        box.addView(bar, blp);
         return box;
     }
 
-    private View block(int color) {
-        View v = new View(activity);
-        v.setBackgroundColor(color);
-        return v;
-    }
-
-    private TextView label(String s, int gravity) {
-        TextView t = LiveRender.text(activity, s, 13, Color.WHITE);
-        t.setGravity(gravity);
-        t.setMaxLines(1);
-        return t;
+    private View oddsLabel(String team, String pct, boolean fav) {
+        LinearLayout l = new LinearLayout(activity);
+        l.setOrientation(LinearLayout.HORIZONTAL);
+        l.setGravity(Gravity.BOTTOM);
+        l.addView(Broadcast.body(activity, team + " ", 13, Broadcast.TEXT, 600));
+        l.addView(Broadcast.cond(activity, pct, 17, fav ? Broadcast.GOLD : Broadcast.TEXT, 700));
+        return l;
     }
 
     private View formRow(String team, List<String> letters) {
@@ -655,40 +611,66 @@ final class MatchPanel implements LiveFeed.Listener {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(3), 0, dp(3));
-        TextView name = LiveRender.text(activity, team, 13, 0xCCF2F2F0);
-        name.setMaxLines(1);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        row.addView(name, new LinearLayout.LayoutParams(dp(110), LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(Broadcast.cond(activity, team, 13, Broadcast.BODY, 600), new LinearLayout.LayoutParams(dp(70), LinearLayout.LayoutParams.WRAP_CONTENT));
         for (int i = 0; i < Math.min(letters.size(), 10); i++) {
             String r = letters.get(i);
-            TextView chip = LiveRender.text(activity, r, 12, Color.WHITE);
+            boolean win = "W".equals(r);
+            TextView chip = Broadcast.cond(activity, r, 12, win ? Broadcast.INK : Broadcast.TEXT, 700);
             chip.setGravity(Gravity.CENTER);
-            chip.setTypeface(chip.getTypeface(), android.graphics.Typeface.BOLD);
-            chip.setBackgroundColor(MatchStyle.formColor(r));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(22), dp(22));
-            lp.rightMargin = dp(4);
+            chip.setBackgroundColor(win ? Broadcast.WIN : Broadcast.LOSS);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(20), dp(20));
+            lp.rightMargin = dp(3);
             row.addView(chip, lp);
         }
         return row;
     }
 
-    private View lineupColumn(String team, List<String> names, int color) {
+    private View lineupColumn(String team, List<String> names, int color, boolean expected) {
         LinearLayout col = new LinearLayout(activity);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setBackgroundColor((color & 0x00FFFFFF) | 0x2E000000);
-        col.setPadding(dp(10), dp(8), dp(10), dp(8));
-        TextView head = LiveRender.text(activity, team, 13, Color.WHITE);
-        head.setTypeface(head.getTypeface(), android.graphics.Typeface.BOLD);
+        LinearLayout head = new LinearLayout(activity);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.BOTTOM);
+        View tick = new View(activity);
+        tick.setBackgroundColor(color);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(dp(4), dp(13));
+        tlp.rightMargin = dp(5);
+        tlp.bottomMargin = dp(6);
+        head.addView(tick, tlp);
+        head.addView(Broadcast.sectionHead(activity, team + (expected ? " (exp.)" : "") + " XI"), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         col.addView(head);
-        for (String n : names) col.addView(LiveRender.text(activity, n, 12, 0xDDF2F2F0));
-        if (names.isEmpty()) col.addView(LiveRender.muted(activity, "Not announced"));
+        for (int i = 0; i < names.size(); i++) {
+            LinearLayout r = new LinearLayout(activity);
+            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.addView(Broadcast.cond(activity, String.valueOf(i + 1), 12, 0xFF8C94A1, 600), new LinearLayout.LayoutParams(dp(18), LinearLayout.LayoutParams.WRAP_CONTENT));
+            TextView n = Broadcast.body(activity, names.get(i), 12.5f, 0xFFDADDE3, 500);
+            n.setMaxLines(1);
+            n.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            r.addView(n);
+            col.addView(r);
+        }
+        if (names.isEmpty()) col.addView(note("Not announced"));
         return col;
     }
 
-    /** Crest / venue images through the shared cache (display size, companion paths resolved). */
+    private TextView note(String s) {
+        TextView t = Broadcast.body(activity, s, 12.5f, Broadcast.SECONDARY, 500);
+        t.setPadding(0, dp(4), 0, dp(4));
+        return t;
+    }
+
+    /** Crest images through the shared cache (display size, companion paths resolved). */
     private void loadImage(String url, ImageView into, int maxPx) {
         ImageCache.load(into, url, apiBase, token, maxPx);
     }
+
+    /** The panel's background: the two-tone wash in the team colours (plain base without them). */
+    private void applyWash(LiveTeams t) {
+        if (t == washFor) return;
+        washFor = t;
+        panel.setBackground(Broadcast.wash(t, 255));
+    }
+
 
     // ---- Fantasy ----------------------------------------------------------------------------------------------
 
@@ -721,7 +703,7 @@ final class MatchPanel implements LiveFeed.Listener {
     private void renderFantasy() {
         content.removeAllViews();
         if (fantasyLeagues == null) {
-            content.addView(LiveRender.muted(activity, fantasyNote));
+            content.addView(note(fantasyNote));
             return;
         }
         for (int i = 0; i < fantasyLeagues.length(); i++) {
@@ -732,7 +714,15 @@ final class MatchPanel implements LiveFeed.Listener {
             double mine = me == null ? 0 : me.optDouble("points", 0);
             double theirs = opp == null ? 0 : opp.optDouble("points", 0);
             section(l.optString("name", "League"));
-            content.addView(LiveRender.text(activity, (me != null && str(me, "team") != null ? str(me, "team") : "You") + "  " + pts(mine) + " – " + pts(theirs) + "  " + (opp != null && str(opp, "team") != null ? str(opp, "team") : "Opp"), 15, Color.WHITE));
+            // Mockup A (c): a dark chip with a green edge, the score in condensed numerals
+            TextView sc = Broadcast.cond(activity, (me != null && str(me, "team") != null ? str(me, "team") : "You") + "  " + pts(mine) + " – " + pts(theirs) + "  " + (opp != null && str(opp, "team") != null ? str(opp, "team") : "Opp"), 16, Broadcast.TEXT, 700);
+            android.graphics.drawable.LayerDrawable chip =
+                new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {new android.graphics.drawable.ColorDrawable(Broadcast.SUB), new android.graphics.drawable.ColorDrawable(Broadcast.WIN)});
+            chip.setLayerWidth(1, dp(4));
+            chip.setLayerGravity(1, Gravity.START | Gravity.FILL_VERTICAL);
+            sc.setBackground(chip);
+            sc.setPadding(dp(12), dp(6), dp(8), dp(6));
+            content.addView(sc);
             JSONArray starters = l.optJSONArray("starters");
             for (int j = 0; starters != null && j < starters.length(); j++) {
                 JSONObject s = starters.optJSONObject(j);
@@ -745,7 +735,7 @@ final class MatchPanel implements LiveFeed.Listener {
                 if (str(s, "pos") != null) p.add(str(s, "pos"));
                 if (str(s, "nflTeam") != null) p.add(str(s, "nflTeam"));
                 String line = android.text.TextUtils.join(" · ", p) + (s.has("points") && !s.isNull("points") ? "   " + pts(s.optDouble("points")) : "");
-                TextView t = LiveRender.text(activity, line, 13, isOpp ? 0xFFF2A8A3 : 0xFF9EE0A8);
+                TextView t = Broadcast.body(activity, line, 13, isOpp ? 0xFFF2A8A3 : 0xFF9EE0A8, 600);
                 t.setPadding(0, dp(3), 0, dp(3));
                 content.addView(t);
             }
@@ -757,39 +747,39 @@ final class MatchPanel implements LiveFeed.Listener {
     private void renderProgramme(String title, String description, List<String[]> upNext) {
         content.removeAllViews();
         if (title != null && !title.isEmpty()) {
-            TextView t = LiveRender.text(activity, title, 18, Color.WHITE);
+            TextView t = Broadcast.cond(activity, title, 20, Broadcast.TEXT, 700);
+            t.setMaxLines(2);
             t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
             content.addView(t);
         }
         if (description != null && !description.isEmpty()) {
-            TextView d = LiveRender.text(activity, description, 14, 0xDDF2F2F0);
+            TextView d = Broadcast.body(activity, description, 14, Broadcast.BODY, 500);
             d.setPadding(0, dp(8), 0, 0);
             content.addView(d);
         }
         if (upNext != null && !upNext.isEmpty()) {
             section("Up next");
             for (String[] n : upNext) {
-                TextView r = LiveRender.text(activity, (n[0].isEmpty() ? "" : n[0] + "  ") + n[1], 13, Color.WHITE);
+                TextView r = Broadcast.body(activity, (n[0].isEmpty() ? "" : n[0] + "  ") + n[1], 13, Broadcast.TEXT, 600);
                 r.setPadding(0, dp(4), 0, dp(4));
                 content.addView(r);
             }
         }
-        if (content.getChildCount() == 0) content.addView(LiveRender.muted(activity, "Nothing more about this one."));
+        if (content.getChildCount() == 0) content.addView(note("Nothing more about this one."));
     }
 
     // ---- helpers ------------------------------------------------------------------------------------------------
 
     private void section(String name) {
-        TextView t = LiveRender.text(activity, name, 13, 0x99F2F2F0);
-        t.setPadding(0, dp(16), 0, dp(4));
-        t.setAllCaps(true);
-        content.addView(t);
+        content.addView(Broadcast.sectionHead(activity, name));
     }
 
-    private TextView button(String label) {
-        TextView t = LiveRender.text(activity, label, 14, Color.WHITE);
-        t.setBackgroundColor(0xFF333338);
-        t.setPadding(dp(14), dp(8), dp(14), dp(8));
+    /** Condensed caps; the primary one gold. */
+    private TextView button(String label, boolean primary) {
+        TextView t = Broadcast.cond(activity, label, 15, primary ? Broadcast.INK : Broadcast.TEXT, 700);
+        t.setLetterSpacing(0.05f);
+        t.setBackgroundColor(primary ? Broadcast.GOLD : Broadcast.CHIP);
+        t.setPadding(dp(16), dp(7), dp(16), dp(7));
         t.setGravity(Gravity.CENTER);
         return t;
     }

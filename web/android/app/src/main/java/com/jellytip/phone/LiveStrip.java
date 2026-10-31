@@ -3,7 +3,6 @@ package com.jellytip.phone;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -14,29 +13,42 @@ import android.widget.TextView;
 import org.json.JSONObject;
 
 /**
- * The live views' scoreboard strip (plan "Live panel: pop, context, performance"): both teams' colours on a diagonal,
- * crests, the score (pulses when it changes), period and clock with a breathing live dot, a one-line situation under
- * it, and a flash of the team colour with a label on big moments. Built once; [bind] only updates what changed.
+ * The live views' score strip in the Broadcast look (plan "In-match visual direction: DECIDED 31-Oct", mockup A (c)):
+ * two angled full-colour slabs with crests, condensed names and scores (the score slides up on change), then a
+ * situation row (gold box with down & distance or the period, the situation, the clock and a live dot). Moments: the
+ * team's colour band wipes across the strip from the left with a gold leading edge (300 ms), holds 2 s and wipes off
+ * to the right; the score swaps underneath while it's covered. Built once; [bind] only updates what changed.
  */
 final class LiveStrip {
+
+    private static final long WIPE_MS = 300;
+    private static final long HOLD_MS = 2_000;
 
     final LinearLayout view;
     private final Activity a;
     private final String apiBase;
     private final String token;
     private final FrameLayout strip;
+    private final Broadcast.Slab homeSlab = new Broadcast.Slab(0xFF2A303B, true);
+    private final Broadcast.Slab awaySlab = new Broadcast.Slab(0xFF1C212A, false);
     private final ImageView homeCrest;
     private final ImageView awayCrest;
     private final TextView homeName;
     private final TextView awayName;
-    private final TextView score;
+    private final TextView homeScore;
+    private final TextView awayScore;
+    private final TextView box;
+    private final TextView situation;
     private final TextView clock;
     private final View dot;
-    private final TextView flash;
-    private final TextView summary;
+    private final LinearLayout band;
+    private final TextView bandLabel;
+    private final TextView bandDetail;
     private ObjectAnimator dotAnim;
-    private int boundHome;
-    private int boundAway;
+    private boolean wiping;
+    private String pendingHome;
+    private String pendingAway;
+    private LiveTeams teams = LiveTeams.NONE;
 
     LiveStrip(Activity a, String apiBase, String token) {
         this.a = a;
@@ -45,70 +57,87 @@ final class LiveStrip {
         view = new LinearLayout(a);
         view.setOrientation(LinearLayout.VERTICAL);
         strip = new FrameLayout(a);
-        strip.setClipToOutline(true);
-        strip.setOutlineProvider(
-            new android.view.ViewOutlineProvider() {
-                @Override
-                public void getOutline(View v, android.graphics.Outline o) {
-                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(10));
-                }
-            }
-        );
-        LinearLayout row = new LinearLayout(a);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), 0, dp(8), 0);
+        strip.setClipChildren(true);
+        LinearLayout slabs = new LinearLayout(a);
+        slabs.setOrientation(LinearLayout.HORIZONTAL);
+
+        LinearLayout left = new LinearLayout(a);
+        left.setOrientation(LinearLayout.HORIZONTAL);
+        left.setGravity(Gravity.CENTER_VERTICAL);
+        left.setBackground(homeSlab);
+        left.setPadding(dp(10), 0, dp(14), 0);
         homeCrest = crest();
-        awayCrest = crest();
-        homeName = LiveRender.text(a, "", 13, Color.WHITE);
-        awayName = LiveRender.text(a, "", 13, Color.WHITE);
-        for (TextView t : new TextView[] {homeName, awayName}) {
-            t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
-            t.setMaxLines(1);
-            t.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        }
+        homeName = Broadcast.cond(a, "", 18, 0xFFFFFFFF, 700);
         homeName.setPadding(dp(6), 0, 0, 0);
-        awayName.setPadding(0, 0, dp(6), 0);
+        homeScore = Broadcast.cond(a, "", 32, 0xFFFFFFFF, 700);
+        left.addView(homeCrest, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        left.addView(homeName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        left.addView(homeScore);
+
+        LinearLayout right = new LinearLayout(a);
+        right.setOrientation(LinearLayout.HORIZONTAL);
+        right.setGravity(Gravity.CENTER_VERTICAL);
+        right.setBackground(awaySlab);
+        right.setPadding(dp(18), 0, dp(10), 0);
+        awayScore = Broadcast.cond(a, "", 32, 0xFFFFFFFF, 700);
+        awayName = Broadcast.cond(a, "", 18, 0xFFFFFFFF, 700);
+        awayName.setPadding(dp(6), 0, dp(6), 0);
         awayName.setGravity(Gravity.END);
-        LinearLayout centre = new LinearLayout(a);
-        centre.setOrientation(LinearLayout.VERTICAL);
-        centre.setGravity(Gravity.CENTER_HORIZONTAL);
-        score = LiveRender.text(a, "v", 20, Color.WHITE);
-        score.setTypeface(score.getTypeface(), android.graphics.Typeface.BOLD);
-        centre.addView(score);
-        LinearLayout clockRow = new LinearLayout(a);
-        clockRow.setOrientation(LinearLayout.HORIZONTAL);
-        clockRow.setGravity(Gravity.CENTER_VERTICAL);
+        awayCrest = crest();
+        right.addView(awayScore);
+        right.addView(awayName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        right.addView(awayCrest, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        slabs.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        rlp.leftMargin = -dp(8);
+        slabs.addView(right, rlp);
+        strip.addView(slabs, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        // The moment band: team colour with a gold leading edge, off to the left until a moment
+        band = new LinearLayout(a);
+        band.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout bandText = new LinearLayout(a);
+        bandText.setOrientation(LinearLayout.VERTICAL);
+        bandText.setGravity(Gravity.CENTER_VERTICAL);
+        bandText.setPadding(dp(12), 0, dp(8), 0);
+        bandLabel = Broadcast.cond(a, "", 27, 0xFF111111, 700);
+        bandDetail = Broadcast.body(a, "", 13, 0xFF111111, 600);
+        bandDetail.setMaxLines(1);
+        bandText.addView(bandLabel);
+        bandText.addView(bandDetail);
+        band.addView(bandText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        View edge = new View(a);
+        edge.setBackgroundColor(Broadcast.GOLD);
+        band.addView(edge, new LinearLayout.LayoutParams(dp(8), LinearLayout.LayoutParams.MATCH_PARENT));
+        band.setVisibility(View.GONE);
+        strip.addView(band, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        view.addView(strip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+
+        // Situation row: gold box, the situation, the clock and a live dot
+        LinearLayout sit = new LinearLayout(a);
+        sit.setOrientation(LinearLayout.HORIZONTAL);
+        sit.setGravity(Gravity.CENTER_VERTICAL);
+        sit.setPadding(0, dp(8), 0, 0);
+        box = Broadcast.cond(a, "", 20, Broadcast.INK, 700);
+        box.setBackgroundColor(Broadcast.GOLD);
+        box.setPadding(dp(8), dp(1), dp(8), dp(1));
+        situation = Broadcast.body(a, "", 14, Broadcast.BODY, 600);
+        situation.setMaxLines(1);
+        situation.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        situation.setPadding(dp(8), 0, dp(6), 0);
         dot = new View(a);
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.OVAL);
-        d.setColor(0xFFB3261E);
+        d.setColor(Broadcast.LIVE);
         dot.setBackground(d);
-        clockRow.addView(dot, new LinearLayout.LayoutParams(dp(7), dp(7)));
-        clock = LiveRender.text(a, "LIVE", 10, 0xD9FFFFFF);
-        clock.setPadding(dp(4), 0, 0, 0);
-        clockRow.addView(clock);
-        centre.addView(clockRow);
-        row.addView(homeCrest, new LinearLayout.LayoutParams(dp(30), dp(30)));
-        row.addView(homeName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(centre, new LinearLayout.LayoutParams(dp(100), LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(awayName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(awayCrest, new LinearLayout.LayoutParams(dp(30), dp(30)));
-        strip.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        flash = LiveRender.text(a, "", 20, Color.WHITE);
-        flash.setTypeface(flash.getTypeface(), android.graphics.Typeface.BOLD);
-        flash.setLetterSpacing(0.15f);
-        flash.setGravity(Gravity.CENTER);
-        flash.setVisibility(View.GONE);
-        strip.addView(flash, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        view.addView(strip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)));
-        summary = LiveRender.text(a, "", 12, 0xFFFFC94A);
-        summary.setTypeface(summary.getTypeface(), android.graphics.Typeface.BOLD);
-        summary.setMaxLines(1);
-        summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        summary.setPadding(0, dp(6), 0, 0);
-        summary.setVisibility(View.GONE);
-        view.addView(summary);
+        clock = Broadcast.cond(a, "", 18, Broadcast.TEXT, 700);
+        clock.setPadding(dp(6), 0, 0, 0);
+        sit.addView(box);
+        sit.addView(situation, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        sit.addView(dot, new LinearLayout.LayoutParams(dp(7), dp(7)));
+        sit.addView(clock);
+        view.addView(sit);
         bindTeams(LiveTeams.NONE);
     }
 
@@ -119,47 +148,77 @@ final class LiveStrip {
     }
 
     void bindTeams(LiveTeams t) {
-        if (t.homeColor != boundHome || t.awayColor != boundAway) {
-            boundHome = t.homeColor;
-            boundAway = t.awayColor;
-            strip.setBackground(new MatchStyle.SplitDrawable(MatchStyle.darken(t.homeColor), MatchStyle.darken(t.awayColor), 0));
-        }
-        setText(homeName, t.homeShort);
-        setText(awayName, t.awayShort);
-        ImageCache.load(homeCrest, t.homeLogo, apiBase, token, dp(30));
-        ImageCache.load(awayCrest, t.awayLogo, apiBase, token, dp(30));
+        teams = t;
+        homeSlab.setColor(t.homeColor);
+        awaySlab.setColor(t.awayColor);
+        int onHome = Broadcast.on(t.homeColor);
+        int onAway = Broadcast.on(t.awayColor);
+        homeName.setTextColor(onHome);
+        homeScore.setTextColor(onHome);
+        awayName.setTextColor(onAway);
+        awayScore.setTextColor(onAway);
+        set(homeName, t.homeShort);
+        set(awayName, t.awayShort);
+        // The situation row sits on the wash: text picked by contrast with the blended colour
+        int washLeft = t.known ? Broadcast.blend(t.homeColor, 0.22f) : Broadcast.BASE;
+        int washRight = t.known ? Broadcast.blend(t.awayColor, 0.22f) : Broadcast.BASE;
+        situation.setTextColor(Broadcast.on(washLeft) == Broadcast.INK ? Broadcast.INK : Broadcast.BODY);
+        clock.setTextColor(Broadcast.on(washRight) == Broadcast.INK ? Broadcast.INK : Broadcast.TEXT);
+        ImageCache.load(homeCrest, t.homeLogo, apiBase, token, dp(28));
+        ImageCache.load(awayCrest, t.awayLogo, apiBase, token, dp(28));
     }
 
-    /** The latest /live answer: score (pulses on change), period · clock, the situation line. */
+    /** The latest /live answer: scores (slide on change; held while a moment covers the strip), the situation row. */
     void bind(JSONObject live) {
         if (live == null) return;
         JSONObject sc = live.optJSONObject("score");
-        String s = sc != null && !sc.isNull("home") && !sc.isNull("away") ? sc.optString("home") + " – " + sc.optString("away") : "v";
-        if (!s.contentEquals(score.getText())) {
-            boolean had = !"v".contentEquals(score.getText());
-            score.setText(s);
-            if (had) {
-                score.animate().scaleX(1.15f).scaleY(1.15f).setDuration(140).withEndAction(() -> score.animate().scaleX(1f).scaleY(1f).setDuration(220).start()).start();
-            }
+        String h = sc == null || sc.isNull("home") ? "" : sc.optString("home");
+        String aw = sc == null || sc.isNull("away") ? "" : sc.optString("away");
+        if (wiping) {
+            pendingHome = h;
+            pendingAway = aw;
+        } else {
+            score(homeScore, h);
+            score(awayScore, aw);
         }
         String status = str(live, "status");
         String period = str(live, "period");
         String c = str(live, "clock");
         if (period == null && sc != null) period = str(sc, "period");
         if (c == null && sc != null) c = str(sc, "clock");
-        String line = period != null && c != null ? period + " · " + c : period != null ? period : c != null ? c : "post".equals(status) ? "FT" : "LIVE";
-        setText(clock, line);
-        dot.setVisibility(status == null || "in".equals(status) ? View.VISIBLE : View.GONE);
-        String sum = LiveContent.summary(live.optJSONObject("situation"));
-        setText(summary, sum == null ? "" : sum);
-        summary.setVisibility(sum == null ? View.GONE : View.VISIBLE);
+        JSONObject s = live.optJSONObject("situation");
+        String dd = s == null ? null : LiveContent.downDistance(s);
+        boolean post = "post".equals(status);
+        String boxText = post ? "FT" : dd != null ? dd : period;
+        set(box, boxText == null ? "" : boxText);
+        box.setVisibility(boxText == null ? View.GONE : View.VISIBLE);
+        String sum = LiveContent.summary(s, dd != null);
+        set(situation, sum == null ? "" : sum);
+        String clk = post ? "" : (dd != null && period != null ? period + " " : "") + (c == null ? "LIVE" : c);
+        set(clock, clk);
+        dot.setVisibility(post ? View.GONE : View.VISIBLE);
+    }
+
+    private void score(TextView t, String s) {
+        if (s.contentEquals(t.getText())) return;
+        if (t.getText().length() == 0 || t.getHeight() == 0) {
+            t.setText(s);
+            return;
+        }
+        // Odometer feel: the old number slides up and out, the new one slides in (220 ms)
+        float h = t.getHeight();
+        t.animate().translationY(-h).alpha(0f).setDuration(110).withEndAction(() -> {
+            t.setText(s);
+            t.setTranslationY(h);
+            t.animate().translationY(0).alpha(1f).setDuration(110).start();
+        }).start();
     }
 
     /** The dot breathes only while the strip is on screen. */
     void setActive(boolean on) {
         if (on && dotAnim == null) {
-            dotAnim = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.3f);
-            dotAnim.setDuration(800);
+            dotAnim = ObjectAnimator.ofFloat(dot, View.ALPHA, 1f, 0.35f);
+            dotAnim.setDuration(1_000);
             dotAnim.setRepeatCount(ValueAnimator.INFINITE);
             dotAnim.setRepeatMode(ValueAnimator.REVERSE);
             dotAnim.start();
@@ -170,23 +229,35 @@ final class LiveStrip {
         }
     }
 
-    /** One flash of [color] with [label] (alpha and scale only). */
-    void flash(String label, int color) {
-        flash.setText(label);
-        flash.setBackgroundColor(color);
-        flash.setVisibility(View.VISIBLE);
-        flash.setAlpha(0f);
-        flash.setScaleX(0.94f);
-        flash.setScaleY(0.94f);
-        flash.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(180).withEndAction(() ->
-            flash.animate().alpha(0f).setStartDelay(1_400).setDuration(420).withEndAction(() -> {
-                flash.setVisibility(View.GONE);
-                flash.animate().setStartDelay(0);
-            }).start()
-        ).start();
+    /** The 2-second moment wipe in [color] (translation only); the score swaps underneath once covered. */
+    void flash(String label, String detail, int color) {
+        if (strip.getWidth() == 0) return;
+        bandLabel.setText(label);
+        bandDetail.setText(detail == null ? "" : detail);
+        bandDetail.setVisibility(detail == null ? View.GONE : View.VISIBLE);
+        int on = Broadcast.on(color);
+        bandLabel.setTextColor(on);
+        bandDetail.setTextColor(on);
+        band.getChildAt(0).setBackgroundColor(color);
+        float w = strip.getWidth();
+        wiping = true;
+        band.animate().cancel();
+        band.setVisibility(View.VISIBLE);
+        band.setTranslationX(-w * 1.02f);
+        band.animate().translationX(0).setStartDelay(0).setDuration(WIPE_MS).withEndAction(() -> {
+            if (pendingHome != null) score(homeScore, pendingHome);
+            if (pendingAway != null) score(awayScore, pendingAway);
+            pendingHome = null;
+            pendingAway = null;
+            band.animate().translationX(w * 1.02f).setStartDelay(HOLD_MS).setDuration(WIPE_MS).withEndAction(() -> {
+                band.setVisibility(View.GONE);
+                band.animate().setStartDelay(0);
+                wiping = false;
+            }).start();
+        }).start();
     }
 
-    private static void setText(TextView t, String s) {
+    private static void set(TextView t, String s) {
         if (!s.contentEquals(t.getText())) t.setText(s);
     }
 

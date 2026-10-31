@@ -30,15 +30,32 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
     /** Told when the drawer opens or closes (the feed polls faster while it's open). */
     Runnable onOpenChanged;
 
-    LiveStatsDrawer(Activity activity, FrameLayout root, LiveFeed feed, String apiBase, String token, java.util.function.Supplier<LiveTeams> teams) {
+    private final boolean floating;
+    private LiveTeams washFor;
+
+    LiveStatsDrawer(Activity activity, FrameLayout root, LiveFeed feed, String apiBase, String token, java.util.function.Supplier<LiveTeams> teams, boolean floating) {
         this.activity = activity;
         this.feed = feed;
         this.teams = teams;
+        this.floating = floating;
         feed.addListener(this);
 
+        // Broadcast (plan "In-match visual direction"): the two-tone wash at 95%; docked = full height with a gold
+        // left border, floating (sport.panelStyle) = a rounded card inset 12 dp
         panel = new FrameLayout(activity);
-        panel.setBackgroundColor(0xE60B0C12);
+        panel.setBackground(Broadcast.wash(LiveTeams.NONE, 242));
         panel.setClickable(true); // taps on the panel don't reach the player underneath
+        if (floating) {
+            panel.setClipToOutline(true);
+            panel.setOutlineProvider(
+                new android.view.ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View v, android.graphics.Outline o) {
+                        o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(16));
+                    }
+                }
+            );
+        }
         LinearLayout col = new LinearLayout(activity);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(14), dp(12), dp(14), dp(14));
@@ -53,29 +70,45 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
         strip = new LiveStrip(activity, apiBase, token);
         col.addView(strip.view);
 
+        // Body text sits on a near-black card within the wash
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundColor(Broadcast.CARD);
+        card.setPadding(dp(10), dp(4), dp(10), dp(8));
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        cardLp.topMargin = dp(10);
+        col.addView(card, cardLp);
         LinearLayout tabs = new LinearLayout(activity);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(0, dp(10), 0, dp(10));
+        tabs.setBackground(new Broadcast.RuleDrawable(Broadcast.LINE, Math.max(1, dp(1))));
         for (int i = 0; i < LiveRender.TABS.length; i++) {
             final int index = i;
             TextView t = LiveRender.text(activity, LiveRender.TABS[i], 13, Color.WHITE);
             t.setOnClickListener(v -> selectTab(index));
             tabViews[i] = t;
             LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            tlp.rightMargin = dp(6);
+            tlp.rightMargin = dp(14);
             tabs.addView(t, tlp);
         }
-        col.addView(tabs);
+        card.addView(tabs);
 
         ScrollView scroll = new ScrollView(activity);
         LinearLayout box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(box);
-        col.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        slp.topMargin = dp(8);
+        card.addView(scroll, slp);
         content = new LiveContent(activity, box, apiBase, token);
         panel.addView(col);
+        if (!floating) {
+            View gold = new View(activity);
+            gold.setBackgroundColor(Broadcast.GOLD);
+            panel.addView(gold, new FrameLayout.LayoutParams(dp(3), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START));
+        }
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
+        if (floating) lp.setMargins(dp(12), dp(12), dp(12), dp(12));
         root.addView(panel, lp);
         panel.setVisibility(View.GONE);
         // ~40% of the width (landscape only)
@@ -140,9 +173,9 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
     }
 
     /** The strip flashes a moment while the drawer is open; false = not showing. */
-    boolean flash(String label, int color) {
+    boolean flash(String label, String detail, int color) {
         if (!open) return false;
-        strip.flash(label, color);
+        strip.flash(label, detail, color);
         return true;
     }
 
@@ -164,6 +197,10 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
 
     private void render() {
         LiveTeams t = teams.get();
+        if (t != washFor) {
+            washFor = t;
+            panel.setBackground(Broadcast.wash(t, 242));
+        }
         strip.bindTeams(t);
         strip.bind(feed.last);
         content.render(feed, LiveRender.TABS[tab], t);
