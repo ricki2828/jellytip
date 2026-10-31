@@ -2979,3 +2979,10 @@
   font: 500 12px Barlow, system-ui, sans-serif;
   color: #a9b0bc;
 }
+.ld-game-row .mid small.lp {
+  color: #c9ced6;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

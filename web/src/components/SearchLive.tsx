@@ -120,6 +120,7 @@ export function ChannelsRow({ hits }: { hits: ChannelHit[] }) {
               <span className="onnow-channel">{c.now?.title ?? c.group ?? ""}</span>
               <SportBadges quality={c.quality} size="sm" />
             </button>
+            <MatchInfoButton fixture={c.fixture} className="info-fab" />
           </div>
         ))}
       </div>

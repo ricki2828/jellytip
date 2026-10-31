@@ -106,7 +106,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     sportName: str(p.sportName) ?? str(r.sportName) ?? str(p.sport) ?? str(r.sport),
     match: m ? { team: str(m.team), league: str(m.league) } : null,
     // On the programme; or on the item or its event group, where a server may put it for a channel without a programme
-    fixture: parseFixture(p.matchInfo ?? r.matchInfo ?? obj(r.eventGroup)?.matchInfo),
+    fixture: parseFixture(p.matchInfo ?? r.matchInfo ?? obj(r.eventGroup)?.matchInfo ?? obj(r.now_next)?.matchInfo ?? obj(obj(r.now_next)?.now)?.matchInfo),
   };
 }
 

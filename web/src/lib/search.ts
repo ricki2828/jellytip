@@ -99,6 +99,8 @@ export interface ChannelHit {
   group: string | null;
   quality: Quality | null;
   now: { title: string; phase: Phase | null } | null;
+  /** The match / event on the channel now (RedZone channels carry it on the channel itself). */
+  fixture: Fixture | null;
 }
 
 const CHAN_ID = /^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_.-]{1,64}$/;
@@ -150,7 +152,7 @@ export function parseChannelHits(list: unknown): ChannelHit[] {
     seen.add(id);
     const now = obj(o.now);
     const nowTitle = str(now?.title);
-    out.push({ id, name, num: num(o.num), logo: str(o.logo), group: str(o.group), quality: parseQuality(o.quality), now: nowTitle ? { title: nowTitle, phase: parsePhase(now?.phase) } : null });
+    out.push({ id, name, num: num(o.num), logo: str(o.logo), group: str(o.group), quality: parseQuality(o.quality), now: nowTitle ? { title: nowTitle, phase: parsePhase(now?.phase) } : null, fixture: parseFixture(o.matchInfo ?? now?.matchInfo) });
   }
   return out.slice(0, 20);
 }

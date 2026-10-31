@@ -491,6 +491,7 @@ test("market flip: parsed with the favourite, text names the new favourite", () 
   assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });
 
+import { parseChannelHits } from "../src/lib/search.ts";
 import { mineLive, chipText, clampAlertMin, hasLeagues, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
 
 const FANT = {
@@ -839,4 +840,26 @@ test("round 2 pinned shapes: practice tower with best and gap, tennis tournament
   assert.deepEqual((single[0] as { head: string[] }).head, ["S1"]);
   const g = situationBlocks("golf", { round: 2, leaderboard: [{ pos: 1, player: "X", country: "JPN", flag: "🇯🇵", toPar: "-9" }] }, { home: "", away: "" });
   assert.equal((g[0] as { rows: { country: string | null }[] }).rows[0].country, "🇯🇵");
+});
+
+test("RedZone server shapes: games with status, last play; matchInfo on the channel itself", () => {
+  const d = parseLive({
+    layout: "multi",
+    games: [
+      { matchId: "a", home: "KC", away: "BUF", status: "in", score: { home: 17, away: 14 }, period: "Q4", clock: "3:12", situation: { down: "2nd", distance: 7, yardLine: "BUF 12", redZone: true, lastPlay: "Pass complete for 9" } },
+      { matchId: "b", home: "DET", away: "GB", status: "pre", startsAt: "2026-11-01T18:00:00Z" },
+      { matchId: "c", home: "NE", away: "NYJ", status: "post", score: { home: 20, away: 10 } },
+    ],
+    moments: [{ at: "2026-11-01T17:00:00Z", kind: "touchdown", team: "home", label: "Touchdown", matchId: "a" }],
+  })!;
+  assert.deepEqual(d.games.map((g) => g.status), ["in", "pre", "post"]);
+  assert.equal(d.games[0].lastPlay, "Pass complete for 9");
+  assert.equal(d.games[1].startsAt, Date.parse("2026-11-01T18:00:00Z") / 1000);
+  assert.equal(d.moments.length, 1);
+  // matchInfo on the channel item (no guide) or on its now_next entry still reaches the tile
+  const mi = { id: "multi:nfl:2026-11-01", kind: "multi", title: "NFL RedZone", leagueKey: "nfl" };
+  assert.equal(parseSport({ matchInfo: mi }, { title: "x" }).fixture?.id, "multi:nfl:2026-11-01");
+  assert.equal(parseSport({ now_next: { matchInfo: mi } }, { title: "x" }).fixture?.kind, "multi");
+  const ch = parseChannelHits([{ id: "3:9", name: "NFL RedZone", matchInfo: mi }]);
+  assert.equal(ch[0].fixture?.kind, "multi");
 });

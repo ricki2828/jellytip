@@ -191,12 +191,13 @@ const GameRow = memo(function GameRow({ g }: { g: Game }) {
   return (
     <li className={`ld-game-row${g.redZone ? " rz" : ""}`}>
       <span className="tm">{(g.home.short ?? g.home.name).toUpperCase()}</span>
-      <b className="sc">{g.score ? <Odo value={g.score.home} /> : "–"}</b>
+      <b className="sc">{g.score && g.status !== "pre" ? <Odo value={g.score.home} /> : "–"}</b>
       <span className="mid">
-        {[g.period, g.clock].filter(Boolean).join(" ") || ""}
-        {g.situation && <small>{g.situation}</small>}
+        {g.status === "pre" && g.startsAt ? new Date(g.startsAt * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : g.status === "post" ? "FINAL" : [g.period, g.clock].filter(Boolean).join(" ")}
+        {g.situation && g.status !== "post" && <small>{g.situation}</small>}
+        {g.lastPlay && g.status === "in" && <small className="lp">{g.lastPlay}</small>}
       </span>
-      <b className="sc">{g.score ? <Odo value={g.score.away} /> : "–"}</b>
+      <b className="sc">{g.score && g.status !== "pre" ? <Odo value={g.score.away} /> : "–"}</b>
       <span className="tm">{(g.away.short ?? g.away.name).toUpperCase()}</span>
       {g.redZone && <em className="rzflag">RED ZONE</em>}
     </li>

@@ -19,6 +19,11 @@ export interface Game {
   period: string | null;
   /** "2nd & 7 · KC 34" when the game has a situation. */
   situation: string | null;
+  /** The last play, when the server has it. */
+  lastPlay: string | null;
+  /** Live games come first (red zone at the top), then upcoming, then finished. */
+  status: "in" | "pre" | "post" | null;
+  startsAt: number | null;
   redZone: boolean;
 }
 
@@ -124,7 +129,7 @@ export function parseLive(raw: unknown): LiveStats | null {
       if (!o || !home || !away) return [];
       const sit = obj(o.situation);
       const dd = str(sit?.down) ? `${str(sit?.down)}${str(sit?.distance) ? ` & ${str(sit?.distance)}` : ""}` : null;
-      return [{ matchId: str(o.matchId) ?? "", home, away, score: sc && num(sc.home) != null && num(sc.away) != null ? { home: num(sc.home)!, away: num(sc.away)! } : null, clock: str(o.clock), period: str(o.period), situation: [dd, str(sit?.yardLine) ?? str(sit?.ballOn)].filter(Boolean).join(" · ") || null, redZone: o.redZone === true || sit?.redZone === true }];
+      return [{ matchId: str(o.matchId) ?? "", home, away, score: sc && num(sc.home) != null && num(sc.away) != null ? { home: num(sc.home)!, away: num(sc.away)! } : null, clock: str(o.clock), period: str(o.period), situation: [dd, str(sit?.yardLine) ?? str(sit?.ballOn)].filter(Boolean).join(" · ") || null, redZone: o.redZone === true || sit?.redZone === true, lastPlay: str(sit?.lastPlay), status: o.status === "in" || o.status === "live" ? "in" : o.status === "pre" || o.status === "post" ? o.status : null, startsAt: parseStartsAt(o.startsAt) }];
     }),
     layout: str(r.layout)?.toLowerCase() ?? null,
     situation: obj(r.situation),
