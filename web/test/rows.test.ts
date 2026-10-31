@@ -102,3 +102,26 @@ test("Ricki's real rows (home, movies, shows): every row type keeps its IPTV tit
   assert.ok(all.some((r) => (r as { layout?: string }).layout === "top10"));
   assert.ok(all.some((r) => (r as { layout?: string }).layout === "franchise"));
 });
+
+import { parseHash } from "../src/lib/routeParse.ts";
+
+test("collection links: a card's route (ids with ':' and '~') opens that collection, not the hub", () => {
+  // the card navigates to /collections/<encodeURIComponent(id)>: the hash holds the percent-encoded id
+  for (const id of ["franchise:645", "actor:3987c0da3ba8d58e55450860cc", "decade-genre:2010-drama", "mood:los-angeles", "me:recent-unseen", "weird~id.1_x"]) {
+    const r = parseHash(`#/collections/${encodeURIComponent(id)}`);
+    assert.equal(r.name, "collectionrow", id);
+    assert.equal(r.params.id, id);
+    // the same link typed without encoding works too
+    assert.equal(parseHash(`#/collections/${id}`).params.id, id);
+  }
+  assert.equal(parseHash("#/collections").name, "collections");
+  assert.equal(parseHash("/collections/franchise%3A645?x=1").query.get("x"), "1");
+  // junk falls back to the hub
+  assert.equal(parseHash("#/collections/%E0%A4%A").name, "collections");
+  assert.equal(parseHash(`#/collections/${encodeURIComponent("a b")}`).name, "collections");
+  // other routes are unchanged
+  assert.equal(parseHash("#/livetv").name, "livetv");
+  assert.equal(parseHash("#/item/" + "a".repeat(32)).params.id, "a".repeat(32));
+  assert.equal(parseHash("#/item/nope").name, "home");
+  assert.equal(parseHash("").name, "home");
+});
