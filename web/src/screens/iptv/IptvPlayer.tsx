@@ -793,6 +793,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
             }
           })();
         }),
+        // The player became the mini player: leave the player screen for the one before it. The session (this open() call and its
+        // listeners) stays alive; when it ends later the component is gone (alive is false) and nothing navigates.
+        await NativePlayer.addListener("pipChanged", (e) => {
+          if (e.active && alive.current) exit();
+        }),
         await NativePlayer.addListener("channelSwitch", (e) => debugEvent("iptv-player", "native channel switch", { from: e.from ?? null, to: e.to }, "info")),
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
