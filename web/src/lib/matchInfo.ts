@@ -11,10 +11,16 @@ export interface Side {
   /** Team colours (hex) when the server has them: the match modal's split hero and tints. */
   color: string | null;
   altColor: string | null;
+  /** Tennis: the player's country (a flag instead of a crest). */
+  country: string | null;
 }
 
 export interface Fixture {
   id: string;
+  /** "event": F1 and golf have no home / away; `title` is the hero and `home`/`away` are placeholders (home carries the title). */
+  kind: "match" | "event";
+  title: string | null;
+  participants: string[];
   league: string | null;
   /** The league's key ("nfl", "nba"…): what code decides on; `league` is for display. */
   leagueKey: string | null;
@@ -81,25 +87,36 @@ export function hex(v: unknown): string | null {
 function side(raw: unknown): Side | null {
   const o = obj(raw);
   const name = str(o?.name) ?? str(o?.short);
-  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record), color: hex(o.color), altColor: hex(o.altColor) } : null;
+  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record), color: hex(o.color), altColor: hex(o.altColor), country: str(o.country) } : null;
 }
 
 /** `matchInfo` on a programme / item: a fixture, or null when it has no id or either side. (`match` is the favourite marker and is not read here.) */
 export function parseFixture(raw: unknown): Fixture | null {
   const o = obj(raw);
   const id = str(o?.id);
-  const home = side(o?.home);
-  const away = side(o?.away);
-  if (!o || !id || !home || !away) return null;
+  if (!o || !id) return null;
+  const event = o.kind === "event";
+  const title = str(o.title);
+  let home = side(o.home);
+  let away = side(o.away);
+  if (event) {
+    // F1 and golf: no home / away, the title is the hero
+    if (!title) return null;
+    home = home ?? { name: title, short: null, logo: null, record: null, color: null, altColor: null, country: null };
+    away = away ?? { name: "", short: null, logo: null, record: null, color: null, altColor: null, country: null };
+  } else if (!home || !away) return null;
   const sc = obj(o.score);
   const status = o.status === "pre" || o.status === "in" || o.status === "post" ? o.status : null;
   const v = obj(o.venue);
   return {
     id,
+    kind: event ? "event" : "match",
+    title,
+    participants: arr(o.participants).flatMap((p) => (typeof p === "string" ? [p] : str(obj(p)?.name) ? [str(obj(p)?.name)!] : [])),
     league: str(o.league),
     leagueKey: str(o.leagueKey)?.toLowerCase() ?? null,
-    home,
-    away,
+    home: home!,
+    away: away!,
     startsAt: parseStartsAt(o.startsAt),
     venue: v ? { name: str(v.name), city: str(v.city), image: str(v.image) } : null,
     status,
@@ -156,11 +173,11 @@ export function parseMatchDetail(raw: unknown): MatchDetail | null {
   };
 }
 
-/** "Home v Away". */
-export const matchupTitle = (f: Pick<Fixture, "home" | "away">) => `${f.home.name} v ${f.away.name}`;
+/** "Home v Away"; an event (F1, golf) is its title. */
+export const matchupTitle = (f: Pick<Fixture, "home" | "away"> & { kind?: "match" | "event"; title?: string | null }) => (f.kind === "event" && f.title ? f.title : `${f.home.name} v ${f.away.name}`);
 
 /** The tile title: the matchup when Jellytip identified it, else the listing's own title. */
-export const displayTitle = (title: string, f: Fixture | null | undefined) => (f?.inferred ? matchupTitle(f) : title);
+export const displayTitle = (title: string, f: Fixture | null | undefined) => (f?.inferred || f?.kind === "event" ? matchupTitle(f) : title);
 
 /** "LIVE" / "FT" / "Today 19:30"-style time for the header. */
 export function statusLabel(f: Fixture, now: number): string {
@@ -237,4 +254,11 @@ export function readable(color: string): string {
   if (lum >= 0.1) return color;
   const mix = c.map((v) => Math.round(v + (255 - v) * 0.55));
   return `#${mix.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A two-letter country code as a flag emoji ("NZ" → 🇳🇿); anything else is returned as the upper-case code. */
+export function flagOf(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const c = code.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) : c || null;
 }

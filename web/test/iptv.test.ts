@@ -734,3 +734,55 @@ test("broadcast look: clash rule, contrast text, wash", () => {
   assert.equal(blend("#ffffff", 1), "#ffffff");
   assert.equal(teamColors(null).known, false);
 });
+
+import { flagOf } from "../src/lib/matchInfo.ts";
+import { seriesColor } from "../src/lib/broadcast.ts";
+import { tyreLetter } from "../src/lib/liveStats.ts";
+
+test("event match info (F1, golf), tennis flags, and the three live layouts", () => {
+  const f1 = parseFixture({ id: "f1:mex-race", kind: "event", leagueKey: "f1", title: "Mexico City GP · Race", participants: ["VER", { name: "NOR" }], status: "in", league: "Formula 1" })!;
+  assert.equal(f1.kind, "event");
+  assert.equal(f1.title, "Mexico City GP · Race");
+  assert.deepEqual(f1.participants, ["VER", "NOR"]);
+  assert.equal(matchupTitle(f1), "Mexico City GP · Race");
+  assert.equal(displayTitle("Race", f1), "Mexico City GP · Race");
+  assert.equal(parseFixture({ id: "x", kind: "event" }), null); // an event needs its title
+  assert.equal(parseFixture({ id: "x", home: { name: "A" } }), null); // a match still needs both sides
+  assert.deepEqual(teamColors(f1), { home: "#E10600", away: "#E10600", known: true });
+  assert.equal(seriesColor("golf-pga"), "#0B6E4F");
+  assert.equal(seriesColor("tennis-atp"), null);
+  assert.equal(teamColors(parseFixture({ id: "g", kind: "event", leagueKey: "tennis-atp", title: "x" })).known, false);
+  const t = parseFixture({ id: "t1", leagueKey: "tennis-atp", home: { name: "Kimmer Coppejans", country: "BE" }, away: { name: "Chris Wood", country: "nz" } })!;
+  assert.equal(t.kind, "match");
+  assert.equal(t.home.country, "BE");
+  assert.equal(flagOf("NZ"), "🇳🇿");
+  assert.equal(flagOf("GBR"), "GBR");
+  assert.equal(flagOf(null), null);
+  assert.equal(tyreLetter("soft"), "S");
+  assert.equal(tyreLetter("INTERMEDIATE"), "I");
+  assert.equal(tyreLetter("x"), null);
+
+  const f1b = situationBlocks("f1", { lap: 31, laps: 71, session: "Race", flag: "sc", fastestLap: { driver: "NOR", time: "1:19.4" }, standings: [{ pos: 1, driver: "VER", team: "Red Bull", teamColor: "3671C6", gap: "Leader", tyre: "hard", tyreAge: 12, fastest: false }, { pos: 2, driver: "NOR", gap: "+2.1", tyre: "M", fastest: true }, { pos: 3 }] }, { home: "", away: "" });
+  assert.deepEqual({ ...(f1b[0] as object) }, { kind: "banner", lap: "LAP 31/71", session: "Race", flag: "sc", fastest: "NOR 1:19.4" });
+  const tower = f1b[1] as { rows: { driver: string; color: string | null; tyre: string | null; fastest: boolean }[] };
+  assert.equal(tower.rows.length, 2);
+  assert.equal(tower.rows[0].color, "#3671c6");
+  assert.equal(tower.rows[0].tyre, "H");
+  assert.equal(tower.rows[1].fastest, true);
+
+  const ten = situationBlocks("tennis", { sets: [{ home: 6, away: 4 }, { home: 7, away: 6, tb: { home: 7, away: 5 } }], game: { home: "30", away: "AD" }, serving: "away", stats: { aces: { home: 4, away: 9 } } }, { home: "Coppejans", away: "Wood" });
+  const grid = ten[0] as { head: string[]; rows: { name: string; serving: boolean; cells: string[]; game: string }[] };
+  assert.deepEqual(grid.head, ["S1", "S2", "GAME"]);
+  assert.equal(grid.rows[1].serving, true);
+  assert.equal(grid.rows[0].serving, false);
+  assert.equal(grid.rows[0].game, "30");
+  assert.equal(grid.rows[1].cells[1], "6⁽5⁾");
+  assert.equal(ten[1].kind, "bar");
+
+  const golf = situationBlocks("golf", { round: 3, leaderboard: [{ pos: "T1", player: "Hideki Matsuyama", country: "JPN", toPar: "-12", thru: "F", today: "-4" }, { player: "" }], favourites: [{ pos: "T14", player: "Ryan Fox", country: "NZ", toPar: "-5", thru: "12" }] }, { home: "", away: "" });
+  const lb = golf[0] as { title: string; rows: { player: string; toPar: string }[]; pinned: { player: string; country: string | null }[] };
+  assert.equal(lb.title, "Round 3");
+  assert.equal(lb.rows.length, 1);
+  assert.equal(lb.pinned[0].player, "Ryan Fox");
+  assert.deepEqual(situationBlocks("f1", { standings: [] }, { home: "", away: "" }), []);
+});

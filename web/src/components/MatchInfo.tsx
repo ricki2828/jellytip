@@ -7,7 +7,7 @@ import { matchDetail, matchInfoAvailable, onMatchInfoAvailability } from "../api
 import { refreshRecs } from "../api/recStore";
 import { livePath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
-import { formTone, heroColors, matchupTitle, oddsSplit, startsIn, tint, venueLine, type Fixture, type MatchDetail, type Player, type Side } from "../lib/matchInfo";
+import { flagOf, formTone, heroColors, matchupTitle, oddsSplit, startsIn, tint, venueLine, type Fixture, type MatchDetail, type Player, type Side } from "../lib/matchInfo";
 import { logoSrc } from "../api/iptv";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { flashNote } from "./TasteButtons";
@@ -49,6 +49,8 @@ const artSrc = (u: string | null | undefined, size: 96 | 480): string | null => 
 function Crest({ s, side }: { s: Side; side: "l" | "r" }) {
   const [failed, setFailed] = useState(false);
   const src = failed ? null : artSrc(s.logo, 96);
+  // Tennis: a country flag instead of a crest
+  if (!src && s.country && flagOf(s.country)) return <span className={`mi-crest flagc in-${side}`} aria-label={s.country}>{flagOf(s.country)}</span>;
   return src ? <img className={`mi-crest in-${side}`} src={src} alt="" onError={() => setFailed(true)} /> : <span className={`mi-crest blank in-${side}`}>{s.short ?? s.name.slice(0, 3)}</span>;
 }
 
@@ -167,6 +169,27 @@ export function MatchInfoHost() {
                   <span className="sc">{f.score ? <Odo value={f.score[side]} /> : ""}</span>
                 </div>
               );
+              if (f.kind === "event")
+                return (
+                  <>
+                    <div className="bc-mh event">
+                      <div className="bc-mslab l" style={{ ["--sc" as string]: c.home, ["--sx" as string]: onColor(c.home) }}>
+                        <span className="nm">{f.title}</span>
+                      </div>
+                      {tag && (
+                        <span className="bc-tag">
+                          {f.status === "in" && <i className="mi-pulse" aria-hidden />}
+                          {tag}
+                        </span>
+                      )}
+                    </div>
+                    <div className="bc-sub">
+                      {f.league && <b>{f.league}</b>}
+                      {venueLine(f) && <span className="bc-venue">{venueLine(f)}</span>}
+                    </div>
+                    {f.participants.length > 0 && <p className="bc-parts">{f.participants.slice(0, 12).join(" · ")}</p>}
+                  </>
+                );
               return (
                 <>
                   <div className="bc-mh">
@@ -219,7 +242,7 @@ export function MatchInfoHost() {
               </section>
             )}
 
-            {d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
+            {f.kind !== "event" && d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
               <section>
                 <h3>Odds</h3>
                 {(() => {
@@ -248,7 +271,7 @@ export function MatchInfoHost() {
               </section>
             )}
 
-            <Lineup d={d} />
+            {f.kind !== "event" && <Lineup d={d} />}
 
             {(d.form || d.h2h.length > 0 || d.injuries.length > 0) && (
               <section>

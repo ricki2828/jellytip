@@ -4,8 +4,8 @@
 // memoised and keyed so a poll re-renders only what changed; motion is transform and opacity only.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
-import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, type Block, type LiveStats, type Moment } from "../lib/liveStats";
-import { readable, type Fixture } from "../lib/matchInfo";
+import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, FLAG_LABEL, type Block, type LeaderRow, type LiveStats, type Moment, type TowerRow } from "../lib/liveStats";
+import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
 import { usePrefs } from "../api/me";
@@ -50,6 +50,8 @@ function Crest({ f, side }: { f: Fixture | null; side: "home" | "away" }) {
   const s = f?.[side];
   const src = imgSrc(s?.logo);
   const [failed, setFailed] = useState(false);
+  // Tennis: a country flag instead of a crest
+  if (!src && s?.country && flagOf(s.country)) return <span className="ld-crest flag" aria-label={s.country}>{flagOf(s.country)}</span>;
   return src && !failed ? <img className="ld-crest" src={src} alt="" onError={() => setFailed(true)} /> : <span className="ld-crest blank">{(s?.short ?? s?.name ?? side).slice(0, 3)}</span>;
 }
 
@@ -71,6 +73,28 @@ function Strip({ d, f, flash }: { d: LiveStats; f: Fixture | null; flash: { labe
   const score = useCoveredScore(d.score, flash?.n ?? null);
   const mc = flash?.team === "away" ? c.away : flash?.team === "home" ? c.home : GOLD;
   const name = (side: "home" | "away") => (f?.[side].short ?? f?.[side].name ?? (side === "home" ? "HOME" : "AWAY")).toUpperCase();
+  if (f?.kind === "event") {
+    // F1, golf: no teams. The event title on a series-colour slab
+    return (
+      <div className="bc-stripbox">
+        <div className="bc-strip event">
+          <div className="bc-slab l" style={{ ["--sc" as string]: c.home, ["--sx" as string]: onColor(c.home) }}>
+            <span className="nm">{f.title}</span>
+          </div>
+          {flash && (
+            <div key={flash.n} className="bc-moment" style={{ ["--mc" as string]: c.home, ["--mx" as string]: onColor(c.home) }}>
+              <b>{flash.label}</b>
+            </div>
+          )}
+        </div>
+        <div className="bc-clock">
+          {d.period && <span className="q">{d.period}</span>}
+          {live && <i className="mi-pulse" aria-hidden />}
+          <span>{d.clock ?? (live ? "LIVE" : d.status === "post" ? "FINAL" : "")}</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="bc-stripbox">
       <div className="bc-strip">
@@ -162,6 +186,38 @@ function Spark({ series, color }: { series: { t: number; p: number }[]; color: s
   );
 }
 
+const TYRE_COLOR: Record<string, string> = { S: "#ff3b3b", M: "#ffd12c", H: "#f2f2f2", I: "#3ec56b", W: "#3b8dff" };
+
+/** One timing-tower row: position, team colour bar, driver code, gap and a coloured tyre chip. */
+const TowerRowView = memo(function TowerRowView({ r }: { r: TowerRow }) {
+  return (
+    <li className={`ld-trow${r.fastest ? " fast" : ""}`}>
+      <b className="pos">{r.pos}</b>
+      <i style={{ background: r.color ?? "#5a6372" }} aria-hidden />
+      <span className="drv">{r.driver}</span>
+      <span className="gap">{r.gap ?? ""}</span>
+      {r.tyre && (
+        <span className="tyre" style={{ borderColor: TYRE_COLOR[r.tyre] }} title={r.tyreAge ? `${r.tyre}, ${r.tyreAge} laps` : r.tyre}>
+          {r.tyre}
+        </span>
+      )}
+    </li>
+  );
+});
+
+const LeaderRowView = memo(function LeaderRowView({ r }: { r: LeaderRow }) {
+  return (
+    <li className="ld-lrow">
+      <b className="pos">{r.pos}</b>
+      <span className="pl">
+        {flagOf(r.country) && <span className="flag">{flagOf(r.country)}</span>} {r.player}
+      </span>
+      <span className="thru">{r.thru ?? ""}</span>
+      <b className={`par${r.toPar.startsWith("-") ? " under" : ""}`}>{r.toPar}</b>
+    </li>
+  );
+});
+
 function SituationView({ blocks, hc, ac }: { blocks: Block[]; hc: string; ac: string }) {
   return (
     <>
@@ -200,6 +256,72 @@ function SituationView({ blocks, hc, ac }: { blocks: Block[]; hc: string; ac: st
                   </b>
                 ))}
               </span>
+            </div>
+          );
+        if (b.kind === "banner")
+          return (
+            <div key={i} className="ld-card ld-f1">
+              <div className="ld-f1-top">
+                {b.lap && <b className="ld-lap">{b.lap}</b>}
+                {b.session && <span>{b.session}</span>}
+                {b.flag && <span className={`ld-flag ${b.flag}`}>{FLAG_LABEL[b.flag]}</span>}
+              </div>
+              {b.fastest && <p className="iptv-hint">Fastest lap {b.fastest}</p>}
+            </div>
+          );
+        if (b.kind === "tower")
+          return (
+            <ol key={i} className="ld-tower">
+              {b.rows.map((r) => (
+                <TowerRowView key={r.driver} r={r} />
+              ))}
+            </ol>
+          );
+        if (b.kind === "sets")
+          return (
+            <div key={i} className="ld-card">
+              <table className="ld-table">
+                <thead>
+                  <tr>
+                    <th />
+                    {b.head.map((h) => (
+                      <th key={h}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.rows.map((r) => (
+                    <tr key={r.name}>
+                      <td>
+                        {r.serving && <i className="ld-serve" aria-label="Serving" />}
+                        {r.name}
+                      </td>
+                      {r.cells.map((c, j) => (
+                        <td key={j}>{c}</td>
+                      ))}
+                      {r.game !== "" && <td className="ld-game">{r.game}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        if (b.kind === "leaderboard")
+          return (
+            <div key={i} className="ld-card">
+              <h4>{b.title}</h4>
+              {b.pinned.length > 0 && (
+                <ul className="ld-lb pinned">
+                  {b.pinned.map((r) => (
+                    <LeaderRowView key={`p${r.player}`} r={r} />
+                  ))}
+                </ul>
+              )}
+              <ul className="ld-lb">
+                {b.rows.map((r) => (
+                  <LeaderRowView key={r.player} r={r} />
+                ))}
+              </ul>
             </div>
           );
         return (
