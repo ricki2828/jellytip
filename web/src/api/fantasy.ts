@@ -72,6 +72,15 @@ export function useFantasy(active = true): FantasyLive | null {
   return active && linked ? live : null;
 }
 
+/** Start the Yahoo connect: POST with the normal auth header; the answer's url (Yahoo's authorize page) is where to go. Never a token in a URL. */
+export async function startYahooConnect(): Promise<{ url: string } | { error: string }> {
+  const a = await companionCall("POST", "v1/fantasy/yahoo/start", {});
+  const url = a.data && typeof a.data === "object" ? (a.data as { url?: unknown }).url : null;
+  if (a.status === 200 && typeof url === "string" && /^https:\/\//i.test(url)) return { url };
+  const e = a.data && typeof a.data === "object" ? (a.data as { error?: unknown }).error : null;
+  return { error: typeof e === "string" && e ? e : a.status === 0 ? "The server can't be reached." : `Server said ${a.status}` };
+}
+
 export const saveSleeperUsername = (username: string | null) => savePrefs({ fantasy: { sleeper: { username } } });
 export const saveFantasyAlerts = (alerts: boolean) => savePrefs({ fantasy: { alerts } });
 export const saveAlertMin = (alertMin: number) => savePrefs({ fantasy: { alertMin } });

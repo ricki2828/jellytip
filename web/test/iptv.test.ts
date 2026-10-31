@@ -542,6 +542,10 @@ test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   assert.equal(parseFixture({ ...FIX, leagueKey: "NFL" })!.leagueKey, "nfl");
   assert.equal(parseFixture(FIX)!.leagueKey, null);
   assert.equal(parseFantasy({}), null);
+  assert.deepEqual(d.providers, { sleeper: { linked: false }, yahoo: { available: false, linked: false } });
+  assert.deepEqual(parseFantasy({ providers: { yahoo: { available: true } } })!.leagues, []);
+  const pv = parseFantasy({ leagues: [], providers: { sleeper: { linked: true }, yahoo: { available: true, linked: false } } })!;
+  assert.deepEqual(pv.providers, { sleeper: { linked: true }, yahoo: { available: true, linked: false } });
   assert.equal(chipText({ week: null, leagues: [], events: [], updatedAt: null }), null);
   assert.equal(parsePrefs({ fantasy: { sleeper: { username: " ricki28 " } } }).fantasy.sleeperUsername, "ricki28");
   assert.equal(parsePrefs({}).fantasy.sleeperUsername, null);

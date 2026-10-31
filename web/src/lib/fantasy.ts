@@ -31,7 +31,14 @@ export interface FantasyEvent {
   reason: string | null;
 }
 
+export interface FantasyProviders {
+  sleeper: { linked: boolean };
+  /** available: the server has a Yahoo app configured; linked: this person connected their Yahoo account. */
+  yahoo: { available: boolean; linked: boolean };
+}
+
 export interface FantasyLive {
+  providers: FantasyProviders;
   week: number | null;
   leagues: FantasyLeague[];
   events: FantasyEvent[];
@@ -64,9 +71,10 @@ export function parseStarters(raw: unknown): Starter[] {
 
 export function parseFantasy(raw: unknown): FantasyLive | null {
   const r = obj(raw);
-  if (!r || !Array.isArray(r.leagues)) return null;
+  // No account linked: the answer may carry only `providers`
+  if (!r || (!Array.isArray(r.leagues) && !obj(r.providers))) return null;
   const leagues: FantasyLeague[] = [];
-  for (const x of r.leagues) {
+  for (const x of arr(r.leagues)) {
     const o = obj(x);
     const id = str(o?.id);
     const me = obj(o?.me);
@@ -87,7 +95,12 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
     const delta = num(o?.delta);
     return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me", reason: str(o.reason) } as FantasyEvent] : [];
   });
-  return { week: num(r.week), leagues, events, updatedAt: num(r.updatedAt) };
+  const pv = obj(r.providers);
+  const providers: FantasyProviders = {
+    sleeper: { linked: obj(pv?.sleeper)?.linked === true },
+    yahoo: { available: obj(pv?.yahoo)?.available === true, linked: obj(pv?.yahoo)?.linked === true },
+  };
+  return { providers, week: num(r.week), leagues, events, updatedAt: num(r.updatedAt) };
 }
 
 /** "CCP Dynasty" → "CCP"; "Fantasy" → "Fantasy". */

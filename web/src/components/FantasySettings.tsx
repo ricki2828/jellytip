@@ -1,10 +1,7 @@
 // Settings → Live sport → Fantasy: link a Sleeper username (the server looks the leagues up), the scoring-alert toggle and a
 // "Yahoo: coming soon" line. Hidden when the server has no fantasy route.
 import { useEffect, useState } from "react";
-import { companionMediaUrl } from "../api/companion";
-import { getSession } from "../api/jellyfin";
-import { integrations } from "../api/integrations";
-import { fantasyLive, fantasyMissing, saveAlertMin, saveFantasyAlerts, saveSleeperUsername } from "../api/fantasy";
+import { fantasyLive, fantasyMissing, saveAlertMin, saveFantasyAlerts, saveSleeperUsername, startYahooConnect } from "../api/fantasy";
 import type { Prefs } from "../lib/prefs";
 
 export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: string | null) => void }) {
@@ -13,24 +10,16 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
   const [busy, setBusy] = useState(false);
   const [leagues, setLeagues] = useState<string[] | null>(null);
   const [missing, setMissing] = useState(false);
-  // Yahoo: the per-user Connect button shows once an admin has configured the Yahoo app (only admins can read that status)
-  const [yahoo, setYahoo] = useState(false);
-  useEffect(() => {
-    if (!getSession()?.isAdmin) return;
-    let alive = true;
-    void integrations().then((l) => alive && setYahoo(!!l?.find((x) => x.service === "yahoo")?.configured));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
+  // Yahoo: `providers.yahoo` on /v1/fantasy/live says whether the server has an app (available) and whether this person connected (linked)
+  const [yahoo, setYahoo] = useState<{ available: boolean; linked: boolean } | null>(null);
   useEffect(() => setName(linked ?? ""), [linked]);
   // Probe once (and list the leagues when an account is already linked); a 404 hides the whole section
   useEffect(() => {
     let alive = true;
-    void fantasyLive().then((d) => {
+    void fantasyLive(true).then((d) => {
       if (!alive) return;
       setMissing(fantasyMissing());
+      setYahoo(d?.providers.yahoo ?? null);
       if (d && linked) setLeagues(d.leagues.map((l) => l.name));
     });
     return () => {
@@ -90,9 +79,22 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
           </button>
         </div>
       )}
-      {yahoo ? (
+      {yahoo?.linked ? (
+        <span className="settings-sub">Yahoo: Connected</span>
+      ) : yahoo?.available ? (
         <div className="settings-inline">
-          <button className="btn small" data-nav onClick={() => (window.location.href = companionMediaUrl("v1/fantasy/yahoo/start"))}>
+          <button
+            className="btn small"
+            data-nav
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              const r = await startYahooConnect();
+              setBusy(false);
+              if ("url" in r) window.location.href = r.url;
+              else onMsg(r.error);
+            }}
+          >
             Connect Yahoo
           </button>
           <span className="settings-sub">Sign in with Yahoo to link your Yahoo Fantasy leagues.</span>
