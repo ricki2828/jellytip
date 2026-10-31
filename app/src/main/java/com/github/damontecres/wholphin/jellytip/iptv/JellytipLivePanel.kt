@@ -12,8 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -151,6 +153,8 @@ fun JellytipLivePanel(
     spoilerNotice: Boolean,
     onRouteMissing: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 0 = off screen to the right, 1 = in place (the player animates it; plan "Panel motion"). */
+    progress: Float = 1f,
 ) {
     val data by produceState<MatchLive?>(null, match.id, spoilerNotice) {
         if (spoilerNotice) return@produceState
@@ -165,10 +169,24 @@ fun JellytipLivePanel(
             delay(REFRESH_MS)
         }
     }
-    Row(
+    // Slide via graphicsLayer translation only (no relayout, no blur: light on the Chromecast GPU); the scrim fades over
+    // the panel area only, the video is not resized
+    androidx.compose.foundation.layout.Box(
         modifier
             .fillMaxHeight()
-            .background(Color(0xE6101014))
+            .graphicsLayer { translationX = (1f - progress) * size.width },
+    ) {
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .matchParentSize()
+            .graphicsLayer { alpha = progress }
+            .background(Color.Black.copy(alpha = 0.35f)),
+    )
+    Row(
+        Modifier
+            .fillMaxHeight()
+            .fillMaxWidth()
+            .background(Color(0xCC101014))
             .padding(horizontal = 14.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -198,23 +216,32 @@ fun JellytipLivePanel(
                 d == null -> Note("Loading live data…")
                 else -> {
                     if (d.scoreHome != null && d.scoreAway != null) {
-                        Text(
-                            listOfNotNull("${d.scoreHome} – ${d.scoreAway}", d.period, d.clock).joinToString("  ·  "),
-                            color = JellytipPalette.Vanilla,
-                            fontFamily = JellytipFontFamily,
-                            fontSize = 13.sp,
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // The score pulses once when it changes
+                            Pulse("${d.scoreHome} – ${d.scoreAway}") {
+                                Text("${d.scoreHome} – ${d.scoreAway}", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                            listOfNotNull(d.period, d.clock).joinToString("  ·  ").takeIf { it.isNotEmpty() }?.let {
+                                Text(it, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontSize = 13.sp)
+                            }
+                        }
                     }
-                    when (tab) {
-                        0 -> StatsTab(d, match)
-                        1 -> PlaysTab(d)
-                        2 -> OddsTab(d, match)
-                        else -> ChatTab(d)
+                    // Tab switches cross-fade (150 ms)
+                    androidx.compose.animation.Crossfade(targetState = tab, animationSpec = androidx.compose.animation.core.tween(150), label = "live-panel-tab") { t ->
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            when (t) {
+                                0 -> StatsTab(d, match)
+                                1 -> PlaysTab(d, match.id)
+                                2 -> OddsTab(d, match)
+                                else -> ChatTab(d, match.id)
+                            }
+                        }
                     }
                     d.updatedAt?.let { Note("Updated ${ago(nowSec() - it)}") }
                 }
             }
         }
+    }
     }
 }
 
@@ -246,12 +273,19 @@ private fun StatsTab(
 }
 
 @Composable
-private fun PlaysTab(d: MatchLive) {
+private fun PlaysTab(
+    d: MatchLive,
+    matchId: String,
+) {
     if (d.plays.isEmpty()) {
         Note("No plays yet.")
         return
     }
-    d.plays.take(10).forEach { p ->
+    val shown = d.plays.take(10)
+    val fresh = rememberFresh("plays:$matchId", shown.map { listOfNotNull(it.period, it.clock, it.text).joinToString("|") })
+    shown.forEach { p ->
+        val key = listOfNotNull(p.period, p.clock, p.text).joinToString("|")
+        SlideInNew(key, key in fresh) {
         Text(
             listOfNotNull(listOfNotNull(p.period, p.clock).joinToString(" ").ifBlank { null }, p.text).joinToString("  "),
             color = if (p.scoring) Color.White else JellytipPalette.Vanilla.copy(alpha = 0.8f),
@@ -261,6 +295,7 @@ private fun PlaysTab(d: MatchLive) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        }
     }
 }
 
@@ -281,7 +316,7 @@ private fun OddsTab(
             mk.draw?.let { "Draw ${pct(it)}" },
             mk.away?.let { "${m.away?.short ?: m.away?.name ?: "Away"} ${pct(it)}" },
         ).joinToString(" · ")
-    Text(line, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    Pulse(line) { Text(line, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
     Note(
         listOfNotNull(
             mk.source?.replaceFirstChar { it.uppercase() },
@@ -293,13 +328,19 @@ private fun OddsTab(
 }
 
 @Composable
-private fun ChatTab(d: MatchLive) {
+private fun ChatTab(
+    d: MatchLive,
+    matchId: String,
+) {
     if (d.comments.isEmpty()) {
         Note("No match thread comments.")
         return
     }
     d.chatSource?.let { Note("From $it") }
-    d.comments.take(8).forEach { c ->
+    val shown = d.comments.take(8)
+    val fresh = rememberFresh("chat:$matchId", shown.map { "${it.author}|${it.text}" })
+    shown.forEach { c ->
+        SlideInNew("${c.author}|${c.text}", "${c.author}|${c.text}" in fresh) {
         Text(
             listOfNotNull(c.author?.let { "$it:" }, c.text).joinToString(" "),
             color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
@@ -308,7 +349,75 @@ private fun ChatTab(d: MatchLive) {
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
+        }
     }
+}
+
+/**
+ * Keys in [keys] that weren't there on the previous answer for [scope] (none on the first one, so opening the panel
+ * doesn't animate the whole list). Plain remembered sets: not snapshot state.
+ */
+@Composable
+private fun rememberFresh(
+    scope: String,
+    keys: List<String>,
+): Set<String> {
+    val known = remember(scope) { HashSet<String>() }
+    val first = remember(scope) { booleanArrayOf(true) }
+    return remember(scope, keys) {
+        val fresh = if (first[0]) emptySet() else keys.filter { it !in known }.toSet()
+        first[0] = false
+        known.addAll(keys)
+        fresh
+    }
+}
+
+/** A new play or comment slides down from the top with a short highlight that fades (plan "Panel motion"). */
+@Composable
+private fun SlideInNew(
+    key: String,
+    isNew: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val enter = remember(key) { androidx.compose.animation.core.Animatable(if (isNew) 0f else 1f) }
+    val glow = remember(key) { androidx.compose.animation.core.Animatable(if (isNew) 1f else 0f) }
+    androidx.compose.runtime.LaunchedEffect(key) {
+        if (isNew) {
+            enter.animateTo(1f, androidx.compose.animation.core.tween(280, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+            glow.animateTo(0f, androidx.compose.animation.core.tween(1_200))
+        }
+    }
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .graphicsLayer {
+                translationY = (1f - enter.value) * -16.dp.toPx()
+                alpha = enter.value
+            }.background(JellytipPalette.Jelly.copy(alpha = 0.28f * glow.value), RoundedCornerShape(4.dp)),
+    ) { content() }
+}
+
+/** Pulses its content once (scale 1 → 1.15 → 1) whenever [value] changes after the first time. */
+@Composable
+private fun Pulse(
+    value: String,
+    content: @Composable () -> Unit,
+) {
+    val scale = remember { androidx.compose.animation.core.Animatable(1f) }
+    val last = remember { arrayOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(value) {
+        val before = last[0]
+        last[0] = value
+        if (before != null && before != value) {
+            scale.animateTo(1.15f, androidx.compose.animation.core.tween(140))
+            scale.animateTo(1f, androidx.compose.animation.core.tween(220))
+        }
+    }
+    androidx.compose.foundation.layout.Box(
+        Modifier.graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+        },
+    ) { content() }
 }
 
 @Composable

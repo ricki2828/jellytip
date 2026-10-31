@@ -230,6 +230,7 @@ fun JellytipLiveTvPlayerPage(
     // In-event panel (plan "In-event panel"): Right on a live key match opens it over the right of the video
     var panelOpen by remember { mutableStateOf(false) }
     var panelTab by remember { mutableIntStateOf(0) }
+    var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
     val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
@@ -367,13 +368,28 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         StreamBusyPopup(playState, playback)
-        if (panelOpen && panelMatch != null) {
+        // Slides in from the right (260 ms, decelerate) and out (200 ms, accelerate); kept composed until it is off screen
+        val open = panelOpen && panelMatch != null
+        LaunchedEffect(open, panelMatch?.id) { if (open) shownPanelMatch = panelMatch }
+        val panelProgress by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (open) 1f else 0f,
+            animationSpec =
+                if (open) {
+                    androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
+                } else {
+                    androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+                },
+            label = "live-panel",
+        )
+        val pm = if (open) panelMatch else shownPanelMatch
+        if (pm != null && panelProgress > 0f) {
             JellytipLivePanel(
-                panelMatch,
+                pm,
                 tab = panelTab,
                 spoilerNotice = spoilerNotice,
                 onRouteMissing = { panelOpen = false },
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
+                progress = panelProgress,
             )
         }
         matchModal?.let { m ->
