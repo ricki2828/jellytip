@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -476,4 +476,17 @@ test("live panel: parse, odds as percentages, spoiler gate, chat mask", () => {
   assert.equal(mayShow(false, true), true);
   assert.equal(parseLive({ market: { home: 2, away: -1 } })!.market, null);
   assert.equal(parseLive(null), null);
+});
+
+import { flipText } from "../src/lib/liveStats.ts";
+
+test("market flip: parsed with the favourite, text names the new favourite", () => {
+  const d = parseLive({ market: { source: "polymarket", home: 0.46, away: 0.54, favourite: "away", flip: { at: "2026-10-31T10:00:00Z", from: "home", to: "away", prob: 0.54 } } })!;
+  assert.equal(d.market!.favourite, "away");
+  assert.deepEqual(d.market!.flip, { at: Date.parse("2026-10-31T10:00:00Z") / 1000, from: "home", to: "away", prob: 0.54 });
+  assert.equal(flipText(d.market!.flip!, { home: "Knicks", away: "76ers" }), "📈 Polymarket flip: 76ers now favourites · 54%");
+  assert.equal(parseLive({ market: { home: 0.5, away: 0.5, flip: { at: "x", to: "away", prob: 0.5 } } })!.market!.flip, null);
+  assert.equal(parseLive({ market: { home: 0.5, away: 0.5 } })!.market!.flip, null);
+  assert.equal(parsePrefs({}).sport.flipAlerts, true);
+  assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });

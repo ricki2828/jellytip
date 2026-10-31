@@ -2,6 +2,14 @@
 // optional: a source that failed is simply missing. Pure; tested in web/test/iptv.test.ts.
 import { parseStartsAt } from "./preGame.ts";
 
+/** The Polymarket favourite changed (server: hysteresis at 53%, at least $10k traded, 5 min cool-down; kept on the answer for 2 min). */
+export interface Flip {
+  at: number;
+  from: "home" | "away" | null;
+  to: "home" | "away";
+  prob: number;
+}
+
 export interface LiveStats {
   status: string | null;
   clock: string | null;
@@ -11,7 +19,7 @@ export interface LiveStats {
   leaders: { team: string | null; name: string; line: string }[];
   plays: { clock: string | null; period: string | null; text: string; scoring: boolean }[];
   winProb: number | null;
-  market: { source: string; question: string | null; home: number; away: number; draw: number | null; volume: number | null; updatedAt: number | null } | null;
+  market: { source: string; question: string | null; home: number; away: number; draw: number | null; volume: number | null; updatedAt: number | null; favourite: "home" | "away" | null; flip: Flip | null } | null;
   chat: { source: string; thread: string | null; comments: { author: string; text: string; score: number | null; at: number | null }[] } | null;
   updatedAt: number | null;
   pending: boolean;
@@ -25,6 +33,17 @@ const prob = (v: unknown) => {
   const n = num(v);
   return n != null && n >= 0 && n <= 1 ? n : null;
 };
+
+const side = (v: unknown): "home" | "away" | null => (v === "home" || v === "away" ? v : null);
+
+function parseFlip(raw: unknown): Flip | null {
+  const o = obj(raw);
+  const at = parseStartsAt(o?.at);
+  const to = side(o?.to);
+  const prob = prob_(o?.prob);
+  return o && at != null && to && prob != null ? { at, from: side(o.from), to, prob } : null;
+}
+const prob_ = (v: unknown) => prob(v);
 
 export function parseLive(raw: unknown): LiveStats | null {
   const r = obj(raw);
@@ -58,7 +77,7 @@ export function parseLive(raw: unknown): LiveStats | null {
       })
       .slice(0, 15),
     winProb: prob(wp ? wp.home : r.winProb),
-    market: m && mh != null && ma != null ? { source: str(m.source) ?? "market", question: str(m.question), home: mh, away: ma, draw: prob(m.draw), volume: num(m.volume), updatedAt: parseStartsAt(m.updatedAt) } : null,
+    market: m && mh != null && ma != null ? { source: str(m.source) ?? "market", question: str(m.question), home: mh, away: ma, draw: prob(m.draw), volume: num(m.volume), updatedAt: parseStartsAt(m.updatedAt), favourite: side(m.favourite), flip: parseFlip(m.flip) } : null,
     chat: ch
       ? {
           source: str(ch.source) ?? "chat",
@@ -100,3 +119,6 @@ export const maskText = (t: string) => t.replace(BAD, (w) => `${w[0]}${"*".repea
 
 /** Whether the panel may show live detail for what is playing: live, or a recording / replay only when spoilers are on. */
 export const mayShow = (liveNow: boolean, spoilers: boolean) => liveNow || spoilers;
+
+/** "📈 Polymarket flip: 76ers now favourites · 54%". */
+export const flipText = (f: Flip, names: { home: string; away: string }) => `📈 Polymarket flip: ${names[f.to]} now favourites · ${pct(f.prob)}`;

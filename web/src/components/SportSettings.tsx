@@ -116,6 +116,10 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           <input type="checkbox" data-nav checked={prefs.sport.spoilers} onChange={async (e) => setMsg(await savePrefs({ sport: { spoilers: e.target.checked } }))} />
           <span>Show scores (spoilers) in match info</span>
         </label>
+        <label className="iptv-check">
+          <input type="checkbox" data-nav checked={prefs.sport.flipAlerts} onChange={async (e) => setMsg(await savePrefs({ sport: { flipAlerts: e.target.checked } }))} />
+          <span>Polymarket flip alerts (a pop-up when the favourite changes in a live match)</span>
+        </label>
       </div>
 
       <div className="settings-block settings-pad">

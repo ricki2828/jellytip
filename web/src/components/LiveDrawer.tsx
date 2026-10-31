@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
 import { agoText, maskText, mayShow, pct, volumeText, type LiveStats } from "../lib/liveStats";
 import type { Fixture } from "../lib/matchInfo";
+import { announceFlips } from "./FlipAlerts";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import "../screens/iptv/iptv.css";
 
@@ -79,6 +80,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
       else {
         setD(a);
         setState("ok");
+        announceFlips(matchId, a);
       }
       timer = window.setTimeout(load, REFRESH_MS);
     };

@@ -7,7 +7,7 @@ export interface Prefs {
   playback: { intro: boolean; trailerAutoplay: boolean; trailerSound: boolean; subtitleLangs: string[]; audioLangs: string[] };
   letterboxd: { username: string | null; status: "none" | "pending" | "linked" | "error" };
   /** Favourite teams and leagues: Live TV puts what is on now first (the server does the ranking). */
-  sport: { teams: string[]; leagues: string[]; /** Followed sports (the server's sportName vocabulary). */ sports: string[]; muted: Muted; setup: boolean; /** Show scores (spoilers) in match info. */ spoilers: boolean };
+  sport: { teams: string[]; leagues: string[]; /** Followed sports (the server's sportName vocabulary). */ sports: string[]; muted: Muted; setup: boolean; /** Show scores (spoilers) in match info. */ spoilers: boolean; /** Toast when the Polymarket favourite flips (default on). */ flipAlerts: boolean };
   /** The server returns `sport.sports` (an array, even empty): only then can followed sports and the first-run sheet be saved. */
   sportsSupported: boolean;
   version: number | null;
@@ -45,7 +45,7 @@ export function parsePrefs(raw: unknown): Prefs {
       audioLangs: strs(p.audioLangs),
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
-    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true, spoilers: sp.spoilers === true },
+    sport: { teams: strs(sp.teams), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true, spoilers: sp.spoilers === true, flipAlerts: sp.flipAlerts !== false },
     sportsSupported: Array.isArray(sp.sports),
     version: typeof r.version === "number" ? r.version : null,
   };

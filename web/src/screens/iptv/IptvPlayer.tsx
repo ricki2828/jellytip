@@ -6,6 +6,7 @@ import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
+import { FlipAlerts } from "../../components/FlipAlerts";
 import { LiveDrawer } from "../../components/LiveDrawer";
 import { usePrefs } from "../../api/me";
 import { MatchInfoButton } from "../../components/MatchInfo";
@@ -376,7 +377,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     };
   }, [preNow]);
   const [drawer, setDrawer] = useState(false);
-  const spoilers = !!usePrefs({ defer: true }).prefs?.sport.spoilers;
+  const sportPrefs = usePrefs({ defer: true }).prefs?.sport;
+  const spoilers = !!sportPrefs?.spoilers;
+  const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
   const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
   const [remBusy, setRemBusy] = useState(false);
@@ -594,6 +597,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-method">via IPTV</span>
       </div>
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      <FlipAlerts matchId={extras?.matchId} active={isLive && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />
       {drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive} spoilers={spoilers} onClose={() => setDrawer(false)} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
