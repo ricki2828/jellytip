@@ -106,18 +106,22 @@ export function Home() {
 
   useEffect(() => {
     let alive = true;
-    // Library and IPTV together: in-progress titles by last played, then Next Up (an IPTV route that is missing answers [])
-    Promise.all([resumeItems().catch(() => []), nextUp().catch(() => []), iptvContinue().catch(() => []), iptvNext().catch(() => [])]).then(([resume, next, ic, inx]) => {
-      if (!alive) return;
+    // Continue Watching paints from the library at once. The IPTV part (in progress / up next) is asked for after the
+    // rows request is answered, so it never holds the first screen up or takes a connection from it, and is merged in when it arrives.
+    const apply = (resume: Item[], next: Item[], ic: ContinueEntry[], inx: ContinueEntry[]) => {
       const merged = mergeContinue(resume, next, ic, inx);
       const lib = merged.flatMap((m) => (m.kind === "lib" ? [m.item] : []));
       setContinue(lib);
       setIptvTiles(merged.flatMap((m) => (m.kind === "iptv" ? [m.entry] : [])));
       setContinueOrder(merged.map((m) => (m.kind === "lib" ? m.item.Id.replace(/-/g, "") : iptvKey(m.entry))));
       if (lib[0]) setFocused((f) => f ?? lib[0]);
+    };
+    const libP = Promise.all([resumeItems().catch(() => [] as Item[]), nextUp().catch(() => [] as Item[])]).then(([resume, next]) => {
+      if (alive) apply(resume, next, [], []);
+      return { resume, next };
     });
     setRowsFailed(false);
-    serverRows("home")
+    const rowsP = serverRows("home")
       .then((r) => {
         if (r?.length) return r;
         // A 503 (the server couldn't tell who is asking) must not fall back to the unpersonalised carousels
@@ -139,6 +143,10 @@ export function Home() {
         setRowsReady(true);
         if (r) rememberRowTitles(r);
       });
+    void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([{ resume, next }]) => {
+      const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
+      if (alive && (ic.length || inx.length)) apply(resume, next, ic, inx);
+    });
     getSpecials("home").then((s) => alive && setSpecials(s));
     return () => {
       alive = false;

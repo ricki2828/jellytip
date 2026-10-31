@@ -248,7 +248,20 @@ export interface PlayAnswer {
   direct?: boolean;
 }
 
-export const liveGroups = () => iptvGet<{ groups: LiveGroup[]; defaultGroup?: string }>("v1/iptv/live/groups");
+type GroupsAnswer = Answer<{ groups: LiveGroup[]; defaultGroup?: string }>;
+let groupsCache: { at: number; p: Promise<GroupsAnswer> } | null = null;
+/** Live groups. The nav's "has Live TV" check and the Live TV screen ask at the same moment: one request, kept 20 s. */
+export const liveGroups = (): Promise<GroupsAnswer> => {
+  if (groupsCache && Date.now() - groupsCache.at < 20_000) return groupsCache.p;
+  const p = iptvGet<{ groups: LiveGroup[]; defaultGroup?: string }>("v1/iptv/live/groups");
+  groupsCache = { at: Date.now(), p };
+  void p.then((a) => {
+    if (a.status !== 200 && groupsCache?.p === p) groupsCache = null; // a failure is not remembered
+  });
+  return p;
+};
+window.addEventListener("jellytip-iptv", () => (groupsCache = null));
+window.addEventListener("jellytip-session", () => (groupsCache = null));
 export const liveChannels = (group: string, offset = 0, limit = 500) =>
   iptvGet<{ total: number; offset: number; channels: Channel[] }>(`v1/iptv/live/channels?group=${encodeURIComponent(group)}&offset=${offset}&limit=${limit}`);
 export const epg = (channels: string[], from: number, to: number) =>
