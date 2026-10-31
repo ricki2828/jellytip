@@ -64,9 +64,10 @@ final class LiveAlerts implements LiveFeed.Listener {
         this.token = token;
         this.flips = flips;
         this.sink = sink;
-        this.nfl = matchId != null && matchId.startsWith(NFL_PREFIX);
+        // RedZone (multi:nfl:…): fantasy toasts for every starter, every game (events aren't filtered by game)
+        this.nfl = matchId != null && (matchId.startsWith(NFL_PREFIX) || matchId.startsWith("multi:nfl"));
         if (feed != null) feed.addListener(this);
-        if (fantasy && apiBase != null && matchId != null && matchId.startsWith(NFL_PREFIX)) handler.post(fantasyPoll);
+        if (fantasy && apiBase != null && nfl) handler.post(fantasyPoll);
     }
 
     void release() {

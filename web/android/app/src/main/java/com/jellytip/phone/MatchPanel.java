@@ -77,6 +77,8 @@ final class MatchPanel implements LiveFeed.Listener {
     private final LiveStrip liveStrip;
     private final LiveContent liveContent;
     private LiveTeams teams = LiveTeams.NONE;
+    private final String programmeTitle;
+    private JSONObject multiInfo;
     private JSONObject teamsFrom;
     private String fantasyNote = "Loading fantasy…";
 
@@ -111,6 +113,7 @@ final class MatchPanel implements LiveFeed.Listener {
         this.apiBase = apiBase;
         this.token = token;
         this.matchId = matchId;
+        this.programmeTitle = title;
 
         panel = new FrameLayout(activity);
         panel.setBackgroundColor(Broadcast.BASE);
@@ -150,7 +153,7 @@ final class MatchPanel implements LiveFeed.Listener {
             selectTab("Info");
             fetchInfo();
             // Fantasy: NFL only, and only once the game endpoint names a league
-            if (matchId.startsWith(NFL_PREFIX)) handler.post(fantasyPoll);
+            if (matchId.startsWith(NFL_PREFIX) || multi()) handler.post(fantasyPoll);
         } else {
             tabScroll.setVisibility(View.GONE);
             renderProgramme(title, description, upNext);
@@ -241,11 +244,26 @@ final class MatchPanel implements LiveFeed.Listener {
 
     /** The teams for the live views (names, crests, colours from match info; neutral until it loads). */
     LiveTeams teams() {
-        if (info != teamsFrom) {
-            teamsFrom = info;
-            teams = new LiveTeams(info);
+        JSONObject src = info != null ? info : multiFallback();
+        if (src != teamsFrom) {
+            teamsFrom = src;
+            teams = new LiveTeams(src);
         }
         return teams;
+    }
+
+    /** RedZone without match info (a multi id the match route doesn't know): the programme as the title, the league's colour. */
+    private JSONObject multiFallback() {
+        if (matchId == null || !matchId.startsWith("multi:")) return null;
+        if (multiInfo == null) {
+            String[] parts = matchId.split(":");
+            try {
+                multiInfo = new JSONObject().put("kind", "multi").put("title", programmeTitle != null ? programmeTitle : "Whip-around").put("leagueKey", parts.length > 1 ? parts[1] : null);
+            } catch (org.json.JSONException ignored) {
+                return null;
+            }
+        }
+        return multiInfo;
     }
 
     /** A moment flashes the strip while a live tab shows; false = not on screen. */
@@ -717,7 +735,8 @@ final class MatchPanel implements LiveFeed.Listener {
 
     private void fetchFantasy() {
         io.execute(() -> {
-            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/fantasy/game/" + CompanionHttp.enc(matchId));
+            // RedZone (a multi id): every league's live answer, all games; else this game's
+            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, multi() ? "v1/fantasy/live" : "v1/fantasy/game/" + CompanionHttp.enc(matchId));
             JSONArray got = null;
             if (a.body != null) {
                 try {
@@ -732,7 +751,11 @@ final class MatchPanel implements LiveFeed.Listener {
                 if (released) return;
                 if (result != null && result.length() > 0) {
                     fantasyLeagues = result;
-                    if (!tabs.contains("Fantasy")) addTab("Fantasy");
+                    if (!tabs.contains("Fantasy")) {
+                        addTab("Fantasy");
+                        // RedZone: the Fantasy tab is the default
+                        if (multi() && "Info".equals(tab)) selectTab("Fantasy");
+                    }
                 } else if (fantasyLeagues == null) {
                     fantasyNote = code == 200 || code == 404 ? "No fantasy players in this game." : "Fantasy isn't available right now.";
                 }
@@ -769,7 +792,7 @@ final class MatchPanel implements LiveFeed.Listener {
                 JSONObject s = starters.optJSONObject(j);
                 if (s == null || str(s, "name") == null) continue;
                 String sm = str(s, "matchId");
-                if (sm != null && !sm.equals(matchId)) continue; // in this game only
+                if (multi() ? !"in".equals(str(s, "gameState")) : sm != null && !sm.equals(matchId)) continue; // in this game only (RedZone: live now)
                 boolean isOpp = "opp".equals(str(s, "side"));
                 List<String> p = new ArrayList<>();
                 p.add((isOpp ? "Opp  " : "You  ") + str(s, "name"));
@@ -784,6 +807,11 @@ final class MatchPanel implements LiveFeed.Listener {
     }
 
     // ---- Not a match --------------------------------------------------------------------------------------------
+
+    /** A whip-around programme (RedZone; plan "RedZone / whip-around mode"): NFL fantasy across every game. */
+    private boolean multi() {
+        return matchId != null && matchId.startsWith("multi:nfl");
+    }
 
     private void renderProgramme(String title, String description, List<String[]> upNext) {
         content.removeAllViews();

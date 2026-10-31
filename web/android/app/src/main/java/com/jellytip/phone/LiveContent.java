@@ -90,6 +90,24 @@ final class LiveContent {
     // ---- Stats ---------------------------------------------------------------------------------------------------
 
     private void stats(JSONObject d, LiveTeams t) {
+        // RedZone: the multi-game scoreboard instead
+        JSONArray games = d.optJSONArray("games");
+        if ("multi".equals(str(d, "layout")) || (games != null && games.length() > 0)) {
+            for (int i = 0; games != null && i < Math.min(games.length(), 12); i++) {
+                JSONObject g = games.optJSONObject(i);
+                if (g == null || str(g, "matchId") == null) continue;
+                String key = "game:" + str(g, "matchId");
+                GameRow r = (GameRow) holders.get(key);
+                if (r == null) {
+                    r = new GameRow();
+                    holders.put(key, r);
+                }
+                r.bind(g);
+                order.add(r.root);
+            }
+            if (order.isEmpty()) note("note:nogames", "No games on right now.");
+            return;
+        }
         JSONObject situation = d.optJSONObject("situation");
         if (situation != null) context(str(d, "layout"), situation, t);
         JSONObject wp = d.optJSONObject("winProb");
@@ -344,6 +362,107 @@ final class LiveContent {
 
     private static final Set<String> CONSUMED =
         new HashSet<>(java.util.Arrays.asList("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap"));
+
+    // ---- RedZone: one compact slab row per game ---------------------------------------------------------------------
+
+    private final class GameRow {
+        final LinearLayout root = new LinearLayout(a);
+        final Broadcast.Slab homeSlab = new Broadcast.Slab(0xFF2A303B, true);
+        final Broadcast.Slab awaySlab = new Broadcast.Slab(0xFF1C212A, false);
+        final TextView homeName = Broadcast.cond(a, "", 14, Color.WHITE, 700);
+        final TextView homeScore = Broadcast.cond(a, "", 17, Color.WHITE, 700);
+        final TextView awayName = Broadcast.cond(a, "", 14, Color.WHITE, 700);
+        final TextView awayScore = Broadcast.cond(a, "", 17, Color.WHITE, 700);
+        final TextView clock = Broadcast.cond(a, "", 13, Broadcast.SECONDARY, 600);
+        final TextView red = Broadcast.cond(a, "Red zone", 12, Color.WHITE, 700);
+        final TextView dd = Broadcast.cond(a, "", 12, Broadcast.INK, 700);
+        final TextView ball = Broadcast.body(a, "", 12, Broadcast.BODY, 500);
+        final LinearLayout extra = new LinearLayout(a);
+
+        GameRow() {
+            root.setOrientation(LinearLayout.VERTICAL);
+            root.setPadding(0, dp(3), 0, dp(3));
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout l = new LinearLayout(a);
+            l.setOrientation(LinearLayout.HORIZONTAL);
+            l.setGravity(Gravity.CENTER_VERTICAL);
+            l.setBackground(homeSlab);
+            l.setPadding(dp(6), 0, dp(10), 0);
+            l.addView(homeName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            l.addView(homeScore);
+            LinearLayout r = new LinearLayout(a);
+            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            r.setBackground(awaySlab);
+            r.setPadding(dp(10), 0, dp(6), 0);
+            r.addView(awayScore);
+            awayName.setGravity(Gravity.END);
+            r.addView(awayName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(l, new LinearLayout.LayoutParams(0, dp(28), 1f));
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, dp(28), 1f);
+            rlp.leftMargin = -dp(4);
+            row.addView(r, rlp);
+            clock.setGravity(Gravity.END);
+            row.addView(clock, new LinearLayout.LayoutParams(dp(64), LinearLayout.LayoutParams.WRAP_CONTENT));
+            root.addView(row);
+            extra.setOrientation(LinearLayout.HORIZONTAL);
+            extra.setGravity(Gravity.CENTER_VERTICAL);
+            extra.setPadding(0, dp(3), 0, 0);
+            red.setBackgroundColor(0xFFD64545);
+            red.setPadding(dp(5), 0, dp(5), 0);
+            dd.setBackgroundColor(Broadcast.GOLD);
+            dd.setPadding(dp(5), 0, dp(5), 0);
+            ball.setPadding(dp(6), 0, 0, 0);
+            LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            gap.rightMargin = dp(6);
+            extra.addView(red, gap);
+            extra.addView(dd);
+            extra.addView(ball);
+            root.addView(extra);
+        }
+
+        void bind(JSONObject g) {
+            JSONObject h = g.optJSONObject("home");
+            JSONObject aw = g.optJSONObject("away");
+            int hc = MatchStyle.color(h == null ? null : str(h, "color"), 0xFF2A303B);
+            int ac = MatchStyle.color(aw == null ? null : str(aw, "color"), 0xFF1C212A);
+            if (Broadcast.deltaE(hc, ac) < 20) ac = MatchStyle.color(aw == null ? null : str(aw, "altColor"), 0xFF1C212A);
+            homeSlab.setColor(hc);
+            awaySlab.setColor(ac);
+            int onH = Broadcast.on(hc);
+            int onA = Broadcast.on(ac);
+            homeName.setTextColor(onH);
+            homeScore.setTextColor(onH);
+            awayName.setTextColor(onA);
+            awayScore.setTextColor(onA);
+            setText(homeName, teamLabel(g, h, "home"));
+            setText(awayName, teamLabel(g, aw, "away"));
+            JSONObject sc = g.optJSONObject("score");
+            setText(homeScore, sc == null ? "" : sc.optString("home"));
+            setText(awayScore, sc == null ? "" : sc.optString("away"));
+            String period = str(g, "period") != null ? str(g, "period") : sc == null ? null : str(sc, "period");
+            String c = str(g, "clock") != null ? str(g, "clock") : sc == null ? null : str(sc, "clock");
+            setText(clock, ((period == null ? "" : period + " ") + (c == null ? "" : c)).trim());
+            JSONObject sit = g.optJSONObject("situation");
+            boolean rz = g.optBoolean("redZone", false) || (sit != null && (sit.optBoolean("redZone", false) || sit.optBoolean("isRedZone", false)));
+            String d = sit == null ? null : downDistance(sit);
+            String yl = sit == null ? null : str(sit, "yardLine") != null ? str(sit, "yardLine") : str(sit, "possessionText");
+            red.setVisibility(rz ? View.VISIBLE : View.GONE);
+            setText(dd, d == null ? "" : d);
+            dd.setVisibility(d == null ? View.GONE : View.VISIBLE);
+            setText(ball, yl == null ? "" : "Ball on " + yl);
+            ball.setVisibility(yl == null ? View.GONE : View.VISIBLE);
+            extra.setVisibility(rz || d != null || yl != null ? View.VISIBLE : View.GONE);
+        }
+
+        private String teamLabel(JSONObject g, JSONObject t, String side) {
+            if (t != null) return str(t, "short") != null ? str(t, "short") : str(t, "name") != null ? str(t, "name") : "";
+            String s = str(g, side);
+            return s == null ? "" : s;
+        }
+    }
 
     // ---- F1: the timing tower ---------------------------------------------------------------------------------------
 
