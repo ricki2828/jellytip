@@ -220,6 +220,8 @@ class JellytipIptvService
                     .put("stop", u.stop)
                     .put("title", u.title)
                     .apply { u.league?.let { put("league", it) } }
+                    // Plan "Match info": a reminder set for a known fixture names it
+                    .apply { u.matchInfo?.id?.let { put("matchId", it) } }
                     .toString()
             val res = api.userCall("v1/iptv/reminders", body) ?: return null
             JellytipTrace.log("iptv", "reminder ${u.key} -> ${res.first}")

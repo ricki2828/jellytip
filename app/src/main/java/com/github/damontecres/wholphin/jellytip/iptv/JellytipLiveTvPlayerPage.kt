@@ -226,6 +226,7 @@ fun JellytipLiveTvPlayerPage(
     var preCardTick by remember { mutableIntStateOf(0) }
     var preCardVisible by remember { mutableStateOf(false) }
     var preMenu by remember { mutableStateOf(false) }
+    var matchModal by remember { mutableStateOf<IptvMatch?>(null) }
     LaunchedEffect(preStartsAt, channel.id) {
         if (preStartsAt != null) preCardTick++
     }
@@ -248,6 +249,13 @@ fun JellytipLiveTvPlayerPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Match info (plan "Match info"): the remote's Info key, or holding OK, on a programme with a fixture
+                val matchNow = nowNext?.now?.match?.takeIf { !MatchInfoRoute.missing }
+                val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (matchNow != null && (e.key == Key.Info || (isOk && e.nativeKeyEvent.repeatCount > 0))) {
+                    matchModal = matchNow
+                    return@onPreviewKeyEvent true
+                }
                 if (preStartsAt != null) {
                     val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                     if (ok && preCardVisible) {
@@ -327,6 +335,22 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        matchModal?.let { m ->
+            JellytipMatchModal(
+                m,
+                onWatch = { ch ->
+                    matchModal = null
+                    if (ch.id != channel.id) {
+                        tried += ch.id
+                        fallback = ch
+                        current = IptvTarget(ch.id, ch.name)
+                        playback.play(current, "match info watch")
+                        bannerTick++
+                    }
+                },
+                onDismiss = { matchModal = null },
+            )
+        }
         if (preCardVisible && preStartsAt != null) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -402,8 +426,11 @@ fun JellytipLiveTvPlayerPage(
             val hint =
                 when {
                     cu != null -> "▶  Right: back to live"
-                    nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true -> "◀  From kick-off"
-                    else -> null
+                    else -> {
+                        val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
+                        val info = nowNext?.now?.match != null && !MatchInfoRoute.missing
+                        listOfNotNull(if (kick) "◀  From kick-off" else null, if (info) "Hold OK: match info" else null).joinToString("   ·   ").ifEmpty { null }
+                    }
                 }
             hint?.let {
                 Text(

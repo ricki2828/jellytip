@@ -140,7 +140,10 @@ fun OnNowCard(
                     )
                     QualityChips(o.channel.quality)
                 }
-                Text(o.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(o.displayTitle, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (o.match?.inferred == true && o.match.matchup != null) IdentifiedMark()
+                }
                 val startsAt = o.startsAt
                 if (o.isPre(now) && startsAt != null) {
                     Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
@@ -177,11 +180,20 @@ fun OnNowStrip(
                 230.dp,
                 56.dp,
                 onClick = { onOpen(o, o.channel) },
-                onLongClick = if (o.alternates.isNotEmpty() || o.sport) ({ menu = o }) else null,
+                onLongClick = if (o.alternates.isNotEmpty() || o.sport || o.match != null) ({ menu = o }) else null,
             )
         }
     }
-    menu?.let { o -> AlternatesMenu(o, onPick = { ch -> onOpen(o, ch) }, onDismiss = { menu = null }, extra = if (o.sport) rememberSportMuteItems(o.league, o.sportName) else emptyList()) }
+    var matchFor by remember { mutableStateOf<IptvOnNow?>(null) }
+    matchFor?.let { o -> o.match?.let { m -> JellytipMatchModal(m, onWatch = { ch -> matchFor = null; onOpen(o, ch) }, onDismiss = { matchFor = null }) } }
+    menu?.let { o ->
+        AlternatesMenu(
+            o,
+            onPick = { ch -> onOpen(o, ch) },
+            onDismiss = { menu = null },
+            extra = listOfNotNull(matchInfoItem(o.match) { matchFor = o }) + if (o.sport) rememberSportMuteItems(o.league, o.sportName) else emptyList(),
+        )
+    }
 }
 
 /** Long-press on an event card: watch it on the main channel or any alternate (best first, as the server ranked them). */
@@ -265,6 +277,12 @@ fun JellytipLiveSportRow(
             }
         }
     }
+    var matchFor by remember { mutableStateOf<IptvOnNow?>(null) }
+    matchFor?.let { o ->
+        o.match?.let { m ->
+            JellytipMatchModal(m, onWatch = { ch -> matchFor = null; viewModel.open(o, shown, "match info watch", ch) }, onDismiss = { matchFor = null })
+        }
+    }
     menu?.let { o ->
         AlternatesMenu(
             o,
@@ -272,6 +290,7 @@ fun JellytipLiveSportRow(
             onDismiss = { menu = null },
             extra =
                 listOfNotNull(
+                    matchInfoItem(o.match) { matchFor = o },
                     if (o.startOver) {
                         com.github.damontecres.wholphin.ui.components.DialogItem("From kick-off", dismissOnClick = true) {
                             viewModel.open(o, shown, "home live sport from kick-off", fromKickOff = true)

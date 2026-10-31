@@ -246,6 +246,43 @@ private fun UpcomingOverlay(
     val remindersOn by viewModel.reminders.available.collectAsState()
     val reminderList by viewModel.reminders.items.collectAsState()
     val muteItems = rememberSportMuteItems(u.league, u.sportName)
+    var showMatch by remember(u.key) { mutableStateOf(false) }
+    val m = u.matchInfo
+    if (showMatch && m != null) {
+        JellytipMatchModal(
+            m,
+            onWatch = { ch ->
+                showMatch = false
+                onDismiss()
+                viewModel.watch(u, ch)
+            },
+            onDismiss = {
+                showMatch = false
+                onDismiss()
+            },
+            onRemind =
+                if (remindersOn == true && viewModel.reminders.reminderIdFor(u, reminderList) == null) {
+                    {
+                        viewModel.reminders.add(u)
+                        showMatch = false
+                        onDismiss()
+                    }
+                } else {
+                    null
+                },
+            onRecord =
+                if (u.recordable && u.recordingId == null && u.stop > now) {
+                    {
+                        viewModel.record(u)
+                        showMatch = false
+                        onDismiss()
+                    }
+                } else {
+                    null
+                },
+        )
+        return
+    }
     val live = u.isLive(now)
     val channels = listOf(u.channel) + u.alternateChannels
     val items =
@@ -271,6 +308,7 @@ private fun UpcomingOverlay(
                 u.recordingId != null -> add(DialogItem("Recording scheduled", dismissOnClick = true) {})
                 u.recordable && u.stop > now -> add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
             }
+            matchInfoItem(u.matchInfo, dismissOnClick = false) { showMatch = true }?.let { add(it) }
             addAll(muteItems)
             // Remind me (plan "Remind me"): hidden until the server answers the reminders route (404 = never)
             if (remindersOn == true && u.stop > now) {
@@ -288,7 +326,8 @@ private fun UpcomingOverlay(
             if (live) "On now" else whenLabel(u.start),
             u.league,
         ).joinToString("  ·  ")
-    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss)
+    // Items dismiss one by one (all but Match info, which swaps this menu for the modal)
+    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
 }
 
 @Composable
@@ -365,7 +404,8 @@ private fun UpcomingTile(
                     )
                     QualityChips(u.channel.quality)
                 }
-                Text(u.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(u.displayTitle, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (u.matchInfo?.inferred == true && u.matchInfo.matchup != null) IdentifiedMark()
                 val startsAt = u.startsAt
                 if (u.phase == "pre" && startsAt != null && now < startsAt) {
                     Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)

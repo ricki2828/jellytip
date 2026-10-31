@@ -50,6 +50,18 @@ fun KindPill(
     }
 }
 
+/** Small "identified" mark: the matchup came from the fixtures, the listing didn't name it (plan "Match info"). */
+@Composable
+fun IdentifiedMark() =
+    Text(
+        text = "identified",
+        color = Color.White.copy(alpha = 0.75f),
+        fontFamily = JellytipFontFamily,
+        fontSize = 9.sp,
+        maxLines = 1,
+        modifier = Modifier.background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
+    )
+
 /** Neutral "PRE-GAME" (plan "Pre-game state"): the channel is on but the event hasn't started; not the red LIVE. */
 @Composable
 fun PreGamePill() = Pill("PRE-GAME", Color.White, Color(0xFF5A5F6B))

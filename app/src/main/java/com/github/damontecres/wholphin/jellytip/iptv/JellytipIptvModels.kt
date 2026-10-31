@@ -114,6 +114,8 @@ data class IptvProg(
     val phase: String? = null,
     /** The real start of the event (epoch s), when the server knows it. */
     val startsAt: Long? = null,
+    /** The fixture this programme shows (plan "Match info"); null = unknown. */
+    val match: IptvMatch? = null,
 ) {
     fun isOn(at: Long) = at in start until stop
 
@@ -233,8 +235,13 @@ data class IptvOnNow(
     val phase: String? = null,
     /** The real start (epoch s) when known. */
     val startsAt: Long? = null,
+    /** The fixture (plan "Match info"); null = unknown. */
+    val match: IptvMatch? = null,
 ) {
     fun isPre(now: Long) = phase == "pre" && (startsAt == null || now < startsAt)
+
+    /** The tile title: an identified fixture's matchup in place of a vague listing. */
+    val displayTitle get() = match?.takeIf { it.inferred }?.matchup ?: title
 }
 
 /**
@@ -282,7 +289,12 @@ data class IptvUpcoming(
     val phase: String? = null,
     /** The real start (epoch s) when known; it can differ from the EPG [start]. */
     val startsAt: Long? = null,
+    /** The fixture (plan "Match info"); null = unknown. */
+    val matchInfo: IptvMatch? = null,
 ) {
+    /** The tile title: an identified fixture's matchup in place of a vague listing. */
+    val displayTitle get() = matchInfo?.takeIf { it.inferred }?.matchup ?: title
+
     fun isLive(now: Long) = now in start until stop
 
     /** Starts within 15 minutes (plan "Remind me": `soon`). */
@@ -481,6 +493,7 @@ object IptvParse {
                     startOver = p.optBoolean("startOver", false) || c.optBoolean("startOver", false) || p.optBoolean("catchup", false),
                     phase = p.str("phase") ?: c.str("phase") ?: event?.str("phase"),
                     startsAt = isoSeconds(p.str("startsAt") ?: c.str("startsAt") ?: event?.str("startsAt")),
+                    match = MatchParse.match(p.optJSONObject("matchInfo") ?: c.optJSONObject("matchInfo") ?: event?.optJSONObject("matchInfo"), resolve),
                     sportName = c.str("sportName") ?: p.str("sportName") ?: match?.str("sportName"),
                 )
         }
@@ -544,6 +557,7 @@ object IptvParse {
                 key = o.str("key") ?: "${ch.id}@$start",
                 title = o.str("title") ?: return@mapNotNull null,
                 league = o.str("league") ?: match?.str("league"),
+                // The older favourite marker {team, league}; the newer fixture `match` (with an id) is not one
                 favourite = match != null && (match.str("team") != null || match.str("league") != null),
                 start = start,
                 stop = stop,
@@ -557,6 +571,7 @@ object IptvParse {
                 sportName = o.str("sportName") ?: match?.str("sportName"),
                 phase = o.str("phase"),
                 startsAt = isoSeconds(o.str("startsAt")),
+                matchInfo = MatchParse.match(o.optJSONObject("matchInfo"), resolve),
             )
         }
     }
@@ -577,6 +592,7 @@ object IptvParse {
             startOver = o.optBoolean("startOver", false),
             phase = o.str("phase"),
             startsAt = isoSeconds(o.str("startsAt")),
+            match = MatchParse.match(o.optJSONObject("matchInfo")),
         )
     }
 
