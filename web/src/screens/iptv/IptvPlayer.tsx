@@ -828,7 +828,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
                 // A replay of an earlier game: no match id, or the phone would poll live stats and alert for the old game
                 ...(extras?.matchId && !extras.replay && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
                 // Before the real start the native overlay shows the pre-game card
-                ...(isPre(extras?.startsAt, Date.now() / 1000)
+                ...(isPre(extras?.startsAt, Date.now() / 1000) && !extras?.replay
                   ? { phase: "pre" as const, startsAt: new Date(extras!.startsAt! * 1000).toISOString(), altChannels: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })) }
                   : {}),
               }
