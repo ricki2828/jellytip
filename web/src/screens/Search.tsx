@@ -447,12 +447,17 @@ export function Search({ initial }: { initial: string }) {
         setFallback(null);
         // A group answered late (Discover: TMDB slower than 40 ms; IPTV: copies still being verified): ask again for just that
         // group and merge it into what is on screen. The server sends each at most once per query per 20 s, so this cannot loop.
-        for (const [what, wait] of [["discover", 300], ["iptv", 1500]] as const) {
+        // IPTV: once after about 1 s and, if it is still pending, once more about 1.5 s later.
+        for (const [what, waits] of [["discover", [300]], ["iptv", [1000, 1500]]] as const) {
           if (!r.pending.includes(what)) continue;
-          await new Promise((ok) => setTimeout(ok, wait));
-          if (ctl.signal.aborted) return;
-          const d = await searchAll(term, ctl.signal, what);
-          if (!ctl.signal.aborted && d && d !== "blocked") setUnified((cur) => (cur && cur.q === r.q ? mergeLate(cur, d, what) : cur));
+          for (const wait of waits) {
+            await new Promise((ok) => setTimeout(ok, wait));
+            if (ctl.signal.aborted) return;
+            const d = await searchAll(term, ctl.signal, what);
+            if (ctl.signal.aborted || !d || d === "blocked") break;
+            setUnified((cur) => (cur && cur.q === r.q ? mergeLate(cur, d, what) : cur));
+            if (!d.pending.includes(what)) break;
+          }
         }
         return;
       }

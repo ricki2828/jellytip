@@ -53,3 +53,27 @@ test("trending row: ranks from the server, order as fallback, missing slotted in
   const bare = parseRows([{ id: "trending-top10-series", title: "T", itemIds: ["a", "b"], order: ["b", "a"] }])![0];
   assert.deepEqual(trendEntries(bare, ["a", "b"]).map((x) => (x.kind === "lib" ? x.id : "")), ["b", "a"]);
 });
+
+import { paddedOrder } from "../src/lib/rows.ts";
+
+test("every row type keeps its IPTV titles; padded rows place missing titles by rank", () => {
+  const vod = (i: number) => ({ id: `pp:m:${i}`, title: `Film ${i}` });
+  const mk = (extra: Record<string, unknown>) => parseRows([{ id: "r", title: "R", layout: "poster", ...extra }])![0];
+  // IPTV only (poster or standard), mixed, franchise with order, person row, series: iptvItems all survive parsing
+  const kinds = [
+    mk({ source: "iptv", itemIds: [], iptvItems: [vod(1), vod(2)] }),
+    mk({ layout: "standard", source: "iptv", itemIds: [], iptvItems: [vod(3)] }),
+    mk({ itemIds: ["a".repeat(32)], iptvItems: [vod(4), vod(5)], order: ["a".repeat(32), "pp:m:4", "pp:m:5"] }),
+    mk({ layout: "franchise", itemIds: ["a".repeat(32)], iptvItems: [vod(6)], order: ["a".repeat(32), "pp:m:6"], collection: { tmdbId: 1, name: "S", partsOrder: [], itemIds: [] } }),
+    mk({ itemIds: ["a".repeat(32)], iptvItems: [vod(7)], person: { id: "b".repeat(32), name: "P", role: "actor" } }),
+  ];
+  assert.deepEqual(kinds.map((r) => r.iptvItems.length), [2, 1, 2, 1, 1]);
+  // a padded ranked list: library 1 and 5, IPTV 2 and 3, missing 4 and (no tmdb id) 7
+  const p = mk({
+    itemIds: ["a".repeat(32), "b".repeat(32)],
+    iptvItems: [vod(80), vod(81)],
+    ranks: { ["a".repeat(32)]: 1, "pp:m:80": 2, "pp:m:81": 3, ["b".repeat(32)]: 5 },
+    missing: [{ tmdbId: 5, title: "Gone A", rank: 4 }, { tmdbId: null, title: "Gone B", rank: 7 }],
+  });
+  assert.deepEqual(paddedOrder(p), ["a".repeat(32), "pp:m:80", "pp:m:81", "m:5", "b".repeat(32), "m:Gone B"]);
+});

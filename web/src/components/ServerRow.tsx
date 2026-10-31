@@ -1,5 +1,6 @@
 // One row from the companion's rows v1 manifest (GET /v1/home/carousels?rows=1): items come from Jellyfin in one call
 // by `itemIds` (order kept) once the row nears the screen. Layouts: standard 16:9, poster 2:3, franchise.
+import { useState } from "react";
 import { getItems, type Item } from "../api/jellyfin";
 import type { ServerRow } from "../api/companion";
 import { go } from "../lib/router";
@@ -8,6 +9,10 @@ import { TrendingRow } from "./TrendingRow";
 import { FranchiseRow } from "./FranchiseRow";
 import { Row, RowTitle } from "./Row";
 import { IptvCard, IptvPoster } from "./IptvTile";
+import { PosterCard } from "./PosterCard";
+import { GetItSheet } from "./GetItSheet";
+import { getSession } from "../api/jellyfin";
+import { paddedOrder, type MissingTitle } from "../lib/rows";
 import { useIsPhone } from "../lib/device";
 import type { VodItem } from "../lib/iptvVod";
 
@@ -15,6 +20,27 @@ import type { VodItem } from "../lib/iptvVod";
 function IptvTile({ item, poster }: { item: VodItem; poster: boolean }) {
   const phone = useIsPhone();
   return poster ? <IptvPoster item={item} width={phone ? 112 : 150} /> : <IptvCard item={item} />;
+}
+
+/** A title from a padded list that is nowhere (library, IPTV): dimmed "Not available"; an admin can open Get it. */
+function MissingTile({ m, mediaType, poster }: { m: MissingTitle; mediaType: "movie" | "tv"; poster: boolean }) {
+  const [open, setOpen] = useState(false);
+  const phone = useIsPhone();
+  const admin = !!getSession()?.isAdmin;
+  return (
+    <>
+      <PosterCard
+        width={poster ? (phone ? 112 : 150) : phone ? 160 : 200}
+        src={m.poster}
+        name={m.title}
+        faded
+        tag="Not available"
+        label={`${m.title}, not available`}
+        onOpen={admin && m.tmdbId != null ? () => setOpen(true) : undefined}
+      />
+      {open && <GetItSheet pick={{ title: m.title, year: m.year, tmdbId: m.tmdbId, mediaType, posterUrl: m.poster }} onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 /** A source "iptv" row: the person's IPTV titles, already in the manifest (no Jellyfin call). */
@@ -82,7 +108,11 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
     return <FranchiseRow key={r.id} title={r.title} collection={r.collection} load={load} untitled={untitled} iptvItems={r.iptvItems} order={r.order} {...opts} />;
   const person = r.person;
   // My list and other mixed rows: in the server's `order` when it sends one, else library items first, then the IPTV titles
-  const extra = r.iptvItems.length ? r.iptvItems.map((it) => ({ id: it.id, node: <IptvTile key={it.id} item={it} poster={r.layout === "poster"} /> })) : undefined;
+  const iptvExtra = r.iptvItems.map((it) => ({ id: it.id, node: <IptvTile key={it.id} item={it} poster={r.layout === "poster"} /> }));
+  // Padded lists also name titles that are nowhere: dimmed tiles at their place in the list (by rank when the list is ranked)
+  const missingExtra = r.missing.map((m) => ({ id: `m:${m.tmdbId ?? m.title}`, node: <MissingTile key={`m${m.tmdbId ?? m.title}`} m={m} mediaType={r.mediaType} poster={r.layout === "poster"} /> }));
+  const extra = iptvExtra.length || missingExtra.length ? [...iptvExtra, ...missingExtra] : undefined;
+  const order = r.missing.length ? paddedOrder(r) : r.order;
   return (
     <Row
       key={r.id}
@@ -93,7 +123,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
       onTitle={person ? () => go(`/person/${person.id}?name=${encodeURIComponent(person.name)}`) : hubIds()?.has(r.id) ? () => go(`/collections/${encodeURIComponent(r.id)}`) : undefined}
       person={person ? { ...person, count: r.itemIds.length } : null}
       extra={extra}
-      order={r.order}
+      order={order}
       {...opts}
     />
   );

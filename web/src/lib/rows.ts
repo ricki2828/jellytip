@@ -119,6 +119,11 @@ export function trendEntries(row: Pick<ServerRow, "order" | "ranks" | "iptvItems
   return all.sort((a, b) => a.rank - b.rank).slice(0, cap);
 }
 
+/** Display order of a padded list row: library, IPTV and "not available" tiles together (by rank when ranked; ids undashed, `m:<tmdb>` for missing). */
+export function paddedOrder(row: Pick<ServerRow, "order" | "ranks" | "iptvItems" | "missing" | "itemIds">): string[] {
+  return trendEntries(row, row.itemIds, 1000).map((e) => (e.kind === "lib" ? e.id.replace(/-/g, "").toLowerCase() : e.kind === "iptv" ? e.item.id : `m:${e.title.tmdbId ?? e.title.title}`));
+}
+
 /** Rows in server order; rows without an id, title or items are dropped. null = no `rows` field (old server). */
 export function parseRows(raw: unknown): ServerRow[] | null {
   if (!Array.isArray(raw)) return null;
