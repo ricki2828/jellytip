@@ -443,3 +443,37 @@ test("match info is read from matchInfo, never from the favourite marker match",
   assert.deepEqual(parseSport(raw, { title: "x", matchInfo: FIX }).match, { team: "Chiefs", league: "NFL" });
   assert.equal(parseSport({ match: { ...FIX, team: "Chiefs" } }, { title: "x" }).fixture, null);
 });
+
+import { agoText, maskText, mayShow, parseLive, pct, volumeText } from "../src/lib/liveStats.ts";
+
+test("live panel: parse, odds as percentages, spoiler gate, chat mask", () => {
+  const d = parseLive({
+    status: "in",
+    clock: "08:12",
+    period: "Q3",
+    score: { home: 61, away: 58 },
+    stats: [{ label: "FG%", home: "47%", away: "44%" }, { home: "no label" }],
+    leaders: [{ team: "NYK", name: "Brunson", line: "24 pts" }],
+    plays: Array.from({ length: 20 }, (_, i) => ({ clock: "1:0" + (i % 10), period: "Q3", text: "Play " + i, scoring: i === 0 })),
+    winProb: { home: 0.62 },
+    market: { source: "polymarket", question: "q", home: 0.58, away: 0.42, volume: 1_234_567, url: "https://x", updatedAt: "2026-10-31T10:00:00Z" },
+    chat: { source: "reddit", thread: "Game thread", comments: [{ author: "a", text: "what the fuck", score: 3 }, { text: "" }] },
+    updatedAt: 1_900_000_000,
+  })!;
+  assert.equal(d.stats.length, 1);
+  assert.equal(d.plays.length, 15);
+  assert.equal(d.winProb, 0.62);
+  assert.equal(pct(d.market!.home), "58%");
+  assert.equal(volumeText(d.market!.volume), "$1.2M traded");
+  assert.equal(volumeText(48_000), "$48k traded");
+  assert.equal(volumeText(null), null);
+  assert.equal(d.chat!.comments.length, 1);
+  assert.equal(maskText(d.chat!.comments[0].text), "what the f***");
+  assert.equal(agoText(1000, 1030), "30 s ago");
+  assert.equal(agoText(1000, 1000 + 240), "4 min ago");
+  assert.equal(mayShow(true, false), true);
+  assert.equal(mayShow(false, false), false);
+  assert.equal(mayShow(false, true), true);
+  assert.equal(parseLive({ market: { home: 2, away: -1 } })!.market, null);
+  assert.equal(parseLive(null), null);
+});

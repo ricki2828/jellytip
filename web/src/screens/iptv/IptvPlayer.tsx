@@ -6,6 +6,8 @@ import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
+import { LiveDrawer } from "../../components/LiveDrawer";
+import { usePrefs } from "../../api/me";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -373,6 +375,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       document.removeEventListener("pointerdown", show);
     };
   }, [preNow]);
+  const [drawer, setDrawer] = useState(false);
+  const spoilers = !!usePrefs({ defer: true }).prefs?.sport.spoilers;
   const { items: remItems, available: remAvailable } = useReminders();
   const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
   const [remBusy, setRemBusy] = useState(false);
@@ -577,6 +581,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
         {isLive && <MatchInfoButton id={extras?.matchId} />}
+        {extras?.matchId && state.kind === "playing" && (
+          <button className="btn small" data-nav aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}>
+            Live
+          </button>
+        )}
         {kickoff && state.kind === "playing" && (
           <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extras)}`, true)}>
             From kick-off
@@ -585,6 +594,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-method">via IPTV</span>
       </div>
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      {drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive} spoilers={spoilers} onClose={() => setDrawer(false)} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>

@@ -31,6 +31,7 @@ export function useEscapeClose(onClose: () => void, active = true) {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation(); // other Escape handlers on the document (the player's own Back) must not also run
       onClose();
     };
     document.addEventListener("keydown", on, true);

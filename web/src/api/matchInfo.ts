@@ -1,6 +1,7 @@
 // GET /v1/sport/match/{id}. A 404 (no such route) hides every match-info icon.
 import { companionCall } from "./companionCall";
 import { parseMatchDetail, type MatchDetail } from "../lib/matchInfo";
+import { parseLive, type LiveStats } from "../lib/liveStats";
 
 const EVENT = "jellytip-match-info-availability";
 let unavailable = false;
@@ -28,4 +29,11 @@ export async function matchDetail(id: string, score = false): Promise<MatchDetai
     return "missing";
   }
   return a.status === 200 ? parseMatchDetail(a.data) : null;
+}
+
+/** GET /v1/sport/match/{id}/live: "missing" without the route, null when it failed. */
+export async function liveStats(id: string): Promise<LiveStats | "missing" | null> {
+  const a = await companionCall("GET", `v1/sport/match/${encodeURIComponent(id)}/live`);
+  if (a.status === 404) return "missing";
+  return a.status === 200 ? parseLive(a.data) : null;
 }

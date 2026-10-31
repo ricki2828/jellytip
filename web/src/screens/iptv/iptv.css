@@ -1373,3 +1373,69 @@
   letter-spacing: 0.15em;
   font-weight: 700;
 }
+.live-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  width: min(360px, 46%);
+  padding: 14px 14px 12px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: rgba(14, 14, 14, 0.94);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.live-drawer h3 {
+  margin: 0;
+  font-size: 16px;
+  padding-right: 44px;
+}
+.live-drawer .sheet-x {
+  top: 8px;
+  right: 8px;
+}
+.ld-score {
+  margin: 0;
+  font-weight: 700;
+}
+.ld-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+  text-align: center;
+}
+.ld-table td,
+.ld-table th {
+  padding: 4px 2px;
+  font-variant-numeric: tabular-nums;
+}
+.ld-table th {
+  font-size: 12px;
+  color: var(--dim);
+}
+.ld-plays .score {
+  font-weight: 700;
+}
+.ld-odds {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.ld-chat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ld-chat strong {
+  color: var(--dim);
+  margin-right: 4px;
+}
