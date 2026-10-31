@@ -1006,7 +1006,8 @@ final class LiveContent {
         }
         java.util.Collections.sort(rows, (x, y) -> Double.compare(y.optDouble("p"), x.optDouble("p")));
         double top = rows.isEmpty() ? 1 : Math.max(0.0001, rows.get(0).optDouble("p"));
-        for (int i = 0; i < Math.min(rows.size(), 6); i++) {
+        // The server sends the top 6 plus the user's favourite drivers / golfers wherever they rank
+        for (int i = 0; i < Math.min(rows.size(), 10); i++) {
             JSONObject o = rows.get(i);
             String key = prefix + str(o, "name");
             WinnerRow r = (WinnerRow) holders.get(key);
@@ -1014,7 +1015,7 @@ final class LiveContent {
                 r = new WinnerRow();
                 holders.put(key, r);
             }
-            r.bind(i, str(o, "name"), o.optDouble("p"), top, t.known ? t.homeColor : Broadcast.GOLD);
+            r.bind(i, str(o, "name"), o.optDouble("p"), top, t.known ? t.homeColor : Broadcast.GOLD, o.optBoolean("favourite", false));
             order.add(r.root);
         }
     }
@@ -1052,10 +1053,10 @@ final class LiveContent {
             root.addView(track, tlp);
         }
 
-        void bind(int i, String n, double p, double top, int color) {
+        void bind(int i, String n, double p, double top, int color, boolean fav) {
             setText(rank, String.valueOf(i + 1));
-            setText(name, n);
-            Broadcast.styleBody(name, 13, Color.WHITE, i == 0 ? 700 : 600);
+            setText(name, fav ? "\u2605 " + n : n);
+            Broadcast.styleBody(name, 13, fav ? Broadcast.GOLD : Color.WHITE, i == 0 || fav ? 700 : 600);
             setText(pct, LiveRender.pct(p));
             pct.setTextColor(i == 0 ? Broadcast.GOLD : Color.WHITE);
             float f = (float) Math.max(0.02, Math.min(1, p / top));
