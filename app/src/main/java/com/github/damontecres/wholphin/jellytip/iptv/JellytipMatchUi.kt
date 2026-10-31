@@ -251,7 +251,10 @@ fun JellytipMatchModal(
                                 }
                             }
                             if (d.winner.isNotEmpty()) {
-                                Section("To win" + (d.winnerSource?.let { " · ${it.replaceFirstChar { c -> c.uppercase() }}" } ?: "")) { WinnerList(d.winner, pal) }
+                                Section("To win" + (d.winnerSource?.let { " · ${it.replaceFirstChar { c -> c.uppercase() }}" } ?: "")) {
+                                    if (d.winnerThin) ThinPill()
+                                    WinnerList(d.winner, pal)
+                                }
                             }
                             d.odds?.let { o ->
                                 Section("Odds" + listOfNotNull(o.provider, o.updatedAt?.let { "updated ${hhmm(it)}" }).joinToString(" · ").let { if (it.isEmpty()) "" else " · $it" }) {

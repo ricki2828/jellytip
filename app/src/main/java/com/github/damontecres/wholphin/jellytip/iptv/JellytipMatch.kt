@@ -100,6 +100,7 @@ data class MatchDetail(
     /** A Polymarket winner market on the detail (`market.kind: "winner"`): top outcomes, best first. */
     val winner: List<Outcome> = emptyList(),
     val winnerSource: String? = null,
+    val winnerThin: Boolean = false,
 )
 
 object MatchParse {
@@ -205,6 +206,7 @@ object MatchParse {
             venueImage = o.optJSONObject("venue")?.str("image")?.let { if (it.startsWith("http")) it else resolve(it) },
             winner = (root.optJSONObject("market") ?: o.optJSONObject("market"))?.takeIf { it.str("kind") == "winner" }?.let { LiveParse.outcomes(it.optJSONArray("outcomes")) }.orEmpty(),
             winnerSource = (root.optJSONObject("market") ?: o.optJSONObject("market"))?.str("source"),
+            winnerThin = (root.optJSONObject("market") ?: o.optJSONObject("market"))?.optBoolean("thin", false) == true,
         )
     }
 }

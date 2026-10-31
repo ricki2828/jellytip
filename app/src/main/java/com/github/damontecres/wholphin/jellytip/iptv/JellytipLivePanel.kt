@@ -158,6 +158,8 @@ data class LiveMarket(
     val series: List<MarketPoint> = emptyList(),
     /** "winner" (plan "Polymarket coverage round 2": F1 race, golf tournament, …) or null (head-to-head). */
     val kind: String? = null,
+    /** A thin market (plan "thin markets", decided 31-Oct): little money behind it; a grey pill, never a flip toast. */
+    val thin: Boolean = false,
     /** Winner markets: the top 6 plus the user's favourite drivers / golfers wherever they rank, best first. */
     val outcomes: List<Outcome> = emptyList(),
 ) {
@@ -400,6 +402,7 @@ object LiveParse {
                             MarketPoint(IptvParse.isoSeconds(pt.str("t")) ?: return@mapNotNull null, pt.dbl("p") ?: return@mapNotNull null)
                         },
                     kind = m.str("kind"),
+                    thin = m.optBoolean("thin", false),
                     outcomes = outcomes(m.optJSONArray("outcomes")),
                 )
             }
@@ -1351,6 +1354,7 @@ private fun OddsLine(
             BodyText(leader?.name ?: team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
             p?.let { Odometer(pct(it), 17.sp, Broadcast.Gold) }
             BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { money(it) }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
+            if (mk.thin) ThinPill()
         }
     }
 }
@@ -1368,7 +1372,7 @@ private fun OddsTab(
             SectionHead("Leader · last 30 min")
             Sparkline(mk.series, if (pal.known) pal.home else Broadcast.Gold)
         }
-        BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { "${money(it)} traded" }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
+        SourceLine(mk)
         mk.question?.let { BodyText(it, 12.5.sp) }
         return
     }
@@ -1405,18 +1409,32 @@ private fun OddsTab(
         SectionHead("Favourite · last 30 min")
         Sparkline(mk.series, if (h >= a) hc else ac)
     }
-    BodyText(
-        listOfNotNull(
-            mk.source?.replaceFirstChar { it.uppercase() },
-            mk.volume?.let { "${money(it)} traded" },
-            mk.updatedAt?.let { ago(nowSec() - it) },
-        ).joinToString(" · "),
-        12.sp,
-        Broadcast.Secondary,
-        maxLines = 1,
-    )
+    SourceLine(mk)
     mk.question?.let { BodyText(it, 12.5.sp) }
 }
+
+/** "Polymarket · $1.2M traded · 30 s ago", with the THIN MARKET pill when the market is thin. */
+@Composable
+private fun SourceLine(mk: LiveMarket) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        BodyText(
+            listOfNotNull(
+                mk.source?.replaceFirstChar { it.uppercase() },
+                mk.volume?.let { "${money(it)} traded" },
+                mk.updatedAt?.let { ago(nowSec() - it) },
+            ).joinToString(" · "),
+            12.sp,
+            Broadcast.Secondary,
+            maxLines = 1,
+        )
+        if (mk.thin) ThinPill()
+    }
+}
+
+/** Grey caps "THIN MARKET" (plan "thin markets"): little money behind these odds. */
+@Composable
+internal fun ThinPill() =
+    Cond("Thin market", 11.sp, Broadcast.Secondary, modifier = Modifier.border(1.dp, Color(0xFF5A6372)).padding(horizontal = 4.dp), weight = FontWeight.SemiBold, tracking = 0.06f)
 
 /** A winner market (plan "Polymarket coverage round 2"): ranked outcomes with their probability and a bar; the leader in gold. */
 @Composable

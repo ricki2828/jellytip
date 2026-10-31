@@ -373,7 +373,8 @@ fun JellytipLiveTvPlayerPage(
                 val at = mk?.flipAt
                 if (mk != null && at != null && at != liveSeen.flipAt) {
                     liveSeen.flipAt = at
-                    if (me?.sportFlipAlerts != false) {
+                    // A thin market never fires a flip toast (plan "thin markets")
+                    if (me?.sportFlipAlerts != false && !mk.thin) {
                         val team = if (mk.flipTo == "away") m.away else m.home
                         // Winner markets: flip.to names the outcome; the toast reads "new favourite"
                         val name = if (mk.isWinner) mk.flipTo ?: mk.outcomes.first().name else team?.short ?: team?.name ?: mk.flipTo ?: "New"
