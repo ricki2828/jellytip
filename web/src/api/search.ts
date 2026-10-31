@@ -5,7 +5,7 @@ import { parseSearch, type SearchEntry, type SearchResult } from "../lib/search"
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
 
-const TYPES = "films,shows,people,collections,lists,iptv,discover";
+const TYPES = "films,shows,people,collections,lists,iptv,discover,live,channels";
 
 // A server without the route (404) isn't asked again for a while: every keystroke would pay for the miss
 const RETRY_MS = 5 * 60_000;

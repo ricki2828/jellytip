@@ -100,3 +100,36 @@ test("season hint: the named season, else the counts", () => {
   assert.equal(seasonHint({ kind: "series", seasons: 3, episodes: 28 }), "3 seasons · 28 episodes");
   assert.equal(seasonHint({ kind: "film", seasons: 3 }), null);
 });
+
+import { livePill, parseChannelHits, parseLiveHits } from "../src/lib/search.ts";
+
+const LH = (o: Record<string, unknown>) => ({ title: "Black Caps v India", start: 1000, stop: 9000, channel: { id: "3:77", name: "Sky Sport 1", num: 5, logo: "v1/iptv/img/x", quality: { bucket: "fhd" } }, ...o });
+
+test("live search rows: parse hits and channels, sport query, pills", () => {
+  const hits = parseLiveHits([LH({}), LH({}), LH({ title: "", start: 5 }), LH({ channel: { id: "bad" } }), LH({ replay: true, start: 2000, alternateChannels: [{ id: "3:78", name: "Sky 2" }, { id: "x" }] })]);
+  assert.equal(hits.length, 2);
+  assert.equal(hits[1].replay, true);
+  assert.deepEqual(hits[1].alternates, [{ id: "3:78", name: "Sky 2" }]);
+  assert.equal(parseLiveHits(Array.from({ length: 40 }, (_, i) => LH({ start: i }))).length, 30);
+  const ch = parseChannelHits([{ id: "3:9", name: "ESPN", group: "US", now: { title: "SportsCenter", phase: "live" } }, { id: "3:9", name: "dup" }, { name: "no id" }]);
+  assert.equal(ch.length, 1);
+  assert.equal(ch[0].now?.title, "SportsCenter");
+  // as groups, with the sport filter making it a sport query
+  const r = parseSearch({ groups: [{ type: "live", items: [LH({})] }, { type: "channels", items: [{ id: "3:9", name: "ESPN" }] }], parsed: { filters: { sport: "cricket" } } })!;
+  assert.equal(r.live?.length, 1);
+  assert.equal(r.channels?.length, 1);
+  assert.equal(r.sportQuery, true);
+  // absent groups mean absent rows
+  const none = parseSearch({ groups: [] })!;
+  assert.equal(none.live, null);
+  assert.equal(none.channels, null);
+  assert.equal(none.sportQuery, false);
+  assert.equal(isEmpty(r), false);
+  // top-level lists work too
+  assert.equal(parseSearch({ groups: [], live: [LH({})] })!.live?.length, 1);
+  const now = 5000;
+  assert.deepEqual(livePill(hits[0], now), { text: "LIVE", tone: "rec" });
+  assert.equal(livePill(hits[1], now).text, "REPLAY");
+  assert.equal(livePill(parseLiveHits([LH({ start: 4000 + 3000 * 1, stop: 20000, startsAt: new Date((now + 600) * 1000).toISOString(), phase: "pre" })])[0], now).tone, "pre");
+  assert.equal(livePill(parseLiveHits([LH({ start: now + 90_000, stop: now + 100_000 })])[0], now).tone, "time");
+});

@@ -1,6 +1,12 @@
 // Unified search (pure; tested in web/test/search.test.ts). Contract "Search API" in ~/ai/plans/jellytip-10x.md:
 // GET /v1/search → grouped results + the plain-English filters the server read out of the query (shown as chips).
 
+import { parseFixture, type Fixture } from "./matchInfo.ts";
+import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
+import { isPre, startsLine } from "./preGame.ts";
+import { timeChip } from "./upcoming.ts";
+import { parseQuality, type Quality } from "./sport.ts";
+
 export interface SearchFilters {
   decade?: number | null;
   year?: number | null;
@@ -14,6 +20,9 @@ export interface SearchFilters {
   /** "movie" | "series". */
   kind?: string | null;
   person?: string | null;
+  /** Recognised sport / league words ("cricket", "nba"): the live results lead for these. */
+  sport?: string | null;
+  league?: string | null;
   /** Formats, all required ("4k atmos" → ["4K", "ATMOS"]); older servers sent one string. */
   tech?: string[] | null;
 }
@@ -65,6 +74,87 @@ export interface DiscoverHit {
   requested?: string | null;
 }
 
+/** A programme airing now or soon on one of the caller's channels (`live` group; plan "E. Search covers live channels and events"). */
+export interface LiveHit {
+  key: string;
+  title: string;
+  start: number;
+  stop: number;
+  phase: Phase | null;
+  startsAt: number | null;
+  fixture: Fixture | null;
+  sportName: string | null;
+  league: string | null;
+  replay: boolean;
+  channel: { id: string; name: string; num: number | null; logo: string | null; quality: Quality | null };
+  alternates: { id: string; name: string }[];
+}
+
+/** A channel whose name matched (`channels` group). */
+export interface ChannelHit {
+  id: string;
+  name: string;
+  num: number | null;
+  logo: string | null;
+  group: string | null;
+  quality: Quality | null;
+  now: { title: string; phase: Phase | null } | null;
+}
+
+const CHAN_ID = /^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_.-]{1,64}$/;
+
+export function parseLiveHits(list: unknown): LiveHit[] {
+  const out: LiveHit[] = [];
+  const seen = new Set<string>();
+  for (const x of arr(list)) {
+    const o = obj(x);
+    const title = str(o?.title);
+    const start = num(o?.start);
+    const stop = num(o?.stop);
+    const ch = obj(o?.channel);
+    const cid = str(ch?.id);
+    if (!o || !title || start == null || stop == null || !ch || !cid || !CHAN_ID.test(cid)) continue;
+    const key = `${cid}|${start}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      key,
+      title,
+      start,
+      stop,
+      phase: parsePhase(o.phase),
+      startsAt: parseStartsAt(o.startsAt),
+      fixture: parseFixture(o.matchInfo),
+      sportName: str(o.sportName),
+      league: str(o.league),
+      replay: o.replay === true,
+      channel: { id: cid, name: str(ch.name) ?? "Channel", num: num(ch.num), logo: str(ch.logo), quality: parseQuality(ch.quality) },
+      alternates: arr(o.alternateChannels).flatMap((a) => {
+        const c = obj(a);
+        const id = str(c?.id);
+        return c && id && CHAN_ID.test(id) ? [{ id, name: str(c.name) ?? "Channel" }] : [];
+      }),
+    });
+  }
+  return out.slice(0, 30);
+}
+
+export function parseChannelHits(list: unknown): ChannelHit[] {
+  const out: ChannelHit[] = [];
+  const seen = new Set<string>();
+  for (const x of arr(list)) {
+    const o = obj(x);
+    const id = str(o?.id);
+    const name = str(o?.name);
+    if (!o || !id || !name || !CHAN_ID.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    const now = obj(o.now);
+    const nowTitle = str(now?.title);
+    out.push({ id, name, num: num(o.num), logo: str(o.logo), group: str(o.group), quality: parseQuality(o.quality), now: nowTitle ? { title: nowTitle, phase: parsePhase(now?.phase) } : null });
+  }
+  return out.slice(0, 20);
+}
+
 /** One entry of the server's ranked `results` list (contract: ~/ai/plans/jellytip-search-10x.md "Pinned response fields"). */
 export interface SearchEntry {
   key: string;
@@ -113,6 +203,11 @@ export interface SearchResult {
   techs: unknown;
   logoStyles: unknown;
   untitled: string[];
+  /** Programmes airing now or soon, and channel-name matches; null when the server doesn't send the group. */
+  live: LiveHit[] | null;
+  channels: ChannelHit[] | null;
+  /** A pure sport or league query: the live row goes first. */
+  sportQuery: boolean;
   /** The ranked mixed list and its best hit; null when the server doesn't send `results` (then the groups are shown). */
   results: SearchEntry[] | null;
   top: SearchEntry | null;
@@ -213,6 +308,18 @@ export function seasonHint(e: Pick<SearchEntry, "kind" | "season" | "episode" | 
   return null;
 }
 
+/** `live` and `channels` as groups ({type, items}) or as top-level lists; null when absent. */
+function parseLiveGroups(r: Record<string, unknown>, g: unknown[], f: SearchFilters): { live: LiveHit[] | null; channels: ChannelHit[] | null; sportQuery: boolean } {
+  const grp = (type: string) => g.map(obj).find((x) => x?.type === type)?.items;
+  const live = grp("live") ?? r.live;
+  const channels = grp("channels") ?? r.channels;
+  return {
+    live: Array.isArray(live) ? parseLiveHits(live) : null,
+    channels: Array.isArray(channels) ? parseChannelHits(channels) : null,
+    sportQuery: !!(f.sport || f.league),
+  };
+}
+
 /** Server answer → typed groups; anything malformed drops out. null when it isn't a search answer at all. */
 export function parseSearch(raw: unknown): SearchResult | null {
   const r = obj(raw);
@@ -231,6 +338,8 @@ export function parseSearch(raw: unknown): SearchResult | null {
     unwatched: f.unwatched === true ? true : null,
     kind: str(f.kind),
     person: str(f.person),
+    sport: str(f.sport),
+    league: str(f.league),
     tech: Array.isArray(f.tech) ? strs(f.tech) : str(f.tech) ? [str(f.tech)!] : null,
   };
   return {
@@ -277,13 +386,14 @@ export function parseSearch(raw: unknown): SearchResult | null {
     untitled: strs(r.untitled),
     pending: strs(r.pending),
     ...parseResults(r.results, r.top),
+    ...parseLiveGroups(r, g, filters),
   };
 }
 
 export const isEmpty = (s: SearchResult) =>
   s.results
-    ? !(s.results.length + s.lists.length + s.discover.length)
-    : !(s.films.length + s.shows.length + s.people.length + s.collections.length + s.lists.length + s.iptv.length + s.discover.length);
+    ? !(s.results.length + s.lists.length + s.discover.length + (s.live?.length ?? 0) + (s.channels?.length ?? 0))
+    : !((s.live?.length ?? 0) + (s.channels?.length ?? 0) + s.films.length + s.shows.length + s.people.length + s.collections.length + s.lists.length + s.iptv.length + s.discover.length);
 
 // ---------- filter chips ----------
 
@@ -352,3 +462,12 @@ export function withoutFilter(text: string, f: SearchFilters, drop: string): str
   const rest = keep.filter((c) => c.key !== "genre").map((c) => c.phrase);
   return [genre?.phrase, text, ...rest].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
+
+/** "LIVE" / "REPLAY" / "PRE-GAME · Starts 18:00 · in 35 min" / "Today 19:30". */
+export function livePill(h: LiveHit, now: number): { text: string; tone: "rec" | "pre" | "time" | "dim" } {
+  if (h.replay) return { text: "REPLAY", tone: "dim" };
+  if (isPre(h.startsAt, now, h.phase)) return { text: `PRE-GAME · ${startsLine(h.startsAt!, now)}`, tone: "pre" };
+  if (h.start <= now && now < h.stop) return { text: "LIVE", tone: "rec" };
+  return { text: timeChip({ start: h.start, stop: h.stop }, new Date(now * 1000)), tone: "time" };
+}
+

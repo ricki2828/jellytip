@@ -10,6 +10,7 @@ import { useIsPhone } from "../lib/device";
 import { Card } from "../components/Card";
 import { PersonTile, filmCount } from "../components/PersonTile";
 import { PosterCard } from "../components/PosterCard";
+import { ChannelsRow, LiveRow } from "../components/SearchLive";
 import { IptvCard, IptvPoster, safeArt } from "../components/IptvTile";
 import { Backdrop } from "../components/Backdrop";
 import { imageUrl } from "../api/jellyfin";
@@ -167,8 +168,10 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
   const seen = new Set(list.filter((e) => e.source === "discover").map((e) => e.tmdbId));
   const missing = [...rest.filter((e) => e.source === "discover" && e.kind !== "person" && e.kind !== "collection").map(toDiscover), ...r.discover.filter((d) => !seen.has(d.tmdbId))];
   const phone = useIsPhone();
+  const liveRow = r.live && r.live.length > 0 ? <LiveRow hits={r.live} /> : null;
   return (
     <>
+      {r.sportQuery && liveRow}
       {top && <TopHit e={top} item={top.id ? items?.get(top.id) : undefined} onGetIt={onGetIt} />}
       {inLib.length > 0 && (
         <section className="row poster-row">
@@ -198,6 +201,8 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
           </div>
         </section>
       )}
+      {!r.sportQuery && liveRow}
+      {r.channels && r.channels.length > 0 && <ChannelsRow hits={r.channels} />}
       {people.length > 0 && (
         <section className="row">
           <h2 className="row-title">People</h2>
@@ -265,10 +270,14 @@ function Ranked({ r, untitled, posterW, onGetIt }: { r: SearchResult; untitled: 
 
 /** The old grouped layout (a server without `results`). */
 function Groups({ r, untitled, posterW, setGetIt }: { r: SearchResult; untitled: Set<string>; posterW: number; setGetIt: (d: DiscoverHit) => void }) {
+  const liveRow = r.live && r.live.length > 0 ? <LiveRow hits={r.live} /> : null;
   return (
     <>
+      {r.sportQuery && liveRow}
       {r.films.length > 0 && <LibGrid label="Films" hits={r.films} untitled={untitled} />}
       {r.shows.length > 0 && <LibGrid label="Shows" hits={r.shows} untitled={untitled} />}
+      {!r.sportQuery && liveRow}
+      {r.channels && r.channels.length > 0 && <ChannelsRow hits={r.channels} />}
       {r.people.length > 0 && (
         <section className="row">
           <h2 className="row-title">People</h2>
@@ -483,7 +492,7 @@ export function Search({ initial }: { initial: string }) {
       {/* Opening any result remembers the query (recent searches) */}
       <div className="search-results" onClickCapture={(e) => {
           const el = e.target as HTMLElement;
-          if (!el.closest(".card, .poster, .person-tile, .search-link, .search-hero .btn")) return;
+          if (!el.closest(".card, .poster, .person-tile, .search-link, .search-hero .btn, .onnow-card")) return;
           recordRecent(term);
           // Ranked layout: log which position was opened (1-based, the top hit is 1)
           const key = el.closest<HTMLElement>("[data-key]")?.dataset.key;
