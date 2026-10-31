@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -59,6 +60,7 @@ import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 @HiltViewModel
@@ -77,8 +79,18 @@ private const val STALL_MS = 10_000L
 private const val FLIP_POLL_MS = 30_000L
 private const val FANTASY_POLL_MS = 60_000L
 private const val FLIP_TOAST_MS = 6_000L
+private const val TOAST_GAP_MS = 250L
+private const val MAX_QUEUED_TOASTS = 3
 private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
+private val TOAST_MINE = Color(0xFF4CAF50)
+private val TOAST_OPP = Color(0xFFE5534B)
+
+/** A top-right player toast; [accent] = the fantasy side colour (green yours, red the opponent's), null = neutral. */
+data class PlayerToast(
+    val text: String,
+    val accent: Color? = null,
+)
 
 /**
  * An IPTV channel full screen. Up/Down zap through the guide tab it was opened from: the banner follows at once, the
@@ -235,14 +247,30 @@ fun JellytipLiveTvPlayerPage(
     var panelOpen by remember { mutableStateOf(false) }
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
-    var lastFlipText by remember { mutableStateOf<String?>(null) }
+    var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
     val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
     androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
-    // Top-right toast shared by market flips and fantasy scoring
-    var flipToast by remember { mutableStateOf<String?>(null) }
+    // Top-right toasts shared by market flips and fantasy scoring (plan "fantasy alerts"): one at a time, 6 s each, at
+    // most 3 waiting (the oldest waiting one is dropped)
+    var flipToast by remember { mutableStateOf<PlayerToast?>(null) }
+    val toastQueue = remember { androidx.compose.runtime.mutableStateListOf<PlayerToast>() }
+    fun enqueueToast(t: PlayerToast) {
+        if (toastQueue.size >= MAX_QUEUED_TOASTS) toastQueue.removeAt(0)
+        toastQueue.add(t)
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            androidx.compose.runtime.snapshotFlow { toastQueue.isNotEmpty() }.first { it }
+            val next = toastQueue.removeAt(0)
+            flipToast = next
+            delay(FLIP_TOAST_MS)
+            flipToast = null
+            delay(TOAST_GAP_MS) // let it slide out before the next one
+        }
+    }
     // Fantasy (plan "Fantasy live scoring for NFL"): while an NFL match plays (not a replay), /v1/fantasy/live every
     // 60 s feeds the panel's Fantasy tab, the banner chip and scoring toasts; nothing without a linked account
     val fantasy by JellytipFantasy.live.collectAsState()
@@ -267,17 +295,27 @@ fun JellytipLiveTvPlayerPage(
             return@LaunchedEffect
         }
         if (nflMatch == null || me?.fantasyAlerts == false) return@LaunchedEffect
-        fresh.lastOrNull()?.let { e ->
+        // Both sides (green accent for yours, red for the opponent's), with the play when the server has it:
+        // "🏈 +6.4 Gibbs · TD catch, 34 yds (CCP) · you lead 93.8 – 79.2"
+        fresh.forEach { e ->
             val league = f.leagues.firstOrNull { it.name == e.league || it.id == e.league }
             val sign = if (e.delta >= 0) "+" else ""
-            val who = if (e.side == "opp") "Opp " else ""
+            val opp = e.side == "opp"
             val lead =
                 league?.let { l ->
                     val mine = l.mePoints ?: 0.0
                     val theirs = l.oppPoints ?: 0.0
                     " · " + (if (mine >= theirs) "you lead " else "you trail ") + l.scoreLine
                 }.orEmpty()
-            flipToast = "🏈  $who$sign${pts(e.delta)} ${e.name}" + (e.league?.let { " ($it)" } ?: "") + lead
+            val leagueName = league?.short ?: e.league
+            enqueueToast(
+                PlayerToast(
+                    "🏈  ${if (opp) "Opp " else ""}$sign${pts(e.delta)} ${e.name}" +
+                        (e.reason?.let { " · $it" } ?: "") +
+                        (leagueName?.let { " ($it)" } ?: "") + lead,
+                    accent = if (opp) TOAST_OPP else TOAST_MINE,
+                ),
+            )
         }
     }
     // Favourite-flip toast (plan "Favourite-flip toast"): while watching a live key match (not a replay), /live is
@@ -298,7 +336,7 @@ fun JellytipLiveTvPlayerPage(
                 lastAt = at
                 val team = if (mk.flipTo == "away") m.away else m.home
                 val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
-                flipToast = "📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")
+                enqueueToast(PlayerToast("📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")))
                 JellytipTrace.player("iptv", "market flip ${m.id} -> ${mk.flipTo}")
             }
             delay(FLIP_POLL_MS)
@@ -462,26 +500,17 @@ fun JellytipLiveTvPlayerPage(
                 progress = panelProgress,
             )
         }
-        // Flip toast: top right, slides in from the right, 6 s, never takes focus
-        val toastText = flipToast
+        // Toast: top right, slides in from the right, never takes focus; the queue above times it
+        val toast = flipToast
         val toastIn by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = if (toastText != null) 1f else 0f,
-            animationSpec = androidx.compose.animation.core.tween(if (toastText != null) 260 else 200),
-            label = "flip-toast",
+            targetValue = if (toast != null) 1f else 0f,
+            animationSpec = androidx.compose.animation.core.tween(if (toast != null) 260 else 200),
+            label = "player-toast",
         )
-        LaunchedEffect(toastText) {
-            if (toastText != null) {
-                lastFlipText = toastText
-                delay(FLIP_TOAST_MS)
-                flipToast = null
-            }
-        }
-        if (toastIn > 0f) {
-            Text(
-                (toastText ?: lastFlipText).orEmpty(),
-                color = Color.White,
-                fontFamily = JellytipFontFamily,
-                fontSize = 14.sp,
+        LaunchedEffect(toast) { if (toast != null) lastToast = toast }
+        val shownToast = toast ?: lastToast
+        if (toastIn > 0f && shownToast != null) {
+            Row(
                 modifier =
                     Modifier
                         .align(Alignment.TopEnd)
@@ -489,9 +518,19 @@ fun JellytipLiveTvPlayerPage(
                         .graphicsLayer {
                             translationX = (1f - toastIn) * (size.width + 32.dp.toPx())
                             alpha = toastIn
-                        }.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+                        }.widthIn(max = 640.dp)
+                        .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+                        .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(8.dp)),
+            ) {
+                shownToast.accent?.let { Box(Modifier.width(4.dp).fillMaxHeight().background(it, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))) }
+                Text(
+                    shownToast.text,
+                    color = Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
         }
         matchModal?.let { m ->
             JellytipMatchModal(

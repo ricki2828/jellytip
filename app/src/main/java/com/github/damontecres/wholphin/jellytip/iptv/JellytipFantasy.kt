@@ -69,6 +69,8 @@ data class FantasyEvent(
     val name: String,
     val delta: Double,
     val side: String?,
+    /** The play from the ESPN play-by-play ("TD catch, 34 yds"); null = none matched. */
+    val reason: String? = null,
 )
 
 data class FantasyLive(
@@ -100,7 +102,7 @@ object FantasyParse {
         } else {
             (0 until a.length()).mapNotNull { i ->
                 val e = a.optJSONObject(i) ?: return@mapNotNull null
-                FantasyEvent(e.str("at") ?: return@mapNotNull null, e.str("league"), e.str("name") ?: return@mapNotNull null, e.dbl("delta") ?: return@mapNotNull null, e.str("side"))
+                FantasyEvent(e.str("at") ?: return@mapNotNull null, e.str("league"), e.str("name") ?: return@mapNotNull null, e.dbl("delta") ?: return@mapNotNull null, e.str("side"), e.str("reason"))
             }
         }
 
