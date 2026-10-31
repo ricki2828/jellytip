@@ -30,6 +30,8 @@ jobs:
         run: git fetch --tags https://github.com/damontecres/Wholphin.git || true
       - name: Setup
         uses: ./.github/actions/setup
+      - name: Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)
+        run: bash .github/scripts/jellytip-fixture-scan.sh
       - name: Jellytip unit tests
         run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --no-daemon
       - name: Build debug app
