@@ -185,6 +185,7 @@ export function MatchInfoHost() {
                     </div>
                     <div className="bc-sub">
                       {f.league && <b>{f.league}</b>}
+                      {[f.session, f.round].filter(Boolean).length > 0 && <span>{[f.session, f.round].filter(Boolean).join(" · ")}</span>}
                       {venueLine(f) && <span className="bc-venue">{venueLine(f)}</span>}
                     </div>
                     {f.participants.length > 0 && <p className="bc-parts">{f.participants.slice(0, 12).join(" · ")}</p>}

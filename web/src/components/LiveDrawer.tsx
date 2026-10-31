@@ -223,7 +223,7 @@ const TowerRowView = memo(function TowerRowView({ r }: { r: TowerRow }) {
       <b className="pos">{r.pos}</b>
       <i style={{ background: r.color ?? "#5a6372" }} aria-hidden />
       <span className="drv">{r.driver}</span>
-      <span className="gap">{r.gap ?? ""}</span>
+      <span className="gap">{r.best ? `${r.best}${r.gap ? ` ${r.gap}` : ""}` : (r.gap ?? "")}</span>
       {r.tyre && (
         <span className="tyre" style={{ borderColor: TYRE_COLOR[r.tyre] }} title={r.tyreAge ? `${r.tyre}, ${r.tyreAge} laps` : r.tyre}>
           {r.tyre}
@@ -332,6 +332,28 @@ function SituationView({ blocks, hc, ac }: { blocks: Block[]; hc: string; ac: st
                   ))}
                 </tbody>
               </table>
+            </div>
+          );
+        if (b.kind === "matches")
+          return (
+            <div key={i} className="ld-card">
+              <h4>{b.title}</h4>
+              <ul className="ld-tm">
+                {b.rows.map((m) => (
+                  <li key={m.id}>
+                    <span className="pl">
+                      {m.serving === "home" && <i className="ld-serve" />}
+                      {m.home}
+                    </span>
+                    <b className="sc">{m.score ?? ""}</b>
+                    <span className="pl r">
+                      {m.away}
+                      {m.serving === "away" && <i className="ld-serve" />}
+                    </span>
+                    <small>{[m.round, m.court, m.status].filter(Boolean).join(" · ")}</small>
+                  </li>
+                ))}
+              </ul>
             </div>
           );
         if (b.kind === "leaderboard")

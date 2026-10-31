@@ -2953,3 +2953,29 @@
   font-style: normal;
   letter-spacing: 0.08em;
 }
+.ld-tm {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ld-tm li {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid #1c212a;
+  font: 600 16px "Barlow Condensed", system-ui, sans-serif;
+}
+.ld-tm .pl.r {
+  text-align: right;
+}
+.ld-tm .sc {
+  color: #ffc72c;
+  font-variant-numeric: tabular-nums;
+}
+.ld-tm small {
+  grid-column: 1 / -1;
+  font: 500 12px Barlow, system-ui, sans-serif;
+  color: #a9b0bc;
+}

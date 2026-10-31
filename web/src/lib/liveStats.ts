@@ -224,7 +224,21 @@ export type Block =
   | { kind: "banner"; lap: string | null; session: string | null; flag: Flag | null; fastest: string | null }
   | { kind: "tower"; rows: TowerRow[] }
   | { kind: "sets"; head: string[]; rows: { name: string; serving: boolean; cells: string[]; game: string }[] }
-  | { kind: "leaderboard"; title: string; rows: LeaderRow[]; pinned: LeaderRow[] };
+  | { kind: "leaderboard"; title: string; rows: LeaderRow[]; pinned: LeaderRow[] }
+  | { kind: "matches"; title: string; rows: TennisMatch[] };
+
+export interface TennisMatch {
+  id: string;
+  home: string;
+  away: string;
+  round: string | null;
+  court: string | null;
+  status: string | null;
+  startsAt: number | null;
+  /** "6-4 7-6" from home's point of view; null before the first set. */
+  score: string | null;
+  serving: "home" | "away" | null;
+}
 
 export type Flag = "green" | "yellow" | "sc" | "vsc" | "red" | "chequered";
 export const FLAG_LABEL: Record<Flag, string> = { green: "GREEN", yellow: "YELLOW", sc: "SAFETY CAR", vsc: "VIRTUAL SC", red: "RED FLAG", chequered: "CHEQUERED" };
@@ -235,6 +249,8 @@ export interface TowerRow {
   team: string | null;
   color: string | null;
   gap: string | null;
+  /** Practice and qualifying: the best lap, with `gap` the difference ("+0.123"). */
+  best: string | null;
   tyre: string | null;
   tyreAge: string | null;
   pits: string | null;
@@ -257,6 +273,8 @@ export const tyreLetter = (v: unknown): string | null => {
   return "SMHIW".includes(c) && c ? c : null;
 };
 const towerGap = (r: Record<string, unknown>) => text(r.gap) ?? text(r.interval);
+/** The row's flag (an emoji the server sends) or its country code. */
+const flagText = (r: Record<string, unknown>): string | null => text(r.flag) ?? text(r.country);
 
 const sit = (o: Record<string, unknown> | null, k: string) => o?.[k];
 const text = (v: unknown): string | null => (typeof v === "string" && v ? v : typeof v === "number" && isFinite(v) ? String(v) : null);
@@ -342,7 +360,7 @@ export function situationBlocks(layout: string | null, s: Record<string, unknown
         ? (standings as Record<string, unknown>[]).flatMap((r): TowerRow[] => {
             const driver = text(r.driver);
             return driver
-              ? [{ pos: text(r.pos) ?? "", driver, team: text(r.team), color: typeof r.teamColor === "string" && /^#?[0-9a-f]{6}$/i.test(r.teamColor) ? `#${r.teamColor.replace("#", "").toLowerCase()}` : null, gap: towerGap(r), tyre: tyreLetter(r.tyre), tyreAge: text(r.tyreAge), pits: text(r.pits), fastest: r.fastest === true }]
+              ? [{ pos: text(r.pos) ?? "", driver, team: text(r.team), color: typeof r.teamColor === "string" && /^#?[0-9a-f]{6}$/i.test(r.teamColor) ? `#${r.teamColor.replace("#", "").toLowerCase()}` : null, gap: towerGap(r), best: text(r.best), tyre: tyreLetter(r.tyre), tyreAge: text(r.tyreAge), pits: text(r.pits), fastest: r.fastest === true }]
               : [];
           })
         : [];
@@ -350,7 +368,22 @@ export function situationBlocks(layout: string | null, s: Record<string, unknown
       break;
     }
     case "tennis": {
-      const [setsRaw, gameRaw, serving, stats] = take("sets", "game", "serving", "stats");
+      const [setsRaw, gameRaw, serving, stats, matchesRaw] = take("sets", "game", "serving", "stats", "matches");
+      // A tournament event lists its matches; a single match has a set grid
+      const playerName = (v: unknown) => (typeof v === "string" ? v : text((v as Record<string, unknown> | null)?.name) ?? text((v as Record<string, unknown> | null)?.short));
+      const matchRows = Array.isArray(matchesRaw)
+        ? (matchesRaw as Record<string, unknown>[]).flatMap((m): TennisMatch[] => {
+            const h = playerName(m.home);
+            const a = playerName(m.away);
+            if (!h || !a) return [];
+            const sets = Array.isArray(m.sets) ? (m.sets as Record<string, unknown>[]).map((x) => `${text(x.home) ?? "–"}-${text(x.away) ?? "–"}`).join(" ") : "";
+            return [{ id: text(m.id) ?? `${h}${a}`, home: h, away: a, round: text(m.round), court: text(m.court), status: text(m.status), startsAt: typeof m.startsAt === "number" ? m.startsAt : null, score: sets || null, serving: sideOf(m.serving) }];
+          })
+        : [];
+      if (matchRows.length) {
+        out.push({ kind: "matches", title: "Matches", rows: matchRows });
+        break;
+      }
       const sets = Array.isArray(setsRaw) ? (setsRaw as Record<string, unknown>[]) : [];
       const g = pair(gameRaw);
       if (sets.length || g) {
@@ -369,7 +402,7 @@ export function situationBlocks(layout: string | null, s: Record<string, unknown
       const [round, lb, fav] = take("round", "leaderboard", "favourites");
       const rowsOf = (v: unknown): LeaderRow[] =>
         Array.isArray(v)
-          ? (v as Record<string, unknown>[]).flatMap((r): LeaderRow[] => (text(r.player) ? [{ pos: text(r.pos) ?? "", player: text(r.player)!, country: text(r.country), toPar: text(r.toPar) ?? "E", thru: text(r.thru), today: text(r.today) }] : []))
+          ? (v as Record<string, unknown>[]).flatMap((r): LeaderRow[] => (text(r.player) ? [{ pos: text(r.pos) ?? "", player: text(r.player)!, country: flagText(r), toPar: text(r.toPar) ?? "E", thru: text(r.thru), today: text(r.today) }] : []))
           : [];
       const rows = rowsOf(lb).slice(0, 15);
       const pinned = rowsOf(fav);

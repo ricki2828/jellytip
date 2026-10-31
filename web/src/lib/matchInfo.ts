@@ -21,6 +21,10 @@ export interface Fixture {
   kind: "match" | "event" | "multi";
   title: string | null;
   participants: string[];
+  /** Events: the session ("Race", "Qualifying") and round ("Round 3"), and the F1 country flag. */
+  session: string | null;
+  round: string | null;
+  flag: string | null;
   league: string | null;
   /** The league's key ("nfl", "nba"…): what code decides on; `league` is for display. */
   leagueKey: string | null;
@@ -112,6 +116,9 @@ export function parseFixture(raw: unknown): Fixture | null {
     id,
     kind: o.kind === "multi" ? "multi" : event ? "event" : "match",
     title,
+    session: str(o.session),
+    round: str(o.round),
+    flag: str(o.flag),
     participants: arr(o.participants).flatMap((p) => (typeof p === "string" ? [p] : str(obj(p)?.name) ? [str(obj(p)?.name)!] : [])),
     league: str(o.league),
     leagueKey: str(o.leagueKey)?.toLowerCase() ?? null,

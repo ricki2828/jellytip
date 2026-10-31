@@ -817,3 +817,26 @@ test("RedZone (multi): fixture without teams, games board, fantasy gating by lea
   assert.equal(mineLive(live), 2);
   assert.equal(mineLive(null), 0);
 });
+
+test("round 2 pinned shapes: practice tower with best and gap, tennis tournament matches, event session/round", () => {
+  const ev = parseFixture({ id: "f1:mex-q", kind: "event", leagueKey: "f1", title: "Mexico City GP · Qualifying", session: "Qualifying", flag: "🇲🇽" })!;
+  assert.equal(ev.session, "Qualifying");
+  assert.equal(ev.flag, "🇲🇽");
+  assert.equal(ev.round, null);
+  const q = situationBlocks("f1", { session: "Qualifying", standings: [{ pos: 1, driver: "NOR", number: 4, best: "1:15.2", gap: "BEST", tyre: "S" }, { pos: 2, driver: "VER", best: "1:15.3", gap: "+0.123" }] }, { home: "", away: "" });
+  const tw = q.find((b) => b.kind === "tower") as { rows: { best: string | null; gap: string | null }[] };
+  assert.equal(tw.rows[1].best, "1:15.3");
+  assert.equal(tw.rows[1].gap, "+0.123");
+  const ten = situationBlocks("tennis", { matches: [{ id: "m1", home: { name: "Chris Wood" }, away: "K. Coppejans", status: "in", round: "R32", court: "Court 2", sets: [{ home: 6, away: 4 }, { home: 3, away: 3 }], serving: "home" }, { home: "x" }] }, { home: "", away: "" });
+  assert.equal(ten.length, 1);
+  const mt = ten[0] as { kind: string; rows: { home: string; away: string; score: string | null; serving: string | null; court: string | null }[] };
+  assert.equal(mt.kind, "matches");
+  assert.equal(mt.rows.length, 1);
+  assert.equal(mt.rows[0].score, "6-4 3-3");
+  assert.equal(mt.rows[0].serving, "home");
+  // a single match without game points still shows its set grid
+  const single = situationBlocks("tennis", { sets: [{ home: 6, away: 3 }], serving: "away" }, { home: "A", away: "B" });
+  assert.deepEqual((single[0] as { head: string[] }).head, ["S1"]);
+  const g = situationBlocks("golf", { round: 2, leaderboard: [{ pos: 1, player: "X", country: "JPN", flag: "🇯🇵", toPar: "-9" }] }, { home: "", away: "" });
+  assert.equal((g[0] as { rows: { country: string | null }[] }).rows[0].country, "🇯🇵");
+});
