@@ -6,6 +6,7 @@ import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
+import { FantasyAlerts, FantasyChip } from "../../components/Fantasy";
 import { FlipAlerts } from "../../components/FlipAlerts";
 import { LiveDrawer } from "../../components/LiveDrawer";
 import { usePrefs } from "../../api/me";
@@ -586,6 +587,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
         {isLive && <MatchInfoButton id={extras?.matchId} />}
+        <FantasyChip matchId={extras?.matchId} active={isLive && state.kind === "playing"} />
         {extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}>
             Live
@@ -599,6 +601,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-method">via IPTV</span>
       </div>
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      <FantasyAlerts matchId={extras?.matchId} active={isLive && state.kind === "playing"} />
       <FlipAlerts matchId={extras?.matchId} active={isLive && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />
       {drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive} spoilers={spoilers} onClose={() => setDrawer(false)} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (

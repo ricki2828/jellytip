@@ -1576,3 +1576,33 @@
     animation: none;
   }
 }
+.fantasy-chip {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fantasy-pill {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(47, 143, 91, 0.5);
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.flip-toast.fantasy {
+  top: calc(var(--safe-t, 0px) + 124px);
+}
+.ld-pts {
+  float: right;
+  font-variant-numeric: tabular-nums;
+}
+.mi-list.opp {
+  margin-top: 6px;
+  opacity: 0.85;
+}

@@ -8,6 +8,8 @@ import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { useEscapeClose } from "./BackArrow";
 import { isPre, startsLine } from "../lib/preGame";
+import { useFantasy } from "../api/fantasy";
+import { mineInGame } from "../lib/fantasy";
 import { IdentifiedMark, MatchInfoButton } from "./MatchInfo";
 import { displayTitle } from "../lib/matchInfo";
 import { MuteButton } from "./SportMute";
@@ -61,6 +63,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     };
   }, [sportOnly, checkProvider]);
 
+  const fantasy = useFantasy(true);
   const [openAlt, setOpenAlt] = useState<string | null>(null);
   useEscapeClose(() => setOpenAlt(null), openAlt != null);
   const live = (items ?? []).filter((o) => o.stop > now);
@@ -107,6 +110,10 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               <span className="onnow-title">
                 {o.info.match && (o.info.match.team || o.info.match.league) && <span className="sport-star" title={`Your ${o.info.match.team ? "team" : "league"}: ${o.info.match.team ?? o.info.match.league}`}>★ </span>}
                 {displayTitle(o.title, o.info.fixture)}
+                {(() => {
+                  const n = mineInGame(fantasy, o.info.fixture?.id);
+                  return n > 0 ? <span className="fantasy-pill">{n} of yours</span> : null;
+                })()}
                 {o.info.fixture?.inferred && <IdentifiedMark />}
               </span>
               <span className="onnow-channel">{o.channel}</span>

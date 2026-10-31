@@ -16,6 +16,16 @@ window.addEventListener("jellytip-session", () => {
   window.dispatchEvent(new Event(EVENT));
 });
 
+const memo = new Map<string, { at: number; p: Promise<MatchDetail | "missing" | null> }>();
+/** The same detail for a few callers at once (player chip, flip names, drawer): one request, kept 30 s. */
+export function matchDetailCached(id: string): Promise<MatchDetail | "missing" | null> {
+  const m = memo.get(id);
+  if (m && Date.now() - m.at < 30_000) return m.p;
+  const p = matchDetail(id);
+  memo.set(id, { at: Date.now(), p });
+  return p;
+}
+
 /** `score`: ask for the score too (it is left out unless the person's spoilers setting is on). */
 export async function matchDetail(id: string, score = false): Promise<MatchDetail | "missing" | null> {
   const a = await companionCall("GET", `v1/sport/match/${encodeURIComponent(id)}${score ? "?score=1" : ""}`);

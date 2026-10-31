@@ -6,6 +6,7 @@ import { hasLiveTv, probeNow, qualitySummary, sportSuggest } from "../api/iptv";
 import { savePrefs } from "../api/me";
 import { forgetLearned, learnedTaste, setMuted } from "../api/sportTaste";
 import type { Learned } from "../lib/sportMute";
+import { FantasySettings } from "./FantasySettings";
 import { SportsPicker, SportTagToggles } from "./SportPicker";
 import type { Prefs } from "../lib/prefs";
 import { BUCKET_NAME, toggleName, type ProviderQuality, type QualitySummary, type Suggestion } from "../lib/sport";
@@ -160,6 +161,8 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           </div>
         </div>
       )}
+
+      <FantasySettings prefs={prefs} onMsg={setMsg} />
 
       {summary && (
         <div className="settings-block settings-pad">

@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
 import { agoText, maskText, mayShow, pct, volumeText, type LiveStats } from "../lib/liveStats";
 import type { Fixture } from "../lib/matchInfo";
+import { FantasyTab } from "./Fantasy";
+import { useFantasy } from "../api/fantasy";
+import { isNfl } from "../lib/fantasy";
 import { announceFlips } from "./FlipAlerts";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import "../screens/iptv/iptv.css";
 
-type Tab = "stats" | "plays" | "odds" | "chat";
+type Tab = "stats" | "plays" | "odds" | "chat" | "fantasy";
 const TABS: [Tab, string][] = [
   ["stats", "Stats"],
   ["plays", "Plays"],
@@ -56,6 +59,9 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
   const [now, setNow] = useState(() => Date.now() / 1000);
   const allowed = mayShow(liveNow, spoilers);
+  // Fantasy: only for an NFL game with a linked Sleeper account and the server's routes
+  const fantasy = useFantasy(liveNow);
+  const showFantasy = !!fantasy && fantasy.leagues.length > 0 && !!fixture && isNfl(fixture.league, fixture.id);
   // Slides out for 200 ms before it goes
   const [leaving, setLeaving] = useState(false);
   const close = () => {
@@ -105,7 +111,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
       ) : (
         <>
           <div className="chips" role="tablist" aria-label="Live panel">
-            {TABS.map(([k, label]) => (
+            {(showFantasy ? [...TABS, ["fantasy", "Fantasy"] as [Tab, string]] : TABS).map(([k, label]) => (
               <button key={k} className={`chip${tab === k ? " on" : ""}`} data-nav role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
                 {label}
               </button>
@@ -196,6 +202,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   )}
                 </>
               )}
+              {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} />}
               {tab === "chat" && (
                 <>
                   {(!d.chat || d.chat.comments.length === 0) && <p className="iptv-hint">No chat for this match.</p>}
