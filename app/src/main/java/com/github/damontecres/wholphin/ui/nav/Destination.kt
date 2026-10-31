@@ -197,6 +197,17 @@ sealed class Destination(
     @Serializable
     data object JellytipRecordings : Destination(false)
 
+    /** Jellytip: the Collections hub (sidebar "Collections"): section chips and a grid of collections. */
+    @Serializable
+    data object JellytipCollections : Destination(false)
+
+    /** Jellytip: one hub collection (`GET /v1/collections/{id}`, a row), as a poster grid. */
+    @Serializable
+    data class JellytipHubCollection(
+        val id: String,
+        val title: String,
+    ) : Destination(false)
+
     /** Jellytip: upcoming sport over the next days, grouped by day (sidebar, Live TV). */
     @Serializable
     data object JellytipUpcomingSport : Destination(false)

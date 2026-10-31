@@ -421,6 +421,16 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)
         }
 
+        Destination.JellytipCollections -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.rows.JellytipCollectionsHubPage(modifier = modifier)
+        }
+
+        is Destination.JellytipHubCollection -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.rows.JellytipHubCollectionPage(destination.id, destination.title, modifier = modifier)
+        }
+
         Destination.JellytipUpcomingSport -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipUpcomingSportPage(modifier = modifier)

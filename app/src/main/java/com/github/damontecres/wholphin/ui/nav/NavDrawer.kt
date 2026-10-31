@@ -151,6 +151,11 @@ class NavDrawerViewModel
                     navigationManager.navigateToFromDrawer(Destination.JellytipUpcomingSport)
                 }
 
+                NavDrawerItem.Collections -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipCollections)
+                }
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -185,6 +190,7 @@ class NavDrawerViewModel
                             is NavDrawerItem.LiveTv -> Destination.JellytipLiveTv
                             is NavDrawerItem.Recordings -> Destination.JellytipRecordings
                             is NavDrawerItem.UpcomingSport -> Destination.JellytipUpcomingSport
+                            is NavDrawerItem.Collections -> Destination.JellytipCollections
                             else -> null
                         }
                     }
@@ -274,6 +280,14 @@ sealed interface NavDrawerItem {
             get() = "a_jellytip_recordings"
 
         override fun name(context: Context): String = context.getString(R.string.jellytip_recordings)
+    }
+
+    /** Jellytip: the Collections hub (search-10x plan "C"): collections, top lists, franchises, countries, decades… */
+    object Collections : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_collections"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_collections)
     }
 
     /** Jellytip: upcoming sport (next 3 days), under Live TV for people with IPTV. */
@@ -723,6 +737,10 @@ fun NavigationDrawerScope.NavItem(
 
                 NavDrawerItem.UpcomingSport -> {
                     R.string.fa_clock
+                }
+
+                NavDrawerItem.Collections -> {
+                    R.string.fa_open_folder
                 }
 
                 is ServerNavDrawerItem -> {

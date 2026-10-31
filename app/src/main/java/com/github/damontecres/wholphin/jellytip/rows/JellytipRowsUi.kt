@@ -899,7 +899,7 @@ private fun MixedRow(
     }
 }
 
-private sealed interface TrendTile {
+internal sealed interface TrendTile {
     val rank: Int
     val key: String
 
@@ -1039,7 +1039,7 @@ private fun TrendingTop10Row(
 
 /** A trending title that is nowhere: its poster dimmed, the title when there is none, and "Not available". */
 @Composable
-private fun BoxScope.MissingTrendArt(m: JellytipServerRow.Missing) {
+internal fun BoxScope.MissingTrendArt(m: JellytipServerRow.Missing) {
     var failed by remember(m.poster) { mutableStateOf(false) }
     if (m.poster != null && !failed) {
         AsyncImage(

@@ -209,7 +209,7 @@ object JellytipRowsParser {
             }
         }
 
-    private fun row(o: JSONObject): JellytipServerRow? {
+    internal fun row(o: JSONObject): JellytipServerRow? {
         val id = o.str("id") ?: return null
         val itemIds = o.uuids("itemIds")
         val iptv = com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.items(o.optJSONArray("iptvItems"), com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
