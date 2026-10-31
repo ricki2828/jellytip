@@ -1158,3 +1158,31 @@
   font-weight: 700;
   color: var(--dim);
 }
+.sport-pill.pre,
+.rec-chip.pre {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--vanilla);
+}
+.onnow-starts {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+}
+.pregame-card {
+  position: absolute;
+  left: max(var(--pad), 12px);
+  bottom: 90px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+}
+.pregame-card .buttons {
+  flex-wrap: wrap;
+}

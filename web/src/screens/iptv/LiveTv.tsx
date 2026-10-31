@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
+import { isPre, parsePhase, parseStartsAt } from "../../lib/preGame";
 import { BackArrow, SheetClose, useEscapeClose } from "../../components/BackArrow";
 import { liveExtrasQuery, targetPath, type LiveExtras, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
@@ -148,8 +149,14 @@ export function LiveTv() {
 
   // ---- actions ----
   const playChannel = (ch: Channel, t: Partial<PlayTarget> = {}, label = ch.name, x?: LiveExtras) => go(`${targetPath({ channel: ch.id, ...t })}&t=${encodeURIComponent(label)}${liveExtrasQuery(x)}`);
+  // Kick-off (catch-up) and pre-game (real start still ahead) travel with the play link
+  const liveExtrasOf = (p: Prog): LiveExtras => {
+    const at = parseStartsAt(p.startsAt);
+    const pre = isPre(at, Date.now() / 1000, parsePhase(p.phase));
+    return { kickoff: p.startOver && !pre ? { start: p.start, stop: p.stop } : null, startsAt: pre ? at : null };
+  };
   const open = (ch: Channel, p: Prog) => {
-    if (p.start <= now && now < p.stop) playChannel(ch, {}, ch.name, p.startOver ? { kickoff: { start: p.start, stop: p.stop } } : undefined);
+    if (p.start <= now && now < p.stop) playChannel(ch, {}, ch.name, liveExtrasOf(p));
     else setSheet({ ch, prog: p });
   };
   const record = async (s: Sheet) => {

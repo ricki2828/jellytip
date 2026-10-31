@@ -1,6 +1,7 @@
 // Upcoming sport (GET v1/iptv/sport/upcoming; contract: ~/ai/plans/jellytip-live-sport.md "Upcoming sport"). Events in
 // the server's order (favourite teams, favourite leagues, the rest; by start within a tier). Pure; tested in
 // web/test/upcoming.test.ts.
+import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
 import { parseArt, parseQuality, type Kind, type Quality, type SportArt } from "./sport.ts";
 
 export interface UpChannel {
@@ -17,6 +18,8 @@ export interface UpEvent {
   league: string | null;
   sportName?: string | null;
   startOver?: boolean;
+  phase?: Phase | null;
+  startsAt?: number | null;
   /** The person's team or league that matched (the ★). */
   favourite: boolean;
   start: number;
@@ -67,6 +70,8 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       league: str(e.league) ?? str(m?.league),
       sportName: str(e.sportName) ?? str(e.sport),
       startOver: e.startOver === true,
+      phase: parsePhase(e.phase),
+      startsAt: parseStartsAt(e.startsAt),
       favourite: !!(str(m?.team) || str(m?.league)),
       start,
       stop,

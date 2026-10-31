@@ -9,6 +9,7 @@ import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { isLive, timeChip, type UpChannel, type UpEvent } from "../lib/upcoming";
 import { SheetClose, useEscapeClose } from "./BackArrow";
+import { isPre, startsLine } from "../lib/preGame";
 import { MuteButton } from "./SportMute";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
@@ -17,11 +18,14 @@ import "../screens/iptv/iptv.css";
 export function UpTile({ e, onOpen }: { e: UpEvent; onOpen: () => void }) {
   const live = isLive(e);
   const best = e.channels[0];
+  const nowS = Date.now() / 1000;
+  // Within the hour before the real start the tile says pre-game, with the countdown
+  const pre = isPre(e.startsAt, nowS, e.phase) && e.startsAt! - nowS <= 3600;
   return (
     <MuteButton target={{ title: e.title, league: e.league, sportName: e.sportName }} className={`up-tile${live ? " live" : ""}${artClass(e.art)}`} data-nav onClick={onOpen} aria-label={`${e.title}, ${timeChip(e)}`} title={e.title}>
       <SportArt art={e.art} />
       <span className="up-top">
-        <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>
+        {pre ? <span className="rec-chip pre">PRE-GAME · {startsLine(e.startsAt!, nowS)}</span> : <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>}
         {e.favourite && <span className="sport-star" title="Your team or league">★</span>}
       </span>
       <span className="rec-title">{e.title}</span>
@@ -49,7 +53,9 @@ function ChannelLine({ c, live, onWatch }: { c: UpChannel; live: boolean; onWatc
 
 /** Kick-off (only on the best channel) and the event's other channels, carried into the player. */
 export const watchExtras = (e: UpEvent, via: string): LiveExtras => ({
-  kickoff: e.startOver && via === e.channels[0]?.id ? { start: e.start, stop: e.stop } : null,
+  kickoff: e.startOver && via === e.channels[0]?.id && !isPre(e.startsAt, Date.now() / 1000, e.phase) ? { start: e.start, stop: e.stop } : null,
+  startsAt: isPre(e.startsAt, Date.now() / 1000, e.phase) ? e.startsAt : null,
+  eventKey: e.key,
   alternates: e.channels.filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })),
 });
 

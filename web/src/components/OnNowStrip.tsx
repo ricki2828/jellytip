@@ -7,6 +7,7 @@ import { afterStartup } from "../lib/startup";
 import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { useEscapeClose } from "./BackArrow";
+import { isPre, startsLine } from "../lib/preGame";
 import { MuteButton } from "./SportMute";
 import { MUTED_EVENT } from "../api/sportTaste";
 import { SportBadges } from "./SportBadges";
@@ -24,6 +25,11 @@ function Logo({ o }: { o: OnNow }) {
 export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = false }: { title: string; sportOnly?: boolean; min?: number; checkProvider?: boolean }) {
   const [items, setItems] = useState<OnNow[] | null>(null);
   const [now, setNow] = useState(() => Date.now() / 1000);
+  // Countdowns follow the clock between loads
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now() / 1000), 30_000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => {
     let alive = true;
     let t: number | undefined;
@@ -59,7 +65,9 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
   if (live.length < min) return null;
   // Kick-off (when the channel has catch-up) and the other channels of the same event, for the player's "From kick-off" and stall prompt
   const extrasOf = (o: OnNow, via?: string): LiveExtras => ({
-    kickoff: !via && o.info.startOver ? { start: o.start, stop: o.stop } : null,
+    kickoff: !via && o.info.startOver && !isPre(o.info.startsAt, now, o.info.phase) ? { start: o.start, stop: o.stop } : null,
+    startsAt: !via && isPre(o.info.startsAt, now, o.info.phase) ? o.info.startsAt : null,
+    eventKey: o.info.eventKey,
     alternates: [{ id: o.channelId, name: o.channel }, ...alts(o)].filter((a) => a.id !== (via ?? o.channelId)),
   });
   const play = (id: string, name: string, x?: LiveExtras) => go(livePath(id, name, x));
@@ -85,7 +93,13 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               <SportArt art={o.info.art} />
               <span className="onnow-top">
                 <Logo o={o} />
-                {o.info.kind ? <SportBadges kind={o.info.kind} sport={o.sport} size="sm" /> : <span className="onnow-live">Live</span>}
+                {isPre(o.info.startsAt, now, o.info.phase) ? (
+                  <span className="sport-pill pre">PRE-GAME</span>
+                ) : o.info.kind ? (
+                  <SportBadges kind={o.info.kind} sport={o.sport} size="sm" />
+                ) : (
+                  <span className="onnow-live">Live</span>
+                )}
               </span>
               <span className="onnow-title">
                 {o.info.match && (o.info.match.team || o.info.match.league) && <span className="sport-star" title={`Your ${o.info.match.team ? "team" : "league"}: ${o.info.match.team ?? o.info.match.league}`}>★ </span>}
@@ -93,9 +107,13 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               </span>
               <span className="onnow-channel">{o.channel}</span>
               <SportBadges quality={o.info.quality} size="sm" />
-              <span className="onnow-progress" aria-hidden>
-                <span style={{ width: `${progressOf(o, now) * 100}%` }} />
-              </span>
+              {isPre(o.info.startsAt, now, o.info.phase) ? (
+                <span className="onnow-starts">{startsLine(o.info.startsAt!, now)}</span>
+              ) : (
+                <span className="onnow-progress" aria-hidden>
+                  <span style={{ width: `${progressOf(o, now) * 100}%` }} />
+                </span>
+              )}
             </MuteButton>
             {alts(o).length > 0 && (
               <>

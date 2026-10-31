@@ -297,8 +297,32 @@ test("live extras: kick-off and alternates round-trip through the play link", ()
   const path = livePath("3:76", "Sky Sport 1", x);
   const q = new URLSearchParams(path.split("?")[1]);
   assert.equal(q.get("channel"), "3:76");
-  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }] });
+  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null });
   assert.equal(liveExtrasQuery(null), "");
   assert.equal(liveExtrasQuery({ kickoff: { start: 5, stop: 5 }, alternates: [] }), "");
-  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [] });
+  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null });
+  const p = parseLiveExtras(new URLSearchParams(liveExtrasQuery({ startsAt: 1_900_000_000, eventKey: "nfl:a-v-b" }).slice(1)));
+  assert.equal(p.startsAt, 1_900_000_000);
+  assert.equal(p.eventKey, "nfl:a-v-b");
+});
+
+import { inText, isPre, parsePhase, parseStartsAt, preGameCard, startsLine } from "../src/lib/preGame.ts";
+
+test("pre-game: phase and start parse, the clock decides, texts", () => {
+  const at = parseStartsAt("2026-10-31T18:00:00Z")!;
+  assert.equal(at, Date.parse("2026-10-31T18:00:00Z") / 1000);
+  assert.equal(parseStartsAt("nope"), null);
+  assert.equal(parseStartsAt(null), null);
+  assert.equal(parsePhase("pre"), "pre");
+  assert.equal(parsePhase("weird"), null);
+  assert.equal(isPre(at, at - 600, "pre"), true);
+  assert.equal(isPre(at, at - 600, null), true);
+  assert.equal(isPre(at, at + 1, "pre"), false);
+  assert.equal(isPre(at, at - 600, "live"), false);
+  assert.equal(isPre(null, 0, "pre"), false);
+  assert.equal(inText(at, at - 35 * 60), "in 35 min");
+  assert.equal(inText(at, at - 130 * 60), "in 2h 10m");
+  assert.equal(inText(at, at + 5), "any moment");
+  assert.match(startsLine(at, at - 600), /^Starts \d\d:\d\d · in 10 min$/);
+  assert.match(preGameCard(at, at - 600), /^Pre-game — the event starts at \d\d:\d\d \(in 10 min\)$/);
 });

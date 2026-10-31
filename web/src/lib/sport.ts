@@ -2,6 +2,8 @@
 // §2-§4). Everything is optional: a server without them gives no badges and the old behaviour. Pure; tested in
 // web/test/sport.test.ts. The server decides the order; nothing here sorts.
 
+import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
+
 export type Kind = "live" | "replay" | "highlights" | "other";
 export type Bucket = "uhd" | "fhd50" | "fhd" | "hd" | "sd" | "slow" | "dead" | "unknown";
 
@@ -35,6 +37,9 @@ export interface SportInfo {
   eventKey: string | null;
   /** The programme can be played from its start (catch-up): /play with start=. */
   startOver: boolean;
+  /** Pre-game (plan "Pre-game state"): before the real start the phase is "pre" and `startsAt` (epoch s) says when. */
+  phase: Phase | null;
+  startsAt: number | null;
   /** The programme's league / sport by name (for "Not interested"); null when the server doesn't say. */
   league: string | null;
   sportName: string | null;
@@ -92,6 +97,8 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     alternates: Array.isArray(ev?.alternates) ? (ev!.alternates as unknown[]).filter((x): x is string => typeof x === "string") : [],
     eventKey: str(ev?.key),
     startOver: p.startOver === true || r.startOver === true,
+    phase: parsePhase(p.phase) ?? parsePhase(r.phase),
+    startsAt: parseStartsAt(p.startsAt ?? r.startsAt),
     league: str(p.league) ?? str(r.league) ?? str(m?.league),
     sportName: str(p.sportName) ?? str(r.sportName) ?? str(p.sport) ?? str(r.sport),
     match: m ? { team: str(m.team), league: str(m.league) } : null,

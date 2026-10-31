@@ -9,6 +9,9 @@ export interface Prog {
   catchup?: boolean;
   /** Live and playable from its start. */
   startOver?: boolean;
+  /** Pre-game ("pre"/"live"/"post") and the real start (ISO UTC), when the server sends them. */
+  phase?: string | null;
+  startsAt?: string | null;
   /** Live-sport smarts from the server (may be missing). */
   kind?: "live" | "replay" | "highlights" | "other";
   sport?: boolean;

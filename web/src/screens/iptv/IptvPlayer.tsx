@@ -4,6 +4,8 @@
 // down at once (the provider may allow a single connection).
 import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
+import { addReminder, removeReminder, useReminders } from "../../api/reminderStore";
+import { isPre, preGameCard } from "../../lib/preGame";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
@@ -334,6 +336,68 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     const rest = [...(extras?.alternates ?? []).slice(1), { id: target.channel!, name: title }];
     go(livePath(alt.id, alt.name, { alternates: rest }), true);
   };
+  // Pre-game: before the real start a non-blocking card explains the holding screen; any key or tap brings it back after its 10 s
+  const startsAt = isLive ? extras?.startsAt ?? null : null;
+  const [nowS, setNowS] = useState(() => Date.now() / 1000);
+  const [cardOn, setCardOn] = useState(true);
+  const [others, setOthers] = useState(false);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!startsAt) return;
+    const t = setInterval(() => {
+      const n = Date.now() / 1000;
+      setNowS(n);
+      if (n >= startsAt && !started.current) {
+        started.current = true;
+        flashNote("Started");
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [startsAt]);
+  const preNow = isPre(startsAt, nowS);
+  useEffect(() => {
+    if (!preNow) return;
+    let timer: number | undefined;
+    const show = () => {
+      setCardOn(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setCardOn(false), 10_000);
+    };
+    show();
+    document.addEventListener("keydown", show);
+    document.addEventListener("pointerdown", show);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", show);
+      document.removeEventListener("pointerdown", show);
+    };
+  }, [preNow]);
+  const { items: remItems, available: remAvailable } = useReminders();
+  const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
+  const [remBusy, setRemBusy] = useState(false);
+  const toggleRemind = async () => {
+    if (!startsAt || !extras?.eventKey || !target.channel) return;
+    setRemBusy(true);
+    const err =
+      remId != null
+        ? await removeReminder(remId)
+        : await addReminder({
+            key: extras.eventKey,
+            title,
+            league: null,
+            start: startsAt,
+            stop: startsAt + 3 * 3600,
+            channels: [{ id: target.channel, name: title, num: null, logo: null, quality: null }],
+            favourite: false,
+            kind: null,
+            art: null,
+            recordable: false,
+            recordingId: null,
+          });
+    setRemBusy(false);
+    flashNote(err ?? (remId != null ? "Reminder removed" : "We'll remind you before it starts"));
+  };
+
   const kickoff = isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop ? extras.kickoff : null;
 
   const growing = !!answer?.growing || meta?.state === "recording";
@@ -531,6 +595,37 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <span className="player-method">via IPTV</span>
       </div>
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      {preNow && startsAt && cardOn && state.kind !== "error" && (
+        <div className="pregame-card" role="status">
+          <span>{preGameCard(startsAt, nowS)}</span>
+          <div className="buttons">
+            {remAvailable && extras?.eventKey && (
+              <button className="btn small" data-nav aria-pressed={remId != null} disabled={remBusy} onClick={() => void toggleRemind()}>
+                {remId != null ? "Reminder set ✓" : "Remind me"}
+              </button>
+            )}
+            {(extras?.alternates?.length ?? 0) > 0 && (
+              <button className="btn small" data-nav aria-expanded={others} onClick={() => setOthers((v) => !v)}>
+                Other channels
+              </button>
+            )}
+          </div>
+          {others && (
+            <div className="buttons">
+              {extras!.alternates!.map((a, i) => (
+                <button
+                  key={a.id}
+                  className="btn small"
+                  data-nav
+                  onClick={() => go(livePath(a.id, a.name, { alternates: [...extras!.alternates!.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey }), true)}
+                >
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {stalled && alt && state.kind === "playing" && (
         <div className="iptv-stall" role="alert">
           <span>Not loading.</span>

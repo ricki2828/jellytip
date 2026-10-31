@@ -123,6 +123,9 @@ export interface LiveExtras {
   kickoff?: { start: number; stop: number } | null;
   /** Other channels with the same event, best first. */
   alternates?: { id: string; name: string }[];
+  /** Pre-game: the real start (epoch s) and the event key (for Remind me). */
+  startsAt?: number | null;
+  eventKey?: string | null;
 }
 
 const MAX_ALTERNATES = 4;
@@ -135,6 +138,8 @@ export function liveExtrasQuery(x: LiveExtras | null | undefined): string {
     q.set("ko", String(Math.floor(x.kickoff.start)));
     q.set("kos", String(Math.floor(x.kickoff.stop)));
   }
+  if (x.startsAt && x.startsAt > 0) q.set("ps", String(Math.floor(x.startsAt)));
+  if (x.eventKey) q.set("ek", x.eventKey.slice(0, 120));
   for (const a of (x.alternates ?? []).slice(0, MAX_ALTERNATES)) q.append("alt", `${a.id}~${a.name}`);
   const s = q.toString();
   return s ? `&${s}` : "";
@@ -151,7 +156,8 @@ export function parseLiveExtras(q: URLSearchParams): LiveExtras {
       const id = at < 0 ? v : v.slice(0, at);
       return /^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_.-]{1,64}$/.test(id) ? [{ id, name: at < 0 ? "Another channel" : v.slice(at + 1) || "Another channel" }] : [];
     });
-  return { kickoff: start > 0 && stop > start ? { start, stop } : null, alternates };
+  const ps = Number(q.get("ps"));
+  return { kickoff: start > 0 && stop > start ? { start, stop } : null, alternates, startsAt: ps > 0 ? ps : null, eventKey: q.get("ek") || null };
 }
 
 /** Live play link for a channel with its extras. */
