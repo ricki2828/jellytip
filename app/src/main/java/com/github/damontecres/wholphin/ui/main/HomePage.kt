@@ -569,7 +569,10 @@ fun HomePageContent(
     // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
     var heroItem by remember { mutableStateOf(heroTarget) }
     var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
-    LaunchedEffect(heroTarget, heroHeaderTarget) {
+    // Jellytip: while the hero's own buttons have focus the hero holds still (no mix rotation, no focus follow)
+    var heroButtonsFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(heroTarget, heroHeaderTarget, heroButtonsFocused) {
+        if (heroButtonsFocused) return@LaunchedEffect
         delay(HERO_DEBOUNCE_MS)
         com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(heroSlide)
         heroItem = heroTarget
@@ -662,7 +665,41 @@ fun HomePageContent(
                         }
                     }.fillMaxSize(),
         ) {
-            headerComposable.invoke(heroHeaderItem)
+            Box {
+                headerComposable.invoke(heroHeaderItem)
+                // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
+                val heroPlayItem = heroHeaderItem
+                if (LocalJellytipHome.current && heroComposable != null && heroPlayItem != null) {
+                    com.github.damontecres.wholphin.jellytip.home.JellytipHeroButtons(
+                        item = heroPlayItem,
+                        onPlay = {
+                            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+                            JellytipTrace.focus("hero play ${heroPlayItem.name}")
+                            if (heroPlayItem.type.playable) {
+                                currentOnClickPlay(RowColumn(-1, -1), heroPlayItem)
+                            } else {
+                                onClickItem(RowColumn(-1, -1), heroPlayItem)
+                            }
+                        },
+                        onInfo = {
+                            // Stopped first, so OK opens the page instead of unmuting the trailer
+                            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+                            onClickItem(RowColumn(-1, -1), heroPlayItem)
+                        },
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 48.dp, bottom = 6.dp)
+                                .onFocusChanged { heroButtonsFocused = it.hasFocus }
+                                .focusGroup()
+                                .focusProperties {
+                                    // Down returns to the row (or special) focus came from
+                                    down = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
+                                        ?: rowFocusRequesters.getOrNull(currentPosition.row) ?: FocusRequester.Default
+                                },
+                    )
+                }
+            }
 
             val density = LocalDensity.current
             val spaceAbovePx =
