@@ -31,10 +31,12 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setToast(null), SHOW_MS);
   };
-  const show = (to: "home" | "away", prob: number, at: number) => {
+  const show = (to: string, prob: number, at: number) => {
     if (seen.current.has(at)) return;
     seen.current.add(at);
-    showToast({ color: colors.current[to], kicker: "POLYMARKET FLIP", text: `${names.current[to]} now favourites`, sub: `${pct(prob)} · Polymarket`, icon: "flip" });
+    // Head to head: a side flipped. A winner market (F1 race, golf tournament): `to` is the name of the new favourite.
+    if (to === "home" || to === "away") showToast({ color: colors.current[to], kicker: "POLYMARKET FLIP", text: `${names.current[to]} now favourites`, sub: `${pct(prob)} · Polymarket`, icon: "flip" });
+    else showToast({ color: colors.current.home, kicker: "NEW FAVOURITE", text: to, sub: `${pct(prob)} · Polymarket`, icon: "flip" });
   };
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function FlipAlerts({ matchId, active, drawerOpen }: { matchId: string | 
       }
     });
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ matchId: string; at: number; to: "home" | "away"; prob: number }>).detail;
+      const d = (e as CustomEvent<{ matchId: string; at: number; to: string; prob: number }>).detail;
       if (d.matchId === matchId) show(d.to, d.prob, d.at);
     };
     window.addEventListener(EVENT, on);

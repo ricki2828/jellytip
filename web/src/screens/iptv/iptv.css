@@ -2986,3 +2986,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* winner markets: ranked probability list with bars */
+.wl {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.wl-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px 9px;
+  font: 600 18px "Barlow Condensed", system-ui, sans-serif;
+  text-transform: uppercase;
+}
+.wl-row .rk {
+  color: #a9b0bc;
+  text-align: right;
+}
+.wl-row.lead .nm {
+  color: #ffc72c;
+}
+.wl-row .pc {
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+}
+.wl-row .bar {
+  position: absolute;
+  left: 8px;
+  bottom: 2px;
+  height: 4px;
+  max-width: calc(100% - 16px);
+}

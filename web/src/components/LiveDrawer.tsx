@@ -8,6 +8,7 @@ import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks,
 import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
+import { WinnerList } from "./WinnerList";
 import { usePrefs } from "../api/me";
 import "../fonts";
 import { logoSrc } from "../api/iptv";
@@ -558,7 +559,13 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   {tab === "odds" && (
                     <>
                       {!d.market && d.winProb == null && <p className="iptv-hint">No odds for this match.</p>}
-                      {d.market && (
+                      {d.market?.kind === "winner" && (
+                        <div className="ld-card">
+                          <WinnerList market={d.market} color={fixture?.kind === "match" || !fixture ? hc : colors.known ? hc : GOLD} now={now} />
+                          <Spark series={d.market.series} color={GOLD} />
+                        </div>
+                      )}
+                      {d.market && d.market.kind !== "winner" && (
                         <div className="ld-card">
                           <div className="ld-oddsnum">
                             <b style={{ color: hc }}>

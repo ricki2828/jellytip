@@ -13,6 +13,7 @@ import { SheetClose, useEscapeClose } from "./BackArrow";
 import { flashNote } from "./TasteButtons";
 import { onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
+import { WinnerList } from "./WinnerList";
 import "../fonts";
 import "../screens/iptv/iptv.css";
 
@@ -243,6 +244,12 @@ export function MatchInfoHost() {
               </section>
             )}
 
+            {d.market && (
+              <section>
+                <h3>Odds</h3>
+                <WinnerList market={d.market} color={heroColors(f)[0]} now={now} />
+              </section>
+            )}
             {f.kind === "match" && d.odds && (d.odds.home || d.odds.away || d.odds.draw) && (
               <section>
                 <h3>Odds</h3>

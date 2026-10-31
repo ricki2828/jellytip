@@ -1,6 +1,7 @@
 // Match info (plan: ~/ai/plans/jellytip-live-sport.md "Match info"). A programme / event may carry `matchInfo` ({id, league, home,
 // away, startsAt, venue?, status, source, inferred, score?}); GET /v1/sport/match/{id} adds line-ups, odds, form, head to head,
 // broadcasts and the caller's channels. Everything is optional. Pure; tested in web/test/iptv.test.ts.
+import { parseMarket, type Market } from "./liveStats.ts";
 import { parseStartsAt } from "./preGame.ts";
 
 export interface Side {
@@ -72,6 +73,8 @@ export interface MatchDetail {
   broadcasts: string[];
   channels: MatchChannel[];
   pending: boolean;
+  /** A Polymarket winner market on the event (F1 race winner, golf tournament), when the server sends one. */
+  market: Market | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -177,6 +180,10 @@ export function parseMatchDetail(raw: unknown): MatchDetail | null {
       return c && id ? [{ id, name: str(c.name) ?? "Channel", quality: str(obj(c.quality)?.bucket) }] : [];
     }),
     pending: r.pending === true,
+    market: (() => {
+      const m = parseMarket(obj(r.market));
+      return m?.kind === "winner" ? m : null;
+    })(),
   };
 }
 

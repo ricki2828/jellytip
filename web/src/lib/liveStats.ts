@@ -5,8 +5,9 @@ import { parseStartsAt } from "./preGame.ts";
 /** The Polymarket favourite changed (server: hysteresis at 53%, at least $10k traded, 5 min cool-down; kept on the answer for 2 min). */
 export interface Flip {
   at: number;
-  from: "home" | "away" | null;
-  to: "home" | "away";
+  /** Head to head: the side that became favourite. Winner markets: the name of the new favourite. */
+  from: "home" | "away" | string | null;
+  to: "home" | "away" | string;
   prob: number;
 }
 
@@ -34,6 +35,22 @@ export interface Moment {
   label: string;
 }
 
+/** Polymarket: head to head ({home, away, draw?}) or a multi-outcome winner market (`outcomes`, top 6 by probability). */
+export interface Market {
+  kind: "h2h" | "winner";
+  source: string;
+  question: string | null;
+  home: number;
+  away: number;
+  draw: number | null;
+  outcomes: { name: string; p: number }[];
+  volume: number | null;
+  updatedAt: number | null;
+  series: { t: number; p: number }[];
+  favourite: "home" | "away" | null;
+  flip: Flip | null;
+}
+
 export interface LiveStats {
   status: string | null;
   clock: string | null;
@@ -50,7 +67,7 @@ export interface LiveStats {
   /** Big events since the last poll: score change, red card, wicket, TD, lead change, clutch time. */
   moments: Moment[];
   winProb: number | null;
-  market: { source: string; question: string | null; home: number; away: number; draw: number | null; volume: number | null; updatedAt: number | null; series: { t: number; p: number }[]; favourite: "home" | "away" | null; flip: Flip | null } | null;
+  market: Market | null;
   chat: { source: string; thread: string | null; comments: { author: string; text: string; score: number | null; at: number | null }[] } | null;
   updatedAt: number | null;
   pending: boolean;
@@ -79,19 +96,48 @@ const side = (v: unknown): "home" | "away" | null => (v === "home" || v === "awa
 function parseFlip(raw: unknown): Flip | null {
   const o = obj(raw);
   const at = parseStartsAt(o?.at);
-  const to = side(o?.to);
+  const to = side(o?.to) ?? str(o?.to);
   const prob = prob_(o?.prob);
-  return o && at != null && to && prob != null ? { at, from: side(o.from), to, prob } : null;
+  return o && at != null && to && prob != null ? { at, from: side(o.from) ?? str(o.from), to, prob } : null;
 }
 const prob_ = (v: unknown) => prob(v);
+
+export function parseMarket(m: Record<string, unknown> | null): Market | null {
+  if (!m) return null;
+  const mh = prob(m.home);
+  const ma = prob(m.away);
+  const outcomes = arr(m.outcomes)
+    .flatMap((x) => {
+      const o = obj(x);
+      const name = str(o?.name);
+      const p = prob(o?.p);
+      return o && name && p != null ? [{ name, p }] : [];
+    })
+    .sort((a, b) => b.p - a.p)
+    .slice(0, 6);
+  const winner = m.kind === "winner" && outcomes.length > 0;
+  if (!winner && (mh == null || ma == null)) return null;
+  return {
+    kind: winner ? "winner" : "h2h",
+    source: str(m.source) ?? "market",
+    question: str(m.question),
+    home: mh ?? 0,
+    away: ma ?? 0,
+    draw: prob(m.draw),
+    outcomes: winner ? outcomes : [],
+    volume: num(m.volume),
+    updatedAt: parseStartsAt(m.updatedAt),
+    series: series(m.series),
+    favourite: side(m.favourite),
+    flip: parseFlip(m.flip),
+  };
+}
 
 export function parseLive(raw: unknown): LiveStats | null {
   const r = obj(raw);
   if (!r) return null;
   const sc = obj(r.score);
   const m = obj(r.market);
-  const mh = prob(m?.home);
-  const ma = prob(m?.away);
   const ch = obj(r.chat);
   const wp = obj(r.winProb);
   return {
@@ -140,7 +186,7 @@ export function parseLive(raw: unknown): LiveStats | null {
       return o && at != null && label ? [{ at, kind: str(o.kind) ?? label, team: side(o.team), label } as Moment] : [];
     }),
     winProb: prob(wp ? wp.home : r.winProb),
-    market: m && mh != null && ma != null ? { source: str(m.source) ?? "market", question: str(m.question), home: mh, away: ma, draw: prob(m.draw), volume: num(m.volume), updatedAt: parseStartsAt(m.updatedAt), series: series(m.series), favourite: side(m.favourite), flip: parseFlip(m.flip) } : null,
+    market: parseMarket(m),
     chat: ch
       ? {
           source: str(ch.source) ?? "chat",
@@ -184,7 +230,7 @@ export const maskText = (t: string) => t.replace(BAD, (w) => `${w[0]}${"*".repea
 export const mayShow = (liveNow: boolean, spoilers: boolean) => liveNow || spoilers;
 
 /** "📈 Polymarket flip: 76ers now favourites · 54%". */
-export const flipText = (f: Flip, names: { home: string; away: string }) => `📈 Polymarket flip: ${names[f.to]} now favourites · ${pct(f.prob)}`;
+export const flipText = (f: Flip, names: { home: string; away: string }) => `📈 Polymarket flip: ${f.to === "home" || f.to === "away" ? names[f.to] : f.to} now favourites · ${pct(f.prob)}`;
 
 /** Tabs for the latest answer: Chat only when it has a `chat` block (Reddit may be off), Fantasy only when there are leagues. */
 export function liveTabs(hasChat: boolean, fantasy: boolean): [string, string][] {
