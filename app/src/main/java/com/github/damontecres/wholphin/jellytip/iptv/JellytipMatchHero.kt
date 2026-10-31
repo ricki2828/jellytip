@@ -112,6 +112,39 @@ internal fun BroadcastHeader(
     }
 }
 
+/** An event (F1, golf; plan "Live coverage round 2"): the title as the hero on the series colour, the gold status tag. */
+@Composable
+internal fun EventHeader(
+    m: IptvMatch,
+    pal: MatchPalette,
+) {
+    val now by produceState(nowSec()) {
+        while (true) {
+            delay(30_000)
+            value = nowSec()
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(95.dp).clip(SlabLeft).background(pal.home)) {
+        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+            Cond(m.title ?: m.league ?: "Event", 28.sp, pal.onHome)
+            m.league?.takeIf { m.title != null }?.let { BodyText(it, 13.sp, pal.onHome.copy(alpha = 0.85f), weight = FontWeight.SemiBold, maxLines = 1) }
+        }
+        val tag =
+            when (m.status) {
+                "in" -> "Live"
+                "post" -> "Finished"
+                else -> m.startsAt?.let { countdown(it, now) } ?: "Upcoming"
+            }
+        Cond(
+            tag,
+            13.sp,
+            Broadcast.Ink,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 18.dp).background(Broadcast.Gold).padding(horizontal = 8.dp, vertical = 2.dp),
+            tracking = 0.06f,
+        )
+    }
+}
+
 @Composable
 private fun HeaderCrest(
     t: MatchTeam?,
@@ -131,8 +164,11 @@ private fun HeaderCrest(
     ) {
         var failed by remember(t?.logo) { mutableStateOf(false) }
         val logo = t?.logo
+        val flag = flagEmoji(t?.country)
         if (logo != null && !failed) {
             AsyncImage(model = logo, contentDescription = t?.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(50.dp))
+        } else if (flag != null) {
+            androidx.tv.material3.Text(flag, fontSize = 30.sp)
         } else {
             Box(Modifier.size(44.dp).background(Color.Black.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
                 Cond(initials(t?.name ?: "?"), 16.sp, contrastOn(color))

@@ -118,8 +118,21 @@ data class MatchPalette(
 private val NeutralSlabHome = Color(0xFF2A303B)
 private val NeutralSlabAway = Color(0xFF1C212A)
 
-/** Home / away colours; the away side uses its alternate when the two are close (ΔE < 20). */
+/** Series colours for events (plan "Live coverage round 2"): F1 red, golf green; tennis stays neutral. */
+fun seriesColor(leagueKey: String?): Color? =
+    when {
+        leagueKey == null -> null
+        leagueKey == "f1" -> Color(0xFFE10600)
+        leagueKey.startsWith("golf") -> Color(0xFF0B6E4F)
+        else -> null
+    }
+
+/** Home / away colours; the away side uses its alternate when the two are close (ΔE < 20). Events: the series colour. */
 fun matchPalette(m: IptvMatch?): MatchPalette {
+    if (m != null && (m.isEvent || (m.home == null && m.away == null))) {
+        val c = seriesColor(m.leagueKey) ?: return MatchPalette(NeutralSlabHome, NeutralSlabAway, known = false)
+        return MatchPalette(c, c, known = true)
+    }
     val hc = m?.home?.color
     val ac = m?.away?.color
     if (hc == null && ac == null) return MatchPalette(NeutralSlabHome, NeutralSlabAway, known = false)
@@ -160,6 +173,27 @@ private fun lab(c: Color): DoubleArray {
     fun f(t: Double) = if (t > 0.008856) Math.cbrt(t) else 7.787 * t + 16.0 / 116
     return doubleArrayOf(116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
 }
+
+/** A country's flag: ISO 2 letters (or IOC/ISO 3 mapped to 2) as regional-indicator emoji; null = unknown. */
+fun flagEmoji(country: String?): String? {
+    val c = country?.trim()?.uppercase(Locale.ROOT) ?: return null
+    val two =
+        when {
+            c.length == 2 -> c
+            c.length == 3 -> Locale.getISOCountries().firstOrNull { runCatching { Locale("", it).isO3Country.equals(c, true) }.getOrDefault(false) } ?: IOC[c]
+            else -> null
+        } ?: return null
+    if (!two.all { it in 'A'..'Z' }) return null
+    return String(Character.toChars(0x1F1E6 + (two[0] - 'A'))) + String(Character.toChars(0x1F1E6 + (two[1] - 'A')))
+}
+
+/** IOC codes that differ from ISO 3166 alpha-3 (the common tennis / golf ones). */
+private val IOC =
+    mapOf(
+        "GER" to "DE", "SUI" to "CH", "NED" to "NL", "RSA" to "ZA", "CRO" to "HR", "GRE" to "GR", "POR" to "PT", "DEN" to "DK",
+        "BUL" to "BG", "CHI" to "CL", "URU" to "UY", "PAR" to "PY", "TPE" to "TW", "INA" to "ID", "MAS" to "MY", "PHI" to "PH",
+        "LAT" to "LV", "SLO" to "SI", "ZIM" to "ZW", "ENG" to "GB", "SCO" to "GB", "WAL" to "GB", "NIR" to "GB",
+    )
 
 /** The left slab: a straight left edge, the right edge leaning in at the bottom (static shape). */
 val SlabLeft =

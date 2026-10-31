@@ -157,6 +157,31 @@ data class LiveComment(
     val score: Int?,
 )
 
+/** F1 timing tower row (OpenF1). */
+data class F1Row(
+    val pos: String,
+    val driver: String,
+    val team: String?,
+    val teamColor: String?,
+    val gap: String?,
+    val interval: String?,
+    /** S | M | H | I | W */
+    val tyre: String?,
+    val tyreAge: String?,
+    val pits: String?,
+    val fastest: Boolean,
+)
+
+/** Golf leaderboard row. */
+data class GolfRow(
+    val pos: String,
+    val player: String,
+    val country: String?,
+    val toPar: String?,
+    val thru: String?,
+    val today: String?,
+)
+
 data class LiveBatter(
     val name: String,
     val runs: String?,
@@ -189,6 +214,23 @@ data class LiveSituation(
     val periods: List<Pair<String, String>> = emptyList(),
     /** Every `{home, away}` pair in the situation (possession %, territory, fouls, shots, xG, cards, penalties…). */
     val pairs: List<LiveStat> = emptyList(),
+    // F1 (plan "Live coverage round 2")
+    val lap: String? = null,
+    val laps: String? = null,
+    val session: String? = null,
+    /** green | yellow | sc | vsc | red | chequered */
+    val flag: String? = null,
+    val standings: List<F1Row> = emptyList(),
+    val fastestLap: String? = null,
+    // Tennis: sets (home, away, tie-break), the current game, who serves
+    val sets: List<Triple<String, String, String?>> = emptyList(),
+    val gameHome: String? = null,
+    val gameAway: String? = null,
+    val serving: String? = null,
+    // Golf
+    val round: String? = null,
+    val leaderboard: List<GolfRow> = emptyList(),
+    val favourites: List<GolfRow> = emptyList(),
 ) {
     /** One line for under the scoreboard strip. */
     val summary: String?
@@ -198,6 +240,9 @@ data class LiveSituation(
                 yardLine,
                 if (redZone) "RED ZONE" else null,
                 equation,
+                lap?.let { "Lap $it" + (laps?.let { l -> "/$l" } ?: "") },
+                flag?.takeIf { it != "green" }?.let { flagLabel(it) },
+                round?.let { "Round $it" },
                 if (equation == null && requiredRate != null) "RRR ${fmt(requiredRate)}" else null,
                 run,
             ).joinToString("  ·  ").ifBlank { null }
@@ -337,7 +382,8 @@ object LiveParse {
         )
     }
 
-    private val consumed = setOf("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores")
+    private val consumed =
+        setOf("batters", "bowler", "lastBalls", "lastSix", "run", "drive", "periods", "quarters", "linescores", "standings", "sets", "game", "leaderboard", "favourites", "stats", "fastestLap")
 
     fun situation(o: JSONObject?): LiveSituation? {
         o ?: return null
@@ -353,6 +399,13 @@ object LiveParse {
         val periodsArr = o.optJSONArray("periods") ?: o.optJSONArray("quarters") ?: o.optJSONArray("linescores")
         val lastBalls = o.optJSONArray("lastBalls") ?: o.optJSONArray("lastSix")
         val pairs = ArrayList<LiveStat>()
+        // Tennis stats: {aces: {home, away}, …}
+        o.optJSONObject("stats")?.let { st ->
+            st.keys().forEach { k ->
+                val v = st.optJSONObject(k) ?: return@forEach
+                if (v.has("home") && v.has("away")) pairs += LiveStat(label(k, null), v.optString("home"), v.optString("away"))
+            }
+        }
         o.keys().forEach { k ->
             if (k in consumed) return@forEach
             val v = o.optJSONObject(k) ?: return@forEach
@@ -387,8 +440,40 @@ object LiveParse {
             runTeam = run?.str("team"),
             periods = periodsArr.objects().mapNotNull { p -> (p.str("home") ?: return@mapNotNull null) to (p.str("away") ?: return@mapNotNull null) },
             pairs = pairs,
+            lap = o.str("lap"),
+            laps = o.str("laps"),
+            session = o.str("session"),
+            flag = o.str("flag")?.lowercase(Locale.ROOT),
+            standings =
+                o.optJSONArray("standings").objects().mapNotNull { r ->
+                    F1Row(
+                        r.str("pos") ?: return@mapNotNull null,
+                        r.str("driver") ?: return@mapNotNull null,
+                        r.str("team"),
+                        r.str("teamColor"),
+                        r.str("gap"),
+                        r.str("interval"),
+                        r.str("tyre")?.uppercase(Locale.ROOT)?.take(1),
+                        r.str("tyreAge"),
+                        r.str("pits"),
+                        r.optBoolean("fastest", false),
+                    )
+                }.take(20),
+            fastestLap = o.optJSONObject("fastestLap")?.let { f -> listOfNotNull(f.str("driver"), f.str("time")).joinToString(" ").ifBlank { null } } ?: o.str("fastestLap"),
+            sets = o.optJSONArray("sets").objects().mapNotNull { st -> Triple(st.str("home") ?: return@mapNotNull null, st.str("away") ?: return@mapNotNull null, st.str("tb")) },
+            gameHome = o.optJSONObject("game")?.str("home"),
+            gameAway = o.optJSONObject("game")?.str("away"),
+            serving = o.str("serving")?.takeIf { it == "home" || it == "away" },
+            round = o.str("round"),
+            leaderboard = golfRows(o.optJSONArray("leaderboard")).take(15),
+            favourites = golfRows(o.optJSONArray("favourites")),
         )
     }
+
+    private fun golfRows(a: JSONArray?): List<GolfRow> =
+        a.objects().mapNotNull { r ->
+            GolfRow(r.str("pos") ?: "", r.str("player") ?: return@mapNotNull null, r.str("country"), r.str("toPar"), r.str("thru"), r.str("today"))
+        }
 
     private fun ordinal(n: Int) =
         when (n) {
@@ -493,8 +578,13 @@ fun JellytipLivePanel(
                         .then(if (floating) Modifier.border(2.dp, Broadcast.Gold.copy(alpha = 0.6f), shape) else Modifier)
                         .padding(14.dp),
             ) {
-                ScoreStrip(match, if (spoilerNotice) null else data, pal, if (spoilerNotice) null else flash)
+                if (match.isEvent || (match.home == null && match.away == null)) {
+                    EventStrip(match, pal, if (spoilerNotice) null else flash)
+                } else {
+                    ScoreStrip(match, if (spoilerNotice) null else data, pal, if (spoilerNotice) null else flash)
+                }
                 ClockRow(if (spoilerNotice) null else data, pal)
+                if (!spoilerNotice) data?.situation?.flag?.takeIf { it != "green" }?.let { FlagBanner(it) }
                 // Body text sits on a near-black card within the wash (3 m legibility)
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -583,7 +673,45 @@ private fun ScoreStrip(
     }
 }
 
-/** Gold period box, clock, live dot; the situation line on the right. On the wash: contrast-picked text. */
+/** An event (F1, golf): the title on a full-width slab in the series colour; the moment wipe over it. */
+@Composable
+private fun EventStrip(
+    m: IptvMatch,
+    pal: MatchPalette,
+    flash: LiveFlash?,
+) {
+    Box(Modifier.fillMaxWidth().height(56.dp).clipToBounds()) {
+        Column(
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize().clip(SlabLeft).background(pal.home).padding(horizontal = 12.dp),
+        ) {
+            Cond(m.title ?: m.league ?: "Live", 20.sp, pal.onHome)
+            m.league?.takeIf { m.title != null }?.let { BodyText(it, 12.sp, pal.onHome.copy(alpha = 0.85f), weight = FontWeight.SemiBold, maxLines = 1) }
+        }
+        MomentWipe(flash, pal)
+    }
+}
+
+/** F1 flag state as a full-width banner (yellow, safety car, red, chequered). */
+@Composable
+private fun FlagBanner(flag: String) {
+    val (bg, fg) =
+        when (flag) {
+            "red" -> Color(0xFFE10600) to Color.White
+            "chequered" -> Color.White to Broadcast.Ink
+            else -> Color(0xFFFFD400) to Broadcast.Ink
+        }
+    Cond(
+        flagLabel(flag),
+        15.sp,
+        fg,
+        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp, vertical = 3.dp),
+        tracking = 0.08f,
+        align = TextAlign.Center,
+    )
+}
+
+/** Gold period box (or F1 lap counter / golf round), clock (or session), live dot; the situation line on the right. */
 @Composable
 private fun ClockRow(
     d: MatchLive?,
@@ -591,15 +719,23 @@ private fun ClockRow(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         val post = d?.status == "post"
-        val period = if (post) "FT" else d?.period
+        val s = d?.situation
+        val period =
+            when {
+                post -> "FT"
+                s?.lap != null -> "Lap ${s.lap}" + (s.laps?.let { "/$it" } ?: "")
+                s?.round != null -> "R${s.round}"
+                else -> d?.period
+            }
         period?.let { Cond(it, 15.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 7.dp, vertical = 2.dp)) }
-        d?.clock?.takeIf { !post }?.let { Cond(it, 15.sp, pal.onHomeWash, weight = FontWeight.SemiBold) }
+        (s?.session ?: d?.clock)?.takeIf { !post }?.let { Cond(it, 15.sp, pal.onHomeWash, weight = FontWeight.SemiBold) }
         if (!post) {
             LiveDot()
             Cond("Live", 15.sp, pal.onHomeWash, weight = FontWeight.SemiBold)
         }
         Spacer(Modifier.weight(1f))
-        d?.situation?.summary?.let { BodyText(it, 13.sp, pal.onAwayWash.copy(alpha = 0.8f), weight = FontWeight.SemiBold, maxLines = 1) }
+        // F1 / golf: the box already says lap / round; the rest of the line is for matches
+        s?.summary?.takeIf { s.lap == null && s.round == null }?.let { BodyText(it, 13.sp, pal.onAwayWash.copy(alpha = 0.8f), weight = FontWeight.SemiBold, maxLines = 1) }
     }
 }
 
@@ -611,8 +747,12 @@ private fun Crest(
 ) {
     var failed by remember(t?.logo) { mutableStateOf(false) }
     val logo = t?.logo
+    val flag = flagEmoji(t?.country)
     if (logo != null && !failed) {
         AsyncImage(model = logo, contentDescription = t?.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(size))
+    } else if (flag != null) {
+        // Tennis: the player's flag instead of a crest
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) { androidx.tv.material3.Text(flag, fontSize = (size.value * 0.6f).sp) }
     } else {
         Box(Modifier.size(size).background(Color.Black.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
             Cond(initials(t?.name ?: "?"), 11.sp, Color.White)
@@ -749,6 +889,9 @@ private fun ContextBlock(
     d: MatchLive,
     pal: MatchPalette,
 ) {
+    if (s.standings.isNotEmpty()) TimingTower(s.standings, s.fastestLap)
+    if (s.sets.isNotEmpty() || s.gameHome != null) SetGrid(s, m)
+    if (s.leaderboard.isNotEmpty() || s.favourites.isNotEmpty()) Leaderboard(s)
     // NFL: down & distance in the broadcasters' gold box, the field (drive side, ball, line to gain), the drive
     if (s.downDistance != null || s.fieldPos != null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -784,6 +927,107 @@ private fun ContextBlock(
     }
     // Everything paired (possession, territory, fouls, shots, xG, cards, penalties…)
     s.pairs.take(5).forEach { p -> key(p.label) { StatBar(p, pal) } }
+}
+
+/** F1 timing tower: position, team colour bar, driver code, gap (interval when no gap), tyre chip, fastest-lap dot. */
+@Composable
+private fun TimingTower(
+    rows: List<F1Row>,
+    fastestLap: String?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        rows.take(12).forEach { r ->
+            key(r.driver) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Cond(r.pos, 15.sp, if (r.pos == "1") Broadcast.Gold else Broadcast.Secondary, modifier = Modifier.width(20.dp), align = TextAlign.End)
+                    Box(Modifier.width(4.dp).height(16.dp).background(teamColor(r.teamColor, Broadcast.Secondary)))
+                    Cond(r.driver, 15.sp, modifier = Modifier.weight(1f))
+                    if (r.fastest) Box(Modifier.size(7.dp).background(Color(0xFFA020F0), CircleShape))
+                    Cond((if (r.pos == "1") "Leader" else r.gap ?: r.interval) ?: "", 13.sp, Broadcast.Body, weight = FontWeight.SemiBold)
+                    TyreChip(r.tyre)
+                }
+            }
+        }
+        fastestLap?.let { BodyText("Fastest lap: $it", 12.sp, Color(0xFFC77DFF), weight = FontWeight.SemiBold, maxLines = 1) }
+    }
+}
+
+@Composable
+private fun TyreChip(tyre: String?) {
+    val t = tyre ?: return
+    val (ring, fg) =
+        when (t) {
+            "S" -> Color(0xFFE10600) to Color.White
+            "M" -> Color(0xFFFFD400) to Broadcast.Ink
+            "H" -> Color.White to Broadcast.Ink
+            "I" -> Color(0xFF43B02A) to Color.White
+            "W" -> Color(0xFF0067AD) to Color.White
+            else -> Broadcast.Loss to Color.White
+        }
+    Box(Modifier.size(17.dp).background(ring, CircleShape), contentAlignment = Alignment.Center) { Cond(t, 11.sp, fg) }
+}
+
+/** Tennis: both players with the serve dot, set scores (tie-breaks small), the current game in gold. */
+@Composable
+private fun SetGrid(
+    s: LiveSituation,
+    m: IptvMatch,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(Triple("home", m.home, s.gameHome), Triple("away", m.away, s.gameAway)).forEach { (side, p, game) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(7.dp).background(if (s.serving == side) Broadcast.Gold else Color.Transparent, CircleShape))
+                flagEmoji(p?.country)?.let { androidx.tv.material3.Text(it, fontSize = 13.sp) }
+                Cond(p?.short ?: p?.name ?: "", 15.sp, modifier = Modifier.weight(1f))
+                s.sets.forEach { (h, a, tb) ->
+                    val mine = if (side == "home") h else a
+                    val theirs = if (side == "home") a else h
+                    val won = (mine.toIntOrNull() ?: 0) > (theirs.toIntOrNull() ?: 0)
+                    Row(Modifier.width(22.dp), verticalAlignment = Alignment.Top) {
+                        Cond(mine, 16.sp, if (won) Color.White else Broadcast.Secondary)
+                        if (tb != null && !won) Cond(tb, 9.sp, Broadcast.Secondary)
+                    }
+                }
+                game?.let { Cond(it, 15.sp, Broadcast.Ink, modifier = Modifier.width(30.dp).background(Broadcast.Gold).padding(vertical = 1.dp), align = TextAlign.Center) }
+            }
+        }
+    }
+}
+
+/** Golf: favourites pinned at the top (gold star), then the leaderboard: position, flag, player, to par, thru. */
+@Composable
+private fun Leaderboard(s: LiveSituation) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row {
+            Cond("Pos", 12.sp, Broadcast.Secondary, modifier = Modifier.width(26.dp), weight = FontWeight.SemiBold)
+            Cond("Player", 12.sp, Broadcast.Secondary, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold)
+            Cond("To par", 12.sp, Broadcast.Secondary, modifier = Modifier.width(44.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+            Cond("Thru", 12.sp, Broadcast.Secondary, modifier = Modifier.width(36.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+        }
+        s.favourites.forEach { r -> key("fav:" + r.player) { GolfLine(r, pinned = true) } }
+        if (s.favourites.isNotEmpty()) Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
+        val pinned = s.favourites.map { it.player }.toSet()
+        s.leaderboard.filter { it.player !in pinned }.take(10).forEach { r -> key(r.player) { GolfLine(r, pinned = false) } }
+    }
+}
+
+@Composable
+private fun GolfLine(
+    r: GolfRow,
+    pinned: Boolean,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().then(if (pinned) Modifier.background(Broadcast.Gold.copy(alpha = 0.12f)) else Modifier).padding(vertical = 1.dp),
+    ) {
+        Cond(r.pos, 14.sp, Broadcast.Secondary, modifier = Modifier.width(26.dp), weight = FontWeight.SemiBold)
+        if (pinned) Cond("★ ", 13.sp, Broadcast.Gold)
+        flagEmoji(r.country)?.let { androidx.tv.material3.Text("$it ", fontSize = 12.sp) }
+        BodyText(r.player, 13.sp, Color.White, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold, maxLines = 1)
+        val under = r.toPar?.startsWith("-") == true
+        Cond(r.toPar ?: "", 16.sp, if (under) Broadcast.Gold else Color.White, modifier = Modifier.width(44.dp), align = TextAlign.End)
+        Cond(r.thru ?: "", 13.sp, Broadcast.Secondary, modifier = Modifier.width(36.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+    }
 }
 
 /** The field: end zones in the team colours, 10-yard lines, the ball (white) and the line to gain (gold). */
@@ -1076,6 +1320,16 @@ private fun SlideInNew(
 private fun Note(text: String) = BodyText(text, 12.sp, Broadcast.Secondary)
 
 internal fun pct(p: Double) = "${Math.round(p * 100)}%"
+
+private fun flagLabel(flag: String) =
+    when (flag) {
+        "yellow" -> "Yellow flag"
+        "sc" -> "Safety car"
+        "vsc" -> "Virtual safety car"
+        "red" -> "Red flag"
+        "chequered" -> "Chequered flag"
+        else -> flag
+    }
 
 private fun fmt(v: Double) = String.format(Locale.US, "%.2f", v).trimEnd('0').trimEnd('.')
 

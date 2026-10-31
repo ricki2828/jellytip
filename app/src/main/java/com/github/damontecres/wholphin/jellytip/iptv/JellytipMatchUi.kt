@@ -221,7 +221,7 @@ fun JellytipMatchModal(
         ) {
             Box(Modifier.fillMaxWidth().height(4.dp).background(Broadcast.Gold))
             val sc = (revealed ?: m.score)?.takeIf { showScore }
-            BroadcastHeader(m, sc, pal, crestIn = { crestIn.value })
+            if (m.isEvent || (m.home == null && m.away == null)) EventHeader(m, pal) else BroadcastHeader(m, sc, pal, crestIn = { crestIn.value })
             SubBar(m, detail)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Row(

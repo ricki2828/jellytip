@@ -18,6 +18,8 @@ data class MatchTeam(
     /** Team colours, hex ("#0B2265" or "0B2265"; plan "match info: more pop"); null = neutral greys. */
     val color: String? = null,
     val altColor: String? = null,
+    /** Tennis players carry a country (ISO 2 or 3 letters; a flag instead of a crest). */
+    val country: String? = null,
 )
 
 data class MatchScore(
@@ -43,10 +45,16 @@ data class IptvMatch(
     val inferred: Boolean,
     /** Only sent when the person's spoilers setting is on. */
     val score: MatchScore?,
+    /** "event" for F1 and golf (plan "Live coverage round 2"): no home/away, [title] is the hero; null = a match. */
+    val kind: String? = null,
+    /** "Mexico City GP · Race", "Zozo Championship · Round 3" (events). */
+    val title: String? = null,
 ) {
-    /** "Crusaders v Blues" when both teams are known. */
+    val isEvent get() = kind == "event"
+
+    /** "Crusaders v Blues" when both teams are known; an event's title. */
     val matchup: String?
-        get() = if (home != null && away != null) "${home.name} v ${away.name}" else null
+        get() = if (home != null && away != null) "${home.name} v ${away.name}" else title
 }
 
 data class MatchPlayer(
@@ -99,12 +107,15 @@ object MatchParse {
     ): MatchTeam? {
         o ?: return null
         val name = o.str("name") ?: return null
-        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"), o.str("color"), o.str("altColor"))
+        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"), o.str("color"), o.str("altColor"), o.str("country"))
     }
 
-    fun isFixture(o: JSONObject?): Boolean = o != null && o.str("id") != null && o.optJSONObject("home") != null && o.optJSONObject("away") != null
+    /** A fixture: an id and both teams, or an event (`kind: "event"`) with an id and a title. */
+    fun isFixture(o: JSONObject?): Boolean =
+        o != null && o.str("id") != null &&
+            ((o.optJSONObject("home") != null && o.optJSONObject("away") != null) || (o.str("kind") == "event" && o.str("title") != null))
 
-    /** `matchInfo` (needs id + home + away). */
+    /** `matchInfo` (needs id + home + away, or an event with a title). */
     fun match(
         o: JSONObject?,
         resolve: (String) -> String? = { it },
@@ -131,6 +142,8 @@ object MatchParse {
             status = o.str("status"),
             inferred = o.optBoolean("inferred", false),
             score = sc,
+            kind = o.str("kind"),
+            title = o.str("title"),
         )
     }
 
