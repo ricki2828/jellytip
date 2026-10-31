@@ -26,6 +26,7 @@ import {
 } from "../../api/iptv";
 import { getSession } from "../../api/jellyfin";
 import { normaliseServer, normaliseWebUrl, parseProviderLink } from "../../lib/providerLink";
+import { lastUpdated, retryText } from "../../lib/channelPrune";
 import { ChannelPrune } from "./ChannelPrune";
 import { Recordings } from "./Recordings";
 import "./iptv.css";
@@ -543,13 +544,40 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
       setMsg(null);
     } else setMsg(errorText(a));
   };
+  // Refresh guide now: 202 starts a run; the status is polled until the guide stops running. 404 = no such route: no button.
+  const [noRefresh, setNoRefresh] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const guideRunning = polling || !!p.status.guide?.running;
   const refresh = async () => {
     const a = await refreshProvider(p.id, "all");
+    if (a.status === 404) return setNoRefresh(true);
+    if (a.status === 429) return setMsg(retryText((a.data as { retryAfter_s?: unknown } | null)?.retryAfter_s));
     if (a.status === 202 || a.status === 200) {
-      setMsg("Refreshing now.");
-      onChange({ ...p, syncing: true });
+      setMsg(null);
+      setPolling(true);
+      onChange({ ...p, syncing: true, status: { ...p.status, guide: { ...p.status.guide, running: true } } });
     } else setMsg(a.data?.code === "too_soon" ? "Refreshed less than 5 minutes ago: try again shortly." : a.data?.code === "busy" ? "A refresh is already running." : errorText(a));
   };
+  useEffect(() => {
+    if (!polling) return;
+    let alive = true;
+    let tries = 0;
+    const t = setInterval(async () => {
+      tries++;
+      const a = await iptvGet<Provider["status"]>(`v1/iptv/providers/${p.id}/status`);
+      if (!alive) return;
+      if (a.status === 200 && a.data && !a.data.guide?.running) {
+        setPolling(false);
+        onChange({ ...p, syncing: false, status: { ...p.status, ...a.data } });
+      } else if (tries >= 40) setPolling(false); // give up after ~6 min; the card's own refresh keeps showing progress
+    }, 8000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polling, p.id]);
+  const updated = lastUpdated(p.status.guide?.lastRun ?? p.sync.epg?.at, Date.now() / 1000);
 
   return (
     <section className="iptv-card">
@@ -577,6 +605,7 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
         {n(p.counts.series)} series, {n(p.counts.programmes)} guide entries
         {p.sync.epg?.at ? ` · guide updated ${ago(p.sync.epg.at)}` : ""}
       </p>
+      {p.owner && !noRefresh && updated && <p className="iptv-hint">{updated}</p>}
       {holders.length > 0 && (
         <p className="iptv-hint">
           In use: {holders.map((h) => `${h.kind === "recording" ? "recording" : "watching"}${h.label ? ` ${h.label}` : ""}${h.userName || h.user ? ` (${h.userName ?? h.user})` : ""}`).join(", ")}
@@ -587,9 +616,17 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
           <button className={`btn small${panel === "groups" ? " primary" : ""}`} data-nav onClick={() => setPanel(panel === "groups" ? null : "groups")}>
             Groups
           </button>
-          <button className="btn small" data-nav onClick={refresh} disabled={p.syncing}>
-            Refresh now
-          </button>
+          {!noRefresh && (
+            <button className="btn small" data-nav onClick={refresh} disabled={p.syncing || guideRunning}>
+              {guideRunning ? (
+                <>
+                  <span className="iptv-spinner" aria-hidden /> Refreshing guide…
+                </>
+              ) : (
+                "Refresh guide now"
+              )}
+            </button>
+          )}
           <button className="btn small" data-nav onClick={check}>
             Check connection
           </button>

@@ -100,3 +100,23 @@ export function windowSlice(scrollTop: number, viewport: number, rowH: number, t
   const to = Math.min(total, Math.ceil((scrollTop + viewport) / rowH) + overscan);
   return { from, to };
 }
+
+// ---------- "Refresh guide now" ----------
+
+/** "Last updated 2 h ago" / "just now"; null when there is no run time. `at` is epoch seconds (or ms). */
+export function lastUpdated(at: number | null | undefined, now: number): string | null {
+  if (!at || at <= 0) return null;
+  const t = at > 1e12 ? at / 1000 : at;
+  const s = Math.max(0, now - t);
+  if (s < 90) return "Last updated just now";
+  if (s < 3600) return `Last updated ${Math.round(s / 60)} min ago`;
+  if (s < 86400 * 2) return `Last updated ${Math.round(s / 3600)} h ago`;
+  return `Last updated ${Math.round(s / 86400)} days ago`;
+}
+
+/** The 429 text: "Try again in 7 min" from `retryAfter_s` (seconds). */
+export function retryText(retryAfterS: unknown): string {
+  const s = typeof retryAfterS === "number" && isFinite(retryAfterS) && retryAfterS > 0 ? retryAfterS : 600;
+  const m = Math.max(1, Math.ceil(s / 60));
+  return `Try again in ${m} min`;
+}

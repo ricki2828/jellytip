@@ -96,6 +96,9 @@ export interface Provider {
     checkedAt?: number;
     message?: string | null;
     authFailed?: boolean;
+    /** Guide (EPG) and channel-list runs: when they last ran and whether one is running now. */
+    guide?: { lastRun?: number | null; running?: boolean; programmes?: number | null } | null;
+    channels?: { lastRun?: number | null; running?: boolean } | null;
     /** The server saw streams blocked while the API works: it suggests Direct (message says why). */
     directSuggested?: boolean | string | null;
   };

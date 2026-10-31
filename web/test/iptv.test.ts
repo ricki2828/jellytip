@@ -384,3 +384,17 @@ test("channel pruning: parse, filter, badges, bulk hide, window", () => {
   assert.deepEqual(windowSlice(5000, 400, 50, 1000), { from: 92, to: 116 });
   assert.deepEqual(windowSlice(49_900, 400, 50, 1000), { from: 990, to: 1000 });
 });
+
+import { lastUpdated, retryText } from "../src/lib/channelPrune.ts";
+
+test("refresh guide: last updated and retry texts", () => {
+  const now = 1_900_000_000;
+  assert.equal(lastUpdated(now - 30, now), "Last updated just now");
+  assert.equal(lastUpdated(now - 7200, now), "Last updated 2 h ago");
+  assert.equal(lastUpdated(now - 25 * 60, now), "Last updated 25 min ago");
+  assert.equal(lastUpdated((now - 7200) * 1000, now), "Last updated 2 h ago");
+  assert.equal(lastUpdated(null, now), null);
+  assert.equal(retryText(420), "Try again in 7 min");
+  assert.equal(retryText(30), "Try again in 1 min");
+  assert.equal(retryText(undefined), "Try again in 10 min");
+});
