@@ -112,6 +112,10 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           </>
         )}
         <SportTagToggles prefs={prefs} onMsg={setMsg} />
+        <label className="iptv-check">
+          <input type="checkbox" data-nav checked={prefs.sport.spoilers} onChange={async (e) => setMsg(await savePrefs({ sport: { spoilers: e.target.checked } }))} />
+          <span>Show scores (spoilers) in match info</span>
+        </label>
       </div>
 
       <div className="settings-block settings-pad">

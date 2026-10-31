@@ -8,6 +8,8 @@ import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
 import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { isLive, timeChip, type UpChannel, type UpEvent } from "../lib/upcoming";
+import { IdentifiedMark, MatchInfoButton } from "./MatchInfo";
+import { displayTitle } from "../lib/matchInfo";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { isPre, startsLine } from "../lib/preGame";
 import { MuteButton } from "./SportMute";
@@ -22,16 +24,22 @@ export function UpTile({ e, onOpen }: { e: UpEvent; onOpen: () => void }) {
   // Within the hour before the real start the tile says pre-game, with the countdown
   const pre = isPre(e.startsAt, nowS, e.phase) && e.startsAt! - nowS <= 3600;
   return (
+    <span className="up-wrap">
     <MuteButton target={{ title: e.title, league: e.league, sportName: e.sportName }} className={`up-tile${live ? " live" : ""}${artClass(e.art)}`} data-nav onClick={onOpen} aria-label={`${e.title}, ${timeChip(e)}`} title={e.title}>
       <SportArt art={e.art} />
       <span className="up-top">
         {pre ? <span className="rec-chip pre">PRE-GAME · {startsLine(e.startsAt!, nowS)}</span> : <span className={`rec-chip ${live ? "rec" : "time"}`}>{timeChip(e)}</span>}
         {e.favourite && <span className="sport-star" title="Your team or league">★</span>}
       </span>
-      <span className="rec-title">{e.title}</span>
+      <span className="rec-title">
+        {displayTitle(e.title, e.fixture)}
+        {e.fixture?.inferred && <IdentifiedMark />}
+      </span>
       <span className="rec-sub">{[e.league, best?.name].filter(Boolean).join(" · ")}</span>
       <SportBadges quality={best?.quality} size="sm" />
     </MuteButton>
+    <MatchInfoButton fixture={e.fixture} className="info-fab" />
+    </span>
   );
 }
 
@@ -56,6 +64,7 @@ export const watchExtras = (e: UpEvent, via: string): LiveExtras => ({
   kickoff: e.startOver && via === e.channels[0]?.id && !isPre(e.startsAt, Date.now() / 1000, e.phase) ? { start: e.start, stop: e.stop } : null,
   startsAt: isPre(e.startsAt, Date.now() / 1000, e.phase) ? e.startsAt : null,
   eventKey: e.key,
+  matchId: e.fixture?.id ?? null,
   alternates: e.channels.filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })),
 });
 

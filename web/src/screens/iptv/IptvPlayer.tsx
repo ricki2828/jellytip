@@ -6,6 +6,7 @@ import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
+import { MatchInfoButton } from "../../components/MatchInfo";
 import { Scrubber } from "../../components/Scrubber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
@@ -575,6 +576,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && <span className="iptv-live-pill">Live</span>}
+        {isLive && <MatchInfoButton id={extras?.matchId} />}
         {kickoff && state.kind === "playing" && (
           <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extras)}`, true)}>
             From kick-off

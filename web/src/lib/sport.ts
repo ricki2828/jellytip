@@ -2,6 +2,7 @@
 // §2-§4). Everything is optional: a server without them gives no badges and the old behaviour. Pure; tested in
 // web/test/sport.test.ts. The server decides the order; nothing here sorts.
 
+import { parseFixture, type Fixture } from "./matchInfo.ts";
 import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
 
 export type Kind = "live" | "replay" | "highlights" | "other";
@@ -44,6 +45,8 @@ export interface SportInfo {
   league: string | null;
   sportName: string | null;
   match: { team: string | null; league: string | null } | null;
+  /** The match behind the listing (id, sides, venue, status, inferred): opens the match modal. */
+  fixture: Fixture | null;
 }
 
 const KINDS: Kind[] = ["live", "replay", "highlights", "other"];
@@ -102,6 +105,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     league: str(p.league) ?? str(r.league) ?? str(m?.league),
     sportName: str(p.sportName) ?? str(r.sportName) ?? str(p.sport) ?? str(r.sport),
     match: m ? { team: str(m.team), league: str(m.league) } : null,
+    fixture: parseFixture(p.match ?? r.match),
   };
 }
 

@@ -8,6 +8,8 @@ import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
 import { useEscapeClose } from "./BackArrow";
 import { isPre, startsLine } from "../lib/preGame";
+import { IdentifiedMark, MatchInfoButton } from "./MatchInfo";
+import { displayTitle } from "../lib/matchInfo";
 import { MuteButton } from "./SportMute";
 import { MUTED_EVENT } from "../api/sportTaste";
 import { SportBadges } from "./SportBadges";
@@ -68,6 +70,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
     kickoff: !via && o.info.startOver && !isPre(o.info.startsAt, now, o.info.phase) ? { start: o.start, stop: o.stop } : null,
     startsAt: !via && isPre(o.info.startsAt, now, o.info.phase) ? o.info.startsAt : null,
     eventKey: o.info.eventKey,
+    matchId: o.info.fixture?.id ?? null,
     alternates: [{ id: o.channelId, name: o.channel }, ...alts(o)].filter((a) => a.id !== (via ?? o.channelId)),
   });
   const play = (id: string, name: string, x?: LiveExtras) => go(livePath(id, name, x));
@@ -103,7 +106,8 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
               </span>
               <span className="onnow-title">
                 {o.info.match && (o.info.match.team || o.info.match.league) && <span className="sport-star" title={`Your ${o.info.match.team ? "team" : "league"}: ${o.info.match.team ?? o.info.match.league}`}>★ </span>}
-                {o.title}
+                {displayTitle(o.title, o.info.fixture)}
+                {o.info.fixture?.inferred && <IdentifiedMark />}
               </span>
               <span className="onnow-channel">{o.channel}</span>
               <SportBadges quality={o.info.quality} size="sm" />
@@ -115,6 +119,7 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
                 </span>
               )}
             </MuteButton>
+            <MatchInfoButton fixture={o.info.fixture} className="info-fab" />
             {alts(o).length > 0 && (
               <>
                 <button className="onnow-also" data-nav aria-expanded={openAlt === o.channelId} onClick={() => setOpenAlt(openAlt === o.channelId ? null : o.channelId)}>

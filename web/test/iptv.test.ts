@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -297,10 +297,10 @@ test("live extras: kick-off and alternates round-trip through the play link", ()
   const path = livePath("3:76", "Sky Sport 1", x);
   const q = new URLSearchParams(path.split("?")[1]);
   assert.equal(q.get("channel"), "3:76");
-  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null });
+  assert.deepEqual(parseLiveExtras(q), { kickoff: { start: 1000, stop: 2000 }, alternates: [{ id: "3:77", name: "Sky Sport 2" }, { id: "3:78", name: "Fox & Co ~ HD" }], startsAt: null, eventKey: null, matchId: null });
   assert.equal(liveExtrasQuery(null), "");
   assert.equal(liveExtrasQuery({ kickoff: { start: 5, stop: 5 }, alternates: [] }), "");
-  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null });
+  assert.deepEqual(parseLiveExtras(new URLSearchParams("alt=bad&ko=5&kos=3")), { kickoff: null, alternates: [], startsAt: null, eventKey: null, matchId: null });
   const p = parseLiveExtras(new URLSearchParams(liveExtrasQuery({ startsAt: 1_900_000_000, eventKey: "nfl:a-v-b" }).slice(1)));
   assert.equal(p.startsAt, 1_900_000_000);
   assert.equal(p.eventKey, "nfl:a-v-b");
@@ -397,4 +397,40 @@ test("refresh guide: last updated and retry texts", () => {
   assert.equal(retryText(420), "Try again in 7 min");
   assert.equal(retryText(30), "Try again in 1 min");
   assert.equal(retryText(undefined), "Try again in 10 min");
+});
+
+import { displayTitle, matchupTitle, parseFixture, parseMatchDetail, statusLabel, venueLine } from "../src/lib/matchInfo.ts";
+
+const FIX = { id: "nfl:401", league: "NFL", home: { name: "Chiefs", short: "KC", record: "6-1" }, away: { name: "Bills", short: "BUF" }, startsAt: "2026-10-31T18:00:00Z", venue: { name: "Arrowhead", city: "Kansas City" }, status: "pre", inferred: true };
+
+test("match info: fixture, inferred title, detail sections", () => {
+  const f = parseFixture(FIX)!;
+  assert.equal(matchupTitle(f), "Chiefs v Bills");
+  assert.equal(displayTitle("NFL on CBS", f), "Chiefs v Bills");
+  assert.equal(displayTitle("NFL on CBS", { ...f, inferred: false }), "NFL on CBS");
+  assert.equal(venueLine(f), "Arrowhead, Kansas City");
+  assert.equal(f.score, null);
+  assert.equal(statusLabel({ ...f, status: "in", score: { home: 3, away: 0, clock: "12:04", period: "Q2" } }, 0), "LIVE · 12:04");
+  assert.equal(statusLabel({ ...f, status: "post" }, 0), "FT");
+  // The older {team, league} match shape is not a fixture
+  assert.equal(parseFixture({ team: "Chiefs", league: "NFL" }), null);
+  assert.equal(parseFixture(null), null);
+  const d = parseMatchDetail({
+    match: FIX,
+    lineups: { announced: false, home: [], away: [] },
+    odds: { provider: "ESPN BET", home: { moneyline: "-150", spread: "-3.5" }, away: { moneyline: "+130" }, overUnder: "47.5", updatedAt: "2026-10-31T10:00:00Z" },
+    form: { home: ["W", "W", "L"], away: ["L"] },
+    h2h: ["KC 27-24 BUF", { summary: "BUF 24-20 KC" }],
+    broadcasts: ["CBS"],
+    channels: [{ id: "3:7", name: "CBS HD", quality: { bucket: "fhd" } }, { name: "no id" }],
+    pending: true,
+  })!;
+  assert.equal(d.lineups?.announced, false);
+  assert.equal(d.odds?.home, "-150 · -3.5");
+  assert.equal(d.odds?.away, "+130");
+  assert.deepEqual(d.h2h, ["KC 27-24 BUF", "BUF 24-20 KC"]);
+  assert.deepEqual(d.channels, [{ id: "3:7", name: "CBS HD", quality: "fhd" }]);
+  assert.equal(d.pending, true);
+  assert.equal(parseMatchDetail({}), null);
+  assert.equal(parseMatchDetail({ match: FIX })?.odds, null);
 });

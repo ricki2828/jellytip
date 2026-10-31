@@ -1257,3 +1257,119 @@
   margin-left: 8px;
   font-size: 12px;
 }
+.info-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--vanilla);
+  cursor: pointer;
+}
+.info-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.info-btn:hover,
+.info-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.25);
+}
+.info-fab {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+}
+.onnow-item,
+.up-wrap {
+  position: relative;
+}
+.up-wrap {
+  display: block;
+}
+.identified {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.match-info {
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+}
+.match-info h3 {
+  margin: 10px 0 4px;
+  font-size: 14px;
+}
+.match-info h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.mi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 10px;
+  padding: 6px 0;
+}
+.mi-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  flex: 1;
+}
+.mi-crest {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+.mi-crest.blank {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-weight: 800;
+}
+.mi-score strong {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.mi-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.mi-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mi-list .sub {
+  opacity: 0.6;
+}
+.mi-num {
+  display: inline-block;
+  min-width: 22px;
+  color: var(--faint);
+}
+.mi-form {
+  letter-spacing: 0.15em;
+  font-weight: 700;
+}
