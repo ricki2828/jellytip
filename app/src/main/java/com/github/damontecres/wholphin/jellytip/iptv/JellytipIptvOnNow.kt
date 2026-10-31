@@ -123,8 +123,8 @@ fun OnNowCard(
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Old server (no kind): every card is LIVE, as before
-                    KindPill(o.kind, legacyLive = true)
+                    // Pre-game (plan "Pre-game state") is neutral, not LIVE; old server (no kind): every card is LIVE, as before
+                    if (o.isPre(now)) PreGamePill() else KindPill(o.kind, legacyLive = true)
                     if (o.sport) SportMark(androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.8f), 11.dp)
                     Text(
                         text =
@@ -141,9 +141,14 @@ fun OnNowCard(
                     QualityChips(o.channel.quality)
                 }
                 Text(o.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val frac = ((now - o.start).toFloat() / (o.stop - o.start).coerceAtLeast(1)).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.Gray.copy(alpha = 0.4f))) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(JellytipPalette.Jelly))
+                val startsAt = o.startsAt
+                if (o.isPre(now) && startsAt != null) {
+                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+                } else {
+                    val frac = ((now - o.start).toFloat() / (o.stop - o.start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                    Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.Gray.copy(alpha = 0.4f))) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(JellytipPalette.Jelly))
+                    }
                 }
             }
         }

@@ -67,11 +67,13 @@ class JellytipLiveTvPlayerViewModel
         val service: JellytipIptvService,
         val playback: JellytipIptvPlayback,
         val navigationManager: com.github.damontecres.wholphin.services.NavigationManager,
+        val reminders: JellytipReminders,
     ) : ViewModel()
 
 private const val ZAP_SETTLE_MS = 700L
 private const val BANNER_MS = 5_000L
 private const val STALL_MS = 10_000L
+private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
 
 /**
@@ -217,6 +219,28 @@ fun JellytipLiveTvPlayerPage(
         }
     }
 
+    // Pre-game (plan "Pre-game state"): the channel is on but the event hasn't started. A card bottom-left says when;
+    // it hides after 10 s, any key brings it back, OK on it offers Remind me / other channels; "Started" at startsAt.
+    val preProg = nowNext?.now?.takeIf { it.phase == "pre" && (it.startsAt ?: it.start) > now }
+    val preStartsAt = preProg?.let { it.startsAt ?: it.start }
+    var preCardTick by remember { mutableIntStateOf(0) }
+    var preCardVisible by remember { mutableStateOf(false) }
+    var preMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(preStartsAt, channel.id) {
+        if (preStartsAt != null) preCardTick++
+    }
+    LaunchedEffect(preCardTick) {
+        if (preCardTick == 0 || preStartsAt == null) return@LaunchedEffect
+        preCardVisible = true
+        delay(PRE_CARD_MS)
+        preCardVisible = false
+    }
+    LaunchedEffect(preStartsAt, channel.id) {
+        val at = preStartsAt ?: return@LaunchedEffect
+        delay(((at - nowSec()) * 1000).coerceAtLeast(0))
+        preCardVisible = false
+        android.widget.Toast.makeText(context, "Started", android.widget.Toast.LENGTH_SHORT).show()
+    }
     Box(
         modifier
             .fillMaxSize()
@@ -224,6 +248,14 @@ fun JellytipLiveTvPlayerPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (preStartsAt != null) {
+                    val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                    if (ok && preCardVisible) {
+                        preMenu = true
+                        return@onPreviewKeyEvent true
+                    }
+                    preCardTick++
+                }
                 when (e.key) {
                     Key.DirectionUp, Key.DirectionDown, Key.ChannelUp, Key.ChannelDown, Key.PageUp, Key.PageDown -> {
                         if (lineup.size > 1) {
@@ -295,6 +327,74 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        if (preCardVisible && preStartsAt != null) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 48.dp, bottom = if (bannerVisible) 150.dp else 40.dp)
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PreGamePill()
+                    Text(
+                        "Pre-game — the event starts at ${hhmm(preStartsAt)} (${startsLabel(preStartsAt, now).substringAfter("· ")})",
+                        color = JellytipPalette.Vanilla,
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 15.sp,
+                    )
+                }
+                Text("OK: Remind me · Other channels", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
+            }
+        }
+        if (preMenu && preProg != null && preStartsAt != null) {
+            val remindersOn by viewModel.reminders.available.collectAsState()
+            val others = playback.alternates[lineup[index].id].orEmpty().filter { it.id != channel.id }
+            val items =
+                buildList {
+                    if (remindersOn == true) {
+                        add(
+                            com.github.damontecres.wholphin.ui.components.DialogItem("Remind me", dismissOnClick = true) {
+                                viewModel.reminders.add(
+                                    IptvUpcoming(
+                                        key = "${channel.id}@$preStartsAt",
+                                        title = preProg.title,
+                                        league = null,
+                                        favourite = false,
+                                        start = preStartsAt,
+                                        stop = preProg.stop,
+                                        kind = preProg.kind,
+                                        channel = channel,
+                                        alternateChannels = others,
+                                        recordable = false,
+                                        recordingId = null,
+                                    ),
+                                )
+                                android.widget.Toast.makeText(context, "Reminder set", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    }
+                    others.forEach { ch ->
+                        val name = ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), "")
+                        add(
+                            com.github.damontecres.wholphin.ui.components.DialogItem("Watch on $name", dismissOnClick = true) {
+                                tried += ch.id
+                                fallback = ch
+                                current = IptvTarget(ch.id, ch.name)
+                                playback.play(current, "pre-game other channel")
+                                bannerTick++
+                            },
+                        )
+                    }
+                }
+            if (items.isEmpty()) {
+                preMenu = false
+            } else {
+                com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = preProg.title, dialogItems = items, onDismissRequest = { preMenu = false })
+            }
+        }
         if (bannerVisible) {
             val cu = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
             val shown = if (cu != null) IptvNowNext(IptvProg(cu.start!!, cu.stop!!, cu.label, null, true), null) else nowNext

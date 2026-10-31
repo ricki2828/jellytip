@@ -50,6 +50,25 @@ fun KindPill(
     }
 }
 
+/** Neutral "PRE-GAME" (plan "Pre-game state"): the channel is on but the event hasn't started; not the red LIVE. */
+@Composable
+fun PreGamePill() = Pill("PRE-GAME", Color.White, Color(0xFF5A5F6B))
+
+/** "Starts 18:00 · in 35 min" ("· now" once due); local time. */
+fun startsLabel(
+    startsAt: Long,
+    now: Long,
+): String {
+    val mins = ((startsAt - now + 59) / 60)
+    val inText =
+        when {
+            mins <= 0 -> "now"
+            mins < 60 -> "in $mins min"
+            else -> "in ${mins / 60}h" + if (mins % 60 > 0) " ${mins % 60}m" else ""
+        }
+    return "Starts ${hhmm(startsAt)} · $inText"
+}
+
 /** Amber "STARTING SOON" (plan "Remind me": a reminder within 15 minutes of kick-off). */
 @Composable
 fun SoonPill() = Pill("STARTING SOON", Color.Black, MayBuffer)

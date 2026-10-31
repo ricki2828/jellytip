@@ -335,7 +335,10 @@ private fun UpcomingTile(
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (u.isLive(now)) {
+                    val pre = u.phase == "pre" && (u.startsAt == null || now < u.startsAt)
+                    if (pre) {
+                        PreGamePill()
+                    } else if (u.isLive(now)) {
                         KindPill("live")
                     } else if (countdown && u.isSoon(now)) {
                         SoonPill()
@@ -363,6 +366,10 @@ private fun UpcomingTile(
                     QualityChips(u.channel.quality)
                 }
                 Text(u.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val startsAt = u.startsAt
+                if (u.phase == "pre" && startsAt != null && now < startsAt) {
+                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)
+                }
                 alsoOnText(u.alternateChannels.size)?.let {
                     Text(it, fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)
                 }

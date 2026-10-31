@@ -110,6 +110,10 @@ data class IptvProg(
     val sport: Boolean? = null,
     /** A live programme that can be restarted (catch-up of what is on now, plan "8h Block 3"). */
     val startOver: Boolean = false,
+    /** pre | live | post (plan "Pre-game state"); null = unknown / older server. */
+    val phase: String? = null,
+    /** The real start of the event (epoch s), when the server knows it. */
+    val startsAt: Long? = null,
 ) {
     fun isOn(at: Long) = at in start until stop
 
@@ -225,7 +229,13 @@ data class IptvOnNow(
     val sportName: String? = null,
     /** The programme can be watched from its start (catch-up of what is on now). */
     val startOver: Boolean = false,
-)
+    /** pre | live | post (plan "Pre-game state"); null = unknown. */
+    val phase: String? = null,
+    /** The real start (epoch s) when known. */
+    val startsAt: Long? = null,
+) {
+    fun isPre(now: Long) = phase == "pre" && (startsAt == null || now < startsAt)
+}
 
 /**
  * Sport artwork (`art: {league?: {badge, fanart}, home?: {name, badge}, away?: {name, badge}}`, plan "Sport artwork"):
@@ -268,6 +278,10 @@ data class IptvUpcoming(
     val reminderId: String? = null,
     /** Sport name ("cricket", "speedway") when the server sends one; null = unknown. */
     val sportName: String? = null,
+    /** pre | live | post (plan "Pre-game state"); null = unknown. */
+    val phase: String? = null,
+    /** The real start (epoch s) when known; it can differ from the EPG [start]. */
+    val startsAt: Long? = null,
 ) {
     fun isLive(now: Long) = now in start until stop
 
@@ -465,6 +479,8 @@ object IptvParse {
                     art = art,
                     league = c.str("league") ?: p.str("league") ?: match?.str("league"),
                     startOver = p.optBoolean("startOver", false) || c.optBoolean("startOver", false) || p.optBoolean("catchup", false),
+                    phase = p.str("phase") ?: c.str("phase") ?: event?.str("phase"),
+                    startsAt = isoSeconds(p.str("startsAt") ?: c.str("startsAt") ?: event?.str("startsAt")),
                     sportName = c.str("sportName") ?: p.str("sportName") ?: match?.str("sportName"),
                 )
         }
@@ -539,6 +555,8 @@ object IptvParse {
                 art = art(o.optJSONObject("art"), resolve),
                 reminderId = o.str("reminderId") ?: if (reminders) o.str("id") else null,
                 sportName = o.str("sportName") ?: match?.str("sportName"),
+                phase = o.str("phase"),
+                startsAt = isoSeconds(o.str("startsAt")),
             )
         }
     }
@@ -557,7 +575,17 @@ object IptvParse {
             kind = o.str("kind"),
             sport = if (o.has("sport") && !o.isNull("sport")) o.optBoolean("sport") else null,
             startOver = o.optBoolean("startOver", false),
+            phase = o.str("phase"),
+            startsAt = isoSeconds(o.str("startsAt")),
         )
+    }
+
+    /** ISO-8601 UTC ("2026-10-31T18:00:00Z", offsets allowed) or epoch seconds as text -> epoch seconds; null if neither. */
+    fun isoSeconds(v: String?): Long? {
+        v ?: return null
+        v.toLongOrNull()?.let { return it }
+        return runCatching { java.time.OffsetDateTime.parse(v).toEpochSecond() }.getOrNull()
+            ?: runCatching { java.time.Instant.parse(v).epochSecond }.getOrNull()
     }
 
     /** `/epg` answer: programmes per channel, sorted, overlaps trimmed so cells never stack. */
