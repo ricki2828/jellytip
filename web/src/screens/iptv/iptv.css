@@ -1374,12 +1374,6 @@
   font-weight: 700;
 }
 .live-drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 7;
-  width: min(360px, 46%);
   padding: 14px 14px 12px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -1438,4 +1432,119 @@
 .ld-chat strong {
   color: var(--dim);
   margin-right: 4px;
+}
+
+/* Live drawer motion: transforms and opacity only */
+.ld-wrap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  width: min(360px, 46%);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  animation: ld-scrim-in 260ms ease-out both;
+}
+.ld-wrap.out {
+  animation: ld-scrim-out 200ms ease-in both;
+}
+.ld-wrap .live-drawer {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  animation: ld-in 260ms cubic-bezier(0.1, 0.8, 0.2, 1) both;
+}
+.ld-wrap.out .live-drawer {
+  animation: ld-out 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+@keyframes ld-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes ld-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes ld-scrim-in {
+  from {
+    background: rgba(0, 0, 0, 0);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+@keyframes ld-scrim-out {
+  from {
+    background: rgba(0, 0, 0, 0.35);
+  }
+  to {
+    background: rgba(0, 0, 0, 0);
+  }
+}
+.ld-tab {
+  animation: ld-fade 150ms ease-out both;
+}
+@keyframes ld-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ld-new {
+  animation: ld-slide-down 320ms ease-out both, ld-highlight 1600ms ease-out both;
+}
+@keyframes ld-slide-down {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes ld-highlight {
+  from {
+    background: rgba(255, 255, 255, 0.22);
+  }
+  to {
+    background: transparent;
+  }
+}
+.ld-pulse {
+  display: inline-block;
+  animation: ld-pulse 450ms ease-out both;
+}
+@keyframes ld-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-wrap,
+  .ld-wrap.out,
+  .ld-wrap .live-drawer,
+  .ld-wrap.out .live-drawer,
+  .ld-tab,
+  .ld-new,
+  .ld-pulse {
+    animation: none !important;
+  }
 }

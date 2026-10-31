@@ -1,6 +1,6 @@
 // The in-event "Live" drawer in the player: Stats · Plays · Odds · Chat, refreshed every 15 s while open. It slides in from the
 // right (landscape-friendly) and the video keeps playing. Odds are percentages with their source, never a betting link.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { liveStats, matchDetail } from "../api/matchInfo";
 import { agoText, maskText, mayShow, pct, volumeText, type LiveStats } from "../lib/liveStats";
 import type { Fixture } from "../lib/matchInfo";
@@ -15,6 +15,38 @@ const TABS: [Tab, string][] = [
   ["chat", "Chat"],
 ];
 const REFRESH_MS = 15_000;
+const OUT_MS = 200;
+
+/** A number that pulses once when it changes (not on first render). */
+function Pulse({ value, children }: { value: string | number | null | undefined; children: React.ReactNode }) {
+  const first = useRef(true);
+  const prev = useRef(value);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (prev.current !== value) setN((x) => x + 1);
+    prev.current = value;
+  }, [value]);
+  return (
+    <span key={n} className={n ? "ld-pulse" : undefined}>
+      {children}
+    </span>
+  );
+}
+
+/** Keys seen on earlier renders: what is not in the set is new (the first batch is never new). */
+function useNewKeys(keys: string[]): Set<string> {
+  const seen = useRef<Set<string> | null>(null);
+  const fresh = new Set<string>();
+  if (seen.current && keys.length) for (const k of keys) if (!seen.current.has(k)) fresh.add(k);
+  useEffect(() => {
+    seen.current = new Set([...(seen.current ?? []), ...keys]);
+  });
+  return fresh;
+}
 
 export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("stats");
@@ -23,7 +55,16 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
   const [now, setNow] = useState(() => Date.now() / 1000);
   const allowed = mayShow(liveNow, spoilers);
-  useEscapeClose(onClose);
+  // Slides out for 200 ms before it goes
+  const [leaving, setLeaving] = useState(false);
+  const close = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(onClose, OUT_MS);
+  };
+  useEscapeClose(close);
+  const newPlays = useNewKeys(d?.plays.map((p) => `${p.period}${p.clock}${p.text}`) ?? []);
+  const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
   useEffect(() => {
     if (!allowed) return;
@@ -53,8 +94,9 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
   const home = fixture?.home.name ?? "Home";
   const away = fixture?.away.name ?? "Away";
   return (
-    <aside className="live-drawer" role="dialog" aria-label="Live stats" onClick={(e) => e.stopPropagation()}>
-      <SheetClose onClose={onClose} />
+    <div className={`ld-wrap${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
+    <aside className="live-drawer" role="dialog" aria-label="Live stats">
+      <SheetClose onClose={close} />
       <h3>Live</h3>
       {!allowed ? (
         <p className="iptv-hint">Live stats would spoil this recording. You can turn on "Show scores (spoilers)" in Settings → Live sport.</p>
@@ -74,10 +116,17 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
             <div className="ld-body">
               {(d.score || d.clock || d.period) && (
                 <p className="ld-score">
-                  {d.score ? `${home} ${d.score.home} – ${d.score.away} ${away}` : ""}
+                  {d.score ? (
+                    <Pulse value={`${d.score.home}-${d.score.away}`}>
+                      {home} {d.score.home} – {d.score.away} {away}
+                    </Pulse>
+                  ) : (
+                    ""
+                  )}
                   <span className="iptv-hint">{[d.period, d.clock].filter(Boolean).join(" · ") ? ` ${[d.period, d.clock].filter(Boolean).join(" · ")}` : ""}</span>
                 </p>
               )}
+              <div key={tab} className="ld-tab">
               {tab === "stats" && (
                 <>
                   {d.stats.length === 0 && d.leaders.length === 0 && <p className="iptv-hint">No stats yet.</p>}
@@ -118,7 +167,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   {d.plays.length === 0 && <p className="iptv-hint">No plays yet.</p>}
                   <ul className="mi-list ld-plays">
                     {d.plays.map((p, i) => (
-                      <li key={i} className={p.scoring ? "score" : ""}>
+                      <li key={i} className={`${p.scoring ? "score" : ""}${newPlays.has(`${p.period}${p.clock}${p.text}`) ? " ld-new" : ""}`}>
                         <span className="mi-num">{[p.period, p.clock].filter(Boolean).join(" ")}</span>
                         {p.text}
                       </li>
@@ -132,7 +181,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   {d.market && (
                     <>
                       <p className="ld-odds">
-                        {home} {pct(d.market.home)} · {away} {pct(d.market.away)}
+                        {home} <Pulse value={pct(d.market.home)}>{pct(d.market.home)}</Pulse> · {away} <Pulse value={pct(d.market.away)}>{pct(d.market.away)}</Pulse>
                         {d.market.draw != null && ` · Draw ${pct(d.market.draw)}`}
                       </p>
                       <p className="iptv-hint">{[d.market.source === "polymarket" ? "Polymarket" : d.market.source, volumeText(d.market.volume), agoText(d.market.updatedAt, now)].filter(Boolean).join(" · ")}</p>
@@ -152,7 +201,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                     <>
                       <ul className="ld-chat">
                         {d.chat.comments.map((c, i) => (
-                          <li key={i}>
+                          <li key={i} className={newChat.has(`${c.author}${c.text}`) ? "ld-new" : undefined}>
                             <strong>{c.author}</strong> {maskText(c.text)}
                           </li>
                         ))}
@@ -162,11 +211,13 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                   )}
                 </>
               )}
+              </div>
               <p className="iptv-hint">Updates every 15 s{agoText(d.updatedAt, now) ? ` · ${agoText(d.updatedAt, now)}` : ""}</p>
             </div>
           )}
         </>
       )}
     </aside>
+    </div>
   );
 }
