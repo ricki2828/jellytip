@@ -1,0 +1,3138 @@
+{
+ "home": {
+  "rows": [
+   {
+    "id": "my-list-series",
+    "source": "mylist",
+    "family": "mylist",
+    "title": "My list · Shows",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:58502",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 236235,
+      "title": "The Gentlemen",
+      "year": 2024,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/tw3tzfXaSpmUZIB8ZNqNEGzMBCy.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/yG1wltFmkX5c5ocACKfpX0tp3SY.jpg",
+      "rating": 7.882,
+      "providerName": "PROVIDER",
+      "favourite": true,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:40726",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 125988,
+      "title": "Silo",
+      "year": 2023,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/r2QXomqKjkKHVtYGGtkf2l2Y7go.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4XccmjsOmQZw8S2iW1wvlvmb5v1.jpg",
+      "rating": 8.23,
+      "providerName": "PROVIDER",
+      "favourite": true,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:1779",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1438,
+      "title": "The Wire",
+      "year": 2002,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/4lbclFySvugI51fwsyxBTOm4DqK.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/aQTtua5pG490fMfeKgtYg5B853e.jpg",
+      "rating": 8.636,
+      "providerName": "PROVIDER",
+      "favourite": true,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:s:58502",
+     "11dd6d87:s:40726",
+     "11dd6d87:s:1779"
+    ]
+   },
+   {
+    "id": "trending-top10-series",
+    "title": "Top 10 on IMDb this week: Shows",
+    "source": "trending",
+    "family": "trending",
+    "layout": "top10",
+    "mediaType": "tv",
+    "ranks": {
+     "11dd6d87:s:59509": 1,
+     "11dd6d87:s:59655": 2,
+     "11dd6d87:s:59608": 3,
+     "11dd6d87:s:14410": 4,
+     "11dd6d87:s:42706": 5,
+     "11dd6d87:s:59516": 6,
+     "11dd6d87:s:33922": 7,
+     "11dd6d87:s:28583": 8,
+     "11dd6d87:s:59437": 9,
+     "11dd6d87:s:38737": 10
+    },
+    "trendSource": "imdb",
+    "week": null,
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:59509",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 288673,
+      "title": "Carrie",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+      "rating": 8.267,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59655",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213562,
+      "title": "Crystal Lake",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+      "rating": 8.701,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59608",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213375,
+      "title": "VisionQuest",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+      "rating": 8.6,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:14410",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 95480,
+      "title": "Slow Horses",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/AdYr4DjOgXvDUMwu6vEhZy1Rnxk.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/gPQppUnLx9vqPDLz3WwZ2HJsNbt.jpg",
+      "rating": 8.072,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:42706",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 120911,
+      "title": "The Terminal List",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/xyFAzP7RKK8cARCSalIZ9A9T0jV.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/2qS2LGqsAyT1NEDeIj24Hp2IR10.jpg",
+      "rating": 8.0,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59516",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 285322,
+      "title": "Below",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/vgLqqhMUbljp585qPp1EFCyJtcz.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cn0feYcDvVzVjUDoXa1O8sRgzz.jpg",
+      "rating": 7.196,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:s:59509",
+     "11dd6d87:s:59655",
+     "11dd6d87:s:59608",
+     "11dd6d87:s:14410",
+     "11dd6d87:s:42706",
+     "11dd6d87:s:59516"
+    ]
+   },
+   {
+    "id": "385347510b25a23fe0d354abe5c81b06",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Trending Now",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "ranks": {
+     "11dd6d87:m:2122795": 4,
+     "11dd6d87:m:2122630": 5,
+     "11dd6d87:m:2122790": 10,
+     "11dd6d87:m:2123191": 12,
+     "3c00c801aa0767ebef85430651be8665": 14,
+     "11dd6d87:m:2112475": 15,
+     "f6cb554657c07092bec8de754d829064": 40,
+     "474592355648078dbd30bd8818137f7d": 44,
+     "e990320d3776da4539154a28bdf08c99": 64,
+     "427a24282984eb5a154ffd2891752a81": 65,
+     "a7301fe7b72afce89c622db925d2d911": 122
+    },
+    "itemIds": [
+     "e1a937bbaf9d5611597fce3c7847df08",
+     "8ffa76109b5cc921cf078a51c5953674",
+     "5bd7342916f6fc50ad4472de7aa69c16"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:2122795",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1283515,
+      "title": "Verity",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/rmaNMA1seHqpjtnYKzyynFAr1g8.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cKetrF2dAnQ0AMV5i4BMOs41I5P.jpg",
+      "rating": 6.329,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2122630",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1384216,
+      "title": "The Dog Stars",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/5O616X9vmRzQdB68PHzBewPittd.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/3k7GzxOdLZkN3eZsuhLi2eRzkXO.jpg",
+      "rating": 6.902,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2122790",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1465063,
+      "title": "Forgotten Island",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/myd1K3gefdNAWFsGNRDdMeiK9Qg.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cNICUho5uiAGkfCAQq1ihyaMla4.jpg",
+      "rating": 7.607,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2123191",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1727734,
+      "title": "Ali G: Who Iz I?",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/uTyVxPeWX8Ai30IQoyDDQONNcq.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/hJcGJLi34zE4RhzsiDR6f7pw50K.jpg",
+      "rating": 5.485,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2112475",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 969681,
+      "title": "Spider-Man: Brand New Day",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/bjiS5ipwxb9JFy3XRRN4OAilSeX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4tjxYg2AbOzzG9G1YuiT2NzYhlH.jpg",
+      "rating": 8.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:2122795",
+     "11dd6d87:m:2122630",
+     "11dd6d87:m:2122790",
+     "11dd6d87:m:2123191",
+     "e1a937bbaf9d5611597fce3c7847df08",
+     "11dd6d87:m:2112475",
+     "8ffa76109b5cc921cf078a51c5953674",
+     "5bd7342916f6fc50ad4472de7aa69c16"
+    ]
+   },
+   {
+    "id": "for-you",
+    "source": "jellytip",
+    "family": "foryou",
+    "title": "For you",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "66e5fe652fe4cd5a524c7fc9be31b32e"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1957207",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 121,
+      "title": "The Lord of the Rings: The Two Towers",
+      "year": 2002,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/5VTN0pR8gcqV3EPUHHfMGnJYN9L.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/6G73mNyooWAEQTpckPSnFxFoNmc.jpg",
+      "rating": 8.432,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:54414",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 339692,
+      "title": "Shot Caller",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/qLmLz2wtyYvmW8Ult3l2ngOnW8v.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/hehboYLXB3m90x9ybiBsupwuifL.jpg",
+      "rating": 6.977,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:461806",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 188927,
+      "title": "Star Trek Beyond",
+      "year": 2016,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/wI5VghYNYLktDRPUa5rrVcVA1h7.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/nkr43pY7ZzUt9b0kDFwJLVuDP8G.jpg",
+      "rating": 6.789,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1957206",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 122,
+      "title": "The Lord of the Rings: The Return of the King",
+      "year": 2003,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/rCzpDGLbOoPwLjy3OAm5NUPOTrC.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ctiw6FZK4N36LmkjSklWEbuvlq9.jpg",
+      "rating": 8.506,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1117383",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 398978,
+      "title": "The Irishman",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/mbm8k3GFhXS0ROd9AD1gqYbIFbM.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/1RDto0tLo8Fhq7OcwgDaM7nECb7.jpg",
+      "rating": 7.569,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:518322",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 15255,
+      "title": "Undisputed II: Last Man Standing",
+      "year": 2006,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/2gMCokqpIJoh6u5o06LlOZWsI3k.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/3FhqdmY25ajBgrGOuIMRe0brOci.jpg",
+      "rating": 7.414,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "66e5fe652fe4cd5a524c7fc9be31b32e",
+     "11dd6d87:m:1957207",
+     "11dd6d87:m:54414",
+     "11dd6d87:m:461806",
+     "11dd6d87:m:1957206",
+     "11dd6d87:m:1117383",
+     "11dd6d87:m:518322"
+    ]
+   },
+   {
+    "id": "f805b0f89591146cbcbbaebac304232f",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Just Added",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [
+     "2647551d842b541f39a51b8493cfa582",
+     "60e1cf88c85e840a8f0cf865b3be9162",
+     "012fc8daf50cf2b545656cb5fe8fb921"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "e821c13b2a7301c2bcbbe82264e364b9",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Just Added TV",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "1f71d69706d70f77b5e0548d3381b165",
+     "82d8f2926c17365887a6ecbc48286086",
+     "24ecc0b2a69e80d1d884b879322f14f0"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "f63cb4b8ef08e6f840c68097de3ff424",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "New Episodes This Week",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "2a69718ba97ecbadcb77ca486460de4d",
+     "ba559fa497901bcadee9d0c2718cbd19",
+     "4961cd464185747fc762d50e0b301226"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "ce42ece2f4bf21601e0d703a5c56d786",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Because You Watched Miller's Crossing",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "23cc4cb82abc44600afccba744aa57da",
+     "7260c5eb4bfa8dd8b771cfb6ccb9073b",
+     "a28723126b15d6f39767dc97f9f2d9d1"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:461824",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 115,
+      "title": "The Big Lebowski",
+      "year": 1998,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/3bv6WAp6BSxxYvB5ozKFUYuRA8C.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/77ElMccPnTMPouRxSdbJ4nEjf69.jpg",
+      "rating": 7.855,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:450245",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 901,
+      "title": "City Lights",
+      "year": 1931,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/bXNvzjULc9jrOVhGfjcc64uKZmZ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/Ma7mQsldFCaQpsZbm8zolgLfmV.jpg",
+      "rating": 8.246,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "23cc4cb82abc44600afccba744aa57da",
+     "11dd6d87:m:461824",
+     "7260c5eb4bfa8dd8b771cfb6ccb9073b",
+     "a28723126b15d6f39767dc97f9f2d9d1",
+     "11dd6d87:m:450245"
+    ]
+   },
+   {
+    "id": "me:recent-unseen-tv",
+    "source": "personal",
+    "family": "personal",
+    "title": "New series you haven't tried",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "1f71d69706d70f77b5e0548d3381b165",
+     "82d8f2926c17365887a6ecbc48286086",
+     "24ecc0b2a69e80d1d884b879322f14f0"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "franchise:14246",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "Sniper",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1776439",
+      "source": "iptv",
+      "title": "Sniper 2",
+      "year": 2002,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/z03X84vKeVSjabMPJE0fQYxYiMp.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9geJUJTck567rr7VzgtUUiNho0Z.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.5,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1776440",
+      "source": "iptv",
+      "title": "Sniper 3",
+      "year": 2004,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/pUOUOGL3aqKJ7IyBRYvmZQmsmr9.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5wno51VyhlbNWcYTRFcQQ2QRpMj.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.5,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1776441",
+      "source": "iptv",
+      "title": "Sniper: Reloaded",
+      "year": 2011,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/l2Clr2vyzNSptarbVzzdpJozWFg.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/7AE2LdB4QTVY6R2nTromUWQFx7n.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.8,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1776442",
+      "source": "iptv",
+      "title": "Sniper: Legacy",
+      "year": 2014,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/a9L1t3vRaZRU1Fa0kolfQGiTCnQ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/oehDm7pwRZE2Tdo4FXGhDkcJTlD.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.015,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1776443",
+      "source": "iptv",
+      "title": "Sniper: Ghost Shooter",
+      "year": 2016,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/92YFviTZnjA6rj2jADoA2gmsjsz.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/kgjg3FaCgv37ivD9g7v9d02Ap7J.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.264,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1776444",
+      "source": "iptv",
+      "title": "Sniper: Ultimate Kill",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/kdahBLqWeEuDsM4fCBrXw8oCNRm.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/yD4FojKumGSeA0Z8m49VZ8GKUuJ.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.443,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1776439",
+     "11dd6d87:m:1776440",
+     "11dd6d87:m:1776441",
+     "11dd6d87:m:1776442",
+     "11dd6d87:m:1776443",
+     "11dd6d87:m:1776444"
+    ],
+    "collection": {
+     "tmdbId": 14246,
+     "name": "Sniper Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/2NbhXWB5SKRCdMqEpMz9XieQqxU.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/kvuUWjeSFEXmc7DytEFKehlNHo4.jpg",
+     "partsOrder": []
+    }
+   },
+   {
+    "id": "actor:3987c0da3ba8d58e55450860ccce5dbf",
+    "source": "jellytip",
+    "family": "actor",
+    "title": "Starring Carrie Fisher",
+    "layout": "poster",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1867728",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 11,
+      "title": "Star Wars",
+      "year": 1977,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/fai0rspsNeJCS69wHNjOdWxcI7P.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/zqkmTXzjkAgXmEWLRsY4UpTWCeo.jpg",
+      "rating": 8.207,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867732",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 140607,
+      "title": "Star Wars: The Force Awakens",
+      "year": 2015,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/wqnLdwVXoBjKibFRR5U3y0aDUhs.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8BTsTfln4jlQrLXUBquXJ0ASQy9.jpg",
+      "rating": 7.239,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867730",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1891,
+      "title": "The Empire Strikes Back",
+      "year": 1980,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/nNAeTmF4CtdSgMDplXTDPOpYzsX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/k9pshruhCpJAdH9RaGJO6jaWQ4X.jpg",
+      "rating": 8.393,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867731",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1892,
+      "title": "Return of the Jedi",
+      "year": 1983,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/jQYlydvHm3kUix1f8prMucrplhm.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ziECpBRIyclmBNaFSWlvCfsKbMD.jpg",
+      "rating": 7.912,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867733",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 181808,
+      "title": "Star Wars: The Last Jedi",
+      "year": 2017,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg",
+      "rating": 6.731,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867729",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 181812,
+      "title": "Star Wars: The Rise of Skywalker",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/db32LaOibwEliAmSL2jjDF6oDdj.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/auJKGst3vXpJozHZh4nMFs0xWIU.jpg",
+      "rating": 6.241,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1867728",
+     "11dd6d87:m:1867732",
+     "11dd6d87:m:1867730",
+     "11dd6d87:m:1867731",
+     "11dd6d87:m:1867733",
+     "11dd6d87:m:1867729"
+    ],
+    "person": {
+     "id": "979e3d38a0dff2d3dea356a0924f332a",
+     "name": "Carrie Fisher",
+     "role": "actor"
+    }
+   },
+   {
+    "id": "decade-genre:2010-drama",
+    "source": "jellytip",
+    "family": "decade-genre",
+    "title": "2010s Drama",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "4d3f38f945ba48ff76bb1275857a18fd",
+     "be6f754fcdaa93066578b8361e89e2e1",
+     "ac0bef0929693109842d46d35e142771"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1324178",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 157336,
+      "title": "Interstellar",
+      "year": 2014,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+      "rating": 8.493,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324014",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 68718,
+      "title": "Django Unchained",
+      "year": 2012,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/7oWY8VDWW7thTzWh3OKYRkWUlD5.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/2oZklIzUbvZXXzIFzv7Hi68d6xf.jpg",
+      "rating": 8.194,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324209",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 475557,
+      "title": "Joker",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/udDclJoHjfjb8Ekgsd4FDteOkCU.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/rlay2M5QYvi6igbGcFjq8jxeusY.jpg",
+      "rating": 8.1,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:461902",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 106646,
+      "title": "The Wolf of Wall Street",
+      "year": 2013,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/kW9LmvYHAaS9iA0tHmZVq8hQYoq.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/7Nwnmyzrtd0FkcRyPqmdzTPppQa.jpg",
+      "rating": 8.027,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1122440",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 11324,
+      "title": "Shutter Island",
+      "year": 2010,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/nrmXQ0zcZUL8jFLrakWc90IR8z9.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/lavdyiJWciCJvyLG37ZOs6HJijg.jpg",
+      "rating": 8.195,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1120125",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 150540,
+      "title": "Inside Out",
+      "year": 2015,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/2H1TmgdfNtsKlU9jKdeNyYL5y8T.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/jJKZaTBNenlFclQyjrnvzkRmvWE.jpg",
+      "rating": 7.906,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "4d3f38f945ba48ff76bb1275857a18fd",
+     "be6f754fcdaa93066578b8361e89e2e1",
+     "ac0bef0929693109842d46d35e142771",
+     "11dd6d87:m:1324178",
+     "11dd6d87:m:1324014",
+     "11dd6d87:m:1324209",
+     "11dd6d87:m:461902",
+     "11dd6d87:m:1122440",
+     "11dd6d87:m:1120125"
+    ]
+   },
+   {
+    "id": "me:half-watched-tv",
+    "source": "personal",
+    "family": "personal",
+    "title": "Series you drifted from",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "5ac978ad0305ead157e2138ad10a2e27",
+     "45ba9e56b66cc4320a70c7bd0480bb72",
+     "e374d9a018f3c1fe66da9c70b2974428"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "director:03a77091ea10cceba414578c2f8f8cc0",
+    "source": "jellytip",
+    "family": "director",
+    "title": "Directed by Pedro Almodóvar",
+    "layout": "poster",
+    "mediaType": "movie",
+    "itemIds": [
+     "8874a85704a84fac010a6ff72ec08cbe",
+     "23968168d8505c0e3f9043e7287e4e5f",
+     "9f04f72abf9f8f30948f617f4a09e8ef"
+    ],
+    "iptvItems": [],
+    "order": [],
+    "person": {
+     "id": "844df00a4b054d4f021ddbec0adc7195",
+     "name": "Pedro Almodóvar",
+     "role": "director"
+    }
+   },
+   {
+    "id": "decade-genre:1980-thriller",
+    "source": "jellytip",
+    "family": "decade-genre",
+    "title": "80s Thrillers",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "33b42f6592d4aaccbd578bfa992a17e0",
+     "1a51aa70e1f4c2213b0c1054645b73f3",
+     "7c9c7cb3954dcd525cce3d7c78ffa145"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:462039",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 562,
+      "title": "Die Hard",
+      "year": 1988,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/7Bjd8kfmDSOzpmhySpEhkUyK2oH.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/bvk2AAH64lP2YZs02Q3jskfHT8j.jpg",
+      "rating": 7.816,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1619093",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 679,
+      "title": "Aliens",
+      "year": 1986,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/r1x5JGpyqZU8PYhbs4UcrO1Xb6x.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4kix6fAblJIH6eMs0Ku2loyZJXK.jpg",
+      "rating": 8.0,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:462139",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 8810,
+      "title": "Mad Max 2",
+      "year": 1981,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/l1KVEhkGDpWRzQ0VqIhZqDDuOim.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/MMSI9WzRmOdqXarevQ3Kqnytrx.jpg",
+      "rating": 7.395,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1654777",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 8337,
+      "title": "They Live",
+      "year": 1988,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/ngnybFTuopfbfmmEeX9jjBQQmF6.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/bwyLycDaQdS3rS4crpbYssYLJRy.jpg",
+      "rating": 7.31,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:849717",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1370,
+      "title": "Rambo III",
+      "year": 1988,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/1eSQvGuD25ezKaiaQsyDDG3e9iN.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/nEuPSz6LhmrtYp7K56dbsmomuqA.jpg",
+      "rating": 6.206,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:518663",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 700,
+      "title": "Octopussy",
+      "year": 1983,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/yoosZitM9igSk3Sd0sBXIhKlAh1.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/xTS1qCmhzH3vq7cuextO5vQA6eW.jpg",
+      "rating": 6.36,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "33b42f6592d4aaccbd578bfa992a17e0",
+     "1a51aa70e1f4c2213b0c1054645b73f3",
+     "7c9c7cb3954dcd525cce3d7c78ffa145",
+     "11dd6d87:m:462039",
+     "11dd6d87:m:1619093",
+     "11dd6d87:m:462139",
+     "11dd6d87:m:1654777",
+     "11dd6d87:m:849717",
+     "11dd6d87:m:518663"
+    ]
+   },
+   {
+    "id": "franchise:9888",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "Home Alone",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:471294",
+      "source": "iptv",
+      "title": "Home Alone",
+      "year": 1990,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/onTSipZ8R3bliBdKfPtsDuHTdlL.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ih2xVgeMS8R5WUetYE8Mr9hVTlB.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.47,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:471295",
+      "source": "iptv",
+      "title": "Home Alone 2: Lost in New York",
+      "year": 1992,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/uuitWHpJwxD1wruFl2nZHIb4UGN.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8fnYJPoXxwAN4valDLgz2whMGTH.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.796,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:471296",
+      "source": "iptv",
+      "title": "Home Alone 3",
+      "year": 1997,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/6uOadrCfle0n2LOOxHbgWEdnrm2.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/oHsiqHajO9v8YTuonvcMCkxtpSq.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.278,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:471297",
+      "source": "iptv",
+      "title": "Home Alone 4",
+      "year": 2002,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/qRktvMOO2QaCL7gvNyvZDoxPOZj.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/171wf8HVXZAIScPf9zJyrXpxgRB.jpg",
+      "providerName": "PROVIDER",
+      "rating": 4.484,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:471294",
+     "11dd6d87:m:471295",
+     "11dd6d87:m:471296",
+     "11dd6d87:m:471297"
+    ],
+    "collection": {
+     "tmdbId": 9888,
+     "name": "Home Alone Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/zYPsleQJo1n1rBPlecJBRb3iwSO.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/tpmfRWL1ecFxFOOeqvp6hDf41ac.jpg",
+     "partsOrder": []
+    }
+   },
+   {
+    "id": "franchise:89137",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "How to Train Your Dragon",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1120116",
+      "source": "iptv",
+      "title": "How to Train Your Dragon",
+      "year": 2010,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/ygGmAO60t8GyqUo9xYeYxSZAR3b.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/59vDC1BuEQvti24OMr0ZvtAK6R1.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.867,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1903436",
+      "source": "iptv",
+      "title": "How to Train Your Dragon 2",
+      "year": 2014,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/d13Uj86LdbDLrfDoHR5aDOFYyJC.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8AAuJtCzaibYkbE0QVHc8EBsELB.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.685,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:738773",
+      "source": "iptv",
+      "title": "How to Train Your Dragon: The Hidden World",
+      "year": 2019,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/xvx4Yhf0DVH8G4LzNISpMfFBDy2.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/h3KN24PrOheHVYs9ypuOIdFBEpX.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.749,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1120116",
+     "11dd6d87:m:1903436",
+     "11dd6d87:m:738773"
+    ],
+    "collection": {
+     "tmdbId": 89137,
+     "name": "How to Train Your Dragon Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/jkC6nE9Wzqxt77oSxlYtgIAOzhu.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/vBSuGU5OyJ5lGamkqXo2kVAe01F.jpg",
+     "partsOrder": []
+    }
+   }
+  ]
+ },
+ "movies": {
+  "rows": [
+   {
+    "id": "385347510b25a23fe0d354abe5c81b06",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Trending Now",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "ranks": {
+     "11dd6d87:m:2122795": 4,
+     "11dd6d87:m:2122630": 5,
+     "11dd6d87:m:2122790": 10,
+     "11dd6d87:m:2123191": 12,
+     "3c00c801aa0767ebef85430651be8665": 14,
+     "11dd6d87:m:2112475": 15,
+     "f6cb554657c07092bec8de754d829064": 40,
+     "474592355648078dbd30bd8818137f7d": 44,
+     "e990320d3776da4539154a28bdf08c99": 64,
+     "427a24282984eb5a154ffd2891752a81": 65,
+     "a7301fe7b72afce89c622db925d2d911": 122
+    },
+    "itemIds": [
+     "e1a937bbaf9d5611597fce3c7847df08",
+     "8ffa76109b5cc921cf078a51c5953674",
+     "5bd7342916f6fc50ad4472de7aa69c16"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:2122795",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1283515,
+      "title": "Verity",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/rmaNMA1seHqpjtnYKzyynFAr1g8.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cKetrF2dAnQ0AMV5i4BMOs41I5P.jpg",
+      "rating": 6.329,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2122630",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1384216,
+      "title": "The Dog Stars",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/5O616X9vmRzQdB68PHzBewPittd.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/3k7GzxOdLZkN3eZsuhLi2eRzkXO.jpg",
+      "rating": 6.902,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2122790",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1465063,
+      "title": "Forgotten Island",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/myd1K3gefdNAWFsGNRDdMeiK9Qg.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cNICUho5uiAGkfCAQq1ihyaMla4.jpg",
+      "rating": 7.607,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2123191",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1727734,
+      "title": "Ali G: Who Iz I?",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/uTyVxPeWX8Ai30IQoyDDQONNcq.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/hJcGJLi34zE4RhzsiDR6f7pw50K.jpg",
+      "rating": 5.485,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2112475",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 969681,
+      "title": "Spider-Man: Brand New Day",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/bjiS5ipwxb9JFy3XRRN4OAilSeX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4tjxYg2AbOzzG9G1YuiT2NzYhlH.jpg",
+      "rating": 8.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:2122795",
+     "11dd6d87:m:2122630",
+     "11dd6d87:m:2122790",
+     "11dd6d87:m:2123191",
+     "e1a937bbaf9d5611597fce3c7847df08",
+     "11dd6d87:m:2112475",
+     "8ffa76109b5cc921cf078a51c5953674",
+     "5bd7342916f6fc50ad4472de7aa69c16"
+    ]
+   },
+   {
+    "id": "f805b0f89591146cbcbbaebac304232f",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Just Added",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [
+     "2647551d842b541f39a51b8493cfa582",
+     "60e1cf88c85e840a8f0cf865b3be9162",
+     "012fc8daf50cf2b545656cb5fe8fb921"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "iptv:4k-new-en",
+    "source": "iptv",
+    "family": "iptv",
+    "title": "4K new releases",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:2082802",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1504358,
+      "title": "Don't Say Good Luck",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/dgTKahWonzVLeN8Lm22WR2S7D0A.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/yzdMGn8IRHSGuV8AIzw19wkRU2W.jpg",
+      "rating": 7.287,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2082829",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1284041,
+      "title": "The Last House",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/6JU7E8Vv2M11egkctWVOScxWR75.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/1RhfevWmWCVHtEqxWBEjPOC5KG1.jpg",
+      "rating": 6.793,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2082801",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1728056,
+      "title": "Big Chicken: A Fast Food Conspiracy",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/vNvkzG9HpVbnAPqAgkDJBzYi8be.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/d4p2sqbxC2AYkuyxT7tRBSsP4IM.jpg",
+      "rating": 5.6,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2082820",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1307118,
+      "title": "Soulm8te",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/nIkAHDzo9kbG3kDmDckqywo6CE9.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/7t6f6VxA2ZXbbZSVctgt7bZG2DI.jpg",
+      "rating": 7.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2112475",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 969681,
+      "title": "Spider-Man: Brand New Day",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/bjiS5ipwxb9JFy3XRRN4OAilSeX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4tjxYg2AbOzzG9G1YuiT2NzYhlH.jpg",
+      "rating": 8.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:2082823",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 1481343,
+      "title": "The Devil's Mouth",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/lH8k9uCWYn2b2gsYleqYBDPbWa8.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/pLyaH6k69OJHnONSmN3R7Peh6HE.jpg",
+      "rating": 6.483,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": []
+   },
+   {
+    "id": "ce42ece2f4bf21601e0d703a5c56d786",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Because You Watched Miller's Crossing",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "23cc4cb82abc44600afccba744aa57da",
+     "7260c5eb4bfa8dd8b771cfb6ccb9073b",
+     "a28723126b15d6f39767dc97f9f2d9d1"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:461824",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 115,
+      "title": "The Big Lebowski",
+      "year": 1998,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/3bv6WAp6BSxxYvB5ozKFUYuRA8C.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/77ElMccPnTMPouRxSdbJ4nEjf69.jpg",
+      "rating": 7.855,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:450245",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 901,
+      "title": "City Lights",
+      "year": 1931,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/bXNvzjULc9jrOVhGfjcc64uKZmZ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/Ma7mQsldFCaQpsZbm8zolgLfmV.jpg",
+      "rating": 8.246,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "23cc4cb82abc44600afccba744aa57da",
+     "11dd6d87:m:461824",
+     "7260c5eb4bfa8dd8b771cfb6ccb9073b",
+     "a28723126b15d6f39767dc97f9f2d9d1",
+     "11dd6d87:m:450245"
+    ]
+   },
+   {
+    "id": "me:recent-unseen",
+    "source": "personal",
+    "family": "personal",
+    "title": "Recently added, not seen yet",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [
+     "2647551d842b541f39a51b8493cfa582",
+     "e96039e8705884178e0bb6d79ca1450f",
+     "60e1cf88c85e840a8f0cf865b3be9162"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "director:a38e61d237e44a24b4bab192fc3bdb4e",
+    "source": "jellytip",
+    "family": "director",
+    "title": "Directed by Rian Johnson",
+    "layout": "poster",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "f42b134630cdce7d8c6ad5abfbe9afa9",
+     "a6b497c79d818764afef590021b0a56b"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1324266",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 59967,
+      "title": "Looper",
+      "year": 2012,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/sNjL6SqErDBE8OUZlrDLkexfsCj.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4GPCnwvTbsDleH5QIOyDLMsK8a2.jpg",
+      "rating": 6.918,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1867733",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 181808,
+      "title": "Star Wars: The Last Jedi",
+      "year": 2017,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg",
+      "rating": 6.731,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324243",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 546554,
+      "title": "Knives Out",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/pThyQovXQrw2m0s9x82twj48Jq4.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4HWAQu28e2yaWrtupFPGFkdNU7V.jpg",
+      "rating": 7.843,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:279002",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 661374,
+      "title": "Glass Onion: A Knives Out Mystery",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/vDGr1YdrlfbU9wxTOdpf3zChmv9.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/y3uOfZAYwLkbvhunswBCskNMrfI.jpg",
+      "rating": 7.019,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "f42b134630cdce7d8c6ad5abfbe9afa9",
+     "11dd6d87:m:1324266",
+     "11dd6d87:m:1867733",
+     "11dd6d87:m:1324243",
+     "11dd6d87:m:279002",
+     "a6b497c79d818764afef590021b0a56b"
+    ],
+    "person": {
+     "id": "11b53c16fa7f55c9e807aac08e1bc120",
+     "name": "Rian Johnson",
+     "role": "director"
+    }
+   },
+   {
+    "id": "franchise:14890",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "Bad Boys",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1323859",
+      "source": "iptv",
+      "title": "Bad Boys",
+      "year": 1995,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/x1ygBecKHfXX4M2kRhmFKWfWbJc.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/wOLTJxfv98miIQcn0oNXq9fIgXM.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.83,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1323860",
+      "source": "iptv",
+      "title": "Bad Boys II",
+      "year": 2003,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/yCvB5fG5aEPqa1St7ihY6KEAsHD.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/gxSVZCUlDd8upT1G2wdrUdz2hxG.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.656,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:946531",
+      "source": "iptv",
+      "title": "Bad Boys for Life",
+      "year": 2020,
+      "quality": [
+       "1080p"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/y95lQLnuNKdPAzw9F9Ab8kJ80c3.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/eAIHqfS3kXm7kZl4j7ZBfdegyEz.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.102,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1323862",
+      "source": "iptv",
+      "title": "Bad Boys: Ride or Die",
+      "year": 2024,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/oGythE98MYleE6mZlGs5oBGkux1.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/3q01ACG0MWm0DekhvkPFCXyPZSu.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.306,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1323859",
+     "11dd6d87:m:1323860",
+     "11dd6d87:m:946531",
+     "11dd6d87:m:1323862"
+    ],
+    "collection": {
+     "tmdbId": 14890,
+     "name": "Bad Boys Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/iB59poJBofg1ciKlu6LzZakf11m.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/mNR3xSPbwpIoAtrsbuafei2YkNm.jpg",
+     "partsOrder": []
+    }
+   },
+   {
+    "id": "mood:prison",
+    "source": "jellytip",
+    "family": "mood",
+    "title": "Behind bars",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "d61171be170341bbd36459425a3f200c",
+     "90829d1a7af0eda87f98990cfae2bea8",
+     "9feab24668fa4a4eb01df3626f469105"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:519837",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 278,
+      "title": "The Shawshank Redemption",
+      "year": 1994,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/pNjh59JSxChQktamG3LMp9ZoQzp.jpg",
+      "rating": 8.7,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:461879",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 274,
+      "title": "The Silence of the Lambs",
+      "year": 1991,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/uS9m8OBk1A8eM9I042bx8XXpqAq.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/mbOx1wxMLikzwWUO9TKAcFIy6op.jpg",
+      "rating": 8.346,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1120171",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 809,
+      "title": "Shrek 2",
+      "year": 2004,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/2yYP0PQjG8zVqturh1BAqu2Tixl.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8ohobj5lAIbl5XWw11FywS3IRrS.jpg",
+      "rating": 7.333,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:461945",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 82690,
+      "title": "Wreck-It Ralph",
+      "year": 2012,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/zWoIgZ7mgmPkaZjG0102BSKFIqQ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/3IFRjBDwtk0DlIsDfJ2zEzLjUBi.jpg",
+      "rating": 7.36,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1942812",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 73,
+      "title": "American History X",
+      "year": 1998,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/x2drgoXYZ8484lqyDj7L1CEVR4T.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/6qHI1IYj7QlLSCwHRzkL62X175s.jpg",
+      "rating": 8.324,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1942829",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 291805,
+      "title": "Now You See Me 2",
+      "year": 2016,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/A81kDB6a1K86YLlcOtZB27jriJh.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/oFQilRMEq6yQbtMPxIYWpXeQ5ZN.jpg",
+      "rating": 6.819,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "d61171be170341bbd36459425a3f200c",
+     "90829d1a7af0eda87f98990cfae2bea8",
+     "9feab24668fa4a4eb01df3626f469105",
+     "11dd6d87:m:519837",
+     "11dd6d87:m:461879",
+     "11dd6d87:m:1120171",
+     "11dd6d87:m:461945",
+     "11dd6d87:m:1942812",
+     "11dd6d87:m:1942829"
+    ]
+   },
+   {
+    "id": "franchise:33938",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "Airport",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1962940",
+      "source": "iptv",
+      "title": "Airport",
+      "year": 1970,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/6iOKluJfyiU1SLZbGYrY7Z0i6k0.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4h4UaUk0ENBR9mdttafE1q4fkeI.jpg",
+      "providerName": "PROVIDER",
+      "rating": 6.5,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1962939",
+      "source": "iptv",
+      "title": "Airport '77",
+      "year": 1977,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/m9b3frZR0Wu8I3ayN3QPrxfZMvC.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/flYEmZuMyDJKomYbprKzkbltXRw.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.6,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1962953",
+      "source": "iptv",
+      "title": "The Concorde... Airport '79",
+      "year": 1979,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/bsKUgMi01dme7IDdEWRJSMBNj6R.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/bPGJgUhxuyRmTJZIiJhMutfdHJo.jpg",
+      "providerName": "PROVIDER",
+      "rating": 4.7,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1962940",
+     "11dd6d87:m:1962939",
+     "11dd6d87:m:1962953"
+    ],
+    "collection": {
+     "tmdbId": 33938,
+     "name": "Airport Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/yDnEIOmCgPZJ55d8WeRjlgqgi78.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/aahejNK1UOMWT2FNGOjgQDvczE.jpg",
+     "partsOrder": []
+    }
+   },
+   {
+    "id": "me:unwatched-gems",
+    "source": "personal",
+    "family": "personal",
+    "title": "Unwatched gems",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [
+     "d835cb9441ec77a4dc3b79562e1f9805",
+     "d3deff52e1bb2ed60e16a68057db3cdd",
+     "703e9edec1228a4b38914063182f00e3"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "decade-genre:1980-comedy",
+    "source": "jellytip",
+    "family": "decade-genre",
+    "title": "80s Comedies",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "281fc38b7874112493c86e52e8d157a8",
+     "197d9103c79ec102aa6564de3368bdd0",
+     "1a51aa70e1f4c2213b0c1054645b73f3"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1323857",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 165,
+      "title": "Back to the Future Part II",
+      "year": 1989,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/hQq8xZe5uLjFzSBt4LanNP7SQjl.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/w6tPctxWAsHoQXeKxxNOT6lYKpx.jpg",
+      "rating": 7.785,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324089",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 620,
+      "title": "Ghostbusters",
+      "year": 1984,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/7E8nLijS9AwwUEPu2oFYOVKhdFA.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/c6yfABGVKuB5cjoOwdX4AJMlzUz.jpg",
+      "rating": 7.497,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:524792",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 2108,
+      "title": "The Breakfast Club",
+      "year": 1985,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/gp4zlj7wgbiofLMNsTPndMuO3PN.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/s5HDOmFZaPVQFjk9BxxDrLu1T0g.jpg",
+      "rating": 7.713,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1323883",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 4011,
+      "title": "Beetlejuice",
+      "year": 1988,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/nnl6OWkyPpuMm595hmAxNW3rZFn.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/yRKyJJYIzfeiVDHBe4LXguPQCvD.jpg",
+      "rating": 7.367,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324114",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 927,
+      "title": "Gremlins",
+      "year": 1984,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/6m0F7fsXjQvUbCZrPWcJNrjvIui.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5UX6M0aEphiW6Xmy5rpYX75glbo.jpg",
+      "rating": 7.146,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:953884",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 9340,
+      "title": "The Goonies",
+      "year": 1985,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/eBU7gCjTCj9n2LTxvCSIXXOvHkD.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5qsyqA7FeYRymBmNbPBqBgqWPO4.jpg",
+      "rating": 7.511,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "281fc38b7874112493c86e52e8d157a8",
+     "197d9103c79ec102aa6564de3368bdd0",
+     "1a51aa70e1f4c2213b0c1054645b73f3",
+     "11dd6d87:m:1323857",
+     "11dd6d87:m:1324089",
+     "11dd6d87:m:524792",
+     "11dd6d87:m:1323883",
+     "11dd6d87:m:1324114",
+     "11dd6d87:m:953884"
+    ]
+   },
+   {
+    "id": "franchise:751156",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "Hocus Pocus",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:471276",
+      "source": "iptv",
+      "title": "Hocus Pocus",
+      "year": 1993,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/by4D4Q9NlUjFSEUA1yrxq6ksXmk.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ncr6KR7bBF8cps6yZKiTAwClpn1.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.048,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:519513",
+      "source": "iptv",
+      "title": "Hocus Pocus 2",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/7ze7YNmUaX81ufctGqt0AgHxRtL.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ml8YBTJq7UkALfI022FWscCQuQW.jpg",
+      "providerName": "PROVIDER",
+      "rating": 7.126,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:471276",
+     "11dd6d87:m:519513"
+    ],
+    "collection": {
+     "tmdbId": 751156,
+     "name": "Hocus Pocus Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/1w8K4Dt3WOyCPpe94HY0rA9UXUj.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/id8vrPNR5VGDV9NUeEEcBkxBS9g.jpg",
+     "partsOrder": []
+    }
+   },
+   {
+    "id": "mood:los-angeles",
+    "source": "jellytip",
+    "family": "mood",
+    "title": "L.A. stories",
+    "layout": "standard",
+    "mediaType": "movie",
+    "padded": true,
+    "itemIds": [
+     "6d0a3bfa03ef57f8aa35d377baaab0e8",
+     "0e92f1bda248264724211de15418960d",
+     "7abef8510ab346c129fe0c17f3239b1a"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1324189",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 68721,
+      "title": "Iron Man 3",
+      "year": 2013,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/qhPtAc1TKbMPqNvcdXSOn9Bn7hZ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/4TSqtluelcWByj8YZdqwzQVjI0O.jpg",
+      "rating": 6.933,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324249",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 313369,
+      "title": "La La Land",
+      "year": 2016,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/nlPCdZlHtRNcF6C9hzUH4ebmV1w.jpg",
+      "rating": 7.9,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:461730",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 466272,
+      "title": "Once Upon a Time... in Hollywood",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/8j58iEBw9pOXFD2L0nt0ZXeHviB.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/kKTPv9LKKs5L3oO1y5FNObxAPWI.jpg",
+      "rating": 7.418,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1324032",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 601,
+      "title": "E.T. the Extra-Terrestrial",
+      "year": 1982,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/an0nD6uq6byfxXCfk6lQBzdL2J1.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/mXLVA0YL6tcXi6SJSuAh9ONXFj5.jpg",
+      "rating": 7.518,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1323858",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 196,
+      "title": "Back to the Future Part III",
+      "year": 1990,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/crzoVQnMzIrRfHtQw0tLBirNfVg.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/AtF7TESJEMmImBRUj9Z7HmW2ZH0.jpg",
+      "rating": 7.495,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:845754",
+      "source": "iptv",
+      "kind": "movie",
+      "tmdbId": 254128,
+      "title": "San Andreas",
+      "year": 2015,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/2Gfjn962aaFSD6eST6QU3oLDZTo.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/zcySy6dnSmyqiichtDgO7AEeZoq.jpg",
+      "rating": 6.3,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "6d0a3bfa03ef57f8aa35d377baaab0e8",
+     "0e92f1bda248264724211de15418960d",
+     "7abef8510ab346c129fe0c17f3239b1a",
+     "11dd6d87:m:1324189",
+     "11dd6d87:m:1324249",
+     "11dd6d87:m:461730",
+     "11dd6d87:m:1324032",
+     "11dd6d87:m:1323858",
+     "11dd6d87:m:845754"
+    ]
+   },
+   {
+    "id": "studio:dna-films",
+    "source": "jellytip",
+    "family": "studio",
+    "title": "From DNA Films",
+    "layout": "standard",
+    "mediaType": "movie",
+    "itemIds": [
+     "a42aca208e11d20baa505068da53acd9",
+     "3f18ac5d28e12580a6e2ab9044d1ee75",
+     "2b80060f356b45d886246b297f36acd6"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "award:oscar-international",
+    "source": "jellytip",
+    "family": "awards",
+    "title": "International Feature: Oscar winners & nominees",
+    "layout": "poster",
+    "mediaType": "movie",
+    "itemIds": [
+     "1615eb2dc8d54e0ba7f0957d732807e4",
+     "553d26aa49f344f889d6d0686fd94547",
+     "c6e1675d922d22ac9e8a7e6a768f0dac"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "franchise:135468",
+    "source": "jellytip",
+    "family": "franchise",
+    "title": "G.I. Joe (Live-Action)",
+    "layout": "franchise",
+    "mediaType": "movie",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:m:1957568",
+      "source": "iptv",
+      "title": "G.I. Joe: The Rise of Cobra",
+      "year": 2009,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/mc9b25IAprHfsaOz0wTshOwGHcY.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/jE5wVBRCGQzjHjvFUcYwGS4x0ux.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.781,
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:m:1635171",
+      "source": "iptv",
+      "title": "G.I. Joe: Retaliation",
+      "year": 2013,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/3rWIZMzTKcCtV0eHJ70Z4Ru659f.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/pEhXq18GVe1dg2ltplcxtGWfSje.jpg",
+      "providerName": "PROVIDER",
+      "rating": 5.667,
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:m:1957568",
+     "11dd6d87:m:1635171"
+    ],
+    "collection": {
+     "tmdbId": 135468,
+     "name": "G.I. Joe (Live-Action) Collection",
+     "poster": "https://image.tmdb.org/t/p/w500/fwtBxR52LZ6UZ4Sj5Klh1Us0Ar3.jpg",
+     "backdrop": "https://image.tmdb.org/t/p/original/m3ip0ci0TnX0ATUxpweqElYCeq4.jpg",
+     "partsOrder": []
+    }
+   }
+  ]
+ },
+ "shows": {
+  "rows": [
+   {
+    "id": "trending-top10-series",
+    "title": "Top 10 on IMDb this week: Shows",
+    "source": "trending",
+    "family": "trending",
+    "layout": "top10",
+    "mediaType": "tv",
+    "ranks": {
+     "11dd6d87:s:59509": 1,
+     "11dd6d87:s:59655": 2,
+     "11dd6d87:s:59608": 3,
+     "11dd6d87:s:14410": 4,
+     "11dd6d87:s:42706": 5,
+     "11dd6d87:s:59516": 6,
+     "11dd6d87:s:33922": 7,
+     "11dd6d87:s:28583": 8,
+     "11dd6d87:s:59437": 9,
+     "11dd6d87:s:38737": 10
+    },
+    "trendSource": "imdb",
+    "week": null,
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:59509",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 288673,
+      "title": "Carrie",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+      "rating": 8.267,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59655",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213562,
+      "title": "Crystal Lake",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+      "rating": 8.701,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59608",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213375,
+      "title": "VisionQuest",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+      "rating": 8.6,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:14410",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 95480,
+      "title": "Slow Horses",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/AdYr4DjOgXvDUMwu6vEhZy1Rnxk.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/gPQppUnLx9vqPDLz3WwZ2HJsNbt.jpg",
+      "rating": 8.072,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:42706",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 120911,
+      "title": "The Terminal List",
+      "year": 2022,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/xyFAzP7RKK8cARCSalIZ9A9T0jV.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/2qS2LGqsAyT1NEDeIj24Hp2IR10.jpg",
+      "rating": 8.0,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59516",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 285322,
+      "title": "Below",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/vgLqqhMUbljp585qPp1EFCyJtcz.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cn0feYcDvVzVjUDoXa1O8sRgzz.jpg",
+      "rating": 7.196,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:s:59509",
+     "11dd6d87:s:59655",
+     "11dd6d87:s:59608",
+     "11dd6d87:s:14410",
+     "11dd6d87:s:42706",
+     "11dd6d87:s:59516"
+    ]
+   },
+   {
+    "id": "e821c13b2a7301c2bcbbe82264e364b9",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Just Added TV",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "1f71d69706d70f77b5e0548d3381b165",
+     "82d8f2926c17365887a6ecbc48286086",
+     "24ecc0b2a69e80d1d884b879322f14f0"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "f63cb4b8ef08e6f840c68097de3ff424",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "New Episodes This Week",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "2a69718ba97ecbadcb77ca486460de4d",
+     "ba559fa497901bcadee9d0c2718cbd19",
+     "4961cd464185747fc762d50e0b301226"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "5389fb46c4f2748261c6c56d7aa742be",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Continue a Series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "5ac978ad0305ead157e2138ad10a2e27",
+     "e374d9a018f3c1fe66da9c70b2974428",
+     "45ba9e56b66cc4320a70c7bd0480bb72"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "me:recent-unseen-tv",
+    "source": "personal",
+    "family": "personal",
+    "title": "New series you haven't tried",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "1f71d69706d70f77b5e0548d3381b165",
+     "82d8f2926c17365887a6ecbc48286086",
+     "24ecc0b2a69e80d1d884b879322f14f0"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "tv-genre:drama",
+    "source": "jellytip",
+    "family": "genre",
+    "title": "Drama series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "padded": true,
+    "itemIds": [
+     "4961cd464185747fc762d50e0b301226",
+     "24ecc0b2a69e80d1d884b879322f14f0",
+     "a0fbfb96933592dde2e9954b01680358"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:13584",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1399,
+      "title": "Game of Thrones",
+      "year": 2011,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/zZqpAXxVSBtxV9qPBcscfXBcL2w.jpg",
+      "rating": 8.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:11228",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1396,
+      "title": "Breaking Bad",
+      "year": 2008,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/anFx9aTOOYqgS3v7x3R84Kz67ly.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+      "rating": 8.958,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:29102",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1402,
+      "title": "The Walking Dead",
+      "year": 2010,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/ng3cMtxYKt1OSQYqFlnKWnVsqNO.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/rAOjnEFTuNysY7bot8zonhImGMh.jpg",
+      "rating": 8.08,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:35515",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 69050,
+      "title": "Riverdale",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/d8mmn9thQ5dBk2qbv6BCqGUXWK3.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/kb9XvtEnDhBVVit4eeKygqll4EA.jpg",
+      "rating": 8.393,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39151",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 85271,
+      "title": "WandaVision",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/ijWWwINc8h71NQ8j1LTJMFSj5wr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/lOr9NKxh4vMweufMOUDJjJhCRHW.jpg",
+      "rating": 8.179,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:29486",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 71712,
+      "title": "The Good Doctor",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/luhKkdD80qe62fwop6sdrXK9jUT.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/f3cin9kOz4nOrlYEMxGFQhv4bdN.jpg",
+      "rating": 8.452,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "4961cd464185747fc762d50e0b301226",
+     "24ecc0b2a69e80d1d884b879322f14f0",
+     "a0fbfb96933592dde2e9954b01680358",
+     "11dd6d87:s:13584",
+     "11dd6d87:s:11228",
+     "11dd6d87:s:29102",
+     "11dd6d87:s:35515",
+     "11dd6d87:s:39151",
+     "11dd6d87:s:29486"
+    ]
+   },
+   {
+    "id": "tv-sitcom",
+    "source": "jellytip",
+    "family": "tv-format",
+    "title": "Sitcoms (half-hour comedy)",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "eebce87c6daa5b62521ba16f66ece607",
+     "e374d9a018f3c1fe66da9c70b2974428",
+     "5ac978ad0305ead157e2138ad10a2e27"
+    ],
+    "iptvItems": [],
+    "order": []
+   },
+   {
+    "id": "discover:newdramaseries",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "New Drama Series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "padded": true,
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:59608",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213375,
+      "title": "VisionQuest",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/58v1KFe3rxvHrYM1hLH5ScpwqNR.jpg",
+      "rating": 8.6,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59655",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 213562,
+      "title": "Crystal Lake",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/3ENhExiD2fcjk5FX0AcAXcvLu9N.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/wxiBsKFEOOFK8eQStWOykNORlXY.jpg",
+      "rating": 8.701,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59509",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 288673,
+      "title": "Carrie",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/6mUMquPQBFJGqTACS3Azkwwrx8d.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9yCJtipMeDe8uAdSJKvw8BnYfRz.jpg",
+      "rating": 8.267,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:58651",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 95350,
+      "title": "Lanterns",
+      "year": 2026,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/rb94rKVIzLyfWufIN7WqLvadBDH.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/6gqezQJ2mkm4jreWwLyOZy2Vf6i.jpg",
+      "rating": 8.232,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59437",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 258165,
+      "title": "East of Eden",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/axdUor6gLMTrrB1UF4Qfy0TTSyX.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/70RZX7kNjA0Qjn6HigB1oMvFJ8R.jpg",
+      "rating": 8.041,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:59516",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 285322,
+      "title": "Below",
+      "year": 2026,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/vgLqqhMUbljp585qPp1EFCyJtcz.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/cn0feYcDvVzVjUDoXa1O8sRgzz.jpg",
+      "rating": 7.196,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "11dd6d87:s:59608",
+     "11dd6d87:s:59655",
+     "11dd6d87:s:59509",
+     "11dd6d87:s:58651",
+     "11dd6d87:s:59437",
+     "11dd6d87:s:59516"
+    ]
+   },
+   {
+    "id": "iptv:series-en",
+    "source": "iptv",
+    "family": "iptv",
+    "title": "Series on IPTV",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:13584",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1399,
+      "title": "Game of Thrones",
+      "year": 2011,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/zZqpAXxVSBtxV9qPBcscfXBcL2w.jpg",
+      "rating": 8.5,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:54802",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 76479,
+      "title": "The Boys",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/in1R2dDc421JxsoRWaIIAqVI2KE.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/bq28ajZaoMyzEIm6REelqyqtEDZ.jpg",
+      "rating": 8.425,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39151",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 85271,
+      "title": "WandaVision",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/ijWWwINc8h71NQ8j1LTJMFSj5wr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/lOr9NKxh4vMweufMOUDJjJhCRHW.jpg",
+      "rating": 8.179,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:40720",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 84958,
+      "title": "Loki",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/kEl2t3OhXc3Zb9FBh1AuYzRTgZp.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/q3jHCb4dMfYF6ojikKuHd6LscxC.jpg",
+      "rating": 8.18,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39140",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 60625,
+      "title": "Rick and Morty",
+      "year": 2013,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/owhkU6KRqdXoUQpjV8uyZGPtX58.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/5BDNWWHweQL0q1fmTv7gmRXfnl4.jpg",
+      "rating": 8.679,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39147",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 82856,
+      "title": "The Mandalorian",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/sWgBv7LV2PRoQgkxwlibdGXKz1S.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9zcbqSxdsRMZWHYtyCd1nXPr2xq.jpg",
+      "rating": 8.399,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": []
+   },
+   {
+    "id": "bf86a1dabbc8f28ca760a9d905442cf3",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Limited Series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "padded": true,
+    "itemIds": [
+     "24ecc0b2a69e80d1d884b879322f14f0",
+     "666a527b0863d57dbfdaef32d367ddf3",
+     "123faf2a0c47cae9f04451666cfe7e64"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:39151",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 85271,
+      "title": "WandaVision",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/ijWWwINc8h71NQ8j1LTJMFSj5wr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/lOr9NKxh4vMweufMOUDJjJhCRHW.jpg",
+      "rating": 8.179,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:47156",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 88396,
+      "title": "The Falcon and the Winter Soldier",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/6kbAMLteGO8yyewYau6bJ683sw7.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/aTjbqMONy77fHJrIYu14g1F0d5h.jpg",
+      "rating": 7.6,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:40412",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 87108,
+      "title": "Chernobyl",
+      "year": 2019,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/hlLXt2tOPT6RRnjiUmoxyG1LTFi.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/900tHlUYUkp7Ol04XFSoAaEIXcT.jpg",
+      "rating": 8.73,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:1742",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 87739,
+      "title": "The Queen's Gambit",
+      "year": 2020,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/zU0htwkhNvBQdVSIKB9s6hgVeFK.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ktZaQ4FEmKpRgetiBooZETYQbmQ.jpg",
+      "rating": 8.422,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:1781",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 4613,
+      "title": "Band of Brothers",
+      "year": 2001,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/eLdcio9HBKzsdIJGeD80oObDfkr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/2yDV0xLyqW88dn5qE7YCRnoYmfy.jpg",
+      "rating": 8.611,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39138",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 92749,
+      "title": "Moon Knight",
+      "year": 2022,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/9K3lbMf8TKvL9xGEbzi7TggWCNQ.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/1uegR4uAxRxiMyX4nQnpzbXhrTw.jpg",
+      "rating": 7.636,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "24ecc0b2a69e80d1d884b879322f14f0",
+     "666a527b0863d57dbfdaef32d367ddf3",
+     "123faf2a0c47cae9f04451666cfe7e64",
+     "11dd6d87:s:39151",
+     "11dd6d87:s:47156",
+     "11dd6d87:s:40412",
+     "11dd6d87:s:1742",
+     "11dd6d87:s:1781",
+     "11dd6d87:s:39138"
+    ]
+   },
+   {
+    "id": "tv-genre:mystery",
+    "source": "jellytip",
+    "family": "genre",
+    "title": "Mystery series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "padded": true,
+    "itemIds": [
+     "a0fbfb96933592dde2e9954b01680358",
+     "3afdb6d89d60f7940c042be0064b2c57",
+     "45ba9e56b66cc4320a70c7bd0480bb72"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:53219",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 66732,
+      "title": "Stranger Things",
+      "year": 2016,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/uOOtwVbSr4QDjAGIifLDwpb2Pdl.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/9P4IIMYY3HifqeruZq0ZZ9g7YUi.jpg",
+      "rating": 8.545,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:35515",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 69050,
+      "title": "Riverdale",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/d8mmn9thQ5dBk2qbv6BCqGUXWK3.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/kb9XvtEnDhBVVit4eeKygqll4EA.jpg",
+      "rating": 8.393,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:39151",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 85271,
+      "title": "WandaVision",
+      "year": 2021,
+      "quality": [
+       "4k"
+      ],
+      "poster": "https://image.tmdb.org/t/p/w342/ijWWwINc8h71NQ8j1LTJMFSj5wr.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/lOr9NKxh4vMweufMOUDJjJhCRHW.jpg",
+      "rating": 8.179,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "a0fbfb96933592dde2e9954b01680358",
+     "3afdb6d89d60f7940c042be0064b2c57",
+     "45ba9e56b66cc4320a70c7bd0480bb72",
+     "11dd6d87:s:53219",
+     "11dd6d87:s:35515",
+     "11dd6d87:s:39151"
+    ]
+   },
+   {
+    "id": "c902cf0732b75b04b7df11a56e6f4abd",
+    "source": "kometa",
+    "family": "kometa",
+    "title": "Crime Series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "padded": true,
+    "itemIds": [
+     "2a69718ba97ecbadcb77ca486460de4d",
+     "123faf2a0c47cae9f04451666cfe7e64",
+     "3afdb6d89d60f7940c042be0064b2c57"
+    ],
+    "iptvItems": [
+     {
+      "id": "11dd6d87:s:11228",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 1396,
+      "title": "Breaking Bad",
+      "year": 2008,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/anFx9aTOOYqgS3v7x3R84Kz67ly.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+      "rating": 8.958,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:35400",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 63174,
+      "title": "Lucifer",
+      "year": 2016,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/ekZobS8isE6mA53RAiGDG93hBxL.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/ta5oblpMlEcIPIS2YGcq9XEkWK2.jpg",
+      "rating": 8.428,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:35515",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 69050,
+      "title": "Riverdale",
+      "year": 2017,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/d8mmn9thQ5dBk2qbv6BCqGUXWK3.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/kb9XvtEnDhBVVit4eeKygqll4EA.jpg",
+      "rating": 8.393,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:14869",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 60574,
+      "title": "Peaky Blinders",
+      "year": 2013,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/vUUqzWa2LnHIVqkaKVlVGkVcZIW.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/dzq83RHwQcnP6WGJ6YkenIqeaa5.jpg",
+      "rating": 8.525,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     },
+     {
+      "id": "11dd6d87:s:11691",
+      "source": "iptv",
+      "kind": "series",
+      "tmdbId": 48866,
+      "title": "The 100",
+      "year": 2014,
+      "quality": [],
+      "poster": "https://image.tmdb.org/t/p/w342/wHIMMLFsk32wIzDmawWkYVbxFCS.jpg",
+      "backdrop": "https://image.tmdb.org/t/p/w780/8ZerYKvIaNUJZvAHXYTQu4qTwFw.jpg",
+      "rating": 7.879,
+      "providerName": "PROVIDER",
+      "favourite": false,
+      "played": false
+     }
+    ],
+    "order": [
+     "2a69718ba97ecbadcb77ca486460de4d",
+     "123faf2a0c47cae9f04451666cfe7e64",
+     "3afdb6d89d60f7940c042be0064b2c57",
+     "11dd6d87:s:11228",
+     "11dd6d87:s:35400",
+     "11dd6d87:s:35515",
+     "11dd6d87:s:14869",
+     "11dd6d87:s:11691"
+    ]
+   },
+   {
+    "id": "tv-network:apple-tv",
+    "source": "jellytip",
+    "family": "tv-network",
+    "title": "Apple TV series",
+    "layout": "standard",
+    "mediaType": "tv",
+    "itemIds": [
+     "eebce87c6daa5b62521ba16f66ece607",
+     "a0fbfb96933592dde2e9954b01680358",
+     "ba559fa497901bcadee9d0c2718cbd19"
+    ],
+    "iptvItems": [],
+    "order": []
+   }
+  ]
+ }
+}

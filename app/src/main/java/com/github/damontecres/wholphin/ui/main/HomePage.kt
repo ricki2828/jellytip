@@ -511,7 +511,9 @@ fun HomePageContent(
             reminders = remindersNow
         }
     }
-    LaunchedEffect(liveSpecials, liveServerRows) {
+    // Re-checked on every focus move too: a fresh answer deferred because it would move the focused row is taken as soon
+    // as focus is somewhere it doesn't move (before, it waited for the next fetch, so Home could keep a stale copy all day)
+    LaunchedEffect(liveSpecials, liveServerRows, focusedKey) {
         if (liveSpecials === specials && liveServerRows === serverRows) return@LaunchedEffect
         val key = currentFocusedKey
         val candidate =
