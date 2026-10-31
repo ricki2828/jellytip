@@ -74,3 +74,4 @@ export function useFantasy(active = true): FantasyLive | null {
 
 export const saveSleeperUsername = (username: string | null) => savePrefs({ fantasy: { sleeper: { username } } });
 export const saveFantasyAlerts = (alerts: boolean) => savePrefs({ fantasy: { alerts } });
+export const saveAlertMin = (alertMin: number) => savePrefs({ fantasy: { alertMin } });

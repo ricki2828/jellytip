@@ -491,7 +491,7 @@ test("market flip: parsed with the favourite, text names the new favourite", () 
   assert.equal(parsePrefs({ sport: { flipAlerts: false } }).sport.flipAlerts, false);
 });
 
-import { chipText, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
+import { chipText, clampAlertMin, enqueue, eventText, isNfl, mineInGame, parseFantasy } from "../src/lib/fantasy.ts";
 
 const FANT = {
   week: 9,
@@ -512,17 +512,27 @@ const FANT = {
     { id: "L2", name: "Fantasy", me: { team: "R", points: 87.4, projected: null }, opp: { team: "O", points: 90.1 }, starters: [] },
     { id: "bad" },
   ],
-  events: [{ at: 1_899_999_990, league: "CCP Dynasty", name: "Gibbs", delta: 6.4, side: "me" }, { name: "no at" }],
+  events: [{ at: 1_899_999_990, league: "CCP Dynasty", name: "Gibbs", delta: 6.4, side: "me", reason: "TD catch, 34 yds" }, { at: 1_899_999_991, league: "CCP Dynasty", name: "Lamb", delta: 7.1, side: "opp", reason: "Catch, 41 yds" }, { at: 1_899_999_992, league: "Fantasy", name: "Nobody", delta: 3.2, side: "me" }, { name: "no at" }],
 };
 
 test("fantasy: parse, chip, scoring toast text, my starters in a game", () => {
   const d = parseFantasy(FANT)!;
   assert.equal(d.leagues.length, 2);
-  assert.equal(d.events.length, 1);
+  assert.equal(d.events.length, 3);
   assert.equal(chipText(d), "🏈 CCP 93.8 – 79.2   🏈 Fantasy 87.4 – 90.1");
-  assert.equal(eventText(d.events[0], d), "🏈 +6.4 Gibbs (CCP Dynasty) · you lead 93.8 – 79.2");
+  assert.equal(eventText(d.events[0], d), "🏈 +6.4 Gibbs · TD catch, 34 yds (CCP) · you lead 93.8 – 79.2");
   const trail = { ...d, leagues: [{ ...d.leagues[0], me: { ...d.leagues[0].me, points: 70 } }] };
-  assert.match(eventText(d.events[0], trail), /you trail 79\.2 – 70\.0$/);
+  assert.equal(eventText(d.events[1], trail), "🏈 Opp +7.1 Lamb · Catch, 41 yds (CCP) · you trail 70.0 – 79.2");
+  assert.equal(eventText(d.events[2], d), "🏈 +3.2 Nobody (Fantasy) · you trail 87.4 – 90.1");
+  assert.equal(d.events[2].reason, null);
+  assert.deepEqual(enqueue([1, 2, 3], 4), [2, 3, 4]);
+  assert.deepEqual(enqueue([], 1), [1]);
+  assert.equal(clampAlertMin(0), 1);
+  assert.equal(clampAlertMin(99), 10);
+  assert.equal(clampAlertMin(undefined), 3);
+  assert.equal(parsePrefs({}).fantasy.alertMin, 3);
+  assert.equal(parsePrefs({ fantasy: { alertMin: 5.4 } }).fantasy.alertMin, 5);
+  assert.equal(parsePrefs({ fantasy: { alertMin: 50 } }).fantasy.alertMin, 10);
   assert.equal(mineInGame(d, "nfl:401772"), 2);
   assert.equal(mineInGame(d, "nfl:555555"), 0);
   assert.equal(mineInGame(null, "nfl:401772"), 0);

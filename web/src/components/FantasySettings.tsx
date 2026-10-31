@@ -1,7 +1,7 @@
 // Settings → Live sport → Fantasy: link a Sleeper username (the server looks the leagues up), the scoring-alert toggle and a
 // "Yahoo: coming soon" line. Hidden when the server has no fantasy route.
 import { useEffect, useState } from "react";
-import { fantasyLive, fantasyMissing, saveFantasyAlerts, saveSleeperUsername } from "../api/fantasy";
+import { fantasyLive, fantasyMissing, saveAlertMin, saveFantasyAlerts, saveSleeperUsername } from "../api/fantasy";
 import type { Prefs } from "../lib/prefs";
 
 export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: string | null) => void }) {
@@ -62,8 +62,20 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
       {linked && (
         <label className="iptv-check">
           <input type="checkbox" data-nav checked={prefs.fantasy.alerts} onChange={async (e) => onMsg(await saveFantasyAlerts(e.target.checked))} />
-          <span>Scoring alerts (a pop-up when one of your players scores)</span>
+          <span>Scoring alerts (a pop-up when a player of yours or your opponent's scores)</span>
         </label>
+      )}
+      {linked && prefs.fantasy.alerts && (
+        <div className="settings-inline">
+          <span className="settings-sub">Alert threshold</span>
+          <button className="btn small" data-nav aria-label="Lower the threshold" disabled={prefs.fantasy.alertMin <= 1} onClick={async () => onMsg(await saveAlertMin(prefs.fantasy.alertMin - 1))}>
+            −
+          </button>
+          <strong aria-live="polite">{prefs.fantasy.alertMin} pts</strong>
+          <button className="btn small" data-nav aria-label="Raise the threshold" disabled={prefs.fantasy.alertMin >= 10} onClick={async () => onMsg(await saveAlertMin(prefs.fantasy.alertMin + 1))}>
+            +
+          </button>
+        </div>
       )}
       <span className="settings-sub">Yahoo: coming soon</span>
     </div>

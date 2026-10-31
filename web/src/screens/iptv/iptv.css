@@ -1606,3 +1606,9 @@
   margin-top: 6px;
   opacity: 0.85;
 }
+.flip-toast.fantasy.mine {
+  box-shadow: inset 4px 0 0 #2f8f5b, inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.flip-toast.fantasy.opp {
+  box-shadow: inset 4px 0 0 #d9473d, inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.5);
+}

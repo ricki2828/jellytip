@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { fantasyGame, fantasyLive, useFantasy } from "../api/fantasy";
 import { matchDetailCached } from "../api/matchInfo";
 import { usePrefs } from "../api/me";
-import { chipText, eventText, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
+import { chipText, enqueue, eventText, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
 import type { Fixture } from "../lib/matchInfo";
 import "../screens/iptv/iptv.css";
 
@@ -48,9 +48,29 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const { prefs } = usePrefs({ defer: true });
   const on = active && nfl && !!prefs?.fantasy.sleeperUsername && prefs.fantasy.alerts;
-  const [text, setText] = useState<string | null>(null);
+  const [shown, setShown] = useState<{ text: string; side: "me" | "opp"; key: number } | null>(null);
+  const queue = useRef<{ text: string; side: "me" | "opp" }[]>([]);
+  const busy = useRef(false);
   const seen = useRef<Set<string> | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  const keyN = useRef(0);
+
+  // One toast at a time, 6 s each; up to 3 wait (the oldest are dropped)
+  const next = () => {
+    const n = queue.current.shift();
+    if (!n) {
+      busy.current = false;
+      return setShown(null);
+    }
+    busy.current = true;
+    setShown({ ...n, key: ++keyN.current });
+    timer.current = window.setTimeout(next, 6000);
+  };
+  const push = (n: { text: string; side: "me" | "opp" }) => {
+    queue.current = enqueue(queue.current, n);
+    if (!busy.current) next();
+  };
+
   useEffect(() => {
     if (!on) return;
     let alive = true;
@@ -63,14 +83,12 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
         seen.current ??= new Set();
         const now = Date.now() / 1000;
         for (const e of d.events) {
-          const k = `${e.at}|${e.name}`;
+          const k = `${e.at}|${e.name}|${e.side}`;
           if (seen.current.has(k)) continue;
           seen.current.add(k);
           // The first answer may carry earlier events: only a recent one is news
           if (first && now - e.at > 90) continue;
-          setText(eventText(e, d));
-          window.clearTimeout(timer.current);
-          timer.current = window.setTimeout(() => setText(null), 6000);
+          push({ text: eventText(e, d), side: e.side });
         }
         t = window.setTimeout(poll, 30_000);
       }
@@ -80,12 +98,16 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
       alive = false;
       window.clearTimeout(t);
       window.clearTimeout(timer.current);
+      queue.current = [];
+      busy.current = false;
+      setShown(null);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on]);
-  if (!text) return null;
+  if (!shown) return null;
   return (
-    <div className="flip-toast fantasy" role="status">
-      {text}
+    <div key={shown.key} className={`flip-toast fantasy ${shown.side === "opp" ? "opp" : "mine"}`} role="status">
+      {shown.text}
     </div>
   );
 }

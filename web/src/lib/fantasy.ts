@@ -27,6 +27,8 @@ export interface FantasyEvent {
   name: string;
   delta: number;
   side: "me" | "opp";
+  /** What happened ("TD catch, 34 yds"), when the play-by-play matched. */
+  reason: string | null;
 }
 
 export interface FantasyLive {
@@ -83,7 +85,7 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
     const at = num(o?.at);
     const name = str(o?.name);
     const delta = num(o?.delta);
-    return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me" } as FantasyEvent] : [];
+    return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me", reason: str(o.reason) } as FantasyEvent] : [];
   });
   return { week: num(r.week), leagues, events, updatedAt: num(r.updatedAt) };
 }
@@ -102,15 +104,17 @@ export function chipText(live: FantasyLive): string | null {
     .join("   ");
 }
 
-/** "🏈 +6.4 Gibbs (CCP Dynasty) · you lead 93.8 – 79.2". */
+/**
+ * Toast text. Mine: "🏈 +6.4 Gibbs · TD catch, 34 yds (CCP) · you lead 93.8 – 79.2". The opponent's: "🏈 Opp +7.1 Lamb · Catch, 41 yds
+ * (CCP) · you trail 86.2 – 88.0". Scores are always mine first.
+ */
 export function eventText(e: FantasyEvent, live: FantasyLive): string {
   const l = live.leagues.find((x) => x.name === e.league || x.id === e.league);
-  const who = e.side === "opp" ? "opponent's " : "";
-  const head = `🏈 ${e.delta >= 0 ? "+" : ""}${pts(e.delta)} ${who}${e.name}${e.league ? ` (${e.league})` : ""}`;
+  const head = `🏈 ${e.side === "opp" ? "Opp " : ""}${e.delta >= 0 ? "+" : ""}${pts(e.delta)} ${e.name}${e.reason ? ` · ${e.reason}` : ""}${e.league ? ` (${shortLeague(e.league)})` : ""}`;
   if (!l) return head;
   const d = l.me.points - l.opp.points;
   const state = Math.abs(d) < 0.05 ? "tied" : d > 0 ? "you lead" : "you trail";
-  return `${head} · ${state} ${pts(Math.max(l.me.points, l.opp.points))} – ${pts(Math.min(l.me.points, l.opp.points))}`;
+  return `${head} · ${state} ${pts(l.me.points)} – ${pts(l.opp.points)}`;
 }
 
 /** My starters playing in this game across leagues (the "3 of yours" pill). */
@@ -121,3 +125,13 @@ export function mineInGame(live: FantasyLive | null, matchId: string | null | un
 
 /** An NFL match: `matchInfo.leagueKey` is "nfl" (the display league name is not used). */
 export const isNfl = (leagueKey: string | null | undefined) => leagueKey === "nfl";
+
+export const ALERT_MIN_DEFAULT = 3;
+/** fantasy.alertMin: whole points 1 to 10. */
+export const clampAlertMin = (n: unknown) => (typeof n === "number" && isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : ALERT_MIN_DEFAULT);
+
+/** Toasts show one at a time; a new one joins the queue, which keeps at most `max` waiting (the oldest are dropped). */
+export function enqueue<T>(queue: T[], item: T, max = 3): T[] {
+  const q = [...queue, item];
+  return q.length > max ? q.slice(q.length - max) : q;
+}
