@@ -1,24 +1,20 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,37 +24,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
-import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import kotlinx.coroutines.delay
 import java.util.Locale
 
 /*
- * Match info, more pop (~/ai/plans/jellytip-live-sport.md, "Pinned 31-Oct (match info: more pop, plus coverage)"): a
- * split diagonal hero in the team colours (neutral greys without them) with the venue photo faint behind, big crests
- * with a soft glow sliding in from either side, a LIVE pulse / countdown / FT in the centre; an odds split bar, form
- * chips and tinted line-ups. Motion is graphicsLayer only (alpha, scale, translation): no blur on the Chromecast GPU.
+ * Match info header and blocks in the Broadcast look (~/ai/plans/jellytip-live-sport.md, "In-match visual direction:
+ * DECIDED 31-Oct"; mockup A (b)): two full-colour angled slabs with 50 dp crests (sliding in), names in condensed caps,
+ * the score at 32 sp when shown, and a gold tag on top (LIVE · Q3, a countdown, FT); odds as a gold-led split bar; form
+ * as W / L chips. Replaces the diagonal hero ("more pop"), which conflicted.
  */
-
-private val NeutralHome = Color(0xFF4A4E58)
-private val NeutralAway = Color(0xFF2E3138)
-private val FormWin = Color(0xFF2E9E5B)
-private val FormLoss = Color(0xFFD64545)
-private val FormDraw = Color(0xFF6B6F78)
 
 /** "#0B2265" / "0B2265" -> colour; anything else = [fallback]. */
 internal fun teamColor(
@@ -72,116 +54,13 @@ internal fun teamColor(
         ?.toLongOrNull(16)
         ?.let { Color(0xFF000000 or it) } ?: fallback
 
-/** Home and away colours; the away side uses its alternate when both teams share a colour. */
-internal fun matchColors(m: IptvMatch): Pair<Color, Color> {
-    val home = teamColor(m.home?.color, NeutralHome)
-    val hc = m.home?.color
-    val same = hc != null && hc.equals(m.away?.color, ignoreCase = true)
-    val away = if (same) teamColor(m.away?.altColor, NeutralAway) else teamColor(m.away?.color, NeutralAway)
-    return home to away
-}
-
-/** The split hero. [crestIn] 0..1 slides the crests in (read in graphicsLayer only). */
+/** The header: home slab left, away slab right (overlapping on the angle), the gold status tag. */
 @Composable
-internal fun MatchHero(
-    m: IptvMatch,
-    venueImage: String?,
-    score: MatchScore?,
-    crestIn: () -> Float,
-    modifier: Modifier = Modifier,
-) {
-    val (homeC, awayC) = remember(m.home?.color, m.away?.color, m.away?.altColor) { matchColors(m) }
-    val homeBg = lerp(homeC, Color.Black, 0.45f)
-    val awayBg = lerp(awayC, Color.Black, 0.45f)
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(230.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .drawBehind {
-                drawRect(homeBg)
-                val p =
-                    Path().apply {
-                        moveTo(size.width * 0.58f, 0f)
-                        lineTo(size.width, 0f)
-                        lineTo(size.width, size.height)
-                        lineTo(size.width * 0.42f, size.height)
-                        close()
-                    }
-                drawPath(p, awayBg)
-            },
-    ) {
-        if (venueImage != null) {
-            AsyncImage(
-                model = venueImage,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.16f },
-            )
-        }
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.45f))))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 14.dp),
-        ) {
-            HeroTeam(m.home, homeC, crestIn, fromLeft = true, modifier = Modifier.weight(1f))
-            HeroCentre(m, score, Modifier.width(250.dp))
-            HeroTeam(m.away, awayC, crestIn, fromLeft = false, modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun HeroTeam(
-    t: MatchTeam?,
-    color: Color,
-    crestIn: () -> Float,
-    fromLeft: Boolean,
-    modifier: Modifier,
-) {
-    val glow = lerp(color, Color.White, 0.35f)
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        Box(
-            Modifier
-                .size(140.dp)
-                .graphicsLayer {
-                    val p = crestIn()
-                    translationX = (1f - p) * (if (fromLeft) -1f else 1f) * 120.dp.toPx()
-                    alpha = p
-                }.drawBehind {
-                    // Soft glow: a radial fade behind the crest (no blur)
-                    drawCircle(Brush.radialGradient(listOf(glow.copy(alpha = 0.55f), Color.Transparent), center = center, radius = size.minDimension / 2f))
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            var failed by remember(t?.logo) { mutableStateOf(false) }
-            if (t?.logo != null && !failed) {
-                AsyncImage(model = t.logo, contentDescription = t.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(120.dp))
-            } else {
-                Box(Modifier.size(96.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(initials(t?.name ?: "?"), color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 30.sp)
-                }
-            }
-        }
-        Text(
-            t?.name ?: "TBC",
-            color = Color.White,
-            fontFamily = JellytipFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        t?.record?.let { Text(it, color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 12.sp) }
-    }
-}
-
-@Composable
-private fun HeroCentre(
+internal fun BroadcastHeader(
     m: IptvMatch,
     score: MatchScore?,
-    modifier: Modifier,
+    pal: MatchPalette,
+    crestIn: () -> Float,
 ) {
     val now by produceState(nowSec()) {
         while (true) {
@@ -189,34 +68,106 @@ private fun HeroCentre(
             value = nowSec()
         }
     }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        m.league?.let { Text(it.uppercase(), color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp, letterSpacing = 1.5.sp, maxLines = 1) }
-        val clock = listOfNotNull(m.score?.period, m.score?.clock).joinToString(" · ")
-        when {
-            score != null -> {
-                Text("${score.home} – ${score.away}", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-                listOfNotNull(score.period, score.clock).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
-                    Text(it, color = Color.White.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                }
+    Box(Modifier.fillMaxWidth().height(95.dp)) {
+        Row(Modifier.fillMaxSize()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                modifier = Modifier.weight(1f).fillMaxHeight().clip(SlabLeft).background(pal.home).padding(start = 18.dp, end = 26.dp),
+            ) {
+                HeaderCrest(m.home, pal.home, crestIn, fromLeft = true)
+                TeamName(m.home, pal.onHome, Modifier.weight(1f))
+                score?.let { HeaderScore(it.home, listOfNotNull(it.period, it.clock).joinToString(" · "), pal.onHome, TextAlign.End) }
             }
-            m.status == "in" -> {
-                LivePulse()
-                if (clock.isNotEmpty()) Text(clock, color = Color.White.copy(alpha = 0.85f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .offset(x = (-14).dp)
+                        .fillMaxHeight()
+                        .clip(SlabRight)
+                        .background(pal.away)
+                        .padding(start = 32.dp, end = 4.dp),
+            ) {
+                score?.let { HeaderScore(it.away, "", pal.onAway, TextAlign.Start) }
+                TeamName(m.away, pal.onAway, Modifier.weight(1f))
+                HeaderCrest(m.away, pal.away, crestIn, fromLeft = false)
             }
-            m.status == "post" -> Text("FT", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-            else ->
-                m.startsAt?.let { at ->
-                    Text(countdown(at, now), color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, textAlign = TextAlign.Center)
-                    Text(whenLabel(at), color = Color.White.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                }
         }
-        m.venue?.let { Text("📍 $it", color = Color.White.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        if (m.inferred) Text("identified from the fixtures", color = Color.White.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
+        val tag =
+            when (m.status) {
+                "in" -> "Live" + (m.score?.period?.let { " · $it" } ?: "")
+                "post" -> "Full time"
+                else -> m.startsAt?.let { countdown(it, now) } ?: "Upcoming"
+            }
+        Cond(
+            tag,
+            13.sp,
+            Broadcast.Ink,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp).background(Broadcast.Gold).padding(horizontal = 8.dp, vertical = 2.dp),
+            tracking = 0.06f,
+        )
+    }
+}
+
+@Composable
+private fun HeaderCrest(
+    t: MatchTeam?,
+    color: Color,
+    crestIn: () -> Float,
+    fromLeft: Boolean,
+) {
+    Box(
+        Modifier
+            .size(50.dp)
+            .graphicsLayer {
+                val p = crestIn()
+                translationX = (1f - p) * (if (fromLeft) -1f else 1f) * 60.dp.toPx()
+                alpha = p
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        var failed by remember(t?.logo) { mutableStateOf(false) }
+        val logo = t?.logo
+        if (logo != null && !failed) {
+            AsyncImage(model = logo, contentDescription = t?.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(50.dp))
+        } else {
+            Box(Modifier.size(44.dp).background(Color.Black.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
+                Cond(initials(t?.name ?: "?"), 16.sp, contrastOn(color))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeamName(
+    t: MatchTeam?,
+    color: Color,
+    modifier: Modifier,
+) {
+    Column(modifier) {
+        Cond(t?.name ?: "TBC", 23.sp, color)
+        t?.record?.let { BodyText(it, 13.sp, color.copy(alpha = 0.85f), weight = FontWeight.SemiBold, maxLines = 1) }
+    }
+}
+
+@Composable
+private fun HeaderScore(
+    value: String,
+    sub: String,
+    color: Color,
+    align: TextAlign,
+) {
+    Column(horizontalAlignment = if (align == TextAlign.End) Alignment.End else Alignment.Start) {
+        Odometer(value, 32.sp, color)
+        if (sub.isNotEmpty()) Cond(sub, 13.sp, color, weight = FontWeight.SemiBold, tracking = 0.04f)
     }
 }
 
 /** "Starts in 2h 14m" / "Starts in 25m" / "Starting now"; a day or more away = "Starts Sat 19:30". */
-private fun countdown(
+internal fun countdown(
     at: Long,
     now: Long,
 ): String {
@@ -227,27 +178,6 @@ private fun countdown(
         mins >= 60 -> "Starts in ${mins / 60}h" + if (mins % 60 > 0) " ${mins % 60}m" else ""
         else -> "Starts in ${mins}m"
     }
-}
-
-/** A big red LIVE that breathes (scale only). */
-@Composable
-private fun LivePulse() {
-    val t = rememberInfiniteTransition(label = "live-pulse")
-    val s by t.animateFloat(1f, 1.12f, infiniteRepeatable(tween(700, easing = LinearEasing), RepeatMode.Reverse), label = "live-pulse-scale")
-    Text(
-        "●  LIVE",
-        color = Color.White,
-        fontFamily = JellytipFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 20.sp,
-        modifier =
-            Modifier
-                .graphicsLayer {
-                    scaleX = s
-                    scaleY = s
-                }.background(JellytipPalette.Jelly, RoundedCornerShape(8.dp))
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-    )
 }
 
 /** American (-150 / +130) or decimal (1.85) odds -> implied probability; null = unreadable. */
@@ -264,58 +194,57 @@ internal fun impliedProb(s: String?): Double? {
     }
 }
 
-/** The odds as one bar in the team colours (draw grey), with percentages; nothing when the lines can't be read. */
+/** "Black Caps 64%  India 36%" (the favourite in gold) over a split track in the team colours. */
 @Composable
 internal fun OddsBar(
     o: MatchOdds,
     m: IptvMatch,
+    pal: MatchPalette,
 ) {
     val h = impliedProb(o.home?.moneyline) ?: return
     val a = impliedProb(o.away?.moneyline) ?: return
     val d = impliedProb(o.draw) ?: 0.0
     val sum = h + a + d
-    val (homeC, awayC) = remember(m.home?.color, m.away?.color, m.away?.altColor) { matchColors(m) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))) {
-            Box(Modifier.weight((h / sum).toFloat().coerceAtLeast(0.01f)).height(14.dp).background(homeC))
-            if (d > 0) Box(Modifier.weight((d / sum).toFloat().coerceAtLeast(0.01f)).height(14.dp).background(FormDraw))
-            Box(Modifier.weight((a / sum).toFloat().coerceAtLeast(0.01f)).height(14.dp).background(awayC))
+    val (hc, ac) = if (pal.known) pal.home to pal.away else Broadcast.Gold to Broadcast.Secondary
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            BodyText(m.home?.short ?: m.home?.name ?: "Home", 13.sp, Broadcast.Text, weight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.width(5.dp))
+            Cond(pctText(h / sum), 17.sp, if (h >= a) Broadcast.Gold else Broadcast.Text)
+            Spacer(Modifier.weight(1f))
+            if (d > 0) {
+                BodyText("Draw", 13.sp, Broadcast.Secondary, maxLines = 1)
+                Spacer(Modifier.width(5.dp))
+                Cond(pctText(d / sum), 17.sp)
+                Spacer(Modifier.weight(1f))
+            }
+            BodyText(m.away?.short ?: m.away?.name ?: "Away", 13.sp, Broadcast.Text, weight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.width(5.dp))
+            Cond(pctText(a / sum), 17.sp, if (a > h) Broadcast.Gold else Broadcast.Text)
         }
-        Row(Modifier.fillMaxWidth()) {
-            OddsLabel("${m.home?.short ?: m.home?.name ?: "Home"}  ${pctText(h / sum)}", Modifier.weight(1f), TextAlign.Start)
-            if (d > 0) OddsLabel("Draw  ${pctText(d / sum)}", Modifier.weight(1f), TextAlign.Center)
-            OddsLabel("${pctText(a / sum)}  ${m.away?.short ?: m.away?.name ?: "Away"}", Modifier.weight(1f), TextAlign.End)
+        Row(Modifier.fillMaxWidth().height(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Box(Modifier.weight((h / sum).toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(hc))
+            if (d > 0) Box(Modifier.weight((d / sum).toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(Broadcast.Loss))
+            Box(Modifier.weight((a / sum).toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(ac))
         }
     }
 }
 
 private fun pctText(p: Double) = String.format(Locale.US, "%d%%", Math.round(p * 100))
 
-@Composable
-private fun OddsLabel(
-    text: String,
-    modifier: Modifier,
-    align: TextAlign,
-) = Text(text, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, textAlign = align, maxLines = 1, modifier = modifier)
-
-/** W / L / D as coloured chips (entries may be single letters or a run like "WWLDW"). */
+/** W / L / D as square chips (W green with dark text, the rest slate); entries may be a run like "WWLDW". */
 @Composable
 internal fun FormChips(
     label: String,
     form: List<String>,
 ) {
     val letters = form.flatMap { f -> if (f.length > 1 && f.all { it.uppercaseChar() in "WLD" }) f.map { it.toString() } else listOf(f) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = JellytipPalette.Vanilla.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(200.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Cond(label, 13.sp, Broadcast.Body, modifier = Modifier.width(56.dp), weight = FontWeight.SemiBold)
         letters.take(10).forEach { r ->
-            val c =
-                when (r.uppercase(Locale.ROOT).firstOrNull()) {
-                    'W' -> FormWin
-                    'L' -> FormLoss
-                    else -> FormDraw
-                }
-            Box(Modifier.size(24.dp).background(c, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
-                Text(r.uppercase(Locale.ROOT).take(1), color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            val win = r.uppercase(Locale.ROOT).startsWith("W")
+            Box(Modifier.size(17.dp).background(if (win) Broadcast.Win else Broadcast.Loss), contentAlignment = Alignment.Center) {
+                Cond(r.take(1), 12.sp, if (win) Broadcast.Ink else Broadcast.Text)
             }
         }
     }

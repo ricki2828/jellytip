@@ -2,6 +2,9 @@ package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,11 +25,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -36,9 +40,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
-import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 
@@ -194,7 +196,7 @@ fun JellytipMatchModal(
             onDismiss()
         }
     }
-    // Entry (plan "more pop"): the modal scales and fades in (220 ms), the crests slide in from either side
+    // Entry: the modal scales and fades in (220 ms), the crests slide in from either side (graphicsLayer only)
     val entry = remember(initial.id) { androidx.compose.animation.core.Animatable(0f) }
     val crestIn = remember(initial.id) { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(initial.id) { entry.animateTo(1f, androidx.compose.animation.core.tween(220)) }
@@ -202,30 +204,86 @@ fun JellytipMatchModal(
         delay(60)
         crestIn.animateTo(1f, androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing))
     }
-    val (homeC, awayC) = remember(m.home?.color, m.away?.color, m.away?.altColor) { matchColors(m) }
+    val pal = remember(m.home?.color, m.away?.color, m.away?.altColor) { matchPalette(m) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        // Broadcast (plan "In-match visual direction"): gold top rule, the slab header, a sub bar, three columns, actions
         Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier =
                 Modifier
-                    .width(860.dp)
-                    .height(500.dp)
+                    .width(720.dp)
+                    .height(450.dp)
                     .graphicsLayer {
                         val p = entry.value
                         scaleX = 0.94f + 0.06f * p
                         scaleY = 0.94f + 0.06f * p
                         alpha = p
-                    }.background(Color(0xF2101014), RoundedCornerShape(14.dp))
-                    .verticalScroll(rememberScrollState())
-                    .padding(28.dp),
+                    }.background(pal.wash),
         ) {
-            // Header: the split hero in the team colours
+            Box(Modifier.fillMaxWidth().height(4.dp).background(Broadcast.Gold))
             val sc = (revealed ?: m.score)?.takeIf { showScore }
-            MatchHero(m, detail?.venueImage, sc, crestIn = { crestIn.value })
-            // Actions
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BroadcastHeader(m, sc, pal, crestIn = { crestIn.value })
+            SubBar(m, detail)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(Broadcast.Card)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    val d = detail
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1.25f)) {
+                        when (load) {
+                            MatchLoad.Loading -> Muted("Loading match details…")
+                            MatchLoad.Failed -> Muted("Match details aren't available right now.")
+                            is MatchLoad.Loaded -> {}
+                        }
+                        if (d != null) {
+                            if (d.channels.isNotEmpty() || d.broadcasts.isNotEmpty()) {
+                                Column {
+                                    SectionHead("Where to watch")
+                                    d.channels.forEach { ch -> ChannelRow(ch) { onWatch(ch) } }
+                                    if (d.broadcasts.isNotEmpty()) Muted("On air: ${d.broadcasts.joinToString(", ")}")
+                                }
+                            }
+                            d.odds?.let { o ->
+                                Section("Odds" + listOfNotNull(o.provider, o.updatedAt?.let { "updated ${hhmm(it)}" }).joinToString(" · ").let { if (it.isEmpty()) "" else " · $it" }) {
+                                    OddsBar(o, m, pal)
+                                    listOfNotNull(
+                                        o.home?.spread?.let { "${m.home?.short ?: m.home?.name ?: "Home"} $it" },
+                                        o.draw?.let { "Draw $it" },
+                                        o.overUnder?.let { "O/U $it" },
+                                    ).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString("  ·  ")) }
+                                }
+                            }
+                            if (d.homeForm.isNotEmpty() || d.awayForm.isNotEmpty() || d.h2h.isNotEmpty()) {
+                                Section("Form · last 5") {
+                                    if (d.homeForm.isNotEmpty()) FormChips(m.home?.short ?: m.home?.name ?: "Home", d.homeForm)
+                                    if (d.awayForm.isNotEmpty()) FormChips(m.away?.short ?: m.away?.name ?: "Away", d.awayForm)
+                                    d.h2h.take(5).forEach { Muted(it) }
+                                }
+                            }
+                        }
+                    }
+                    if (d != null && (d.homeLineup.isNotEmpty() || d.awayLineup.isNotEmpty())) {
+                        LineupColumn(m.home?.name, d.homeLineup, pal.home, Modifier.weight(1f))
+                        LineupColumn(m.away?.name, d.awayLineup, pal.away, Modifier.weight(1f))
+                    } else if (d != null && d.lineupsAnnounced == false) {
+                        Column(Modifier.weight(2f)) {
+                            SectionHead("Line-ups")
+                            Muted("Not announced yet")
+                        }
+                    } else {
+                        Box(Modifier.weight(2f))
+                    }
+                }
+            }
+            // Actions: gold fill on focus
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth().background(Broadcast.Base).padding(horizontal = 18.dp, vertical = 11.dp)) {
                 val channels = detail?.channels.orEmpty()
-                ModalButton("▶  Watch", Modifier.focusRequester(first), enabled = channels.isNotEmpty()) { channels.firstOrNull()?.let(onWatch) }
+                ModalButton("Watch", Modifier.focusRequester(first), enabled = channels.isNotEmpty()) { channels.firstOrNull()?.let(onWatch) }
                 onRemind?.let { ModalButton("Remind me") { it() } }
                 onRecord?.let { ModalButton("Record") { it() } }
                 // In play or finished: the score stays hidden until asked for
@@ -235,63 +293,12 @@ fun JellytipMatchModal(
                     }
                 }
             }
-            when (load) {
-                MatchLoad.Loading -> Muted("Loading match details…")
-                MatchLoad.Failed -> Muted("Match details aren't available right now.")
-                is MatchLoad.Loaded -> {}
-            }
-            detail?.let { d ->
-                // Where to watch
-                if (d.channels.isNotEmpty() || d.broadcasts.isNotEmpty()) {
-                    Section("Where to watch") {
-                        d.channels.forEach { ch ->
-                            val name = ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), "")
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                ModalButton("Watch on $name") { onWatch(ch) }
-                                QualityChips(ch.quality)
-                            }
-                        }
-                        if (d.broadcasts.isNotEmpty()) Muted("On air: ${d.broadcasts.joinToString(", ")}")
-                    }
-                }
-                // Odds
-                d.odds?.let { o ->
-                    Section("Odds" + listOfNotNull(o.provider, o.updatedAt?.let { "updated ${hhmm(it)}" }).joinToString(" · ").let { if (it.isEmpty()) "" else "  ·  $it" }) {
-                        OddsBar(o, m)
-                        Line(m.home?.name ?: "Home", listOfNotNull(o.home?.moneyline, o.home?.spread?.let { "spread $it" }).joinToString("  "))
-                        Line(m.away?.name ?: "Away", listOfNotNull(o.away?.moneyline, o.away?.spread?.let { "spread $it" }).joinToString("  "))
-                        o.draw?.let { Line("Draw", it) }
-                        o.overUnder?.let { Line("Over/under", it) }
-                    }
-                }
-                // Line-ups
-                if (d.homeLineup.isNotEmpty() || d.awayLineup.isNotEmpty() || d.lineupsAnnounced == false) {
-                    Section("Line-ups") {
-                        if (d.homeLineup.isEmpty() && d.awayLineup.isEmpty()) {
-                            Muted("Not announced yet")
-                        } else {
-                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                                LineupColumn(m.home?.name, d.homeLineup, homeC, Modifier.weight(1f))
-                                LineupColumn(m.away?.name, d.awayLineup, awayC, Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-                // Form and head-to-head
-                if (d.homeForm.isNotEmpty() || d.awayForm.isNotEmpty() || d.h2h.isNotEmpty()) {
-                    Section("Form and head-to-head") {
-                        if (d.homeForm.isNotEmpty()) FormChips(m.home?.name ?: "Home", d.homeForm)
-                        if (d.awayForm.isNotEmpty()) FormChips(m.away?.name ?: "Away", d.awayForm)
-                        d.h2h.take(5).forEach { Muted(it) }
-                    }
-                }
-            }
         }
     }
     LaunchedEffect(initial.id) { JellytipTrace.log("iptv", "match info ${initial.id}") }
 }
 
-/** A titled section, focusable as a whole so D-pad Down scrolls through the modal on a TV. */
+/** A titled section (gold head), focusable as a whole so D-pad Down scrolls through the modal on a TV. */
 @Composable
 private fun Section(
     title: String,
@@ -299,21 +306,74 @@ private fun Section(
 ) {
     Surface(
         onClick = {},
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RectangleShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.Transparent,
-                focusedContainerColor = Color.White.copy(alpha = 0.06f),
-                contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = JellytipPalette.Vanilla,
+                focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                contentColor = Broadcast.Text,
+                focusedContentColor = Broadcast.Text,
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(8.dp)) {
-            Text(title.uppercase(), color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 11.sp, letterSpacing = 1.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            SectionHead(title)
             content()
         }
+    }
+}
+
+/** "Sky Sport 1 NZ   1080p 5.1": the whole row watches it; focus = gold text. */
+@Composable
+private fun ChannelRow(
+    ch: IptvChannel,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RectangleShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Broadcast.Gold,
+                contentColor = Broadcast.Text,
+                focusedContentColor = Broadcast.Ink,
+            ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+            Text(
+                ch.name.replace(Regex("""^\s*\|[A-Z]{2,3}\|\s*"""), ""),
+                fontFamily = Barlow,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            QualityChips(ch.quality)
+        }
+    }
+}
+
+/** Gold league, venue with a pin, what's on air. */
+@Composable
+private fun SubBar(
+    m: IptvMatch,
+    d: MatchDetail?,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth().background(Broadcast.Sub).padding(horizontal = 18.dp, vertical = 7.dp),
+    ) {
+        m.league?.let { Cond(it, 15.sp, Broadcast.Gold) }
+        m.startsAt?.takeIf { m.status != "in" && m.status != "post" }?.let { BodyText(whenLabel(it), 13.sp, maxLines = 1) }
+        Spacer(Modifier.weight(1f))
+        m.venue?.let { BodyText("📍 $it", 13.sp, maxLines = 1) }
+        if (m.inferred) BodyText("identified from the fixtures", 12.sp, Broadcast.Secondary, maxLines = 1)
     }
 }
 
@@ -324,33 +384,26 @@ private fun LineupColumn(
     tint: Color,
     modifier: Modifier,
 ) {
-    // Tinted with the team colour
-    Column(
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = modifier.background(tint.copy(alpha = 0.18f), RoundedCornerShape(8.dp)).padding(10.dp),
-    ) {
-        team?.let { Text(it, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp) }
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp), modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Box(Modifier.width(4.dp).height(13.dp).background(tint))
+            SectionHead("${team ?: "Team"} XI", Modifier.weight(1f))
+        }
         val (starters, bench) = players.partition { it.starter }
-        starters.forEach { p -> Text(listOfNotNull(p.num, p.name, p.pos?.let { "($it)" }).joinToString(" "), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1) }
-        if (bench.isNotEmpty()) Text("Bench: " + bench.joinToString(", ") { it.name }, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
+        starters.forEachIndexed { i, p ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Cond(p.num ?: "${i + 1}", 12.sp, Color(0xFF8C94A1), modifier = Modifier.width(20.dp), weight = FontWeight.SemiBold)
+                BodyText(p.name + (p.pos?.let { " ($it)" } ?: ""), 12.5.sp, Color(0xFFDADDE3), maxLines = 1)
+            }
+        }
+        if (bench.isNotEmpty()) BodyText("Bench: " + bench.joinToString(", ") { it.name }, 12.sp, Broadcast.Secondary, maxLines = 3)
     }
 }
 
 @Composable
-private fun Line(
-    label: String,
-    value: String,
-) {
-    if (value.isBlank()) return
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(label, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.width(200.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(value, color = Color.White, fontFamily = JellytipFontFamily, fontSize = 13.sp)
-    }
-}
+private fun Muted(text: String) = BodyText(text, 12.5.sp, Broadcast.Body)
 
-@Composable
-private fun Muted(text: String) = Text(text, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
-
+/** Condensed caps; focus = gold fill at 1.04x. */
 @Composable
 private fun ModalButton(
     label: String,
@@ -361,20 +414,27 @@ private fun ModalButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        shape = ClickableSurfaceDefaults.shape(RectangleShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         colors =
             ClickableSurfaceDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.12f),
-                focusedContainerColor = Color.White,
-                contentColor = Color.White,
-                focusedContentColor = Color.Black,
-                disabledContainerColor = Color.White.copy(alpha = 0.05f),
-                disabledContentColor = Color.White.copy(alpha = 0.4f),
+                containerColor = Broadcast.Chip,
+                focusedContainerColor = Broadcast.Gold,
+                contentColor = Broadcast.Text,
+                focusedContentColor = Broadcast.Ink,
+                disabledContainerColor = Broadcast.Chip.copy(alpha = 0.5f),
+                disabledContentColor = Broadcast.Secondary,
             ),
         modifier = modifier,
     ) {
-        Text(label, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Text(
+            label.uppercase(java.util.Locale.ROOT),
+            fontFamily = BarlowCondensed,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            letterSpacing = 0.05.em,
+            modifier = Modifier.padding(horizontal = 17.dp, vertical = 6.dp),
+        )
     }
 }
 

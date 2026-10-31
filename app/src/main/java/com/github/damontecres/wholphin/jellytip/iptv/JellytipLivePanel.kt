@@ -9,15 +9,17 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,45 +31,45 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Text
+import androidx.tv.material3.Icon
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.JellytipApi
-import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
-import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
 /*
- * In-event panel (~/ai/plans/jellytip-live-sport.md, "In-event panel" and "Pinned 31-Oct (Live panel: pop, context,
- * performance)"): `GET /v1/sport/match/{id}/live` while a key match is live. A team-colour scoreboard strip (crests,
- * score, clock, live pulse; it flashes on big moments), pill tabs Stats · Plays · Odds · Chat (· Fantasy), split-bar
- * stats, leader cards, a play timeline, an odds bar with a sparkline, and a per-sport context block (`layout` +
- * `situation`). Every block is optional: an older answer just shows less.
+ * In-event panel (~/ai/plans/jellytip-live-sport.md, "In-event panel", "Live panel: pop, context, performance" and
+ * "In-match visual direction: DECIDED 31-Oct"): `GET /v1/sport/match/{id}/live` while a key match is live, in the
+ * Broadcast look ([Broadcast]): the panel washed in both team colours, angled full-colour score slabs with odometer
+ * scores and the 2 s moment wipe, a gold period box and live dot, underlined tabs Stats · Plays · Odds · Chat
+ * (· Fantasy), split-bar stats, leader rows with headshots, a play list, odds with a sparkline, and a per-sport context
+ * block (`layout` + `situation`). Docked to the right edge with a gold border, or a floating card
+ * (`sport.panelStyle`). Every block is optional: an older answer just shows less.
  *
  * Performance (TV budget < 5% janky frames with the panel open): the player polls (15 s full while open, 30 s light
  * `?fields=market,moments,score` while closed) and parses off the main thread; unchanged rows keep their instances
@@ -124,6 +126,8 @@ data class LiveMoment(
     val kind: String?,
     val team: String?,
     val label: String,
+    /** The line under the label ("Brunson 3PT from 26 ft · Knicks lead 98–96"); null = none. */
+    val detail: String? = null,
 )
 
 data class MarketPoint(
@@ -309,7 +313,7 @@ object LiveParse {
             o.optJSONArray("moments").objects().mapNotNull { m ->
                 val kind = m.str("kind")
                 val label = m.str("label") ?: kind?.replace('_', ' ')?.uppercase(Locale.ROOT) ?: return@mapNotNull null
-                LiveMoment(m.str("at") ?: label, kind, m.str("team"), label)
+                LiveMoment(m.str("at") ?: label, kind, m.str("team"), label, m.str("detail") ?: m.str("text"))
             }
         return MatchLive(
             status = o.str("status"),
@@ -437,25 +441,17 @@ internal suspend fun fetchLive(
 
 val LIVE_TABS = listOf("Stats", "Plays", "Odds", "Chat")
 
-private fun tabIcon(t: String) =
-    when (t) {
-        "Stats" -> "📊"
-        "Plays" -> "⏱"
-        "Odds" -> "📈"
-        "Chat" -> "💬"
-        "Fantasy" -> "🏈"
-        else -> "•"
-    }
 
-/** A moment to flash on the strip; [seq] retriggers it. */
+/** A moment to wipe across the strip; [seq] retriggers it. */
 data class LiveFlash(
     val seq: Int,
     val moment: LiveMoment,
 )
 
 /**
- * The side panel over the right of the video (the player keeps playing). [tab] is driven by the player's Up/Down;
- * [data] comes from the player's poll; [spoilerNotice] = a replay / catch-up with spoilers off: nothing is shown.
+ * The side panel (the player keeps playing). [tab] is driven by the player's Up/Down; [data] comes from the player's
+ * poll; [spoilerNotice] = a replay / catch-up with spoilers off: nothing is shown. [floating] = the rounded card
+ * inset 12 dp instead of docked to the edge.
  */
 @Composable
 fun JellytipLivePanel(
@@ -463,149 +459,149 @@ fun JellytipLivePanel(
     tab: Int,
     spoilerNotice: Boolean,
     data: MatchLive?,
-    /** The rail's tabs: [LIVE_TABS] (Chat only with a chat block), plus "Fantasy" for NFL with a linked account. */
+    /** The tabs: [LIVE_TABS] (Chat only with a chat block), plus "Fantasy" for NFL with a linked account. */
     tabs: List<String> = LIVE_TABS,
     fantasy: FantasyLive? = null,
     flash: LiveFlash? = null,
+    floating: Boolean = false,
     modifier: Modifier = Modifier,
     /** 0 = off screen to the right, 1 = in place (the player animates it; read in graphicsLayer only). */
     progress: () -> Float = { 1f },
 ) {
-    val (homeC, awayC) = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchColors(match) }
-    // Slide via graphicsLayer translation only (no relayout, no blur: light on the Chromecast GPU); the scrim fades over
-    // the panel area only, the video is not resized
+    val pal = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchPalette(match) }
+    val shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape
+    // Slide via graphicsLayer translation only (no relayout, no blur, no shadow: light on the Chromecast GPU)
     Box(
         modifier
             .fillMaxHeight()
-            .graphicsLayer { translationX = (1f - progress()) * size.width },
+            .graphicsLayer { translationX = (1f - progress()) * (size.width + 24.dp.toPx()) },
     ) {
-        Box(
+        Row(
             Modifier
-                .matchParentSize()
-                .graphicsLayer { alpha = progress() }
-                .background(Color.Black.copy(alpha = 0.35f)),
-        )
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Glass)
-                    .padding(horizontal = 12.dp, vertical = 18.dp),
+                .fillMaxSize()
+                .padding(if (floating) 12.dp else 0.dp)
+                .clip(shape)
+                // The wash: home colour left, away right, 22% into #0D1015 (a static brush), at 95%
+                .background(pal.wash, alpha = 0.95f),
         ) {
-            ScoreStrip(match, if (spoilerNotice) null else data, homeC, awayC, flash)
-            if (!spoilerNotice) data?.situation?.summary?.let { Text(it, color = Accent, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            TabChips(tabs, tab)
-            val d = data
-            val name = tabs.getOrNull(tab)
-            when {
-                spoilerNotice -> Note("Live stats would spoil this recording. Turn on spoilers in Settings to see them.")
-                name == "Fantasy" && fantasy != null -> FantasyTab(fantasy, match.id)
-                d == null -> Note("Loading live data…")
-                else ->
-                    // Tab switches cross-fade (150 ms, alpha only)
-                    androidx.compose.animation.Crossfade(targetState = name, animationSpec = tween(150), label = "live-panel-tab") { t ->
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            when (t) {
-                                "Plays" -> PlaysTab(d.plays, match.id, homeC, awayC)
-                                "Odds" -> OddsTab(d.market, match, homeC, awayC)
-                                "Chat" -> ChatTab(d, match.id)
-                                else -> StatsTab(d, match, homeC, awayC)
+            if (!floating) Box(Modifier.width(3.dp).fillMaxHeight().background(Broadcast.Gold))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .then(if (floating) Modifier.border(2.dp, Broadcast.Gold.copy(alpha = 0.6f), shape) else Modifier)
+                        .padding(14.dp),
+            ) {
+                ScoreStrip(match, if (spoilerNotice) null else data, pal, if (spoilerNotice) null else flash)
+                ClockRow(if (spoilerNotice) null else data, pal)
+                // Body text sits on a near-black card within the wash (3 m legibility)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f).background(Broadcast.Card).padding(horizontal = 10.dp, vertical = 8.dp),
+                ) {
+                    Tabs(tabs, tab)
+                    val d = data
+                    val name = tabs.getOrNull(tab)
+                    when {
+                        spoilerNotice -> Note("Live stats would spoil this recording. Turn on spoilers in Settings to see them.")
+                        name == "Fantasy" && fantasy != null -> FantasyTab(fantasy, match.id)
+                        d == null -> Note("Loading live data…")
+                        else ->
+                            // Tab switches cross-fade (150 ms, alpha only)
+                            androidx.compose.animation.Crossfade(targetState = name, animationSpec = tween(150), label = "live-panel-tab") { t ->
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    when (t) {
+                                        "Plays" -> PlaysTab(d.plays, match.id, pal)
+                                        "Odds" -> OddsTab(d.market, match, pal, full = true)
+                                        "Chat" -> ChatTab(d)
+                                        else -> StatsTab(d, match, pal)
+                                    }
+                                    d.updatedAt?.let { Note("Updated ${ago(nowSec() - it)}") }
+                                }
                             }
-                            d.updatedAt?.let { Note("Updated ${ago(nowSec() - it)}") }
-                        }
                     }
+                }
             }
         }
     }
 }
 
-private val Glass = Color(0xE60B0C12)
-private val Accent = Color(0xFFFFC94A)
-private val Neutral = Color(0xFF8A90A0)
-
-private fun sideColor(
-    team: String?,
-    homeC: Color,
-    awayC: Color,
-) = when (team) {
-    "home" -> homeC
-    "away" -> awayC
-    else -> Neutral
-}
-
-/** Bright version of a team colour for bars and dots on the dark glass. */
-private fun bright(c: Color) = lerp(c, Color.White, 0.18f)
-
-// ---- Scoreboard strip -----------------------------------------------------------------------------------------------
+// ---- Score strip: two angled full-colour slabs, odometer scores, the moment wipe ---------------------------------
 
 @Composable
 private fun ScoreStrip(
     m: IptvMatch,
     d: MatchLive?,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
     flash: LiveFlash?,
 ) {
-    val homeBg = lerp(homeC, Color.Black, 0.35f)
-    val awayBg = lerp(awayC, Color.Black, 0.35f)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .drawBehind {
-                drawRect(homeBg)
-                val p =
-                    Path().apply {
-                        moveTo(size.width * 0.54f, 0f)
-                        lineTo(size.width, 0f)
-                        lineTo(size.width, size.height)
-                        lineTo(size.width * 0.46f, size.height)
-                        close()
-                    }
-                drawPath(p, awayBg)
-            },
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-        ) {
-            Crest(m.home, 30.dp)
-            TeamShort(m.home, TextAlign.Start)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(92.dp)) {
-                val score = if (d?.scoreHome != null && d.scoreAway != null) "${d.scoreHome} – ${d.scoreAway}" else "v"
-                // The score pulses once when it changes
-                Pulse(score) { Text(score, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1) }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (d?.status == null || d.status == "in") LiveDot()
-                    val clock = listOfNotNull(d?.period, d?.clock).joinToString(" · ").ifBlank { if (d?.status == "post") "FT" else "LIVE" }
-                    Text(clock, color = Color.White.copy(alpha = 0.85f), fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)
-                }
+    // The score swaps under the wipe: while a moment plays, the shown score changes only once the band covers it
+    val target = (d?.scoreHome ?: "") to (d?.scoreAway ?: "")
+    val latest by rememberUpdatedState(target)
+    var shown by remember { mutableStateOf(target) }
+    val wiping = remember { booleanArrayOf(false) }
+    LaunchedEffect(flash?.seq) { if (flash != null) wiping[0] = true }
+    LaunchedEffect(target) { if (!wiping[0]) shown = target }
+    Box(Modifier.fillMaxWidth().height(56.dp).clipToBounds()) {
+        Row(Modifier.fillMaxSize()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f).fillMaxHeight().clip(SlabLeft).background(pal.home).padding(horizontal = 9.dp),
+            ) {
+                Crest(m.home, 28.dp)
+                Cond(m.home?.short ?: m.home?.name ?: "", 17.sp, pal.onHome, modifier = Modifier.weight(1f))
+                if (shown.first.isNotEmpty()) Odometer(shown.first, 34.sp, pal.onHome)
             }
-            TeamShort(m.away, TextAlign.End)
-            Crest(m.away, 30.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .offset(x = (-7).dp)
+                        .fillMaxHeight()
+                        .clip(SlabRight)
+                        .background(pal.away)
+                        .padding(start = 15.dp, end = 2.dp),
+            ) {
+                if (shown.second.isNotEmpty()) Odometer(shown.second, 34.sp, pal.onAway)
+                Cond(m.away?.short ?: m.away?.name ?: "", 17.sp, pal.onAway, modifier = Modifier.weight(1f), caps = true)
+                Crest(m.away, 28.dp)
+            }
         }
-        MomentFlash(flash, homeC, awayC)
+        MomentWipe(
+            flash,
+            pal,
+            onCovered = { shown = latest },
+            onDone = {
+                wiping[0] = false
+                shown = latest
+            },
+        )
     }
 }
 
+/** Gold period box, clock, live dot; the situation line on the right. On the wash: contrast-picked text. */
 @Composable
-private fun RowScope.TeamShort(
-    t: MatchTeam?,
-    align: TextAlign,
-) = Text(
-    t?.short ?: t?.name ?: "",
-    color = Color.White,
-    fontFamily = JellytipFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 13.sp,
-    textAlign = align,
-    maxLines = 1,
-    overflow = TextOverflow.Ellipsis,
-    modifier = Modifier.weight(1f),
-)
+private fun ClockRow(
+    d: MatchLive?,
+    pal: MatchPalette,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        val post = d?.status == "post"
+        val period = if (post) "FT" else d?.period
+        period?.let { Cond(it, 15.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 7.dp, vertical = 2.dp)) }
+        d?.clock?.takeIf { !post }?.let { Cond(it, 15.sp, pal.onHomeWash, weight = FontWeight.SemiBold) }
+        if (!post) {
+            LiveDot()
+            Cond("Live", 15.sp, pal.onHomeWash, weight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.weight(1f))
+        d?.situation?.summary?.let { BodyText(it, 13.sp, pal.onAwayWash.copy(alpha = 0.8f), weight = FontWeight.SemiBold, maxLines = 1) }
+    }
+}
 
 /** A crest at its display size (Coil sizes the request from the fixed layout size and caches it). */
 @Composable
@@ -618,8 +614,8 @@ private fun Crest(
     if (logo != null && !failed) {
         AsyncImage(model = logo, contentDescription = t?.name, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(size))
     } else {
-        Box(Modifier.size(size).background(Color.White.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Text(initials(t?.name ?: "?"), color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+        Box(Modifier.size(size).background(Color.Black.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
+            Cond(initials(t?.name ?: "?"), 11.sp, Color.White)
         }
     }
 }
@@ -628,75 +624,38 @@ private fun Crest(
 @Composable
 private fun LiveDot() {
     val t = rememberInfiniteTransition(label = "live-dot")
-    val a = t.animateFloat(1f, 0.3f, infiniteRepeatable(tween(800, easing = LinearEasing), RepeatMode.Reverse), label = "live-dot-alpha")
+    val a = t.animateFloat(1f, 0.35f, infiniteRepeatable(tween(1_000, easing = LinearEasing), RepeatMode.Reverse), label = "live-dot-alpha")
     Box(
         Modifier
             .size(7.dp)
             .graphicsLayer { alpha = a.value }
-            .background(JellytipPalette.Jelly, CircleShape),
+            .background(Broadcast.Live, CircleShape),
     )
 }
 
-/** The strip flashes the scoring team's colour once with a short label ("TOUCHDOWN", "WICKET", "LEAD CHANGE"). */
-@Composable
-private fun MomentFlash(
-    flash: LiveFlash?,
-    homeC: Color,
-    awayC: Color,
-) {
-    val a = remember { Animatable(0f) }
-    var shown by remember { mutableStateOf<LiveMoment?>(null) }
-    LaunchedEffect(flash?.seq) {
-        val f = flash ?: return@LaunchedEffect
-        shown = f.moment
-        a.snapTo(0f)
-        a.animateTo(1f, tween(180))
-        delay(1_400)
-        a.animateTo(0f, tween(420))
-        shown = null
-    }
-    val m = shown ?: return
-    val c = sideColor(m.team, homeC, awayC).let { if (it == Neutral) JellytipPalette.Jelly else bright(it) }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                alpha = a.value
-                scaleX = 0.94f + 0.06f * a.value
-                scaleY = 0.94f + 0.06f * a.value
-            }.background(c),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(m.label, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, letterSpacing = 2.sp, maxLines = 1)
-    }
-}
+// ---- Tabs: condensed caps with icons, a gold underline on the selected one -----------------------------------------
 
-// ---- Tabs ----------------------------------------------------------------------------------------------------------
-
-/** Pill chips with icons; the selected one also names itself (the panel is narrow). */
 @Composable
-private fun TabChips(
+private fun Tabs(
     tabs: List<String>,
     tab: Int,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        tabs.forEachIndexed { i, t ->
-            key(t) {
-                val on = i == tab
-                Text(
-                    if (on) "${tabIcon(t)}  $t" else tabIcon(t),
-                    color = if (on) Color.Black else Color.White,
-                    fontFamily = JellytipFontFamily,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    modifier =
-                        Modifier
-                            .background(if (on) Accent else Color.White.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                )
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+            tabs.forEachIndexed { i, t ->
+                key(t) {
+                    val on = i == tab
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)) {
+                            Icon(BroadcastIcons.forTab(t), contentDescription = null, tint = if (on) Color.White else Broadcast.Secondary, modifier = Modifier.size(13.dp))
+                            Cond(t, 14.sp, if (on) Color.White else Broadcast.Secondary, weight = FontWeight.SemiBold, tracking = 0.04f)
+                        }
+                        Box(Modifier.height(3.dp).fillMaxWidth().background(if (on) Broadcast.Gold else Color.Transparent))
+                    }
+                }
             }
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
     }
 }
 
@@ -706,86 +665,76 @@ private fun TabChips(
 private fun StatsTab(
     d: MatchLive,
     m: IptvMatch,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
 ) {
-    d.situation?.let { ContextBlock(d.layout, it, m, homeC, awayC) }
-    d.winProbHome?.let { p -> SplitStat(LiveStat("Win probability", pct(p), pct(1 - p)), homeC, awayC) }
+    d.situation?.let { ContextBlock(d.layout, it, m, d, pal) }
+    d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
     if (d.stats.isEmpty() && d.leaders.isEmpty() && d.situation == null && d.winProbHome == null) {
         Note("No stats for this match yet.")
-        return
     }
-    d.stats.take(8).forEach { s -> key(s.label) { SplitStat(s, homeC, awayC) } }
-    if (d.leaders.isNotEmpty()) {
-        SectionLabel("Leaders")
-        d.leaders.take(4).forEach { l -> key(l.name) { LeaderCard(l, homeC, awayC) } }
-    }
+    d.stats.take(7).forEach { s -> key(s.label) { StatBar(s, pal) } }
+    d.leaders.take(3).forEach { l -> key(l.name) { LeaderRow(l, pal) } }
+    // The market in one line at the foot (as on air)
+    d.market?.takeIf { it.home != null || it.away != null }?.let { mk -> OddsLine(mk, m) }
 }
 
 private val leadingNumber = Regex("""-?\d+(?:\.\d+)?""")
 
-/** "54%" / "12" / "3.4" -> the number; anything else = null. */
+/** "54%" / "12" / "13/34" -> the leading number; anything else = null. */
 private fun num(s: String) = leadingNumber.find(s)?.value?.toDoubleOrNull()
 
-/** One stat as a split bar in the team colours (each side's share); text only when the values aren't numbers. */
+/** Bar colours: the team colours when known, else gold v grey so the split still reads. */
+private fun barColors(pal: MatchPalette) = if (pal.known) pal.home to pal.away else Broadcast.Gold to Broadcast.Secondary
+
+/** One stat: the two values in condensed numerals, the label between, a square split track under them. */
 @Composable
-private fun SplitStat(
+private fun StatBar(
     s: LiveStat,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
 ) {
     val h = num(s.home)
     val a = num(s.away)
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(s.home, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(52.dp))
-            Text(s.label, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text(s.away, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(52.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Cond(s.home, 16.sp)
+            Cond(s.label, 12.sp, Broadcast.Secondary, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold, tracking = 0.06f, align = TextAlign.Center)
+            Cond(s.away, 16.sp)
         }
         if (h != null && a != null && h >= 0 && a >= 0 && h + a > 0) {
-            val share = (h / (h + a)).toFloat()
-            val hc = bright(homeC)
-            val ac = bright(awayC)
-            Box(
-                Modifier.fillMaxWidth().height(6.dp).drawBehind {
-                    val gap = 2.dp.toPx()
-                    val split = size.width * share
-                    val r = CornerRadius(size.height / 2, size.height / 2)
-                    drawRoundRect(hc, size = Size((split - gap / 2).coerceAtLeast(0f), size.height), cornerRadius = r)
-                    drawRoundRect(ac, topLeft = Offset(split + gap / 2, 0f), size = Size((size.width - split - gap / 2).coerceAtLeast(0f), size.height), cornerRadius = r)
-                },
-            )
+            val (hc, ac) = barColors(pal)
+            Row(Modifier.fillMaxWidth().height(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.weight(h.toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(hc))
+                Box(Modifier.weight(a.toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(ac))
+            }
         }
     }
 }
 
 @Composable
-private fun LeaderCard(
+private fun LeaderRow(
     l: LiveLeader,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
 ) {
-    val c = sideColor(l.team, homeC, awayC)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier =
+    val c = pal.side(l.team)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
             Modifier
-                .fillMaxWidth()
-                .background(c.copy(alpha = 0.22f), RoundedCornerShape(8.dp))
-                .padding(6.dp),
-    ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(bright(c).copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(c.copy(alpha = 0.35f))
+                .border(2.dp, c, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
             var failed by remember(l.headshot) { mutableStateOf(false) }
             if (l.headshot != null && !failed) {
-                AsyncImage(model = l.headshot, contentDescription = l.name, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.size(36.dp))
+                AsyncImage(model = l.headshot, contentDescription = l.name, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.size(32.dp))
             } else {
-                Text(initials(l.name), color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Cond(initials(l.name), 12.sp)
             }
         }
         Column(Modifier.weight(1f)) {
-            Text(l.name, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            l.line?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Cond(l.name, 15.sp)
+            l.line?.let { BodyText(it, 12.5.sp, maxLines = 1) }
         }
     }
 }
@@ -797,72 +746,74 @@ private fun ContextBlock(
     layout: String?,
     s: LiveSituation,
     m: IptvMatch,
-    homeC: Color,
-    awayC: Color,
+    d: MatchLive,
+    pal: MatchPalette,
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp)).padding(8.dp),
-    ) {
-        // NFL: down & distance, the field with the ball, drive, red zone
-        if (s.downDistance != null || s.fieldPos != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                s.downDistance?.let { Text(it, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
-                s.yardLine?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 12.sp) }
-                if (s.redZone) Chip("RED ZONE", Color(0xFFD64545))
-            }
-            s.fieldPos?.let { FieldBar(it, sideColor(s.possession, homeC, awayC), s.possession) }
-            s.drive?.let { Note("Drive: $it") }
+    // NFL: down & distance in the broadcasters' gold box, the field (drive side, ball, line to gain), the drive
+    if (s.downDistance != null || s.fieldPos != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            s.downDistance?.let { Cond(it, 17.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 7.dp, vertical = 1.dp)) }
+            s.yardLine?.let { BodyText("Ball on $it", 13.sp, weight = FontWeight.SemiBold, maxLines = 1) }
+            if (s.redZone) Cond("Red zone", 13.sp, Color.White, modifier = Modifier.background(Color(0xFFD64545)).padding(horizontal = 6.dp, vertical = 1.dp))
         }
-        // Cricket: batters, the bowler, run rates, the last six balls
-        if (s.batters.isNotEmpty() || s.bowler != null || s.lastBalls.isNotEmpty()) {
-            s.batters.take(2).forEach { b ->
-                key(b.name) {
-                    Row {
-                        Text(b.name + if (b.onStrike) " *" else "", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = if (b.onStrike) FontWeight.SemiBold else FontWeight.Normal, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                        Text(listOfNotNull(b.runs, b.balls?.let { "($it)" }).joinToString(" "), color = Color.White, fontFamily = JellytipFontFamily, fontSize = 12.sp)
-                    }
+        s.fieldPos?.let { FieldBar(it, s, m, pal) }
+        s.drive?.let { BodyText(it, 12.5.sp, maxLines = 1) }
+    }
+    // Cricket: batters, the bowler, RR v RRR, the last six balls
+    if (s.batters.isNotEmpty() || s.bowler != null || s.lastBalls.isNotEmpty()) {
+        s.batters.take(2).forEach { b ->
+            key(b.name) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Cond(b.name + if (b.onStrike) " *" else "", 15.sp, if (b.onStrike) Color.White else Broadcast.Body, modifier = Modifier.weight(1f))
+                    Cond(listOfNotNull(b.runs, b.balls?.let { "($it)" }).joinToString(" "), 15.sp)
                 }
             }
-            s.bowler?.let { Note("Bowling: $it" + (s.bowlerFigures?.let { f -> "  $f" } ?: "")) }
-            val rates = listOfNotNull(s.runRate?.let { "RR ${fmt(it)}" }, s.requiredRate?.let { "RRR ${fmt(it)}" }).joinToString("  v  ")
-            if (rates.isNotEmpty()) Text(rates, color = Accent, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            if (s.lastBalls.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { s.lastBalls.forEach { BallChip(it) } }
-            }
         }
-        // Basketball: the run, period scores
-        s.run?.let { Chip(it, bright(sideColor(s.runTeam, homeC, awayC).let { c -> if (c == Neutral) JellytipPalette.Jelly else c })) }
-        if (s.periods.isNotEmpty()) PeriodGrid(s.periods, m, layout)
-        // Everything paired (possession, territory, fouls, shots, xG, cards, penalties…)
-        s.pairs.take(6).forEach { p -> key(p.label) { SplitStat(p, homeC, awayC) } }
+        s.bowler?.let { BodyText("Bowling: $it" + (s.bowlerFigures?.let { f -> "  $f" } ?: ""), 12.5.sp, maxLines = 1) }
+        val rates = listOfNotNull(s.runRate?.let { "RR ${fmt(it)}" }, s.requiredRate?.let { "RRR ${fmt(it)}" }).joinToString("  v  ")
+        if (rates.isNotEmpty()) Cond(rates, 14.sp, Broadcast.Gold)
+        if (s.lastBalls.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { s.lastBalls.forEach { BallChip(it) } }
     }
+    // Basketball: period scores (gold totals), the run
+    if (s.periods.isNotEmpty()) PeriodGrid(s.periods, m, d, layout, pal)
+    s.run?.let { run ->
+        Row(Modifier.fillMaxWidth().background(Broadcast.Chip), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(7.dp).height(26.dp).background(pal.side(s.runTeam).takeIf { s.runTeam != null } ?: Broadcast.Gold))
+            Cond(run, 14.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), tracking = 0.03f)
+        }
+    }
+    // Everything paired (possession, territory, fouls, shots, xG, cards, penalties…)
+    s.pairs.take(5).forEach { p -> key(p.label) { StatBar(p, pal) } }
 }
 
-/** The field: end zones at both ends, 10-yard lines, the ball (team colour of the side in possession). */
+/** The field: end zones in the team colours, 10-yard lines, the ball (white) and the line to gain (gold). */
 @Composable
 private fun FieldBar(
     pos: Float,
-    color: Color,
-    possession: String?,
+    s: LiveSituation,
+    m: IptvMatch,
+    pal: MatchPalette,
 ) {
-    val ball = bright(color)
+    val dist = s.downDistance?.substringAfter("&", "")?.trim()?.toIntOrNull()
+    val dir = if (s.possession == "away") -1f else 1f
+    val (hc, ac) = barColors(pal)
     Box(
-        Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(4.dp)).drawBehind {
-            drawRect(Color(0xFF1F5E33))
-            val ez = size.width * 0.08f
-            drawRect(Color(0xFF17472A), size = Size(ez, size.height))
-            drawRect(Color(0xFF17472A), topLeft = Offset(size.width - ez, 0f), size = Size(ez, size.height))
+        Modifier.fillMaxWidth().height(15.dp).drawBehind {
+            val ez = size.width / 12f
+            drawRect(hc, size = Size(ez, size.height))
+            drawRect(ac, topLeft = Offset(size.width - ez, 0f), size = Size(ez, size.height))
             val field = size.width - 2 * ez
+            drawRect(Color(0xFF24572B), topLeft = Offset(ez, 0f), size = Size(field, size.height))
             for (i in 1..9) {
                 val x = ez + field * i / 10f
-                drawLine(Color.White.copy(alpha = 0.25f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                drawLine(Color.White.copy(alpha = 0.35f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
             }
-            val x = ez + field * pos
-            drawCircle(ball, radius = size.height * 0.38f, center = Offset(x, size.height / 2))
-            // Direction of play: a small tick towards the end zone being attacked
-            val dir = if (possession == "away") -1f else 1f
-            drawLine(ball, Offset(x, size.height / 2), Offset(x + dir * size.height * 0.9f, size.height / 2), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            val bx = ez + field * pos
+            if (dist != null) {
+                val gx = (bx + dir * field * dist / 100f).coerceIn(ez, ez + field)
+                drawRect(Broadcast.Gold, topLeft = Offset(gx - 1.dp.toPx(), 0f), size = Size(1.5.dp.toPx(), size.height))
+            }
+            drawRect(Color.White, topLeft = Offset(bx - 1.dp.toPx(), 0f), size = Size(1.5.dp.toPx(), size.height))
         },
     )
 }
@@ -873,33 +824,40 @@ private fun BallChip(b: String) {
         when (b.uppercase(Locale.ROOT)) {
             "W" -> Color(0xFFD64545) to Color.White
             "4" -> Color(0xFF2F7DE1) to Color.White
-            "6" -> Color(0xFF8E44E0) to Color.White
-            "0", "." -> Color.White.copy(alpha = 0.12f) to Color.White.copy(alpha = 0.7f)
-            else -> Color.White.copy(alpha = 0.25f) to Color.White
+            "6" -> Broadcast.Gold to Broadcast.Ink
+            "0", "." -> Broadcast.Loss to Broadcast.Body
+            else -> Broadcast.Chip to Color.White
         }
-    Box(Modifier.size(22.dp).background(bg, CircleShape), contentAlignment = Alignment.Center) {
-        Text(if (b == "0") "·" else b.take(2), color = fg, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+    Box(Modifier.size(17.dp).background(bg), contentAlignment = Alignment.Center) {
+        Cond(if (b == "0") "·" else b.take(2), 12.sp, fg)
     }
 }
 
+/** Q1…Q4 (OT) scores per team with a team-colour tick; the total in gold. */
 @Composable
 private fun PeriodGrid(
     periods: List<Pair<String, String>>,
     m: IptvMatch,
+    d: MatchLive,
     layout: String?,
+    pal: MatchPalette,
 ) {
     val prefix = if (layout == "basketball" || layout == "nfl") "Q" else "P"
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val shown = periods.take(5)
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row {
-            Text("", modifier = Modifier.width(44.dp))
-            periods.take(6).forEachIndexed { i, _ ->
-                Text(if (i < 4 || prefix != "Q") "$prefix${i + 1}" else "OT", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-            }
+            Spacer(Modifier.weight(1.4f))
+            shown.forEachIndexed { i, _ -> Cond(if (prefix == "Q" && i >= 4) "OT" else "$prefix${i + 1}", 12.sp, Broadcast.Secondary, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold, align = TextAlign.Center) }
+            Cond("T", 12.sp, Broadcast.Secondary, modifier = Modifier.weight(1.1f), weight = FontWeight.SemiBold, align = TextAlign.Center)
         }
-        listOf(m.home to periods.map { it.first }, m.away to periods.map { it.second }).forEach { (t, scores) ->
-            Row {
-                Text(t?.short ?: t?.name ?: "", color = Color.White, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(44.dp))
-                scores.take(6).forEach { Text(it, color = Color.White, fontFamily = JellytipFontFamily, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
+        listOf(Triple(m.home, shown.map { it.first }, "home" to (d.scoreHome ?: "")), Triple(m.away, shown.map { it.second }, "away" to (d.scoreAway ?: ""))).forEach { (t, scores, side) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1.4f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.width(4.dp).height(13.dp).background(barColors(pal).let { if (side.first == "home") it.first else it.second }))
+                    Cond(t?.short ?: t?.name ?: "", 14.sp, weight = FontWeight.SemiBold)
+                }
+                scores.forEach { Cond(it, 14.sp, modifier = Modifier.weight(1f), weight = FontWeight.SemiBold, align = TextAlign.Center) }
+                Cond(side.second, 14.sp, Broadcast.Gold, modifier = Modifier.weight(1.1f), align = TextAlign.Center)
             }
         }
     }
@@ -907,13 +865,12 @@ private fun PeriodGrid(
 
 // ---- Plays ---------------------------------------------------------------------------------------------------------
 
-/** A timeline: team-colour dots on a line; scoring plays bold and larger with the points ("+3"). */
+/** A play list: condensed clock, a team-colour tick, the text; scoring plays bold white with "+3". */
 @Composable
 private fun PlaysTab(
     plays: List<LivePlay>,
     matchId: String,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
 ) {
     if (plays.isEmpty()) {
         Note("No plays yet.")
@@ -921,56 +878,57 @@ private fun PlaysTab(
     }
     val shown = plays.take(9)
     val fresh = rememberFresh("plays:$matchId", shown.map { it.key })
-    val line = Color.White.copy(alpha = 0.15f)
-    Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier =
-            Modifier.drawBehind {
-                val x = 5.dp.toPx()
-                drawLine(line, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
-            },
-    ) {
-        shown.forEach { p ->
-            key(p.key) {
-                SlideInNew(p.key, p.key in fresh) { TimelineRow(p, sideColor(p.team, homeC, awayC)) }
+    shown.forEach { p ->
+        key(p.key) {
+            SlideInNew(p.key, p.key in fresh) {
+                Column {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 3.dp)) {
+                        Cond(listOfNotNull(p.period, p.clock).joinToString(" "), 13.sp, Broadcast.Secondary, modifier = Modifier.width(48.dp))
+                        Box(Modifier.padding(top = 2.dp).width(3.dp).height(14.dp).background(if (p.team != null) pal.side(p.team) else Color.Transparent))
+                        BodyText(
+                            p.text,
+                            if (p.scoring) 14.sp else 13.sp,
+                            if (p.scoring) Color.White else Color(0xFFDADDE3),
+                            modifier = Modifier.weight(1f),
+                            weight = if (p.scoring) FontWeight.Bold else FontWeight.Medium,
+                        )
+                        if (p.scoring && p.points != null && p.points > 0) Cond("+${p.points}", 14.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 5.dp))
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF1C212A)))
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun TimelineRow(
-    p: LivePlay,
-    color: Color,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.padding(top = 4.dp).size(if (p.scoring) 12.dp else 10.dp).background(bright(color), CircleShape))
-        Column(Modifier.weight(1f)) {
-            listOfNotNull(p.period, p.clock).joinToString(" ").ifBlank { null }?.let {
-                Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
-            }
-            Text(
-                p.text,
-                color = if (p.scoring) Color.White else JellytipPalette.Vanilla.copy(alpha = 0.85f),
-                fontFamily = JellytipFontFamily,
-                fontWeight = if (p.scoring) FontWeight.Bold else FontWeight.Normal,
-                fontSize = if (p.scoring) 14.sp else 12.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (p.scoring && p.points != null && p.points > 0) Chip("+${p.points}", bright(color))
     }
 }
 
 // ---- Odds ----------------------------------------------------------------------------------------------------------
 
+/** One line: the favourite and its probability in gold (odometer), the source. */
+@Composable
+private fun OddsLine(
+    mk: LiveMarket,
+    m: IptvMatch,
+) {
+    val homeFav = (mk.home ?: 0.0) >= (mk.away ?: 0.0)
+    val team = if (homeFav) m.home else m.away
+    val p = if (homeFav) mk.home else mk.away
+    Column {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Broadcast.Line))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+            Icon(BroadcastIcons.Odds, contentDescription = null, tint = Broadcast.Gold, modifier = Modifier.size(14.dp))
+            BodyText(team?.short ?: team?.name ?: "", 13.sp, Color.White, weight = FontWeight.SemiBold, maxLines = 1)
+            p?.let { Odometer(pct(it), 17.sp, Broadcast.Gold) }
+            BodyText(listOfNotNull(mk.source?.replaceFirstChar { it.uppercase() }, mk.volume?.let { money(it) }, mk.updatedAt?.let { ago(nowSec() - it) }).joinToString(" · "), 12.sp, Broadcast.Secondary, maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun OddsTab(
     mk: LiveMarket?,
     m: IptvMatch,
-    homeC: Color,
-    awayC: Color,
+    pal: MatchPalette,
+    full: Boolean,
 ) {
     if (mk == null || (mk.home == null && mk.away == null)) {
         Note("No market for this match.")
@@ -979,39 +937,43 @@ private fun OddsTab(
     val h = mk.home ?: 0.0
     val a = mk.away ?: 0.0
     val dr = mk.draw ?: 0.0
-    val sum = (h + a + dr).takeIf { it > 0 } ?: 1.0
-    val hc = bright(homeC)
-    val ac = bright(awayC)
-    Pulse("$h|$a|$dr") {
-        Box(
-            Modifier.fillMaxWidth().height(14.dp).drawBehind {
-                val r = CornerRadius(size.height / 2, size.height / 2)
-                val hw = (size.width * h / sum).toFloat()
-                val dw = (size.width * dr / sum).toFloat()
-                drawRoundRect(Color.White.copy(alpha = 0.1f), cornerRadius = r)
-                drawRoundRect(hc, size = Size(hw, size.height), cornerRadius = r)
-                if (dw > 0) drawRect(Neutral, topLeft = Offset(hw, 0f), size = Size(dw, size.height))
-                drawRoundRect(ac, topLeft = Offset(hw + dw, 0f), size = Size(size.width - hw - dw, size.height), cornerRadius = r)
-            },
-        )
+    val (hc, ac) = barColors(pal)
+    Row(verticalAlignment = Alignment.Bottom) {
+        Column(Modifier.weight(1f)) {
+            Cond(m.home?.short ?: m.home?.name ?: "Home", 14.sp, Broadcast.Secondary, weight = FontWeight.SemiBold)
+            mk.home?.let { Odometer(pct(it), 24.sp, if (h >= a) Broadcast.Gold else Color.White) }
+        }
+        if (mk.draw != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                Cond("Draw", 14.sp, Broadcast.Secondary, weight = FontWeight.SemiBold)
+                Odometer(pct(dr), 20.sp, Color.White)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
+            Cond(m.away?.short ?: m.away?.name ?: "Away", 14.sp, Broadcast.Secondary, weight = FontWeight.SemiBold)
+            mk.away?.let { Odometer(pct(it), 24.sp, if (a > h) Broadcast.Gold else Color.White) }
+        }
     }
-    Row {
-        mk.home?.let { Text("${m.home?.short ?: m.home?.name ?: "Home"} ${pct(it)}", color = hc, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f)) }
-        mk.draw?.let { Text("Draw ${pct(it)}", color = Color.White, fontFamily = JellytipFontFamily, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
-        mk.away?.let { Text("${pct(it)} ${m.away?.short ?: m.away?.name ?: "Away"}", color = ac, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1f)) }
+    Row(Modifier.fillMaxWidth().height(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Box(Modifier.weight(h.toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(hc))
+        if (dr > 0) Box(Modifier.weight(dr.toFloat()).fillMaxHeight().background(Broadcast.Loss))
+        Box(Modifier.weight(a.toFloat().coerceAtLeast(0.01f)).fillMaxHeight().background(ac))
     }
-    if (mk.series.size >= 2) {
-        SectionLabel("Favourite · last 30 min")
+    if (full && mk.series.size >= 2) {
+        SectionHead("Favourite · last 30 min")
         Sparkline(mk.series, if (h >= a) hc else ac)
     }
-    Note(
+    BodyText(
         listOfNotNull(
             mk.source?.replaceFirstChar { it.uppercase() },
             mk.volume?.let { "${money(it)} traded" },
             mk.updatedAt?.let { ago(nowSec() - it) },
-        ).joinToString(", "),
+        ).joinToString(" · "),
+        12.sp,
+        Broadcast.Secondary,
+        maxLines = 1,
     )
-    mk.question?.let { Note(it) }
+    mk.question?.let { BodyText(it, 12.5.sp) }
 }
 
 /** The probability series as a line (drawn, not composed per point); a faint 50% line. */
@@ -1021,7 +983,7 @@ private fun Sparkline(
     color: Color,
 ) {
     val pts = remember(series) { series.sortedBy { it.t } }
-    Canvas(Modifier.fillMaxWidth().height(40.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(36.dp)) {
         val t0 = pts.first().t
         val span = (pts.last().t - t0).coerceAtLeast(1).toFloat()
         val lo = minOf(0.4, pts.minOf { it.p })
@@ -1041,29 +1003,22 @@ private fun Sparkline(
 // ---- Chat ----------------------------------------------------------------------------------------------------------
 
 @Composable
-private fun ChatTab(
-    d: MatchLive,
-    matchId: String,
-) {
+private fun ChatTab(d: MatchLive) {
     if (d.comments.isEmpty()) {
         Note("No match thread comments.")
         return
     }
     d.chatSource?.let { Note("From $it") }
     val shown = d.comments.take(8)
-    val fresh = rememberFresh("chat:$matchId", shown.map { "${it.author}|${it.text}" })
+    val fresh = rememberFresh("chat", shown.map { "${it.author}|${it.text}" })
     shown.forEach { c ->
         val k = "${c.author}|${c.text}"
         key(k) {
             SlideInNew(k, k in fresh) {
-                Text(
-                    listOfNotNull(c.author?.let { "$it:" }, c.text).joinToString(" "),
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 12.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    c.author?.let { Cond(it, 13.sp, Broadcast.Gold, weight = FontWeight.SemiBold) }
+                    BodyText(c.text, 13.sp, Color(0xFFDADDE3), maxLines = 3)
+                }
             }
         }
     }
@@ -1090,7 +1045,7 @@ private fun rememberFresh(
     }
 }
 
-/** A new play or comment slides down from the top with a short highlight that fades (drawn: no recomposition per frame). */
+/** A new play or comment slides down with a short gold glow that fades (drawn: no recomposition per frame). */
 @Composable
 private fun SlideInNew(
     key: String,
@@ -1105,7 +1060,6 @@ private fun SlideInNew(
             glow.animateTo(0f, tween(1_200))
         }
     }
-    val tint = JellytipPalette.Jelly
     Box(
         Modifier
             .graphicsLayer {
@@ -1113,55 +1067,13 @@ private fun SlideInNew(
                 alpha = enter.value
             }.drawBehind {
                 val g = glow.value
-                if (g > 0f) drawRoundRect(tint.copy(alpha = 0.28f * g), cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()))
+                if (g > 0f) drawRoundRect(Broadcast.Gold.copy(alpha = 0.2f * g), cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()))
             },
     ) { content() }
 }
 
-/** Pulses its content once (scale 1 → 1.15 → 1) whenever [value] changes after the first time. */
 @Composable
-private fun Pulse(
-    value: String,
-    content: @Composable () -> Unit,
-) {
-    val scale = remember { Animatable(1f) }
-    val last = remember { arrayOf<String?>(null) }
-    LaunchedEffect(value) {
-        val before = last[0]
-        last[0] = value
-        if (before != null && before != value) {
-            scale.animateTo(1.15f, tween(140))
-            scale.animateTo(1f, tween(220))
-        }
-    }
-    Box(
-        Modifier.graphicsLayer {
-            scaleX = scale.value
-            scaleY = scale.value
-        },
-    ) { content() }
-}
-
-@Composable
-private fun Chip(
-    text: String,
-    color: Color,
-) = Text(
-    text,
-    color = Color.White,
-    fontFamily = JellytipFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 11.sp,
-    maxLines = 1,
-    modifier = Modifier.background(color, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
-)
-
-@Composable
-private fun SectionLabel(text: String) =
-    Text(text.uppercase(Locale.ROOT), color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 10.sp, letterSpacing = 1.sp)
-
-@Composable
-private fun Note(text: String) = Text(text, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
+private fun Note(text: String) = BodyText(text, 12.sp, Broadcast.Secondary)
 
 internal fun pct(p: Double) = "${Math.round(p * 100)}%"
 

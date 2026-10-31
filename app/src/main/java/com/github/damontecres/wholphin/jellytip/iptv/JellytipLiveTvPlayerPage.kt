@@ -85,13 +85,21 @@ private const val TOAST_GAP_MS = 250L
 private const val MAX_QUEUED_TOASTS = 3
 private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
-private val TOAST_MINE = Color(0xFF4CAF50)
+private val TOAST_MINE = Color(0xFF22C55E)
 private val TOAST_OPP = Color(0xFFE5534B)
 
-/** A top-right player toast; [accent] = the fantasy side colour (green yours, red the opponent's), null = neutral. */
+/**
+ * A top-right player toast, a Broadcast lower third (plan "In-match visual direction"): a colour edge (the team for a
+ * flip or moment, green for your player, red for your opponent's), an icon block, then a kicker, the main line in
+ * condensed caps and a sub line.
+ */
 data class PlayerToast(
-    val text: String,
-    val accent: Color? = null,
+    val main: String,
+    val kicker: String? = null,
+    val sub: String? = null,
+    val edge: Color = Broadcast.Gold,
+    val kickerColor: Color = Broadcast.Gold,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector = BroadcastIcons.Odds,
 )
 
 /**
@@ -249,6 +257,8 @@ fun JellytipLiveTvPlayerPage(
     var panelOpen by remember { mutableStateOf(false) }
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
+    // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
+    var panelMenu by remember { mutableStateOf(false) }
     var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
     val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
@@ -310,15 +320,18 @@ fun JellytipLiveTvPlayerPage(
                 league?.let { l ->
                     val mine = l.mePoints ?: 0.0
                     val theirs = l.oppPoints ?: 0.0
-                    " · " + (if (mine >= theirs) "you lead " else "you trail ") + l.scoreLine
-                }.orEmpty()
-            val leagueName = league?.short ?: e.league
+                    (if (mine >= theirs) "You lead " else "You trail ") + l.scoreLine
+                }
+            val leagueName = league?.name ?: e.league
+            val color = if (opp) TOAST_OPP else TOAST_MINE
             enqueueToast(
                 PlayerToast(
-                    "🏈  ${if (opp) "Opp " else ""}$sign${pts(e.delta)} ${e.name}" +
-                        (e.reason?.let { " · $it" } ?: "") +
-                        (leagueName?.let { " ($it)" } ?: "") + lead,
-                    accent = if (opp) TOAST_OPP else TOAST_MINE,
+                    main = "$sign${pts(e.delta)} ${e.name}" + (e.reason?.let { " · $it" } ?: ""),
+                    kicker = (if (opp) "Opponent's player" else "Your player") + (leagueName?.let { " · $it" } ?: ""),
+                    sub = lead,
+                    edge = color,
+                    kickerColor = color,
+                    icon = BroadcastIcons.Ball,
                 ),
             )
         }
@@ -360,7 +373,15 @@ fun JellytipLiveTvPlayerPage(
                     if (me?.sportFlipAlerts != false) {
                         val team = if (mk.flipTo == "away") m.away else m.home
                         val name = team?.short ?: team?.name ?: mk.flipTo ?: "New"
-                        enqueueToast(PlayerToast("📈  ${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip: $name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: "")))
+                        val pal = matchPalette(m)
+                        enqueueToast(
+                            PlayerToast(
+                                main = "$name now favourites" + (mk.flipProb?.let { " · ${pct(it)}" } ?: ""),
+                                kicker = "${mk.source?.replaceFirstChar { it.uppercase() } ?: "Market"} flip",
+                                sub = mk.volume?.let { v -> "${if (v >= 1_000_000) String.format(java.util.Locale.US, "$%.1fM", v / 1_000_000) else String.format(java.util.Locale.US, "$%.0fK", v / 1_000)} traded" },
+                                edge = if (pal.known) pal.side(mk.flipTo) else Broadcast.Gold,
+                            ),
+                        )
                     }
                     JellytipTrace.player("iptv", "market flip ${m.id} -> ${mk.flipTo}")
                 }
@@ -372,7 +393,16 @@ fun JellytipLiveTvPlayerPage(
                     } else if (me?.sportFlipAlerts != false) {
                         val team = if (mo.team == "away") m.away else if (mo.team == "home") m.home else null
                         val score = if (d.scoreHome != null && d.scoreAway != null) " · ${m.home?.short ?: m.home?.name} ${d.scoreHome} – ${d.scoreAway} ${m.away?.short ?: m.away?.name}" else ""
-                        enqueueToast(PlayerToast("⚡  ${mo.label}" + (team?.let { " · ${it.short ?: it.name}" } ?: "") + score))
+                        val pal = matchPalette(m)
+                        enqueueToast(
+                            PlayerToast(
+                                main = mo.label,
+                                kicker = team?.let { it.short ?: it.name } ?: "Live",
+                                sub = mo.detail ?: score.removePrefix(" · ").ifBlank { null },
+                                edge = if (pal.known && mo.team != null) pal.side(mo.team) else Broadcast.Live,
+                                icon = BroadcastIcons.Ball,
+                            ),
+                        )
                     }
                 }
             }
@@ -422,6 +452,10 @@ fun JellytipLiveTvPlayerPage(
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionRight -> return@onPreviewKeyEvent true
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            if (e.nativeKeyEvent.repeatCount > 0 && !panelMenu) panelMenu = true
+                            return@onPreviewKeyEvent true
+                        }
                         else -> {}
                     }
                 }
@@ -541,15 +575,40 @@ fun JellytipLiveTvPlayerPage(
                 tabs = panelTabs,
                 fantasy = fantasy,
                 flash = liveFlash,
+                floating = me?.sportPanelStyle == "floating",
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
                 progress = { panelProgress.value },
             )
         }
-        // Toast: top right, slides in from the right, never takes focus; the queue above times it
+        if (panelMenu) {
+            val floating = me?.sportPanelStyle == "floating"
+            val pm = panelMatch
+            com.github.damontecres.wholphin.ui.components.DialogPopup(
+                showDialog = true,
+                title = "Live panel",
+                dialogItems =
+                    listOfNotNull(
+                        com.github.damontecres.wholphin.ui.components.DialogItem(if (floating) "Docked to the edge" else "Docked to the edge  ✓", dismissOnClick = true) {
+                            com.github.damontecres.wholphin.jellytip.me.JellytipMe.setPanelStyle("docked")
+                        },
+                        com.github.damontecres.wholphin.ui.components.DialogItem(if (floating) "Floating  ✓" else "Floating", dismissOnClick = true) {
+                            com.github.damontecres.wholphin.jellytip.me.JellytipMe.setPanelStyle("floating")
+                        },
+                        matchInfoItem(pm) { matchModal = it },
+                    ),
+                onDismissRequest = { panelMenu = false },
+            )
+        }
+        // Toast: a Broadcast lower third, top right; slides in from the right (240 ms), never takes focus; the queue
+        // above times it
         val toast = flipToast
         val toastIn = androidx.compose.animation.core.animateFloatAsState(
             targetValue = if (toast != null) 1f else 0f,
-            animationSpec = androidx.compose.animation.core.tween(if (toast != null) 260 else 200),
+            animationSpec =
+                androidx.compose.animation.core.tween(
+                    if (toast != null) 240 else 200,
+                    easing = if (toast != null) androidx.compose.animation.core.LinearOutSlowInEasing else androidx.compose.animation.core.FastOutLinearInEasing,
+                ),
             label = "player-toast",
         )
         LaunchedEffect(toast) { if (toast != null) lastToast = toast }
@@ -560,22 +619,32 @@ fun JellytipLiveTvPlayerPage(
                 modifier =
                     Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 28.dp, end = 32.dp)
+                        .padding(top = 24.dp, end = 24.dp)
                         .graphicsLayer {
-                            translationX = (1f - toastIn.value) * (size.width + 32.dp.toPx())
+                            translationX = (1f - toastIn.value) * (size.width + 24.dp.toPx())
                             alpha = toastIn.value
-                        }.widthIn(max = 640.dp)
+                        }.width(330.dp)
                         .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
-                        .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(8.dp)),
+                        .background(Broadcast.Base.copy(alpha = 0.96f)),
             ) {
-                shownToast.accent?.let { Box(Modifier.width(4.dp).fillMaxHeight().background(it, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))) }
-                Text(
-                    shownToast.text,
-                    color = Color.White,
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                )
+                Box(Modifier.width(8.dp).fillMaxHeight().background(shownToast.edge))
+                Box(Modifier.width(36.dp).fillMaxHeight().background(Broadcast.Chip), contentAlignment = Alignment.Center) {
+                    androidx.tv.material3.Icon(shownToast.icon, contentDescription = null, tint = shownToast.kickerColor, modifier = Modifier.size(19.dp))
+                }
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    shownToast.kicker?.let { Cond(it, 12.sp, shownToast.kickerColor, tracking = 0.08f) }
+                    Text(
+                        shownToast.main.uppercase(java.util.Locale.ROOT),
+                        color = Color.White,
+                        fontFamily = BarlowCondensed,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        lineHeight = 20.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    shownToast.sub?.let { BodyText(it, 12.sp, maxLines = 1) }
+                }
             }
         }
         matchModal?.let { m ->
@@ -595,25 +664,26 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         if (preCardVisible && preStartsAt != null) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            // Broadcast pre-game card: gold tag, the start in condensed caps, the hint in Barlow
+            val pm = nowNext?.now?.match
+            val pal = remember(pm?.id) { matchPalette(pm) }
+            Row(
                 modifier =
                     Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 48.dp, bottom = if (bannerVisible) 150.dp else 40.dp)
-                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                        .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+                        .background(pal.wash, alpha = 0.96f),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PreGamePill()
-                    Text(
-                        "Pre-game — the event starts at ${hhmm(preStartsAt)} (${startsLabel(preStartsAt, now).substringAfter("· ")})",
-                        color = JellytipPalette.Vanilla,
-                        fontFamily = JellytipFontFamily,
-                        fontSize = 15.sp,
-                    )
+                Box(Modifier.width(4.dp).fillMaxHeight().background(Broadcast.Gold))
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Cond("Pre-game", 13.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 7.dp, vertical = 1.dp), tracking = 0.06f)
+                        pm?.matchup?.let { Cond(it, 17.sp, pal.onHomeWash) }
+                    }
+                    Cond("Starts ${hhmm(preStartsAt)} · ${startsLabel(preStartsAt, now).substringAfter("· ")}", 20.sp, Color.White)
+                    BodyText("OK: Remind me · Other channels", 12.sp, Broadcast.Secondary)
                 }
-                Text("OK: Remind me · Other channels", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
             }
         }
         if (preMenu && preProg != null && preStartsAt != null) {

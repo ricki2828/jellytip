@@ -44,6 +44,8 @@ data class MePrefs(
     val sportFlipAlerts: Boolean = true,
     /** `fantasy.alerts` (plan "Fantasy live scoring"): scoring toasts while watching. Default on. */
     val fantasyAlerts: Boolean = true,
+    /** `sport.panelStyle` (plan "In-match visual direction"): the live panel docked to the edge or floating. */
+    val sportPanelStyle: String = "docked",
 )
 
 data class SportMuted(
@@ -112,6 +114,7 @@ object MeParse {
             sportSpoilers = o.optJSONObject("sport")?.optBoolean("spoilers", false) == true,
             sportFlipAlerts = o.optJSONObject("sport")?.optBoolean("flipAlerts", true) != false,
             fantasyAlerts = o.optJSONObject("fantasy")?.optBoolean("alerts", true) != false,
+            sportPanelStyle = o.optJSONObject("sport")?.optString("panelStyle")?.takeIf { it == "floating" } ?: "docked",
         )
     }
 
@@ -272,6 +275,18 @@ object JellytipMe {
             }
             JellytipTrace.log("me", "sport muted $kind '$value' on=$on ok=$ok")
             withContext(Dispatchers.Main) { onDone(ok) }
+        }
+    }
+
+    /** Live panel style (`sport.panelStyle`: docked | floating); one retry after a 409. Shown at once, saved behind. */
+    fun setPanelStyle(style: String) {
+        _prefs.value?.let { _prefs.value = it.copy(sportPanelStyle = style) }
+        scope.launch {
+            for (attempt in 0..1) {
+                val (code, _) = patch(JSONObject().put("sport", JSONObject().put("panelStyle", style)))
+                if (code != 409) break
+            }
+            JellytipTrace.log("me", "sport panelStyle $style")
         }
     }
 
