@@ -35,10 +35,19 @@ import java.util.Locale
  * just missing); replays and catch-up show a spoiler notice instead unless `sport.spoilers` is on.
  */
 
-/** `/live` is missing on this server (404): no panel, no hint, for the rest of the run. */
+/** `/live` is missing on this server (404): no panel and no hint, until it is tried again 10 min later. */
 object LivePanelRoute {
     @Volatile
-    var missing = false
+    private var missingUntil = 0L
+
+    /** Set on a 404; the route is tried again 10 min later (the server endpoints land after an install). */
+    var missing: Boolean
+        get() = System.currentTimeMillis() < missingUntil
+        set(value) {
+            missingUntil = if (value) System.currentTimeMillis() + RETRY_AFTER_MS else 0L
+        }
+
+    private const val RETRY_AFTER_MS = 10 * 60_000L
 }
 
 data class LiveStat(

@@ -45,10 +45,19 @@ import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 
-/** `GET /v1/sport/match/{id}` is missing on this server (404): the action is no longer offered this run. */
+/** `GET /v1/sport/match/{id}` is missing on this server (404): the action is hidden until it is tried again 10 min later. */
 object MatchInfoRoute {
     @Volatile
-    var missing = false
+    private var missingUntil = 0L
+
+    /** Set on a 404; the route is tried again 10 min later (the server endpoints land after an install). */
+    var missing: Boolean
+        get() = System.currentTimeMillis() < missingUntil
+        set(value) {
+            missingUntil = if (value) System.currentTimeMillis() + RETRY_AFTER_MS else 0L
+        }
+
+    private const val RETRY_AFTER_MS = 10 * 60_000L
 }
 
 private sealed interface MatchLoad {
