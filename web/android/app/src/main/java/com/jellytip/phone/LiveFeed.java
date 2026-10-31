@@ -19,6 +19,7 @@ final class LiveFeed {
 
     private static final long FAST_MS = 15_000;
     private static final long SLOW_MS = 30_000;
+    private static final long MISSING_RETRY_MS = 10 * 60_000;
 
     private final Handler handler;
     private final String apiBase;
@@ -33,16 +34,18 @@ final class LiveFeed {
     JSONObject last;
     /** Why there's nothing to show (null while loading or once data arrived). */
     String note;
-    /** The route is missing on this server (404): polling stops. */
+    /** The route is missing on this server (404): asked again every 10 min. */
     boolean missing;
+    /** 403 (no IPTV) or this match unknown (200 `{unknown: true}`): polling stops and live tabs hide. */
+    boolean hidden;
 
     private final Runnable poll =
         new Runnable() {
             @Override
             public void run() {
-                if (released || missing) return;
+                if (released || hidden) return;
                 fetch();
-                handler.postDelayed(this, fast ? FAST_MS : SLOW_MS);
+                handler.postDelayed(this, missing ? MISSING_RETRY_MS : fast ? FAST_MS : SLOW_MS);
             }
         };
 
@@ -82,8 +85,9 @@ final class LiveFeed {
     private void fetch() {
         io.execute(() -> {
             CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/sport/match/" + CompanionHttp.enc(matchId) + "/live");
+            final int verdict = CompanionHttp.verdict(a);
             JSONObject got = null;
-            if (a.body != null) {
+            if (verdict == CompanionHttp.OK) {
                 try {
                     got = new JSONObject(a.body);
                 } catch (org.json.JSONException ignored) {
@@ -94,12 +98,17 @@ final class LiveFeed {
             final int code = a.code;
             handler.post(() -> {
                 if (released) return;
-                if (result != null) {
+                if (verdict == CompanionHttp.NO_IPTV || verdict == CompanionHttp.UNKNOWN) {
+                    hidden = true;
+                    handler.removeCallbacks(poll);
+                    note = "No live stats for this match.";
+                } else if (result != null) {
                     last = result;
                     note = null;
+                    missing = false;
                 } else if (code == 404) {
                     missing = true;
-                    if (last == null) note = "Live stats aren't available for this match.";
+                    if (last == null) note = "Live stats aren't available on this server yet.";
                 } else if (last == null) {
                     note = "Live stats aren't available right now.";
                 }

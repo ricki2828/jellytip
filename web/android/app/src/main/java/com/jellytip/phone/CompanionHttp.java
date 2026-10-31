@@ -22,6 +22,28 @@ final class CompanionHttp {
 
     private CompanionHttp() {}
 
+    /**
+     * Match routes' status codes (plan live-sport, "Pinned 31-Oct (match routes' status codes)"): 404 = the route is
+     * missing (try again in 10 min); 403 = no IPTV provider (hide match features); 200 `{unknown: true}` = hide this
+     * match only.
+     */
+    static final int OK = 0;
+    static final int MISSING = 1;
+    static final int NO_IPTV = 2;
+    static final int UNKNOWN = 3;
+    static final int FAILED = 4;
+
+    static int verdict(Answer a) {
+        if (a.code == 404) return MISSING;
+        if (a.code == 403) return NO_IPTV;
+        if (a.code != 200 || a.body == null) return FAILED;
+        try {
+            return new org.json.JSONObject(a.body).optBoolean("unknown", false) ? UNKNOWN : OK;
+        } catch (org.json.JSONException e) {
+            return FAILED;
+        }
+    }
+
     static String enc(String s) {
         try {
             return URLEncoder.encode(s, "UTF-8");

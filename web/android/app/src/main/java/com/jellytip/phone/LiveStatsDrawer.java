@@ -133,6 +133,10 @@ final class LiveStatsDrawer implements LiveFeed.Listener {
 
     @Override
     public void onLive() {
+        if (feed.hidden) {
+            hideNow();
+            return;
+        }
         updateChatTab();
         if (open) render();
     }
