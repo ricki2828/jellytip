@@ -141,7 +141,7 @@ fun IptvVodTile(
                 modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
             )
         }
-        IptvCornerMark(item.qualityLabel, Modifier.align(Alignment.TopEnd).padding(6.dp))
+        IptvCornerMark(listOfNotNull(item.qualityLabel, item.audioLabel).joinToString(" · ").ifEmpty { null }, Modifier.align(Alignment.TopEnd).padding(6.dp))
         if (item.played) {
             // Watched: a tick like the library's played mark
             Text(

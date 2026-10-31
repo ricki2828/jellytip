@@ -39,7 +39,18 @@ data class IptvVodItem(
     val favourite: Boolean = false,
     /** Watched (progress reached 92%, plan "8h Block 1"); drawn as a tick. */
     val played: Boolean = false,
+    /** atmos | 5.1 | 7.1 | stereo (plan live-sport §1b values); null = unknown. Atmos and surround get a badge. */
+    val audio: String? = null,
 ) {
+    /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
+    val audioLabel: String?
+        get() =
+            when (audio?.lowercase()) {
+                "atmos" -> "ATMOS"
+                "5.1", "7.1" -> audio
+                else -> null
+            }
+
     val isSeries get() = kind == "series"
 
     /** Short quality label for tiles: "4K", "HDR", "1080p"… */
@@ -150,6 +161,7 @@ object IptvVodParse {
             tech = o.optJSONArray("tech")?.let { t -> (0 until t.length()).mapNotNull { t.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
             favourite = o.optBoolean("favourite", false),
             played = o.optBoolean("played", false) || o.optJSONObject("progress")?.optBoolean("played", false) == true,
+            audio = o.str("audio") ?: o.optJSONObject("quality")?.str("audio"),
         )
     }
 

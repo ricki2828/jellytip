@@ -444,6 +444,12 @@ fun PersonPageContent(
                 },
             )
         }
+        // Jellytip (search-10x "D"): their titles on IPTV that the library lacks; hidden when empty
+        if (personId != null) {
+            item {
+                com.github.damontecres.wholphin.jellytip.iptv.JellytipPersonIptvRow(personId, Modifier.fillMaxWidth())
+            }
+        }
         if (discovered.isNotEmpty()) {
             item {
                 DiscoverRow(

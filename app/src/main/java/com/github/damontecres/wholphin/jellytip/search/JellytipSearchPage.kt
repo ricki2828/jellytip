@@ -342,6 +342,8 @@ private fun groupTitle(g: SearchGroup): String {
             "collections" -> "Collections"
             "iptv" -> "On your IPTV"
             "results" -> "Results"
+            "results-library" -> "In your library"
+            "results-iptv" -> "On IPTV"
             "discover" -> "Not in the library"
             "lists" -> "Letterboxd lists"
             else -> g.type
@@ -382,12 +384,12 @@ private fun ResultGroup(
 
         "people" -> PeopleRow(g, viewModel)
 
-        "results" -> {
-            // Films and shows in rank order, library and IPTV mixed (IPTV tiles carry the cue)
+        "results", "results-library", "results-iptv" -> {
+            // Films and shows in rank order (library and IPTV in separate rows; IPTV tiles carry the quality cue)
             val row =
                 remember(q, g.ids, g.iptv, g.order) {
                     JellytipServerRow(
-                        id = "search:results:${q.hashCode()}",
+                        id = "search:${g.type}:${q.hashCode()}",
                         source = "search",
                         family = "search",
                         title = groupTitle(g),
@@ -568,6 +570,7 @@ private fun SearchIptv.toVodItem() =
         providerName = null,
         progress = null,
         tech = tech,
+        audio = audio,
     )
 
 /** The best hit as a wide card: its art, title, facts (kind · year · seasons · rating · where), OK opens it. */

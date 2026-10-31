@@ -58,6 +58,7 @@ data class SearchIptv(
     val quality: List<String> = emptyList(),
     val tmdbId: Int? = null,
     val rating: Double? = null,
+    val audio: String? = null,
 )
 
 /**
@@ -81,6 +82,8 @@ data class SearchResult(
     val backdrop: String? = null,
     val quality: List<String> = emptyList(),
     val tech: List<String> = emptyList(),
+    /** IPTV audio: atmos | 5.1 | stereo (optional). */
+    val audio: String? = null,
     /** Discover (admins). */
     val posterUrl: String? = null,
     /** Person. */
@@ -130,9 +133,9 @@ data class SearchAnswer(
                 groups.all { it.ids.isEmpty() && it.people.isEmpty() && it.collections.isEmpty() && it.iptv.isEmpty() && it.discover.isEmpty() && it.lists.isEmpty() }
 
     /**
-     * What the page shows after the top hit when [results] exists: one ranked "results" row (library and IPTV films
-     * and shows, top hit left out), then people, collections, "not available" (discover), then the old Letterboxd
-     * lists group if any.
+     * What the page shows after the top hit when [results] exists: "In your library" and "On IPTV" rows (films and
+     * shows, rank order, top hit left out), then people, collections, "not available" (discover), then the old
+     * Letterboxd lists group if any.
      */
     val rankedGroups: List<SearchGroup>
         get() {
@@ -141,15 +144,15 @@ data class SearchAnswer(
             val people = r.filter { it.kind == "person" && it.personId != null }
             val collections = r.filter { it.kind == "collection" && it.collectionId != null }
             val discover = r.filter { it.isTitle && it.source == "discover" && (it.tmdbId ?: 0) > 0 && it.key != top?.key }
+            // Library and IPTV shown separately (plan "D"), each in rank order; an empty one is left out
+            val lib = media.filter { it.source == "library" && it.id != null }
+            val iptv = media.filter { it.source == "iptv" && it.iptvId != null }
             return listOfNotNull(
-                media.takeIf { it.isNotEmpty() }?.let { m ->
-                    SearchGroup(
-                        type = "results",
-                        total = m.size,
-                        ids = m.mapNotNull { it.id },
-                        iptv = m.filter { it.id == null && it.iptvId != null }.map { it.toIptv() },
-                        order = m.mapNotNull { it.id?.toString()?.replace("-", "") ?: it.iptvId },
-                    )
+                lib.takeIf { it.isNotEmpty() }?.let { m ->
+                    SearchGroup(type = "results-library", total = m.size, ids = m.mapNotNull { it.id }, order = m.mapNotNull { it.id?.toString()?.replace("-", "") })
+                },
+                iptv.takeIf { it.isNotEmpty() }?.let { m ->
+                    SearchGroup(type = "results-iptv", total = m.size, iptv = m.map { it.toIptv() }, order = m.mapNotNull { it.iptvId })
                 },
                 people.takeIf { it.isNotEmpty() }?.let { p ->
                     SearchGroup("people", p.size, people = p.map { SearchPerson(it.personId!!, it.title, it.role ?: "actor", it.imageTag, it.filmCount) })
@@ -180,6 +183,7 @@ fun SearchResult.toIptv() =
         quality = quality,
         tmdbId = tmdbId,
         rating = rating,
+        audio = audio,
     )
 
 data class SearchSuggest(
@@ -333,6 +337,7 @@ object SearchParse {
                 backdrop = o.str("backdrop"),
                 quality = strings(o.optJSONArray("quality")),
                 tech = strings(o.optJSONArray("tech")),
+                audio = o.str("audio"),
                 posterUrl = o.str("posterUrl"),
                 personId = uuid(o.str("personId")),
                 role = o.str("role"),
