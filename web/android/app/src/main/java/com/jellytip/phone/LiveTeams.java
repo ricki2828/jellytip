@@ -33,13 +33,15 @@ final class LiveTeams {
         awayShort = s(a, "short", awayName);
         homeLogo = s(h, "logo", null);
         awayLogo = s(a, "logo", null);
-        event = info != null && ("event".equals(s(info, "kind", null)) || (h == null && a == null && s(info, "title", null) != null));
+        String kind = s(info, "kind", null);
+        event = info != null && ("event".equals(kind) || "multi".equals(kind) || (h == null && a == null && s(info, "title", null) != null));
         title = s(info, "title", null);
         league = s(info, "league", null);
         homeCountry = s(h, "country", null);
         awayCountry = s(a, "country", null);
         String leagueKey = s(info, "leagueKey", null);
-        Integer series = leagueKey == null ? null : "f1".equals(leagueKey) ? Integer.valueOf(0xFFE10600) : leagueKey.startsWith("golf") ? Integer.valueOf(0xFF0B6E4F) : null;
+        Integer series =
+            leagueKey == null ? null : "f1".equals(leagueKey) ? Integer.valueOf(0xFFE10600) : leagueKey.startsWith("golf") ? Integer.valueOf(0xFF0B6E4F) : "nfl".equals(leagueKey) ? Integer.valueOf(0xFF013369) : null;
         String hc = event ? null : s(h, "color", null);
         String ac = event ? null : s(a, "color", null);
         known = event ? series != null : hc != null || ac != null;
