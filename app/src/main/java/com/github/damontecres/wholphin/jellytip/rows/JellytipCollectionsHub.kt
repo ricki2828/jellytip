@@ -56,6 +56,7 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.model.serializer.toUUID
 import org.json.JSONObject
 
 /*
@@ -74,6 +75,12 @@ data class HubCollection(
     val libCount: Int,
     val iptvCount: Int,
     val ranked: Boolean,
+    /** movie | tv | mixed (optional). */
+    val mediaType: String? = null,
+    /** Art fallbacks (optional): a library title of the collection (its Jellyfin backdrop), or the person (director/actor cards). */
+    val artItemId: java.util.UUID? = null,
+    val personId: java.util.UUID? = null,
+    val personImageTag: String? = null,
 ) {
     /** "12 films · 5 on IPTV" */
     val subtitle: String
@@ -107,6 +114,10 @@ object HubParse {
                         libCount = o.optInt("libCount", 0),
                         iptvCount = o.optInt("iptvCount", 0),
                         ranked = o.optBoolean("ranked", false),
+                        mediaType = o.str("mediaType"),
+                        artItemId = art?.str("itemId")?.let { runCatching { it.toUUID() }.getOrNull() },
+                        personId = art?.optJSONObject("person")?.str("id")?.let { runCatching { it.toUUID() }.getOrNull() },
+                        personImageTag = art?.optJSONObject("person")?.str("imageTag"),
                     )
                 }
             HubSection(s.str("key") ?: return@mapNotNull null, s.str("title") ?: s.optString("key"), list).takeIf { it.items.isNotEmpty() }
@@ -274,11 +285,29 @@ private fun HubCard(
     c: HubCollection,
     onClick: () -> Unit,
 ) {
+    val images = com.github.damontecres.wholphin.ui.LocalImageUrlService.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // Art: the hub's backdrop / poster, else a library title's Jellyfin backdrop, else the person's photo
+    val art =
+        remember(c.id, density) {
+            with(density) {
+                c.backdrop ?: c.poster
+                    ?: c.artItemId?.let { images.getItemImageUrl(itemId = it, imageType = org.jellyfin.sdk.model.api.ImageType.BACKDROP, fillWidth = 220.dp.roundToPx(), fillHeight = 124.dp.roundToPx()) }
+                    ?: c.personId?.let { images.getItemImageUrl(itemId = it, imageType = org.jellyfin.sdk.model.api.ImageType.PRIMARY, fillWidth = 220.dp.roundToPx(), tag = c.personImageTag) }
+            }
+        }
     SpecialCard(width = 220.dp, height = 124.dp, onClick = onClick, onLongClick = onClick, modifier = Modifier) {
-        val art = c.backdrop ?: c.poster
         var failed by remember(art) { mutableStateOf(false) }
         if (art != null && !failed) {
-            AsyncImage(model = art, contentDescription = c.title, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = art,
+                contentDescription = c.title,
+                contentScale = ContentScale.Crop,
+                // Portraits: keep the face (top of the photo)
+                alignment = if (c.backdrop == null && c.poster == null && c.artItemId == null && c.personId != null) Alignment.TopCenter else Alignment.Center,
+                onError = { failed = true },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
         Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
