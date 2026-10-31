@@ -149,6 +149,8 @@ public class PlayerActivity extends AppCompatActivity {
     private MatchPanel matchPanel;
     private LiveAlerts liveAlerts;
     private TextView infoButton;
+    /** The opening note (bottom centre in landscape; a banner at the top of the panel in portrait). */
+    private TextView noteView;
     private TextView liveButton;
     private TextView pipButton;
     private boolean pipReceiverOn;
@@ -293,7 +295,7 @@ public class PlayerActivity extends AppCompatActivity {
 
         String note = in.getStringExtra(EXTRA_NOTE);
         if (note != null && !note.isEmpty()) {
-            TextView noteView = new TextView(this);
+            noteView = new TextView(this);
             noteView.setText(note);
             noteView.setTextColor(Color.WHITE);
             noteView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -697,6 +699,10 @@ public class PlayerActivity extends AppCompatActivity {
         lp.leftMargin = dp(24);
         lp.bottomMargin = dp(88);
         root.addView(preCard, lp);
+        // Portrait stacks the note under the card: re-place it once the card has its height
+        preCard.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (b - t != ob - ot) root.post(this::applyLayout);
+        });
         showPreCard();
         // "Started" at the real start
         handler.postDelayed(
@@ -932,6 +938,10 @@ public class PlayerActivity extends AppCompatActivity {
             view.setLayoutParams(lp);
         }
         if (matchPanel != null) matchPanel.show(portrait, top + (portrait ? height : 0));
+        // Pre-game card and note: over the picture's foot in landscape; in portrait a banner at the top of the panel
+        int panelTop = top + (portrait ? height : 0);
+        placeBanner(preCard, portrait, panelTop, Gravity.BOTTOM | Gravity.START, dp(24), dp(88));
+        placeBanner(noteView, portrait, panelTop + (preCard != null && preCard.getVisibility() == View.VISIBLE ? preCard.getHeight() : 0), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, dp(72));
         // The spinner sits on the picture
         FrameLayout.LayoutParams sp = (FrameLayout.LayoutParams) spinner.getLayoutParams();
         int spinTop = portrait ? top + height / 2 - dp(24) : 0;
@@ -946,6 +956,26 @@ public class PlayerActivity extends AppCompatActivity {
         if (liveButton != null) liveButton.setVisibility(portrait ? View.GONE : View.VISIBLE);
         if ((portrait || pip) && liveDrawer != null) liveDrawer.hideNow();
         updateFeedSpeed();
+    }
+
+    private void placeBanner(View v, boolean portrait, int panelTop, int landGravity, int landLeft, int landBottom) {
+        if (v == null) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        int width = portrait ? FrameLayout.LayoutParams.MATCH_PARENT : FrameLayout.LayoutParams.WRAP_CONTENT;
+        int gravity = portrait ? Gravity.TOP | Gravity.START : landGravity;
+        int topMargin = portrait ? panelTop : 0;
+        int left = portrait ? 0 : landLeft;
+        int bottom = portrait ? 0 : landBottom;
+        if (lp.width != width || lp.gravity != gravity || lp.topMargin != topMargin || lp.leftMargin != left || lp.bottomMargin != bottom) {
+            lp.width = width;
+            lp.gravity = gravity;
+            lp.topMargin = topMargin;
+            lp.leftMargin = left;
+            lp.bottomMargin = bottom;
+            v.setLayoutParams(lp);
+        }
+        // Above the panel (added later)
+        if (portrait) v.bringToFront();
     }
 
     private void updateFeedSpeed() {
@@ -1176,6 +1206,7 @@ public class PlayerActivity extends AppCompatActivity {
             view.setUseController(false);
             for (View o : overlays) o.setVisibility(View.GONE);
             hidePreCard();
+            if (noteView != null) noteView.setVisibility(View.GONE);
             if (liveDrawer != null) liveDrawer.hideNow();
         } else {
             view.setUseController(true);
