@@ -227,6 +227,14 @@ fun JellytipLiveTvPlayerPage(
     var preCardVisible by remember { mutableStateOf(false) }
     var preMenu by remember { mutableStateOf(false) }
     var matchModal by remember { mutableStateOf<IptvMatch?>(null) }
+    // In-event panel (plan "In-event panel"): Right on a live key match opens it over the right of the video
+    var panelOpen by remember { mutableStateOf(false) }
+    var panelTab by remember { mutableIntStateOf(0) }
+    val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing }
+    LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
+    val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
+    val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
+    androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
     LaunchedEffect(preStartsAt, channel.id) {
         if (preStartsAt != null) preCardTick++
     }
@@ -249,6 +257,25 @@ fun JellytipLiveTvPlayerPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // The side panel takes Left (close) and Up/Down (tabs) while it is open; the video keeps playing
+                if (panelOpen) {
+                    when (e.key) {
+                        Key.DirectionLeft -> {
+                            panelOpen = false
+                            return@onPreviewKeyEvent true
+                        }
+                        Key.DirectionUp -> {
+                            panelTab = (panelTab - 1 + LIVE_TABS.size) % LIVE_TABS.size
+                            return@onPreviewKeyEvent true
+                        }
+                        Key.DirectionDown -> {
+                            panelTab = (panelTab + 1) % LIVE_TABS.size
+                            return@onPreviewKeyEvent true
+                        }
+                        Key.DirectionRight -> return@onPreviewKeyEvent true
+                        else -> {}
+                    }
+                }
                 // Match info (plan "Match info"): the remote's Info key, or holding OK, on a programme with a fixture
                 val matchNow = nowNext?.now?.match?.takeIf { !MatchInfoRoute.missing }
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
@@ -300,6 +327,11 @@ fun JellytipLiveTvPlayerPage(
                             playback.play(current, "back to live")
                             bannerTick++
                             true
+                        } else if (e.key == Key.DirectionRight && panelMatch != null && matchModal == null && !preMenu) {
+                            // Live: Right opens the in-event panel (Right was unused here)
+                            panelOpen = true
+                            JellytipTrace.player("iptv", "live panel ${panelMatch.id}")
+                            true
                         } else {
                             false
                         }
@@ -335,6 +367,15 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        if (panelOpen && panelMatch != null) {
+            JellytipLivePanel(
+                panelMatch,
+                tab = panelTab,
+                spoilerNotice = spoilerNotice,
+                onRouteMissing = { panelOpen = false },
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
+            )
+        }
         matchModal?.let { m ->
             JellytipMatchModal(
                 m,
@@ -429,7 +470,11 @@ fun JellytipLiveTvPlayerPage(
                     else -> {
                         val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
                         val info = nowNext?.now?.match != null && !MatchInfoRoute.missing
-                        listOfNotNull(if (kick) "◀  From kick-off" else null, if (info) "Hold OK: match info" else null).joinToString("   ·   ").ifEmpty { null }
+                        listOfNotNull(
+                            if (kick) "◀  From kick-off" else null,
+                            if (panelMatch != null) "→  Live stats" else null,
+                            if (info) "Hold OK: match info" else null,
+                        ).joinToString("   ·   ").ifEmpty { null }
                     }
                 }
             hint?.let {
