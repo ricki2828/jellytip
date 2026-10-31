@@ -126,7 +126,12 @@ data class IptvProg(
 data class IptvNowNext(
     val now: IptvProg?,
     val next: IptvProg?,
-)
+    /** Entry-level matchInfo (plan "RedZone": guide-less whip-around channels carry it with no programmes). */
+    val match: IptvMatch? = null,
+) {
+    /** The fixture on now: the programme's, else the entry's (RedZone without a guide). */
+    val liveMatch get() = now?.match ?: match
+}
 
 /** Who holds a provider connection (409 answers, connections). */
 data class IptvHolder(
@@ -441,7 +446,19 @@ object IptvParse {
         for (i in 0 until list.length()) {
             val c = list.optJSONObject(i) ?: continue
             val chObj = c.optJSONObject("channel") ?: c
-            val p = c.optJSONObject("now") ?: c.optJSONObject("programme") ?: c.optJSONObject("program") ?: continue
+            val p =
+                c.optJSONObject("now") ?: c.optJSONObject("programme") ?: c.optJSONObject("program")
+                    // A guide-less whip-around channel (RedZone): the tile's matchInfo stands in for the programme
+                    ?: c.optJSONObject("matchInfo")?.takeIf { it.optString("kind") == "multi" }?.let { mi ->
+                        JSONObject()
+                            .put("title", mi.optString("title", "Whip-around"))
+                            .put("start", isoSeconds(mi.optString("startsAt").takeIf { s -> s.isNotBlank() && s != "null" }) ?: (now - 1))
+                            .put("stop", isoSeconds(mi.optString("endsAt").takeIf { s -> s.isNotBlank() && s != "null" }) ?: (now + 3 * 3600))
+                            .put("kind", "live")
+                            .put("sport", true)
+                            .put("matchInfo", mi)
+                    }
+                    ?: continue
             val base = channel(chObj, resolve) ?: continue
             // Quality / event may sit on the item instead of the channel object
             val event = eventGroup(c) ?: eventGroup(chObj)
@@ -617,7 +634,7 @@ object IptvParse {
         val chans = JSONObject(json).optJSONObject("channels") ?: return emptyMap()
         return chans.keys().asSequence().associateWith { id ->
             val o = chans.optJSONObject(id)
-            IptvNowNext(prog(o?.optJSONObject("now")), prog(o?.optJSONObject("next")))
+            IptvNowNext(prog(o?.optJSONObject("now")), prog(o?.optJSONObject("next")), MatchParse.match(o?.optJSONObject("matchInfo")))
         }
     }
 

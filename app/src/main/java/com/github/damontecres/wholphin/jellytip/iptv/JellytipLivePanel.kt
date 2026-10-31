@@ -208,6 +208,10 @@ data class MultiGame(
     val downDistance: String?,
     val yardLine: String?,
     val redZone: Boolean,
+    /** pre | in | post */
+    val status: String? = null,
+    val startsAt: Long? = null,
+    val lastPlay: String? = null,
 )
 
 data class LiveBatter(
@@ -427,6 +431,9 @@ object LiveParse {
                         downDistance = sit?.downDistance,
                         yardLine = sit?.yardLine,
                         redZone = g.optBoolean("redZone", false) || sit?.redZone == true,
+                        status = g.str("status"),
+                        startsAt = IptvParse.isoSeconds(g.str("startsAt")),
+                        lastPlay = g.optJSONObject("situation")?.str("lastPlay"),
                     )
                 },
         )
@@ -1048,7 +1055,13 @@ private fun GameRow(g: MultiGame) {
                 g.scoreAway?.let { Odometer(it, 17.sp, p.onAway) }
                 Cond(g.away?.short ?: g.away?.name ?: "", 14.sp, p.onAway, modifier = Modifier.weight(1f), align = TextAlign.End)
             }
-            Cond(listOfNotNull(g.period, g.clock).joinToString(" "), 13.sp, Broadcast.Secondary, modifier = Modifier.width(62.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
+            val clock =
+                when (g.status) {
+                    "pre" -> g.startsAt?.let { hhmm(it) } ?: "Soon"
+                    "post" -> "Final"
+                    else -> listOfNotNull(g.period, g.clock).joinToString(" ")
+                }
+            Cond(clock, 13.sp, Broadcast.Secondary, modifier = Modifier.width(62.dp), weight = FontWeight.SemiBold, align = TextAlign.End)
         }
         if (g.redZone || g.downDistance != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1057,6 +1070,7 @@ private fun GameRow(g: MultiGame) {
                 g.yardLine?.let { BodyText("Ball on $it", 12.sp, maxLines = 1) }
             }
         }
+        g.lastPlay?.takeIf { g.status == "in" || g.status == null }?.let { BodyText(it, 12.sp, Broadcast.Secondary, maxLines = 1) }
     }
 }
 

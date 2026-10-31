@@ -260,7 +260,7 @@ fun JellytipLiveTvPlayerPage(
     // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
     var panelMenu by remember { mutableStateOf(false) }
     var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
-    val panelMatch = nowNext?.now?.match?.takeIf { current.isLive && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
+    val panelMatch = nowNext?.liveMatch?.takeIf { current.isLive && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
@@ -286,7 +286,7 @@ fun JellytipLiveTvPlayerPage(
     // Fantasy (plan "Fantasy live scoring for NFL"): while an NFL match plays (not a replay), /v1/fantasy/live every
     // 60 s feeds the panel's Fantasy tab, the banner chip and scoring toasts; nothing without a linked account
     val fantasy by JellytipFantasy.live.collectAsState()
-    val nflMatch = nowNext?.now?.match?.takeIf { current.isLive && isNfl(it) && !spoilerNotice }
+    val nflMatch = nowNext?.liveMatch?.takeIf { current.isLive && isNfl(it) && !spoilerNotice }
     LaunchedEffect(nflMatch?.id) {
         if (nflMatch == null) return@LaunchedEffect
         while (true) {
@@ -463,7 +463,7 @@ fun JellytipLiveTvPlayerPage(
                     }
                 }
                 // Match info (plan "Match info"): the remote's Info key, or holding OK, on a programme with a fixture
-                val matchNow = nowNext?.now?.match?.takeIf { !MatchInfoRoute.missing && !MatchHidden.hides(it.id) }
+                val matchNow = nowNext?.liveMatch?.takeIf { !MatchInfoRoute.missing && !MatchHidden.hides(it.id) }
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                 if (matchNow != null && (e.key == Key.Info || (isOk && e.nativeKeyEvent.repeatCount > 0))) {
                     matchModal = matchNow
@@ -668,7 +668,7 @@ fun JellytipLiveTvPlayerPage(
         }
         if (preCardVisible && preStartsAt != null) {
             // Broadcast pre-game card: gold tag, the start in condensed caps, the hint in Barlow
-            val pm = nowNext?.now?.match
+            val pm = nowNext?.liveMatch
             val pal = remember(pm?.id) { matchPalette(pm) }
             Row(
                 modifier =
@@ -744,7 +744,7 @@ fun JellytipLiveTvPlayerPage(
                     cu != null -> "▶  Right: back to live"
                     else -> {
                         val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
-                        val info = nowNext?.now?.match?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
+                        val info = nowNext?.liveMatch?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
                         listOfNotNull(
                             if (kick) "◀  From kick-off" else null,
                             if (panelMatch != null) "→  Live stats" else null,
