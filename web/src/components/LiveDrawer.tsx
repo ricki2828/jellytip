@@ -365,8 +365,8 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                       {d.plays.length === 0 && <p className="iptv-hint">No plays yet.</p>}
                       <ul className="ld-plays">
                         {d.plays.map((p, i) => {
-                          const k = `${p.period}${p.clock}${p.text}`;
-                          return <PlayRow key={`${k}${i}`} when={[p.period, p.clock].filter(Boolean).join(" ")} text={p.text} scoring={p.scoring} delta={p.delta} color={teamColor(p.team)} fresh={newPlays.has(k)} />;
+                          const k = p.id ?? `${p.period}${p.clock}${p.text}`;
+                          return <PlayRow key={p.id ?? `${k}${i}`} when={[p.period, p.clock].filter(Boolean).join(" ")} text={p.text} scoring={p.scoring} delta={p.delta} color={teamColor(p.team)} fresh={newPlays.has(k)} />;
                         })}
                       </ul>
                     </>

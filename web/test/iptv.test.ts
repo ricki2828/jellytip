@@ -688,7 +688,18 @@ test("live panel redesign: new fields parse, split-bar shares, sparkline, moment
   assert.deepEqual((nfl[1] as { pos: number; side: string }).pos, 66);
   const bb = situationBlocks("basketball", { quarters: [{ period: "Q1", home: 28, away: 25 }, { home: 30, away: 33 }], fouls: { home: "5", away: "3" }, run: "12-2 run" }, { home: "PHX", away: "DEN" });
   assert.equal(bb[0].kind, "grid");
-  assert.equal(bb[1].kind, "bar");
+  assert.deepEqual(bb.map((b) => b.kind), ["grid", "kv", "bar"]);
+  // pinned shape: yardLine, drive {summary}, periods, run {text, team}, equation, and any other {home, away} key as a bar
+  const nfl2 = situationBlocks("nfl", { down: "3rd", distance: 4, yardLine: "BUF 41", fieldPos: 59, possession: "away", redZone: true, drive: { summary: "7 plays, 52 yds" } }, { home: "KC", away: "BUF" });
+  assert.deepEqual((nfl2[0] as { rows: string[][] }).rows, [["Down & distance", "3rd & 4"], ["Ball on", "BUF 41"], ["Drive", "7 plays, 52 yds"]]);
+  assert.deepEqual({ ...(nfl2[1] as object) }, { kind: "field", pos: 59, side: "away", redZone: true, text: "BUF 41" });
+  const bb2 = situationBlocks("basketball", { periods: [{ home: 20, away: 22 }, { home: 25, away: 19 }], run: { text: "12-2 run", team: "home" }, fouls: { home: 5, away: 3 }, teamRebounds: { home: "3", away: "5" } }, { home: "PHX", away: "DEN" });
+  assert.deepEqual((bb2[0] as { head: string[] }).head, ["Q1", "Q2"]);
+  assert.deepEqual(bb2.map((b) => b.kind), ["grid", "kv", "bar", "bar"]);
+  assert.equal((bb2[3] as { label: string }).label, "Team Rebounds");
+  const cr2 = situationBlocks("cricket", { bowler: { name: "Bumrah", figures: "2-18", overs: "4.2" }, equation: "NZ need 41 from 30", rr: 6.1 }, { home: "NZ", away: "IND" });
+  assert.deepEqual((cr2[0] as { rows: string[][] }).rows, [["Bowling", "Bumrah 2-18 (4.2 ov)"], ["Run rate", "6.1"], ["Target", "NZ need 41 from 30"]]);
+  assert.equal(parseLive({ plays: [{ id: "p1", text: "x" }] })!.plays[0].id, "p1");
   assert.deepEqual(situationBlocks("unknown", { a: 1 }, { home: "A", away: "B" }), []);
   assert.deepEqual(situationBlocks("nfl", null, { home: "A", away: "B" }), []);
   assert.deepEqual(situationBlocks("football", { possession: { home: "58", away: "42" } }, { home: "A", away: "B" }).map((b) => b.kind), ["bar"]);

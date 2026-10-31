@@ -24,7 +24,7 @@ export interface LiveStats {
   score: { home: number; away: number } | null;
   stats: { label: string; home: string; away: string }[];
   leaders: { team: string | null; name: string; line: string; headshot: string | null }[];
-  plays: { clock: string | null; period: string | null; text: string; scoring: boolean; team: "home" | "away" | null; delta: number | null }[];
+  plays: { clock: string | null; period: string | null; text: string; scoring: boolean; team: "home" | "away" | null; delta: number | null; id: string | null }[];
   /** Sport layout key ("basketball", "nfl", "football", "rugby", "cricket") and its sport-specific `situation`. */
   layout: string | null;
   situation: Record<string, unknown> | null;
@@ -94,7 +94,7 @@ export function parseLive(raw: unknown): LiveStats | null {
       .flatMap((x) => {
         const o = obj(x);
         const text = str(o?.text);
-        return o && text ? [{ clock: str(o.clock), period: str(o.period), text, scoring: o.scoring === true, team: side(o.team), delta: num(o.delta) ?? num(o.points) }] : [];
+        return o && text ? [{ clock: str(o.clock), period: str(o.period), text, scoring: o.scoring === true, team: side(o.team), delta: num(o.delta) ?? num(o.points), id: str(o.id) }] : [];
       })
       .slice(0, 15),
     layout: str(r.layout)?.toLowerCase() ?? null,
@@ -201,75 +201,87 @@ const pair = (v: unknown): { home: string | null; away: string | null } | null =
 };
 const sideOf = (v: unknown): "home" | "away" | null => (v === "home" || v === "away" ? v : null);
 
-/** The sport-specific part of the panel from `layout` + `situation`: tolerant of missing keys; nothing for an unknown layout. */
+/** The sport-specific part of the panel from `layout` + `situation` (pinned shape: plan "/live schema, PINNED 31-Oct"): tolerant of missing
+ * keys; any other {home, away} key (fouls, possession, territory, cards…) becomes a split bar; nothing for an unknown layout. */
 export function situationBlocks(layout: string | null, s: Record<string, unknown> | null, names: { home: string; away: string }): Block[] {
   if (!layout || !s) return [];
   const out: Block[] = [];
+  const used = new Set<string>();
   const bar = (label: string, p: { home: string | null; away: string | null } | null) => {
     const sh = p ? statShare(p.home, p.away) : null;
     if (p && sh != null) out.push({ kind: "bar", label, home: sh, away: 1 - sh, homeText: p.home ?? "", awayText: p.away ?? "" });
   };
+  const take = (...keys: string[]) => {
+    keys.forEach((k) => used.add(k));
+    return keys.map((k) => sit(s, k));
+  };
   switch (layout) {
     case "nfl": {
-      const down = text(sit(s, "down"));
-      const dist = text(sit(s, "distance")) ?? text(sit(s, "ytg"));
+      const [down, distance, yardLine, fieldPosRaw, possessionRaw, redZone, drive] = take("down", "distance", "yardLine", "fieldPos", "possession", "redZone", "drive");
+      take("ballOn", "ytg");
+      const dist = text(distance) ?? text(sit(s, "ytg"));
+      const ball = text(yardLine) ?? text(sit(s, "ballOn"));
+      const driveText = typeof drive === "string" ? drive : text((drive as Record<string, unknown> | null)?.summary);
       const rows: [string, string][] = [];
-      if (down) rows.push(["Down & distance", dist ? `${down} & ${dist}` : down]);
-      const fp = sit(s, "fieldPos");
-      if (text(sit(s, "ballOn"))) rows.push(["Ball on", text(sit(s, "ballOn"))!]);
-      if (text(sit(s, "drive"))) rows.push(["Drive", text(sit(s, "drive"))!]);
+      if (text(down)) rows.push(["Down & distance", dist ? `${text(down)} & ${dist}` : text(down)!]);
+      if (ball) rows.push(["Ball on", ball]);
+      if (driveText) rows.push(["Drive", driveText]);
       if (rows.length) out.push({ kind: "kv", title: null, rows });
-      const pos = typeof fp === "number" ? fp : statNumber(text(fp));
-      if (pos != null) out.push({ kind: "field", pos: Math.max(0, Math.min(100, pos)), side: sideOf(sit(s, "possession")), redZone: sit(s, "redZone") === true, text: text(sit(s, "ballOn")) });
-      else if (sit(s, "redZone") === true) out.push({ kind: "kv", title: null, rows: [["Red zone", "Yes"]] });
+      // fieldPos is 0-100 from the home end zone
+      const pos = typeof fieldPosRaw === "number" ? fieldPosRaw : statNumber(text(fieldPosRaw));
+      if (pos != null) out.push({ kind: "field", pos: Math.max(0, Math.min(100, pos)), side: sideOf(possessionRaw), redZone: redZone === true, text: ball });
+      else if (redZone === true) out.push({ kind: "kv", title: null, rows: [["Red zone", "Yes"]] });
       break;
     }
     case "basketball": {
-      const qs = Array.isArray(sit(s, "quarters")) ? (sit(s, "quarters") as Record<string, unknown>[]) : [];
+      const [periodsRaw, quartersRaw, runRaw] = take("periods", "quarters", "run");
+      const qs = Array.isArray(periodsRaw) ? (periodsRaw as Record<string, unknown>[]) : Array.isArray(quartersRaw) ? (quartersRaw as Record<string, unknown>[]) : [];
       if (qs.length)
         out.push({
           kind: "grid",
           label: "By quarter",
-          head: qs.map((q, i) => text(q.period) ?? `Q${i + 1}`),
+          head: qs.map((q, i) => text(q.period) ?? (i < 4 ? `Q${i + 1}` : `OT${i - 3}`)),
           rows: [
             { name: names.home, cells: qs.map((q) => text(q.home) ?? "–") },
             { name: names.away, cells: qs.map((q) => text(q.away) ?? "–") },
           ],
         });
-      bar("Team fouls", pair(sit(s, "fouls")));
-      if (text(sit(s, "run"))) out.push({ kind: "kv", title: null, rows: [["Run", text(sit(s, "run"))!]] });
-      break;
-    }
-    case "football": {
-      bar("Possession", pair(sit(s, "possession")));
-      bar("Shots", pair(sit(s, "shots")));
-      bar("xG", pair(sit(s, "xg")));
-      const cards = Array.isArray(sit(s, "cards")) ? (sit(s, "cards") as unknown[]).map((c) => (typeof c === "string" ? c : text((c as Record<string, unknown>)?.label) ?? [text((c as Record<string, unknown>)?.minute), text((c as Record<string, unknown>)?.kind)].filter(Boolean).join(" "))).filter(Boolean) : [];
-      if (cards.length) out.push({ kind: "chips", label: "Cards", items: cards });
-      break;
-    }
-    case "rugby": {
-      bar("Territory", pair(sit(s, "territory")));
-      bar("Possession", pair(sit(s, "possession")));
-      bar("Penalties", pair(sit(s, "penalties")));
+      const run = typeof runRaw === "string" ? runRaw : text((runRaw as Record<string, unknown> | null)?.text);
+      if (run) out.push({ kind: "kv", title: null, rows: [["Run", run]] });
       break;
     }
     case "cricket": {
-      const bats = Array.isArray(sit(s, "batters")) ? (sit(s, "batters") as Record<string, unknown>[]) : [];
+      const [battersRaw, bowlerRaw, rr, rrr, lastBallsRaw, equation] = take("batters", "bowler", "rr", "rrr", "lastBalls", "equation");
+      const bats = Array.isArray(battersRaw) ? (battersRaw as Record<string, unknown>[]) : [];
       if (bats.length) out.push({ kind: "kv", title: "At the crease", rows: bats.flatMap((b) => (text(b.name) ? [[`${text(b.name)}${b.onStrike === true ? " *" : ""}`, `${text(b.runs) ?? "0"} (${text(b.balls) ?? "0"})`] as [string, string]] : [])) });
-      const bowler = sit(s, "bowler");
-      const bt = typeof bowler === "string" ? bowler : text((bowler as Record<string, unknown> | null)?.name) ? `${text((bowler as Record<string, unknown>).name)} ${text((bowler as Record<string, unknown>).figures) ?? ""}`.trim() : null;
+      const bo = bowlerRaw && typeof bowlerRaw === "object" ? (bowlerRaw as Record<string, unknown>) : null;
+      const bt = typeof bowlerRaw === "string" ? bowlerRaw : text(bo?.name) ? [text(bo!.name), text(bo!.figures), text(bo!.overs) ? `(${text(bo!.overs)} ov)` : null].filter(Boolean).join(" ") : null;
       const kv: [string, string][] = [];
       if (bt) kv.push(["Bowling", bt]);
-      if (text(sit(s, "rr"))) kv.push(["Run rate", text(sit(s, "rr"))!]);
-      if (text(sit(s, "rrr"))) kv.push(["Required", text(sit(s, "rrr"))!]);
+      if (text(rr)) kv.push(["Run rate", text(rr)!]);
+      if (text(rrr)) kv.push(["Required", text(rrr)!]);
+      if (text(equation)) kv.push(["Target", text(equation)!]);
       if (kv.length) out.push({ kind: "kv", title: null, rows: kv });
-      const lb = Array.isArray(sit(s, "lastBalls")) ? (sit(s, "lastBalls") as unknown[]).map(text).filter((x): x is string => !!x).slice(-6) : [];
+      const lb = Array.isArray(lastBallsRaw) ? (lastBallsRaw as unknown[]).map(text).filter((x): x is string => !!x).slice(-6) : [];
       if (lb.length) out.push({ kind: "chips", label: "Last 6 balls", items: lb });
       break;
     }
-    default:
+    case "football":
+    case "rugby":
       break;
+    default:
+      return [];
+  }
+  // Every other {home, away} key (fouls, possession, territory, shots, xG, penalties, cards…) is a split bar; football cards may be a list of chips
+  for (const [k, v] of Object.entries(s)) {
+    if (used.has(k)) continue;
+    if (k === "cards" && Array.isArray(v)) {
+      const cards = (v as unknown[]).map((c) => (typeof c === "string" ? c : text((c as Record<string, unknown>)?.label) ?? [text((c as Record<string, unknown>)?.minute), text((c as Record<string, unknown>)?.kind)].filter(Boolean).join(" "))).filter(Boolean);
+      if (cards.length) out.push({ kind: "chips", label: "Cards", items: cards });
+      continue;
+    }
+    const p = pair(v);
+    if (p) bar(k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()), p);
   }
   return out;
 }
