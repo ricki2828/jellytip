@@ -1186,3 +1186,74 @@
 .pregame-card .buttons {
   flex-wrap: wrap;
 }
+.prune-back {
+  place-items: center;
+}
+.livetv-sheet.prune {
+  width: min(720px, 100%);
+  max-height: calc(100% - 24px);
+  margin: 12px 0;
+}
+.prune-list {
+  position: relative;
+  height: min(52vh, 480px);
+  overflow-y: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.prune-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.prune-row.on {
+  background: rgba(255, 255, 255, 0.1);
+}
+.prune-row.hid .prune-name {
+  opacity: 0.5;
+}
+.prune-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prune-badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.prune-badge.yes {
+  background: rgba(47, 143, 91, 0.45);
+}
+.prune-badge.sometimes {
+  background: rgba(217, 138, 28, 0.4);
+}
+.prune-hidden {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+}
+.prune-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  background: #151515;
+}
+.prune-bar .spacer {
+  flex: 1;
+}
+.iptv-chan-link {
+  margin-left: 8px;
+  font-size: 12px;
+}

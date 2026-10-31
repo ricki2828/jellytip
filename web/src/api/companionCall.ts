@@ -5,7 +5,7 @@ import { getSession } from "./jellyfin";
 import { COMPANION_BASE } from "./companion";
 import { isNative } from "../lib/native";
 
-export type Method = "GET" | "POST" | "PATCH" | "DELETE";
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface Reply {
   /** 0 = unreachable, 401 = signed out. */

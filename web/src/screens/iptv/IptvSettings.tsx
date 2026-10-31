@@ -8,6 +8,7 @@ import {
   deleteProvider,
   editProvider,
   errorText,
+  groupChannels,
   iptvChanged,
   iptvGet,
   optCategories,
@@ -25,6 +26,7 @@ import {
 } from "../../api/iptv";
 import { getSession } from "../../api/jellyfin";
 import { normaliseServer, normaliseWebUrl, parseProviderLink } from "../../lib/providerLink";
+import { ChannelPrune } from "./ChannelPrune";
 import { Recordings } from "./Recordings";
 import "./iptv.css";
 
@@ -227,6 +229,10 @@ function Groups({ p, onSaved }: { p: Provider; onSaved: () => void }) {
   const [pending, setPending] = useState<Record<CatType, Record<string, boolean>>>({ live: {}, vod: {}, series: {} });
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Channel pruning: the group being edited, per-group counts once known, and whether the server has the route (null = not asked)
+  const [prune, setPrune] = useState<Category | null>(null);
+  const [stats, setStats] = useState<Record<string, { total: number; hidden: number }>>({});
+  const [pruneOk, setPruneOk] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     const a = await getCategories(p.id, type, q.trim());
@@ -241,6 +247,22 @@ function Groups({ p, onSaved }: { p: Provider; onSaved: () => void }) {
     const t = setTimeout(load, q ? 300 : 0);
     return () => clearTimeout(t);
   }, [load, q]);
+
+  // Hide the Channels links when the server has no such route: one probe on the first picked live group
+  useEffect(() => {
+    if (type !== "live" || pruneOk !== null || !list || !p.owner) return;
+    const first = list.categories.find((c) => c.opted);
+    if (!first) return;
+    let alive = true;
+    void groupChannels(p.id, first.id).then((a) => {
+      if (!alive) return;
+      setPruneOk(a !== "missing");
+      if (a !== "missing" && "list" in a) setStats((m) => ({ ...m, [String(first.id)]: { total: a.list.channels.length, hidden: a.list.channels.filter((x) => x.hidden).length } }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [type, pruneOk, list, p.id, p.owner]);
 
   const opted = (c: Category) => pending[type][String(c.id)] ?? c.opted;
   const set = (cs: Category[], on: boolean) =>
@@ -323,9 +345,23 @@ function Groups({ p, onSaved }: { p: Provider; onSaved: () => void }) {
               {c.lang !== "en" && <span className={`iptv-lang ${c.lang}`}>{c.lang === "foreign" ? "other language" : "language?"}</span>}
               <span className="iptv-cat-count">{n(c.count)}</span>
             </label>
+            {type === "live" && c.opted && pruneOk !== false && p.owner && (
+              <button className="link iptv-chan-link" data-nav onClick={() => setPrune(c)}>
+                Channels{stats[String(c.id)] ? ` (${stats[String(c.id)].total} · ${stats[String(c.id)].hidden} hidden)` : ""}
+              </button>
+            )}
           </li>
         ))}
       </ul>
+      {prune && (
+        <ChannelPrune
+          pid={p.id}
+          catId={prune.id}
+          name={prune.name}
+          onClose={() => setPrune(null)}
+          onStats={(st) => setStats((m) => ({ ...m, [String(prune.id)]: st }))}
+        />
+      )}
       {list && shown.length === 0 && <p className="iptv-hint">{q ? "No groups match." : "No groups yet: the lists are still being fetched."}</p>}
       {hidden.length > 0 && (
         <button className="link" data-nav onClick={() => setShowAll(true)}>

@@ -351,3 +351,36 @@ test("collections hub: optional art fields", () => {
   assert.deepEqual(c.person, { id: "b".repeat(32), imageTag: "t" });
   assert.equal(c.mediaType, "movie");
 });
+
+import { counts, filterChannels, parsePrune, sportBadge, windowSlice, withHidden } from "../src/lib/channelPrune.ts";
+
+test("channel pruning: parse, filter, badges, bulk hide, window", () => {
+  const l = parsePrune({
+    policy: "sports",
+    channels: [
+      { sid: 1, name: "ESPN", sports: "yes", sportShare: 0.82, hidden: false },
+      { sid: 2, name: "TLC", sports: "no", hidden: true },
+      { sid: 3, name: "FX", sports: "sometimes", sportShare: 0.05, lastSport: "NFL", hidden: false },
+      { sid: 4, name: "Local 9", sports: "weird" },
+      { name: "no sid" },
+      { sid: 1, name: "dup" },
+    ],
+  })!;
+  assert.equal(l.policy, "sports");
+  assert.deepEqual(l.channels.map((c) => c.sid), ["1", "2", "3", "4"]);
+  assert.equal(l.channels[3].sports, "unknown");
+  assert.deepEqual(counts(l.channels), { total: 4, hidden: 1 });
+  assert.deepEqual(filterChannels(l.channels, "", "hidden").map((c) => c.name), ["TLC"]);
+  assert.deepEqual(filterChannels(l.channels, "es", "all").map((c) => c.name), ["ESPN"]);
+  assert.deepEqual(filterChannels(l.channels, "", "sometimes").map((c) => c.name), ["FX"]);
+  assert.equal(sportBadge(l.channels[0]), "Sport 82%");
+  assert.equal(sportBadge(l.channels[2]), "Sometimes · NFL last week");
+  assert.equal(sportBadge(l.channels[1]), "No sport");
+  assert.equal(sportBadge(l.channels[3]), "Not known");
+  assert.equal(withHidden(l.channels, new Set(["1"]), true)[0].hidden, true);
+  assert.equal(parsePrune({ channels: [] })?.policy, null);
+  assert.equal(parsePrune(null), null);
+  assert.deepEqual(windowSlice(0, 400, 50, 1000), { from: 0, to: 16 });
+  assert.deepEqual(windowSlice(5000, 400, 50, 1000), { from: 92, to: 116 });
+  assert.deepEqual(windowSlice(49_900, 400, 50, 1000), { from: 990, to: 1000 });
+});

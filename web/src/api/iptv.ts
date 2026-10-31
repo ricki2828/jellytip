@@ -4,6 +4,7 @@ import { getSession } from "./jellyfin";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
+import { parsePrune, type Policy, type PruneList } from "../lib/channelPrune";
 import { parseCredits, parseVodDetail, type VodDetail, type VodItem } from "../lib/iptvVod";
 import { parseContinue, type ContinueEntry } from "../lib/continue";
 import { parseOnNow, type OnNow } from "../lib/onNow";
@@ -354,4 +355,22 @@ export async function iptvNext(): Promise<ContinueEntry[]> {
 export async function personCredits(jellyfinPersonId: string): Promise<{ iptvItems: VodItem[]; pending: boolean } | null> {
   const a = await companionCall("GET", `v1/people/${encodeURIComponent(jellyfinPersonId)}/credits`);
   return a.status === 200 ? parseCredits(a.data) : null;
+}
+
+// ---------- channel pruning inside a group ----------
+
+/** A group's channels with sport levels and hidden flags; "missing" when the server has no such route. */
+export async function groupChannels(pid: string | number, catId: string | number): Promise<{ list: PruneList } | "missing" | { error: string }> {
+  const a = await companionCall("GET", `v1/iptv/providers/${pid}/groups/${encodeURIComponent(String(catId))}/channels`);
+  if (a.status === 404) return "missing";
+  const list = a.status === 200 ? parsePrune(a.data) : null;
+  return list ? { list } : { error: a.status === 0 ? "The server can't be reached." : `Server said ${a.status}` };
+}
+
+/** Bulk hide / show (≤ 5,000) and / or the group's policy; returns an error text or null. */
+export async function saveGroupChannels(pid: string | number, catId: string | number, body: { hide?: Record<string, boolean>; policy?: Policy }): Promise<string | null> {
+  const a = await companionCall("PUT", `v1/iptv/providers/${pid}/groups/${encodeURIComponent(String(catId))}/channels`, body);
+  if (a.status === 200 || a.status === 204) return null;
+  const e = a.data && typeof a.data === "object" ? (a.data as { error?: unknown }).error : null;
+  return typeof e === "string" && e ? e : a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`;
 }
