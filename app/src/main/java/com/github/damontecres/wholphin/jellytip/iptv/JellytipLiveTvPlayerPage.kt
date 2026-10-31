@@ -264,7 +264,7 @@ fun JellytipLiveTvPlayerPage(
     val panelMatch = nowNext?.liveMatch?.takeIf { current.isLive && !it.replay && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
-    val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights") && me?.sportSpoilers != true
+    val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights" || nowNext?.liveMatch?.replay == true) && me?.sportSpoilers != true
     androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
     // Top-right toasts shared by market flips and fantasy scoring (plan "fantasy alerts"): one at a time, 6 s each, at
     // most 3 waiting (the oldest waiting one is dropped)
@@ -815,7 +815,7 @@ private fun NowNextBanner(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
                 val p = nn?.now
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (!catchUp) KindPill(p?.kind)
+                    if (!catchUp) KindPill(p?.shownKind)
                     if (ch.sport == true || p?.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.75f), 14.dp)
                     Text(
                         text = listOfNotNull(ch.num?.toString(), ch.name, if (catchUp) "Catch-up" else null).joinToString("  "),

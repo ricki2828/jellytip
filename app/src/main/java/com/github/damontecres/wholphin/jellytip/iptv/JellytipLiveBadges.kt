@@ -46,9 +46,15 @@ fun KindPill(
 ) {
     when {
         kind == "live" || (kind == null && legacyLive) -> Pill("LIVE", Color.White, JellytipPalette.Jelly)
-        kind == "replay" || kind == "highlights" -> Pill("REPLAY", Color.White.copy(alpha = 0.9f), Color(0xFF6B6B6B))
+        // Broadcast (plan "In-match visual direction"): condensed caps on slate
+        kind == "replay" || kind == "highlights" ->
+            Cond("Replay", 11.sp, Color.White, modifier = Modifier.background(Broadcast.Loss, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp), tracking = 0.06f)
     }
 }
+
+/** The programme's kind, with an identified game being re-aired (`matchInfo.replay`) as "replay". */
+val IptvProg.shownKind: String?
+    get() = if (match?.replay == true) "replay" else kind
 
 /** Small "identified" mark: the matchup came from the fixtures, the listing didn't name it (plan "Match info"). */
 @Composable

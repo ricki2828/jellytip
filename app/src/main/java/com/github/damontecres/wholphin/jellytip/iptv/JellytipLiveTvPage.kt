@@ -1086,7 +1086,7 @@ private fun FocusInfo(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (prog?.kind != "live" || prog?.isOn(now) == true) KindPill(prog?.kind)
+            if (prog?.kind != "live" || prog?.isOn(now) == true) KindPill(prog?.shownKind)
             if (ch?.sport == true || prog?.sport == true) SportMark(JellytipPalette.Vanilla.copy(alpha = 0.7f), 13.dp)
             Text(
                 text = listOfNotNull(ch?.num?.toString(), ch?.name, ch?.let { alsoOnText((it.alternates + it.alternateChannels.map { a -> a.id }).distinct().size) }).joinToString("  "),
@@ -1244,7 +1244,7 @@ private fun ProgCell(
         ) {
             if (recorded) Box(Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
             // LIVE only while it is on; REPLAY whenever the server says so
-            if (prog.kind != "live" || onNow) KindPill(prog.kind)
+            if (prog.kind != "live" || onNow) KindPill(prog.shownKind)
             Text(
                 text = (if (catchUp) "↺ " else "") + prog.title.ifEmpty { note ?: "No guide information" },
                 fontFamily = JellytipFontFamily,
