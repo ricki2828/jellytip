@@ -92,6 +92,12 @@ export interface JellytipPlayerPlugin {
     /** The programme on now (epoch s): enables the "From kick-off" button. */
     programmeStart?: number;
     programmeStop?: number;
+    /** Pre-game (plan live-sport "Pinned 31-Oct (native phone player)"): "pre" shows the pre-game card until startsAt. */
+    phase?: "pre" | "live" | "post" | null;
+    /** The event's real start, ISO UTC (e.g. "2026-10-31T18:00:00Z"). */
+    startsAt?: string | null;
+    /** Channels offered by the card's "Other channels" (falls back to `alternates`). */
+    altChannels?: { id: string; name: string }[];
   }): Promise<NativePlayerResult>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
@@ -105,6 +111,11 @@ export interface JellytipPlayerPlugin {
     event: "needUrl",
     cb: (e: { requestId: number; reason: "failover" | "kickoff" | "live"; channelId: string; start?: number; stop?: number }) => void,
   ): Promise<{ remove: () => Promise<void> }>;
+  /**
+   * Pre-game card buttons: "remind" (channelId = the channel playing) or "channel" (channelId = the one picked from
+   * Other channels). The web app sets the reminder / switches (e.g. closes and reopens on that channel).
+   */
+  addListener(event: "pregameAction", cb: (e: { action: "remind" | "channel"; channelId?: string }) => void): Promise<{ remove: () => Promise<void> }>;
   /** Diagnostic: the player switched channel ({from, to, why}). */
   addListener(event: "failover", cb: (e: { from: string; to: string; why: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }

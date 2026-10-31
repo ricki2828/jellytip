@@ -61,6 +61,22 @@ public class PlayerPlugin extends Plugin {
         i.putExtra(PlayerActivity.EXTRA_ALT_NAMES, names.toArray(new String[0]));
         i.putExtra(PlayerActivity.EXTRA_PROG_START, call.getLong("programmeStart", 0L));
         i.putExtra(PlayerActivity.EXTRA_PROG_STOP, call.getLong("programmeStop", 0L));
+        // Pre-game (plan live-sport "Pinned 31-Oct (native phone player)"): phase, startsAt (ISO UTC), altChannels
+        i.putExtra(PlayerActivity.EXTRA_PHASE, call.getString("phase"));
+        i.putExtra(PlayerActivity.EXTRA_STARTS_AT, isoMs(call.getString("startsAt")));
+        if (call.getData().has("altChannels")) {
+            JSArray pre = call.getArray("altChannels", new JSArray());
+            java.util.List<String> pIds = new java.util.ArrayList<>();
+            java.util.List<String> pNames = new java.util.ArrayList<>();
+            for (int k = 0; k < pre.length(); k++) {
+                org.json.JSONObject a = pre.optJSONObject(k);
+                if (a == null || a.optString("id").isEmpty()) continue;
+                pIds.add(a.optString("id"));
+                pNames.add(a.optString("name", a.optString("id")));
+            }
+            i.putExtra(PlayerActivity.EXTRA_PRE_ALT_IDS, pIds.toArray(new String[0]));
+            i.putExtra(PlayerActivity.EXTRA_PRE_ALT_NAMES, pNames.toArray(new String[0]));
+        }
         startActivityForResult(call, i, "onPlayerClosed");
     }
 
@@ -114,6 +130,24 @@ public class PlayerPlugin extends Plugin {
     /** From the player activity: a JS event ("progress", "playerError", "needUrl", "failover"). */
     void emit(String event, JSObject data) {
         notifyListeners(event, data);
+    }
+
+    /** ISO-8601 ("2026-10-31T18:00:00Z", offsets allowed) or epoch seconds -> epoch ms; 0 when absent or unreadable. */
+    private static long isoMs(String v) {
+        if (v == null || v.isEmpty()) return 0L;
+        try {
+            return Long.parseLong(v) * 1000L;
+        } catch (NumberFormatException ignored) {
+            // ISO below
+        }
+        // minSdk 24: no java.time; "2026-10-31T18:00:00Z" / "...+01:00", fractional seconds dropped
+        String t = v.replaceAll("\\.\\d+", "").replaceAll("Z$", "+00:00");
+        try {
+            java.util.Date d = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).parse(t);
+            return d == null ? 0L : d.getTime();
+        } catch (java.text.ParseException e) {
+            return 0L;
+        }
     }
 
     private static String stringOr(String s, String fallback) {

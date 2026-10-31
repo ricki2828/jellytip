@@ -63,6 +63,10 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_PROG_START = "programmeStart";
     static final String EXTRA_PROG_STOP = "programmeStop";
     static final String RESULT_CHANNEL_ID = "channelId";
+    static final String EXTRA_PHASE = "phase";
+    static final String EXTRA_STARTS_AT = "startsAt";
+    static final String EXTRA_PRE_ALT_IDS = "preAltIds";
+    static final String EXTRA_PRE_ALT_NAMES = "preAltNames";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -77,6 +81,7 @@ public class PlayerActivity extends AppCompatActivity {
     private static final long NOTE_MS = 6_000;
     private static final long STALL_MS = 10_000;
     private static final long UNLOCK_ROTATION_MS = 1_500;
+    private static final long PRE_CARD_MS = 10_000;
     private static final long URL_TIMEOUT_MS = 15_000;
     private static final long SEEK_BACK_MS = 10_000;
     private static final long SEEK_FORWARD_MS = 30_000;
@@ -100,6 +105,11 @@ public class PlayerActivity extends AppCompatActivity {
     /** Watching the programme on now from its start (a catch-up link); "Back to live" returns. */
     private boolean fromKickOff;
     private TextView kickOffButton;
+    /** Pre-game (plan "Pre-game state"): the event's real start (epoch ms) while the channel shows a holding screen. */
+    private long startsAtMs;
+    private android.widget.LinearLayout preCard;
+    private TextView preText;
+    private final java.util.List<String[]> preChannels = new java.util.ArrayList<>(); // {id, name}
     private long stalledSince;
     private int requestSeq;
     private final java.util.Map<Integer, UrlCallback> pending = new java.util.HashMap<>();
@@ -197,9 +207,21 @@ public class PlayerActivity extends AppCompatActivity {
             root.addView(kickOffButton, lp);
             overlays.add(kickOffButton);
         }
+        // Pre-game: a card bottom-left until the event starts; hides after 10 s, any tap brings it back
+        String phase = in.getStringExtra(EXTRA_PHASE);
+        startsAtMs = in.getLongExtra(EXTRA_STARTS_AT, 0L);
+        String[] preIds = in.getStringArrayExtra(EXTRA_PRE_ALT_IDS);
+        String[] preNames = in.getStringArrayExtra(EXTRA_PRE_ALT_NAMES);
+        if (preIds != null) {
+            for (int k = 0; k < preIds.length; k++) preChannels.add(new String[] {preIds[k], preNames != null && k < preNames.length ? preNames[k] : preIds[k]});
+        } else {
+            preChannels.addAll(alternates);
+        }
+        if ("pre".equals(phase) && startsAtMs > System.currentTimeMillis()) addPreGameCard(root);
         view.setControllerVisibilityListener(
             (PlayerView.ControllerVisibilityListener) visibility -> {
                 for (View o : overlays) o.setVisibility(visibility);
+                if (visibility == View.VISIBLE) showPreCard();
             }
         );
 
@@ -528,6 +550,85 @@ public class PlayerActivity extends AppCompatActivity {
         } catch (org.json.JSONException ignored) {
             // diagnostic only
         }
+    }
+
+    private void addPreGameCard(FrameLayout root) {
+        preCard = new android.widget.LinearLayout(this);
+        preCard.setOrientation(android.widget.LinearLayout.VERTICAL);
+        preCard.setBackgroundColor(0xD9000000);
+        preCard.setPadding(dp(16), dp(12), dp(16), dp(12));
+        preText = new TextView(this);
+        preText.setTextColor(Color.WHITE);
+        preText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        preCard.addView(preText);
+        android.widget.LinearLayout buttons = new android.widget.LinearLayout(this);
+        buttons.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        buttons.setPadding(0, dp(10), 0, 0);
+        TextView remind = pill("Remind me", 0xCC444444);
+        remind.setOnClickListener(v -> preGameAction("remind", null));
+        buttons.addView(remind);
+        if (!preChannels.isEmpty()) {
+            TextView others = pill("Other channels", 0xCC444444);
+            android.widget.LinearLayout.LayoutParams olp = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            olp.leftMargin = dp(10);
+            others.setOnClickListener(v -> pickOtherChannel());
+            buttons.addView(others, olp);
+        }
+        preCard.addView(buttons);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+        lp.leftMargin = dp(24);
+        lp.bottomMargin = dp(88);
+        root.addView(preCard, lp);
+        showPreCard();
+        // "Started" at the real start
+        handler.postDelayed(
+            () -> {
+                if (closing) return;
+                hidePreCard();
+                preCard = null;
+                android.widget.Toast.makeText(this, "Started", android.widget.Toast.LENGTH_SHORT).show();
+            },
+            Math.max(0, startsAtMs - System.currentTimeMillis())
+        );
+    }
+
+    private final Runnable hidePre = this::hidePreCard;
+
+    private void showPreCard() {
+        if (preCard == null) return;
+        long now = System.currentTimeMillis();
+        if (startsAtMs <= now) return;
+        long mins = (startsAtMs - now + 59_999) / 60_000;
+        String in = mins < 60 ? "in " + mins + " min" : "in " + (mins / 60) + "h" + (mins % 60 > 0 ? " " + (mins % 60) + "m" : "");
+        String at = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(new java.util.Date(startsAtMs));
+        preText.setText("Pre-game \u2014 the event starts at " + at + " (" + in + ")");
+        preCard.setVisibility(View.VISIBLE);
+        handler.removeCallbacks(hidePre);
+        handler.postDelayed(hidePre, PRE_CARD_MS);
+    }
+
+    private void hidePreCard() {
+        if (preCard != null) preCard.setVisibility(View.GONE);
+    }
+
+    private void pickOtherChannel() {
+        String[] names = new String[preChannels.size()];
+        for (int k = 0; k < names.length; k++) names[k] = preChannels.get(k)[1];
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Other channels")
+            .setItems(names, (d, which) -> preGameAction("channel", preChannels.get(which)[0]))
+            .show();
+    }
+
+    /** Back to the web app: `pregameAction {action: remind | channel, channelId?}`. */
+    private void preGameAction(String action, String forChannel) {
+        PlayerPlugin p = PlayerPlugin.current;
+        if (p == null) return;
+        JSObject o = new JSObject();
+        o.put("action", action);
+        if (forChannel != null) o.put("channelId", forChannel);
+        else if (channelId != null) o.put("channelId", channelId);
+        p.emit("pregameAction", o);
     }
 
     private TextView pill(String text, int background) {
