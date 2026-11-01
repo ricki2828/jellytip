@@ -322,7 +322,7 @@ fun rememberLiveSportOnNow(viewModel: JellytipOnNowViewModel = hiltViewModel()):
     val loaded by produceState(initial) {
         value = viewModel.service.onNow().sportOnly()
     }
-    return loaded
+    return loaded.takeIf { JellytipIptvState.rememberHasIptv() }
 }
 
 /** At least two live sport channels, or nothing. */

@@ -104,7 +104,7 @@ fun rememberHomeRecordings(viewModel: JellytipRecordingsHomeViewModel = hiltView
             delay(REFRESH_MS)
         }
     }
-    return loaded
+    return loaded.takeIf { JellytipIptvState.rememberHasIptv() }
 }
 
 private const val REFRESH_MS = 60_000L

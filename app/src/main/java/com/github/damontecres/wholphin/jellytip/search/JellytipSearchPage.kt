@@ -253,6 +253,7 @@ private fun SearchContent(
     viewModel: JellytipSearchViewModel,
     modifier: Modifier,
 ) {
+    val hasIptv = com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.rememberHasIptv()
     val boxFocus = remember { FocusRequester() }
     var typing by remember { mutableStateOf(false) }
     var resultsTouched by remember { mutableStateOf(false) }
@@ -335,8 +336,8 @@ private fun SearchContent(
                     // Live TV (plan "E"): "Live & upcoming" first for a sport / league / team query, else after the top hit and
                     // library rows; "Channels" right after it
                     fun liveRows() {
-                        if (answer.live.isNotEmpty()) item(key = "${answer.q}:live") { SearchLiveRow(answer.live, onOpened = { viewModel.opened("live") }) }
-                        if (answer.channels.isNotEmpty()) item(key = "${answer.q}:channels") { SearchChannelsRow(answer.channels, onOpened = { viewModel.opened("channel") }) }
+                        if (answer.live.isNotEmpty() && hasIptv) item(key = "${answer.q}:live") { SearchLiveRow(answer.live, onOpened = { viewModel.opened("live") }) }
+                        if (answer.channels.isNotEmpty() && hasIptv) item(key = "${answer.q}:channels") { SearchChannelsRow(answer.channels, onOpened = { viewModel.opened("channel") }) }
                     }
                     if (answer.liveFirst) liveRows()
                     if (answer.results != null) {

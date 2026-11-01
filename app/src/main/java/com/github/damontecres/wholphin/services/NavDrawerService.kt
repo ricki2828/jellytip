@@ -76,6 +76,7 @@ class NavDrawerService
                     if (user != null && userDto != null && user.id == userDto.id) {
                         updateNavDrawer(user, userDto, discoverActive)
                     } else {
+                        com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value = null
                         _state.update { NavDrawerItemState() }
                     }
                 } catch (ex: CancellationException) {
@@ -211,7 +212,7 @@ class NavDrawerService
             // Jellytip: "Live TV" right after Movies/Shows, only when the person has opted-in IPTV channels
             // Unknown (slow or failed check) = hidden; a late "yes" rebuilds the drawer once
             val liveTv =
-                kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv() } == true
+                kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv(force = true) } == true
             if (!liveTv && !retryingLiveTv) {
                 retryingLiveTv = true
                 coroutineScope.launchDefault {

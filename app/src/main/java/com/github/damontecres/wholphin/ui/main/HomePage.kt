@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -458,6 +459,7 @@ fun HomePageContent(
     val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
     val headerItem = if (specialFocus?.showHeader == false) null else focusedItem
 
+    val currentFocusedEntry by rememberUpdatedState(focusedEntry)
     val focusedKey = entries.getOrNull(focusedEntry)?.key
     val currentFocusedKey by rememberUpdatedState(focusedKey)
     val currentHasFocus by rememberUpdatedState(hasFocus)
@@ -583,6 +585,7 @@ fun HomePageContent(
     }
     DisposableEffect(Unit) { onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(null) } }
 
+    val heroButtonsRequester = remember { FocusRequester() }
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
 
@@ -667,7 +670,16 @@ fun HomePageContent(
                         }
                     }.fillMaxSize(),
         ) {
-            Box {
+            Box(
+                modifier =
+                    Modifier.layout { measurable, constraints ->
+                        // Under a tab bar (Movies/Shows) the page is shorter than Home: the header gives way so the
+                        // special / poster rows below keep the room they need (Tonight's pick was cut off at the bottom)
+                        val cap = (constraints.maxHeight - HOME_ROWS_MIN_HEIGHT.roundToPx()).coerceAtLeast(0)
+                        val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = minOf(constraints.maxHeight, cap)))
+                        layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+                    },
+            ) {
                 headerComposable.invoke(heroHeaderItem)
                 // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
                 val heroPlayItem = heroHeaderItem
@@ -703,6 +715,7 @@ fun HomePageContent(
                                 .align(Alignment.BottomEnd)
                                 .padding(end = 48.dp, bottom = 6.dp)
                                 .graphicsLayer { alpha = heroButtonsAlpha }
+                                .focusRequester(heroButtonsRequester)
                                 .onFocusChanged { heroButtonsFocused = it.hasFocus }
                                 .focusGroup()
                                 .focusProperties {
@@ -714,6 +727,7 @@ fun HomePageContent(
                 }
             }
 
+            val heroButtonsShown = LocalJellytipHome.current && heroComposable != null && heroHeaderItem != null
             val density = LocalDensity.current
             val spaceAbovePx =
                 remember(density) {
@@ -752,7 +766,10 @@ fun HomePageContent(
                         ),
                     modifier =
                         Modifier
-                            .focusRequester(anyRowFocus)
+                            .focusProperties {
+                                // Up from the top row goes to the hero buttons (not left into the nav rail)
+                                if (heroButtonsShown && currentFocusedEntry <= 0) up = heroButtonsRequester
+                            }.focusRequester(anyRowFocus)
                             .focusRestorer(),
                 ) {
                     items(count = entries.size, key = { entries[it].key }) { entryIndex ->
@@ -1337,3 +1354,6 @@ fun HomePageViewMoreCard(
 
 /** Jellytip: hero/text block lag behind focus by this much (fast scrolling skips the tiles in between). */
 private const val HERO_DEBOUNCE_MS = 150L
+
+/** Room the rows under the hero need (title + the tallest special card + focus zoom + spacing); the Home layout leaves exactly this. */
+private val HOME_ROWS_MIN_HEIGHT = 238.dp

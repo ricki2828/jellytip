@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip.iptv
 import android.annotation.SuppressLint
 import android.content.Context
 import android.provider.Settings
+import androidx.compose.runtime.collectAsState
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,11 +61,15 @@ class JellytipIptvService
         /** "Live TV" in the sidebar only when the person has opted-in channels (asked at most every 10 minutes). */
         suspend fun hasLiveTv(force: Boolean = false): Boolean {
             val cached = liveCheck
-            if (!force && cached != null && System.currentTimeMillis() - cached.first < LIVE_CHECK_TTL_MS) return cached.second
+            if (!force && cached != null && System.currentTimeMillis() - cached.first < LIVE_CHECK_TTL_MS) {
+                JellytipIptvState.hasIptv.value = cached.second
+                return cached.second
+            }
             // IPTV configured = the person has a provider (empty list / 403 disabled|no_user / failure = none), or opted-in channels
             val hasProvider = ownProviderIds()?.isNotEmpty() == true
             val has = hasProvider || groups()?.any { it.id != FAV && it.count > 0 } == true
             liveCheck = System.currentTimeMillis() to has
+            JellytipIptvState.hasIptv.value = has
             return has
         }
 
@@ -332,3 +337,12 @@ class JellytipIptvService
             private const val UPCOMING_TTL_MS = 10 * 60_000L
         }
     }
+
+/** One source of truth for "this person has IPTV" (null = not known yet = hide every live-sport / Live TV entry). */
+object JellytipIptvState {
+    val hasIptv = kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null)
+
+    /** Composable read: true only once known to be true. */
+    @androidx.compose.runtime.Composable
+    fun rememberHasIptv(): Boolean = hasIptv.collectAsState().value == true
+}

@@ -108,7 +108,7 @@ fun rememberUpcomingSport(viewModel: JellytipUpcomingSportViewModel = hiltViewMo
     val loaded by produceState(initial) {
         viewModel.service.upcoming()?.let { value = it.takeIf { l -> l.isNotEmpty() } }
     }
-    return loaded
+    return loaded.takeIf { JellytipIptvState.rememberHasIptv() }
 }
 
 /** Home: "Coming up in sport", favourites first (server order). */
@@ -201,7 +201,8 @@ fun rememberReminders(viewModel: JellytipUpcomingSportViewModel = hiltViewModel(
     LaunchedEffect(Unit) { viewModel.reminders.start() }
     val on by viewModel.reminders.available.collectAsState()
     val items by viewModel.reminders.items.collectAsState()
-    return items?.takeIf { on == true && it.isNotEmpty() }
+    val hasIptv = JellytipIptvState.rememberHasIptv()
+    return items?.takeIf { hasIptv && on == true && it.isNotEmpty() }
 }
 
 @Composable
