@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFantasy } from "../api/fantasy";
 import { getSession, logout } from "../api/jellyfin";
 import { go, isRootRoute, systemBack } from "../lib/router";
 import { isNative } from "../lib/native";
@@ -72,6 +73,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M5 19.5h14" />
     </>
   ),
+  fantasy: (
+    <>
+      <path d="M4 16c1.5-6 7-11 16-12-1 9-6 14.5-12 16-2-1-3-2-4-4Z" />
+      <path d="m9 13 4 4m-2-6 4 4m-2-6 4 4" />
+    </>
+  ),
 };
 
 const LINKS: [string, string][] = [
@@ -87,6 +94,8 @@ export function Nav({ current }: { current: string }) {
   const s = getSession();
   // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
   const liveTv = useLiveTv();
+  const fantasy = useFantasy(true, true);
+  const fantasyLinked = !!(fantasy?.providers.yahoo.linked || fantasy?.providers.sleeper.linked || fantasy?.leagues.length);
   // Recordings: a link once there are any, with the count of ready, unwatched ones
   const recs = useRecs();
   const hasRecs = !!recs && shown(recs).length > 0;
@@ -106,7 +115,7 @@ export function Nav({ current }: { current: string }) {
     };
   }, []);
   const hasHub = (hubNow()?.length ?? 0) > 0;
-  const links: [string, string][] = [...LINKS, ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -188,7 +197,7 @@ export function Nav({ current }: { current: string }) {
       </div>
       {/* Phone: the same links as a bottom tab bar (shown by the phone media query only) */}
       <div className="tabbar" role="tablist">
-        {LINKS.map(([k, label]) => (
+        {[...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : [])].map(([k, label]) => (
           <a key={k} href={`#/${k}`} role="tab" aria-selected={current === k} className={current === k ? "active" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden>
               {ICONS[k]}

@@ -47,6 +47,7 @@ export function parseHash(hash: string): Route {
       // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
       return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };
     case "settings":
+    case "fantasy":
     case "taste":
     case "livetv":
     case "recordings":

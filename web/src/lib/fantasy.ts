@@ -16,6 +16,7 @@ export interface Starter {
 export interface FantasyLeague {
   id: string;
   name: string;
+  source?: "sleeper" | "yahoo" | "unknown";
   me: { team: string; points: number; projected: number | null };
   opp: { team: string; points: number };
   starters: Starter[];
@@ -34,7 +35,7 @@ export interface FantasyEvent {
 export interface FantasyProviders {
   sleeper: { linked: boolean };
   /** available: the server has a Yahoo app configured; linked: this person connected their Yahoo account. */
-  yahoo: { available: boolean; linked: boolean };
+  yahoo: { available: boolean; linked: boolean; status?: "ready" | "approval_required" | "reconnect" | "unavailable" | "unconfigured" };
 }
 
 export interface FantasyLive {
@@ -48,6 +49,12 @@ export interface FantasyLive {
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const str = (v: unknown) => (typeof v === "string" && v ? v : typeof v === "number" ? String(v) : null);
 const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
+const timestamp = (v: unknown) => {
+  if (typeof v === "number") return isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+  const ms = Date.parse(v);
+  return isFinite(ms) ? ms / 1000 : null;
+};
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 export function parseStarters(raw: unknown): Starter[] {
@@ -83,6 +90,7 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
     leagues.push({
       id,
       name: str(o.name) ?? id,
+      source: o.source === "yahoo" || o.source === "sleeper" ? o.source : "unknown",
       me: { team: str(me.team) ?? "You", points: num(me.points) ?? 0, projected: num(me.projected) },
       opp: { team: str(opp.team) ?? "Opponent", points: num(opp.points) ?? 0 },
       starters: parseStarters(o.starters),
@@ -90,7 +98,7 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
   }
   const events = arr(r.events).flatMap((x) => {
     const o = obj(x);
-    const at = num(o?.at);
+    const at = timestamp(o?.at);
     const name = str(o?.name);
     const delta = num(o?.delta);
     return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me", reason: str(o.reason) } as FantasyEvent] : [];
@@ -98,9 +106,9 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
   const pv = obj(r.providers);
   const providers: FantasyProviders = {
     sleeper: { linked: obj(pv?.sleeper)?.linked === true },
-    yahoo: { available: obj(pv?.yahoo)?.available === true, linked: obj(pv?.yahoo)?.linked === true },
+    yahoo: { available: obj(pv?.yahoo)?.available === true, linked: obj(pv?.yahoo)?.linked === true, ...(yahooStatus(obj(pv?.yahoo)?.status) ? { status: yahooStatus(obj(pv?.yahoo)?.status) } : {}) },
   };
-  return { providers, week: num(r.week), leagues, events, updatedAt: num(r.updatedAt) };
+  return { providers, week: num(r.week), leagues, events, updatedAt: timestamp(r.updatedAt) };
 }
 
 /** "CCP Dynasty" → "CCP"; "Fantasy" → "Fantasy". */
@@ -166,3 +174,7 @@ export function eventParts(e: FantasyEvent, live: FantasyLive): { kicker: string
 
 /** RedZone (a whip-around): my starters playing right now, across every game. */
 export const mineLive = (live: FantasyLive | null): number => (live ? live.leagues.reduce((n, l) => n + l.starters.filter((s) => s.side === "me" && s.gameState === "in").length, 0) : 0);
+
+function yahooStatus(value: unknown): FantasyProviders["yahoo"]["status"] {
+  return value === "ready" || value === "approval_required" || value === "reconnect" || value === "unavailable" || value === "unconfigured" ? value : undefined;
+}

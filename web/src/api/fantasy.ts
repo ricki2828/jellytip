@@ -24,7 +24,9 @@ export function fantasyLive(force = false): Promise<FantasyLive | null> {
         at = Date.now();
       }
       window.dispatchEvent(new Event(EVENT));
-      return state;
+      // Keep the last snapshot visible, but tell forced refresh callers that it failed
+      // so they can warn that live scores may be stale.
+      return a.status === 200 ? state : null;
     })
     .finally(() => (inflight = null));
   return inflight;
@@ -54,20 +56,20 @@ export async function fantasyGame(matchId: string): Promise<{ id: string; league
 export const sleeperUsername = () => prefsNow()?.fantasy.sleeperUsername ?? null;
 
 /** Live fantasy data for a component: null until known, with no league from any source, or without the route. */
-export function useFantasy(active = true): FantasyLive | null {
+export function useFantasy(active = true, includeEmpty = false): FantasyLive | null {
   const [live, setLive] = useState<FantasyLive | null>(state);
   useEffect(() => {
     if (!active) return setLive(null);
     let alive = true;
     const on = () => alive && setLive(state);
     window.addEventListener(EVENT, on);
-    void fantasyLive().then((d) => alive && setLive(d));
+    void fantasyLive().then((d) => { if (alive && d) setLive(d); });
     return () => {
       alive = false;
       window.removeEventListener(EVENT, on);
     };
   }, [active]);
-  return active && hasLeagues(live) ? live : null;
+  return active && (includeEmpty || hasLeagues(live)) ? live : null;
 }
 
 /** Start the Yahoo connect: POST with the normal auth header; the answer's url (Yahoo's authorize page) is where to go. Never a token in a URL. */

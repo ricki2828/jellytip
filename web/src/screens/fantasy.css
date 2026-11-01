@@ -1,0 +1,9 @@
+.fantasy-page { max-width: 1100px; margin: 0 auto; padding: 100px 20px 110px; }
+.fantasy-page aside, .fantasy-league { border: 1px solid #ffffff30; border-radius: 12px; padding: 20px; margin: 20px 0; }
+.fantasy-page aside { border-color: #d9a86c; }
+.fantasy-sides { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.fantasy-sides ul { list-style: none; padding: 0; }
+.fantasy-sides li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #ffffff20; }
+.fantasy-sides li span { display: block; opacity: .75; font-size: .875rem; }
+.fantasy-sides li > div:last-child { text-align: right; flex-shrink: 0; }
+@media (max-width: 650px) { .fantasy-sides { grid-template-columns: 1fr; } .fantasy-page { padding-left: 12px; padding-right: 12px; } }

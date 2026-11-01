@@ -7,6 +7,7 @@ import { SportMuteHost } from "./components/SportMute";
 import { ReminderNudge } from "./components/Reminders";
 import { Nav } from "./components/Nav";
 import { Login } from "./screens/Login";
+import { FantasyPage } from "./screens/FantasyPage";
 import { Home } from "./screens/Home";
 import { Library } from "./screens/Library";
 import { Details } from "./screens/Details";
@@ -85,6 +86,7 @@ export function App() {
       {session && <MatchInfoHost />}
       {session && <ReminderNudge />}
       <main>
+        {route.name === "fantasy" && <FantasyPage />}
         {route.name === "home" && <Home />}
         {route.name === "movies" && <Library key="movie" kind="movie" />}
         {route.name === "shows" && <Library key="tv" kind="tv" />}

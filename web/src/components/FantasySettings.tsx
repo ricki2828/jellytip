@@ -11,7 +11,7 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
   const [leagues, setLeagues] = useState<string[] | null>(null);
   const [missing, setMissing] = useState(false);
   // Yahoo: `providers.yahoo` on /v1/fantasy/live says whether the server has an app (available) and whether this person connected (linked)
-  const [yahoo, setYahoo] = useState<{ available: boolean; linked: boolean } | null>(null);
+  const [yahoo, setYahoo] = useState<{ available: boolean; linked: boolean; status?: string } | null>(null);
   useEffect(() => setName(linked ?? ""), [linked]);
   // Probe once (and list the leagues when an account is already linked); a 404 hides the whole section
   useEffect(() => {
@@ -80,7 +80,11 @@ export function FantasySettings({ prefs, onMsg }: { prefs: Prefs; onMsg: (m: str
         </div>
       )}
       {yahoo?.linked ? (
-        <span className="settings-sub">Yahoo: Connected</span>
+        yahoo.status === "approval_required" ? (
+          <span className="settings-sub">Yahoo connected, but Fantasy API access needs app approval. <a href="https://sports.yahoo.com/developer/application-confirmation/" target="_blank" rel="noreferrer">Confirm the app with Yahoo</a>.</span>
+        ) : (
+          <span className="settings-sub">Yahoo: Connected{yahoo.status === "reconnect" ? " · sign in again to renew access" : yahoo.status === "unavailable" ? " · scores temporarily unavailable" : ""}</span>
+        )
       ) : yahoo?.available ? (
         <div className="settings-inline">
           <button

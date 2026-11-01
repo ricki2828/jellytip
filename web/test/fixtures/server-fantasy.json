@@ -1,0 +1,102 @@
+{
+  "week": 8,
+  "leagues": [
+    {
+      "id": "L1",
+      "name": "Synthetic Sleeper",
+      "source": "sleeper",
+      "me": {
+        "team": "Home",
+        "points": 20.5
+      },
+      "opp": {
+        "team": "Away",
+        "points": 30.0
+      },
+      "starters": [
+        {
+          "side": "me",
+          "name": "Quarterback One",
+          "pos": "QB",
+          "nflTeam": "BUF",
+          "points": 12.0,
+          "matchId": "espn:football~nfl:9001",
+          "gameState": "in"
+        },
+        {
+          "side": "me",
+          "name": "Runner Two",
+          "pos": "RB",
+          "nflTeam": "WSH",
+          "points": 8.5,
+          "matchId": "espn:football~nfl:9002",
+          "gameState": "post"
+        },
+        {
+          "side": "opp",
+          "name": "Opp Rb",
+          "pos": "RB",
+          "nflTeam": "DET",
+          "points": 30.0,
+          "matchId": "espn:football~nfl:9002",
+          "gameState": "post"
+        },
+        {
+          "side": "opp",
+          "name": "SEA D/ST",
+          "pos": "DEF",
+          "nflTeam": "SEA",
+          "points": 0.0,
+          "matchId": null,
+          "gameState": "pre"
+        }
+      ]
+    },
+    {
+      "id": "461.l.123",
+      "name": "Office League",
+      "source": "yahoo",
+      "me": {
+        "team": "Yahoo Me",
+        "points": 55.2,
+        "projected": 98.1
+      },
+      "opp": {
+        "team": "Yahoo Opp",
+        "points": 40.0
+      },
+      "starters": [
+        {
+          "side": "me",
+          "name": "Yahoo QB",
+          "pos": "QB",
+          "nflTeam": "BUF",
+          "points": 21.5,
+          "matchId": "espn:football~nfl:9001",
+          "gameState": "in"
+        },
+        {
+          "side": "opp",
+          "name": "Yahoo QB",
+          "pos": "QB",
+          "nflTeam": "BUF",
+          "points": 21.5,
+          "matchId": "espn:football~nfl:9001",
+          "gameState": "in"
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "updatedAt": "2026-11-01T18:00:00Z",
+  "providers": {
+    "sleeper": {
+      "linked": true
+    },
+    "yahoo": {
+      "available": true,
+      "linked": true,
+      "status": "ready"
+    }
+  }
+}
