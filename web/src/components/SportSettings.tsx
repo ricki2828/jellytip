@@ -2,7 +2,8 @@
 // a summary of the stream checks and, for admins, "Check streams now". Shown only to people with Live TV and prefs.
 import { useEffect, useState } from "react";
 import { getSession } from "../api/jellyfin";
-import { hasLiveTv, probeNow, qualitySummary, sportSuggest } from "../api/iptv";
+import { hasLiveTv, logoSrc, probeNow, qualitySummary, sportSuggest, sportTeams } from "../api/iptv";
+import { follow, isFollowing, removeByName, teamLine, unfollow, type TeamHit } from "../lib/teams";
 import { savePrefs } from "../api/me";
 import { forgetLearned, learnedTaste, setMuted } from "../api/sportTaste";
 import type { Learned } from "../lib/sportMute";
@@ -24,15 +25,26 @@ function progressText(p: ProviderQuality): string {
   return bits.join(" · ");
 }
 
+const CDN = /^https:\/\/(a\.espncdn\.com|[a-z0-9-]+\.thesportsdb\.com)\//i;
+
+/** Team crest: the catalogue's logo (public CDN or a companion path), else the short name on the team colour. */
+function TeamCrest({ t }: { t: TeamHit }) {
+  const [failed, setFailed] = useState(false);
+  const src = t.logo ? (CDN.test(t.logo) ? t.logo : /^https?:\/\//i.test(t.logo) ? null : logoSrc(t.logo, 96)) : null;
+  return src && !failed ? <img className="th-crest" src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : <span className="th-crest blank" style={t.color ? { background: t.color } : undefined}>{(t.short ?? t.name).slice(0, 3)}</span>;
+}
+
 export function SportSettings({ prefs }: { prefs: Prefs }) {
   const [live, setLive] = useState(false);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Suggestion[]>([]);
+  // The team catalogue (typeahead); null until asked or when the server has no such route (then the old team chips are used)
+  const [teamHits, setTeamHits] = useState<TeamHit[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [summary, setSummary] = useState<QualitySummary | null>(null);
   const [checking, setChecking] = useState(false);
   const [learned, setLearned] = useState<Learned[] | null>(null);
-  const { teams, leagues, muted } = prefs.sport;
+  const { teams, teamRefs, leagues, muted } = prefs.sport;
   const admin = !!getSession()?.isAdmin;
 
   useEffect(() => {
@@ -52,7 +64,11 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
   useEffect(() => {
     if (!live) return;
     let alive = true;
-    const t = setTimeout(() => void sportSuggest(q.trim()).then((r) => alive && setFound(r)), q ? 250 : 0);
+    const t = setTimeout(() => {
+      void sportSuggest(q.trim()).then((r) => alive && setFound(r));
+      if (q.trim().length >= 1) void sportTeams(q.trim()).then((r) => alive && setTeamHits(r));
+      else setTeamHits(null);
+    }, q ? 250 : 0);
     return () => {
       alive = false;
       clearTimeout(t);
@@ -61,7 +77,8 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
 
   if (!live) return null;
 
-  const save = async (patch: { teams?: string[]; leagues?: string[] }) => setMsg(await savePrefs({ sport: patch }));
+  const save = async (patch: { teams?: string[]; teamRefs?: unknown[]; leagues?: string[] }) => setMsg(await savePrefs({ sport: patch }));
+  const toggleTeam = (t: TeamHit) => void save(isFollowing(t, teams, teamRefs) ? unfollow(t, teams, teamRefs) : follow(t, teams, teamRefs));
   const toggle = (s: Suggestion) => void (s.type === "team" ? save({ teams: toggleName(teams, s.name) }) : save({ leagues: toggleName(leagues, s.name) }));
   const picked = (s: Suggestion) => (s.type === "team" ? teams : leagues).some((x) => x.toLowerCase() === s.name.toLowerCase());
   const check = async () => {
@@ -79,7 +96,7 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
         <div className="chips settings-chips-gap" aria-label="Your teams, leagues and tournaments">
           {teams.length + leagues.length === 0 && <span className="settings-sub">Nothing picked yet.</span>}
           {teams.map((n) => (
-            <button key={`t:${n}`} className="chip on" data-nav aria-label={`Remove ${n}`} onClick={() => void save({ teams: toggleName(teams, n) })}>
+            <button key={`t:${n}`} className="chip on" data-nav aria-label={`Remove ${n}`} onClick={() => void save(removeByName(n, teams, teamRefs))}>
               {n} <span aria-hidden>×</span>
             </button>
           ))}
@@ -92,9 +109,28 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
         <div className="settings-inline settings-chips-gap">
           <input className="settings-input" data-nav value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search teams, leagues &amp; tournaments" spellCheck={false} maxLength={60} aria-label="Search teams, leagues and tournaments" />
         </div>
+        {teamHits && teamHits.length > 0 && (
+          <ul className="team-hits" aria-label="Teams">
+            {teamHits.map((t) => {
+              const on = isFollowing(t, teams, teamRefs);
+              return (
+                <li key={`${t.leagueKey}:${t.id}`}>
+                  <button className={`team-hit${on ? " on" : ""}`} data-nav aria-pressed={on} aria-label={teamLine(t)} onClick={() => toggleTeam(t)}>
+                    <TeamCrest t={t} />
+                    <span className="th-text">
+                      <strong>{t.name}</strong>
+                      {t.league && <small>{t.league}</small>}
+                    </span>
+                    <span className="th-state">{on ? "Following ✓" : "Follow"}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {found.length > 0 && (
           <div className="chips settings-chips-gap" aria-label="Suggestions">
-            {found.slice(0, 40).map((s) => (
+            {found.filter((s) => !teamHits || s.type !== "team" || q.trim() === "").slice(0, 40).map((s) => (
               <button key={`${s.type}:${s.name}`} className={`chip${picked(s) ? " on" : ""}`} data-nav aria-pressed={picked(s)} onClick={() => toggle(s)}>
                 {s.name}
                 <span className="livetv-count">{s.tournament ? "Tournament" : s.type === "league" ? "League" : "Team"}</span>

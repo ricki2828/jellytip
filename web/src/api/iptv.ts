@@ -4,6 +4,7 @@ import { getSession } from "./jellyfin";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
+import { parseTeams, type TeamHit } from "../lib/teams";
 import { parsePrune, type Policy, type PruneList } from "../lib/channelPrune";
 import { parseCredits, parseVodDetail, type VodDetail, type VodItem } from "../lib/iptvVod";
 import { parseContinue, type ContinueEntry } from "../lib/continue";
@@ -376,4 +377,10 @@ export async function saveGroupChannels(pid: string | number, catId: string | nu
   if (a.status === 200 || a.status === 204) return null;
   const e = a.data && typeof a.data === "object" ? (a.data as { error?: unknown }).error : null;
   return typeof e === "string" && e ? e : a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`;
+}
+
+/** Teams matching what was typed, from the catalogue (best first, at most 20); null when the server has no such route. */
+export async function sportTeams(q: string): Promise<TeamHit[] | null> {
+  const a = await iptvGet<unknown>(`v1/sport/teams?q=${encodeURIComponent(q)}`);
+  return a.status === 200 ? parseTeams(a.data) : null;
 }

@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true, panelStyle: "docked" });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], teamRefs: [], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true, panelStyle: "docked" });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 
@@ -921,4 +921,41 @@ test("replays: matchInfo.replay and inferredBy parse, live chips are replaced, t
   assert.equal(parseLiveExtras(q).replay, true);
   assert.equal(parseLiveExtras(new URLSearchParams("mi=m")).replay, false);
   assert.equal(liveExtrasQuery({ replay: false }), "");
+});
+
+import { follow, isFollowing, parseTeamRefs, parseTeams, removeByName, teamLine, unfollow } from "../src/lib/teams.ts";
+
+test("favourite teams: catalogue parse, line, follow / unfollow keep names and refs in step", () => {
+  const hits = parseTeams({ teams: [
+    { id: "26", name: "UCLA Bruins", short: "UCLA", league: "College Football", leagueKey: "college-football", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png", color: "2D68C4", sport: "football" },
+    { id: "26", name: "UCLA Bruins", league: "College Basketball", leagueKey: "mens-college-basketball" },
+    { id: "26", name: "dup", leagueKey: "college-football" },
+    { name: "no id" },
+  ] });
+  assert.equal(hits.length, 2);
+  assert.equal(teamLine(hits[0]), "UCLA Bruins · College Football");
+  assert.equal(hits[0].color, "#2d68c4");
+  assert.equal(parseTeams(null).length, 0);
+  assert.equal(parseTeams([{ id: "1", name: "A" }]).length, 1);
+  // football and basketball UCLA are different favourites
+  const a = follow(hits[0], [], []);
+  assert.deepEqual(a, { teams: ["UCLA Bruins"], teamRefs: [{ teamId: "26", leagueKey: "college-football", name: "UCLA Bruins" }] });
+  assert.equal(isFollowing(hits[0], a.teams, a.teamRefs), true);
+  assert.equal(isFollowing(hits[1], a.teams, a.teamRefs), false);
+  const b = follow(hits[1], a.teams, a.teamRefs);
+  assert.deepEqual(b.teams, ["UCLA Bruins"]); // the name is not doubled
+  assert.equal(b.teamRefs.length, 2);
+  // unfollowing one keeps the shared name for the other; unfollowing the last drops it
+  const c = unfollow(hits[0], b.teams, b.teamRefs);
+  assert.deepEqual(c.teams, ["UCLA Bruins"]);
+  assert.equal(c.teamRefs.length, 1);
+  const d = unfollow(hits[1], c.teams, c.teamRefs);
+  assert.deepEqual(d, { teams: [], teamRefs: [] });
+  // the "your teams" chip removes the name and its refs
+  assert.deepEqual(removeByName("ucla bruins", b.teams, b.teamRefs), { teams: [], teamRefs: [] });
+  // old name-only favourites still count (no leagueKey in the hit)
+  assert.equal(isFollowing({ id: "9", name: "Warriors", short: null, league: null, leagueKey: null, logo: null, color: null, sport: null }, ["warriors"], []), true);
+  assert.deepEqual(parseTeamRefs([{ teamId: 5, leagueKey: "nfl", name: "Chiefs" }, { teamId: "x" }, null]), [{ teamId: "5", leagueKey: "nfl", name: "Chiefs" }]);
+  assert.deepEqual(parsePrefs({ sport: { teams: ["Chiefs"], teamRefs: [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }] } }).sport.teamRefs, [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }]);
+  assert.deepEqual(parsePrefs({}).sport.teamRefs, []);
 });
