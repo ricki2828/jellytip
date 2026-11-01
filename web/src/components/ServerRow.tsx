@@ -10,6 +10,7 @@ import { FranchiseRow } from "./FranchiseRow";
 import { Row, RowTitle } from "./Row";
 import { IptvCard, IptvPoster } from "./IptvTile";
 import { PosterCard } from "./PosterCard";
+import { CARD_W, PHONE_CARD_W } from "./Card";
 import { GetItSheet } from "./GetItSheet";
 import { getSession } from "../api/jellyfin";
 import { paddedOrder, type MissingTitle } from "../lib/rows";
@@ -22,22 +23,38 @@ function IptvTile({ item, poster }: { item: VodItem; poster: boolean }) {
   return poster ? <IptvPoster item={item} width={phone ? 112 : 150} /> : <IptvCard item={item} />;
 }
 
-/** A title from a padded list that is nowhere (library, IPTV): dimmed "Not available"; an admin can open Get it. */
+/** A title from a padded list that is nowhere (library, IPTV): dimmed "Not available"; an admin can open Get it.
+ *  Same shape as its row: a 2:3 poster in poster rows, a 16:9 card (poster art cropped to fill) in standard rows. */
 function MissingTile({ m, mediaType, poster }: { m: MissingTitle; mediaType: "movie" | "tv"; poster: boolean }) {
   const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
   const phone = useIsPhone();
   const admin = !!getSession()?.isAdmin;
+  const onOpen = admin && m.tmdbId != null ? () => setOpen(true) : undefined;
+  const aria = `${m.title}, not available`;
+  const width = phone ? PHONE_CARD_W : CARD_W;
   return (
     <>
-      <PosterCard
-        width={poster ? (phone ? 112 : 150) : phone ? 160 : 200}
-        src={m.poster}
-        name={m.title}
-        faded
-        tag="Not available"
-        label={`${m.title}, not available`}
-        onOpen={admin && m.tmdbId != null ? () => setOpen(true) : undefined}
-      />
+      {poster ? (
+        <PosterCard width={phone ? 112 : 150} src={m.poster} name={m.title} faded tag="Not available" label={aria} onOpen={onOpen} />
+      ) : (
+        <button
+          className="card missing-card"
+          data-nav={onOpen ? true : undefined}
+          tabIndex={onOpen ? 0 : -1}
+          disabled={!onOpen}
+          style={{ width, height: Math.round((width * 9) / 16) }}
+          title={aria}
+          aria-label={aria}
+          onClick={onOpen}
+        >
+          {m.poster && !failed && <img className={`card-img${loaded ? " in" : ""}`} src={m.poster} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
+          <div className="card-fade" />
+          <span className="card-title">{m.title}</span>
+          <span className="card-tag">Not available</span>
+        </button>
+      )}
       {open && <GetItSheet pick={{ title: m.title, year: m.year, tmdbId: m.tmdbId, mediaType, posterUrl: m.poster }} onClose={() => setOpen(false)} />}
     </>
   );

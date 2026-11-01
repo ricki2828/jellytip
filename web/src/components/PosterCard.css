@@ -62,6 +62,19 @@ div.poster {
   opacity: 0.38;
   filter: grayscale(0.6);
 }
+.card.missing-card {
+  opacity: 0.38;
+  filter: grayscale(0.6);
+  cursor: default;
+}
+.card.missing-card .card-img {
+  object-position: center 25%;
+}
+.card.missing-card:not(:disabled) {
+  cursor: pointer;
+}
+.card.missing-card:not(:disabled):hover,
+.card.missing-card:not(:disabled):focus,
 .poster.faded:hover,
 .poster.faded:focus {
   opacity: 0.75;
