@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.main
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
 import androidx.compose.animation.core.animateFloatAsState
@@ -182,18 +183,15 @@ fun HomePage(
                 remember {
                     { clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
-                        // OK while the hero trailer plays: unmute, then full screen; otherwise open the item
-                        if (!JellytipTrailerControl.onOk(item)) {
-                            // Free the hero player/decoder before the main player or details page starts
-                            JellytipTrailerControl.stop()
-                            viewModel.recordOpen(clickedPosition)
-                            if (currentHomePrefs.clickToPlay &&
-                                homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
-                            ) {
-                                viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (click-to-play row)")
-                            } else {
-                                viewModel.navigationManager.navigateTo(item.destination(), "home OK")
-                            }
+                        // OK always opens the item. Free the hero player/decoder before the main player or details page starts
+                        JellytipTrailerControl.stop()
+                        viewModel.recordOpen(clickedPosition)
+                        if (currentHomePrefs.clickToPlay &&
+                            homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
+                        ) {
+                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (click-to-play row)")
+                        } else {
+                            viewModel.navigationManager.navigateTo(item.destination(), "home OK")
                         }
                     }
                 }
@@ -202,13 +200,6 @@ fun HomePage(
                     longClick@{ clickedPosition: RowColumn, item: BaseItem ->
                         // row -1 = a server-row tile: keep the remembered row position as it is
                         if (clickedPosition.row >= 0) position = clickedPosition
-                        if (JellytipTrailerControl.isPlayingFor(item)) {
-                            // Long-press OK always opens details while the hero trailer plays
-                            JellytipTrailerControl.stop()
-                            // Open details only after OK is released: the key-up used to click Play and start the film
-                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination(), "home long-press OK") }
-                            return@longClick
-                        }
                         val row =
                             (homeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
                         val canRemoveContinueWatching =
@@ -563,34 +554,32 @@ fun HomePageContent(
         }
         lastFocusedIndex = key to index
     }
-    // Jellytip: on Continue Watching / Next Up the hero rotates a featured mix (new releases, just added, specials)
-    // instead of showing the focused tile; other rows keep the hero on the focused tile
-    val heroMix =
-        if (heroComposable != null && specialsPage != null) {
-            com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroMix(homeRows, specials, serverRows)
-        } else {
-            emptyList()
-        }
-    val onLeadingRow = specialFocus == null && homeRows.getOrNull(position.row).isContinueWatchingNextUp
-    val heroSlide = com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroSlide(heroMix, onLeadingRow)
-    val heroTarget = heroSlide?.item ?: focusedItem
-    val heroHeaderTarget = heroSlide?.item ?: headerItem
+    // The hero always shows the focused tile (Continue Watching / Next Up included); specials drive it through specialFocus
+    val heroTarget = focusedItem
+    val heroHeaderTarget = headerItem
     // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
     var heroItem by remember { mutableStateOf(heroTarget) }
     var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
-    // Jellytip: while the hero's own buttons have focus the hero holds still (no mix rotation, no focus follow)
+    // Jellytip: while the hero's own buttons have focus the hero holds still (no focus follow)
     var heroButtonsFocused by remember { mutableStateOf(false) }
     LaunchedEffect(heroTarget, heroHeaderTarget, heroButtonsFocused) {
         if (heroButtonsFocused) return@LaunchedEffect
         delay(HERO_DEBOUNCE_MS)
-        com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(heroSlide)
         heroItem = heroTarget
         heroHeaderItem = heroHeaderTarget
         JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
     }
-    DisposableEffect(Unit) { onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix.show(null) } }
 
     val heroButtonsRequester = remember { FocusRequester() }
+    // Back from the hero buttons returns to the tile focus came from (the row's focusRestorer remembers it), not the nav rail
+    DisposableEffect(heroButtonsFocused) {
+        JellytipTrailerControl.heroButtonsFocused = heroButtonsFocused
+        onDispose { JellytipTrailerControl.heroButtonsFocused = false }
+    }
+    BackHandler(enabled = heroButtonsFocused) {
+        val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
+        if (special == null || !special.tryRequestFocus()) rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+    }
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
 
@@ -688,8 +677,6 @@ fun HomePageContent(
                 headerComposable.invoke(heroHeaderItem)
                 // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
                 val heroPlayItem = heroHeaderItem
-                val mePrefs by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
-                val heroSoundSetting = mePrefs?.heroSound == true
                 if (LocalJellytipHome.current && heroComposable != null && heroPlayItem != null) {
                     // Only on the top row (or while they hold focus); fades out once focus is on a lower row
                     val heroButtonsAlpha by animateFloatAsState(
@@ -713,8 +700,9 @@ fun HomePageContent(
                             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
                             onClickItem(RowColumn(-1, -1), heroPlayItem)
                         },
-                        soundOn = com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.heroSoundOn(heroSoundSetting),
-                        onSound = { com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.toggleHeroSound(heroSoundSetting) },
+                        // Sound for the hero trailer that is playing now; the next tile starts muted again (unless ui.heroSound)
+                        soundOn = JellytipTrailerControl.sound.takeIf { JellytipTrailerControl.isHeroPlaying },
+                        onSound = { JellytipTrailerControl.toggleHeroSound() },
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)

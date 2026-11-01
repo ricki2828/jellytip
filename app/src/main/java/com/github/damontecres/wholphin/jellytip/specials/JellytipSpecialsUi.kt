@@ -229,10 +229,8 @@ private class SpecialActions(
     val open: (BaseItem) -> Unit,
     val navigate: (Destination) -> Unit,
 ) {
-    /** OK on a film tile: unmute the hero trailer if it plays muted for this film, else open it. */
-    fun click(item: BaseItem) {
-        if (!JellytipTrailerControl.onOk(item)) open(item)
-    }
+    /** OK on a film tile opens it. */
+    fun click(item: BaseItem) = open(item)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

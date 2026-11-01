@@ -511,16 +511,10 @@ fun RecommendedContent(
                     homeRows = state.rows,
                     position = position,
                     onClickItem = { _, item ->
-                        if (!JellytipTrailerControl.onOk(item)) {
-                            viewModel.navigationManager.navigateTo(item.destination())
-                        }
+                        JellytipTrailerControl.stop()
+                        viewModel.navigationManager.navigateTo(item.destination())
                     },
                     onLongClickItem = longClick@{ position, item ->
-                        if (JellytipTrailerControl.isPlayingFor(item)) {
-                            JellytipTrailerControl.stop()
-                            JellytipInputGuard.afterRelease { viewModel.navigationManager.navigateTo(item.destination()) }
-                            return@longClick
-                        }
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,

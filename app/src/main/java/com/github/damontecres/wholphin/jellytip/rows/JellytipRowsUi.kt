@@ -147,10 +147,8 @@ fun JellytipServerRowView(
             }
         }
     val click: (BaseItem) -> Unit = { item ->
-        if (!JellytipTrailerControl.onOk(item)) {
-            onOpened?.invoke(item.id.toString())
-            open(item)
-        }
+        onOpened?.invoke(item.id.toString())
+        open(item)
     }
     val play: (BaseItem) -> Unit =
         remember(viewModel) {

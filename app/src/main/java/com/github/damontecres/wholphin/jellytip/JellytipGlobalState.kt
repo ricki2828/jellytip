@@ -92,7 +92,6 @@ fun jellytipInitGlobalState() {
             com.github.damontecres.wholphin.jellytip.cards.JellytipThumbTitles,
             com.github.damontecres.wholphin.jellytip.cards.JellytipTech,
             com.github.damontecres.wholphin.jellytip.me.JellytipMe,
-            com.github.damontecres.wholphin.jellytip.home.JellytipHeroMix,
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl,
             com.github.damontecres.wholphin.jellytip.library.JellytipSizes,
         )

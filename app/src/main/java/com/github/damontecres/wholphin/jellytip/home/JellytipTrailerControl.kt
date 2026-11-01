@@ -8,8 +8,7 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import java.util.UUID
 
 /**
- * State of the home hero trailer, shared between the hero (plays it) and the card click handlers (OK presses).
- * OK while a trailer plays: 1st press unmutes (hint chip), the next opens details as usual.
+ * State of the home hero trailer, shared between the hero (plays it) and the home specials that take the player over.
  * One home page is on screen at a time, so a process-wide holder is enough.
  */
 object JellytipTrailerControl {
@@ -22,21 +21,17 @@ object JellytipTrailerControl {
 
     var sound by mutableStateOf(false)
 
-    /**
-     * The hero buttons' Sound toggle for this app run (plan "TV hero trailer: unmute"); null = follow the `ui.heroSound`
-     * setting. Snapshot state, but created with the object (not lazily during composition).
-     */
-    var heroSoundThisRun by mutableStateOf<Boolean?>(null)
+    /** The hero buttons have focus: Back returns to the tile (MainActivity must not take it as "mute"). */
+    var heroButtonsFocused = false
 
-    /** Whether hero trailers play with sound: this run's toggle, else the setting. */
-    fun heroSoundOn(setting: Boolean): Boolean = heroSoundThisRun ?: setting
+    /** The hero's own trailer is playing (not a special's video). */
+    val isHeroPlaying get() = url != null && owner == null
 
-    /** The Sound button: flip it for this run and, when the hero's trailer is playing, unmute / mute it where it is. */
-    fun toggleHeroSound(setting: Boolean) {
-        val on = !heroSoundOn(setting)
-        heroSoundThisRun = on
-        if (url != null && owner == null) sound = on
-        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> $on")
+    /** The hero Sound button: sound for the trailer playing now; the next hero trailer starts from the setting again. */
+    fun toggleHeroSound() {
+        if (!isHeroPlaying) return
+        sound = !sound
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> $sound")
     }
     var hintTick by mutableLongStateOf(0L) // bumped each time the "sound on" hint should show
 
@@ -68,7 +63,7 @@ object JellytipTrailerControl {
      * screen on the previous page while the back stack moved on.)
      */
     fun onBackKey(event: android.view.KeyEvent): Boolean {
-        if (event.keyCode != android.view.KeyEvent.KEYCODE_BACK) return false
+        if (event.keyCode != android.view.KeyEvent.KEYCODE_BACK || heroButtonsFocused) return false
         return when (event.action) {
             android.view.KeyEvent.ACTION_DOWN -> {
                 if (event.repeatCount == 0) muteOnUp = playing && sound
@@ -145,19 +140,5 @@ object JellytipTrailerControl {
         url = null
         trailerItemId = null
         owner = null
-    }
-
-    /** True if [item]'s trailer is playing in the hero. */
-    fun isPlayingFor(item: BaseItem) = url != null && owner == null && itemId == item.id
-
-    /**
-     * OK on [item] while its trailer plays muted = unmute (stay on home, hint chip). Returns true when consumed;
-     * false (sound already on, or no trailer) lets the normal action run: open details.
-     */
-    fun onOk(item: BaseItem): Boolean {
-        if (!isPlayingFor(item) || sound) return false
-        sound = true
-        hintTick = System.nanoTime()
-        return true
     }
 }

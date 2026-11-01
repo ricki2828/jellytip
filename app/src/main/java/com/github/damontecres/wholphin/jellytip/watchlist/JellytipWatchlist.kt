@@ -204,10 +204,8 @@ fun JellytipWatchlistPage(
                     onFocusPosition = { position = it },
                     onClickItem = { clicked, item ->
                         position = clicked
-                        if (!JellytipTrailerControl.onOk(item)) {
-                            JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(item.destination(), "watchlist OK")
-                        }
+                        JellytipTrailerControl.stop()
+                        viewModel.navigationManager.navigateTo(item.destination(), "watchlist OK")
                     },
                     onLongClickItem = { clicked, item ->
                         position = clicked

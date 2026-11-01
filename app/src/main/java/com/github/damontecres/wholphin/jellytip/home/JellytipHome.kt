@@ -232,10 +232,8 @@ fun JellytipHomeHero(
         if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
-            // Sound: the hero Sound toggle (this run) or the ui.heroSound / trailer-sound settings. A featured-mix slide
-            // (focus is on a Continue Watching tile) starts muted unless the toggle was turned on this run.
-            val heroSound = JellytipTrailerControl.heroSoundOn(com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true)
-            val sound = (heroSound || settings.trailerSound) && (JellytipHeroMix.kickerFor(item) == null || JellytipTrailerControl.heroSoundThisRun == true)
+            // Sound: only the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
+            val sound = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true || settings.trailerSound
             JellytipTrailerControl.start(item, url, trailerId, sound = sound)
         }
     }
@@ -269,37 +267,6 @@ fun JellytipHomeHero(
                     httpClient = viewModel.httpClient,
                     onEnded = { JellytipTrailerControl.stop() },
                     drawSurface = JellytipTrailerControl.owner == null,
-                )
-            }
-            // "Sound on" hint, 2 s, bottom-right just above the first row
-            var hintVisible by remember { mutableStateOf(false) }
-            LaunchedEffect(JellytipTrailerControl.hintTick) {
-                // A special's video (Trailer Break, Closet Picks) shows its own hint in its frame
-                if (JellytipTrailerControl.hintTick == 0L || JellytipTrailerControl.owner != null) return@LaunchedEffect
-                hintVisible = true
-                delay(2_000)
-                hintVisible = false
-            }
-            AnimatedVisibility(
-                visible = hintVisible,
-                enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(300)),
-                modifier =
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(
-                            end = 48.dp,
-                            top = (LocalConfiguration.current.screenHeightDp * JellytipHomeTokens.HEADER_HEIGHT_FRACTION - 40).dp,
-                        ),
-            ) {
-                Text(
-                    text = "Sound on  \u00B7  OK for details",
-                    fontSize = rememberJellytipSizes().sp(JellytipHomeTokens.TEXT_PX),
-                    color = JellytipPalette.Vanilla,
-                    modifier =
-                        Modifier
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
             // Narrow left strip keeps the nav rail legible
@@ -535,8 +502,6 @@ fun JellytipHomeHeader(
                             bottom = JellytipHomeTokens.BOTTOM_PAD_PX.toDp(),
                         ).width(JellytipHomeTokens.TEXT_BLOCK_W_PX.toDp()),
             ) {
-                // Featured-mix slide: where it came from ("New release", "Just added", ...)
-                JellytipHeroMix.kickerFor(item)?.let { Kicker(it) }
                 val logoUrl = rememberLogoUrl(item)
                 var logoFailed by remember(logoUrl) { mutableStateOf(false) }
                 if (showLogo && logoUrl != null && !logoFailed) {
