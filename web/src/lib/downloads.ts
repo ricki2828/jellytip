@@ -210,26 +210,49 @@ async function saveImages(item: Item): Promise<DownloadRecord["images"]> {
   return { tile: t, backdrop: b, logo: l };
 }
 
-/** Text subtitles (default, forced and English first, at most 4) as VTT, for offline playback. */
-async function saveSubtitles(item: Item): Promise<OfflineSubtitle[]> {
+/** Every text subtitle track as VTT (default, forced and English first), for offline playback. Tracks already in
+ *  `have` are kept; each missing one gets 3 tries. Image subtitles (PGS/VobSub) can't become VTT and are skipped. */
+async function saveSubtitles(item: Item, have: OfflineSubtitle[] = []): Promise<OfflineSubtitle[]> {
   const src = item.MediaSources?.[0];
-  if (!src) return [];
+  if (!src) return have;
   const text = (src.MediaStreams ?? []).filter((s) => s.Type === "Subtitle" && s.IsTextSubtitleStream);
   const rank = (s: MediaStream) => (s.Index === src.DefaultSubtitleStreamIndex ? 0 : s.IsForced ? 1 : (s.Language ?? "").startsWith("en") ? 2 : 3);
-  const picked = [...text].sort((a, b) => rank(a) - rank(b)).slice(0, 4);
-  const out: OfflineSubtitle[] = [];
-  for (const s of picked) {
-    try {
-      const res = await fetch(`${JF_BASE}/Videos/${item.Id}/${src.Id}/Subtitles/${s.Index}/0/Stream.vtt`, { headers: { Authorization: authHeader() } });
-      if (!res.ok) continue;
-      const key = `sub:${item.Id}:${s.Index}`;
-      await idbPut("blobs", key, await res.text());
-      out.push({ index: s.Index, label: s.DisplayTitle || s.Language || `Track ${s.Index}`, key });
-    } catch {
-      /* skip this track */
+  const out: OfflineSubtitle[] = [...have];
+  for (const s of [...text].sort((a, b) => rank(a) - rank(b))) {
+    if (out.some((x) => x.index === s.Index)) continue;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(`${JF_BASE}/Videos/${item.Id}/${src.Id}/Subtitles/${s.Index}/0/Stream.vtt`, { headers: { Authorization: authHeader() } });
+        if (!res.ok) {
+          if (res.status < 500) break; // 4xx: this track won't convert; don't retry
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const key = `sub:${item.Id}:${s.Index}`;
+        await idbPut("blobs", key, await res.text());
+        out.push({ index: s.Index, label: s.DisplayTitle || s.Language || `Track ${s.Index}`, key });
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
     }
   }
   return out;
+}
+
+/** When a download finishes: fetch the item again and add any subtitle tracks that weren't saved yet
+ *  (subtitles Bazarr/OpenSubtitles added after the download started, or tracks that failed the first time). */
+async function topUpSubtitles(id: string) {
+  if (!navigator.onLine) return;
+  try {
+    const cur = await getDownload(id);
+    if (!cur) return;
+    const subtitles = await saveSubtitles(await getItem(id), cur.subtitles ?? []);
+    if (subtitles.length === (cur.subtitles ?? []).length) return;
+    const latest = await getDownload(id);
+    if (latest) await save({ ...latest, subtitles });
+  } catch {
+    /* offline or item gone: keep what we have */
+  }
 }
 
 export async function startDownload(itemOrId: Item | string, quality: Quality = getQuality()): Promise<DownloadRecord> {
@@ -343,6 +366,7 @@ async function syncOnce(): Promise<boolean> {
   if (inDm.length) (await NativeDownloads.query({ ids: inDm.map((r) => r.downloadId!) }).catch(() => ({ items: [] }))).items.forEach((s) => native.set(s.downloadId, s));
   for (const r of inDm) {
     const before = snapshot(r);
+    const wasDone = r.state === "done";
     const s = native.get(r.downloadId!);
     if (!s) {
       r.state = "failed";
@@ -351,6 +375,7 @@ async function syncOnce(): Promise<boolean> {
       r.bytesDone = s.bytesDone;
       r.bytesTotal = s.bytesTotal;
       r.state = s.status === "done" ? "done" : s.status === "failed" ? "failed" : s.status === "running" ? "downloading" : s.status === "paused" ? "paused" : "queued";
+      if (r.state === "done" && !wasDone) void topUpSubtitles(r.itemId);
       if (s.status === "failed") r.error = `Download failed (${s.reason})`;
       else if (s.status === "paused") r.error = s.reason === 3 ? "Waiting for Wi-Fi" : s.reason === 2 ? "Waiting for network" : "Paused";
       else r.error = undefined;
