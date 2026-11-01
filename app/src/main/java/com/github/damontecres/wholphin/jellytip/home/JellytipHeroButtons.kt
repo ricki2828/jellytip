@@ -31,11 +31,16 @@ fun JellytipHeroButtons(
     onPlay: () -> Unit,
     onInfo: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Hero trailer sound (plan "TV hero trailer: unmute"); null hides the toggle. */
+    soundOn: Boolean? = null,
+    onSound: () -> Unit = {},
 ) {
     val resume = item.resumeMs > 0
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier) {
         HeroButton(if (!item.type.playable) "▶  Watch" else if (resume) "▶  Resume" else "▶  Play", primary = true, onClick = onPlay)
         HeroButton("More info", primary = false, onClick = onInfo)
+        // Unmutes the trailer where it is (and keeps sound on for this run); again mutes
+        soundOn?.let { on -> HeroButton(if (on) "\uD83D\uDD0A  Sound on" else "\uD83D\uDD07  Sound", primary = false, onClick = onSound) }
     }
 }
 

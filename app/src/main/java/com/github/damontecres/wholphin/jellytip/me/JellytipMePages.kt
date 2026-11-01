@@ -198,6 +198,7 @@ fun JellytipMePage(
                 item { SettingRow("Intro", if (p.intro) "On" else "Off") { viewModel.setPlaybackToggle("intro", !p.intro) } }
                 item { SettingRow("Trailers play by themselves", if (p.trailerAutoplay) "On" else "Off") { viewModel.setPlaybackToggle("trailerAutoplay", !p.trailerAutoplay) } }
                 item { SettingRow("Trailer sound", if (p.trailerSound) "On" else "Off") { viewModel.setPlaybackToggle("trailerSound", !p.trailerSound) } }
+                item { SettingRow("Hero trailer sound", if (p.heroSound) "On" else "Off") { viewModel.patch(JSONObject().put("ui", JSONObject().put("heroSound", !p.heroSound))) } }
                 item { SettingRow("Audio language", langName(p.audioLangs.firstOrNull())) { dialog = "audio" } }
                 item { SettingRow("Subtitles", langName(p.subtitleLangs.firstOrNull())) { dialog = "subs" } }
                 item {

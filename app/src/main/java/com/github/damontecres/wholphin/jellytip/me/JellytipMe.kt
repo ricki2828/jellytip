@@ -46,6 +46,8 @@ data class MePrefs(
     val fantasyAlerts: Boolean = true,
     /** `sport.panelStyle` (plan "In-match visual direction"): the live panel docked to the edge or floating. */
     val sportPanelStyle: String = "docked",
+    /** `ui.heroSound` (plan "TV hero trailer: unmute"): the Home / Movies / Shows hero trailer plays with sound. Default off. */
+    val heroSound: Boolean = false,
 )
 
 data class SportMuted(
@@ -115,6 +117,7 @@ object MeParse {
             sportFlipAlerts = o.optJSONObject("sport")?.optBoolean("flipAlerts", true) != false,
             fantasyAlerts = o.optJSONObject("fantasy")?.optBoolean("alerts", true) != false,
             sportPanelStyle = o.optJSONObject("sport")?.optString("panelStyle")?.takeIf { it == "floating" } ?: "docked",
+            heroSound = o.optJSONObject("ui")?.optBoolean("heroSound", false) == true,
         )
     }
 

@@ -21,6 +21,23 @@ object JellytipTrailerControl {
     private var trailerItemId: UUID? = null
 
     var sound by mutableStateOf(false)
+
+    /**
+     * The hero buttons' Sound toggle for this app run (plan "TV hero trailer: unmute"); null = follow the `ui.heroSound`
+     * setting. Snapshot state, but created with the object (not lazily during composition).
+     */
+    var heroSoundThisRun by mutableStateOf<Boolean?>(null)
+
+    /** Whether hero trailers play with sound: this run's toggle, else the setting. */
+    fun heroSoundOn(setting: Boolean): Boolean = heroSoundThisRun ?: setting
+
+    /** The Sound button: flip it for this run and, when the hero's trailer is playing, unmute / mute it where it is. */
+    fun toggleHeroSound(setting: Boolean) {
+        val on = !heroSoundOn(setting)
+        heroSoundThisRun = on
+        if (url != null && owner == null) sound = on
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> $on")
+    }
     var hintTick by mutableLongStateOf(0L) // bumped each time the "sound on" hint should show
 
     /**

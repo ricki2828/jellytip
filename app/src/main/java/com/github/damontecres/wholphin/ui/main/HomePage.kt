@@ -671,6 +671,8 @@ fun HomePageContent(
                 headerComposable.invoke(heroHeaderItem)
                 // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
                 val heroPlayItem = heroHeaderItem
+                val mePrefs by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
+                val heroSoundSetting = mePrefs?.heroSound == true
                 if (LocalJellytipHome.current && heroComposable != null && heroPlayItem != null) {
                     com.github.damontecres.wholphin.jellytip.home.JellytipHeroButtons(
                         item = heroPlayItem,
@@ -688,6 +690,8 @@ fun HomePageContent(
                             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
                             onClickItem(RowColumn(-1, -1), heroPlayItem)
                         },
+                        soundOn = com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.heroSoundOn(heroSoundSetting),
+                        onSound = { com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.toggleHeroSound(heroSoundSetting) },
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)

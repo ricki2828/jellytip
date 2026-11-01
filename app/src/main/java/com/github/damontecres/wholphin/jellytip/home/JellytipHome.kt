@@ -232,8 +232,10 @@ fun JellytipHomeHero(
         if (!trailerWanted || item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
-            // A featured-mix slide (focus is on a Continue Watching tile) always starts muted
-            val sound = settings.trailerSound && JellytipHeroMix.kickerFor(item) == null
+            // Sound: the hero Sound toggle (this run) or the ui.heroSound / trailer-sound settings. A featured-mix slide
+            // (focus is on a Continue Watching tile) starts muted unless the toggle was turned on this run.
+            val heroSound = JellytipTrailerControl.heroSoundOn(com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true)
+            val sound = (heroSound || settings.trailerSound) && (JellytipHeroMix.kickerFor(item) == null || JellytipTrailerControl.heroSoundThisRun == true)
             JellytipTrailerControl.start(item, url, trailerId, sound = sound)
         }
     }
@@ -345,6 +347,22 @@ fun JellytipHomeHero(
 
 private const val HERO_PLAYER_IDLE_MS = 120_000L
 
+/** Ramps [player]'s volume to [target] over [ms] (cancellable; the last value sticks). */
+private suspend fun fadeVolume(
+    player: androidx.media3.common.Player,
+    target: Float,
+    ms: Int,
+) {
+    val from = player.volume
+    if (from == target) return
+    val steps = (ms / 25).coerceAtLeast(1)
+    for (i in 1..steps) {
+        player.volume = from + (target - from) * i / steps
+        delay(25)
+    }
+    player.volume = target
+}
+
 @Composable
 private fun HomeKenBurns(
     url: String,
@@ -429,6 +447,7 @@ private fun HeroTrailer(
             JellytipTrailerControl.stop()
         }
     }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(url) {
         firstFrame = false
         if (url != null) {
@@ -436,11 +455,15 @@ private fun HeroTrailer(
             player.playWhenReady = true
             player.prepare()
         } else {
+            // Focus left the hero or the item changed: fade the sound out (250 ms) before stopping. Never behind another
+            // screen: when Home isn't resumed (app hidden, Google home) it stops at once.
+            if (player.volume > 0f && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) fadeVolume(player, 0f, 250)
             player.stop()
             player.clearMediaItems()
         }
     }
-    LaunchedEffect(sound) { player.volume = if (sound) 1f else 0f }
+    // Sound on / off (OK on the trailer, the hero Sound button, Back) fades in 400 ms / out 250 ms
+    LaunchedEffect(sound) { fadeVolume(player, if (sound) 1f else 0f, if (sound) 400 else 250) }
     val alpha by animateFloatAsState(
         targetValue = if (url != null && firstFrame) 1f else 0f,
         animationSpec = tween(if (url != null) 800 else 150),
