@@ -58,18 +58,36 @@ class JellytipIptvService
             return runCatching { IptvParse.groups(body) }.getOrNull()
         }
 
-        /** "Live TV" in the sidebar only when the person has opted-in channels (asked at most every 10 minutes). */
+        @Volatile
+        private var userKey: String? = null
+
+        private val prefs by lazy { context.getSharedPreferences("jellytip_iptv", Context.MODE_PRIVATE) }
+
+        /** The signed-in person changed: forget the last answer and start from the one saved for them (null = never asked). */
+        fun switchUser(id: String?) {
+            if (id == userKey) return
+            userKey = id
+            liveCheck = null
+            JellytipIptvState.hasIptv.value = id?.let { k -> prefs.takeIf { it.contains("has_$k") }?.getBoolean("has_$k", false) }
+        }
+
+        /** "Live TV" in the sidebar only when the person has IPTV (a provider or opted-in channels); asked at most every 10 minutes. */
         suspend fun hasLiveTv(force: Boolean = false): Boolean {
             val cached = liveCheck
             if (!force && cached != null && System.currentTimeMillis() - cached.first < LIVE_CHECK_TTL_MS) {
                 JellytipIptvState.hasIptv.value = cached.second
                 return cached.second
             }
+            val asked = userKey
             // IPTV configured = the person has a provider (empty list / 403 disabled|no_user / failure = none), or opted-in channels
             val hasProvider = ownProviderIds()?.isNotEmpty() == true
             val has = hasProvider || groups()?.any { it.id != FAV && it.count > 0 } == true
-            liveCheck = System.currentTimeMillis() to has
-            JellytipIptvState.hasIptv.value = has
+            // A person switched meanwhile: this answer is for someone else
+            if (asked == userKey) {
+                liveCheck = System.currentTimeMillis() to has
+                JellytipIptvState.hasIptv.value = has
+                asked?.let { prefs.edit().putBoolean("has_$it", has).apply() }
+            }
             return has
         }
 

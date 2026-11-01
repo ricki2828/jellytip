@@ -76,7 +76,7 @@ class NavDrawerService
                     if (user != null && userDto != null && user.id == userDto.id) {
                         updateNavDrawer(user, userDto, discoverActive)
                     } else {
-                        com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value = null
+                        jellytipIptv.switchUser(null)
                         _state.update { NavDrawerItemState() }
                     }
                 } catch (ex: CancellationException) {
@@ -194,13 +194,11 @@ class NavDrawerService
         /**
          * Update the current state of the nav drawer items
          */
-        @Volatile
-        private var retryingLiveTv = false
-
         suspend fun updateNavDrawer(
             user: JellyfinUser,
             userDto: ServerUserConfig,
             discoverActive: Boolean,
+            knownLiveTv: Boolean? = null,
         ) {
             val builtins =
                 buildList {
@@ -210,19 +208,11 @@ class NavDrawerService
                     if (userDto.policy?.isAdministrator == true) add(NavDrawerItem.Discover)
                 }
             // Jellytip: "Live TV" right after Movies/Shows, only when the person has opted-in IPTV channels
-            // Unknown (slow or failed check) = hidden; a late "yes" rebuilds the drawer once
-            val liveTv =
-                kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv(force = true) } == true
-            if (!liveTv && !retryingLiveTv) {
-                retryingLiveTv = true
-                coroutineScope.launchDefault {
-                    try {
-                        if (runCatching { jellytipIptv.hasLiveTv() }.getOrDefault(false)) updateNavDrawer(user, userDto, discoverActive)
-                    } finally {
-                        retryingLiveTv = false
-                    }
-                }
-            }
+            // Unknown (check slower than LIVE_TV_CHECK_MS) = the last answer saved for this person, else hidden; the
+            // check then finishes below and rebuilds the drawer once if it differs
+            jellytipIptv.switchUser(user.id.toString())
+            val checked = knownLiveTv ?: kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv() }
+            val liveTv = checked ?: (com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value == true)
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
                 allLibraries
@@ -241,9 +231,7 @@ class NavDrawerService
                             }
                         ServerNavDrawerItem(
                             itemId = it.itemId,
-                            // Jellyfin's own "Collections" view (box sets) was a second "Collections" in the drawer, and
-                            // not the Jellytip hub (franchises, top lists, countries…): it gets its own name
-                            name = if (it.collectionType == CollectionType.BOXSETS && it.name.equals("Collections", ignoreCase = true)) "Box sets" else it.name,
+                            name = it.name,
                             destination = destination,
                             type = it.collectionType,
                         )
@@ -294,6 +282,11 @@ class NavDrawerService
             applyRecordings(jellytipIptv.hasRecordings.value)
             // Ask once so the entry appears without visiting Live TV or Home first
             if (liveTv) coroutineScope.launchDefault { runCatching { jellytipIptv.recordings() } }
+            // Slow check: finish it here (in the per-user collection, so a user switch cancels it), rebuild if it changed
+            if (checked == null) {
+                val fresh = runCatching { jellytipIptv.hasLiveTv(force = true) }.getOrNull()
+                if (fresh != null && fresh != liveTv) updateNavDrawer(user, userDto, discoverActive, knownLiveTv = fresh)
+            }
         }
 
         /** Put "Recordings" right after "Live TV" (in whichever list Live TV is), or take it out. */

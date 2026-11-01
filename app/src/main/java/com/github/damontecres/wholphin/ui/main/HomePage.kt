@@ -44,7 +44,12 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -717,6 +722,8 @@ fun HomePageContent(
                                 .graphicsLayer { alpha = heroButtonsAlpha }
                                 .focusRequester(heroButtonsRequester)
                                 .onFocusChanged { heroButtonsFocused = it.hasFocus }
+                                // Invisible buttons never take focus (on the group itself, so before focusGroup)
+                                .focusProperties { canFocus = heroButtonsAlpha > 0f }
                                 .focusGroup()
                                 .focusProperties {
                                     // Down returns to the row (or special) focus came from
@@ -766,9 +773,12 @@ fun HomePageContent(
                         ),
                     modifier =
                         Modifier
-                            .focusProperties {
-                                // Up from the top row goes to the hero buttons (not left into the nav rail)
-                                if (heroButtonsShown && currentFocusedEntry <= 0) up = heroButtonsRequester
+                            .onPreviewKeyEvent { event ->
+                                // Up from the top row goes to the hero buttons (not left into the nav rail); the rows' own
+                                // focus groups would otherwise decide by geometry
+                                heroButtonsShown && currentFocusedEntry <= 0 &&
+                                    event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp &&
+                                    heroButtonsRequester.tryRequestFocus()
                             }.focusRequester(anyRowFocus)
                             .focusRestorer(),
                 ) {
