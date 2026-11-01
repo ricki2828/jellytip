@@ -33,7 +33,7 @@ const LB = ["none", "pending", "linked", "error"] as const;
 /** sport.teams may mix plain names with {name, teamId, leagueKey} entries; sport.teamRefs (if sent) adds refs too. */
 function teamsOf(sp: Record<string, unknown>): { teams: string[]; teamRefs: TeamRef[] } {
   const { names, refs } = splitTeams(sp.teams);
-  const extra = parseTeamRefs(sp.teamRefs).filter((r) => !refs.some((x) => x.teamId === r.teamId && x.leagueKey === r.leagueKey));
+  const extra = parseTeamRefs(sp.teamRefs).filter((r) => !refs.some((x) => x.teamId === r.teamId));
   return { teams: names.length || !Array.isArray(sp.teams) ? names : strs(sp.teams), teamRefs: [...refs, ...extra] };
 }
 

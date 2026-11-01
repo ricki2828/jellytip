@@ -17,7 +17,8 @@ export interface TeamHit {
 
 export interface TeamRef {
   teamId: string;
-  leagueKey: string;
+  /** Optional on the wire (the server accepts a ref with only a teamId). */
+  leagueKey?: string | null;
   name: string;
 }
 
@@ -47,9 +48,8 @@ export function parseTeamRefs(raw: unknown): TeamRef[] {
   for (const x of Array.isArray(raw) ? raw : []) {
     const o = obj(x);
     const teamId = str(o?.teamId);
-    const leagueKey = str(o?.leagueKey);
     const name = str(o?.name);
-    if (o && teamId && leagueKey && name) out.push({ teamId, leagueKey, name });
+    if (o && teamId && name) out.push({ teamId, leagueKey: str(o.leagueKey), name });
   }
   return out;
 }
@@ -61,18 +61,19 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** Following this team: by id and league when a ref exists, else by name. */
 export const isFollowing = (t: TeamHit, names: string[], refs: TeamRef[]): boolean =>
-  refs.some((r) => r.teamId === t.id && (!t.leagueKey || r.leagueKey === t.leagueKey)) || (!t.leagueKey && names.some((n) => same(n, t.name)));
+  refs.some((r) => r.teamId === t.id) || (!t.leagueKey && names.some((n) => same(n, t.name)));
 
 /** The two lists after following a team: its name joins sport.teams and its {teamId, leagueKey, name} joins sport.teamRefs. */
 export function follow(t: TeamHit, names: string[], refs: TeamRef[]): { teams: string[]; teamRefs: TeamRef[] } {
   const teams = names.some((n) => same(n, t.name)) ? names : [...names, t.name];
-  const teamRefs = t.leagueKey ? [...refs.filter((r) => !(r.teamId === t.id && r.leagueKey === t.leagueKey)), { teamId: t.id, leagueKey: t.leagueKey, name: t.name }] : refs;
+  // Catalogue ids are unique per team and sport ("espn:football~college-football:26"), so a ref is matched by teamId alone; at most 50
+  const teamRefs = [...refs.filter((r) => r.teamId !== t.id), { teamId: t.id, leagueKey: t.leagueKey, name: t.name }].slice(-50);
   return { teams, teamRefs };
 }
 
 /** Unfollow: the ref goes, and the name goes unless another ref still uses it (two teams may share a name across sports). */
 export function unfollow(t: Pick<TeamHit, "id" | "name" | "leagueKey">, names: string[], refs: TeamRef[]): { teams: string[]; teamRefs: TeamRef[] } {
-  const teamRefs = refs.filter((r) => !(r.teamId === t.id && (!t.leagueKey || r.leagueKey === t.leagueKey)));
+  const teamRefs = refs.filter((r) => r.teamId !== t.id);
   const stillUsed = teamRefs.some((r) => same(r.name, t.name));
   return { teams: stillUsed ? names : names.filter((n) => !same(n, t.name)), teamRefs };
 }
@@ -97,13 +98,8 @@ export function splitTeams(raw: unknown): { names: string[]; refs: TeamRef[] } {
     if (!name) continue;
     if (!names.some((n) => same(n, name))) names.push(name);
     const teamId = str(o?.teamId);
-    const leagueKey = str(o?.leagueKey);
-    if (teamId && leagueKey && !refs.some((r) => r.teamId === teamId && r.leagueKey === leagueKey)) refs.push({ teamId, leagueKey, name });
+    if (teamId && !refs.some((r) => r.teamId === teamId)) refs.push({ teamId, leagueKey: str(o?.leagueKey), name });
   }
   return { names, refs };
 }
 
-/** The list to PATCH as sport.teams: every ref as an object, and each name with no ref as a plain string. */
-export function teamsPayload(names: string[], refs: TeamRef[]): (string | { name: string; teamId: string; leagueKey: string })[] {
-  return [...refs.map((r) => ({ name: r.name, teamId: r.teamId, leagueKey: r.leagueKey })), ...names.filter((n) => !refs.some((r) => same(r.name, n)))];
-}

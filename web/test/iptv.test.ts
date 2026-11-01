@@ -923,13 +923,13 @@ test("replays: matchInfo.replay and inferredBy parse, live chips are replaced, t
   assert.equal(liveExtrasQuery({ replay: false }), "");
 });
 
-import { follow, isFollowing, parseTeamRefs, parseTeams, removeByName, splitTeams, teamLine, teamsPayload, unfollow } from "../src/lib/teams.ts";
+import { follow, isFollowing, parseTeamRefs, parseTeams, removeByName, splitTeams, teamLine, unfollow } from "../src/lib/teams.ts";
 
 test("favourite teams: catalogue parse, line, follow / unfollow keep names and refs in step", () => {
   const hits = parseTeams({ teams: [
-    { id: "26", name: "UCLA Bruins", short: "UCLA", league: "College Football", leagueKey: "college-football", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png", color: "2D68C4", sport: "football" },
-    { id: "26", name: "UCLA Bruins", league: "College Basketball", leagueKey: "mens-college-basketball" },
-    { id: "26", name: "dup", leagueKey: "college-football" },
+    { id: "espn:football~college-football:26", name: "UCLA Bruins", short: "UCLA", league: "College Football", leagueKey: "college-football", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png", color: "2D68C4", sport: "football" },
+    { id: "espn:basketball~mens-college-basketball:26", name: "UCLA Bruins", league: "College Basketball", leagueKey: "mens-college-basketball" },
+    { id: "espn:football~college-football:26", name: "dup", leagueKey: "college-football" },
     { name: "no id" },
   ] });
   assert.equal(hits.length, 2);
@@ -941,7 +941,7 @@ test("favourite teams: catalogue parse, line, follow / unfollow keep names and r
   assert.equal(parseTeams([{ id: "1", name: "A" }]).length, 1);
   // football and basketball UCLA are different favourites
   const a = follow(hits[0], [], []);
-  assert.deepEqual(a, { teams: ["UCLA Bruins"], teamRefs: [{ teamId: "26", leagueKey: "college-football", name: "UCLA Bruins" }] });
+  assert.deepEqual(a, { teams: ["UCLA Bruins"], teamRefs: [{ teamId: "espn:football~college-football:26", leagueKey: "college-football", name: "UCLA Bruins" }] });
   assert.equal(isFollowing(hits[0], a.teams, a.teamRefs), true);
   assert.equal(isFollowing(hits[1], a.teams, a.teamRefs), false);
   const b = follow(hits[1], a.teams, a.teamRefs);
@@ -957,17 +957,16 @@ test("favourite teams: catalogue parse, line, follow / unfollow keep names and r
   assert.deepEqual(removeByName("ucla bruins", b.teams, b.teamRefs), { teams: [], teamRefs: [] });
   // old name-only favourites still count (no leagueKey in the hit)
   assert.equal(isFollowing({ id: "9", name: "Warriors", short: null, league: null, leagueKey: null, logo: null, color: null, sport: null }, ["warriors"], []), true);
-  assert.deepEqual(parseTeamRefs([{ teamId: 5, leagueKey: "nfl", name: "Chiefs" }, { teamId: "x" }, null]), [{ teamId: "5", leagueKey: "nfl", name: "Chiefs" }]);
+  assert.deepEqual(parseTeamRefs([{ teamId: 5, leagueKey: "nfl", name: "Chiefs" }, { teamId: "x" }, { teamId: "y", name: "No league" }, null]), [{ teamId: "5", leagueKey: "nfl", name: "Chiefs" }, { teamId: "y", leagueKey: null, name: "No league" }]);
   assert.deepEqual(parsePrefs({ sport: { teams: ["Chiefs"], teamRefs: [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }] } }).sport.teamRefs, [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }]);
   assert.deepEqual(parsePrefs({}).sport.teamRefs, []);
 });
 
-test("sport.teams mixes plain names and {name, teamId, leagueKey}: both read, both written", () => {
+test("sport.teams may mix plain names and {name, teamId, leagueKey} objects (read); the pinned write is names plus teamRefs", () => {
   const raw = ["Warriors", { name: "UCLA Bruins", teamId: "espn:football~college-football:26", leagueKey: "ncaaf" }, { name: "Oops" }, "warriors"];
   const { names, refs } = splitTeams(raw);
   assert.deepEqual(names, ["Warriors", "UCLA Bruins", "Oops"]);
   assert.deepEqual(refs, [{ teamId: "espn:football~college-football:26", leagueKey: "ncaaf", name: "UCLA Bruins" }]);
-  assert.deepEqual(teamsPayload(names, refs), [{ name: "UCLA Bruins", teamId: "espn:football~college-football:26", leagueKey: "ncaaf" }, "Warriors", "Oops"]);
   const p = parsePrefs({ sport: { teams: raw } }).sport;
   assert.deepEqual(p.teams, ["Warriors", "UCLA Bruins", "Oops"]);
   assert.equal(p.teamRefs.length, 1);
