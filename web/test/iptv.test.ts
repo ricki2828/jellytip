@@ -923,7 +923,7 @@ test("replays: matchInfo.replay and inferredBy parse, live chips are replaced, t
   assert.equal(liveExtrasQuery({ replay: false }), "");
 });
 
-import { follow, isFollowing, parseTeamRefs, parseTeams, removeByName, teamLine, unfollow } from "../src/lib/teams.ts";
+import { follow, isFollowing, parseTeamRefs, parseTeams, removeByName, splitTeams, teamLine, teamsPayload, unfollow } from "../src/lib/teams.ts";
 
 test("favourite teams: catalogue parse, line, follow / unfollow keep names and refs in step", () => {
   const hits = parseTeams({ teams: [
@@ -936,6 +936,8 @@ test("favourite teams: catalogue parse, line, follow / unfollow keep names and r
   assert.equal(teamLine(hits[0]), "UCLA Bruins · College Football");
   assert.equal(hits[0].color, "#2d68c4");
   assert.equal(parseTeams(null).length, 0);
+  // the server as built answers {items: [...]}
+  assert.equal(parseTeams({ items: [{ id: "espn:football~college-football:26", name: "UCLA Bruins", leagueKey: "ncaaf", logo: null, color: "#2d68c4" }] })[0].id, "espn:football~college-football:26");
   assert.equal(parseTeams([{ id: "1", name: "A" }]).length, 1);
   // football and basketball UCLA are different favourites
   const a = follow(hits[0], [], []);
@@ -958,4 +960,17 @@ test("favourite teams: catalogue parse, line, follow / unfollow keep names and r
   assert.deepEqual(parseTeamRefs([{ teamId: 5, leagueKey: "nfl", name: "Chiefs" }, { teamId: "x" }, null]), [{ teamId: "5", leagueKey: "nfl", name: "Chiefs" }]);
   assert.deepEqual(parsePrefs({ sport: { teams: ["Chiefs"], teamRefs: [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }] } }).sport.teamRefs, [{ teamId: "12", leagueKey: "nfl", name: "Chiefs" }]);
   assert.deepEqual(parsePrefs({}).sport.teamRefs, []);
+});
+
+test("sport.teams mixes plain names and {name, teamId, leagueKey}: both read, both written", () => {
+  const raw = ["Warriors", { name: "UCLA Bruins", teamId: "espn:football~college-football:26", leagueKey: "ncaaf" }, { name: "Oops" }, "warriors"];
+  const { names, refs } = splitTeams(raw);
+  assert.deepEqual(names, ["Warriors", "UCLA Bruins", "Oops"]);
+  assert.deepEqual(refs, [{ teamId: "espn:football~college-football:26", leagueKey: "ncaaf", name: "UCLA Bruins" }]);
+  assert.deepEqual(teamsPayload(names, refs), [{ name: "UCLA Bruins", teamId: "espn:football~college-football:26", leagueKey: "ncaaf" }, "Warriors", "Oops"]);
+  const p = parsePrefs({ sport: { teams: raw } }).sport;
+  assert.deepEqual(p.teams, ["Warriors", "UCLA Bruins", "Oops"]);
+  assert.equal(p.teamRefs.length, 1);
+  // a plain-string list still reads as before
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A", "A", 1] } }).sport.teams, ["A"]);
 });

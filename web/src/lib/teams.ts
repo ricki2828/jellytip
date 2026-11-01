@@ -25,7 +25,9 @@ const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "
 const str = (v: unknown) => (typeof v === "string" && v ? v : typeof v === "number" ? String(v) : null);
 
 export function parseTeams(raw: unknown): TeamHit[] {
-  const list = Array.isArray(raw) ? raw : obj(raw) && Array.isArray(obj(raw)!.teams) ? (obj(raw)!.teams as unknown[]) : [];
+  const o0 = obj(raw);
+  // The server as built answers {items: [...]}; the plan also said {teams: [...]}
+  const list = Array.isArray(raw) ? raw : Array.isArray(o0?.items) ? (o0!.items as unknown[]) : Array.isArray(o0?.teams) ? (o0!.teams as unknown[]) : [];
   const out: TeamHit[] = [];
   const seen = new Set<string>();
   for (const x of list) {
@@ -80,3 +82,28 @@ export const removeByName = (name: string, names: string[], refs: TeamRef[]): { 
   teams: names.filter((n) => !same(n, name)),
   teamRefs: refs.filter((r) => !same(r.name, name)),
 });
+
+/** sport.teams as the server stores it: plain names (the old form) and {name, teamId, leagueKey} entries together. Names and refs out. */
+export function splitTeams(raw: unknown): { names: string[]; refs: TeamRef[] } {
+  const names: string[] = [];
+  const refs: TeamRef[] = [];
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (typeof x === "string") {
+      if (x && !names.some((n) => same(n, x))) names.push(x);
+      continue;
+    }
+    const o = obj(x);
+    const name = str(o?.name);
+    if (!name) continue;
+    if (!names.some((n) => same(n, name))) names.push(name);
+    const teamId = str(o?.teamId);
+    const leagueKey = str(o?.leagueKey);
+    if (teamId && leagueKey && !refs.some((r) => r.teamId === teamId && r.leagueKey === leagueKey)) refs.push({ teamId, leagueKey, name });
+  }
+  return { names, refs };
+}
+
+/** The list to PATCH as sport.teams: every ref as an object, and each name with no ref as a plain string. */
+export function teamsPayload(names: string[], refs: TeamRef[]): (string | { name: string; teamId: string; leagueKey: string })[] {
+  return [...refs.map((r) => ({ name: r.name, teamId: r.teamId, leagueKey: r.leagueKey })), ...names.filter((n) => !refs.some((r) => same(r.name, n)))];
+}

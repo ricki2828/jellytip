@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSession } from "../api/jellyfin";
 import { hasLiveTv, logoSrc, probeNow, qualitySummary, sportSuggest, sportTeams } from "../api/iptv";
-import { follow, isFollowing, removeByName, teamLine, unfollow, type TeamHit } from "../lib/teams";
+import { follow, isFollowing, removeByName, teamLine, teamsPayload, unfollow, type TeamHit, type TeamRef } from "../lib/teams";
 import { savePrefs } from "../api/me";
 import { forgetLearned, learnedTaste, setMuted } from "../api/sportTaste";
 import type { Learned } from "../lib/sportMute";
@@ -77,8 +77,10 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
 
   if (!live) return null;
 
-  const save = async (patch: { teams?: string[]; teamRefs?: unknown[]; leagues?: string[] }) => setMsg(await savePrefs({ sport: patch }));
-  const toggleTeam = (t: TeamHit) => void save(isFollowing(t, teams, teamRefs) ? unfollow(t, teams, teamRefs) : follow(t, teams, teamRefs));
+  const save = async (patch: { teams?: unknown[]; leagues?: string[] }) => setMsg(await savePrefs({ sport: patch }));
+  // Teams go to the server as one list: {name, teamId, leagueKey} for catalogue picks, plain names for the rest
+  const saveTeams = (r: { teams: string[]; teamRefs: TeamRef[] }) => void save({ teams: teamsPayload(r.teams, r.teamRefs) });
+  const toggleTeam = (t: TeamHit) => saveTeams(isFollowing(t, teams, teamRefs) ? unfollow(t, teams, teamRefs) : follow(t, teams, teamRefs));
   const toggle = (s: Suggestion) => void (s.type === "team" ? save({ teams: toggleName(teams, s.name) }) : save({ leagues: toggleName(leagues, s.name) }));
   const picked = (s: Suggestion) => (s.type === "team" ? teams : leagues).some((x) => x.toLowerCase() === s.name.toLowerCase());
   const check = async () => {
@@ -96,7 +98,7 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
         <div className="chips settings-chips-gap" aria-label="Your teams, leagues and tournaments">
           {teams.length + leagues.length === 0 && <span className="settings-sub">Nothing picked yet.</span>}
           {teams.map((n) => (
-            <button key={`t:${n}`} className="chip on" data-nav aria-label={`Remove ${n}`} onClick={() => void save(removeByName(n, teams, teamRefs))}>
+            <button key={`t:${n}`} className="chip on" data-nav aria-label={`Remove ${n}`} onClick={() => saveTeams(removeByName(n, teams, teamRefs))}>
               {n} <span aria-hidden>×</span>
             </button>
           ))}

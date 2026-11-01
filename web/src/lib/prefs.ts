@@ -15,7 +15,7 @@ export interface Prefs {
   version: number | null;
 }
 
-import { parseTeamRefs, type TeamRef } from "./teams.ts";
+import { parseTeamRefs, splitTeams, type TeamRef } from "./teams.ts";
 
 export interface Muted {
   sports: string[];
@@ -29,6 +29,13 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 const strs = (v: unknown) => [...new Set((Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string" && !!x))];
 const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
 const LB = ["none", "pending", "linked", "error"] as const;
+
+/** sport.teams may mix plain names with {name, teamId, leagueKey} entries; sport.teamRefs (if sent) adds refs too. */
+function teamsOf(sp: Record<string, unknown>): { teams: string[]; teamRefs: TeamRef[] } {
+  const { names, refs } = splitTeams(sp.teams);
+  const extra = parseTeamRefs(sp.teamRefs).filter((r) => !refs.some((x) => x.teamId === r.teamId && x.leagueKey === r.leagueKey));
+  return { teams: names.length || !Array.isArray(sp.teams) ? names : strs(sp.teams), teamRefs: [...refs, ...extra] };
+}
 
 /** Server prefs → complete prefs (defaults fill anything missing or malformed). */
 export function parsePrefs(raw: unknown): Prefs {
@@ -52,7 +59,7 @@ export function parsePrefs(raw: unknown): Prefs {
     },
     letterboxd: { username: typeof l.username === "string" && l.username ? l.username : null, status: LB.includes(l.status as never) ? (l.status as Prefs["letterboxd"]["status"]) : "none" },
     fantasy: { sleeperUsername: typeof sl.username === "string" && sl.username.trim() ? sl.username.trim() : null, alerts: fa.alerts !== false, alertMin: typeof fa.alertMin === "number" && isFinite(fa.alertMin) ? Math.min(10, Math.max(1, Math.round(fa.alertMin))) : 3 },
-    sport: { teams: strs(sp.teams), teamRefs: parseTeamRefs(sp.teamRefs), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true, spoilers: sp.spoilers === true, flipAlerts: sp.flipAlerts !== false, panelStyle: sp.panelStyle === "floating" ? "floating" : "docked" },
+    sport: { ...teamsOf(sp), leagues: strs(sp.leagues), sports: strs(sp.sports), muted: { sports: strs(obj(sp.muted).sports), leagues: strs(obj(sp.muted).leagues), tags: strs(obj(sp.muted).tags) }, setup: sp.setup === true, spoilers: sp.spoilers === true, flipAlerts: sp.flipAlerts !== false, panelStyle: sp.panelStyle === "floating" ? "floating" : "docked" },
     sportsSupported: Array.isArray(sp.sports),
     version: typeof r.version === "number" ? r.version : null,
   };
