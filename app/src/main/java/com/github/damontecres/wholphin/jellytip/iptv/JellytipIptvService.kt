@@ -61,7 +61,9 @@ class JellytipIptvService
         suspend fun hasLiveTv(force: Boolean = false): Boolean {
             val cached = liveCheck
             if (!force && cached != null && System.currentTimeMillis() - cached.first < LIVE_CHECK_TTL_MS) return cached.second
-            val has = groups()?.any { it.id != FAV && it.count > 0 } ?: false
+            // IPTV configured = the person has a provider (empty list / 403 disabled|no_user / failure = none), or opted-in channels
+            val hasProvider = ownProviderIds()?.isNotEmpty() == true
+            val has = hasProvider || groups()?.any { it.id != FAV && it.count > 0 } == true
             liveCheck = System.currentTimeMillis() to has
             return has
         }

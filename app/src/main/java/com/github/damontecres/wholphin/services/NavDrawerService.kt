@@ -193,6 +193,9 @@ class NavDrawerService
         /**
          * Update the current state of the nav drawer items
          */
+        @Volatile
+        private var retryingLiveTv = false
+
         suspend fun updateNavDrawer(
             user: JellyfinUser,
             userDto: ServerUserConfig,
@@ -206,11 +209,24 @@ class NavDrawerService
                     if (userDto.policy?.isAdministrator == true) add(NavDrawerItem.Discover)
                 }
             // Jellytip: "Live TV" right after Movies/Shows, only when the person has opted-in IPTV channels
+            // Unknown (slow or failed check) = hidden; a late "yes" rebuilds the drawer once
             val liveTv =
                 kotlinx.coroutines.withTimeoutOrNull(LIVE_TV_CHECK_MS) { jellytipIptv.hasLiveTv() } == true
+            if (!liveTv && !retryingLiveTv) {
+                retryingLiveTv = true
+                coroutineScope.launchDefault {
+                    try {
+                        if (runCatching { jellytipIptv.hasLiveTv() }.getOrDefault(false)) updateNavDrawer(user, userDto, discoverActive)
+                    } finally {
+                        retryingLiveTv = false
+                    }
+                }
+            }
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
                 allLibraries
+                    // Jellyfin's own box-sets view is the old "Collections"; the Jellytip hub replaces it in the drawer
+                    .filter { it.collectionType != CollectionType.BOXSETS }
                     .map {
                         val destination =
                             if (it.isRecordingFolder) {

@@ -674,6 +674,12 @@ fun HomePageContent(
                 val mePrefs by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
                 val heroSoundSetting = mePrefs?.heroSound == true
                 if (LocalJellytipHome.current && heroComposable != null && heroPlayItem != null) {
+                    // Only on the top row (or while they hold focus); fades out once focus is on a lower row
+                    val heroButtonsAlpha by animateFloatAsState(
+                        if (heroButtonsFocused || focusedEntry <= 0) 1f else 0f,
+                        tween(150),
+                        label = "jellytip-hero-buttons",
+                    )
                     com.github.damontecres.wholphin.jellytip.home.JellytipHeroButtons(
                         item = heroPlayItem,
                         onPlay = {
@@ -696,6 +702,7 @@ fun HomePageContent(
                             Modifier
                                 .align(Alignment.BottomEnd)
                                 .padding(end = 48.dp, bottom = 6.dp)
+                                .graphicsLayer { alpha = heroButtonsAlpha }
                                 .onFocusChanged { heroButtonsFocused = it.hasFocus }
                                 .focusGroup()
                                 .focusProperties {
