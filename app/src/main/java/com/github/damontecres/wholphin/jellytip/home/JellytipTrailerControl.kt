@@ -33,8 +33,6 @@ object JellytipTrailerControl {
         sound = !sound
         com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> $sound")
     }
-    var hintTick by mutableLongStateOf(0L) // bumped each time the "sound on" hint should show
-
     /**
      * Who shows the video: null = the hero; otherwise a home "special" (Trailer Break, Closet Picks) that took the one
      * home player over. Only the owner draws a PlayerSurface for it.
@@ -118,17 +116,6 @@ object JellytipTrailerControl {
     /** Stop only if [owner] (null = hero) currently holds the player, so the hero never stops a special's video. */
     fun stopIfOwner(owner: String?) {
         if (this.owner == owner) stop()
-    }
-
-    /**
-     * OK on a video special: unmute when its video plays muted (hint chip) and return true; false = sound already on or not
-     * playing, so the caller does its normal action.
-     */
-    fun onOkOwner(owner: String): Boolean {
-        if (!isPlayingForOwner(owner) || sound) return false
-        sound = true
-        hintTick = System.nanoTime()
-        return true
     }
 
     /** Focus moved or page left: stop and reset to the default sound state next time. */

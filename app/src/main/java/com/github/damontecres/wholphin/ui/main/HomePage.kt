@@ -182,10 +182,13 @@ fun HomePage(
             val onClickItem =
                 remember {
                     { clickedPosition: RowColumn, item: BaseItem ->
-                        position = clickedPosition
+                        // row -1 = hero buttons / a server-row tile: keep the remembered row position, so Back lands on the tile
+                        if (clickedPosition.row >= 0) {
+                            position = clickedPosition
+                            viewModel.recordOpen(clickedPosition)
+                        }
                         // OK always opens the item. Free the hero player/decoder before the main player or details page starts
                         JellytipTrailerControl.stop()
-                        viewModel.recordOpen(clickedPosition)
                         if (currentHomePrefs.clickToPlay &&
                             homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
                         ) {
@@ -222,7 +225,10 @@ fun HomePage(
                                 canRemoveNextUp = canRemoveNextUp,
                                 actions =
                                     ContextMenuActions(
-                                        navigateTo = viewModel.navigationManager::navigateTo,
+                                        navigateTo = { destination ->
+                                            JellytipTrailerControl.stop()
+                                            viewModel.navigationManager.navigateTo(destination)
+                                        },
                                         onClickWatch = viewModel::setWatched,
                                         onClickFavorite = viewModel::setFavorite,
                                         onClickAddPlaylist = { itemId ->
@@ -253,12 +259,14 @@ fun HomePage(
             val onClickPlay =
                 remember {
                     { _: RowColumn, item: BaseItem ->
+                        JellytipTrailerControl.stop()
                         viewModel.navigationManager.navigateTo(Destination.Playback(item), "home Play key")
                     }
                 }
             val onClickViewMore =
                 remember {
                     { _: RowColumn, row: HomeRowLoadingState.Success ->
+                        JellytipTrailerControl.stop()
                         viewModel.navigationManager.navigateTo(
                             Destination.MoreHomeRow(row.title, row.rowType!!, row.items.size),
                         )
@@ -576,16 +584,16 @@ fun HomePageContent(
         JellytipTrailerControl.heroButtonsFocused = heroButtonsFocused
         onDispose { JellytipTrailerControl.heroButtonsFocused = false }
     }
-    BackHandler(enabled = heroButtonsFocused) {
-        val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
-        if (special == null || !special.tryRequestFocus()) rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
-    }
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
 
     val currentPosition by rememberUpdatedState(position)
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
+    BackHandler(enabled = heroButtonsFocused) {
+        val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
+        if (special == null || !special.tryRequestFocus()) rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+    }
 
     if (takeFocus) {
         LaunchedEffect(homeRows) {

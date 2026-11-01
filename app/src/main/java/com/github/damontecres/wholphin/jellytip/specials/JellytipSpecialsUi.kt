@@ -267,26 +267,8 @@ private fun TrailerBreakRow(
                 item.data.genres?.take(3)?.takeIf { it.isNotEmpty() }?.joinToString(", "),
             ).joinToString("  \u00B7  ")
         }
-    val onOk: () -> Unit = {
-        when {
-            JellytipTrailerControl.onOkOwner(owner) -> {}
-            JellytipTrailerControl.isPlayingForOwner(owner) -> actions.open(item)
-            else ->
-                scope.launch {
-                    // Not playing yet (autoplay off, or still waiting): start now with sound
-                    val url = resolve() ?: return@launch actions.open(item)
-                    JellytipTrailerControl.startSpecial(owner, url, sound = true, itemId = item.id)
-                    JellytipTrailerControl.hintTick = System.nanoTime()
-                }
-        }
-    }
-    val playing = JellytipTrailerControl.isPlayingForOwner(owner)
-    val hint =
-        when {
-            playing && JellytipTrailerControl.sound -> "Sound on \u00B7 OK again for details"
-            playing -> "OK for sound \u00B7 again for details"
-            else -> "OK to play with sound \u00B7 again for details"
-        }
+    // OK opens details; the trailer only autoplays (muted unless the sound settings are on)
+    val onOk: () -> Unit = { actions.open(item) }
     // As on the web: one framed near-black band, no row title above (the kicker is the title), info on the left and
     // a fixed 16:9 panel on the right (the still until the trailer has a picture, then the trailer, letterboxed).
     // Height fits under the hero text with the row spacing, so nothing is cut at the bottom of the screen.
@@ -311,7 +293,6 @@ private fun TrailerBreakRow(
             LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 100)
             if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
             if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
-            Caption(hint, alpha = 0.45f, px = 16)
         }
         SpecialCard(
             width = panelHeight * 16f / 9f,
@@ -973,17 +954,13 @@ private fun ClosetPicksRow(
         items = entries,
         onClickItem = { _, entry ->
             when (entry) {
+                // No details exist for the video itself: OK starts it (settings decide sound) and does nothing while it plays
                 ClosetEntry.Video ->
-                    when {
-                        JellytipTrailerControl.onOkOwner(owner) -> {}
-                        // OK again: there are no details for the video itself, so OK toggles the sound back off
-                        JellytipTrailerControl.isPlayingForOwner(owner) -> JellytipTrailerControl.sound = false
-                        else ->
-                            scope.launch {
-                                val url = resolve() ?: return@launch
-                                JellytipTrailerControl.startSpecial(owner, url, sound = true)
-                                JellytipTrailerControl.hintTick = System.nanoTime()
-                            }
+                    if (!JellytipTrailerControl.isPlayingForOwner(owner)) {
+                        scope.launch {
+                            val url = resolve() ?: return@launch
+                            JellytipTrailerControl.startSpecial(owner, url, sound = settings.trailerSound)
+                        }
                     }
 
                 is ClosetEntry.Pick -> {
@@ -1040,7 +1017,6 @@ private fun ClosetPicksRow(
                             )
                             Caption(if (special.picks.size == 1) "1 pick" else "${special.picks.size} picks", alpha = 0.7f)
                         }
-                        SoundHint(owner, "Sound on \u00B7 OK to mute", Modifier.align(Alignment.TopEnd).padding(sizes.px(14)))
                     }
                 }
 
@@ -1217,43 +1193,6 @@ private fun SpecialVideoSurface(
             )
         }
     }
-}
-
-/**
- * The special's own hint (the hero's chip stays hidden while a special holds the player): "OK for sound" while its video
- * plays muted, then [soundOnText] for 2 s after OK turns the sound on.
- */
-@Composable
-private fun SoundHint(
-    owner: String,
-    soundOnText: String,
-    modifier: Modifier,
-) {
-    val playing = JellytipTrailerControl.isPlayingForOwner(owner)
-    val sound = JellytipTrailerControl.sound
-    var soundOnVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(JellytipTrailerControl.hintTick, playing, sound) {
-        soundOnVisible = false
-        if (!playing || !sound || JellytipTrailerControl.hintTick == 0L) return@LaunchedEffect
-        soundOnVisible = true
-        delay(2_000)
-        soundOnVisible = false
-    }
-    val text =
-        when {
-            !playing -> return
-            !sound -> "OK for sound"
-            soundOnVisible -> soundOnText
-            else -> return
-        }
-    Caption(
-        text,
-        alpha = 0.9f,
-        modifier =
-            modifier
-                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
