@@ -100,6 +100,7 @@ private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
 private val TOAST_MINE = Color(0xFF22C55E)
 private val TOAST_OPP = Color(0xFFE5534B)
+private val IMAGE_SUBTITLE_MIMES = setOf("application/pgs", "application/dvbsubs", "application/vobsub")
 
 private data class IptvTrackChoice(val group: Tracks.Group, val index: Int) {
     val format get() = group.getTrackFormat(index)
@@ -111,7 +112,7 @@ private fun Tracks.choices(type: Int): List<IptvTrackChoice> =
         (0 until group.length).mapNotNull { index ->
             val format = group.getTrackFormat(index)
             val mime = format.sampleMimeType
-            val imageSubtitle = mime?.startsWith("image/") == true || mime in setOf("application/pgs", "application/dvbsubs", "application/vobsub")
+            val imageSubtitle = mime?.startsWith("image/") == true || mime in IMAGE_SUBTITLE_MIMES
             if (group.isTrackSupported(index) && !imageSubtitle) IptvTrackChoice(group, index) else null
         }
     }
@@ -323,26 +324,17 @@ fun JellytipLiveTvPlayerPage(
                 trackMessage = null
                 trackSnapshot = Tracks.EMPTY
                 subtitleCues = emptyList()
-                // Selection parameters belong to this media item. The shared player also serves the guide,
-                // so an explicit subtitle-off or audio override must not follow a channel change.
-                trackPlayer?.let { player ->
-                    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                        .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
-                        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                        .build()
-                }
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                if (playback.state.value.target == current && trackPlayer?.currentMediaItem == trackItem) {
-                    trackSnapshot = tracks
+                if (trackPlayer?.currentMediaItem == trackItem) {
+                    if (playback.state.value.target == current) trackSnapshot = tracks
                     trackCursor = trackCursor.coerceIn(0, tracks.choices(C.TRACK_TYPE_AUDIO).size + tracks.choices(C.TRACK_TYPE_TEXT).size)
                 }
             }
 
             override fun onCues(cueGroup: CueGroup) {
-                if (playback.state.value.target == current) subtitleCues = cueGroup.cues
+                if (playback.state.value.target == current && trackPlayer?.currentMediaItem == trackItem) subtitleCues = cueGroup.cues
             }
         }
         trackPlayer?.addListener(listener)
@@ -357,8 +349,18 @@ fun JellytipLiveTvPlayerPage(
             }
         }
     }
-    val audioTracks = if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_AUDIO) else emptyList()
-    val subtitleTracks = if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_TEXT) else emptyList()
+    LaunchedEffect(trackPlayer, trackTarget, trackItem, current) {
+        if (trackPlayer != null && trackTarget == current && trackPlayer.currentMediaItem == trackItem) {
+            trackSnapshot = trackPlayer.currentTracks
+            subtitleCues = trackPlayer.currentCues.cues
+        }
+    }
+    val audioTracks = remember(trackSnapshot, trackTarget, current, trackItem) {
+        if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_AUDIO) else emptyList()
+    }
+    val subtitleTracks = remember(trackSnapshot, trackTarget, current, trackItem) {
+        if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_TEXT) else emptyList()
+    }
     val trackRows = audioTracks.size + 1 + subtitleTracks.size
     LaunchedEffect(trackMessage) {
         if (trackMessage != null) {
@@ -642,14 +644,6 @@ fun JellytipLiveTvPlayerPage(
                     preCardTick++
                 }
                 when (e.key) {
-                    Key.Back, Key.Escape -> {
-                        if (bannerVisible) {
-                            bannerVisible = false
-                            bannerArmed = false
-                            true
-                        } else false
-                    }
-
                     Key.DirectionUp, Key.DirectionDown, Key.ChannelUp, Key.ChannelDown, Key.PageUp, Key.PageDown -> {
                         if (lineup.size > 1) {
                             val step = if (e.key == Key.DirectionUp || e.key == Key.ChannelDown || e.key == Key.PageUp) -1 else 1
@@ -661,10 +655,13 @@ fun JellytipLiveTvPlayerPage(
                     }
 
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (bannerVisible && bannerArmed) {
+                        if (e.nativeKeyEvent.repeatCount > 0) {
+                            true
+                        } else if (bannerArmed) {
                             openTrackSheet()
                             bannerArmed = false
                         } else if (bannerVisible) {
+                            bannerVisible = false
                             bannerArmed = true
                         } else {
                             bannerArmed = true
