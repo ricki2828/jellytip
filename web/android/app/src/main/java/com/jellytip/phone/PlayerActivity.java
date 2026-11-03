@@ -92,7 +92,6 @@ public class PlayerActivity extends AppCompatActivity {
     private static final int MAX_RECONNECTS = 5;
     private static final long NOTE_MS = 6_000;
     private static final long STALL_MS = 10_000;
-    private static final long UNLOCK_ROTATION_MS = 1_500;
     private static final long PRE_CARD_MS = 10_000;
     private static final long URL_TIMEOUT_MS = 15_000;
     private static final long SEEK_BACK_MS = 10_000;
@@ -159,6 +158,14 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView noteView;
     private TextView liveButton;
     private TextView pipButton;
+    private TextView rotateButton;
+    private TextView centeredPlay;
+    private TextView pauseFlash;
+    private boolean wasPlaying;
+    private final Runnable hidePauseFlash = () -> {
+        if (pauseFlash != null) pauseFlash.setVisibility(View.GONE);
+        updateCenteredPlay();
+    };
     private boolean pipReceiverOn;
     private int alertSeq;
     /** Length at the last end of a growing recording: no growth since = it has finished, so close. */
@@ -200,9 +207,8 @@ public class PlayerActivity extends AppCompatActivity {
         session = in.getIntExtra(EXTRA_SESSION, 0);
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
-        // Opens in landscape (either side) whatever way the phone is held; free rotation starts later ([unlockRotation])
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-        handler.postDelayed(this::unlockRotation, UNLOCK_ROTATION_MS);
+        // Follow the phone's current orientation on entry, including when auto-rotate is disabled.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         getContentResolver().registerContentObserver(android.provider.Settings.System.getUriFor(android.provider.Settings.System.ACCELEROMETER_ROTATION), false, rotationLockObserver);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -236,6 +242,8 @@ public class PlayerActivity extends AppCompatActivity {
         back.setShadowLayer(8, 0, 2, Color.BLACK);
         back.setPadding(dp(18), dp(2), dp(18), dp(8));
         back.setContentDescription("Back");
+        back.setMinWidth(dp(44));
+        back.setMinHeight(dp(44));
         back.setOnClickListener(v -> close("back", null));
         root.addView(back, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
         overlays.add(back);
@@ -247,6 +255,10 @@ public class PlayerActivity extends AppCompatActivity {
         trp.rightMargin = dp(24);
         root.addView(topRight, trp);
         overlays.add(topRight);
+        rotateButton = pill("Rotate", 0xCC333333);
+        rotateButton.setContentDescription("Rotate player");
+        rotateButton.setOnClickListener(v -> rotatePlayer());
+        topRight.addView(rotateButton, gap());
         matchId = in.getStringExtra(EXTRA_MATCH_ID);
         if (matchId != null && !matchId.isEmpty()) {
             // ⓘ: the web app shows match info (after the player closes, or over it when it can)
@@ -303,6 +315,22 @@ public class PlayerActivity extends AppCompatActivity {
                 if (visibility == View.VISIBLE) showPreCard();
             }
         );
+        centeredPlay = pill("▶", 0xCC333333);
+        centeredPlay.setContentDescription("Play");
+        centeredPlay.setGravity(Gravity.CENTER);
+        centeredPlay.setMinWidth(dp(56));
+        centeredPlay.setMinHeight(dp(56));
+        centeredPlay.setVisibility(View.GONE);
+        centeredPlay.setOnClickListener(v -> { if (player != null) player.play(); });
+        root.addView(centeredPlay, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
+        pauseFlash = pill("Ⅱ", 0xCC333333);
+        pauseFlash.setContentDescription("Paused");
+        pauseFlash.setGravity(Gravity.CENTER);
+        pauseFlash.setEnabled(false);
+        pauseFlash.setClickable(false);
+        pauseFlash.setFocusable(false);
+        pauseFlash.setVisibility(View.GONE);
+        root.addView(pauseFlash, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
 
         String note = in.getStringExtra(EXTRA_NOTE);
         if (note != null && !note.isEmpty()) {
@@ -430,8 +458,26 @@ public class PlayerActivity extends AppCompatActivity {
     private final Player.Listener listener =
         new Player.Listener() {
             @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                if (centeredPlay == null || player == null) return;
+                updateCenteredPlay();
+                boolean readyPause = !isPlaying && !player.getPlayWhenReady() && player.getPlaybackState() == Player.STATE_READY;
+                if (readyPause && wasPlaying && !inPip()) {
+                    handler.removeCallbacks(hidePauseFlash);
+                    pauseFlash.setVisibility(View.VISIBLE);
+                    centeredPlay.setVisibility(View.GONE);
+                    handler.postDelayed(hidePauseFlash, 500);
+                } else if (isPlaying) {
+                    handler.removeCallbacks(hidePauseFlash);
+                    pauseFlash.setVisibility(View.GONE);
+                    updateCenteredPlay();
+                }
+                wasPlaying = isPlaying;
+            }
+            @Override
             public void onPlaybackStateChanged(int state) {
                 spinner.setVisibility(state == Player.STATE_BUFFERING || state == Player.STATE_IDLE ? View.VISIBLE : View.GONE);
+                updateCenteredPlay();
                 if (state == Player.STATE_READY) {
                     reconnects = 0;
                     if (toLiveEdge) {
@@ -457,6 +503,7 @@ public class PlayerActivity extends AppCompatActivity {
 
             @Override
             public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                updateCenteredPlay();
                 updatePip();
             }
         };
@@ -791,6 +838,8 @@ public class PlayerActivity extends AppCompatActivity {
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         t.setBackgroundColor(background);
         t.setPadding(dp(14), dp(8), dp(14), dp(8));
+        t.setMinWidth(dp(44));
+        t.setMinHeight(dp(44));
         return t;
     }
 
@@ -890,29 +939,31 @@ public class PlayerActivity extends AppCompatActivity {
         if (!isChangingConfigurations()) close("back", null);
     }
 
-    /** Set once the player has opened in landscape: from then on the phone's own rotation decides. */
-    private boolean rotationUnlocked;
+    private boolean manualRotation;
 
-    /**
-     * After the landscape start (or 1.5 s): turning the phone to portrait rotates, as long as the system auto-rotate
-     * is on. With rotation locked it stays landscape.
-     */
-    private void unlockRotation() {
-        if (closing) return;
-        rotationUnlocked = true;
-        applyRotationRule();
+    private void updateCenteredPlay() {
+        if (centeredPlay == null || player == null || pauseFlash == null) return;
+        boolean readyPause = player.getPlaybackState() == Player.STATE_READY && !player.getPlayWhenReady();
+        centeredPlay.setVisibility(readyPause && !inPip() && pauseFlash.getVisibility() != View.VISIBLE ? View.VISIBLE : View.GONE);
+    }
+
+    private void rotatePlayer() {
+        manualRotation = true;
+        boolean landscape = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        setRequestedOrientation(landscape ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
     private void applyRotationRule() {
-        if (!rotationUnlocked || isInPictureInPictureMode()) return;
+        if (manualRotation || isInPictureInPictureMode()) return;
         boolean autoRotate = android.provider.Settings.System.getInt(getContentResolver(), android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 1;
-        setRequestedOrientation(autoRotate ? ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        setRequestedOrientation(autoRotate ? ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
     private final android.database.ContentObserver rotationLockObserver =
         new android.database.ContentObserver(handler) {
             @Override
             public void onChange(boolean selfChange) {
+                manualRotation = false;
                 applyRotationRule();
             }
         };
@@ -920,9 +971,6 @@ public class PlayerActivity extends AppCompatActivity {
     @Override
     public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        boolean landscape = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        // The device reported landscape: safe to let it rotate (it won't flip straight back to portrait)
-        if (landscape && !rotationUnlocked) unlockRotation();
         root.post(this::applyLayout);
     }
 
@@ -961,6 +1009,17 @@ public class PlayerActivity extends AppCompatActivity {
             sp.topMargin = spinTop;
             sp.gravity = spinGravity;
             spinner.setLayoutParams(sp);
+        }
+        int centerTop = portrait ? top + height / 2 - dp(28) : 0;
+        int centerGravity = portrait ? Gravity.TOP | Gravity.CENTER_HORIZONTAL : Gravity.CENTER;
+        for (View action : new View[] {centeredPlay, pauseFlash}) {
+            if (action == null) continue;
+            FrameLayout.LayoutParams cp = (FrameLayout.LayoutParams) action.getLayoutParams();
+            if (cp.topMargin != centerTop || cp.gravity != centerGravity) {
+                cp.topMargin = centerTop;
+                cp.gravity = centerGravity;
+                action.setLayoutParams(cp);
+            }
         }
         // Portrait has the panel's Info and live tabs; landscape keeps ⓘ and the Live drawer
         if (infoButton != null) infoButton.setVisibility(portrait || matchHidden ? View.GONE : View.VISIBLE);
@@ -1239,6 +1298,8 @@ public class PlayerActivity extends AppCompatActivity {
         if (pip) {
             view.hideController();
             view.setUseController(false);
+            if (centeredPlay != null) centeredPlay.setVisibility(View.GONE);
+            if (pauseFlash != null) pauseFlash.setVisibility(View.GONE);
             for (View o : overlays) o.setVisibility(View.GONE);
             hidePreCard();
             if (noteView != null) noteView.setVisibility(View.GONE);
@@ -1246,6 +1307,7 @@ public class PlayerActivity extends AppCompatActivity {
         } else {
             view.setUseController(true);
             view.showController();
+            updateCenteredPlay();
             applyRotationRule();
         }
         root.post(this::applyLayout);

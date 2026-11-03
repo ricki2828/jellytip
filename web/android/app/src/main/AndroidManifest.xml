@@ -25,12 +25,12 @@
 
         </activity>
 
-        <!-- Native IPTV player (PlayerPlugin): opens landscape; rotation and the mini player must not restart the stream.
+        <!-- Native IPTV player (PlayerPlugin): rotation and the mini player must not restart the stream.
              Its own task (taskAffinity) so the app behind the picture-in-picture window stays usable. -->
         <activity
             android:name=".PlayerActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="unspecified"
             android:theme="@style/AppTheme.NoActionBar"
             android:taskAffinity="com.jellytip.phone.player"
             android:supportsPictureInPicture="true"

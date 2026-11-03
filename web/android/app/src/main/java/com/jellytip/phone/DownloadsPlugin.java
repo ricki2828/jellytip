@@ -25,6 +25,7 @@ import org.json.JSONException;
  */
 @CapacitorPlugin(name = "JellytipDownloads")
 public class DownloadsPlugin extends Plugin {
+    private Integer playerPreviousOrientation;
 
     private static final String SUBDIR = DownloadQueue.SUBDIR;
 
@@ -127,8 +128,7 @@ public class DownloadsPlugin extends Plugin {
     }
 
     /**
-     * Player mode: landscape + system bars hidden (swipe to peek), or back to normal. The WebView can't do element
-     * fullscreen or lock orientation itself inside Capacitor, so the player asks for it here.
+     * Player mode: fullscreen and rotation are separate explicit actions in the WebView.
      */
     @PluginMethod
     public void setPlayerMode(PluginCall call) {
@@ -136,13 +136,23 @@ public class DownloadsPlugin extends Plugin {
         Activity a = getActivity();
         a.runOnUiThread(() -> {
             WindowInsetsControllerCompat c = WindowCompat.getInsetsController(a.getWindow(), a.getWindow().getDecorView());
+            if (Boolean.TRUE.equals(call.getBoolean("rotate", false))) {
+                if (playerPreviousOrientation == null) playerPreviousOrientation = a.getRequestedOrientation();
+                boolean landscape = a.getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+                a.setRequestedOrientation(landscape ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                call.resolve();
+                return;
+            }
             if (on) {
+                if (playerPreviousOrientation == null) playerPreviousOrientation = a.getRequestedOrientation();
                 c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 c.hide(WindowInsetsCompat.Type.systemBars());
-                a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             } else {
                 c.show(WindowInsetsCompat.Type.systemBars());
-                a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                if (Boolean.TRUE.equals(call.getBoolean("reset", false)) && playerPreviousOrientation != null) {
+                    a.setRequestedOrientation(playerPreviousOrientation);
+                    playerPreviousOrientation = null;
+                }
             }
             call.resolve();
         });

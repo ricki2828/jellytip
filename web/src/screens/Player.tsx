@@ -12,6 +12,7 @@ import { pickAudio, pickSubtitle } from "../lib/tracks";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
+import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -22,23 +23,20 @@ const DOUBLE_TAP_MS = 300;
 
 type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void };
 
-/** Phone: go fullscreen and turn to landscape (Android allows the lock only while fullscreen, and only from a tap). */
-async function enterLandscape(box: HTMLElement | null) {
+/** Rotation is an explicit player action; fullscreen remains a separate choice. */
+async function rotatePlayer(box: HTMLElement | null) {
   if (isNative) {
-    await NativeDownloads.setPlayerMode({ fullscreen: true }).catch(() => undefined);
+    await NativeDownloads.setPlayerMode({ fullscreen: false, rotate: true }).catch(() => undefined);
     return;
   }
   if (!isPhone() || !box) return;
-  try {
-    if (!document.fullscreenElement && box.requestFullscreen) await box.requestFullscreen({ navigationUI: "hide" });
-    await (screen.orientation as LockableOrientation | undefined)?.lock?.("landscape");
-  } catch {
-    /* no gesture, or not supported (iOS): stay as is */
-  }
+  const orientation = screen.orientation as LockableOrientation | undefined;
+  if (!orientation?.lock) return;
+  try { await orientation.lock(nextPlayerOrientation(orientation.type)); } catch { /* Keep natural orientation when the browser requires fullscreen. */ }
 }
 
 function leaveLandscape() {
-  if (isNative) NativeDownloads.setPlayerMode({ fullscreen: false }).catch(() => undefined);
+  if (isNative) NativeDownloads.setPlayerMode({ fullscreen: false, reset: true }).catch(() => undefined);
   try {
     (screen.orientation as LockableOrientation | undefined)?.unlock?.();
   } catch {
@@ -83,6 +81,8 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const [next, setNext] = useState<Item | null>(null);
   const [audioIndex, setAudioIndex] = useState<number | null>(null);
   const [needsTap, setNeedsTap] = useState(false);
+  const [pauseFlash, setPauseFlash] = useState(false);
+  const pauseFlashTimer = useRef<number | null>(null);
   const netRetries = useRef(0);
   const hideTimer = useRef<number | null>(null);
   const subIndexRef = useRef(-1);
@@ -391,7 +391,12 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) tryPlay(v);
-    else v.pause();
+    else {
+      v.pause();
+      setPauseFlash(true);
+      if (pauseFlashTimer.current) clearTimeout(pauseFlashTimer.current);
+      pauseFlashTimer.current = window.setTimeout(() => setPauseFlash(false), 500);
+    }
   };
   // Repeated skips (double-tap, held arrow) add up from where the last one is going, not from where playback still is:
   // a transcode seek takes a moment, and currentTime has not moved yet when the next tap lands
@@ -403,7 +408,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     seekTarget.current = to;
     v.currentTime = to;
   };
-  const nativeFs = useRef(true); // the app enters player mode on mount
+  const nativeFs = useRef(false);
   const toggleFs = () => {
     if (isNative) {
       nativeFs.current = !nativeFs.current;
@@ -424,11 +429,16 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   };
   const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
   const boxRef = useRef<HTMLDivElement>(null);
+  const onRotate = () => {
+    void rotatePlayer(boxRef.current);
+  };
 
-  // Phone: try landscape at once (works when the Play tap's activation is still fresh), else on the first tap
+  // Restore the prior player mode when this screen leaves.
   useEffect(() => {
-    enterLandscape(boxRef.current);
-    return leaveLandscape;
+    return () => {
+      leaveLandscape();
+      if (pauseFlashTimer.current) clearTimeout(pauseFlashTimer.current);
+    };
   }, []);
 
   // ---- touch: tap = show/hide controls, double-tap left/right half = -/+10 s (repeat taps keep seeking) ----
@@ -440,7 +450,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const onVideoPointerUp = (e: React.PointerEvent<HTMLVideoElement>) => {
     if (e.pointerType === "mouse") return;
     touchClick.current = true; // the click that follows belongs to this touch
-    enterLandscape(boxRef.current);
     const rect = e.currentTarget.getBoundingClientRect();
     const side = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
     const now = Date.now();
@@ -459,8 +468,8 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     if (tapTimer.current) clearTimeout(tapTimer.current);
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
-      if (controls && !videoRef.current?.paused) setControls(false);
-      else poke();
+      togglePlay();
+      poke();
     }, DOUBLE_TAP_MS);
   };
 
@@ -553,6 +562,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         onPlay={() => setPaused(false)}
         onPause={() => {
           setPaused(true);
+          if (videoRef.current?.readyState) setBuffering(false);
           setControls(true);
           if (startedRef.current) progress();
         }}
@@ -590,13 +600,14 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         </div>
       )}
       {buffering && !error && !needsTap && <div className="spinner" />}
+      {pauseFlash && <div className="pause-flash" role="status" aria-label="Paused">Ⅱ</div>}
       {seekFlash && (
         <div className={`seek-flash ${seekFlash.side < 0 ? "left" : "right"}`} aria-live="polite">
           {seekFlash.side < 0 ? "−" : "+"}
           {10 * seekFlash.n} s
         </div>
       )}
-      {needsTap && !error && (
+      {paused && !pauseFlash && (needsTap || !buffering) && !error && (
         <button
           className="tap-play"
           data-nav
@@ -604,7 +615,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           aria-label="Play"
           onClick={(e) => {
             e.stopPropagation();
-            enterLandscape(boxRef.current);
             if (videoRef.current) tryPlay(videoRef.current);
           }}
         >
@@ -671,6 +681,9 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           <button className="btn ghost" data-nav onClick={toggleFs}>
             Fullscreen
           </button>
+          {canOfferRotate(isNative, isPhone(), typeof (screen.orientation as LockableOrientation | undefined)?.lock === "function") && (
+            <button className="btn ghost" data-nav aria-label="Rotate player" onClick={onRotate}>Rotate</button>
+          )}
         </div>
       </div>
 

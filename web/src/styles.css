@@ -1153,6 +1153,22 @@ button.overview.open {
 .tap-play:focus {
   box-shadow: 0 0 0 3px var(--night), 0 0 0 5px var(--vanilla);
 }
+.pause-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+}
+.player-row .btn { min-width: 44px; min-height: 44px; }
 .sub-menu button {
   border: 0;
   background: none;
