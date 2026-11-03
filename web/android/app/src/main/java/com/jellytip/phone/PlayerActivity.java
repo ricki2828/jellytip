@@ -26,6 +26,10 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Format;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
@@ -40,6 +44,8 @@ import com.getcapacitor.JSObject;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Full-screen IPTV player (see {@link PlayerPlugin}). TS and HLS play natively; AC-3/E-AC-3 and other audio the
@@ -159,6 +165,10 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView liveButton;
     private TextView pipButton;
     private TextView rotateButton;
+    private TextView tracksButton;
+    private android.widget.LinearLayout tracksMenu;
+    private android.widget.ScrollView tracksScroll;
+    private int tracksControllerTimeout;
     private TextView centeredPlay;
     private TextView pauseFlash;
     private boolean wasPlaying;
@@ -255,6 +265,10 @@ public class PlayerActivity extends AppCompatActivity {
         trp.rightMargin = dp(24);
         root.addView(topRight, trp);
         overlays.add(topRight);
+        tracksButton = pill("Tracks", 0xCC333333);
+        tracksButton.setContentDescription("Audio and subtitles");
+        tracksButton.setOnClickListener(v -> toggleTracksMenu());
+        topRight.addView(tracksButton, gap());
         rotateButton = pill("Rotate", 0xCC333333);
         rotateButton.setContentDescription("Rotate player");
         rotateButton.setOnClickListener(v -> rotatePlayer());
@@ -285,6 +299,23 @@ public class PlayerActivity extends AppCompatActivity {
                 topRight.addView(liveButton, gap());
             }
         }
+        tracksMenu = new android.widget.LinearLayout(this);
+        tracksMenu.setOrientation(android.widget.LinearLayout.VERTICAL);
+        tracksMenu.setPadding(dp(10), dp(10), dp(10), dp(10));
+        tracksMenu.setBackgroundColor(0xF0202020);
+        tracksScroll = new android.widget.ScrollView(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int available = Math.max(dp(96), root.getHeight() - dp(84));
+                super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(available, View.MeasureSpec.AT_MOST));
+            }
+        };
+        tracksScroll.setFillViewport(false);
+        tracksScroll.addView(tracksMenu);
+        tracksScroll.setVisibility(View.GONE);
+        FrameLayout.LayoutParams tracksLp = new FrameLayout.LayoutParams(dp(260), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        tracksLp.topMargin = dp(68);
+        tracksLp.rightMargin = dp(24);
+        root.addView(tracksScroll, tracksLp);
         // Mini player (Android 8+, where the device has picture-in-picture)
         if (supportsPip()) {
             pipButton = pill("\u29C9", 0xCC333333);
@@ -312,6 +343,7 @@ public class PlayerActivity extends AppCompatActivity {
         view.setControllerVisibilityListener(
             (PlayerView.ControllerVisibilityListener) visibility -> {
                 for (View o : overlays) o.setVisibility(visibility);
+                if (visibility != View.VISIBLE) closeTracksMenu();
                 if (visibility == View.VISIBLE) showPreCard();
             }
         );
@@ -395,7 +427,8 @@ public class PlayerActivity extends AppCompatActivity {
             new OnBackPressedCallback(true) {
                 @Override
                 public void handleOnBackPressed() {
-                    if (liveDrawer != null && liveDrawer.isOpen()) liveDrawer.close();
+                    if (tracksScroll != null && tracksScroll.getVisibility() == View.VISIBLE) closeTracksMenu();
+                    else if (liveDrawer != null && liveDrawer.isOpen()) liveDrawer.close();
                     else close("back", null);
                 }
             }
@@ -455,8 +488,99 @@ public class PlayerActivity extends AppCompatActivity {
         if (live) handler.postDelayed(stallTick, 1_000);
     }
 
+    private void toggleTracksMenu() {
+        if (tracksScroll == null || inPip()) return;
+        if (tracksScroll.getVisibility() == View.VISIBLE) { closeTracksMenu(); return; }
+        rebuildTracksMenu();
+        tracksControllerTimeout = view.getControllerShowTimeoutMs();
+        view.setControllerShowTimeoutMs(0);
+        tracksScroll.setVisibility(View.VISIBLE);
+        tracksScroll.bringToFront();
+        view.showController();
+    }
+
+    private void closeTracksMenu() {
+        if (tracksScroll != null && tracksScroll.getVisibility() == View.VISIBLE) {
+            tracksScroll.setVisibility(View.GONE);
+            view.setControllerShowTimeoutMs(tracksControllerTimeout);
+        }
+    }
+
+    private void rebuildTracksMenu() {
+        if (tracksMenu == null || player == null) return;
+        tracksMenu.removeAllViews();
+        Tracks tracks = player.getCurrentTracks();
+        boolean anyAudio = addTrackChoices(tracks, C.TRACK_TYPE_AUDIO, "Audio");
+        addTrackMessage("Subtitles");
+        TextView off = pill("Off" + (player.getTrackSelectionParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) || !hasSelectedText(tracks) ? " ✓" : ""), 0xCC333333);
+        off.setOnClickListener(v -> {
+            TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
+            b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+            player.setTrackSelectionParameters(b.build());
+            rebuildTracksMenu();
+        });
+        tracksMenu.addView(off);
+        boolean anyText = addTrackChoices(tracks, C.TRACK_TYPE_TEXT, null);
+        if (!anyAudio && !anyText) addTrackMessage("No selectable tracks available yet.");
+    }
+
+    private boolean hasSelectedText(Tracks tracks) {
+        for (Tracks.Group group : tracks.getGroups()) if (group.getType() == C.TRACK_TYPE_TEXT)
+            for (int i = 0; i < group.length; i++) if (group.isTrackSelected(i)) return true;
+        return false;
+    }
+
+    private boolean addTrackChoices(Tracks tracks, int type, String heading) {
+        if (heading != null) addTrackMessage(heading);
+        boolean found = false;
+        int sequence = 0;
+        Set<String> usedNames = new HashSet<>();
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != type) continue;
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) continue;
+                found = true;
+                Format format = group.getTrackFormat(i);
+                sequence++;
+                String language = format.language != null && !format.language.isEmpty() && !"und".equals(format.language)
+                    ? Locale.forLanguageTag(format.language).getDisplayLanguage(Locale.getDefault()) : "";
+                String name = format.label != null && !format.label.isEmpty() ? format.label :
+                    !language.isEmpty() ? language : "Track " + sequence;
+                if (format.channelCount > 0) name += " · " + format.channelCount + " ch";
+                if (format.bitrate > 0) name += " · " + (format.bitrate / 1000) + " kb/s";
+                if (!usedNames.add(name)) name += " · Track " + sequence;
+                TextView choice = pill(name + (group.isTrackSelected(i) ? " ✓" : ""), 0xCC333333);
+                final int index = i;
+                choice.setOnClickListener(v -> {
+                    TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
+                    b.clearOverridesOfType(type);
+                    b.setTrackTypeDisabled(type, false);
+                    b.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), index));
+                    player.setTrackSelectionParameters(b.build());
+                    rebuildTracksMenu();
+                });
+                tracksMenu.addView(choice);
+            }
+        }
+        if (!found) addTrackMessage("No selectable " + (type == C.TRACK_TYPE_TEXT ? "subtitle" : "audio") + " tracks.");
+        return found;
+    }
+
+    private void addTrackMessage(String message) {
+        TextView label = new TextView(this);
+        label.setText(message);
+        label.setTextColor(Color.WHITE);
+        label.setPadding(dp(12), dp(7), dp(12), dp(7));
+        tracksMenu.addView(label);
+    }
+
     private final Player.Listener listener =
         new Player.Listener() {
+            @Override
+            public void onTracksChanged(@NonNull Tracks tracks) {
+                if (tracksScroll != null && tracksScroll.getVisibility() == View.VISIBLE) rebuildTracksMenu();
+            }
+
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
                 if (centeredPlay == null || player == null) return;
@@ -630,6 +754,12 @@ public class PlayerActivity extends AppCompatActivity {
 
     /** Play another link in place (failover, kick-off, back to live). */
     private void switchTo(String url, String mime, boolean seekable) {
+        closeTracksMenu();
+        TrackSelectionParameters.Builder tracks = player.getTrackSelectionParameters().buildUpon();
+        tracks.clearOverridesOfType(C.TRACK_TYPE_AUDIO);
+        tracks.clearOverridesOfType(C.TRACK_TYPE_TEXT);
+        tracks.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false);
+        player.setTrackSelectionParameters(tracks.build());
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
         if (type != null) b.setMimeType(type);
@@ -1301,6 +1431,7 @@ public class PlayerActivity extends AppCompatActivity {
             if (centeredPlay != null) centeredPlay.setVisibility(View.GONE);
             if (pauseFlash != null) pauseFlash.setVisibility(View.GONE);
             for (View o : overlays) o.setVisibility(View.GONE);
+            closeTracksMenu();
             hidePreCard();
             if (noteView != null) noteView.setVisibility(View.GONE);
             if (liveDrawer != null) liveDrawer.hideNow();

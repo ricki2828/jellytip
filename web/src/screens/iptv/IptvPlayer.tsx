@@ -30,6 +30,7 @@ import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { alternatesAfterSwitch, shouldSurfaceLiveStall } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
+import { hlsChoices, nativeChoices, nativeSubtitlesOff, type TrackChoice } from "../../lib/iptvTracks";
 import "./iptv.css";
 
 const PROGRESS_MS = 30_000;
@@ -75,6 +76,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const linkRef = useRef<string | null>(null);
   const answerRef = useRef<PlayAnswer | null>(null);
   const engineRef = useRef<Engine>("native");
+  const [playerEngine, setPlayerEngine] = useState<Engine>("native");
   const fmtRef = useRef<"ts" | "m3u8">("ts");
   const watchRef = useRef<number | undefined>(undefined);
   const renewed = useRef(false);
@@ -95,6 +97,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const isLive = !!target.channel && target.start == null;
   const [meta, setMeta] = useState<RecMeta | null>(null);
   const [controls, setControls] = useState(true);
+  const [tracksOpen, setTracksOpen] = useState(false);
+  const [audioChoices, setAudioChoices] = useState<TrackChoice[]>([]);
+  const [subtitleChoices, setSubtitleChoices] = useState<TrackChoice[]>([]);
+  const [subtitleOff, setSubtitleOff] = useState(true);
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
   const growRef = useRef(false);
@@ -110,7 +116,25 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   // Where to start once the media is known: the resume point, then (after a renewed link) where the old one stopped
   const seekTo = useRef(resume);
 
+  const refreshTracks = useCallback(() => {
+    const h = hlsRef.current;
+    if (h) {
+      setAudioChoices(hlsChoices(h.audioTracks, h.audioTrack));
+      setSubtitleChoices(hlsChoices(h.subtitleTracks, h.subtitleTrack));
+      setSubtitleOff(h.subtitleTrack < 0);
+      return;
+    }
+    if (engineRef.current === "mpegts") { setAudioChoices([]); setSubtitleChoices([]); return; }
+    const v = videoRef.current as (HTMLVideoElement & { audioTracks?: ArrayLike<{ label?: string; language?: string; enabled: boolean }> }) | null;
+    setAudioChoices(nativeChoices(v?.audioTracks ?? [], false));
+    setSubtitleChoices(nativeChoices(v?.textTracks ?? [], true));
+    setSubtitleOff(nativeSubtitlesOff(v?.textTracks ?? []));
+  }, []);
+
   const teardown = useCallback(() => {
+    setTracksOpen(false);
+    setAudioChoices([]); setSubtitleChoices([]);
+    setPlayerEngine("native");
     window.clearTimeout(watchRef.current);
     hlsRef.current?.destroy();
     hlsRef.current = null;
@@ -210,6 +234,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       linkRef.current = url;
       const engine = engineFor(a.url, a.mime);
       engineRef.current = engine;
+      setPlayerEngine(engine);
+      refreshTracks();
       answerRef.current = a;
       failingUrl.current = null;
       attemptStarted.current = Date.now();
@@ -260,12 +286,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           if (data.fatal && hlsRef.current === h)
             void onLinkError(url, [data.type, data.details, data.response?.code, data.error?.message].filter((x) => x != null && x !== "").join(" "));
         });
+        for (const event of [H.Events.AUDIO_TRACKS_UPDATED, H.Events.AUDIO_TRACK_SWITCHED, H.Events.SUBTITLE_TRACKS_UPDATED, H.Events.SUBTITLE_TRACK_SWITCH]) h.on(event, refreshTracks);
+        refreshTracks();
         h.loadSource(url);
         h.attachMedia(v);
-      } else v.src = url;
+      } else { v.src = url; refreshTracks(); }
       v.play().catch(() => setPaused(true));
     },
-    [onLinkError],
+    [onLinkError, refreshTracks],
   );
 
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
@@ -309,6 +337,23 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
+  // Native media track lists can be populated after metadata and change during playback.
+  useEffect(() => {
+    const v = videoRef.current as (HTMLVideoElement & { audioTracks?: EventTarget }) | null;
+    if (!v) return;
+    const update = () => { if (!hlsRef.current && engineRef.current !== "mpegts") refreshTracks(); };
+    for (const list of [v.audioTracks, v.textTracks]) {
+      list?.addEventListener("addtrack", update);
+      list?.addEventListener("removetrack", update);
+      list?.addEventListener("change", update);
+    }
+    return () => { for (const list of [v.audioTracks, v.textTracks]) {
+      list?.removeEventListener("addtrack", update);
+      list?.removeEventListener("removetrack", update);
+      list?.removeEventListener("change", update);
+    } };
+  }, [refreshTracks]);
+
   // A recording's own times: its length when the file can't say, and whether it is still growing
   useEffect(() => {
     if (!target.recording) return;
@@ -339,8 +384,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const poke = useCallback(() => {
     setControls(true);
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setControls(false), 3500);
-  }, []);
+    if (!tracksOpen) hideTimer.current = window.setTimeout(() => setControls(false), 3500);
+  }, [tracksOpen]);
   useEffect(() => {
     poke();
     return () => {
@@ -545,15 +590,21 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.key === "Escape" || e.key === "Backspace") && tracksOpen) { e.preventDefault(); e.stopPropagation(); setTracksOpen(false); return; }
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         e.stopPropagation();
         exit();
         return;
       }
+      const onButton = (document.activeElement as HTMLElement | null)?.tagName === "BUTTON";
+      if (tracksOpen && onButton) return;
+      if (tracksOpen && [" ", "k", "Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "j", "l", "PageDown", "PageUp"].includes(e.key)) {
+        e.preventDefault();
+        return;
+      }
       if (isLive) return;
       poke();
-      const onButton = (document.activeElement as HTMLElement | null)?.tagName === "BUTTON";
       let handled = true;
       switch (e.key) {
         case " ":
@@ -593,7 +644,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, controls, length, growing]);
+  }, [isLive, controls, length, growing, tracksOpen]);
 
   // Where to start: the resume point (or, after a renewed link, where the old one stopped), once the player can take a seek
   const applyResume = (v: HTMLVideoElement) => {
@@ -609,7 +660,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
 
   return (
     <div
-      className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" ? " show" : ""}`}
+      className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" || tracksOpen ? " show" : ""}`}
       onMouseMove={isLive ? undefined : poke}
       onClick={() => {
         if (touchClick.current) touchClick.current = false;
@@ -643,7 +694,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           setTime(e.currentTarget.currentTime);
         }}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
-        onLoadedMetadata={(e) => applyResume(e.currentTarget)}
+        onLoadedMetadata={(e) => { applyResume(e.currentTarget); refreshTracks(); }}
         onCanPlay={(e) => applyResume(e.currentTarget)}
         onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
         onPlaying={finishBuffer}
@@ -694,6 +745,16 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         )}
         <span className="player-method">via IPTV</span>
       </div>
+      {state.kind === "playing" && <button className="btn small iptv-tracks-button" data-nav aria-expanded={tracksOpen} onClick={(e) => { e.stopPropagation(); const opening = !tracksOpen; setTracksOpen(opening); if (opening) { setControls(true); if (hideTimer.current) window.clearTimeout(hideTimer.current); } else poke(); refreshTracks(); }}>Audio &amp; subtitles</button>}
+      {tracksOpen && state.kind === "playing" && <div className="iptv-track-menu" role="group" aria-label="Audio and subtitles" onClick={(e) => e.stopPropagation()}>
+        {playerEngine === "mpegts" ? <p>Track selection is unavailable for this stream in this browser.</p> : <>
+          <strong>Audio</strong>
+          {audioChoices.length ? audioChoices.map((choice) => <button key={`a${choice.index}`} className="btn small" data-nav aria-pressed={choice.active} onClick={() => { const h = hlsRef.current; if (h) h.audioTrack = choice.index; else { const v = videoRef.current as (HTMLVideoElement & { audioTracks?: ArrayLike<{ enabled: boolean }> }) | null; if (v?.audioTracks) Array.from(v.audioTracks).forEach((track, i) => { track.enabled = i === choice.index; }); } refreshTracks(); }}>{choice.label}{choice.active ? " ✓" : ""}</button>) : <p>No selectable audio tracks exposed.</p>}
+          <strong>Subtitles</strong>
+          <button className="btn small" data-nav aria-pressed={subtitleOff} onClick={() => { const h = hlsRef.current; if (h) h.subtitleTrack = -1; else Array.from(videoRef.current?.textTracks ?? []).forEach((track) => { if (track.kind === "subtitles" || track.kind === "captions") track.mode = "disabled"; }); refreshTracks(); }}>Off{subtitleOff ? " ✓" : ""}</button>
+          {subtitleChoices.map((choice) => <button key={`s${choice.index}`} className="btn small" data-nav aria-pressed={choice.active} onClick={() => { const h = hlsRef.current; if (h) h.subtitleTrack = choice.index; else Array.from(videoRef.current?.textTracks ?? []).forEach((track, i) => { if (track.kind === "subtitles" || track.kind === "captions") track.mode = i === choice.index ? "showing" : "disabled"; }); refreshTracks(); }}>{choice.label}{choice.active ? " ✓" : ""}</button>)}
+        </>}
+      </div>}
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />
       <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />

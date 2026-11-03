@@ -3103,3 +3103,31 @@
 .team-hit.on .th-state {
   color: #ffc72c;
 }
+
+.iptv-tracks-button {
+  position: absolute;
+  z-index: 21;
+  top: 4.5rem;
+  right: 1.5rem;
+  cursor: pointer;
+}
+
+.iptv-track-menu {
+  position: absolute;
+  z-index: 20;
+  top: 7.5rem;
+  right: 1.5rem;
+  max-height: min(65vh, 30rem);
+  min-width: min(18rem, 85vw);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  padding: .75rem;
+  color: white;
+  background: rgba(18, 22, 30, .96);
+  border-radius: .7rem;
+}
+.iptv-track-menu strong { margin-top: .35rem; }
+.iptv-track-menu p { margin: .35rem 0; }
+.iptv-track-menu .btn { text-align: left; }
