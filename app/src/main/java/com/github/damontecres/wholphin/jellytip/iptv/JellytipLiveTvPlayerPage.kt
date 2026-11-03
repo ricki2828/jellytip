@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -53,6 +58,14 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import androidx.media3.ui.SubtitleView
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
@@ -87,6 +100,30 @@ private const val PRE_CARD_MS = 10_000L
 private const val IDLE_RETUNE_MS = 600L
 private val TOAST_MINE = Color(0xFF22C55E)
 private val TOAST_OPP = Color(0xFFE5534B)
+
+private data class IptvTrackChoice(val group: Tracks.Group, val index: Int) {
+    val format get() = group.getTrackFormat(index)
+    val selected get() = group.isTrackSelected(index)
+}
+
+private fun Tracks.choices(type: Int): List<IptvTrackChoice> =
+    groups.filter { it.type == type }.flatMap { group ->
+        (0 until group.length).mapNotNull { index ->
+            val format = group.getTrackFormat(index)
+            val mime = format.sampleMimeType
+            val imageSubtitle = mime?.startsWith("image/") == true || mime in setOf("application/pgs", "application/dvbsubs", "application/vobsub")
+            if (group.isTrackSupported(index) && !imageSubtitle) IptvTrackChoice(group, index) else null
+        }
+    }
+
+private fun IptvTrackChoice.label(): String =
+    listOfNotNull(
+        format.label?.takeIf { it.isNotBlank() },
+        format.language?.takeUnless { it == "und" }?.let { java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.getDefault()).ifBlank { it } },
+        format.codecs?.takeIf { it.isNotBlank() } ?: format.sampleMimeType?.substringAfter('/'),
+        format.channelCount.takeIf { it > 0 }?.let { "$it ch" },
+        format.bitrate.takeIf { it > 0 }?.let { "${it / 1000} kb/s" },
+    ).distinct().joinToString(" · ").ifBlank { "Track ${index + 1}" }
 
 /**
  * A top-right player toast, a Broadcast lower third (plan "In-match visual direction"): a colour edge (the team for a
@@ -127,6 +164,7 @@ fun JellytipLiveTvPlayerPage(
     var current by remember { mutableStateOf(opened ?: IptvTarget(lineup[startIndex].id, lineup[startIndex].name)) }
     var bannerTick by remember { mutableIntStateOf(1) }
     var bannerVisible by remember { mutableStateOf(true) }
+    var bannerArmed by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     // Same-event alternate in use after the lineup channel's stream failed (plan §4); null = the lineup channel
     var fallback by remember { mutableStateOf<IptvChannel?>(null) }
@@ -166,6 +204,7 @@ fun JellytipLiveTvPlayerPage(
         tried += ch.id
         val target = if (index == startIndex && opened != null) opened else IptvTarget(ch.id, ch.name)
         current = target
+        bannerArmed = false
         if (playback.state.value.target != target) delay(ZAP_SETTLE_MS)
         playback.play(target, "full screen settle")
     }
@@ -233,6 +272,7 @@ fun JellytipLiveTvPlayerPage(
         bannerVisible = true
         delay(BANNER_MS)
         bannerVisible = false
+        bannerArmed = false
     }
     val nowNext by produceState<IptvNowNext?>(null, channel.id) {
         value = null
@@ -260,11 +300,113 @@ fun JellytipLiveTvPlayerPage(
     // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
     var panelMenu by remember { mutableStateOf(false) }
     var lastToast by remember { mutableStateOf<PlayerToast?>(null) }
+    var trackSheetOpen by remember { mutableStateOf(false) }
+    var trackCursor by remember { mutableIntStateOf(0) }
+    var trackSnapshot by remember { mutableStateOf(Tracks.EMPTY) }
+    var trackMessage by remember { mutableStateOf<String?>(null) }
+    var subtitleCues by remember { mutableStateOf<List<Cue>>(emptyList()) }
+    val trackPlayer = playback.player
+    val trackTarget = playState.target
+    var trackItem by remember { mutableStateOf<MediaItem?>(null) }
+    DisposableEffect(trackPlayer, current) {
+        trackSheetOpen = false
+        trackCursor = 0
+        trackMessage = null
+        subtitleCues = emptyList()
+        trackItem = trackPlayer?.currentMediaItem
+        trackSnapshot = if (playback.state.value.target == current && trackItem != null) trackPlayer?.currentTracks ?: Tracks.EMPTY else Tracks.EMPTY
+        val listener = object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                trackItem = mediaItem
+                trackSheetOpen = false
+                trackCursor = 0
+                trackMessage = null
+                trackSnapshot = Tracks.EMPTY
+                subtitleCues = emptyList()
+                // Selection parameters belong to this media item. The shared player also serves the guide,
+                // so an explicit subtitle-off or audio override must not follow a channel change.
+                trackPlayer?.let { player ->
+                    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .build()
+                }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                if (playback.state.value.target == current && trackPlayer?.currentMediaItem == trackItem) {
+                    trackSnapshot = tracks
+                    trackCursor = trackCursor.coerceIn(0, tracks.choices(C.TRACK_TYPE_AUDIO).size + tracks.choices(C.TRACK_TYPE_TEXT).size)
+                }
+            }
+
+            override fun onCues(cueGroup: CueGroup) {
+                if (playback.state.value.target == current) subtitleCues = cueGroup.cues
+            }
+        }
+        trackPlayer?.addListener(listener)
+        onDispose {
+            trackPlayer?.removeListener(listener)
+            trackPlayer?.let { player ->
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build()
+            }
+        }
+    }
+    val audioTracks = if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_AUDIO) else emptyList()
+    val subtitleTracks = if (trackTarget == current && trackItem != null) trackSnapshot.choices(C.TRACK_TYPE_TEXT) else emptyList()
+    val trackRows = audioTracks.size + 1 + subtitleTracks.size
+    LaunchedEffect(trackMessage) {
+        if (trackMessage != null) {
+            delay(3_000)
+            trackMessage = null
+        }
+    }
+    LaunchedEffect(trackSheetOpen, matchModal, preMenu, panelMenu) {
+        if (trackSheetOpen && (matchModal != null || preMenu || panelMenu)) trackSheetOpen = false
+    }
+    fun openTrackSheet() {
+        if (matchModal != null || preMenu || panelOpen || panelMenu) return
+        trackCursor = audioTracks.indexOfFirst { it.selected }.takeIf { it >= 0 } ?: audioTracks.size
+        trackSheetOpen = true
+        bannerVisible = true
+    }
+    fun selectTrack() {
+        val player = trackPlayer ?: return
+        if (playback.state.value.target != current || player.currentMediaItem != trackItem) return
+        val choice = when {
+            trackCursor < audioTracks.size -> audioTracks[trackCursor]
+            trackCursor > audioTracks.size -> subtitleTracks.getOrNull(trackCursor - audioTracks.size - 1)
+            else -> null
+        }
+        val type = if (trackCursor < audioTracks.size) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(type)
+            .setTrackTypeDisabled(type, type == C.TRACK_TYPE_TEXT && choice == null)
+            .apply { if (choice != null) addOverride(TrackSelectionOverride(choice.group.mediaTrackGroup, choice.index)) }
+            .build()
+        trackMessage = when {
+            choice == null -> "Subtitles off"
+            type == C.TRACK_TYPE_AUDIO -> "Audio: ${choice.label()}"
+            else -> "Subtitles: ${choice.label()}"
+        }
+        trackSheetOpen = false
+        bannerTick++
+        focus.tryRequestFocus()
+    }
     // A replayed game (matchInfo.replay) gets no live panel, chip, fantasy or alerts
     val panelMatch = nowNext?.liveMatch?.takeIf { current.isLive && !it.replay && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
     val spoilerNotice = (nowNext?.now?.kind == "replay" || nowNext?.now?.kind == "highlights" || nowNext?.liveMatch?.replay == true) && me?.sportSpoilers != true
+    androidx.activity.compose.BackHandler(enabled = trackSheetOpen) {
+        trackSheetOpen = false
+        focus.tryRequestFocus()
+    }
     androidx.activity.compose.BackHandler(enabled = panelOpen) { panelOpen = false }
     // Top-right toasts shared by market flips and fantasy scoring (plan "fantasy alerts"): one at a time, 6 s each, at
     // most 3 waiting (the oldest waiting one is dropped)
@@ -442,6 +584,25 @@ fun JellytipLiveTvPlayerPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (trackSheetOpen) {
+                    when (e.key) {
+                        Key.DirectionUp -> trackCursor = Math.floorMod(trackCursor - 1, trackRows)
+                        Key.DirectionDown -> trackCursor = (trackCursor + 1) % trackRows
+                        Key.DirectionLeft, Key.DirectionRight -> {}
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> if (e.nativeKeyEvent.repeatCount == 0) selectTrack()
+                        Key.Back, Key.Escape -> {
+                            trackSheetOpen = false
+                            focus.tryRequestFocus()
+                        }
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (e.key == Key.Captions || e.key == Key.MediaAudioTrack) {
+                    openTrackSheet()
+                    return@onPreviewKeyEvent true
+                }
+                if (matchModal != null || preMenu || panelMenu) return@onPreviewKeyEvent false
                 // The side panel takes Left (close) and Up/Down (tabs) while it is open; the video keeps playing
                 if (panelOpen) {
                     when (e.key) {
@@ -481,6 +642,14 @@ fun JellytipLiveTvPlayerPage(
                     preCardTick++
                 }
                 when (e.key) {
+                    Key.Back, Key.Escape -> {
+                        if (bannerVisible) {
+                            bannerVisible = false
+                            bannerArmed = false
+                            true
+                        } else false
+                    }
+
                     Key.DirectionUp, Key.DirectionDown, Key.ChannelUp, Key.ChannelDown, Key.PageUp, Key.PageDown -> {
                         if (lineup.size > 1) {
                             val step = if (e.key == Key.DirectionUp || e.key == Key.ChannelDown || e.key == Key.PageUp) -1 else 1
@@ -492,7 +661,15 @@ fun JellytipLiveTvPlayerPage(
                     }
 
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (bannerVisible) bannerVisible = false else bannerTick++
+                        if (bannerVisible && bannerArmed) {
+                            openTrackSheet()
+                            bannerArmed = false
+                        } else if (bannerVisible) {
+                            bannerArmed = true
+                        } else {
+                            bannerArmed = true
+                            bannerTick++
+                        }
                         true
                     }
 
@@ -533,6 +710,11 @@ fun JellytipLiveTvPlayerPage(
         val player = playback.player
         if (player != null) {
             PlayerSurface(player = player, surfaceType = SURFACE_TYPE_SURFACE_VIEW, modifier = Modifier.fillMaxSize())
+            AndroidView(
+                factory = { SubtitleView(it) },
+                update = { it.setCues(subtitleCues) },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         val status =
             when (val s = playState) {
@@ -785,8 +967,53 @@ fun JellytipLiveTvPlayerPage(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            trackMessage?.let {
+                Text(
+                    it,
+                    color = Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 15.sp,
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = 76.dp, start = 48.dp)
+                        .background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                )
+            }
+        }
+        if (trackSheetOpen) {
+            Column(
+                modifier = Modifier.align(Alignment.CenterEnd).padding(32.dp).widthIn(min = 320.dp, max = 440.dp)
+                    .fillMaxHeight(0.85f).background(Broadcast.Base.copy(alpha = 0.97f), RoundedCornerShape(12.dp))
+                    .verticalScroll(rememberScrollState()).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Audio & subtitles", color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                Text("Audio", color = Broadcast.Gold, fontFamily = JellytipFontFamily, fontSize = 15.sp)
+                if (audioTracks.isEmpty()) Text("No selectable audio tracks yet", color = Broadcast.Secondary, fontFamily = JellytipFontFamily, fontSize = 14.sp)
+                audioTracks.forEachIndexed { i, choice -> TrackSheetRow(choice.label(), choice.selected, trackCursor == i) }
+                Text("Subtitles", color = Broadcast.Gold, fontFamily = JellytipFontFamily, fontSize = 15.sp)
+                TrackSheetRow("Off", subtitleTracks.none { it.selected }, trackCursor == audioTracks.size)
+                subtitleTracks.forEachIndexed { i, choice -> TrackSheetRow(choice.label(), choice.selected, trackCursor == audioTracks.size + 1 + i) }
+            }
         }
     }
+}
+
+@Composable
+private fun TrackSheetRow(label: String, selected: Boolean, focused: Boolean) {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) { if (focused) bringIntoView.bringIntoView() }
+    Text(
+        text = "${if (selected) "✓  " else "    "}$label",
+        color = Color.White,
+        fontFamily = JellytipFontFamily,
+        fontSize = 16.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth()
+            .bringIntoViewRequester(bringIntoView)
+            .background(if (focused) JellytipPalette.Jelly.copy(alpha = 0.5f) else Color.Transparent, RoundedCornerShape(6.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
