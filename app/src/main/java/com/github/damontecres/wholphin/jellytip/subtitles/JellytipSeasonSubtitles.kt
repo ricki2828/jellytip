@@ -83,20 +83,34 @@ class JellytipSeasonSubtitles
                         return@launch
                     }
                     showToast(context, "Searching $language subtitles for ${if (seasons.size > 1) "${seasons.size} seasons" else "the season"}...")
-                    val jobs =
-                        seasons.mapNotNull { sid ->
-                            val res =
-                                companionApi.postJson(
-                                    "/v1/subtitles/season",
-                                    JSONObject().put("seasonId", sid.toString()).put("language", language).toString(),
-                                )
-                            res?.takeIf { it.first in 200..299 }?.let { Job(JSONObject(it.second).getString("jobId")) }
+                    val summaries = mutableListOf<String>()
+                    // Submit and finish one season before taking the next slot. Other clients may occupy both
+                    // companion slots, so 429 keeps this season pending with bounded retries.
+                    for (sid in seasons) {
+                        var job: Job? = null
+                        for (attempt in 0 until MAX_SUBMIT_ATTEMPTS) {
+                            val res = companionApi.postJson(
+                                "/v1/subtitles/season",
+                                JSONObject().put("seasonId", sid.toString()).put("language", language).toString(),
+                            )
+                            if (res?.first == 429) {
+                                delay(minOf(30_000L, 1_000L shl minOf(attempt, 5)))
+                                continue
+                            }
+                            if (res?.first == 202) {
+                                job = Job(JSONObject(res.second).getString("jobId"))
+                            } else {
+                                summaries += if (res?.first == 401 || res?.first == 403) "Admin authorization required" else "Season subtitle search unavailable (${res?.first ?: "offline"})"
+                            }
+                            break
                         }
-                    if (jobs.isEmpty()) {
-                        showToast(context, "Subtitle search is unavailable right now", Toast.LENGTH_LONG)
-                        return@launch
+                        if (job == null && summaries.size < seasons.indexOf(sid) + 1) summaries += "Subtitle service remained busy after retries"
+                        if (job != null) {
+                            track(companionApi, listOf(job))
+                            summaries += job.summary.ifBlank { "Season subtitle search finished" }
+                        }
                     }
-                    track(companionApi, jobs)
+                    showToast(context, summaries.joinToString("\n"), Toast.LENGTH_LONG)
                 } catch (ex: Exception) {
                     Timber.w(ex, "Season subtitles failed")
                     showToast(context, "Season subtitle search failed", Toast.LENGTH_LONG)
@@ -128,14 +142,15 @@ class JellytipSeasonSubtitles
                     v.optString("message").takeIf { it.isNotBlank() && it != "null" }?.let { job.summary += " ($it)" }
                 }
                 if (failures > 5) {
+                    jobs.filter { !it.finished }.forEach { it.summary = "Lost contact with the subtitle service" }
                     showToast(context, "Lost contact with the subtitle service", Toast.LENGTH_LONG)
                     return
                 }
                 if (jobs.all { it.finished }) {
-                    showToast(context, jobs.joinToString("\n") { it.summary }.ifBlank { "Subtitle search finished" }, Toast.LENGTH_LONG)
                     return
                 }
             }
+            jobs.filter { !it.finished }.forEach { it.summary = "Subtitle search is still running on the server" }
             showToast(context, "Subtitle search is still running on the server", Toast.LENGTH_LONG)
         }
 
@@ -146,5 +161,6 @@ class JellytipSeasonSubtitles
 
             private const val POLL_MS = 4_000L
             private const val MAX_POLLS = 450 // 30 min
+            private const val MAX_SUBMIT_ATTEMPTS = 12
         }
     }

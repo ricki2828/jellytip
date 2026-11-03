@@ -1,8 +1,9 @@
 // Details for movies, series and episodes. Backdrop = companion detailsIndex (≠ hero, ≠ tile), info block bottom-left only;
 // series get season chips + episodes, episodes get prev/next; cast and more-like-this sit further down.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   episodes as getEpisodes,
+  getSession,
   getItem,
   localTrailers,
   personImage,
@@ -29,6 +30,9 @@ import { DetailsQuote, ReviewsRow } from "../components/Reviews";
 import { TasteButtons } from "../components/TasteButtons";
 import { runtimeText } from "../api/jellyfin";
 import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
+import { companionCall } from "../api/companionCall";
+import { usePrefs } from "../api/me";
+import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -53,6 +57,10 @@ export function Details({ id }: { id: string }) {
   const [eps, setEps] = useState<Item[] | null>(null);
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [subtitleProgress, setSubtitleProgress] = useState<Progress | null>(null);
+  const [subtitleActive, setSubtitleActive] = useState(false);
+  const subtitleLock = useRef(false);
+  const { prefs } = usePrefs({ defer: true });
   const phone = useIsPhone();
   // Double feature (from the specials row): "Play both" plays this one, then the pair
   const pairParam = new URLSearchParams(location.hash.split("?")[1] ?? "").get("pair") ?? "";
@@ -189,6 +197,17 @@ export function Details({ id }: { id: string }) {
       flash("Couldn't update favourite. Try again.");
     }
   };
+  const searchAllSubtitles = async () => {
+    if (subtitleLock.current) return;
+    subtitleLock.current = true;
+    setSubtitleActive(true);
+    try {
+      await runSeasonSubtitles(seasonList.map((s) => s.Id), prefs?.playback.subtitleLangs[0]?.trim() || "eng", companionCall, setSubtitleProgress);
+    } finally {
+      subtitleLock.current = false;
+      setSubtitleActive(false);
+    }
+  };
 
   return (
     <div className="details">
@@ -291,7 +310,9 @@ export function Details({ id }: { id: string }) {
                 </button>
               ))}
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
+              {getSession()?.isAdmin && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchAllSubtitles()}>Search subtitles for all seasons</button>}
             </div>
+            {getSession()?.isAdmin && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
             {phone ? (
               // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
               <div className="ep-list">
