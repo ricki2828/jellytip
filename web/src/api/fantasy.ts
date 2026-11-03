@@ -6,6 +6,43 @@ import { hasLeagues, parseFantasy, parseStarters, type FantasyLive, type Starter
 
 const EVENT = "jellytip-fantasy";
 const FRESH_MS = 45_000;
+const subscribers = new Set<(result: FantasyLive | null) => void>();
+export const fantasySeen = new Set<string>();
+let fantasyPrimed = false;
+export function fantasyFirstEvents(): boolean { const first = !fantasyPrimed; fantasyPrimed = true; return first; }
+let timer: number | undefined;
+let generation = 0;
+let refreshFailed = false;
+let refreshChecked = false;
+export const fantasyRefreshStatus = () => ({ failed: refreshFailed, checked: refreshChecked });
+
+function schedule() {
+  window.clearTimeout(timer);
+  if (!subscribers.size || document.hidden) return;
+  timer = window.setTimeout(() => void refresh(), FRESH_MS);
+}
+async function refresh() {
+  if (!subscribers.size || document.hidden) return;
+  await retryFantasyRefresh();
+  schedule();
+}
+/** Retry now and publish the result to every visible fantasy consumer. */
+export async function retryFantasyRefresh(): Promise<void> {
+  const requestGeneration = generation;
+  let failed: boolean;
+  try { failed = !(await fantasyLive(true)); } catch { failed = true; }
+  if (requestGeneration !== generation) return;
+  refreshFailed = failed;
+  refreshChecked = true;
+  for (const subscriber of subscribers) subscriber(state);
+}
+export function subscribeFantasyRefresh(subscriber: (result: FantasyLive | null) => void): () => void {
+  subscribers.add(subscriber);
+  if (subscribers.size === 1) void refresh();
+  else subscriber(state);
+  return () => { subscribers.delete(subscriber); schedule(); };
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && subscribers.size) void refresh(); else schedule(); });
 let state: FantasyLive | null = null;
 let unavailable = false;
 let at = 0;
@@ -16,8 +53,10 @@ export function fantasyLive(force = false): Promise<FantasyLive | null> {
   if (unavailable) return Promise.resolve(null);
   if (!force && state && Date.now() - at < FRESH_MS) return Promise.resolve(state);
   if (inflight) return inflight;
+  const requestGeneration = generation;
   inflight = companionCall("GET", "v1/fantasy/live")
     .then((a) => {
+      if (requestGeneration !== generation) return null;
       if (a.status === 404) unavailable = true;
       else if (a.status === 200) {
         state = parseFantasy(a.data);
@@ -28,14 +67,22 @@ export function fantasyLive(force = false): Promise<FantasyLive | null> {
       // so they can warn that live scores may be stale.
       return a.status === 200 ? state : null;
     })
-    .finally(() => (inflight = null));
+    .finally(() => { if (requestGeneration === generation) inflight = null; });
   return inflight;
 }
 
 window.addEventListener("jellytip-session", () => {
+  generation++;
   state = null;
   unavailable = false;
   at = 0;
+  inflight = null;
+  fantasySeen.clear();
+  fantasyPrimed = false;
+  refreshFailed = false;
+  refreshChecked = false;
+  window.dispatchEvent(new Event(EVENT));
+  if (subscribers.size) void refresh();
 });
 
 export const fantasyMissing = () => unavailable;
@@ -63,10 +110,11 @@ export function useFantasy(active = true, includeEmpty = false): FantasyLive | n
     let alive = true;
     const on = () => alive && setLive(state);
     window.addEventListener(EVENT, on);
-    void fantasyLive().then((d) => { if (alive && d) setLive(d); }).catch(() => { /* Page refresh reports failures and retains the last snapshot. */ });
+    const unsubscribe = subscribeFantasyRefresh(() => { if (alive) setLive(state); });
     return () => {
       alive = false;
       window.removeEventListener(EVENT, on);
+      unsubscribe();
     };
   }, [active]);
   return active && (includeEmpty || hasLeagues(live)) ? live : null;

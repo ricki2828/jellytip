@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fantasyLive, fantasyMissing, useFantasy } from "../api/fantasy";
+import { fantasyMissing, fantasyRefreshStatus, retryFantasyRefresh, subscribeFantasyRefresh, useFantasy } from "../api/fantasy";
 import { FantasyMatchups } from "../components/FantasyMatchups";
 import { snapshotStale, sourceAgeSeconds } from "../lib/fantasyPage";
 import "./fantasy.css";
@@ -11,18 +11,17 @@ export function FantasyPage() {
   const [lastCheck, setLastCheck] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    let alive = true;
-    const refresh = async () => {
-      if (document.hidden) return;
-      try { const result = await fantasyLive(true); if (alive) { setFailed(!result); if (result) setLastCheck(Date.now()); setNow(Date.now()); } }
-      catch { if (alive) setFailed(true); }
-      finally { if (alive) setChecked(true); }
-    };
-    void refresh();
-    const timer = setInterval(() => void refresh(), 45_000);
+    const unsubscribe = subscribeFantasyRefresh((result) => {
+      const refreshed = fantasyRefreshStatus();
+      setFailed(refreshed.failed);
+      setChecked(refreshed.checked);
+      if (result && !refreshed.failed) setLastCheck(Date.now());
+      setNow(Date.now());
+    });
+    const resetForSession = () => { setFailed(false); setChecked(false); setLastCheck(null); };
+    window.addEventListener("jellytip-session", resetForSession);
     const ageTimer = setInterval(() => setNow(Date.now()), 15_000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { alive = false; clearInterval(timer); clearInterval(ageTimer); document.removeEventListener("visibilitychange", refresh); };
+    return () => { unsubscribe(); window.removeEventListener("jellytip-session", resetForSession); clearInterval(ageTimer); };
   }, []);
   const status = live?.providers.yahoo.status;
   const stale = snapshotStale(live, failed, now);
@@ -39,7 +38,7 @@ export function FantasyPage() {
     {live && <div className="fantasy-freshness"><p>Source updated: {live.updatedAt != null ? new Date(live.updatedAt * 1000).toLocaleString() : "Unavailable"}{age != null && ` · ${age}s ago`}</p><p>Last successful check: {lastCheck != null ? new Date(lastCheck).toLocaleTimeString() : "Not yet checked"}</p></div>}
     {yahooNotice && !hasScores && yahooNotice}
     {status === "ready" && !hasScores && <p>Yahoo is connected and ready.</p>}
-    {stale && !fantasyMissing() && <div className="fantasy-stale" role="status"><p>{failed ? "The latest check failed." : age == null ? "The source update time is unavailable." : "Live player data is older than 90 seconds."} {hasScores ? "Showing the last available scores." : "Scores are currently unavailable."}</p><button type="button" onClick={() => { void fantasyLive(true).then(result => { setFailed(!result); if (result) setLastCheck(Date.now()); setNow(Date.now()); }).catch(() => { setFailed(true); setNow(Date.now()); }); }}>Retry</button></div>}
+    {stale && !fantasyMissing() && <div className="fantasy-stale" role="status"><p>{failed ? "The latest check failed." : age == null ? "The source update time is unavailable." : "Live player data is older than 90 seconds."} {hasScores ? "Showing the last available scores." : "Scores are currently unavailable."}</p><button type="button" onClick={() => void retryFantasyRefresh()}>Retry</button></div>}
     {!live && !checked && <p role="status">Loading fantasy scores…</p>}
     {checked && fantasyMissing() && <p>Fantasy is not available on this server yet.</p>}
     {live && !live.leagues.length && <p>{linked ? "No matchups available this week." : "No fantasy providers linked."} Manage linked accounts in <a href="#/settings">Settings</a>.</p>}

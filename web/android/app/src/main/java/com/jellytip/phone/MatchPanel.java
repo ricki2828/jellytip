@@ -23,7 +23,7 @@ import org.json.JSONObject;
  * Portrait panel below the 16:9 video (~/ai/plans/jellytip-live-sport.md, "Phone: portrait match layout plus a mini
  * player"). A match gets tabs Info · Stats · Plays · Odds · Chat · Fantasy: Info is GET /v1/sport/match/{id} (header,
  * where to watch, odds, line-ups, form, Remind me / Record), the live tabs read the player's {@link LiveFeed}, and
- * Fantasy (NFL only, shown once /v1/fantasy/game/{id} returns a league) polls that every 60 s while it is open.
+ * Fantasy (NFL only, using /v1/fantasy/live) checks every 60 s while it is open.
  * Anything else shows its title, description and what's on next.
  */
 final class MatchPanel implements LiveFeed.Listener {
@@ -81,6 +81,9 @@ final class MatchPanel implements LiveFeed.Listener {
     private JSONObject multiInfo;
     private JSONObject teamsFrom;
     private String fantasyNote = "Loading fantasy…";
+    private Object fantasyUpdatedAt;
+    private long fantasyFetchedAt;
+    private boolean fantasyRefreshFailed;
 
     private final Runnable fantasyPoll =
         new Runnable() {
@@ -744,20 +747,17 @@ final class MatchPanel implements LiveFeed.Listener {
 
     private void fetchFantasy() {
         io.execute(() -> {
-            // RedZone (a multi id): every league's live answer, all games; else this game's
-            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, multi() ? "v1/fantasy/live" : "v1/fantasy/game/" + CompanionHttp.enc(matchId));
-            JSONArray got = null;
-            if (a.body != null) {
-                try {
-                    got = new JSONObject(a.body).optJSONArray("leagues");
-                } catch (org.json.JSONException ignored) {
-                    // treated as none
-                }
-            }
+            FantasySnapshot.Result snapshot = FantasySnapshot.get(apiBase, token);
+            JSONObject live = snapshot.data;
+            JSONArray got = live == null ? null : live.optJSONArray("leagues");
             final JSONArray result = got;
-            final int code = a.code;
+            final int code = snapshot.code;
+            final Object updated = live == null ? null : live.opt("updatedAt");
             handler.post(() -> {
                 if (released) return;
+                fantasyRefreshFailed = code != 200 || result == null;
+                fantasyFetchedAt = System.currentTimeMillis();
+                if (!fantasyRefreshFailed) fantasyUpdatedAt = updated;
                 if (result != null && result.length() > 0) {
                     fantasyLeagues = result;
                     if (!tabs.contains("Fantasy")) {
@@ -765,8 +765,12 @@ final class MatchPanel implements LiveFeed.Listener {
                         // RedZone: the Fantasy tab is the default
                         if (multi() && "Info".equals(tab)) selectTab("Fantasy");
                     }
+                } else if (result != null) {
+                    // A successful empty response is current data, so clear an older league snapshot.
+                    fantasyLeagues = result;
+                    fantasyNote = "No fantasy players in this game.";
                 } else if (fantasyLeagues == null) {
-                    fantasyNote = code == 200 || code == 404 ? "No fantasy players in this game." : "Fantasy isn't available right now.";
+                    fantasyNote = code == 404 ? "Fantasy isn't available on this server yet." : "Fantasy isn't available right now.";
                 }
                 if ("Fantasy".equals(tab)) render();
             });
@@ -779,6 +783,14 @@ final class MatchPanel implements LiveFeed.Listener {
             content.addView(note(fantasyNote));
             return;
         }
+        String source = fantasyUpdatedAt == null || fantasyUpdatedAt == JSONObject.NULL ? "Source update unavailable" : "Source updated " + fantasyUpdatedAt;
+        long sourceSeconds = 0;
+        if (fantasyUpdatedAt instanceof Number) sourceSeconds = ((Number) fantasyUpdatedAt).longValue();
+        else if (fantasyUpdatedAt instanceof String) sourceSeconds = PlayerPlugin.isoMs((String) fantasyUpdatedAt) / 1000;
+        if (sourceSeconds > 10_000_000_000L) sourceSeconds /= 1000;
+        String age = sourceSeconds <= 0 ? "Data age unavailable" : "Data age " + Math.max(0, System.currentTimeMillis() / 1000 - sourceSeconds) + "s";
+        String check = fantasyFetchedAt <= 0 ? "Not checked yet" : "Checked " + Math.max(0, System.currentTimeMillis() - fantasyFetchedAt) / 1000 + "s ago";
+        content.addView(note(source + " · " + age + " · " + (fantasyRefreshFailed ? "Refresh failed; retry on next check" : check)));
         for (int i = 0; i < fantasyLeagues.length(); i++) {
             JSONObject l = fantasyLeagues.optJSONObject(i);
             if (l == null) continue;
@@ -801,7 +813,7 @@ final class MatchPanel implements LiveFeed.Listener {
                 JSONObject s = starters.optJSONObject(j);
                 if (s == null || str(s, "name") == null) continue;
                 String sm = str(s, "matchId");
-                if (multi() ? !"in".equals(str(s, "gameState")) : sm != null && !sm.equals(matchId)) continue; // in this game only (RedZone: live now)
+                if (multi() ? !"in".equals(str(s, "gameState")) : !matchId.equals(sm)) continue; // in this game only (RedZone: live now)
                 boolean isOpp = "opp".equals(str(s, "side"));
                 List<String> p = new ArrayList<>();
                 p.add((isOpp ? "Opp  " : "You  ") + str(s, "name"));

@@ -108,7 +108,7 @@ final class LiveFeed {
                 } else if (result != null) {
                     if (light && last != null) {
                         // Light answer: only market, moments and score are fresh; the rest stays from the last full one
-                        for (String k : new String[] {"market", "moments", "score", "status", "clock", "period"}) {
+                        for (String k : new String[] {"market", "moments", "score", "status", "clock", "period", "updatedAt", "marketUpdatedAt", "momentsUpdatedAt", "scoreUpdatedAt"}) {
                             if (result.has(k)) {
                                 try {
                                     last.put(k, result.opt(k));

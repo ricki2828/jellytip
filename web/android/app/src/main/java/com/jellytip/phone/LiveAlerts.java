@@ -155,15 +155,8 @@ final class LiveAlerts implements LiveFeed.Listener {
 
     private void fetchFantasy() {
         io.execute(() -> {
-            CompanionHttp.Answer a = CompanionHttp.get(apiBase, token, "v1/fantasy/live");
-            JSONObject got = null;
-            if (a.body != null) {
-                try {
-                    got = new JSONObject(a.body);
-                } catch (org.json.JSONException ignored) {
-                    // skipped
-                }
-            }
+            FantasySnapshot.Result snapshot = FantasySnapshot.get(apiBase, token);
+            JSONObject got = snapshot.data;
             final JSONObject result = got;
             handler.post(() -> {
                 if (!released && result != null) onFantasy(result);

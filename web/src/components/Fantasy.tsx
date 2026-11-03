@@ -1,7 +1,7 @@
 // Fantasy (Sleeper) in the player: the matchup chip, scoring toasts and the drawer's Fantasy tab. All of it stays hidden
 // without a linked account or without the server routes. Contract: ~/ai/plans/jellytip-live-sport.md "Fantasy live scoring for NFL".
 import { useEffect, useRef, useState } from "react";
-import { fantasyGame, fantasyLive, useFantasy } from "../api/fantasy";
+import { fantasyFirstEvents, fantasyGame, fantasySeen, subscribeFantasyRefresh, useFantasy } from "../api/fantasy";
 import { matchDetailCached } from "../api/matchInfo";
 import { usePrefs } from "../api/me";
 import { chipText, enqueue, eventParts, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
@@ -29,12 +29,6 @@ export function FantasyChip({ matchId, active }: { matchId: string | null | unde
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const live = useFantasy(active && nfl);
   const text = live ? chipText(live) : null;
-  // Keep it fresh while it is on screen
-  useEffect(() => {
-    if (!active || !nfl || !live) return;
-    const t = setInterval(() => void fantasyLive(true), 30_000);
-    return () => clearInterval(t);
-  }, [active, nfl, !!live]);
   if (!text) return null;
   return (
     <span className="fantasy-chip" title="Your fantasy matchups">
@@ -52,7 +46,6 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
   const [shown, setShown] = useState<{ t: ToastData; key: number } | null>(null);
   const queue = useRef<ToastData[]>([]);
   const busy = useRef(false);
-  const seen = useRef<Set<string> | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const keyN = useRef(0);
 
@@ -74,32 +67,32 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
 
   useEffect(() => {
     if (!on) return;
-    let alive = true;
-    let t: number | undefined;
-    const poll = async () => {
-      const d = await fantasyLive(true);
-      if (!alive) return;
-      // No league from either source: nothing to watch, stop polling
-      if (d && d.leagues.length > 0) {
-        const first = seen.current == null;
-        seen.current ??= new Set();
-        const now = Date.now() / 1000;
-        for (const e of d.events) {
-          const k = `${e.at}|${e.league}|${e.name}`; // the server keeps events for 15 min
-          if (seen.current.has(k)) continue;
-          seen.current.add(k);
-          // The first answer may carry earlier events: only a recent one is news
-          if (first && now - e.at > 90) continue;
-          const p = eventParts(e, d);
-          push({ color: e.side === "opp" ? "#D9473D" : "#22C55E", kicker: p.kicker, text: p.text, sub: p.sub, icon: "fantasy" });
-        }
-        t = window.setTimeout(poll, 30_000);
+    const unsubscribe = subscribeFantasyRefresh((d) => {
+      if (!d || !d.leagues.length) return;
+      const first = fantasyFirstEvents();
+      const now = Date.now() / 1000;
+      for (const key of fantasySeen) if (Number(key.split("|", 1)[0]) < now - 900) fantasySeen.delete(key);
+      for (const e of d.events) {
+        const k = `${e.at}|${e.league}|${e.name}`;
+        if (fantasySeen.has(k)) continue;
+        fantasySeen.add(k);
+        // The first snapshot establishes the baseline, including recent events.
+        // A remounted alert consumer must never replay that baseline as a toast.
+        if (first) continue;
+        const p = eventParts(e, d);
+        push({ color: e.side === "opp" ? "#D9473D" : "#22C55E", kicker: p.kicker, text: p.text, sub: p.sub, icon: "fantasy" });
       }
+    });
+    const resetForSession = () => {
+      window.clearTimeout(timer.current);
+      queue.current = [];
+      busy.current = false;
+      setShown(null);
     };
-    void poll();
+    window.addEventListener("jellytip-session", resetForSession);
     return () => {
-      alive = false;
-      window.clearTimeout(t);
+      unsubscribe();
+      window.removeEventListener("jellytip-session", resetForSession);
       window.clearTimeout(timer.current);
       queue.current = [];
       busy.current = false;
