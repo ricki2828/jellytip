@@ -63,7 +63,7 @@ export function useFantasy(active = true, includeEmpty = false): FantasyLive | n
     let alive = true;
     const on = () => alive && setLive(state);
     window.addEventListener(EVENT, on);
-    void fantasyLive().then((d) => { if (alive && d) setLive(d); });
+    void fantasyLive().then((d) => { if (alive && d) setLive(d); }).catch(() => { /* Page refresh reports failures and retains the last snapshot. */ });
     return () => {
       alive = false;
       window.removeEventListener(EVENT, on);
