@@ -307,7 +307,7 @@ fun JellytipLiveTvPlayerPage(
     var trackMessage by remember { mutableStateOf<String?>(null) }
     var subtitleCues by remember { mutableStateOf<List<Cue>>(emptyList()) }
     val trackPlayer = playback.player
-    val initialTrackSelectionParameters = trackPlayer?.trackSelectionParameters
+    val initialTrackSelectionParameters = remember(trackPlayer) { trackPlayer?.trackSelectionParameters }
     val trackTarget = playState.target
     var trackItem by remember { mutableStateOf<MediaItem?>(null) }
     DisposableEffect(trackPlayer, current) {
@@ -372,6 +372,7 @@ fun JellytipLiveTvPlayerPage(
         trackCursor = audioTracks.indexOfFirst { it.selected }.takeIf { it >= 0 } ?: audioTracks.size
         trackSheetOpen = true
         bannerVisible = true
+        bannerTick++
     }
     fun selectTrack() {
         val player = trackPlayer ?: return
