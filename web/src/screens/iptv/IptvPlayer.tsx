@@ -28,6 +28,7 @@ import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../l
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
+import { alternatesAfterSwitch, shouldSurfaceLiveStall } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import "./iptv.css";
 
@@ -77,6 +78,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const fmtRef = useRef<"ts" | "m3u8">("ts");
   const watchRef = useRef<number | undefined>(undefined);
   const renewed = useRef(false);
+  const manualRetries = useRef(0);
+  const attemptStarted = useRef(Date.now());
+  const firstFrame = useRef(false);
+  const lastTime = useRef(0);
+  const failingUrl = useRef<string | null>(null);
+  const rebufferStarted = useRef<number | null>(null);
+  const rebufferCount = useRef(0);
+  const stallReported = useRef(false);
   const alive = useRef(true);
   const [state, setState] = useState<State>({ kind: "loading" });
   const [answer, setAnswer] = useState<PlayAnswer | null>(null);
@@ -93,6 +102,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const lastMove = useRef(Date.now());
   const quietUntil = useRef(0);
   const [stalled, setStalled] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   // A "From kick-off" catch-up (the programme was still on air when it started) ends at the moment it was pressed: then back to live
   const kickoffRun = useRef(!isLiveTarget(target) && !!target.channel && target.stop != null && target.stop * 1000 > Date.now());
   const loadDone = useRef(false);
@@ -124,6 +134,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     linkRef.current = null;
   }, []);
 
+  const finishBuffer = useCallback(() => {
+    if (rebufferStarted.current == null) return;
+    debugEvent("iptv-player", "rebuffer ended", { durationMs: Date.now() - rebufferStarted.current, count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info");
+    rebufferStarted.current = null;
+  }, []);
+
   const report = useCallback(() => {
     const key = progressKey(target);
     const v = videoRef.current;
@@ -137,6 +153,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const onLinkError = useCallback(
     async (url: string, detail = "") => {
       if (!alive.current || linkRef.current !== url) return;
+      if (failingUrl.current === url) return;
+      failingUrl.current = url;
       const { status, code } = await probe(url);
       if (!alive.current || linkRef.current !== url) return;
       const what = linkFailure(status, code);
@@ -148,9 +166,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         mime: answerRef.current?.mime ?? null,
         kind: answerRef.current?.kind ?? null,
         status,
-        code,
-        detail,
-        mediaError: v?.error ? `${v.error.code} ${v.error.message}` : null,
+        errorClass: what,
+        mediaErrorCode: v?.error?.code ?? null,
         readyState: v?.readyState,
         networkState: v?.networkState,
         size: v ? `${v.videoWidth}x${v.videoHeight}` : null,
@@ -175,12 +192,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         return;
       }
       teardown();
+      finishBuffer();
+      debugEvent("iptv-player", "terminal failure", { errorClass: what, player: engine, format: fmtRef.current, status });
       if (what === "full") setState({ kind: "full", text: "Every connection to this provider is in use." });
       else setState({ kind: "error", text: failureText(code, playbackFailureText(engine, detail, status)) });
     },
     // start is defined below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [teardown, isLive],
+    [teardown, finishBuffer, isLive],
   );
 
   const attach = useCallback(
@@ -192,6 +211,15 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       const engine = engineFor(a.url, a.mime);
       engineRef.current = engine;
       answerRef.current = a;
+      failingUrl.current = null;
+      attemptStarted.current = Date.now();
+      firstFrame.current = false;
+      lastTime.current = 0;
+      rebufferStarted.current = null;
+      lastMove.current = Date.now();
+      setStalled(false);
+      setRetrying(false);
+      stallReported.current = false;
       debugEvent("iptv-player", "attach", { player: engine, mime: a.mime ?? null, kind: a.kind, format: fmtRef.current, canPlay: a.mime ? v.canPlayType(a.mime) : null }, "info");
       watchRef.current = window.setTimeout(() => {
         const el = videoRef.current;
@@ -243,6 +271,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
   const start = useCallback(async (retry = false): Promise<boolean> => {
     if (!retry) setState({ kind: "loading" });
+    if (!retry) attemptStarted.current = Date.now();
     if (isLive && fmtRef.current === "ts" && !(await loadMpegts()).default.getFeatureList().mseLivePlayback) fmtRef.current = "m3u8";
     const a = await play(playQuery(target, iptvDevice(), fmtRef.current));
     if (!alive.current) return false;
@@ -253,6 +282,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       return true;
     }
     const what = linkFailure(a.status, a.data?.code);
+    debugEvent("iptv-player", "terminal failure", { errorClass: what, status: a.status, player: engineRef.current, format: fmtRef.current });
     if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
     else if (what === "full") {
       const b = parseBlocker(a.data);
@@ -267,12 +297,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     alive.current = true;
     renewed.current = false;
     void start();
-    const onHide = () => teardown();
+    const onHide = () => { finishBuffer(); teardown(); };
     window.addEventListener("pagehide", onHide);
     return () => {
       alive.current = false;
       window.removeEventListener("pagehide", onHide);
       report();
+      finishBuffer();
       teardown();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -298,11 +329,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     return () => clearInterval(t);
   }, [target, report]);
 
-  // A link that played for a while may renew again later (the 4 h expiry, a server restart)
+  // A renewed link may be needed later in a long live session (4 h expiry or server restart).
   useEffect(() => {
     if (state.kind !== "playing") return;
-    const t = setTimeout(() => (renewed.current = false), 60_000);
-    return () => clearTimeout(t);
+    const t = window.setTimeout(() => { renewed.current = false; }, 60_000);
+    return () => window.clearTimeout(t);
   }, [state.kind, answer]);
 
   const poke = useCallback(() => {
@@ -331,20 +362,66 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     }, 1000);
     return () => clearInterval(t);
   }, [state.kind, backToLive]);
-  const alt = extras?.alternates?.[0];
   useEffect(() => {
-    if (!isLive || !alt || state.kind !== "playing") return;
+    if (!isLive || state.kind !== "playing") return;
     lastMove.current = Date.now();
+    const v = videoRef.current;
+    let frameId = 0;
+    let active = true;
+    const onVisible = () => {
+      if (document.hidden) return;
+      lastMove.current = Date.now();
+      stallReported.current = false;
+      setStalled(false);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    if (v?.requestVideoFrameCallback) {
+      const frame = () => {
+        if (!active) return;
+        lastMove.current = Date.now();
+        setStalled(false);
+        stallReported.current = false;
+        if (Date.now() - attemptStarted.current >= 60_000) manualRetries.current = 0;
+        if (!firstFrame.current) {
+          firstFrame.current = true;
+          debugEvent("iptv-player", "first frame", { elapsedMs: Date.now() - attemptStarted.current, player: engineRef.current, format: fmtRef.current }, "info");
+        }
+        finishBuffer();
+        frameId = v.requestVideoFrameCallback(frame);
+      };
+      frameId = v.requestVideoFrameCallback(frame);
+    }
     const t = setInterval(() => {
       const v = videoRef.current;
-      if (v && !v.paused && Date.now() - lastMove.current >= STALL_MS && Date.now() > quietUntil.current) setStalled(true);
+        if (v && shouldSurfaceLiveStall(Date.now(), lastMove.current, STALL_MS, v.paused, document.hidden, quietUntil.current) && !stallReported.current) {
+          stallReported.current = true;
+          setStalled(true);
+          debugEvent("iptv-player", "stall detected", {
+            player: engineRef.current,
+            format: fmtRef.current,
+            firstFrame: firstFrame.current,
+            rebufferCount: rebufferCount.current,
+            droppedFrames: v.getVideoPlaybackQuality?.().droppedVideoFrames ?? null,
+          });
+        }
     }, 1000);
-    return () => clearInterval(t);
-  }, [isLive, alt, state.kind]);
-  const switchTo = () => {
-    if (!alt) return;
-    const rest = [...(extras?.alternates ?? []).slice(1), { id: target.channel!, name: title }];
-    go(livePath(alt.id, alt.name, { alternates: rest }), true);
+    return () => { active = false; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); if (frameId) v?.cancelVideoFrameCallback?.(frameId); };
+  }, [isLive, state.kind, finishBuffer]);
+  const retryStream = () => {
+    if (manualRetries.current >= 1) return;
+    manualRetries.current++;
+    setRetrying(true);
+    setStalled(false);
+    stallReported.current = false;
+    finishBuffer();
+    teardown();
+    debugEvent("iptv-player", "manual retry", { player: engineRef.current, format: fmtRef.current, attempt: manualRetries.current }, "info");
+    void start().then(() => setRetrying(false), () => setRetrying(false));
+  };
+  const reportStall = () => {
+    debugEvent("iptv-player", "user reported stall", { player: engineRef.current, format: fmtRef.current, firstFrame: firstFrame.current, rebufferCount: rebufferCount.current }, "info");
+    void sendDebugReport();
+    flashNote("Diagnostic report queued");
   };
   // Pre-game: before the real start a non-blocking card explains the holding screen; any key or tap brings it back after its 10 s
   const startsAt = isLive ? extras?.startsAt ?? null : null;
@@ -549,16 +626,30 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         onEnded={() => kickoffRun.current && backToLive()}
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => {
-          lastMove.current = Date.now();
-          setStalled(false);
+          if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
+            stallReported.current = false;
+            if (!isLive || !e.currentTarget.requestVideoFrameCallback) {
+              lastMove.current = Date.now();
+              setStalled(false);
+              if (Date.now() - attemptStarted.current >= 60_000) manualRetries.current = 0;
+            }
+            if (!firstFrame.current && e.currentTarget.videoWidth > 0 && (!isLive || !e.currentTarget.requestVideoFrameCallback)) {
+              firstFrame.current = true;
+              debugEvent("iptv-player", "first frame", { elapsedMs: Date.now() - attemptStarted.current, player: engineRef.current, format: fmtRef.current }, "info");
+            }
+            finishBuffer();
+          }
+          lastTime.current = e.currentTarget.currentTime;
           setTime(e.currentTarget.currentTime);
         }}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
         onLoadedMetadata={(e) => applyResume(e.currentTarget)}
         onCanPlay={(e) => applyResume(e.currentTarget)}
+        onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
+        onPlaying={finishBuffer}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
-      {state.kind === "loading" && <div className="spinner" />}
+      {state.kind === "loading" && <div className="spinner" role="status" aria-label={retrying ? "Retrying stream" : "Connecting to stream"} />}
       {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
       {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
         <div className="player-error">
@@ -638,22 +729,24 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           )}
         </div>
       )}
-      {stalled && alt && state.kind === "playing" && (
+      {stalled && state.kind === "playing" && (
         <div className="iptv-stall" role="alert">
-          <span>Not loading.</span>
-          <button className="btn primary small" data-nav data-autofocus onClick={switchTo}>
-            Switch to {alt.name}
-          </button>
+          <span>{manualRetries.current < 1 ? "Playback has stalled." : "Playback is still stalled; retry was already used."}</span>
+          {manualRetries.current < 1 && <button className="btn primary small" data-nav data-autofocus onClick={retryStream}>Retry current stream</button>}
+          {(extras?.alternates ?? []).map((a, i) => <button key={a.id} className="btn small" data-nav data-autofocus={(manualRetries.current >= 1 && i === 0) || undefined} onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
           <button
             className="btn small"
             data-nav
+            data-autofocus={(manualRetries.current >= 1 && !(extras?.alternates?.length)) || undefined}
             onClick={() => {
               quietUntil.current = Date.now() + 30_000;
               setStalled(false);
+              stallReported.current = false;
             }}
           >
             Keep waiting
           </button>
+          <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
       )}
       {!isLive && state.kind === "playing" && (
@@ -745,7 +838,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
           if (key && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000), target.episode ? target.series : undefined);
         }),
         await NativePlayer.addListener("playerError", (e) => {
-          debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, ...e });
+          debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, errorCode: e.errorCode ?? null });
           void sendDebugReport();
         }),
         // The player asks for a link when it fails over, starts over from kick-off or goes back to live; links never travel up front
@@ -867,9 +960,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
         mime: a.mime ?? null,
         direct: link.direct,
         errorCode: r.errorCode ?? null,
-        error: r.error ?? null,
+        errorClass: what,
         status: r.httpStatus ?? 0,
-        code: r.iptvError ?? null,
         time: r.positionMs / 1000,
         verdict: what,
       });

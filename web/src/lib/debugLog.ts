@@ -4,15 +4,10 @@
 import { deviceId, getSession } from "../api/jellyfin";
 import { companionCall } from "../api/companionCall";
 import { scrub } from "./scrub";
+import { clean } from "./debugPrivacy";
 
 const MAX_EVENTS = 200;
 const events: Record<string, unknown>[] = [];
-
-function clean(data: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(data)) out[k] = typeof v === "string" ? scrub(v) : v;
-  return out;
-}
 
 export function debugEvent(tag: string, msg: string, data: Record<string, unknown> = {}, level: "info" | "warn" | "error" = "warn") {
   const e = { t: new Date().toISOString(), level, tag, msg: scrub(msg), ...clean(data) };
@@ -22,9 +17,15 @@ export function debugEvent(tag: string, msg: string, data: Record<string, unknow
 }
 
 let lastSent = 0;
+let pending: ReturnType<typeof setTimeout> | null = null;
 /** Posts the buffered events (at most one report every 6 s: the server allows 1 per 5 s). */
 export async function sendDebugReport(): Promise<void> {
-  if (!events.length || Date.now() - lastSent < 6000) return;
+  if (!events.length) return;
+  const remaining = 6000 - (Date.now() - lastSent);
+  if (remaining > 0) {
+    if (!pending) pending = setTimeout(() => { pending = null; void sendDebugReport(); }, remaining);
+    return;
+  }
   lastSent = Date.now();
   await companionCall("POST", "v1/debug/report", {
     app: "jellytip-web",
