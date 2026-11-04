@@ -638,6 +638,10 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         {plan && <span className="player-method">{plan.method === "DirectPlay" ? "Direct" : plan.method === "DirectStream" ? "Remux" : "Transcode"}</span>}
       </div>
 
+      <button className="btn small player-track-trigger" data-nav aria-expanded={menu} onClick={(e) => { e.stopPropagation(); setMenu((m) => !m); setControls(true); }}>
+        Audio &amp; subtitles
+      </button>
+
       {next && remaining > 0 && remaining < NEXT_UP_SECONDS && (
         <button className="btn primary next-up" data-nav onClick={playNext}>
           {thenId ? `Up next · ${next.Name}` : `Next episode · E${next.IndexNumber} ${next.Name}`}
@@ -670,9 +674,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
               <HoldButton label="+" onStep={(s) => stepDelay(s)} />
             </span>
           )}
-          <button className="btn ghost" data-nav onClick={() => setMenu((m) => !m)}>
-            {audios.length > 1 ? "Audio & subtitles" : "Subtitles"}
-          </button>
           {next && (
             <button className="btn ghost" data-nav onClick={playNext}>
               Next ›

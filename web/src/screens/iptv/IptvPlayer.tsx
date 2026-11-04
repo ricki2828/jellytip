@@ -747,7 +747,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       </div>
       {state.kind === "playing" && <button className="btn small iptv-tracks-button" data-nav aria-expanded={tracksOpen} onClick={(e) => { e.stopPropagation(); const opening = !tracksOpen; setTracksOpen(opening); if (opening) { setControls(true); if (hideTimer.current) window.clearTimeout(hideTimer.current); } else poke(); refreshTracks(); }}>Audio &amp; subtitles</button>}
       {tracksOpen && state.kind === "playing" && <div className="iptv-track-menu" role="group" aria-label="Audio and subtitles" onClick={(e) => e.stopPropagation()}>
-        {playerEngine === "mpegts" ? <p>Track selection is unavailable for this stream in this browser.</p> : <>
+        {playerEngine === "mpegts" ? <>
+          <p>This stream format can’t expose track controls.</p>
+          {isLive && <button className="btn small" data-nav onClick={() => { fmtRef.current = "m3u8"; setTracksOpen(false); setState({ kind: "loading" }); teardown(); void start(); }}>Switch to HLS and choose tracks</button>}
+        </> : <>
           <strong>Audio</strong>
           {audioChoices.length ? audioChoices.map((choice) => <button key={`a${choice.index}`} className="btn small" data-nav aria-pressed={choice.active} onClick={() => { const h = hlsRef.current; if (h) h.audioTrack = choice.index; else { const v = videoRef.current as (HTMLVideoElement & { audioTracks?: ArrayLike<{ enabled: boolean }> }) | null; if (v?.audioTracks) Array.from(v.audioTracks).forEach((track, i) => { track.enabled = i === choice.index; }); } refreshTracks(); }}>{choice.label}{choice.active ? " ✓" : ""}</button>) : <p>No selectable audio tracks exposed.</p>}
           <strong>Subtitles</strong>
