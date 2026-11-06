@@ -43,6 +43,18 @@ export function parseHash(hash: string): Route {
         if (!/^[^\s/?#%]{1,160}$/.test(id)) return { name: "collections", params: {}, query };
         return { name: "collectionrow", params: { id }, query };
       }
+    case "journeys": {
+      // #/journeys = all guided journeys; #/journeys/<id> = one ("f:<tmdbId>", "d:<personId>", "l:<list slug>")
+      if (seg[1] == null) return { name: "journeys", params: {}, query };
+      let id = seg[1];
+      try {
+        id = decodeURIComponent(id);
+      } catch {
+        return { name: "journeys", params: {}, query };
+      }
+      if (!/^(f:\d{1,9}|d:[0-9a-f]{32}|l:[a-z0-9][a-z0-9_-]{0,120})$/i.test(id)) return { name: "journeys", params: {}, query };
+      return { name: "journey", params: { id }, query };
+    }
     case "iptv":
       // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
       return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };

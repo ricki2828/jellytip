@@ -63,6 +63,7 @@ export function Collections() {
   return (
     <div className="collections">
       <h1 className="page-title">Collections</h1>
+      <button className="chip" data-nav onClick={() => go("/journeys")}>Start a journey</button>
       {!sections && !hubUnavailable() && <p className="empty">Loading…</p>}
       {(hubUnavailable() || (sections && sections.length === 0)) && <p className="empty">Nothing here yet.</p>}
       {sections && sections.length > 0 && (

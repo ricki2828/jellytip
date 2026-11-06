@@ -24,6 +24,8 @@ import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
 import { Taste } from "./screens/Taste";
 import { Inbox } from "./screens/Inbox";
+import { Journeys } from "./screens/Journeys";
+import { Journey } from "./screens/Journey";
 import { TileMenuHost } from "./components/TasteButtons";
 import { parseLiveExtras, parseTarget } from "./lib/iptvPlay";
 import { VOD_ID_RE } from "./lib/iptvVod";
@@ -104,6 +106,8 @@ export function App() {
         {route.name === "settings" && <Settings />}
         {route.name === "taste" && <Taste />}
         {route.name === "inbox" && <Inbox />}
+        {route.name === "journeys" && <Journeys />}
+        {route.name === "journey" && <Journey key={route.params.id} id={route.params.id} />}
         {route.name === "list" && <ListPage key={route.params.id} slug={route.params.id} />}
         <Suspense fallback={null}>
           {route.name === "iptv" && <IptvSettings />}
