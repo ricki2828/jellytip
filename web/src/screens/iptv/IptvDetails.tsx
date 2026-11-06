@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { errorText, streamUrl, vodFavourite, vodItem } from "../../api/iptv";
 import { dropPersonalCaches } from "../../api/companion";
 import { Backdrop } from "../../components/Backdrop";
+import { PreviewVideo } from "../../components/PreviewVideo";
+import { iptvPlayable } from "../../lib/trailerPreview";
+import { useTrailerPreview } from "../../lib/useTrailerPreview";
 import { IptvDot, safeArt } from "../../components/IptvTile";
 import { tmdbSized } from "../../components/FranchiseRow";
 import { useIsPhone } from "../../lib/device";
@@ -53,6 +56,10 @@ export function IptvDetails({ id }: { id: string }) {
     };
   }, [id]);
 
+  // The companion's cached trailer plays muted in the backdrop after a rest; off while the Trailer modal is open
+  const playable = d && !trailerUrl ? iptvPlayable(d.trailer, streamUrl) : null;
+  const preview = useTrailerPreview(playable ? { kind: "direct", key: `iptv:${d?.id}`, url: playable } : null, { trigger: "passive" });
+
   if (err)
     return (
       <div className="details">
@@ -79,6 +86,7 @@ export function IptvDetails({ id }: { id: string }) {
     <div className="details iptv-details">
       <div className="details-hero">
         <Backdrop url={tmdbSized(safeArt(d.backdrop ?? d.poster, 960), phone ? "w1280" : "original")} focal={null} />
+        <PreviewVideo url={preview} />
         <div className="scrim-left" />
         <div className="scrim-bottom" />
         <div className="details-text">

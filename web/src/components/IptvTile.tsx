@@ -7,6 +7,7 @@ import { tileBadges } from "../lib/techBadges";
 import { TechBadges } from "./TechBadges";
 import { useIsPhone } from "../lib/device";
 import { go } from "../lib/router";
+import { announceIptvFocus } from "../lib/iptvFocus";
 import { CARD_W, PHONE_CARD_W } from "./Card";
 import { PosterCard } from "./PosterCard";
 import { tmdbSized } from "./FranchiseRow";
@@ -17,6 +18,10 @@ const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPT
 
 /** TMDB art, or provider art through the companion's image proxy; raw provider URLs never load (CSP, privacy). */
 export const safeArt = (u: string | null | undefined, size?: 96 | 192 | 480 | 960) => (u && /^https:\/\/image\.tmdb\.org\//.test(u) ? u : logoSrc(u, size));
+
+/** Tells the Home hero which IPTV title the person is on (a no-op where nothing listens). */
+const announce = (t: Pick<VodItem, "id" | "title" | "year" | "poster" | "backdrop">) =>
+  announceIptvFocus({ id: t.id, title: t.title, year: t.year, art: safeArt(t.backdrop ?? t.poster, 960) });
 
 export function IptvDot() {
   return <span className="iptv-corner-dot" aria-hidden title="via IPTV" />;
@@ -34,6 +39,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
         tech={vodTech(item)}
         autoFocus={autoFocus}
         watched={!!(item as Tile).played || !!(item as Tile).progress?.played}
+        onFocus={() => announce(item)}
         onOpen={() => go(vodPath(item.id))}
       />
       <IptvDot />
@@ -59,6 +65,8 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus, onOpen }: { i
       title={label(item)}
       aria-label={label(item)}
       onClick={() => (onOpen ? onOpen() : go(vodPath(item.id)))}
+      onFocus={() => announce(item)}
+      onMouseEnter={() => announce(item)}
     >
       {art && !failed && <img className={`card-img${loaded ? " in" : ""}`} src={art} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
       <div className="card-fade" />

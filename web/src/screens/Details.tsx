@@ -21,6 +21,9 @@ import { go } from "../lib/router";
 import { focusFirst } from "../lib/spatial";
 import { useIsPhone } from "../lib/device";
 import { Backdrop } from "../components/Backdrop";
+import { jfTarget } from "../lib/trailerPreview";
+import { useTrailerPreview } from "../lib/useTrailerPreview";
+import { PreviewVideo } from "../components/PreviewVideo";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { ScoreLine } from "../components/ScoreLine";
@@ -159,6 +162,9 @@ export function Details({ id }: { id: string }) {
 
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);
 
+  // Muted trailer in the backdrop after a rest, as on the TV; off while the full trailer modal is open
+  const preview = useTrailerPreview(item && !showTrailer ? jfTarget(item) : null, { trigger: "passive" });
+
   if (error) return <div className="empty">Couldn't load this title. {error}</div>;
   if (!item) return <div className="details loading" />;
 
@@ -213,6 +219,7 @@ export function Details({ id }: { id: string }) {
     <div className="details">
       <div className="details-hero">
         <Backdrop url={pick.url} focal={pick.focal} />
+        <PreviewVideo url={preview} />
         <div className="scrim-left" />
         <div className="scrim-bottom" />
         <div className="details-text">

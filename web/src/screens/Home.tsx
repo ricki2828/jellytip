@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
-import { Hero } from "../components/Hero";
+import { Hero, IptvHero, type IptvHeroTile } from "../components/Hero";
+import { onIptvFocus } from "../lib/iptvFocus";
 import { buildSlides, excludedIds, heroSources, SLIDE_MS, type HeroSlide } from "../lib/heroMix";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
@@ -51,7 +52,7 @@ export const letterboxdLoader = (l: LetterboxdRow) => async () => {
 };
 
 /** The hero: the featured mix rotates until someone touches a tile, then it follows focus. Own state, so a slide change does not re-render Home. */
-function HomeHero({ focused, slides, engaged }: { focused: Item | null; slides: HeroSlide[]; engaged: boolean }) {
+function HomeHero({ focused, focusedIptv, slides, engaged }: { focused: Item | null; focusedIptv: IptvHeroTile | null; slides: HeroSlide[]; engaged: boolean }) {
   const [i, setI] = useState(0);
   useEffect(() => {
     if (engaged || slides.length < 2) return;
@@ -59,6 +60,7 @@ function HomeHero({ focused, slides, engaged }: { focused: Item | null; slides: 
     return () => clearInterval(t);
   }, [engaged, slides]);
   const slide = !engaged && slides.length ? slides[i % slides.length] : null;
+  if (focusedIptv && !slide) return <IptvHero tile={focusedIptv} />;
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }
 
@@ -191,7 +193,18 @@ export function Home() {
     };
   }, [rows, specials, rowsReady, continueItems]);
 
+  // An IPTV tile in focus shows its own hero (and trailer); a Jellyfin tile takes it back
+  const [focusedIptv, setFocusedIptv] = useState<IptvHeroTile | null>(null);
+  useEffect(
+    () =>
+      onIptvFocus((t) => {
+        setFocusedIptv(t);
+        if (userInput.current) setEngaged(true);
+      }),
+    [],
+  );
   const onFocusItem = useCallback((i: Item) => {
+    setFocusedIptv(null);
     setFocused(i);
     if (userInput.current) setEngaged(true);
   }, []);
@@ -213,7 +226,7 @@ export function Home() {
 
   return (
     <div className="home">
-      <HomeHero focused={focused} slides={slides} engaged={engaged} />
+      <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
       <div className="rows">
         {continueItems && (continueItems.length > 0 || iptvTiles.length > 0) && (
           <Row

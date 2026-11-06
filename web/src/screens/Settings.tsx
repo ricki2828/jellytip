@@ -95,7 +95,7 @@ function Personal({ prefs }: { prefs: Prefs }) {
           <Toggle label="Intro" sub="The Jellytip intro when the TV app starts" on={pb.intro} onChange={(v) => void save({ playback: { intro: v } })} />
         </li>
         <li>
-          <Toggle label="Trailers play on their own" sub="In the Home hero after a short pause" on={pb.trailerAutoplay} onChange={(v) => void save({ playback: { trailerAutoplay: v } })} />
+          <Toggle label="Trailers play on their own" sub="In the Home hero and on details pages, after a short pause" on={pb.trailerAutoplay} onChange={(v) => void save({ playback: { trailerAutoplay: v } })} />
         </li>
         <li>
           <Toggle label="Trailers with sound" sub="On the TV; browsers start them muted until you click" on={pb.trailerSound} onChange={(v) => void save({ playback: { trailerSound: v } })} />
