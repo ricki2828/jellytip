@@ -2,7 +2,7 @@
 // Reports start / progress (10 s) / stop so resume works with the TV; text subtitles with a delay control; next episode.
 import { Scrubber } from "../components/Scrubber";
 import { getSeekMeta, trickplaySource, type SeekMeta } from "../api/seekMeta";
-import { advanceSeek, settled, SETTLE_MS, type SeekRamp } from "../lib/seekRamp";
+import { advanceSeek, commitDue, SETTLE_MS, type SeekRamp } from "../lib/seekRamp";
 import { chapterMarks, nextChapter, prevChapter } from "../lib/chapters";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type Hls from "hls.js";
@@ -422,7 +422,14 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const seekBy = (s: number) => {
     const v = videoRef.current;
     if (!v) return;
-    const to = Math.min(Math.max((seekTarget.current ?? v.currentTime) + s, 0), (v.duration || duration) - 1);
+    const base = ramp.current?.target ?? seekTarget.current ?? v.currentTime; // a click mid-burst builds on the pending target
+    if (ramp.current) {
+      ramp.current = null;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+      setPendingSeek(null);
+    }
+    const to = Math.min(Math.max(base + s, 0), (v.duration || duration) - 1);
     seekTarget.current = to;
     v.currentTime = to;
   };
@@ -430,6 +437,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const [pendingSeek, setPendingSeek] = useState<number | null>(null);
   const ramp = useRef<SeekRamp | null>(null);
   const settleTimer = useRef<number | null>(null);
+  const heldKey = useRef(false); // an arrow is physically down: don't commit yet
   const commitSeek = () => {
     if (settleTimer.current) clearTimeout(settleTimer.current);
     settleTimer.current = null;
@@ -451,15 +459,26 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     setPendingSeek(r.target);
     if (settleTimer.current) clearTimeout(settleTimer.current);
     const wait = () => {
-      if (settled(ramp.current, performance.now())) commitSeek();
+      if (commitDue(ramp.current, performance.now(), heldKey.current)) commitSeek();
       else settleTimer.current = window.setTimeout(wait, 60);
     };
     settleTimer.current = window.setTimeout(wait, SETTLE_MS);
   };
   const [seekMeta, setSeekMeta] = useState<SeekMeta | null>(null);
   useEffect(() => {
+    let alive = true;
     setSeekMeta(null);
-    getSeekMeta(id).then(setSeekMeta, () => undefined);
+    // a pending seek belongs to the previous item: drop it
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = null;
+    ramp.current = null;
+    seekTarget.current = null;
+    heldKey.current = false;
+    setPendingSeek(null);
+    getSeekMeta(id).then((m) => alive && setSeekMeta(m), () => undefined);
+    return () => {
+      alive = false;
+    };
   }, [id]);
   useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const marks = chapterMarks(seekMeta?.chapters, duration || Infinity);
@@ -543,6 +562,9 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tg = e.target as HTMLElement | null;
+      const typing = !!tg && (tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" || tg.isContentEditable || (tg.tagName === "INPUT" && (tg as HTMLInputElement).type !== "range"));
+      if (typing && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "PageUp" || e.key === "PageDown")) return;
       if (findSubs) { poke(); return; } // the subtitle dialog owns the keys
       const mk = playerKeyWhileMenu(menu, e.key);
       if (mk === "close") {
@@ -567,9 +589,11 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           else togglePlay();
           break;
         case "ArrowLeft":
+          heldKey.current = true;
           keySeek(-1, e);
           break;
         case "ArrowRight":
+          heldKey.current = true;
           keySeek(1, e);
           break;
         case "PageUp":
@@ -614,8 +638,20 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
       if (handled) e.preventDefault();
       poke();
     };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") heldKey.current = false;
+    };
+    const onBlur = () => {
+      heldKey.current = false;
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu, findSubs, controls, duration, exit, playNext, poke, marks.length, seekMeta]);
 

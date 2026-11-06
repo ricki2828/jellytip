@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { advanceSeek, settled, SETTLE_MS, BURST_GAP_MS, REPEAT_THROTTLE_MS, type SeekInput } from "../src/lib/seekRamp.ts";
+import { advanceSeek, commitDue, settled, SETTLE_MS, BURST_GAP_MS, REPEAT_THROTTLE_MS, type SeekInput } from "../src/lib/seekRamp.ts";
 import { chapterAt, chapterMarks, nextChapter, prevChapter } from "../src/lib/chapters.ts";
 import { pickTrickplay, tileLocation, tileUrl, type TrickplayInfo } from "../src/lib/trickplay.ts";
 
@@ -117,4 +117,21 @@ test("pickTrickplay: widest <= 480, else narrowest, null when absent or malforme
 
 test("tile url", () => {
   assert.equal(tileUrl("/jf", "item", 320, 2, "src", "tok"), "/jf/Videos/item/Trickplay/320/2.jpg?MediaSourceId=src&api_key=tok");
+});
+
+test("held arrow: no commit before the first OS key-repeat (660 ms) and the burst survives it", () => {
+  assert.ok(BURST_GAP_MS > SETTLE_MS);
+  assert.ok(SETTLE_MS > 660);
+  let s = advanceSeek(null, inp({ now: 0 }));
+  // still held at 600 ms and 1200 ms: never due, even past SETTLE_MS
+  assert.equal(commitDue(s, 600, true), false);
+  assert.equal(commitDue(s, SETTLE_MS + 100, true), false);
+  // first OS repeat lands at 660 ms: same burst (not reset to the playhead), keeps ramping from the pending target
+  const r = advanceSeek(s, inp({ now: 660, repeat: true }));
+  assert.equal(r.presses, 2);
+  assert.equal(r.target, 120);
+  assert.equal(r.burstStart, 0);
+  // released: commits only after settling from the last step
+  assert.equal(commitDue(r, 700, false), false);
+  assert.equal(commitDue(r, 660 + SETTLE_MS, false), true);
 });

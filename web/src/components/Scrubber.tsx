@@ -63,6 +63,8 @@ export function Scrubber({
   const tipT = tipAt != null ? Math.min(Math.max(tipAt, 0), cap) : null;
   const tipPct = tipT != null && cap ? (tipT / cap) * 100 : 0;
   const loc = tipT != null && thumbs ? tileLocation(thumbs.info, tipT) : null;
+  // narrow screens: scale the whole sheet by one factor (never crop the thumbnail)
+  const k = loc ? Math.min(1, (typeof window === "undefined" ? 9999 : window.innerWidth * 0.4) / loc.w) : 1;
   const chap = tipT != null && chapters?.length ? chapterAt(chapters, tipT) : null;
   const fromPointer = (e: React.PointerEvent<HTMLInputElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -76,11 +78,11 @@ export function Scrubber({
             <span
               className="seek-thumb"
               style={{
-                width: loc.w,
-                height: loc.h,
+                width: loc.w * k,
+                height: loc.h * k,
                 backgroundImage: `url("${thumbs.url(loc.sheet)}")`,
-                backgroundSize: `${loc.w * loc.cols}px ${loc.h * loc.rows}px`,
-                backgroundPosition: `-${loc.x}px -${loc.y}px`,
+                backgroundSize: `${loc.w * loc.cols * k}px ${loc.h * loc.rows * k}px`,
+                backgroundPosition: `-${loc.x * k}px -${loc.y * k}px`,
               }}
             />
           )}
@@ -89,8 +91,8 @@ export function Scrubber({
         </span>
       )}
       {cap > 0 &&
-        chapters?.map((c) => (
-          <i key={c.at} className="seek-tick" style={{ left: `${(c.at / cap) * 100}%` }} aria-hidden />
+        chapters?.map((c, i) => (
+          <i key={`${i}-${c.at}`} className="seek-tick" style={{ left: `${(c.at / cap) * 100}%` }} aria-hidden />
         ))}
       <input
         className="seek"

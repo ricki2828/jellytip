@@ -1057,7 +1057,6 @@ button.overview.open {
 }
 .seek-thumb {
   display: block;
-  max-width: 40vw;
   background-repeat: no-repeat;
   border-radius: 4px;
   background-color: #000;

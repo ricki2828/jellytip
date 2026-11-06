@@ -1,7 +1,8 @@
 // Keyboard / remote seeking: a press adds a step to a pending target, repeated or held presses ramp up
 // (10 -> 30 -> 60 s), Shift jumps further, and the real seek is committed once presses stop for a moment.
-export const SETTLE_MS = 450; // quiet time before the pending target is committed
-export const BURST_GAP_MS = 900; // presses closer than this belong to one burst
+export const SETTLE_MS = 700; // quiet time before the pending target is committed; above the OS key-repeat delay (500-660 ms)
+export const BURST_GAP_MS = 1000; // must exceed SETTLE_MS and the first key-repeat delay so a held key stays one burst
+export const BURST_GAP_MS_CHECK = BURST_GAP_MS > SETTLE_MS; // presses closer than this belong to one burst
 export const REPEAT_THROTTLE_MS = 150; // a held key repeats ~30/s: apply one step per this many ms
 
 const TIERS = [10, 30, 60];
@@ -48,4 +49,9 @@ export function advanceSeek(prev: SeekRamp | null, i: SeekInput): SeekRamp {
 /** True once presses have stopped long enough to fire the seek. */
 export function settled(s: SeekRamp | null, now: number): boolean {
   return !!s && now - s.lastAt >= SETTLE_MS;
+}
+
+/** Commit gate: never while the arrow is physically held (the first OS repeat arrives after 500-660 ms), else once settled. */
+export function commitDue(s: SeekRamp | null, now: number, held: boolean): boolean {
+  return !held && settled(s, now);
 }
