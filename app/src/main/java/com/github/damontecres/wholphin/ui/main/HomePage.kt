@@ -571,12 +571,22 @@ fun HomePageContent(
     var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
     // Jellytip: while the hero's own buttons have focus the hero holds still (no focus follow)
     var heroButtonsFocused by remember { mutableStateOf(false) }
-    LaunchedEffect(heroTarget, heroHeaderTarget, heroButtonsFocused) {
+    // Keyed on ids, not the items: a refreshed row hands out equal-id copies of the focused tile, and keying on the
+    // objects restarted this effect (debounce + trace) with focus not having moved at all
+    val latestHeroTarget by rememberUpdatedState(heroTarget)
+    val latestHeaderTarget by rememberUpdatedState(heroHeaderTarget)
+    LaunchedEffect(heroTarget?.id, heroHeaderTarget?.id, heroButtonsFocused) {
         if (heroButtonsFocused) return@LaunchedEffect
         delay(HERO_DEBOUNCE_MS)
-        heroItem = heroTarget
-        heroHeaderItem = heroHeaderTarget
+        heroItem = latestHeroTarget
+        heroHeaderItem = latestHeaderTarget
         JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
+    }
+    // Same tile, fresher copy (watched state, progress): take it at once, no debounce, no trace
+    LaunchedEffect(heroTarget, heroHeaderTarget) {
+        if (heroButtonsFocused) return@LaunchedEffect
+        if (heroItem?.id == heroTarget?.id) heroItem = heroTarget
+        if (heroHeaderItem?.id == heroHeaderTarget?.id) heroHeaderItem = heroHeaderTarget
     }
 
     val heroButtonsRequester = remember { FocusRequester() }

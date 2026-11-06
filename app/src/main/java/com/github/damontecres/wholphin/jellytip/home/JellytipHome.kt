@@ -9,6 +9,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -240,16 +241,18 @@ fun JellytipHomeHero(
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
 
-    val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), tween(400), label = "jellytip-scrim")
+    // System animations off (animator scale 0): no Ken Burns drift, no hero crossfade
+    val reducedMotion = remember { com.github.damontecres.wholphin.jellytip.JellytipSession.reducedMotion(appContext) }
+    val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), if (reducedMotion) snap<Float>() else tween<Float>(400), label = "jellytip-scrim")
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
         Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
             Crossfade(
                 targetState = lastUrl,
-                animationSpec = tween(700),
+                animationSpec = if (reducedMotion) snap<Float>() else tween<Float>(700),
                 modifier = Modifier.fillMaxSize(),
                 label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed) }
+            ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed && !reducedMotion) }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true
