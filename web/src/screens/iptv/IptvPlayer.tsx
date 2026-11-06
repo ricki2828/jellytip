@@ -27,7 +27,7 @@ import { refreshRecs } from "../../api/recStore";
 import { matchupTitle } from "../../lib/matchInfo";
 import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
-import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
+import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
@@ -732,6 +732,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const [drawer, setDrawer] = useState(false);
   const sportPrefs = usePrefs({ defer: true }).prefs?.sport;
   const spoilers = !!sportPrefs?.spoilers;
+  const live_ok = shouldShowLiveExtras(extras);
   const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
   const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
@@ -962,9 +963,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
-        {isLive && <MatchInfoButton id={extras?.matchId} />}
-        <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />
-        {extras?.matchId && state.kind === "playing" && (
+        {live_ok && isLive && <MatchInfoButton id={extras?.matchId} />}
+        {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />}
+        {live_ok && extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}>
             Live
           </button>
@@ -997,9 +998,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         onActivity={poke}
       />}
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
-      <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />
-      <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />
-      {drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive && !extras?.replay} spoilers={spoilers} onClose={() => setDrawer(false)} />}
+      {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />}
+      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />}
+      {live_ok && drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive && !extras?.replay} spoilers={spoilers} onClose={() => setDrawer(false)} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
@@ -1022,7 +1023,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
                   key={a.id}
                   className="btn small"
                   data-nav
-                  onClick={() => go(livePath(a.id, a.name, { alternates: [...extras!.alternates!.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey }), true)}
+                  onClick={() => go(livePath(a.id, a.name, { alternates: [...extras!.alternates!.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey, nospoil: extras!.nospoil }), true)}
                 >
                   {a.name}
                 </button>
@@ -1036,7 +1037,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           <span>{copy}</span>
           <button className="btn primary small" data-nav data-autofocus onClick={retryNow}>Retry now</button>
           {rec.phase === "stalled" && <button className="btn small" data-nav onClick={() => { quietUntil.current = Date.now() + QUIET_MS; }}>Keep waiting</button>}
-          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
+          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, nospoil: extras?.nospoil, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
           <button className="btn small" data-nav onClick={() => dispatchRef.current({ t: "cancel" })}>Back</button>
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
@@ -1197,8 +1198,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
           resumeMs,
           note: link.direct ? DIRECT_NOTE : undefined,
           // The portrait panel for anything that is not a match (description, what's next), and the user's alert settings
-          description: extras?.desc ?? undefined,
-          upNext: extras?.upNext,
+          description: extras?.nospoil ? undefined : extras?.desc ?? undefined,
+          upNext: extras?.nospoil ? undefined : extras?.upNext,
           fantasyAlerts: sportPrefsRef.current?.fantasyAlerts,
           flipAlerts: sportPrefsRef.current?.flipAlerts,
           panelStyle: sportPrefsRef.current?.panelStyle,
@@ -1211,7 +1212,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
                 programmeStop: extras?.kickoff?.stop,
                 // The match behind the listing: ⓘ, and the native Live drawer (which polls the companion itself)
                 // A replay of an earlier game: no match id, or the phone would poll live stats and alert for the old game
-                ...(extras?.matchId && !extras.replay && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
+                ...(extras?.matchId && !extras.replay && !extras.nospoil && getSession()?.token ? { matchId: extras.matchId, apiBase: COMPANION_BASE, token: getSession()!.token } : {}),
                 // Before the real start the native overlay shows the pre-game card
                 ...(isPre(extras?.startsAt, Date.now() / 1000) && !extras?.replay
                   ? { phase: "pre" as const, startsAt: new Date(extras!.startsAt! * 1000).toISOString(), altChannels: extras?.alternates?.map((x) => ({ id: x.id, name: x.name })) }
@@ -1233,7 +1234,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
         const pick = extras?.alternates?.find((x) => x.id === switchTo.current);
         switchTo.current = null;
         if (pick) {
-          go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey }), true);
+          go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey, nospoil: extras?.nospoil }), true);
           return;
         }
       }

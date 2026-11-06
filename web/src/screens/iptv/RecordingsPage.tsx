@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { refreshRecs } from "../../api/recStore";
 import { BackArrow } from "../../components/BackArrow";
+import { go } from "../../lib/router";
 import { Recordings } from "./Recordings";
 import "./iptv.css";
 
@@ -16,6 +17,7 @@ export function RecordingsPage() {
       <div className="page-head">
         <BackArrow />
         <h1 className="page-title">Recordings</h1>
+        <button className="btn small" data-nav onClick={() => go("/games")}>Game Centre</button>
       </div>
       <Recordings />
     </div>

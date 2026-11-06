@@ -133,7 +133,12 @@ export interface LiveExtras {
   /** The programme's description and what is on next: the phone player's panel for anything that is not a match. */
   desc?: string | null;
   upNext?: { title: string; start?: number }[];
+  /** Spoiler-safe playback (Game Centre): no match info, fantasy, flip alerts or live drawer, and no EPG description. */
+  nospoil?: boolean;
 }
+
+/** Whether the player may show match info, fantasy, flip alerts and the live drawer. */
+export const shouldShowLiveExtras = (x: LiveExtras | null | undefined): boolean => !x?.nospoil;
 
 const MAX_ALTERNATES = 4;
 
@@ -149,6 +154,7 @@ export function liveExtrasQuery(x: LiveExtras | null | undefined): string {
   if (x.eventKey) q.set("ek", x.eventKey.slice(0, 120));
   if (x.matchId) q.set("mi", x.matchId.slice(0, 120));
   if (x.replay) q.set("rp", "1");
+  if (x.nospoil) q.set("nospoil", "1");
   if (x.desc) q.set("dsc", x.desc.slice(0, 280));
   for (const n of (x.upNext ?? []).slice(0, 3)) q.append("nx", `${n.start ?? 0}~${n.title.slice(0, 80)}`);
   for (const a of (x.alternates ?? []).slice(0, MAX_ALTERNATES)) q.append("alt", `${a.id}~${a.name}`);
@@ -170,6 +176,7 @@ export function parseLiveExtras(q: URLSearchParams): LiveExtras {
   const ps = Number(q.get("ps"));
   return { kickoff: start > 0 && stop > start ? { start, stop } : null, alternates, startsAt: ps > 0 ? ps : null, eventKey: q.get("ek") || null, matchId: q.get("mi") || null,
     replay: q.get("rp") === "1",
+    ...(q.get("nospoil") === "1" ? { nospoil: true } : {}),
     desc: q.get("dsc") || null,
     upNext: q.getAll("nx").slice(0, 3).flatMap((v) => {
       const at = v.indexOf("~");

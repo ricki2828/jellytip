@@ -87,7 +87,10 @@ export function OnNowStrip({ title, sportOnly = false, min = 1, checkProvider = 
       : o.info.alternates.map((id) => ({ id, name: (items ?? []).find((x) => x.channelId === id)?.channel ?? "Another channel", num: null, logo: null, quality: null }));
   return (
     <section className="row onnow-row">
-      <h2 className="row-title">{title}</h2>
+      <h2 className="row-title">
+        {title}
+        {sportOnly && <button className="btn small" data-nav onClick={() => go("/games")}>Game Centre</button>}
+      </h2>
       <div className="row-scroll">
         {live.map((o) => (
           <div key={o.channelId} className="onnow-item">
