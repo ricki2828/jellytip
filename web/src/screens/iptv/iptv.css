@@ -3105,6 +3105,8 @@
 }
 
 .iptv-tracks-button {
+  display: flex;
+  gap: .5rem;
   position: absolute;
   z-index: 21;
   top: 4.5rem;

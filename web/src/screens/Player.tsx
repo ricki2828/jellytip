@@ -1,7 +1,7 @@
 // Player: direct play when the browser can, else Jellyfin HLS via hls.js (one automatic retry as a plain H.264 transcode).
 // Reports start / progress (10 s) / stop so resume works with the TV; text subtitles with a delay control; next episode.
 import { Scrubber } from "../components/Scrubber";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type Hls from "hls.js";
 import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
@@ -9,6 +9,10 @@ import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 import { prefsSoon } from "../api/me";
 import { pickAudio, pickSubtitle } from "../lib/tracks";
+import { TrackMenu } from "../components/TrackMenu.tsx";
+import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
+import { jellyfinAudioLabel } from "../lib/trackMenu.ts";
+import { replayDone, replayTarget, startReplay, type Replay } from "../lib/captionReplay.ts";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
@@ -75,6 +79,8 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const [buffering, setBuffering] = useState(true);
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState(false);
+  const { prefs: subPrefs, setPrefs: setSubPrefs, vars: subVars } = useSubtitlePrefs();
+  const replayRef = useRef<Replay | null>(null);
   const [subIndex, setSubIndex] = useState<number>(-1);
   const [cues, setCues] = useState<Cue[]>([]);
   const [delay, setDelay] = useState<number>(() => Number(localStorage.getItem(DELAY_KEY) ?? 0) || 0);
@@ -240,6 +246,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     setNext(null);
     if (thenId && /^[0-9a-f]{32}$/i.test(thenId)) getItem(thenId).then((t) => setNext(t), () => undefined);
     setCues([]);
+    replayRef.current = null;
     setBuffering(true);
     localRef.current = null;
     (async () => {
@@ -543,11 +550,25 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
   const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
+  const textSubs = subs.filter((x) => x.IsTextSubtitleStream);
+  /** "What did they say?": back ~10 s with captions on, then the previous subtitle state returns once that span has played */
+  const replayCaptions = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const pick = textSubs.find((x) => x.Index === plan?.source.DefaultSubtitleStreamIndex) ?? textSubs[0];
+    const r = startReplay(v.currentTime, subIndex, pick ? pick.Index : null, 0, replayRef.current);
+    if (!r) return;
+    replayRef.current = r.replay;
+    if (r.show != null) setSubIndex(r.show);
+    seekTarget.current = r.seekTo;
+    v.currentTime = r.seekTo;
+    setMenu(false);
+  };
   const remaining = duration - time;
   const title = item ? (item.Type === "Episode" ? `${item.SeriesName} · S${item.ParentIndexNumber} E${item.IndexNumber} · ${item.Name}` : item.Name) : "";
 
   return (
-    <div ref={boxRef} className={`player${controls || paused ? " show" : ""}`} onMouseMove={poke} onClick={() => !touchClick.current && poke()}>
+    <div ref={boxRef} className={`player${controls || paused ? " show" : ""}`} style={subVars as CSSProperties} data-sub-bg={subPrefs.background} onMouseMove={poke} onClick={() => !touchClick.current && poke()}>
       <video
         ref={videoRef}
         className="player-video"
@@ -580,7 +601,15 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           seekTarget.current = null;
           if (startedRef.current) progress();
         }}
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          const t = e.currentTarget.currentTime;
+          setTime(t);
+          const r = replayRef.current;
+          if (r && replayDone(r, t)) {
+            replayRef.current = null;
+            setSubIndex(r.restore);
+          }
+        }}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND)}
         onEnded={() => {
           stop();
@@ -638,9 +667,26 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         {plan && <span className="player-method">{plan.method === "DirectPlay" ? "Direct" : plan.method === "DirectStream" ? "Remux" : "Transcode"}</span>}
       </div>
 
-      <button className="btn small player-track-trigger" data-nav aria-expanded={menu} onClick={(e) => { e.stopPropagation(); setMenu((m) => !m); setControls(true); }}>
-        Audio &amp; subtitles
-      </button>
+      <TrackMenu
+        open={menu}
+        onOpenChange={(o) => { setMenu(o); if (o) setControls(true); }}
+        audio={audios.map((a) => ({ id: String(a.Index), label: jellyfinAudioLabel(a), active: a.Index === audioIndex }))}
+        subtitles={subs.map((x) => ({ id: String(x.Index), label: subLabel(x) + (x.IsTextSubtitleStream ? "" : " (image, not supported yet)"), active: x.Index === subIndex, disabled: !x.IsTextSubtitleStream }))}
+        subtitlesOff={subIndex < 0}
+        onPickAudio={(v) => chooseAudio(Number(v))}
+        onPickSubtitle={(v) => { replayRef.current = null; setSubIndex(v == null ? -1 : Number(v)); }}
+        prefs={subPrefs}
+        onPrefs={setSubPrefs}
+        replay={textSubs.length ? { disabled: replayTarget(time, 0) == null, run: replayCaptions } : undefined}
+        barClassName="player-track-trigger"
+        menuClassName="sub-menu"
+        onActivity={poke}
+        extra={subIndex >= 0 ? (
+          <button type="button" role="menuitem" data-track-item data-nav className="btn small" onClick={() => setDelay(0)}>
+            Reset delay ({delay.toFixed(1)} s)
+          </button>
+        ) : undefined}
+      />
 
       {next && remaining > 0 && remaining < NEXT_UP_SECONDS && (
         <button className="btn primary next-up" data-nav onClick={playNext}>
@@ -688,53 +734,6 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         </div>
       </div>
 
-      {menu && <div className="sheet-scrim" onClick={() => setMenu(false)} />}
-      {menu && (
-        <div className="sub-menu" onClick={(e) => e.stopPropagation()}>
-          {audios.length > 1 && (
-            <>
-              <div className="menu-head">Audio</div>
-              {audios.map((a) => (
-                <button key={a.Index} data-nav className={a.Index === audioIndex ? "on" : ""} onClick={() => chooseAudio(a.Index)}>
-                  {subLabel(a)}
-                </button>
-              ))}
-              <div className="menu-head">Subtitles</div>
-            </>
-          )}
-          <button
-            data-nav
-            data-autofocus
-            className={subIndex < 0 ? "on" : ""}
-            onClick={() => {
-              setSubIndex(-1);
-              setMenu(false);
-            }}
-          >
-            Off
-          </button>
-          {subs.map((s) => (
-            <button
-              key={s.Index}
-              data-nav
-              disabled={!s.IsTextSubtitleStream}
-              className={s.Index === subIndex ? "on" : ""}
-              onClick={() => {
-                setSubIndex(s.Index);
-                setMenu(false);
-              }}
-            >
-              {subLabel(s)}
-              {!s.IsTextSubtitleStream && " (image, not supported yet)"}
-            </button>
-          ))}
-          {subIndex >= 0 && (
-            <button data-nav onClick={() => setDelay(0)}>
-              Reset delay ({delay.toFixed(1)} s)
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
