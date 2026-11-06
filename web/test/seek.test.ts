@@ -129,7 +129,7 @@ test("held arrow: no commit before the first OS key-repeat (660 ms) and the burs
   // first OS repeat lands at 660 ms: same burst (not reset to the playhead), keeps ramping from the pending target
   const r = advanceSeek(s, inp({ now: 660, repeat: true }));
   assert.equal(r.presses, 2);
-  assert.equal(r.target, 120);
+  assert.equal(r.target, 140); // 110 + 30 (held past 500 ms)
   assert.equal(r.burstStart, 0);
   // released: commits only after settling from the last step
   assert.equal(commitDue(r, 700, false), false);
