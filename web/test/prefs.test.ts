@@ -54,3 +54,10 @@ test("reactions: only ±1 thumbs, strings for not interested", () => {
   assert.deepEqual(parseReactions({ thumbs: { a: 1, b: -1, c: 2, d: "1" }, notInterested: ["x", "tmdb:5", 3] }), { thumbs: { a: 1, b: -1 }, notInterested: ["x", "tmdb:5"] });
   assert.deepEqual(parseReactions(null), { thumbs: {}, notInterested: [] });
 });
+
+test("playback language prefs: old, partial and malformed payloads keep working", () => {
+  assert.deepEqual(parsePrefs({}).playback.audioLangs, []);
+  assert.deepEqual(parsePrefs({ playback: { audioLangs: ["en", "en", 5, ""], subtitleLangs: "fr" } }).playback, { intro: true, trailerAutoplay: true, trailerSound: false, subtitleLangs: [], audioLangs: ["en"] });
+  // a server that sends extra keys (or a future alwaysSubs) doesn't break parsing
+  assert.deepEqual(parsePrefs({ playback: { audioLangs: ["fr"], subtitleLangs: ["en"], alwaysSubs: true } }).playback.audioLangs, ["fr"]);
+});

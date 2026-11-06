@@ -5,6 +5,7 @@ import { getSession, logout } from "../api/jellyfin";
 import { savePrefs, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
 import type { Prefs } from "../lib/prefs";
+import { getAlwaysSubs, setAlwaysSubs } from "../lib/trackMemory";
 import { go } from "../lib/router";
 import { aboutLine } from "../lib/buildInfo";
 import { IntegrationsSettings } from "../components/IntegrationsSettings";
@@ -70,6 +71,8 @@ function Personal({ prefs }: { prefs: Prefs }) {
     return e;
   };
   const pb = prefs.playback;
+  const uid = getSession()?.userId ?? "";
+  const [alwaysSubs, setAlways] = useState(() => getAlwaysSubs(uid));
   const lbStatus = { none: null, pending: "Linking…", linked: "Linked: your lists and ratings feed your rows", error: "Couldn't read that profile (is it public?)" }[prefs.letterboxd.status];
 
   return (
@@ -106,6 +109,10 @@ function Personal({ prefs }: { prefs: Prefs }) {
         </li>
         <li>
           <Langs label="Subtitle languages" value={pb.subtitleLangs} onChange={(v) => void save({ playback: { subtitleLangs: v } })} />
+          <span className="settings-sub settings-pad">Audio and subtitle languages follow you to every device you sign in on. A track you pick by hand is remembered for that show or film on this device.</span>
+        </li>
+        <li>
+          <Toggle label="Always show subtitles" sub="In your subtitle language even when the audio matches. This device only." on={alwaysSubs} onChange={(v) => { setAlwaysSubs(uid, v); setAlways(v); }} />
         </li>
       </ul>
 

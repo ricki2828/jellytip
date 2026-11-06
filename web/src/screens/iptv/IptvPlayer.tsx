@@ -34,7 +34,8 @@ import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { alternatesAfterSwitch, initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
-import { hlsChoices, nativeChoices, nativeSubtitlesOff, type TrackChoice } from "../../lib/iptvTracks";
+import { hlsChoices, nativeChoices, nativeSubtitlesOff, pickIptvTracks, type TrackChoice } from "../../lib/iptvTracks";
+import { getAlwaysSubs } from "../../lib/trackMemory";
 import "./iptv.css";
 
 const PROGRESS_MS = 30_000;
@@ -122,6 +123,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const [audioChoices, setAudioChoices] = useState<TrackChoice[]>([]);
   const [subtitleChoices, setSubtitleChoices] = useState<TrackChoice[]>([]);
   const [subtitleOff, setSubtitleOff] = useState(true);
+  // Start-of-playback language prefs: applied once per start, and never over a pick made in the track menu
+  const autoTracks = useRef({ done: false, manual: false });
+  const audioChoicesRef = useRef<TrackChoice[]>([]);
+  const subtitleChoicesRef = useRef<TrackChoice[]>([]);
+  audioChoicesRef.current = audioChoices;
+  subtitleChoicesRef.current = subtitleChoices;
+  const langPrefs = usePrefs({ defer: true }).prefs?.playback;
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
   const growRef = useRef(false);
@@ -462,6 +470,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       }
       setAnswer(a.data);
       setState({ kind: "playing" });
+      // Every (re)attach can be a new engine with default tracks: let the language prefs pick again on its fresh lists
+      autoTracks.current.done = false;
+      setAudioChoices([]);
+      setSubtitleChoices([]);
       try {
         await attach(a.data);
       } catch {
@@ -497,12 +509,32 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   }, [target, isLive, attach]);
 
   useEffect(() => {
+    const a = autoTracks.current;
+    if (a.done || a.manual || !langPrefs || !audioChoices.length) return;
+    const apply = () => {
+      if (a.done || a.manual) return;
+      a.done = true;
+      const alwaysSubs = getAlwaysSubs(getSession()?.userId ?? "");
+      if (!langPrefs.audioLangs.length && !alwaysSubs) return;
+      const r = pickIptvTracks(audioChoicesRef.current, subtitleChoicesRef.current, { ...langPrefs, alwaysSubs });
+      if (r.audio != null) selectAudio(r.audio);
+      if (r.subtitle != null) selectSubtitle(r.subtitle);
+    };
+    // Latch once audio and text track lists are both there; text tracks can appear late, so wait up to 3 s for them
+    if (subtitleChoices.length) { apply(); return; }
+    const t = window.setTimeout(apply, 3000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioChoices, subtitleChoices, langPrefs]);
+
+  useEffect(() => {
     alive.current = true;
     gen.current++;
     quietUntil.current = 0;
     playingSince.current = null;
     lastMove.current = Date.now();
     renewed.current = false;
+    autoTracks.current = { done: false, manual: false };
     startRef.current = start;
     recRef.current = initialRecovery(isLive);
     setRec(recRef.current);
@@ -951,8 +983,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         subtitles={subtitleChoices.map((c) => ({ id: String(c.index), label: c.label, active: c.active }))}
         subtitlesOff={subtitleOff}
         audioEmptyNote="No selectable audio tracks exposed."
-        onPickAudio={(v) => selectAudio(Number(v))}
-        onPickSubtitle={(v) => { replayRef.current = null; selectSubtitle(v == null ? -1 : Number(v)); }}
+        onPickAudio={(v) => { autoTracks.current.manual = true; selectAudio(Number(v)); }}
+        onPickSubtitle={(v) => { autoTracks.current.manual = true; replayRef.current = null; selectSubtitle(v == null ? -1 : Number(v)); }}
         unavailable={playerEngine === "mpegts" ? {
           note: "This stream format can’t expose track controls.",
           action: isLive ? { label: "Switch to HLS and choose tracks", run: () => { fmtRef.current = "m3u8"; setTracksOpen(false); setState({ kind: "loading" }); teardown(); void start(); } } : undefined,

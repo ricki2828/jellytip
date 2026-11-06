@@ -6,12 +6,12 @@ import { advanceSeek, commitDue, SETTLE_MS, type SeekRamp } from "../lib/seekRam
 import { chapterMarks, nextChapter, prevChapter } from "../lib/chapters";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type Hls from "hls.js";
-import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
+import { episodes, getItem, getSession, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 import { prefsSoon, usePrefs } from "../api/me";
-import { pickAudio, pickSubtitle } from "../lib/tracks";
+import { chooseStart, getAlwaysSubs, loadStore, memoryKey, recordChoice, saveStore } from "../lib/trackMemory";
 import { TrackMenu } from "../components/TrackMenu.tsx";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
 import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
@@ -95,6 +95,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const [delay, setDelay] = useState<number>(() => Number(localStorage.getItem(DELAY_KEY) ?? 0) || 0);
   const [next, setNext] = useState<Item | null>(null);
   const [audioIndex, setAudioIndex] = useState<number | null>(null);
+  const memKeyRef = useRef<string | null>(null);
   const [needsTap, setNeedsTap] = useState(false);
   const [pauseFlash, setPauseFlash] = useState(false);
   const pauseFlashTimer = useRef<number | null>(null);
@@ -227,6 +228,15 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   }, [id, attach, abandonPlan, audioIndex]);
   fallbackRef.current = fallback;
 
+  /** A manual audio / subtitle choice is remembered for this series or movie (re-applied before the global language prefs). */
+  const remember = (change: { audio?: number; subtitle?: number }) => {
+    const uid = getSession()?.userId;
+    const k = memKeyRef.current;
+    const streams = planRef.current?.source.MediaStreams;
+    if (!uid || !k || !streams) return;
+    saveStore(uid, recordChoice(loadStore(uid), k, streams, change, Date.now(), audioIndex ?? planRef.current?.source.DefaultAudioStreamIndex ?? null));
+  };
+
   /** Switch audio track: renegotiate at the current position (no direct play: browsers can't switch tracks in-file). */
   const chooseAudio = async (index: number) => {
     setMenu(false);
@@ -234,6 +244,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     const v = videoRef.current;
     const at = v?.currentTime || 0;
     const def = planRef.current.source.DefaultAudioStreamIndex;
+    remember({ audio: index });
     abandonPlan();
     setAudioIndex(index);
     setBuffering(true);
@@ -269,6 +280,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           if (!alive) return;
           const it = online ?? dl.item;
           setItem(it);
+          memKeyRef.current = memoryKey(it);
           const pending = await localPosition(id);
           const saved = pending ?? (it.UserData?.Played ? 0 : it.UserData?.PlaybackPositionTicks ?? 0);
           const startTicks = startParam != null ? Number(startParam) * TICKS_PER_SECOND : saved;
@@ -298,22 +310,37 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         const it = await getItem(id);
         if (!alive) return;
         setItem(it);
+        memKeyRef.current = memoryKey(it);
         const saved = it.UserData?.Played ? 0 : it.UserData?.PlaybackPositionTicks ?? 0;
         const startTicks = startParam != null ? Number(startParam) * TICKS_PER_SECOND : saved;
         // The person's language prefs pick the first tracks (a choice made in the player menu wins after that)
         const pb = (await prefsSoon())?.playback;
         if (!alive) return;
         const fileSrc = it.MediaSources?.[0];
-        const wantAudio = pb?.audioLangs.length ? pickAudio(fileSrc?.MediaStreams ?? [], pb.audioLangs, null) : null;
+        const uid = getSession()?.userId ?? "";
+        const fileStreams = fileSrc?.MediaStreams ?? [];
+        // Precedence: what this person picked on this series/movie before, then the language prefs, then the file's default
+        const entry = loadStore(uid)[memoryKey(it)];
+        const langPrefs = pb ? { ...pb, alwaysSubs: getAlwaysSubs(uid) } : null;
+        const first = chooseStart(fileStreams, entry, langPrefs, { defaultAudio: fileSrc?.DefaultAudioStreamIndex, defaultSub: -1 });
+        const wantAudio = first.audio;
         const otherAudio = wantAudio != null && wantAudio !== fileSrc?.DefaultAudioStreamIndex;
-        // A non-default audio track can't be switched in-file by browsers: same renegotiation as the audio menu
-        const p = await negotiate(id, startTicks, otherAudio ? { audioStreamIndex: wantAudio!, allowDirectPlay: false } : {});
+        // A non-default audio track can't be switched in-file by browsers: same renegotiation as the audio menu.
+        // The chosen track always goes into PlaybackInfo so a transcode carries it.
+        const p = await negotiate(id, startTicks, wantAudio != null ? { audioStreamIndex: wantAudio, ...(otherAudio ? { allowDirectPlay: false } : {}) } : {});
         if (!alive) return;
         const src = p.source;
         const subs = (src.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
         const def = subs.find((s) => s.Index === src.DefaultSubtitleStreamIndex && s.IsTextSubtitleStream) ?? subs.find((s) => s.IsForced && s.IsTextSubtitleStream);
-        const audio = otherAudio ? wantAudio : src.DefaultAudioStreamIndex ?? null;
-        setSubIndex(pb ? pickSubtitle(src.MediaStreams ?? [], audio, pb, def ? def.Index : -1) : def ? def.Index : -1);
+        // Indexes belong to one MediaSource: when the server used another version, the audio we chose doesn't apply to it
+        const sameSource = !fileSrc || src.Id === fileSrc.Id;
+        const start = chooseStart(src.MediaStreams ?? [], entry, langPrefs, {
+          defaultAudio: src.DefaultAudioStreamIndex,
+          defaultSub: def ? def.Index : -1,
+          forceAudio: sameSource ? wantAudio ?? src.DefaultAudioStreamIndex ?? null : src.DefaultAudioStreamIndex ?? null,
+        });
+        const audio = start.audio;
+        setSubIndex(start.subtitle);
         setAudioIndex(audio);
         attach(p, startTicks / TICKS_PER_SECOND);
         if (it.Type === "Episode" && it.SeriesId) {
@@ -794,7 +821,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         subtitles={subs.map((x) => ({ id: String(x.Index), label: subLabel(x) + (x.IsTextSubtitleStream ? "" : " (image, not supported yet)"), active: x.Index === subIndex, disabled: !x.IsTextSubtitleStream }))}
         subtitlesOff={subIndex < 0}
         onPickAudio={(v) => chooseAudio(Number(v))}
-        onPickSubtitle={(v) => { replayRef.current = null; setSubIndex(v == null ? -1 : Number(v)); }}
+        onPickSubtitle={(v) => { replayRef.current = null; const n = v == null ? -1 : Number(v); remember({ subtitle: n }); setSubIndex(n); }}
         prefs={subPrefs}
         onPrefs={setSubPrefs}
         replay={textSubs.length ? { disabled: replayTarget(time, 0) == null, run: replayCaptions } : undefined}
