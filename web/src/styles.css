@@ -991,9 +991,11 @@ button.overview.open {
 }
 .player-track-trigger {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   top: 12px;
   right: var(--pad);
+  display: flex;
+  gap: 8px;
 }
 .player-bottom {
   bottom: 0;
@@ -1080,13 +1082,44 @@ button.overview.open {
   bottom: 9%;
   text-align: center;
   pointer-events: none;
-  font-size: clamp(18px, 2.6vw, 38px);
+  font-size: calc(clamp(18px, 2.6vw, 38px) * var(--sub-scale, 1));
   font-weight: 500;
   line-height: 1.25;
   text-shadow: 0 0 4px #000, 0 2px 3px #000, 0 0 1px #000;
+  bottom: calc(9% + var(--sub-lift, 0%));
 }
 .player.show .subs {
-  bottom: 17%;
+  bottom: calc(17% + var(--sub-lift, 0%));
+}
+/* subtitle background preference (custom-rendered .subs, and native cues below) */
+.player[data-sub-bg="none"] .subs {
+  text-shadow: none;
+}
+.player[data-sub-bg="box"] .subs {
+  text-shadow: none;
+}
+.player[data-sub-bg="box"] .subs > div {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  margin: 0.08em 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.78);
+}
+/* native text tracks (IPTV / HLS): size + background via ::cue; position is best effort (Chromium/Safari container) */
+.player-video::cue {
+  font-size: calc(100% * var(--sub-scale, 1));
+  text-shadow: 0 0 4px #000, 0 2px 3px #000, 0 0 1px #000;
+  background-color: transparent;
+}
+.player[data-sub-bg="none"] .player-video::cue {
+  text-shadow: none;
+}
+.player[data-sub-bg="box"] .player-video::cue {
+  text-shadow: none;
+  background-color: rgba(0, 0, 0, 0.78);
+}
+.player-video::-webkit-media-text-track-container {
+  transform: translateY(calc(var(--sub-lift, 0%) * -1));
 }
 .spinner {
   position: absolute;
@@ -1122,8 +1155,9 @@ button.overview.open {
 }
 .sub-menu {
   position: absolute;
+  z-index: 4;
   right: var(--pad);
-  bottom: 96px;
+  top: 60px;
   min-width: 260px;
   max-height: 60vh;
   overflow-y: auto;
@@ -1213,6 +1247,14 @@ button.overview.open {
 .tabbar,
 .sheet-scrim {
   display: none;
+}
+/* click-away layer under the track menu: swallows the tap so it never toggles playback; dimmed on phones */
+.track-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: transparent;
 }
 .seek-flash {
   position: absolute;
@@ -1631,9 +1673,13 @@ button.overview.open {
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
   }
+  .track-scrim {
+    background: rgba(0, 0, 0, 0.45);
+  }
   .sub-menu {
     left: 0;
     right: 0;
+    top: auto;
     bottom: 0;
     min-width: 0;
     max-height: 70svh;
