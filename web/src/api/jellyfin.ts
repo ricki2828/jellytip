@@ -2,6 +2,8 @@
 // website; the seedbox origin in the Android app).
 
 import { SERVER_ORIGIN } from "../lib/native";
+import { applySessionPatch, SESSION_META_EVENT } from "../lib/sessionPatch";
+export { SESSION_META_EVENT };
 
 export const JF_BASE = `${SERVER_ORIGIN}/jellyfin`;
 const CLIENT = "Jellytip Web";
@@ -14,6 +16,8 @@ export interface Session {
   userId: string;
   userName?: string;
   isAdmin?: boolean;
+  /** Policy.EnableSubtitleManagement (undefined on sessions stored before this was recorded). */
+  canManageSubtitles?: boolean;
 }
 
 export interface UserData {
@@ -40,6 +44,7 @@ export interface MediaStream {
   Language?: string;
   DisplayTitle?: string;
   Title?: string;
+  Path?: string;
   IsDefault?: boolean;
   IsForced?: boolean;
   IsExternal?: boolean;
@@ -149,6 +154,17 @@ export function setSession(s: Session | null) {
   window.dispatchEvent(new Event("jellytip-session"));
 }
 
+/** Update fields of the CURRENT session (same token and user) without announcing a session change: a person
+ * switching accounts is "jellytip-session" and resets every per-user cache; this is "jellytip-session-meta". */
+export function patchSession(expect: { token: string; userId: string }, patch: Partial<Pick<Session, "isAdmin" | "canManageSubtitles">>): boolean {
+  const next = applySessionPatch(session, expect, patch);
+  if (!next) return false;
+  session = next;
+  localStorage.setItem(STORE_KEY, JSON.stringify(session));
+  window.dispatchEvent(new Event(SESSION_META_EVENT));
+  return true;
+}
+
 export function authHeader(token = session?.token): string {
   const parts = [`Client="${CLIENT}"`, `Device="${deviceName()}"`, `DeviceId="${deviceId()}"`, `Version="${VERSION}"`];
   if (token) parts.push(`Token="${token}"`);
@@ -156,8 +172,10 @@ export function authHeader(token = session?.token): string {
 }
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -194,11 +212,11 @@ export function uid(): string {
 
 interface AuthResult {
   AccessToken: string;
-  User: { Id: string; Name: string; Policy?: { IsAdministrator?: boolean } };
+  User: { Id: string; Name: string; Policy?: { IsAdministrator?: boolean; EnableSubtitleManagement?: boolean } };
 }
 
 function storeAuth(r: AuthResult) {
-  setSession({ token: r.AccessToken, userId: r.User.Id, userName: r.User.Name, isAdmin: !!r.User.Policy?.IsAdministrator });
+  setSession({ token: r.AccessToken, userId: r.User.Id, userName: r.User.Name, isAdmin: !!r.User.Policy?.IsAdministrator, canManageSubtitles: !!r.User.Policy?.EnableSubtitleManagement });
 }
 
 export async function login(username: string, password: string) {

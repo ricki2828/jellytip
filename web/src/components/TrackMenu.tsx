@@ -28,6 +28,8 @@ export type TrackMenuProps = {
   triggerClassName?: string;
   onActivity?: () => void;
   extra?: ReactNode;
+  /** "Find subtitles…": omit when the playing item can't be searched (IPTV) or the account may not manage subtitles */
+  findSubtitles?: () => void;
 };
 
 const BTN = "btn small";
@@ -163,6 +165,11 @@ export function TrackMenu(p: TrackMenuProps) {
                 {head("Subtitles", "subs")}
                 {radio({ id: "off", label: "Off", active: p.subtitlesOff }, "s", () => { close(); p.onPickSubtitle(null); })}
                 {subtitles.map((o) => radio(o, "s", () => { close(); p.onPickSubtitle(o.id); }))}
+                {p.findSubtitles && (
+                  <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => { close(); p.findSubtitles!(); }}>
+                    Find subtitles…
+                  </button>
+                )}
               </div>
               {subtitles.length > 0 && (
                 <div role="group" aria-label="Subtitle appearance" className="track-appearance-group">

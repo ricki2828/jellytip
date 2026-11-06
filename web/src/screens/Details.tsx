@@ -2,8 +2,8 @@
 // series get season chips + episodes, episodes get prev/next; cast and more-like-this sit further down.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  episodes as getEpisodes,
   getSession,
+  episodes as getEpisodes,
   getItem,
   localTrailers,
   personImage,
@@ -35,6 +35,9 @@ import { runtimeText } from "../api/jellyfin";
 import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
 import { companionCall } from "../api/companionCall";
 import { usePrefs } from "../api/me";
+import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
+import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
+import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
 
 function fmtClock(ticks: number) {
@@ -63,6 +66,9 @@ export function Details({ id }: { id: string }) {
   const [subtitleProgress, setSubtitleProgress] = useState<Progress | null>(null);
   const [subtitleActive, setSubtitleActive] = useState(false);
   const subtitleLock = useRef(false);
+  const canSubs = useCanManageSubtitles();
+  const canSeasons = canSearchSeasons(getSession());
+  const [findSubs, setFindSubs] = useState(false);
   const { prefs } = usePrefs({ defer: true });
   const phone = useIsPhone();
   // Double feature (from the specials row): "Play both" plays this one, then the pair
@@ -203,12 +209,12 @@ export function Details({ id }: { id: string }) {
       flash("Couldn't update favourite. Try again.");
     }
   };
-  const searchAllSubtitles = async () => {
-    if (subtitleLock.current) return;
+  const searchSeasonSubtitles = async (ids: string[]) => {
+    if (subtitleLock.current || !ids.length) return;
     subtitleLock.current = true;
     setSubtitleActive(true);
     try {
-      await runSeasonSubtitles(seasonList.map((s) => s.Id), prefs?.playback.subtitleLangs[0]?.trim() || "eng", companionCall, setSubtitleProgress);
+      await runSeasonSubtitles(ids, defaultSearchLanguage(prefs?.playback.subtitleLangs), companionCall, setSubtitleProgress);
     } finally {
       subtitleLock.current = false;
       setSubtitleActive(false);
@@ -300,12 +306,28 @@ export function Details({ id }: { id: string }) {
               {ud?.IsFavorite ? "♥ Favourite" : "♡ Favourite"}
             </button>
             {item.Type !== "Series" && <DownloadButton item={item} onError={flash} />}
+            {canSubs && (item.Type === "Movie" || item.Type === "Episode") && (
+              <button className="btn" data-nav aria-haspopup="dialog" onClick={() => setFindSubs(true)}>
+                Find subtitles
+              </button>
+            )}
             {item.Type !== "Episode" && <TasteButtons item={item} />}
           </div>
           {phone && <DetailsQuote item={item} phone />}
         </div>
         {!phone && <DetailsQuote item={item} phone={false} />}
       </div>
+
+      {findSubs && canSubs && (
+        <SubtitleSearchDialog
+          itemId={item.Id}
+          title={item.Type === "Episode" ? `${item.SeriesName ?? ""} · S${item.ParentIndexNumber} E${item.IndexNumber} · ${item.Name}` : item.Name}
+          subtitleLangs={prefs?.playback.subtitleLangs}
+          where="page"
+          onClose={() => setFindSubs(false)}
+          onAdded={(fresh) => setItem((cur) => (cur && cur.Id === fresh.Id ? { ...cur, MediaSources: fresh.MediaSources } : cur))}
+        />
+      )}
 
       <div className="details-below">
         {item.Type === "Series" && seasonList.length > 0 && (
@@ -317,9 +339,10 @@ export function Details({ id }: { id: string }) {
                 </button>
               ))}
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
-              {getSession()?.isAdmin && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchAllSubtitles()}>Search subtitles for all seasons</button>}
+              {canSeasons && season && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
+              {canSeasons && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
             </div>
-            {getSession()?.isAdmin && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
+            {canSeasons && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
             {phone ? (
               // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
               <div className="ep-list">
