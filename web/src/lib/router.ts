@@ -25,7 +25,7 @@ let restoring = false;
 let lastFocus: string | undefined;
 let saveTimer: number | null = null;
 
-const ROOTS = new Set(["home", "movies", "shows", "search", "downloads", "fantasy", "discover", "livetv", "recordings", "upcoming", "collections", "inbox"]);
+const ROOTS = new Set(["home", "movies", "shows", "search", "ask", "downloads", "fantasy", "discover", "livetv", "recordings", "upcoming", "collections", "inbox"]);
 /** Root tabs (Home, Movies, Shows, Search, Downloads, admins' Discover, Live TV) have no back arrow; everything else does. */
 export const isRootRoute = (name: string) => ROOTS.has(name);
 
