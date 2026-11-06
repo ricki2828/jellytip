@@ -7,7 +7,7 @@ import { getItem, getItems, getSession, jf, type Item } from "../api/jellyfin";
 import { usePrefs } from "../api/me";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { defaultSearchLanguage, languageName } from "../lib/remoteSubtitles";
-import { FILTERS, PAGE_SIZE, SCAN_PATH, TASKS_PATH, buildCountQuery, buildItemsQuery, classify, createTapGate, errorText, mapLibraries, mapTasks, matchesFilter, refreshPath, runningTasks, startIntervalPoll, validId, type Library, type ManageFilter, type ManageItem, type Task } from "../lib/manage";
+import { PAGE_SIZE, SCAN_PATH, TASKS_PATH, buildCountQuery, buildItemsQuery, classify, createArm, errorText, filtersFor, loadPages, mapLibraries, mapTasks, mergeById, refreshPath, runningTasks, startIntervalPoll, validId, type Library, type ManageFilter, type ManageItem, type Task } from "../lib/manage";
 import { go } from "../lib/router";
 
 const asManage = (i: Item): ManageItem => i as unknown as ManageItem;
@@ -67,7 +67,13 @@ export function Manage({ itemId }: { itemId?: string | null }) {
   const [subsFor, setSubsFor] = useState<Item | null>(null);
   const [single, setSingle] = useState<Item | null>(null);
   const [armed, setArmed] = useState(false);
-  const gate = useRef(createTapGate());
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const langRef = useRef(lang);
+  langRef.current = lang;
+  const focusFrom = useRef<number | null>(null);
+  const arm = useRef<ReturnType<typeof createArm> | null>(null);
+  if (!arm.current) arm.current = createArm({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (t) => window.clearTimeout(t as number), now: () => Date.now() }, setArmed);
+  useEffect(() => () => arm.current?.dispose(), []);
   const gen = useRef(0); // drops answers from a previous library / filter
 
   // libraries + counts
@@ -102,53 +108,55 @@ export function Manage({ itemId }: { itemId?: string | null }) {
     setLoading(true);
     setErr(null);
     try {
-      let at = start;
-      let got: Item[] = [];
-      let more: number | null = null;
-      // client-classified filters can return a page with few hits: keep reading pages (bounded) until something shows up
-      for (let hops = 0; hops < 6; hops++) {
-        const r = await getItems(buildItemsQuery(lib, f, at, PAGE_SIZE));
-        if (my !== gen.current) return;
-        const page = r.Items ?? [];
-        const total = r.TotalRecordCount ?? 0;
-        at += page.length;
-        more = f === "recent" || page.length === 0 || at >= total ? null : at;
-        got = got.concat(page.filter((i) => matchesFilter(asManage(i), f, lang)));
-        if (got.length >= 10 || more == null) break;
-      }
-      setItems((cur) => (replace ? got : cur.concat(got)));
-      setNext(more);
+      const r = await loadPages<Item & ManageItem>({ fetchPage: (at) => getItems(buildItemsQuery(lib, f, at, PAGE_SIZE)) as Promise<{ Items?: (Item & ManageItem)[]; TotalRecordCount?: number }>, filter: f, lang: langRef.current, start, current: () => my === gen.current });
+      if (!r) return;
+      if (!replace) focusFrom.current = itemsLen.current;
+      setItems((cur) => (replace ? r.items : mergeById(cur, r.items)));
+      setNext(r.next);
     } catch (e) {
       if (my === gen.current) setErr(errorText(e, "Reading the library"));
     } finally {
       if (my === gen.current) setLoading(false);
     }
-  }, [lang]);
+  }, []);
 
+  const itemsLen = useRef(0);
+  itemsLen.current = items.length;
+  // the language only matters to "No subtitles": changing it (prefs arriving) reloads that filter only
+  const subLang = filter === "no-subs" ? lang : "";
   useEffect(() => {
     if (sel) void load(sel, filter, 0, true);
-  }, [sel, filter, load]);
+  }, [sel, filter, subLang, load]);
+
+  // after "Load more": focus the first new row
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from == null || loading) return;
+    focusFrom.current = null;
+    document.querySelectorAll<HTMLElement>(".manage-list .manage-row .manage-title")[from]?.focus();
+  }, [items, loading]);
 
   const refresh = async (i: Item, full: boolean) => {
+    const key = `${i.Id}:${full}`;
+    if (busy.has(key)) return;
+    setBusy((b) => new Set(b).add(key));
     setMsg(null);
     try {
       await jf(refreshPath(i.Id, { full }), { method: "POST" });
       setMsg(`Refresh queued for ${i.Name}${full ? " (full)" : ""}. It runs on the server; check Server jobs.`);
     } catch (e) {
       setMsg(errorText(e, "Refresh"));
+    } finally {
+      setBusy((b) => {
+        const n = new Set(b);
+        n.delete(key);
+        return n;
+      });
     }
   };
 
   const scan = async () => {
-    const now = Date.now();
-    if (!gate.current.isArmed("scan", now)) {
-      gate.current.arm("scan", now);
-      setArmed(true);
-      window.setTimeout(() => setArmed(false), 8000);
-      return;
-    }
-    if (!gate.current.confirm("scan", now)) return;
-    setArmed(false);
+    if (!arm.current?.press("scan")) return;
     try {
       await jf(SCAN_PATH, { method: "POST" });
       setMsg("Library scan started on the server.");
@@ -161,14 +169,14 @@ export function Manage({ itemId }: { itemId?: string | null }) {
 
   const rowFor = (i: Item) => {
     const c = classify(asManage(i), lang);
-    const flags = [c.overview && "no overview", c.poster && "no poster", c.subs && `no ${languageName(lang)} subtitles`].filter(Boolean).join(" · ");
+    const flags = [c.overview && "no overview", c.poster && "no poster", c.subs && `no ${languageName(lang)} subtitles`, c.untagged && "untagged subtitles"].filter(Boolean).join(" · ");
     return (
       <li key={i.Id} className="manage-row">
         <button className="manage-title" data-nav onClick={() => go(`/item/${i.Id}`)}>{label(i)}</button>
         <span className="manage-dim">{i.Type}{flags ? ` · ${flags}` : ""}</span>
         <span className="manage-actions">
-          <button className="chip" data-nav onClick={() => void refresh(i, false)}>Refresh</button>
-          <button className="chip" data-nav onClick={() => void refresh(i, true)} title="Full refresh: re-reads all metadata sources (existing images and edits are kept)">Full refresh</button>
+          <button className="chip" data-nav disabled={busy.has(`${i.Id}:false`)} onClick={() => void refresh(i, false)}>Refresh</button>
+          <button className="chip" data-nav disabled={busy.has(`${i.Id}:true`)} onClick={() => void refresh(i, true)} title="Re-reads metadata from providers and local files; images are kept">Full refresh</button>
           {(i.Type === "Movie" || i.Type === "Episode") && <button className="chip" data-nav aria-haspopup="dialog" onClick={() => setSubsFor(i)}>Find subtitles</button>}
         </span>
       </li>
@@ -191,7 +199,7 @@ export function Manage({ itemId }: { itemId?: string | null }) {
         <h2>Libraries</h2>
         <div className="chips">
           {(libs ?? []).map((l) => (
-            <button key={l.id} data-nav className={`chip${sel?.id === l.id ? " on" : ""}`} onClick={() => setSel(l)}>
+            <button key={l.id} data-nav className={`chip${sel?.id === l.id ? " on" : ""}`} onClick={() => { if (l.kind === "tvshows" && filter === "no-subs") setFilter("recent"); setSel(l); }}>
               {l.name}{counts[l.id] != null ? ` · ${counts[l.id]}` : ""}
             </button>
           ))}
@@ -200,15 +208,17 @@ export function Manage({ itemId }: { itemId?: string | null }) {
           </button>
         </div>
         <div className="chips">
-          {FILTERS.map(([k, t]) => (
+          {filtersFor(sel?.kind ?? "other").map(([k, t]) => (
             <button key={k} data-nav className={`chip${filter === k ? " on" : ""}`} onClick={() => setFilter(k)}>{t}</button>
           ))}
         </div>
         {filter === "no-subs" && <p className="manage-dim">Looking for {languageName(lang)} (your preferred subtitle language). Series are skipped: check their episodes.</p>}
         <ul className="manage-list">{items.map(rowFor)}</ul>
         {!loading && items.length === 0 && !err && sel && <p className="manage-dim">Nothing found here.</p>}
-        {loading && <p className="manage-dim">Loading…</p>}
-        {next != null && !loading && <button className="btn" data-nav onClick={() => sel && void load(sel, filter, next, false)}>Load more</button>}
+        {(next != null || (loading && items.length > 0)) && (
+          <button className="btn" data-nav disabled={loading} onClick={() => next != null && sel && void load(sel, filter, next, false)}>{loading ? "Loading…" : "Load more"}</button>
+        )}
+        {loading && items.length === 0 && <p className="manage-dim">Loading…</p>}
       </section>
       {subsFor && (
         <SubtitleSearchDialog itemId={subsFor.Id} title={label(subsFor)} subtitleLangs={prefs?.playback.subtitleLangs} where="page" onClose={() => setSubsFor(null)} />

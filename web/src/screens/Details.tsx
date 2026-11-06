@@ -311,7 +311,7 @@ export function Details({ id }: { id: string }) {
                 Find subtitles
               </button>
             )}
-            {getSession()?.isAdmin && <button className="btn" data-nav onClick={() => go(`/manage?item=${item.Id}`)}>Manage</button>}
+            {getSession()?.isAdmin && ["Movie", "Series", "Season", "Episode"].includes(item.Type) && <button className="btn" data-nav onClick={() => go(`/manage?item=${item.Id}`)}>Manage</button>}
             {item.Type !== "Episode" && <TasteButtons item={item} />}
           </div>
           {phone && <DetailsQuote item={item} phone />}

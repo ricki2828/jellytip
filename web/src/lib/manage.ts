@@ -15,7 +15,7 @@ export const FILTERS: [ManageFilter, string][] = [
   ["no-subs", "No subtitles"],
 ];
 
-const ID_RE = /^[0-9a-f]{32}$/i;
+const ID_RE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 export const validId = (id: string): boolean => ID_RE.test(id);
 
 export interface Library {
@@ -84,11 +84,20 @@ export function missingSubtitle(i: ManageItem, lang: string): boolean | null {
   if (i.Type === "Series" || i.Type === "Season") return null;
   if (!i.MediaStreams) return null;
   const want = toSearchLanguage(lang) ?? lang;
-  return !i.MediaStreams.some((s) => s.Type === "Subtitle" && (toSearchLanguage(s.Language) ?? "") === want);
+  const subs = i.MediaStreams.filter((s) => s.Type === "Subtitle");
+  if (subs.some((s) => (toSearchLanguage(s.Language) ?? "") === want)) return false;
+  if (subs.some((s) => !(s.Language ?? "").trim())) return null; // an untagged track might be it: unknown, not missing
+  return true;
 }
 
-export function classify(i: ManageItem, lang: string): { overview: boolean; poster: boolean; subs: boolean | null } {
-  return { overview: missingOverview(i), poster: missingPoster(i), subs: missingSubtitle(i, lang) };
+/** Has subtitle tracks but at least one carries no language tag. */
+export const hasUntaggedSubtitles = (i: ManageItem): boolean => !!i.MediaStreams?.some((s) => s.Type === "Subtitle" && !(s.Language ?? "").trim());
+
+/** The filters a library kind supports ("No subtitles" is per file, so not for series libraries). */
+export const filtersFor = (k: Library["kind"]): [ManageFilter, string][] => (k === "tvshows" ? FILTERS.filter(([f]) => f !== "no-subs") : FILTERS);
+
+export function classify(i: ManageItem, lang: string): { overview: boolean; poster: boolean; subs: boolean | null; untagged: boolean } {
+  return { overview: missingOverview(i), poster: missingPoster(i), subs: missingSubtitle(i, lang), untagged: missingSubtitle(i, lang) === null && hasUntaggedSubtitles(i) };
 }
 
 /** Does an item belong in the list for this filter? "recent" shows everything. */
@@ -155,9 +164,6 @@ export function errorText(e: unknown, what: string): string {
 }
 
 // ---------- confirmation gate ----------
-
-/** Typed-phrase gate (exact, trimmed, case-sensitive). Kept generic; delete is not offered because the client has no delete flow. */
-export const phraseOk = (typed: string, phrase: string): boolean => typed.trim() === phrase;
 
 /** Two-step tap gate: arm, then confirm inside the window. Anything else (late, never armed, another target) is refused. */
 export function createTapGate(windowMs = CONFIRM_WINDOW_MS) {
@@ -235,4 +241,82 @@ export function startIntervalPoll<T>(o: { fetch(): Promise<PollResult<T>>; onRes
       off();
     },
   };
+}
+
+// ---------- scan arm (gate + its expiry timer in one place, so label and gate cannot disagree) ----------
+
+export interface ArmEnv {
+  setTimer(fn: () => void, ms: number): unknown;
+  clearTimer(t: unknown): void;
+  now(): number;
+}
+export function createArm(env: ArmEnv, onChange: (armed: boolean) => void, windowMs = CONFIRM_WINDOW_MS) {
+  const gate = createTapGate(windowMs);
+  let timer: unknown = null;
+  const clear = () => {
+    if (timer != null) env.clearTimer(timer);
+    timer = null;
+  };
+  return {
+    /** First press arms (returns false); a press inside the window confirms (returns true, once). */
+    press(key: string): boolean {
+      const now = env.now();
+      if (gate.isArmed(key, now)) {
+        const ok = gate.confirm(key, now);
+        clear();
+        onChange(false);
+        return ok;
+      }
+      clear();
+      gate.arm(key, now);
+      onChange(true);
+      timer = env.setTimer(() => {
+        timer = null;
+        gate.reset();
+        onChange(false);
+      }, windowMs);
+      return false;
+    },
+    dispose() {
+      clear();
+      gate.reset();
+    },
+  };
+}
+
+// ---------- paging ----------
+
+export const MIN_HITS = 10;
+export const MAX_HOPS = 6;
+export function mergeById<T extends { Id: string }>(have: readonly T[], add: readonly T[]): T[] {
+  const seen = new Set(have.map((i) => i.Id));
+  const out = have.slice();
+  for (const i of add) if (!seen.has(i.Id)) (seen.add(i.Id), out.push(i));
+  return out;
+}
+
+/**
+ * Read pages from `start` until MIN_HITS matches or the end (at most MAX_HOPS pages). `current()` false at any point
+ * (library / filter changed) → null, nothing is applied. `next` = where "Load more" continues, null = the end.
+ */
+export async function loadPages<T extends ManageItem>(o: {
+  fetchPage(startIndex: number): Promise<{ Items?: T[]; TotalRecordCount?: number }>;
+  filter: ManageFilter;
+  lang: string;
+  start: number;
+  current(): boolean;
+}): Promise<{ items: T[]; next: number | null } | null> {
+  let at = o.start;
+  let got: T[] = [];
+  let next: number | null = null;
+  for (let hops = 0; hops < MAX_HOPS; hops++) {
+    const r = await o.fetchPage(at);
+    if (!o.current()) return null;
+    const page = r.Items ?? [];
+    at += page.length;
+    next = o.filter === "recent" || page.length === 0 || at >= (r.TotalRecordCount ?? 0) ? null : at;
+    got = mergeById(got, page.filter((i) => matchesFilter(i, o.filter, o.lang)));
+    if (got.length >= MIN_HITS || next == null) break;
+  }
+  return { items: got, next };
 }
