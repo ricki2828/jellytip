@@ -1,6 +1,9 @@
 // Player: direct play when the browser can, else Jellyfin HLS via hls.js (one automatic retry as a plain H.264 transcode).
 // Reports start / progress (10 s) / stop so resume works with the TV; text subtitles with a delay control; next episode.
 import { Scrubber } from "../components/Scrubber";
+import { getSeekMeta, trickplaySource, type SeekMeta } from "../api/seekMeta";
+import { advanceSeek, commitDue, SETTLE_MS, type SeekRamp } from "../lib/seekRamp";
+import { chapterMarks, nextChapter, prevChapter } from "../lib/chapters";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type Hls from "hls.js";
 import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
@@ -419,9 +422,75 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const seekBy = (s: number) => {
     const v = videoRef.current;
     if (!v) return;
-    const to = Math.min(Math.max((seekTarget.current ?? v.currentTime) + s, 0), (v.duration || duration) - 1);
+    const base = ramp.current?.target ?? seekTarget.current ?? v.currentTime; // a click mid-burst builds on the pending target
+    if (ramp.current) {
+      ramp.current = null;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+      setPendingSeek(null);
+    }
+    const to = Math.min(Math.max(base + s, 0), (v.duration || duration) - 1);
     seekTarget.current = to;
     v.currentTime = to;
+  };
+  // Keyboard / remote seeking: presses ramp a pending target (shown on the bar), committed once they settle
+  const [pendingSeek, setPendingSeek] = useState<number | null>(null);
+  const ramp = useRef<SeekRamp | null>(null);
+  const settleTimer = useRef<number | null>(null);
+  const heldKey = useRef(false); // an arrow is physically down: don't commit yet
+  const commitSeek = () => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = null;
+    const r = ramp.current;
+    ramp.current = null;
+    setPendingSeek(null);
+    const v = videoRef.current;
+    if (r && v) {
+      seekTarget.current = r.target;
+      v.currentTime = r.target;
+    }
+  };
+  const keySeek = (dir: -1 | 1, e: KeyboardEvent) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const now = performance.now();
+    const r = advanceSeek(ramp.current, { dir, now, repeat: e.repeat, shift: e.shiftKey, base: seekTarget.current ?? v.currentTime, duration: v.duration || duration });
+    ramp.current = r;
+    setPendingSeek(r.target);
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    const wait = () => {
+      if (commitDue(ramp.current, performance.now(), heldKey.current)) commitSeek();
+      else settleTimer.current = window.setTimeout(wait, 60);
+    };
+    settleTimer.current = window.setTimeout(wait, SETTLE_MS);
+  };
+  const [seekMeta, setSeekMeta] = useState<SeekMeta | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setSeekMeta(null);
+    // a pending seek belongs to the previous item: drop it
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = null;
+    ramp.current = null;
+    seekTarget.current = null;
+    heldKey.current = false;
+    setPendingSeek(null);
+    getSeekMeta(id).then((m) => alive && setSeekMeta(m), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
+  const marks = chapterMarks(seekMeta?.chapters, duration || Infinity);
+  const thumbs = plan && seekMeta ? trickplaySource(id, plan.source.Id, seekMeta.trickplay) : null;
+  const chapterSeek = (dir: -1 | 1) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const from = ramp.current?.target ?? seekTarget.current ?? v.currentTime;
+    const to = dir > 0 ? nextChapter(marks, from) : prevChapter(marks, from);
+    if (to == null) return;
+    ramp.current = { target: to, dir, presses: 1, burstStart: performance.now(), lastAt: performance.now() };
+    commitSeek();
   };
   const nativeFs = useRef(false);
   const toggleFs = () => {
@@ -493,6 +562,9 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tg = e.target as HTMLElement | null;
+      const typing = !!tg && (tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" || tg.isContentEditable || (tg.tagName === "INPUT" && (tg as HTMLInputElement).type !== "range"));
+      if (typing && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "PageUp" || e.key === "PageDown")) return;
       if (findSubs) { poke(); return; } // the subtitle dialog owns the keys
       const mk = playerKeyWhileMenu(menu, e.key);
       if (mk === "close") {
@@ -517,10 +589,17 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
           else togglePlay();
           break;
         case "ArrowLeft":
-          seekBy(-10);
+          heldKey.current = true;
+          keySeek(-1, e);
           break;
         case "ArrowRight":
-          seekBy(10);
+          heldKey.current = true;
+          keySeek(1, e);
+          break;
+        case "PageUp":
+        case "PageDown":
+          if (marks.length) chapterSeek(e.key === "PageUp" ? -1 : 1);
+          else handled = false;
           break;
         case "ArrowUp":
           if (videoRef.current) videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.1);
@@ -559,10 +638,22 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
       if (handled) e.preventDefault();
       poke();
     };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") heldKey.current = false;
+    };
+    const onBlur = () => {
+      heldKey.current = false;
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu, findSubs, controls, duration, exit, playNext, poke]);
+  }, [menu, findSubs, controls, duration, exit, playNext, poke, marks.length, seekMeta]);
 
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
@@ -737,7 +828,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
       )}
 
       <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
-        <Scrubber time={time} max={duration || 0} fmt={clock} onActivity={poke} onSeek={(t) => videoRef.current && (videoRef.current.currentTime = t)} />
+        <Scrubber time={time} max={duration || 0} fmt={clock} onActivity={poke} thumbs={thumbs} chapters={marks} pending={pendingSeek} onSeek={(t) => videoRef.current && (videoRef.current.currentTime = t)} />
         <div className="player-row">
           <button className="btn ghost" data-nav onClick={togglePlay}>
             {paused ? "Play" : "Pause"}
