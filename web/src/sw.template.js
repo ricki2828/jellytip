@@ -28,6 +28,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin || !url.pathname.startsWith(SCOPE)) return; // API, images, media: straight to network
+  if (url.pathname === SCOPE + "version.json") return; // the update check must always see the live file
   if (req.mode === "navigate") {
     // Fresh index when online (picks up new deploys), cached shell when offline
     event.respondWith(fetch(req).catch(() => caches.match(new URL("./", self.registration.scope).href)));

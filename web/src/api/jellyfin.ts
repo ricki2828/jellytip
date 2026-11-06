@@ -2,12 +2,13 @@
 // website; the seedbox origin in the Android app).
 
 import { SERVER_ORIGIN } from "../lib/native";
+import { versionString } from "../lib/buildInfo";
 import { applySessionPatch, SESSION_META_EVENT } from "../lib/sessionPatch";
 export { SESSION_META_EVENT };
 
 export const JF_BASE = `${SERVER_ORIGIN}/jellyfin`;
 const CLIENT = "Jellytip Web";
-const VERSION = "0.1.0";
+const VERSION = versionString(); // "0.1.0+<sha>": Jellyfin's session log shows which build a playback came from
 const STORE_KEY = "jellytip.session";
 const DEVICE_KEY = "jellytip.deviceId";
 
