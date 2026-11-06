@@ -1,0 +1,15 @@
+.manage { padding: 84px var(--pad) 48px; max-width: 1100px; }
+.manage h1 { margin: 0 0 16px; }
+.manage-card { background: #1a1a1a; border-radius: 12px; padding: 14px 16px; margin: 0 0 16px; }
+.manage-card h2 { margin: 0 0 10px; font-size: 1.1rem; }
+.manage-dim { opacity: 0.65; font-size: 0.9rem; margin: 4px 0; }
+.manage-err { color: #ff8a80; }
+.manage-msg { color: var(--vanilla); }
+.manage-list { list-style: none; margin: 8px 0; padding: 0; }
+.manage-row { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid #ffffff14; }
+.manage-title { background: none; border: 0; color: var(--vanilla); text-align: left; font-size: 1rem; padding: 0; cursor: pointer; }
+.manage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.manage-scan.armed { outline: 2px solid #ffb74d; }
+.manage-task { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 6px 0; }
+.manage-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: #ffffff1f; overflow: hidden; }
+.manage-bar i { display: block; height: 100%; background: var(--vanilla); }
