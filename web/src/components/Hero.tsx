@@ -2,34 +2,113 @@
 // then a muted local trailer after a short rest. Click / Enter on the hero turns the sound on.
 import { useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
-import { localTrailers } from "../api/jellyfin";
-import { prefsNow } from "../api/me";
 import { backdropInfo, extras, type Extras } from "../api/companion";
-import { trailerStreamUrl } from "../api/playback";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
+import { vodPath } from "../lib/iptvVod";
 import { useVideoBlocked } from "../lib/videoFocus";
 import { useSoundBack } from "../lib/soundBack";
+import { jfTarget, type PreviewTarget } from "../lib/trailerPreview";
+import { usePreviewLifecycle, useTrailerPreview } from "../lib/useTrailerPreview";
 import { Backdrop } from "./Backdrop";
 import { ScoreLine } from "./ScoreLine";
 import { infoLine, TitleLogo } from "./TitleBlock";
 import { HeroQuote } from "./Reviews";
 
 const DEBOUNCE_MS = 250;
-const TRAILER_DELAY_MS = 2500;
 const RANK_WAIT_MS = 1200; // the companion usually answers well inside this; a premature guess costs a second full-size image
-const trailerCache = new Map<string, string | null>();
 
-window.addEventListener("jellytip-session", () => trailerCache.clear()); // per user (and token in the URL)
+/**
+ * The muted preview video's state: sound toggle (Back mutes), the "other video took over" pause, a hidden tab pause,
+ * and the single-preview slot. `url` null = nothing playing.
+ */
+function useHeroVideo(id: string, url: string | null) {
+  const [stopped, setStopped] = useState<string | null>(null); // url a newer preview (or the clip ending) switched off
+  const [sound, setSound] = useState(false);
+  const [hint, setHint] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (!url) setStopped(null); // the next preview of the same title may play again
+  }, [url]);
+  const live = url && stopped !== url ? url : null;
+  const { hidden } = usePreviewLifecycle(id, live, () => setStopped(url));
+  // "Back" while the trailer has sound = mute, as on the TV (shared with the specials' inline videos)
+  const back = useSoundBack(id, sound, () => setSound(false));
+  const soundOn = () => {
+    setSound(true);
+    back.soundOn();
+  };
+  const mute = back.mute;
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = !sound;
+  }, [sound, live]);
+  // Another video on the page (trailer break, closet clip) took over: pause, resume when it lets go
+  const blocked = useVideoBlocked(id);
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (blocked || hidden) {
+      el.pause();
+      if (sound && blocked) mute(); // its sound must not come back when the hero resumes
+    } else el.play().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocked, hidden, live]);
+  const showHint = () => {
+    setHint(true);
+    setTimeout(() => setHint(false), 2000);
+  };
+  return { videoRef, live, sound, soundOn, mute, hint, showHint, stop: () => setStopped(url) };
+}
 
-async function trailerFor(item: Item): Promise<string | null> {
-  const target = item.Type === "Episode" || item.Type === "Season" ? item.SeriesId : item.Id;
-  if (!target || !["Movie", "Series", "Episode", "Season"].includes(item.Type)) return null;
-  if (trailerCache.has(target)) return trailerCache.get(target)!;
-  const t = (await localTrailers(target))[0];
-  const url = t ? trailerStreamUrl(t.Id) : null;
-  trailerCache.set(target, url);
-  return url;
+function HeroVideo({ v }: { v: ReturnType<typeof useHeroVideo> }) {
+  if (!v.live) return null;
+  return <video ref={v.videoRef} key={v.live} className="hero-trailer" src={v.live} autoPlay muted={!v.sound} playsInline onEnded={v.stop} onError={v.stop} />;
+}
+
+/** An IPTV title the person is on in a row (tile focus / hover / tap). */
+export interface IptvHeroTile {
+  id: string;
+  title: string;
+  year?: number | null;
+  art: string | null;
+}
+
+/** Hero for an IPTV title: its art, then the companion's cached trailer (if any) after a short rest. */
+export function IptvHero({ tile }: { tile: IptvHeroTile }) {
+  const target: PreviewTarget = { kind: "iptv", id: tile.id };
+  const url = useTrailerPreview(target, { trigger: "focus" });
+  const v = useHeroVideo("hero", url);
+  const onClick = () => {
+    if (v.live && !v.sound) {
+      v.soundOn();
+      v.showHint();
+    } else go(vodPath(tile.id));
+  };
+  return (
+    <div className="hero">
+      <Backdrop url={tile.art} focal={null} kenBurns={!v.live} />
+      <HeroVideo v={v} />
+      <div className="hero-click" onClick={onClick} aria-hidden />
+      <div className="scrim-left" />
+      <div className="scrim-bottom" />
+      {v.hint && <div className="hero-hint">Sound on · click again for details</div>}
+      <div className="hero-text">
+        <div className="hero-kicker">via IPTV</div>
+        <div className="line strong">{tile.title}</div>
+        {tile.year ? <div className="line">{tile.year}</div> : null}
+        <div className="buttons">
+          <button className="btn primary" data-nav onClick={() => go(vodPath(tile.id))}>
+            Details
+          </button>
+          {v.live && (
+            <button className="btn" data-nav onClick={() => (v.sound ? v.mute() : v.soundOn())}>
+              {v.sound ? "Mute" : "Sound on"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** `kicker`: where a featured-mix slide came from; `rotating`: the mix is on, so no trailers (slides last a few seconds). */
@@ -39,18 +118,11 @@ export function Hero({ item, kicker, rotating = false }: { item: Item | null; ki
   const [shownKicker, setShownKicker] = useState<string | undefined>(undefined);
   const [pick, setPick] = useState<ImagePick>({ url: null, focal: null });
   const [ext, setExt] = useState<Extras | null>(null);
-  const [trailer, setTrailer] = useState<string | null>(null);
-  const [sound, setSound] = useState(false);
-  const [hint, setHint] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  // "Back" while the trailer has sound = mute, as on the TV (shared with the specials' inline videos)
-  const back = useSoundBack("hero", sound, () => setSound(false));
-  const soundOn = () => {
-    setSound(true);
-    back.soundOn();
-  };
-  const mute = back.mute;
+  // Prefs, the rotating mix, touch, reduced motion, Save-Data and the 2.5 s rest are all decided in the hook
+  const url = useTrailerPreview(shown ? jfTarget(shown) : null, { trigger: "focus", rotating });
+  const v = useHeroVideo("hero", url);
+  const trailer = v.live;
+  const { sound, soundOn, mute } = v;
 
   useEffect(() => {
     if (!item) return;
@@ -65,7 +137,6 @@ export function Hero({ item, kicker, rotating = false }: { item: Item | null; ki
   useEffect(() => {
     if (!shown) return;
     let alive = true;
-    setTrailer(null);
     setExt(null);
     // Wait briefly for the companion's ranking; past that show a non-tile backdrop and upgrade when it arrives
     const quick = setTimeout(() => alive && setPick(heroPick(shown, false)), RANK_WAIT_MS);
@@ -75,41 +146,18 @@ export function Hero({ item, kicker, rotating = false }: { item: Item | null; ki
     });
     const kind = shown.Type === "Movie" ? "movie" : shown.Type === "Series" ? "series" : null;
     if (kind) extras(shown.Id, kind).then((e) => alive && setExt(e));
-    // The person's playback prefs can turn hero trailers off (they follow them across devices)
-    const t = rotating ? undefined : setTimeout(() => {
-      if (prefsNow()?.playback.trailerAutoplay === false) return;
-      trailerFor(shown).then((u) => alive && setTrailer(u));
-    }, TRAILER_DELAY_MS);
     return () => {
       alive = false;
-      clearTimeout(t);
       clearTimeout(quick);
     };
-  }, [shown, rotating]);
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = !sound;
-  }, [sound, trailer]);
-
-  // Another video on the page (trailer break, closet clip) took over: pause, resume when it lets go
-  const blocked = useVideoBlocked("hero");
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (blocked) {
-      v.pause();
-      if (sound) mute(); // its sound must not come back when the hero resumes
-    } else v.play().catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocked, trailer]);
+  }, [shown]);
 
   if (!shown) return <div className="hero" />;
 
   const onHeroClick = () => {
     if (trailer && !sound) {
       soundOn();
-      setHint(true);
-      setTimeout(() => setHint(false), 2000);
+      v.showHint();
     } else go(`/item/${shown.Id}`);
   };
   const episodeLine = shown.Type === "Episode" ? `S${shown.ParentIndexNumber} E${shown.IndexNumber} · ${shown.Name}` : null;
@@ -118,23 +166,11 @@ export function Hero({ item, kicker, rotating = false }: { item: Item | null; ki
   return (
     <div className="hero">
       <Backdrop url={pick.url} focal={pick.focal} kenBurns={!trailer} />
-      {trailer && (
-        <video
-          ref={videoRef}
-          key={trailer}
-          className="hero-trailer"
-          src={trailer}
-          autoPlay
-          muted={!sound}
-          playsInline
-          onEnded={() => setTrailer(null)}
-          onError={() => setTrailer(null)}
-        />
-      )}
+      <HeroVideo v={v} />
       <div className="hero-click" onClick={onHeroClick} aria-hidden />
       <div className="scrim-left" />
       <div className="scrim-bottom" />
-      {hint && <div className="hero-hint">Sound on · click again for details</div>}
+      {v.hint && <div className="hero-hint">Sound on · click again for details</div>}
       <div className="hero-text">
         {shownKicker && <div className="hero-kicker">{shownKicker}</div>}
         <TitleLogo item={shown} />
