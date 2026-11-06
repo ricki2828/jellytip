@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getItems, nextUp, resumeItems, type Item } from "../api/jellyfin";
+import { getItems, nextUp, resumeItems, uid, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { withSpecials } from "../components/specials/Specials";
 import { Hero, IptvHero, type IptvHeroTile } from "../components/Hero";
@@ -11,11 +11,13 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit } from "../components/HomeEdit";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
-import { IptvCard } from "../components/IptvTile";
 import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
-import { continuePath, continueTitle, mergeContinue, type ContinueEntry } from "../lib/continue";
-import { go } from "../lib/router";
+import type { ContinueEntry } from "../lib/continue";
+import { actionsFor, buildContinue, optimisticHide, pruneHidden, readDismissed, writeDismissed, type ActionId, type RowEntry } from "../lib/continueRow";
+import { markWatched } from "../api/continueActions";
+import { ContinueTile } from "../components/ContinueTile";
+import { flashNote } from "../components/TasteButtons";
 import { RemindersRow } from "../components/Reminders";
 import { UpcomingRow } from "../components/Upcoming";
 import { usePrefs } from "../api/me";
@@ -64,24 +66,41 @@ function HomeHero({ focused, focusedIptv, slides, engaged }: { focused: Item | n
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }
 
-const iptvKey = (e: ContinueEntry) => `iptv:${e.kind}:${e.id}`;
-
-/** An IPTV title in progress (or up next): opens the IPTV player at its position. */
-function ContinueTile({ e, autoFocus }: { e: ContinueEntry; autoFocus?: boolean }) {
-  return (
-    <IptvCard
-      item={{ id: e.id, title: continueTitle(e), year: null, quality: [], tech: e.tech, poster: e.poster, backdrop: e.backdrop, progress: e.pos > 0 && e.dur > 0 ? { position: e.pos, duration: e.dur } : null }}
-      autoFocus={autoFocus}
-      onOpen={() => go(continuePath(e))}
-    />
-  );
+interface ContinueSrc {
+  resume: Item[];
+  next: Item[];
+  ic: ContinueEntry[];
+  inx: ContinueEntry[];
 }
 
 export function Home() {
   useHubTick();
-  const [continueItems, setContinue] = useState<Item[] | null>(null);
-  const [iptvTiles, setIptvTiles] = useState<ContinueEntry[]>([]);
-  const [continueOrder, setContinueOrder] = useState<string[]>([]);
+  const [src, setSrc] = useState<ContinueSrc | null>(null);
+  // Tiles hidden by an action in flight (or just done): key -> the server's last-played time then. Keys, not a snapshot of
+  // the row, so two actions never undo each other.
+  const [hidden, setHidden] = useState<ReadonlyMap<string, number>>(new Map());
+  // Newest fetch wins: an older answer arriving late must not overwrite it
+  const seq = useRef(0);
+  const [undo, setUndo] = useState<{ msg: string; run: () => void } | null>(null);
+  const [dismissVer, setDismissVer] = useState(0);
+  const user = uid();
+  const entries = useMemo(
+    () => (src ? buildContinue(src.resume, src.next, src.ic, src.inx, { hidden, dismissed: readDismissed(localStorage, user) }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [src, hidden, user, dismissVer],
+  );
+  const continueItems = useMemo(() => (entries ? entries.flatMap((e) => (e.lib ? [e.lib] : [])) : null), [entries]);
+  // Another person signing in: nothing of the last one's row stays
+  useEffect(() => {
+    const on = () => {
+      setSrc(null);
+      setHidden(new Map());
+      setUndo(null);
+      seq.current++;
+    };
+    window.addEventListener("jellytip-session", on);
+    return () => window.removeEventListener("jellytip-session", on);
+  }, []);
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [lists, setLists] = useState<LetterboxdRow[]>([]);
   // Rows v1 from the companion when it has them; null = the Kometa carousels + Letterboxd lists as before
@@ -112,16 +131,14 @@ export function Home() {
     let alive = true;
     // Continue Watching paints from the library at once. The IPTV part (in progress / up next) is asked for after the
     // rows request is answered, so it never holds the first screen up or takes a connection from it, and is merged in when it arrives.
-    const apply = (resume: Item[], next: Item[], ic: ContinueEntry[], inx: ContinueEntry[]) => {
-      const merged = mergeContinue(resume, next, ic, inx);
-      const lib = merged.flatMap((m) => (m.kind === "lib" ? [m.item] : []));
-      setContinue(lib);
-      setIptvTiles(merged.flatMap((m) => (m.kind === "iptv" ? [m.entry] : [])));
-      setContinueOrder(merged.map((m) => (m.kind === "lib" ? m.item.Id.replace(/-/g, "") : iptvKey(m.entry))));
-      if (lib[0]) setFocused((f) => f ?? lib[0]);
+    const me = uid();
+    const mine = ++seq.current;
+    const apply = (v: ContinueSrc) => {
+      if (!alive || uid() !== me || seq.current !== mine) return; // late: someone else signed in, or a newer fetch landed
+      setSrc(v);
     };
     const libP = Promise.all([resumeItems().catch(() => [] as Item[]), nextUp().catch(() => [] as Item[])]).then(([resume, next]) => {
-      if (alive) apply(resume, next, [], []);
+      apply({ resume, next, ic: [], inx: [] });
       return { resume, next };
     });
     setRowsFailed(false);
@@ -149,7 +166,7 @@ export function Home() {
       });
     void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([{ resume, next }]) => {
       const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
-      if (alive && (ic.length || inx.length)) apply(resume, next, ic, inx);
+      if (ic.length || inx.length) apply({ resume, next, ic, inx });
     });
     getSpecials("home").then((s) => alive && setSpecials(s));
     return () => {
@@ -157,6 +174,71 @@ export function Home() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload]);
+
+  // The hero starts on the first library tile of Continue Watching
+  useEffect(() => {
+    if (continueItems?.[0]) setFocused((f) => f ?? continueItems[0]);
+  }, [continueItems]);
+
+  const onAction = useCallback(
+    (a: ActionId, e: RowEntry, wrap: HTMLElement | null) => {
+      const me = uid();
+      // Focus moves to a neighbouring tile, else the next (or previous) row, never the page top, when the tile goes
+      const row = wrap?.closest("section.row");
+      const target =
+        (wrap?.nextElementSibling ?? wrap?.previousElementSibling)?.querySelector<HTMLElement>("button.card") ??
+        row?.nextElementSibling?.querySelector<HTMLElement>("[data-nav]") ??
+        row?.previousElementSibling?.querySelector<HTMLElement>("[data-nav]") ??
+        document.querySelector<HTMLElement>(".home [data-nav]");
+      const focusAway = () => requestAnimationFrame(() => target && document.contains(target) && target.focus());
+      const hide = (k: string) => {
+        setHidden((h) => new Map(h).set(k, e.at));
+        focusAway();
+      };
+      const unhide = (k: string) =>
+        setHidden((h) => {
+          const n = new Map(h);
+          n.delete(k);
+          return n;
+        });
+      const refresh = () => {
+        const mine = ++seq.current;
+        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
+          if (uid() !== me || seq.current !== mine || !resume || !next) return;
+          setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
+          // Hides for items the server no longer returns, or has since seen played again, are done with
+          const present = buildContinue(resume, next, ic ?? [], inx ?? []);
+          setHidden((h) => pruneHidden(h, present));
+        });
+      };
+      if (a === "remove") {
+        // Local only: nothing on the server changes
+        writeDismissed(localStorage, me, e.key, true, e.at);
+        setDismissVer((n) => n + 1);
+        focusAway();
+        setUndo({
+          msg: "Hidden on this device.",
+          run: () => {
+            if (uid() !== me) return;
+            writeDismissed(localStorage, me, e.key, false);
+            setDismissVer((n) => n + 1);
+            setUndo(null);
+          },
+        });
+      } else if (a === "watched" && actionsFor(e).watched) {
+        void optimisticHide({ hide, unhide, notify: flashNote }, e.key, () => markWatched(e), "Couldn't mark it as watched. Try again.", "Marked as watched").then((ok) => {
+          if (ok) void refresh();
+        });
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 7000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
 
   // No Continue Watching: the hero starts on the first carousel's first title
   useEffect(() => {
@@ -226,16 +308,21 @@ export function Home() {
 
   return (
     <div className="home">
+      {undo && (
+        <p className="taste-note continue-undo" role="status">
+          {undo.msg}{" "}
+          <button className="btn small" data-nav onClick={undo.run}>
+            Undo
+          </button>
+        </p>
+      )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
       <div className="rows">
-        {continueItems && (continueItems.length > 0 || iptvTiles.length > 0) && (
+        {entries && entries.length > 0 && (
           <Row
             title="Continue Watching"
-            items={continueItems}
-            onFocusItem={onFocusItem}
-            autoFocusFirst={!continueOrder[0]?.startsWith("iptv:")}
-            extra={iptvTiles.map((e, i) => ({ id: iptvKey(e), node: <ContinueTile key={iptvKey(e)} e={e} autoFocus={i === 0 && continueOrder[0] === iptvKey(e)} /> }))}
-            order={continueOrder}
+            items={[]}
+            extra={entries.map((e, i) => ({ id: e.key, node: <ContinueTile key={e.key} entry={e} autoFocus={i === 0} onFocusItem={onFocusItem} onAction={onAction} /> }))}
           />
         )}
         <RemindersRow />

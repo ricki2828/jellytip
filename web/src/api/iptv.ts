@@ -278,8 +278,8 @@ export const play = (query: string) => iptvGet<PlayAnswer & { connection?: Conne
 export const addRecording = (channel: string, programme: number) =>
   iptvPost<{ recording: Recording; warning: string | null }>("v1/iptv/recordings", { channel, programme });
 /** `series`: the pid:s:sid id when `item` is an episode (so Next Up can find the show). */
-export const saveProgress = (item: string, position: number, duration: number, series?: string) =>
-  iptvPost<{ ok: boolean }>("v1/iptv/progress", { item, position, duration, ...(series ? { series } : {}) });
+export const saveProgress = (item: string, position: number, duration: number, series?: string, played?: boolean) =>
+  iptvPost<{ ok: boolean }>("v1/iptv/progress", { item, position, duration, ...(series ? { series } : {}), ...(played ? { played: true } : {}) });
 /** Absolute address of a stream link (links are relative to the companion base). */
 export const streamUrl = (rel: string) => `${COMPANION_BASE}/${rel.replace(/^\//, "")}`;
 
