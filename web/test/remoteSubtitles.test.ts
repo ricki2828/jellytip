@@ -207,8 +207,8 @@ test("waitForNewSubtitle polls, survives a blip, and gives up honestly", async (
 test("added messages say plainly what happened", () => {
   assert.match(addedMessage(true, "player", "X"), /Pick it under Audio & subtitles/);
   assert.match(addedMessage(true, "page", "X"), /Audio & subtitles menu/);
-  assert.match(addedMessage(false, "player", "X"), /restart playback/);
-  assert.match(addedMessage(false, "page", "X"), /reopen this page/);
+  assert.match(addedMessage(false, "player", "X"), /Restart playback/);
+  assert.match(addedMessage(false, "page", "X"), /Reopen this page/);
 });
 
 test("gating split: the policy opens the per-item dialog, only admins get the season chips", () => {
@@ -218,4 +218,46 @@ test("gating split: the policy opens the per-item dialog, only admins get the se
   assert.equal(canSearchSeasons({ isAdmin: true }), true);
   assert.equal(canSearchSeasons({}), false);
   assert.equal(canSearchSeasons(null), false);
+});
+
+test("added detection counts duplicates and ignores paths: a second identical-looking track is new, a re-download is not", () => {
+  const ext = (i: number, path?: string) => st(i, { IsExternal: true, DisplayTitle: "English - SRT - External", Path: path });
+  assert.equal(addedSubtitle([ext(2, "/a.srt")], [ext(2, "/a.srt"), ext(3, "/b.srt")])?.Index, 3);
+  assert.equal(addedSubtitle([ext(2)], [ext(2), ext(3)])?.Index, 3); // server reports no paths
+  assert.equal(addedSubtitle([ext(2, "/a.srt")], [ext(2, "/a.srt")]), null); // identical file re-downloaded: nothing new
+});
+
+test("remapActive keeps the n-th of several same-looking tracks", () => {
+  const ext = (i: number) => st(i, { IsExternal: true, DisplayTitle: "English - External" });
+  assert.equal(remapActive([ext(2), ext(3)], [ext(2), ext(3), ext(4)], 3), 3);
+  assert.equal(remapActive([st(1, { Language: "fre" }), ext(3)], [st(1, { Language: "fre" }), st(2, { Language: "spa" }), ext(4)], 3), 4);
+});
+
+test("polling stops when aborted (dialog closed) but returns a track found before that", async () => {
+  const ctl = new AbortController();
+  let loads = 0;
+  const r = await waitForNewSubtitle(async () => { loads++; return [st(2)]; }, [st(2)], async () => { if (loads === 1) ctl.abort(); }, 4, 1500, ctl.signal);
+  assert.equal(r.aborted, true);
+  assert.equal(r.added, null);
+  assert.equal(loads, 1);
+  const pre = new AbortController();
+  pre.abort();
+  assert.equal((await waitForNewSubtitle(async () => { loads++; return []; }, [], async () => undefined, 4, 1, pre.signal)).aborted, true);
+  const found = await waitForNewSubtitle(async () => [st(2), st(3, { IsExternal: true })], [st(2)], async () => undefined, 4, 1, new AbortController().signal);
+  assert.equal(found.added?.Index, 3);
+});
+
+test("download timeout says it may still complete; unconfirmed vs unchanged messages differ", () => {
+  const m = errorMessage(new SubtitleError("timeout"), "download");
+  assert.match(m, /may still complete on the server/);
+  assert.doesNotMatch(m, /Try again\./);
+  assert.match(addedMessage(null, "player", "X"), /couldn't confirm it's listed yet/);
+  assert.match(addedMessage(false, "page", "X"), /track list hasn't changed/);
+  assert.notEqual(addedMessage(null, "page", "X"), addedMessage(false, "page", "X"));
+});
+
+test("state machine: an unconfirmed download (listed: null) is a finished download", () => {
+  const a = sub({ id: "a" });
+  const s = run([{ type: "search", seq: 1, language: "eng" }, { type: "found", seq: 1, results: [a] }, { type: "download", seq: 2, picked: a }, { type: "added", seq: 2, listed: null }]);
+  assert.equal(s.phase === "added" && s.listed, null);
 });

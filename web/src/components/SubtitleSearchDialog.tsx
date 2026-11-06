@@ -20,11 +20,22 @@ export type SubtitleSearchDialogProps = {
   onAdded?: (item: Item) => void;
 };
 
+/** Back to where the dialog was opened from; if that control is gone (player controls re-rendered), the player's play button or its container. */
+function restoreFocus(opener: HTMLElement | null) {
+  if (opener?.isConnected) return opener.focus();
+  const fallback = document.querySelector<HTMLElement>('.player button[aria-label="Play"], .player [data-nav]') ?? document.querySelector<HTMLElement>(".player");
+  if (fallback) {
+    if (!fallback.hasAttribute("tabindex") && fallback.tagName === "DIV") fallback.tabIndex = -1;
+    fallback.focus();
+  }
+}
+
 export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, where, onClose, onAdded }: SubtitleSearchDialogProps) {
   const [state, dispatch] = useReducer(reduce, initialPhase);
   const [language, setLanguage] = useState(() => defaultSearchLanguage(subtitleLangs));
   const box = useRef<HTMLDivElement>(null);
   const ctl = useRef<AbortController | null>(null);
+  const poll = useRef<AbortController | null>(null);
   const opener = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
   const alive = useRef(true);
   const seqs = useRef(0);
@@ -50,15 +61,17 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
     const seq = ++seqs.current;
     dispatch({ type: "download", seq, picked });
     try {
-      const before = await currentStreams(itemId, sourceId).catch(() => []);
+      // null = the list before the download could not be read: a new track can't be told from an old one, so don't guess
+      const before = await currentStreams(itemId, sourceId).catch(() => null);
       await downloadSubtitle(itemId, picked.id);
-      const r = await refreshAfterDownload(itemId, before, sourceId);
-      if (!alive.current) {
-        if (r.listed && r.item) onAdded?.(r.item);
+      if (!before) {
+        if (alive.current) dispatch({ type: "added", seq, listed: null });
         return;
       }
-      if (r.listed && r.item) onAdded?.(r.item);
-      dispatch({ type: "added", seq, listed: r.listed });
+      poll.current = new AbortController();
+      const r = await refreshAfterDownload(itemId, before, sourceId, poll.current.signal);
+      if (r.listed && r.item) onAdded?.(r.item); // also when the dialog was closed meanwhile but the track did show up
+      if (alive.current) dispatch({ type: "added", seq, listed: r.listed });
     } catch (e) {
       if (alive.current) dispatch({ type: "failed", seq, error: classifyError(e) });
     }
@@ -70,7 +83,8 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
     return () => {
       alive.current = false;
       ctl.current?.abort();
-      opener.current?.focus?.();
+      poll.current?.abort(); // stop waiting for the track list; the download itself stays on the server
+      restoreFocus(opener.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

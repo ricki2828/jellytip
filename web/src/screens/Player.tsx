@@ -363,16 +363,18 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   }, [report, stop]);
 
   // ---- subtitles ----
+  // Keyed on the media source, not the plan object: a plan whose stream list was refreshed (subtitle download) keeps its cues
+  const planSourceId = plan?.source.Id;
   useEffect(() => {
     setCues([]);
-    if (subIndex < 0 || !plan) return;
+    if (subIndex < 0 || !planSourceId) return;
     const ctl = new AbortController();
     const offline = localRef.current?.subtitles.find((x) => x.index === subIndex);
-    (offline ? subtitleText(offline.key).then((t) => t ?? Promise.reject(new Error("missing"))) : fetchSubtitles(id, plan.source.Id, subIndex, ctl.signal))
+    (offline ? subtitleText(offline.key).then((t) => t ?? Promise.reject(new Error("missing"))) : fetchSubtitles(id, planSourceId, subIndex, ctl.signal))
       .then((txt) => !ctl.signal.aborted && setCues(parseVtt(txt)))
       .catch(() => !ctl.signal.aborted && setCues([]));
     return () => ctl.abort();
-  }, [subIndex, plan, id]);
+  }, [subIndex, planSourceId, id]);
 
   useEffect(() => {
     localStorage.setItem(DELAY_KEY, String(delay));

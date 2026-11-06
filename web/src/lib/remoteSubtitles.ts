@@ -18,6 +18,9 @@ export const canSearchSeasons = (s: SubtitleAccessSession): boolean => !!s && s.
 /** A session stored before the flag existed: the policy has to be read once (admins and known answers need no lookup). */
 export const needsPolicyLookup = (s: SubtitleAccessSession): boolean => !!s && s.isAdmin !== true && s.canManageSubtitles === undefined;
 
+/** Look the policy up when unknown, and once per app start when it says "no" (an admin may have granted it since login). */
+export const shouldLookupPolicy = (s: SubtitleAccessSession, refreshedThisStart: boolean): boolean => needsPolicyLookup(s) || (!!s && s.isAdmin !== true && s.canManageSubtitles === false && !refreshedThisStart);
+
 // ---------- languages ----------
 
 /** Pref codes are ISO 639-1 ("en"); Jellyfin's RemoteSearch takes ISO 639-2/B ("eng"). */
@@ -171,6 +174,7 @@ export function errorMessage(e: SubtitleError, action: "search" | "download" = "
     case "notfound":
       return action === "search" ? "The server has no subtitle search for this item (no subtitle provider is set up, or the item is gone)." : "That subtitle is no longer available from the provider. Pick another.";
     case "timeout":
+      if (action === "download") return `The subtitle download didn't answer within ${Math.round(DOWNLOAD_TIMEOUT_MS / 1000)} s. It may still complete on the server; check the track list before trying again.`;
       return `The subtitle ${action} timed out after ${Math.round((action === "search" ? SEARCH_TIMEOUT_MS : DOWNLOAD_TIMEOUT_MS) / 1000)} s. Try again.`;
     case "cancelled":
       return "Cancelled.";
@@ -218,14 +222,14 @@ export type Phase =
   | { phase: "results"; seq: number; language: string; results: RemoteSubtitle[] }
   | { phase: "empty"; seq: number; language: string }
   | { phase: "downloading"; seq: number; language: string; results: RemoteSubtitle[]; picked: RemoteSubtitle }
-  | { phase: "added"; seq: number; language: string; results: RemoteSubtitle[]; picked: RemoteSubtitle; listed: boolean }
+  | { phase: "added"; seq: number; language: string; results: RemoteSubtitle[]; picked: RemoteSubtitle; listed: boolean | null }
   | { phase: "error"; seq: number; language: string; action: "search" | "download"; error: SubtitleError; results: RemoteSubtitle[] };
 
 export type Event =
   | { type: "search"; seq: number; language: string }
   | { type: "found"; seq: number; results: RemoteSubtitle[] }
   | { type: "download"; seq: number; picked: RemoteSubtitle }
-  | { type: "added"; seq: number; listed: boolean }
+  | { type: "added"; seq: number; listed: boolean | null }
   | { type: "failed"; seq: number; error: SubtitleError }
   | { type: "cancel" };
 
@@ -271,20 +275,34 @@ export interface StreamLike {
 }
 
 const subs = <T extends StreamLike>(l: readonly T[]) => l.filter((s) => s.Type === "Subtitle");
-/** Identity of a track independent of its index (indices shift when an external track is inserted). */
-export const streamKey = (s: StreamLike) => [s.Path ?? "", s.IsExternal ? "x" : "e", s.Language ?? "", s.Codec ?? "", s.DisplayTitle ?? s.Title ?? ""].join("|");
+/** Identity of a track independent of its index (indices shift when an external track is inserted). Paths are not
+ * used: a re-downloaded file keeps its path, and the server may report none. Identical tracks are told apart by count. */
+export const streamKey = (s: StreamLike) => [s.IsExternal ? "x" : "e", s.Language ?? "", s.Codec ?? "", s.DisplayTitle ?? s.Title ?? ""].join("|");
 
+/** Subtitle tracks in `after` beyond what `before` already had (duplicates counted, so a second identical-looking track is new). */
 export function addedSubtitle<T extends StreamLike>(before: readonly T[], after: readonly T[]): T | null {
-  const old = new Set(subs(before).map(streamKey));
-  const fresh = subs(after).filter((s) => !old.has(streamKey(s)));
+  const have = new Map<string, number>();
+  for (const s of subs(before)) have.set(streamKey(s), (have.get(streamKey(s)) ?? 0) + 1);
+  const fresh = subs(after).filter((s) => {
+    const k = streamKey(s);
+    const n = have.get(k) ?? 0;
+    if (n > 0) {
+      have.set(k, n - 1);
+      return false;
+    }
+    return true;
+  });
   return fresh.find((s) => s.IsExternal) ?? fresh[fresh.length - 1] ?? null;
 }
 
-/** Jellyfin refreshes the item in the background after a download: ask again a few times, as the TV does (4 x 1.5 s). */
-export async function waitForNewSubtitle<T extends StreamLike>(load: () => Promise<readonly T[]>, before: readonly T[], pause: (ms: number) => Promise<void>, attempts = 4, delayMs = 1500): Promise<{ streams: readonly T[]; added: T | null }> {
+/** Jellyfin refreshes the item in the background after a download: ask again a few times, as the TV does (4 x 1.5 s).
+ * `signal` stops the polling (dialog closed); anything found before that is still returned. */
+export async function waitForNewSubtitle<T extends StreamLike>(load: () => Promise<readonly T[]>, before: readonly T[], pause: (ms: number) => Promise<void>, attempts = 4, delayMs = 1500, signal?: AbortSignal): Promise<{ streams: readonly T[]; added: T | null; aborted?: boolean }> {
   let streams: readonly T[] = before;
   for (let i = 0; i < attempts; i++) {
+    if (signal?.aborted) return { streams, added: null, aborted: true };
     await pause(delayMs);
+    if (signal?.aborted) return { streams, added: null, aborted: true };
     try {
       streams = await load();
     } catch {
@@ -296,16 +314,22 @@ export async function waitForNewSubtitle<T extends StreamLike>(load: () => Promi
   return { streams, added: null };
 }
 
-/** After the stream list changed, where did the active subtitle go? -1 = off (or the track vanished). */
+/** After the stream list changed, where did the active subtitle go? -1 = off (or the track vanished).
+ * Same-looking tracks keep their order (the n-th "English external" stays the n-th). */
 export function remapActive(before: readonly StreamLike[], after: readonly StreamLike[], active: number): number {
   if (active < 0) return -1;
-  const cur = before.find((s) => s.Type === "Subtitle" && s.Index === active);
+  const old = subs(before);
+  const cur = old.find((s) => s.Index === active);
   if (!cur) return -1;
   const key = streamKey(cur);
-  return subs(after).find((s) => streamKey(s) === key)?.Index ?? -1;
+  const nth = old.filter((s) => streamKey(s) === key).indexOf(cur);
+  return subs(after).filter((s) => streamKey(s) === key)[nth]?.Index ?? -1;
 }
 
-export function addedMessage(listed: boolean, where: "page" | "player", name: string): string {
+/** listed: true = a new track is in the list; false = the list did not change; null = could not check. */
+export function addedMessage(listed: boolean | null, where: "page" | "player", name: string): string {
   if (listed) return where === "player" ? `Added "${name}". Pick it under Audio & subtitles.` : `Added "${name}". It is now in this title's subtitle list and will show in the player's Audio & subtitles menu.`;
-  return `Downloaded "${name}", but the server hasn't listed it yet. It should appear shortly; ${where === "player" ? "restart playback to use it" : "reopen this page to check"}.`;
+  const later = where === "player" ? "Restart playback to use it" : "Reopen this page to check";
+  if (listed === null) return `Downloaded "${name}"; couldn't confirm it's listed yet. ${later} if it doesn't appear.`;
+  return `Downloaded "${name}", but the track list hasn't changed. The server may already have had this subtitle; if not, it should appear shortly. ${later}.`;
 }
