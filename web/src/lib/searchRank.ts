@@ -2,9 +2,11 @@
 import type { SearchEntry, SearchResult } from "./search.ts";
 import { neutralIntent, type SearchIntent } from "./searchIntent.ts";
 
-export type Avail = "Library" | "IPTV" | "Not available";
+import { sourceLabel, type Avail } from "./availability.ts";
 
-export const availability = (e: Pick<SearchEntry, "source">): Avail => (e.source === "library" ? "Library" : e.source === "iptv" ? "IPTV" : "Not available");
+export type { Avail };
+
+export const availability = (e: Pick<SearchEntry, "source">): Avail => sourceLabel(e.source);
 
 /** Lower-case, accents and punctuation out, leading article out: "The Office (US)" ~ "office us". */
 export function norm(s: string): string {

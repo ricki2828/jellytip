@@ -112,3 +112,13 @@ div.poster {
     grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   }
 }
+.card-avail {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  pointer-events: none;
+}
+.card-avail .avail-badge {
+  margin: 0;
+  background: rgba(10, 10, 10, 0.78);
+}

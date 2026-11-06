@@ -3,6 +3,9 @@
 // Reasons are stated only from data the client holds.
 import type { Item } from "../api/jellyfin.ts";
 import type { VodEpisode, VodItem } from "./iptvVod.ts";
+import { episodeReason, providerOf } from "./availability.ts";
+
+export { providerOf };
 
 export type EpStatus = "present" | "missing" | "unaired";
 
@@ -133,7 +136,7 @@ export function reasonLabel(r: EpRow, now: Date): string | null {
     case "unaired":
       return airsLabel(r.airDate, now) ?? "Not released yet";
     case "missing":
-      return r.iptv ? "Available via IPTV" : "Not in your library";
+      return episodeReason(!!r.iptv);
   }
 }
 
@@ -142,9 +145,6 @@ export const reasonDetail = (r: EpRow, now: Date): string | null =>
   r.status === "unaired" && airsLabel(r.airDate, now)
     ? "Not released yet"
     : null;
-
-/** Provider id of a `pid:s:sid` / `pid:e:eid` IPTV id. */
-export const providerOf = (id: string): string => id.split(":")[0] ?? "";
 
 /** Only titles from the person's own or shared providers (what GET v1/iptv/providers returned) survive. */
 export function ownedVod<T extends { id: string }>(

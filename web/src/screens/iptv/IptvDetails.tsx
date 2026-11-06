@@ -14,6 +14,9 @@ import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { vodTech, type VodDetail, type VodEpisode, type VodProgress } from "../../lib/iptvVod";
 import { go } from "../../lib/router";
 import { detailBadges } from "../../lib/techBadges";
+import { WaysToWatch } from "../../components/WaysToWatch";
+import { availabilityOf, type IptvCopy } from "../../lib/availability";
+import { vodPath } from "../../lib/iptvVod";
 import "./iptv.css";
 
 const mins = (s?: number | null) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`) : null);
@@ -81,6 +84,12 @@ export function IptvDetails({ id }: { id: string }) {
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
   const playEp = (s: number, e: VodEpisode, from = resumeAt(e.progress)) => go(playPath({ series: d.id, episode: e.id }, `${d.title} · S${s} E${e.episode}`, from));
+  // Every copy the companion returned for this title (own + shared providers); this page's own id first
+  const copies: IptvCopy[] = [
+    { id: d.id, providerName: d.providerName, quality: d.quality, tech: d.tech },
+    ...(d.copies ?? []).filter((c) => c.id !== d.id).map((c) => ({ id: c.id, providerName: c.providerTitle, quality: c.quality })),
+  ];
+  const ways = availabilityOf(null, { iptv: copies, iptvChecked: true });
 
   return (
     <div className="details iptv-details">
@@ -165,6 +174,17 @@ export function IptvDetails({ id }: { id: string }) {
             )}
           </div>
         </div>
+      </div>
+      <div className="details-below">
+        <WaysToWatch
+          ways={ways}
+          onAct={(w) => {
+            if (!w.iptvId) return;
+            if (w.iptvId !== d.id) go(vodPath(w.iptvId));
+            else if (d.kind === "series") nextEp && playEp(nextEp.s, nextEp.e);
+            else go(playPath({ vod: d.id }, d.title, resume));
+          }}
+        />
       </div>
       {d.kind === "series" && (d.seasons?.length ?? 0) > 0 && (
         <div className="details-below">
