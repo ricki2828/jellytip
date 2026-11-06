@@ -1,0 +1,6 @@
+.person-iptv-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
