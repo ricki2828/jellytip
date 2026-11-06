@@ -141,3 +141,35 @@ test("retry restarts from scratch and ignores the old run's late answer", async 
   assert.deepEqual(r.values, ["fresh"]);
   assert.equal(r.states.at(-1), "done");
 });
+
+test("denied (401/403) is terminal: one ask, error state, nothing scheduled", async () => {
+  const r = run([async () => ({ kind: "denied" as const })]);
+  await tick();
+  assert.equal(r.calls(), 1);
+  assert.equal(r.states.at(-1), "error");
+  assert.equal(r.f.pending(), 0);
+});
+
+test("resuming after maxMs while hidden times out instead of asking again", async () => {
+  const r = run([async () => ok("a", true)], undefined, { maxMs: 8000 });
+  await tick();
+  r.f.setHidden(true);
+  await r.f.advance(20_000);
+  assert.equal(r.calls(), 1);
+  await r.f.show();
+  assert.equal(r.calls(), 1);
+  assert.equal(r.states.at(-1), "timeout");
+});
+
+test("retry while a hidden wait is pending cannot run two attempts at once", async () => {
+  const r = run([async () => ok("a", true)]);
+  await tick();
+  r.f.setHidden(true);
+  await r.f.advance(3000);
+  r.h.retry();
+  await tick();
+  const before = r.calls();
+  r.f.setHidden(false);
+  await r.f.show();
+  assert.equal(r.calls(), before);
+});

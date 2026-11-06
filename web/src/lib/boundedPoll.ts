@@ -13,7 +13,7 @@ export interface PollEnv {
   onVisible(cb: () => void): () => void;
 }
 
-export type Outcome<T> = { kind: "ok"; value: T; pending: boolean } | { kind: "missing" } | { kind: "error" };
+export type Outcome<T> = { kind: "ok"; value: T; pending: boolean } | { kind: "missing" } | { kind: "error" } | { kind: "denied" }; // denied = 401/403: terminal, never retried
 
 export interface PollOpts<T> {
   fetch(signal: AbortSignal): Promise<Outcome<T>>;
@@ -72,6 +72,7 @@ export function startBoundedPoll<T>(o: PollOpts<T>): { cancel(): void; retry(): 
     }
     if (dead || mine.signal.aborted) return;
     if (r.kind === "missing") return finish("unavailable");
+    if (r.kind === "denied") return finish("error");
     if (r.kind === "error") return attempts >= maxAttempts ? finish("error") : (o.onState("checking"), schedule());
     o.onValue(r.value);
     if (!r.pending) return finish("done");
@@ -81,6 +82,7 @@ export function startBoundedPoll<T>(o: PollOpts<T>): { cancel(): void; retry(): 
 
   const begin = () => {
     dead = false;
+    waiting = false;
     attempts = 0;
     began = env.now();
     o.onState("checking");
@@ -88,6 +90,7 @@ export function startBoundedPoll<T>(o: PollOpts<T>): { cancel(): void; retry(): 
     unsub = env.onVisible(() => {
       if (waiting && !dead) {
         waiting = false;
+        if (env.now() - began >= maxMs) return finish("timeout");
         void attempt();
       }
     });
@@ -98,6 +101,7 @@ export function startBoundedPoll<T>(o: PollOpts<T>): { cancel(): void; retry(): 
   return {
     cancel() {
       dead = true;
+      waiting = false;
       ctl?.abort();
       if (timer !== null) env.clearTimer(timer);
       timer = null;
