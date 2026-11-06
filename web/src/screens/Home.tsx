@@ -24,6 +24,7 @@ import { UpcomingRow } from "../components/Upcoming";
 import { savePrefs, usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
+import { go } from "../lib/router";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
@@ -520,6 +521,7 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        <button className="btn tonight-open" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
         {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
             Edit Home
