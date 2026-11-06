@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dedupeIds, interleaveSpecials, planHome, readLocalHome, shouldDefer, writeLocalHome, type Cand } from "../src/lib/homePlan.ts";
+import { TOP_KEY, dedupeIds, interleaveSpecials, planHome, readLocalHome, shouldDefer, writeLocalHome, type Cand } from "../src/lib/homePlan.ts";
 
 const ids = (p: string, n: number) => Array.from({ length: n }, (_, i) => `${p}${i}`);
 const row = (key: string, n = 8, extra: Partial<Cand> = {}): Cand => ({ key, ids: ids(key, n), count: n, ...extra });
@@ -91,4 +91,25 @@ test("specials land before the row they asked for; the pick still leads the plan
   const order = interleaveSpecials(c, [{ id: "s1", position: 1 }, { id: "p", position: 2 }]).map((x) => x.key);
   assert.deepEqual(order, ["a", "special-s1", "b", "special-p", "c"]);
   assert.deepEqual(planHome(interleaveSpecials(c, [{ id: "s1", position: 1 }, { id: "p", position: 2 }]), none, null).visible, ["special-p", "a", "special-s1", "b", "c"]);
+});
+
+test("focus on Continue Watching (above the first row): a new first row waits; appended rows don't", () => {
+  const cur = ["a", "b"];
+  assert.equal(shouldDefer(cur, ["pick", "a", "b"], TOP_KEY), true); // Tonight's pick arrives above
+  assert.equal(shouldDefer(cur, ["a", "b", "c"], TOP_KEY), false);
+  assert.equal(shouldDefer([], ["pick", "a"], TOP_KEY), false); // nothing shown yet
+});
+
+test("watched ratio is over the sampled ids only", () => {
+  const long = ids("a", 100);
+  const w = new Set(long.slice(0, 40)); // all 40 sampled are watched
+  assert.deepEqual(planHome([{ key: "a", ids: long, count: 100 }], none, w).dropped, ["a"]);
+});
+
+test("specials have their own cap and don't use up the 4 row slots", () => {
+  const sp = (n: string): Cand => ({ key: `special-${n}`, ids: null, count: 99 });
+  const c = [sp("1"), sp("2"), sp("3"), row("a"), row("b"), row("c"), row("d"), row("e")];
+  const p = planHome(c, none, null);
+  assert.deepEqual(p.visible, ["special-1", "special-2", "a", "b", "c", "d"]);
+  assert.deepEqual(p.more, ["special-3", "e"]);
 });

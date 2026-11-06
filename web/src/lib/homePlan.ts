@@ -7,6 +7,10 @@ export const MIN_ROW_ITEMS = 4;
 export const WATCHED_CUTOFF = 0.8;
 export const DEDUPE_AT = 3; // an item already in this many earlier rows is skipped
 export const MAX_DISCOVERY = 4;
+export const MAX_SPECIALS = 2; // specials other than the pick, on the first screen; counted apart from the 4 rows
+export const WATCHED_SAMPLE = 40; // ids per row looked up to tell how much of it is watched
+/** Focus is on something above the first planned row (Continue Watching, reminders, recordings...). */
+export const TOP_KEY = "__top__";
 
 export interface Cand {
   key: string;
@@ -61,7 +65,7 @@ export function planHome(cands: Cand[], user: UserHome, watched: ReadonlySet<str
   const kept: Cand[] = [];
   for (const c of cands) {
     if (hidden.has(c.key)) dropped.push(c.key);
-    else if (!pinned.has(c.key) && (c.count < MIN_ROW_ITEMS || (watched && c.ids && watchedRatio(c.ids, watched) >= WATCHED_CUTOFF))) dropped.push(c.key);
+    else if (!pinned.has(c.key) && (c.count < MIN_ROW_ITEMS || (watched && c.ids && watchedRatio(c.ids.slice(0, WATCHED_SAMPLE), watched) >= WATCHED_CUTOFF))) dropped.push(c.key);
     else kept.push(c);
   }
   const pick = kept.find((c) => c.pick && !pinned.has(c.key));
@@ -81,11 +85,14 @@ export function planHome(cands: Cand[], user: UserHome, watched: ReadonlySet<str
   const visible: string[] = [];
   const more: string[] = [];
   let disc = 0;
+  let sp = 0;
   for (const c of ordered) {
+    const special = c.key.startsWith("special-");
     if (c === pick || pinned.has(c.key)) visible.push(c.key);
-    else if (disc < maxDiscovery) {
+    else if (special ? sp < MAX_SPECIALS : disc < maxDiscovery) {
       visible.push(c.key);
-      disc++;
+      if (special) sp++;
+      else disc++;
     } else more.push(c.key);
   }
   return { visible, more, dropped, ids };
@@ -93,10 +100,13 @@ export function planHome(cands: Cand[], user: UserHome, watched: ReadonlySet<str
 
 /**
  * A late plan must wait when someone is on a row and the change would move it: anything before the focused row
- * differs, or the focused row is going away. No focus (or focus outside the planned rows) = apply at once.
+ * differs, or the focused row is going away. Focus above the first row (TOP_KEY) holds a change of first row.
+ * No focus (or focus below / outside the planned rows) = apply at once.
  */
 export function shouldDefer(current: string[], next: string[], focusedKey: string | null): boolean {
   if (!focusedKey) return false;
+  // On something above the first row: hold anything that changes what comes first
+  if (focusedKey === TOP_KEY) return current.length > 0 && next[0] !== current[0];
   const at = current.indexOf(focusedKey);
   if (at < 0) return false;
   const to = next.indexOf(focusedKey);

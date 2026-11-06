@@ -9,7 +9,7 @@ import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit, type Placement } from "../components/HomeEdit";
-import { interleaveSpecials, planHome, readLocalHome, shouldDefer, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
+import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { useHubTick } from "../api/collections";
@@ -28,8 +28,7 @@ import { dropPersonalCaches } from "../api/companion";
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
 const ROW_LIMIT = 24;
-const WATCHED_SAMPLE = 40; // ids per row asked for to tell how much of it is watched
-const WATCHED_WAIT_MS = 1200; // rows wait this long at most for that answer
+const GATE_MS = 1200; // first paint of the rows waits this long at most for rows, specials, prefs and watched data together
 
 /** Rows the quality filter may judge by their library ids: plain lists. Ranked, person, collection and IPTV rows are shown as sent. */
 const filterable = (r: ServerRow) => r.layout !== "franchise" && !r.person && !r.collection && !r.order.length && !r.missing.length && !r.iptvItems.length && !r.id.startsWith("trending-top10");
@@ -115,6 +114,7 @@ export function Home() {
   // Specials wait for the manifest so they land between the right rows (no jump when the rows arrive)
   const [rowsReady, setRowsReady] = useState(false);
   const [specials, setSpecials] = useState<Special[]>([]);
+  const [specialsReady, setSpecialsReady] = useState(false);
   // Personal prefs (Home edit) when the server has them; a save reloads rows + specials
   const { available: personal, prefs } = usePrefs({ defer: true });
   const [editing, setEditing] = useState(false);
@@ -174,7 +174,10 @@ export function Home() {
       const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
       if (ic.length || inx.length) apply({ resume, next, ic, inx });
     });
-    getSpecials("home").then((s) => alive && setSpecials(s));
+    getSpecials("home")
+      .then((s) => alive && setSpecials(s))
+      .catch(() => undefined)
+      .finally(() => alive && setSpecialsReady(true));
     return () => {
       alive = false;
     };
@@ -298,28 +301,6 @@ export function Home() {
   }, []);
 
   // ---- Row plan: first screen / More rows / left out (rules in lib/homePlan.ts) ----
-  const [watched, setWatched] = useState<ReadonlySet<string> | null>(null);
-  const [watchedReady, setWatchedReady] = useState(false);
-  useEffect(() => {
-    if (!rows) return setWatchedReady(true);
-    let alive = true;
-    setWatchedReady(false);
-    const ids = [...new Set(rows.filter(filterable).flatMap((r) => r.itemIds.slice(0, WATCHED_SAMPLE)))];
-    const t = window.setTimeout(() => alive && setWatchedReady(true), WATCHED_WAIT_MS);
-    (ids.length ? itemsByIds(ids) : Promise.resolve([] as Item[]))
-      .then((items) => alive && setWatched(new Set(items.filter((it) => it.UserData?.Played).map((it) => undash(it.Id)))))
-      .catch(() => undefined)
-      .finally(() => {
-        if (!alive) return;
-        window.clearTimeout(t);
-        setWatchedReady(true);
-      });
-    return () => {
-      alive = false;
-      window.clearTimeout(t);
-    };
-  }, [rows]);
-
   const [local, setLocal] = useState<UserHome>(() => readLocalHome(localStorage, uid()));
   useEffect(() => {
     const on = () => setLocal(readLocalHome(localStorage, uid()));
@@ -344,27 +325,60 @@ export function Home() {
     }
     return out;
   }, [rows, carousels, lists, specials]);
-  const planReady = rowsReady && watchedReady;
-  const target = useMemo<HomePlan | null>(() => {
-    if (!planReady) return null;
-    // Specials keep their place relative to the rows only through the plan: pick first, the rest ordered by position among rows
-    return planHome(interleaveSpecials(cands, specials), userHome, watched);
-  }, [planReady, cands, specials, userHome, watched]);
+
+  // Rows, specials and prefs are all in (or GATE_MS has passed) before the first plan, so nothing lands above a row late
+  const [gateOpen, setGateOpen] = useState(false);
+  useEffect(() => {
+    setGateOpen(false);
+    const t = window.setTimeout(() => setGateOpen(true), GATE_MS);
+    return () => window.clearTimeout(t);
+  }, [reload]);
+  const inputsReady = rowsReady && specialsReady && personal !== undefined;
+  const [watched, setWatched] = useState<ReadonlySet<string> | null>(null);
+  const [watchedReady, setWatchedReady] = useState(false);
+  useEffect(() => setWatchedReady(false), [rows]);
+  useEffect(() => {
+    if (!rows) return setWatchedReady(true);
+    if (!inputsReady) return;
+    let alive = true;
+    // Only rows that could land on the first screen (with spare for ones the filter drops); More rows are not looked up
+    const near = new Set(planHome(interleaveSpecials(cands, specials), userHome, null, 2 * MAX_DISCOVERY_LOOKUP).visible);
+    const ids = [...new Set(rows.filter((r) => filterable(r) && near.has(r.id)).flatMap((r) => r.itemIds.slice(0, WATCHED_SAMPLE)))];
+    (ids.length ? itemsByIds(ids) : Promise.resolve([] as Item[]))
+      .then((items) => alive && setWatched(new Set(items.filter((it) => it.UserData?.Played).map((it) => undash(it.Id)))))
+      .catch(() => undefined)
+      .finally(() => alive && setWatchedReady(true));
+    return () => {
+      alive = false;
+    };
+  }, [rows, inputsReady, cands, specials, userHome]);
+  const planReady = rowsReady && (gateOpen || (inputsReady && watchedReady));
+  const target = useMemo<HomePlan | null>(() => (planReady ? planHome(interleaveSpecials(cands, specials), userHome, watched) : null), [planReady, cands, specials, userHome, watched]);
 
   // What is on screen. A late change that would move the row in focus waits until focus leaves that spot.
   const [shown, setShown] = useState<HomePlan | null>(null);
   const shownRef = useRef<HomePlan | null>(null);
   const targetRef = useRef<HomePlan | null>(null);
-  const focusKey = useRef<string | null>(null);
+  const rowsEl = useRef<HTMLDivElement>(null);
   const moreOpenRef = useRef(false);
   const [moreOpen, setMoreOpen] = useState(false);
   moreOpenRef.current = moreOpen;
   const seqOf = (p: HomePlan) => (moreOpenRef.current ? [...p.visible, ...p.more] : p.visible);
+  /** Where focus is now, asked of the DOM each time (a row that unmounted under focus leaves nothing stale). */
+  const focusKeyNow = (): string | null => {
+    const box = rowsEl.current;
+    const el = document.activeElement;
+    if (!box || !el || !box.contains(el)) return null;
+    const k = el.closest<HTMLElement>("[data-rowkey]")?.dataset.rowkey;
+    if (k) return k;
+    const first = box.querySelector("[data-rowkey]");
+    return first && first.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING ? TOP_KEY : null;
+  };
   const settle = useCallback(() => {
     const t = targetRef.current;
     const cur = shownRef.current;
     if (!t || t === cur) return;
-    if (cur && shouldDefer(seqOf(cur), seqOf(t), focusKey.current)) return;
+    if (cur && shouldDefer(seqOf(cur), seqOf(t), focusKeyNow())) return;
     shownRef.current = t;
     setShown(t);
   }, []);
@@ -372,36 +386,48 @@ export function Home() {
     targetRef.current = target;
     settle();
   }, [target, settle]);
-  // Another person signing in: nothing of the last one's plan stays
+  // Another person signing in: plan again from scratch
   useEffect(() => {
     const on = () => {
       shownRef.current = null;
-      focusKey.current = null;
       setShown(null);
       setMoreOpen(false);
+      settle();
     };
     window.addEventListener("jellytip-session", on);
     return () => window.removeEventListener("jellytip-session", on);
-  }, []);
-  const rowFocus = useCallback(
-    (e: React.FocusEvent) => {
-      const k = (e.target as HTMLElement).closest<HTMLElement>("[data-rowkey]")?.dataset.rowkey ?? null;
-      if (k !== focusKey.current) {
-        focusKey.current = k;
-        settle();
-      }
-    },
-    [settle],
-  );
+  }, [settle]);
   const rowBlur = useCallback(
     (e: React.FocusEvent) => {
-      if (!e.relatedTarget) {
-        focusKey.current = null;
-        settle();
-      }
+      // Focus left the rows (or went nowhere): a held change may land now
+      if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget as Node)) requestAnimationFrame(settle);
     },
     [settle],
   );
+
+  // More rows: expanding moves focus to the first row it shows; if the button goes while focused, focus goes to the last row
+  const moreBtn = useRef<HTMLButtonElement>(null);
+  const moreFocused = useRef(false);
+  const focusRow = (key: string | undefined, tries = 12) => {
+    if (!key) return;
+    const el = rowsEl.current?.querySelector<HTMLElement>(`[data-rowkey="${CSS.escape(key)}"] [data-nav]`);
+    if (el) el.focus();
+    else if (tries > 0) requestAnimationFrame(() => focusRow(key, tries - 1));
+  };
+  const toggleMore = () => {
+    const open = !moreOpen;
+    setMoreOpen(open);
+    if (open) requestAnimationFrame(() => focusRow(shown?.more[0]));
+  };
+  const moreCount = shown?.more.length ?? 0;
+  useEffect(() => {
+    if (moreCount === 0 && moreFocused.current) {
+      moreFocused.current = false;
+      const last = shown?.visible[shown.visible.length - 1];
+      requestAnimationFrame(() => focusRow(last));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moreCount]);
 
   // Hovering or focusing a tile changes `focused` (the hero follows): unchanged elements keep React from re-rendering every row
   const elements = useMemo(() => {
@@ -456,7 +482,7 @@ export function Home() {
         </p>
       )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
-      <div className="rows" onFocusCapture={rowFocus} onBlurCapture={rowBlur}>
+      <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
         {entries && entries.length > 0 && (
           <Row
             title="Continue Watching"
@@ -478,10 +504,17 @@ export function Home() {
             }}
           />
         )}
+        {!rowsFailed && !shown && (
+          <div className="home-skel" aria-hidden="true">
+            <div />
+            <div />
+            <div />
+          </div>
+        )}
         {!rowsFailed && shown && shown.visible.map(wrap)}
         {!rowsFailed && shown && shown.more.length > 0 && (
           <div className="home-more">
-            <button className="btn" data-nav aria-expanded={moreOpen} onClick={() => setMoreOpen((o) => !o)}>
+            <button ref={moreBtn} className="btn" data-nav aria-expanded={moreOpen} onClick={toggleMore} onFocus={() => (moreFocused.current = true)} onBlur={() => (moreFocused.current = false)}>
               {moreOpen ? "Fewer rows" : `More rows (${shown.more.length})`}
             </button>
           </div>
@@ -500,6 +533,7 @@ export function Home() {
           onSave={saveHome}
           placement={placement}
           specials={!!personal}
+          reorder={!!personal}
           onClose={(saved) => {
             setEditing(false);
             if (saved && personal) {
@@ -513,4 +547,5 @@ export function Home() {
   );
 }
 
-const MIN_UNKNOWN = 99; // carousels and specials: size not known up front, so the minimum never applies
+const MIN_UNKNOWN = 99;
+const MAX_DISCOVERY_LOOKUP = 4; // carousels and specials: size not known up front, so the minimum never applies

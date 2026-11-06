@@ -92,3 +92,25 @@
   justify-content: center;
   padding: 12px 0;
 }
+.home-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 12px 0;
+}
+.home-skel > div {
+  height: 140px;
+  border-radius: 8px;
+  background: var(--panel, rgba(255, 255, 255, 0.05));
+  animation: home-skel-pulse 1.4s ease-in-out infinite;
+}
+@keyframes home-skel-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-skel > div {
+    animation: none;
+  }
+}
