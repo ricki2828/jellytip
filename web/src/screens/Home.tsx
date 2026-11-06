@@ -24,6 +24,7 @@ import { UpcomingRow } from "../components/Upcoming";
 import { savePrefs, usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
+import { go } from "../lib/router";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
@@ -483,6 +484,7 @@ export function Home() {
       )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
+        <button className="btn tonight-open" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
         {entries && entries.length > 0 && (
           <Row
             title="Continue Watching"
