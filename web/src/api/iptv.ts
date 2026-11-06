@@ -361,6 +361,16 @@ export async function personCredits(jellyfinPersonId: string): Promise<{ iptvIte
   return a.status === 200 ? parseCredits(a.data) : null;
 }
 
+export type CreditsCheck = { kind: "ok"; iptvItems: VodItem[]; pending: boolean } | { kind: "missing" } | { kind: "error" };
+
+/** Like personCredits but tells "no such route" (404/501) from a failed call, and can be cancelled. */
+export async function personCreditsChecked(jellyfinPersonId: string, signal?: AbortSignal): Promise<CreditsCheck> {
+  const a = await companionCall("GET", `v1/people/${encodeURIComponent(jellyfinPersonId)}/credits`, undefined, { signal });
+  if (a.status === 404 || a.status === 501) return { kind: "missing" };
+  const c = a.status === 200 ? parseCredits(a.data) : null;
+  return c ? { kind: "ok", ...c } : { kind: "error" };
+}
+
 // ---------- channel pruning inside a group ----------
 
 /** A group's channels with sport levels and hidden flags; "missing" when the server has no such route. */
