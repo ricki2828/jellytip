@@ -7,7 +7,7 @@ import { episodes, getItem, TICKS_PER_SECOND, type Item, type MediaStream } from
 import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, stopEncoding, type PlayPlan } from "../api/playback";
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
-import { prefsSoon } from "../api/me";
+import { prefsSoon, usePrefs } from "../api/me";
 import { pickAudio, pickSubtitle } from "../lib/tracks";
 import { TrackMenu } from "../components/TrackMenu.tsx";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
@@ -16,6 +16,9 @@ import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } 
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
+import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
+import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
+import { remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
 
 const PROGRESS_MS = 10_000;
@@ -79,6 +82,9 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const [buffering, setBuffering] = useState(true);
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState(false);
+  const [findSubs, setFindSubs] = useState(false);
+  const canFindSubs = useCanManageSubtitles();
+  const { prefs } = usePrefs({ defer: true });
   const { prefs: subPrefs, setPrefs: setSubPrefs, vars: subVars } = useSubtitlePrefs();
   const replayRef = useRef<Replay | null>(null);
   const [subIndex, setSubIndex] = useState<number>(-1);
@@ -485,6 +491,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (findSubs) { poke(); return; } // the subtitle dialog owns the keys
       const mk = playerKeyWhileMenu(menu, e.key);
       if (mk === "close") {
         e.preventDefault();
@@ -553,11 +560,22 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu, controls, duration, exit, playNext, poke]);
+  }, [menu, findSubs, controls, duration, exit, playNext, poke]);
 
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
   const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
+  /** A downloaded subtitle is now listed on the item: show it in the menu without renegotiating, and keep the active track selected. */
+  const addedSubtitles = (fresh: Item) => {
+    const p = planRef.current;
+    const streams = fresh.MediaSources?.find((m) => m.Id === p?.source.Id)?.MediaStreams;
+    if (!p || !streams) return;
+    const old = p.source.MediaStreams ?? [];
+    setSubIndex((cur) => remapActive(old, streams, cur));
+    const np = { ...p, source: { ...p.source, MediaStreams: streams } };
+    planRef.current = np;
+    setPlan(np);
+  };
   const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); if (o) setControls(true); }, []);
   const textSubs = subs.filter((x) => x.IsTextSubtitleStream);
   /** "What did they say?": back ~10 s with captions on, then the previous subtitle state returns once that span has played */
@@ -690,12 +708,25 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         barClassName="player-track-trigger"
         menuClassName="sub-menu"
         onActivity={poke}
+        findSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs(true) : undefined}
         extra={subIndex >= 0 ? (
           <button type="button" role="menuitem" data-track-item data-nav className="btn small" onClick={() => setDelay(0)}>
             Reset delay ({delay.toFixed(1)} s)
           </button>
         ) : undefined}
       />
+
+      {findSubs && item && plan && (
+        <SubtitleSearchDialog
+          itemId={id}
+          title={title}
+          sourceId={plan.source.Id}
+          subtitleLangs={prefs?.playback.subtitleLangs}
+          where="player"
+          onClose={() => setFindSubs(false)}
+          onAdded={addedSubtitles}
+        />
+      )}
 
       {next && remaining > 0 && remaining < NEXT_UP_SECONDS && (
         <button className="btn primary next-up" data-nav onClick={playNext}>

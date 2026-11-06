@@ -14,6 +14,8 @@ export interface Session {
   userId: string;
   userName?: string;
   isAdmin?: boolean;
+  /** Policy.EnableSubtitleManagement (undefined on sessions stored before this was recorded). */
+  canManageSubtitles?: boolean;
 }
 
 export interface UserData {
@@ -40,6 +42,7 @@ export interface MediaStream {
   Language?: string;
   DisplayTitle?: string;
   Title?: string;
+  Path?: string;
   IsDefault?: boolean;
   IsForced?: boolean;
   IsExternal?: boolean;
@@ -194,11 +197,11 @@ export function uid(): string {
 
 interface AuthResult {
   AccessToken: string;
-  User: { Id: string; Name: string; Policy?: { IsAdministrator?: boolean } };
+  User: { Id: string; Name: string; Policy?: { IsAdministrator?: boolean; EnableSubtitleManagement?: boolean } };
 }
 
 function storeAuth(r: AuthResult) {
-  setSession({ token: r.AccessToken, userId: r.User.Id, userName: r.User.Name, isAdmin: !!r.User.Policy?.IsAdministrator });
+  setSession({ token: r.AccessToken, userId: r.User.Id, userName: r.User.Name, isAdmin: !!r.User.Policy?.IsAdministrator, canManageSubtitles: !!r.User.Policy?.EnableSubtitleManagement });
 }
 
 export async function login(username: string, password: string) {
