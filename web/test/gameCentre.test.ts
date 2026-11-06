@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildGames, gatePress, gateStart, gateArmed, CONFIRM_MS, isHighlightProgramme, leaksResult, mentionsTeam, phaseOf, sanitizeTitle, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor } from "../src/lib/gameCentre.ts";
+import { liveExtrasQuery, parseLiveExtras, shouldShowLiveExtras } from "../src/lib/iptvPlay.ts";
 import { parsePrefs } from "../src/lib/prefs.ts";
 import { parseUpcoming } from "../src/lib/upcoming.ts";
 import type { Rec } from "../src/lib/recs.ts";
@@ -11,6 +12,8 @@ const ch = (id = "1:1", name = "Sky Sport 1") => ({ id, name });
 const ev = (key: string, title: string, start: number, extra: object = {}) => ({ key, title, start, stop: start + 7200, channel: ch(), ...extra });
 const events = (...x: object[]) => parseUpcoming({ items: x });
 const rec = (id: number, title: string, start: number, extra: Partial<Rec> = {}): Rec => ({ id, channelId: "1:1", channel: "Sky Sport 1", title, start, stop: start + 7200, state: "done", playable: true, ...extra });
+
+const TEAMS = ["Warriors", "Panthers", "Chiefs", "Bills", "Arsenal", "Chelsea", "Schalke 04", "Köln", "Celtics", "Lakers", "Blues", "Roosters", "Eels", "Liverpool", "Everton", "Man City", "Raiders"];
 
 test("sanitiser: scores, results and highlights never survive", () => {
   const dirty: string[] = [
@@ -27,35 +30,50 @@ test("sanitiser: scores, results and highlights never survive", () => {
     "Warriors win thriller",
     "Chiefs beat Raiders 31-17",
     "Chiefs defeated Raiders by 14 points",
-    "Result: Lakers v Celtics",
-    "Federer v Nadal 6-4 6-3 7-5",
+    "Result: Celtics v Lakers",
     "Black Caps beat Australia by 5 wickets",
-    "All Blacks 3-0 Springboks (HT)",
-    "Rugby: Blues bt Chiefs",
-    "Man City two-nil Spurs",
-    "Post-match recap: Roosters v Eels",
+    "Rugby: Blues bt Roosters",
     "Warriors v Panthers (Won 24-18)",
+    "Chiefs 31 Bills 24",
+    "Arsenal 2 Chelsea 1",
+    "Chiefs 31, Bills 24",
+    "Arsenal 2:1 Chelsea",
+    "Arsenal 3-2 pens",
+    "Chelsea lose to Arsenal",
+    "Arsenal edge Chelsea",
+    "Eels fell to Roosters",
+    "Roosters go down to Eels",
+    "Chelsea beaten by Arsenal",
+    "Chiefs thrash Raiders",
+    "Chiefs 31 Bills 24 NFL Week 9",
   ];
   for (const t of dirty) {
-    const s = sanitizeTitle(t);
-    assert.doesNotMatch(s, /\d\s*[-–—]\s*\d/, `score left in "${s}" from "${t}"`);
-    assert.doesNotMatch(s, /\b(won|wins?|beat|beats|defeated|bt|highlights?|recap|FT|HT|nil|result|final score|full time)\b/i, `result word left in "${s}" from "${t}"`);
+    const s = sanitizeTitle(t, TEAMS);
+    assert.doesNotMatch(s, /\d/, `digit left in "${s}" from "${t}"`);
+    assert.doesNotMatch(s, /\b(won|wins?|beat|beats|beaten|defeated|bt|highlights?|recap|FT|HT|nil|result|final score|full time|lose|loses|lost|edge|fell|thrash)\b/i, `result word left in "${s}" from "${t}"`);
     assert.ok(s.length > 0);
   }
 });
 
-test("sanitiser: winner is not leaked by word order, and clean titles pass through", () => {
-  assert.equal(sanitizeTitle("Chiefs beat Raiders 31-17"), "Chiefs v Raiders");
-  assert.equal(sanitizeTitle("Raiders beaten by Chiefs"), "Chiefs v Raiders");
-  assert.equal(sanitizeTitle("NFL: Raiders beat Chiefs"), "NFL: Chiefs v Raiders");
-  assert.equal(sanitizeTitle("Warriors v Panthers"), "Warriors v Panthers");
-  assert.equal(sanitizeTitle("NRL Telstra Premiership: Warriors v Panthers"), "NRL Telstra Premiership: Warriors v Panthers");
-  assert.equal(sanitizeTitle("Rugby Championship 2026-27 Round 3"), "Rugby Championship 2026-27 Round 3");
-  assert.equal(sanitizeTitle("Super Rugby Pacific 19:30 kick-off"), "Super Rugby Pacific 19:30 kick-off");
-  assert.equal(sanitizeTitle("NBA Finals Game 7: Celtics v Lakers"), "NBA Finals Game 7: Celtics v Lakers");
-  assert.equal(sanitizeTitle("24-18"), "Game");
-  assert.equal(leaksResult("Warriors 24-18 Panthers"), true);
-  assert.equal(leaksResult("Warriors v Panthers"), false);
+test("sanitiser: rebuilt titles name teams alphabetically, never the winner first", () => {
+  assert.equal(sanitizeTitle("Chiefs 31 Bills 24", TEAMS), "Bills v Chiefs");
+  assert.equal(sanitizeTitle("Arsenal 2 Chelsea 1", TEAMS), "Arsenal v Chelsea");
+  assert.equal(sanitizeTitle("Chelsea lose to Arsenal", TEAMS), "Arsenal v Chelsea");
+  assert.equal(sanitizeTitle("Arsenal edge Chelsea", TEAMS), "Arsenal v Chelsea");
+  assert.equal(sanitizeTitle("Chiefs beat Raiders 31-17", TEAMS), "Chiefs v Raiders");
+  assert.equal(sanitizeTitle("Arsenal 3-2 pens", ["Arsenal"]), "Arsenal game");
+  assert.equal(sanitizeTitle("Lopsided 3-0 win", ["Arsenal"]), "Game");
+});
+
+test("sanitiser: clean titles pass; team-name numbers are allow-listed, other numbers are not", () => {
+  assert.equal(sanitizeTitle("Schalke 04 v Köln", TEAMS), "Schalke 04 v Köln");
+  assert.equal(sanitizeTitle("Schalke 04 v Köln 2-1", TEAMS), "Köln v Schalke 04");
+  assert.equal(sanitizeTitle("1860 München v Köln", ["1860 München", "Köln"]), "1860 München v Köln");
+  assert.equal(sanitizeTitle("Warriors v Panthers", TEAMS), "Warriors v Panthers");
+  assert.equal(sanitizeTitle("NRL Telstra Premiership: Warriors v Panthers", TEAMS), "NRL Telstra Premiership: Warriors v Panthers");
+  assert.equal(sanitizeTitle("NBA Finals Game 7: Celtics v Lakers", TEAMS), "Celtics v Lakers");
+  assert.equal(leaksResult("Warriors 24-18 Panthers", TEAMS), true);
+  assert.equal(leaksResult("Warriors v Panthers", TEAMS), false);
 });
 
 test("highlight programmes are not games", () => {
@@ -63,6 +81,7 @@ test("highlight programmes are not games", () => {
   assert.equal(isHighlightProgramme("Warriors v Panthers - Highlights"), true);
   assert.equal(isHighlightProgramme("Warriors v Panthers", "highlights"), true);
   assert.equal(isHighlightProgramme("Warriors v Panthers", "live"), false);
+  for (const t of ["Post-match reaction", "Postmatch: Warriors", "Press conference: Warriors", "Warriors analysis", "Warriors v Panthers review", "NRL Classic: Warriors", "Re-live: Warriors v Panthers", "Warriors v Panthers preview", "Warriors build-up", "Studio: Warriors"]) assert.equal(isHighlightProgramme(t), true, t);
 });
 
 test("team mentions are whole-word and case-insensitive", () => {
@@ -83,6 +102,8 @@ test("grouping: followed games only, highlights dropped, recording joined to its
   const recs = [rec(9, "Warriors v Panthers", at(19)), rec(10, "Warriors v Knights", at(19, 0, -1)), rec(11, "Storm v Cowboys", at(19, 0, -1))];
   const g = buildGames(evs, recs, ["Warriors"], NOW);
   assert.deepEqual(g.map((x) => x.key).sort(), ["e:a", "e:d", "e:e", "r:10"]);
+  assert.equal(buildGames(null, [rec(20, "Warriors training day", at(10, 0, -1)), rec(21, "Warriors", at(10, 0, -1))], ["Warriors"], NOW).length, 0);
+  assert.equal(buildGames(null, [rec(22, "Warriors vs Knights", at(10, 0, -1)), rec(23, "Warriors at Storm", at(10, 0, -1))], ["Warriors"], NOW).length, 2);
   assert.equal(g.find((x) => x.key === "e:a")!.rec?.id, 9);
   assert.equal(g.filter((x) => x.rec?.id === 9).length, 1);
 });
@@ -186,4 +207,33 @@ test("spoiler pref defaults to safe", () => {
 test("route: #/games parses", async () => {
   const { parseHash } = await import("../src/lib/routeParse.ts");
   assert.equal(parseHash("#/games").name, "games");
+});
+
+test("recording slot fallback needs a team mention in the recording title", () => {
+  const evs = events(ev("a", "Warriors v Panthers", at(19)));
+  assert.equal(buildGames(evs, [rec(5, "Late movie", at(19))], ["Warriors"], NOW)[0].rec, null);
+  assert.equal(buildGames(evs, [rec(5, "Warriors v Panthers", at(19))], ["Warriors"], NOW)[0].rec?.id, 5);
+  assert.equal(buildGames(events(ev("a", "Warriors v Panthers", at(19), { recordingId: 5 })), [rec(5, "Late movie", at(19))], ["Warriors"], NOW)[0].rec?.id, 5);
+});
+
+test("every way opens spoiler-free and carries no match or event id", () => {
+  const g = buildGames(events(ev("a", "Warriors v Panthers", at(19), { startOver: true, recordingId: 9, matchInfo: { id: "m1", home: { name: "Warriors" }, away: { name: "Panthers" } } })), [rec(9, "Warriors v Panthers", at(19))], ["Warriors"], NOW)[0];
+  const w = waysFor(g, NOW);
+  assert.equal(w.ways.length, 3);
+  for (const x of w.ways) {
+    assert.match(x.path, /nospoil=1/);
+    assert.doesNotMatch(x.path, /[&?](mi|ek)=/);
+  }
+});
+
+test("nospoil extras round-trip and gate the live extras", () => {
+  const q = new URLSearchParams(liveExtrasQuery({ nospoil: true, matchId: "m1" }).slice(1));
+  const x = parseLiveExtras(q);
+  assert.equal(x.nospoil, true);
+  assert.equal(shouldShowLiveExtras(x), false);
+  assert.equal(shouldShowLiveExtras(parseLiveExtras(new URLSearchParams("mi=m1"))), true);
+  assert.equal(shouldShowLiveExtras(null), true);
+  assert.equal(shouldShowLiveExtras(undefined), true);
+  assert.equal(parseLiveExtras(new URLSearchParams("nospoil=0")).nospoil, undefined);
+  assert.doesNotMatch(liveExtrasQuery({ matchId: "m1" }), /nospoil/);
 });

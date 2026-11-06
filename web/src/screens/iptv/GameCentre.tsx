@@ -31,9 +31,9 @@ function GameCard({ g, now, pref, shown, scoreLine, gate, onPress }: { g: Game; 
             {x.label}
           </button>
         ))}
-        {!pref && !shown && w.phase !== "upcoming" && (
-          <button className="btn small gc-reveal" data-nav onClick={onPress} aria-label={`Reveal score for ${g.title}`}>
-            {armed ? "Press again to reveal" : "Reveal score"}
+        {!pref && w.phase !== "upcoming" && (
+          <button className="btn small gc-reveal" data-nav aria-disabled={shown || undefined} onClick={shown ? undefined : onPress} aria-label={shown ? `Score shown for ${g.title}` : `Reveal score for ${g.title}`}>
+            {shown ? "Score shown" : armed ? "Press again to reveal" : "Reveal score"}
           </button>
         )}
       </div>

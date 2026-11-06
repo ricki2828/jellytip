@@ -9,47 +9,38 @@ import type { UpEvent } from "./upcoming.ts";
 
 // ---------- title sanitiser ----------
 
-const VERBS = "beats?|beating|beaten by|defeated|defeats?|bt\\.?|def\\.|d\\.|thrash(?:es|ed)?|stuns?|stunned|crush(?:es|ed)?|rout(?:s|ed)?|upsets?|edges? past|edged|edge out|hammer(?:s|ed)?|overcomes?|overcame|outlast(?:s|ed)?|sink(?:s)?|sunk|oust(?:s|ed)?|dispatch(?:es|ed)?|see off|sees off|saw off|hold off|holds off";
-const BEAT_RE = new RegExp(`^(.{2,50}?)\\s+(?:${VERBS})\\s+(.{2,50}?)$`, "i");
-const NUM_SCORE = /(?<![\d:.\/-])\d{1,3}\s*[-–—]\s*\d{1,3}(?![\d:.\/-])/g;
-const BRACKETED = /[(\[][^)\]]*(?:\d+\s*[-–—:]\s*\d+|\bFT\b|\bHT\b|\bAET\b|\bpens?\b|\bwon\b|\bwin\b|\bbeat\b|\bfinal score\b|\bresult)[^)\]]*[)\]]/gi;
-const MARGIN = /\bby\s+\d+\s+(?:points?|pts|goals?|tries|runs?|wickets?|games?|sets?|lengths?|strokes?|seconds?)\b/gi;
-const NIL = /\b(?:\w+[-\s])?(?:nil|zip)(?:[-\s]\w+)?\b(?=\s*(?:draw|win|victory|result|$|[)\]:,.]))/gi;
-const WORDS = /\b(?:full[-\s]?time(?:\s+score)?|final\s+score|half[-\s]?time\s+score|ft|ht|aet|won|wins?|winning|winners?|victory|victories|triumph|triumphs|loses|lost|losses|defeat|result|results|scoreline|highlights?|recap|goals? of the (?:game|match)|man of the match|player ratings)\b/gi;
+const VERBS = "beats?|beating|beaten(?: by)?|defeated|defeats?|bt\\.?|def\\.|d\\.|thrash(?:es|ed)?|stuns?|stunned|crush(?:es|ed)?|rout(?:s|ed)?|upsets?|edges?|edged|hammer(?:s|ed)?|overcomes?|overcame|outlast(?:s|ed)?|sink(?:s)?|sunk|oust(?:s|ed)?|dispatch(?:es|ed)?|sees? off|saw off|holds? off|lose|loses|lost|loss|falls?|fell|go(?:es)? down|went down";
+const VERB_RE = new RegExp(`\\b(?:${VERBS})\\b`, "i");
+const BRACKETED = /[(\[][^)\]]*(?:\d|\bFT\b|\bHT\b|\bAET\b|\bpens?\b|\bwon\b|\bwin\b|\bbeat\b|\bfinal score\b|\bresult)[^)\]]*[)\]]/i;
+const RESULT_WORDS = /\b(?:full[-\s]?time|final\s+score|half[-\s]?time|ft|ht|aet|pens|penalties|won|wins?|winning|winners?|victory|triumph|result|results|scoreline|nil|zip|points?|goals?|wickets?|tries|runs|highlights?|recap)\b/i;
+const STANDALONE_NUM = /(?<![\p{L}\p{N}])\d+(?![\p{L}\p{N}])/gu;
 
-/** Programmes that are a digest of a game, not the game: kept off the screen altogether (they carry the result). */
+/** Programmes that are a digest, reaction or build-up around a game, not the game: kept off the screen (they carry or invite the result). */
 export const isHighlightProgramme = (title: string, kind?: string | null): boolean =>
-  kind === "highlights" || /\b(highlights?|recap|match of the day|the review|round[-\s]?up|best bits|goals? of the)\b/i.test(title);
+  kind === "highlights" || /\b(highlights?|recap|match of the day|the review|round[-\s]?up|best bits|goals? of the|post[-\s]?match|reactions?|press conference|analysis|reviews?|classic|re[-\s]?live|previews?|build[-\s]?up|studio)\b/i.test(title);
 
-const tidy = (s: string) =>
-  s
-    .replace(/\(\s*\)|\[\s*\]/g, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([,.:;)])/g, "$1")
-    .replace(/([:;])\s*[-–—,:;]+\s*/g, "$1 ")
-    .replace(/\s*[-–—|:,]\s*([-–—|:,]\s*)+/g, " - ")
-    .replace(/^[\s:–—|,-]+|[\s:–—|,-]+$/g, "")
-    .trim();
+const tidy = (s: string) => s.replace(/\s{2,}/g, " ").trim();
 
-/** A title safe to show: scores, results, winners and "highlights" taken out. "A beat B" becomes "A v B" in alphabetical order (the order must not name the winner). */
-export function sanitizeTitle(raw: string): string {
-  let t = raw.normalize("NFKC");
-  t = t.replace(BRACKETED, " ").replace(NUM_SCORE, " ").replace(MARGIN, " ").replace(NIL, " ");
-  t = tidy(t);
-  // "League: A beat B" keeps its prefix
-  const colon = t.match(/^([^:]{2,40}:\s*)(.+)$/);
-  const [prefix, body] = colon && BEAT_RE.test(colon[2]) ? [colon[1], colon[2]] : ["", t];
-  const m = body.match(BEAT_RE);
-  if (m) {
-    const [a, b] = [tidy(m[1].replace(WORDS, " ")), tidy(m[2].replace(WORDS, " "))].sort((x, y) => x.localeCompare(y));
-    t = `${prefix}${a} v ${b}`;
-  }
-  t = tidy(t.replace(WORDS, " "));
-  return t || "Game";
+const dedupe = (names: string[]) => [...new Map(names.map((n) => [norm(n), n])).values()];
+const numbersIn = (names: string[]) => new Set(names.flatMap((n) => n.match(/\d+/g) ?? []));
+
+/**
+ * A title safe to show. Allow-list: a title shows as written only when it has no number outside the followed teams' own
+ * names ("Schalke 04"), no result verb or word and no bracketed note. Otherwise it is rebuilt from the followed teams it
+ * names alone: "Arsenal v Chelsea" (alphabetical, so the order never names the winner), "Arsenal game", or "Game".
+ */
+export function sanitizeTitle(raw: string, teams: string[] = []): string {
+  const t = tidy(raw.normalize("NFKC"));
+  const allow = numbersIn(teams);
+  const extra = (t.match(STANDALONE_NUM) ?? []).some((n) => !allow.has(n));
+  if (t && !extra && !VERB_RE.test(t) && !RESULT_WORDS.test(t) && !BRACKETED.test(t) && !/[-–—]\s*\d|\d\s*[-–—:]/.test(t.replace(/\b\d{4}\b/g, ""))) return t;
+  const named = dedupe(teams.filter((n) => mentionsTeam(t, [n]))).sort((x, y) => x.localeCompare(y));
+  if (named.length >= 2) return `${named[0]} v ${named[1]}`;
+  return named.length === 1 ? `${named[0]} game` : "Game";
 }
 
 /** Whether sanitising changed the title (it carried a score, result or highlights marker). */
-export const leaksResult = (raw: string): boolean => sanitizeTitle(raw) !== tidy(raw.normalize("NFKC"));
+export const leaksResult = (raw: string, teams: string[] = []): boolean => sanitizeTitle(raw, teams) !== tidy(raw.normalize("NFKC"));
 
 // ---------- the spoiler pref and the reveal gate ----------
 
@@ -115,11 +106,13 @@ export function mentionsTeam(text: string, teams: string[]): boolean {
 
 const eventText = (e: UpEvent) => [e.title, e.fixture?.home.name, e.fixture?.away.name, ...(e.fixture?.participants ?? [])].filter(Boolean).join(" | ");
 
-function gameTitle(raw: string, f: Fixture | null | undefined): string {
+function gameTitle(raw: string, f: Fixture | null | undefined, teams: string[]): string {
   if (f && f.kind === "match" && f.home.name && f.away.name) return `${f.home.name} v ${f.away.name}`;
-  return sanitizeTitle(raw);
+  return sanitizeTitle(raw, teams);
 }
 
+/** A recording title that reads as a fixture: "A v B", "A vs B", "A at B". */
+const GAME_SEP = /\s(?:v|vs\.?|versus|at|@)\s/i;
 const SAME_SLOT_S = 15 * 60;
 export const WINDOW_DAYS = 4;
 
@@ -128,6 +121,7 @@ export function buildGames(events: UpEvent[] | null, recs: Rec[] | null, teams: 
   const out: Game[] = [];
   const usedRecs = new Set<string>();
   const from = now - WINDOW_DAYS * 86400;
+  const leagues = [...new Set((events ?? []).map((e) => e.fixture?.league ?? e.league).filter((l): l is string => !!l))];
   const eligible = (events ?? []).filter((e) => e.stop >= from && !isHighlightProgramme(e.title, e.kind) && (e.favourite || mentionsTeam(eventText(e), teams)));
   // A recording belongs to the event that names it; failing that, to one that airs in the same slot on the same channel (first come)
   const claimed = new Map<string, Rec>();
@@ -137,18 +131,18 @@ export function buildGames(events: UpEvent[] | null, recs: Rec[] | null, teams: 
   }
   for (const e of eligible) {
     if (claimed.has(e.key)) continue;
-    const r = (recs ?? []).find((x) => x.channelId === e.channels[0]?.id && Math.abs(x.start - e.start) <= SAME_SLOT_S && ![...claimed.values()].includes(x));
+    const r = (recs ?? []).find((x) => x.channelId === e.channels[0]?.id && Math.abs(x.start - e.start) <= SAME_SLOT_S && mentionsTeam(x.title, teams) && ![...claimed.values()].includes(x));
     if (r) claimed.set(e.key, r);
   }
   for (const e of eligible) {
     const rec = claimed.get(e.key) ?? null;
     if (rec) usedRecs.add(String(rec.id));
-    out.push({ key: `e:${e.key}`, title: gameTitle(e.title, e.fixture), league: e.league ?? e.fixture?.league ?? null, start: e.start, stop: e.stop, channel: e.channels[0]?.name ?? null, event: e, rec, fixture: e.fixture ?? null });
+    out.push({ key: `e:${e.key}`, title: gameTitle(e.title, e.fixture, teams), league: e.league ?? e.fixture?.league ?? null, start: e.start, stop: e.stop, channel: e.channels[0]?.name ?? null, event: e, rec, fixture: e.fixture ?? null });
   }
   for (const r of recs ?? []) {
     if (usedRecs.has(String(r.id)) || (r.state !== "done" && r.state !== "recording")) continue;
-    if (r.stop < from || isHighlightProgramme(r.title) || !mentionsTeam(r.title, teams)) continue;
-    out.push({ key: `r:${r.id}`, title: sanitizeTitle(r.title), league: null, start: r.start, stop: r.stop, channel: r.channel || null, event: null, rec: r, fixture: null });
+    if (r.stop < from || isHighlightProgramme(r.title) || !mentionsTeam(r.title, teams) || !(GAME_SEP.test(r.title) || leagues.some((l) => mentionsTeam(r.title, [l])))) continue;
+    out.push({ key: `r:${r.id}`, title: sanitizeTitle(r.title, teams), league: null, start: r.start, stop: r.stop, channel: r.channel || null, event: null, rec: r, fixture: null });
   }
   return out;
 }
@@ -176,7 +170,7 @@ export function agoText(secs: number): string {
   return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""} ago` : `${m} min ago`;
 }
 
-const extrasOf = (g: Game, via: string): LiveExtras => ({ eventKey: g.event?.key ?? null, matchId: g.fixture?.id ?? null, replay: !!g.fixture?.replay, alternates: (g.event?.channels ?? []).filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })) });
+const extrasOf = (g: Game, via: string): LiveExtras => ({ nospoil: true, alternates: (g.event?.channels ?? []).filter((c) => c.id !== via).map((c) => ({ id: c.id, name: c.name })) });
 
 export interface Ways {
   phase: Phase;
@@ -193,7 +187,7 @@ export function waysFor(g: Game, now: number): Ways {
   const best = g.event?.channels[0] ?? null;
   const ways: Way[] = [];
   if (g.rec && g.rec.playable !== false && (g.rec.state === "done" || g.rec.state === "recording"))
-    ways.push({ kind: "recording", label: "Your recording, from the start", path: `${targetPath({ recording: String(g.rec.id) })}&t=${t}` });
+    ways.push({ kind: "recording", label: "Your recording, from the start", path: `${targetPath({ recording: String(g.rec.id) })}&t=${t}${liveExtrasQuery({ nospoil: true })}` });
   if (g.event?.startOver && best && phase !== "upcoming")
     ways.push({ kind: "catchup", label: `Catch-up on ${best.name}, from the start`, path: `${targetPath({ channel: best.id, start: g.start, stop: g.stop })}&t=${t}${liveExtrasQuery(extrasOf(g, best.id))}` });
   if (phase === "live" && best) ways.push({ kind: "live", label: `Live on ${best.name}`, path: `${targetPath({ channel: best.id })}&t=${t}${liveExtrasQuery(extrasOf(g, best.id))}` });
