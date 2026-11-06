@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
+import { FLOOD_LIMIT, MAX_SERIES, addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
 
 const NOW = 1_800_000_000_000;
 const ep = (id: string, n: number, at = NOW - 1000) => ({ id, show: "Show", season: 2, episode: n, at });
@@ -54,10 +54,13 @@ test("dedupe: the same arrival seen twice, or detected again after a drop and re
   s = applyObservation(s, { titles: { "movie:1": title(0) } }, NOW + 2);
   s = applyObservation(s, up, NOW + 3);
   assert.equal(s.events.length, 1);
-  // read state survives a duplicate
+  // read state survives a duplicate, whichever copy comes first
   const read = markAllRead(s);
-  const merged = tidyEvents([{ ...read.events[0], read: false }, ...read.events], NOW + 4);
-  assert.equal(merged.length, 1);
+  for (const order of [[{ ...read.events[0], read: false }, ...read.events], [...read.events, { ...read.events[0], read: false }]]) {
+    const merged = tidyEvents(order, NOW + 4);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].read, true);
+  }
 });
 
 test("a source that failed leaves its part of the snapshot alone; partial IPTV lookups do not drop a known IPTV rank", () => {
@@ -125,4 +128,53 @@ test("throttle and wording helpers", () => {
   assert.equal(eventText({ id: "x", kind: "library", title: "Dune", link: "/", at: 0, read: false }), "Dune is now in your library");
   assert.equal(eventText({ id: "x", kind: "episode", title: "Show", season: 2, episode: 5, link: "/", at: 0, read: false }), "New episode: Show S2E5");
   assert.equal(ago(NOW - 2 * 3600_000, NOW), "2h ago");
+});
+
+test("events are stamped with detection time, not the episode's DateCreated", () => {
+  let s = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1)] } }, NOW);
+  s = applyObservation(s, { eps: { s1: [ep("e2", 2, NOW - 20 * 24 * 3600_000), ep("e1", 1)] } }, NOW + 7);
+  assert.equal(s.events[0].at, NOW + 7);
+});
+
+test("unobserved series carry through; a rescan with changed dates fires nothing", () => {
+  let s = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1)], s2: [ep("f1", 1)] } }, NOW);
+  s = applyObservation(s, { eps: { s2: [ep("f1", 1)] } }, NOW + 1); // s1 not asked this time
+  assert.deepEqual(s.snap.eps.s1, ["e1"]);
+  s = applyObservation(s, { eps: { s1: [ep("e2", 2), ep("e1", 1)] } }, NOW + 2); // a finished series gets an episode
+  assert.deepEqual(s.events.map((e) => e.id), ["ep:e2"]);
+  const again = applyObservation(s, { eps: { s1: [ep("e2", 2, 5), ep("e1", 1, 9)], s2: [ep("f1", 1, 123)] } }, NOW + 3);
+  assert.equal(again.events.length, 1);
+});
+
+test("series cap drops the least recently touched", () => {
+  const eps: Record<string, ReturnType<typeof ep>[]> = {};
+  for (let i = 0; i < MAX_SERIES + 5; i++) eps[`s${i}`] = [ep(`e${i}`, 1)];
+  const s = applyObservation(emptyStore("u"), { eps }, NOW);
+  assert.equal(Object.keys(s.snap.eps).length, MAX_SERIES);
+  assert.equal(s.snap.eps.s0, undefined);
+});
+
+test("several new episodes of one show are one grouped event", () => {
+  let s = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1)] } }, NOW);
+  s = applyObservation(s, { eps: { s1: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ep(`e${n}`, n)) } }, NOW + 1);
+  assert.equal(s.events.length, 1);
+  assert.equal(eventText(s.events[0]), "Show: 8 new episodes");
+  assert.equal(s.events[0].link, "/item/s1");
+});
+
+test("flood guard: more than 20 events in one look collapse to one summary", () => {
+  const seed: Record<string, ReturnType<typeof ep>[]> = {};
+  const next: Record<string, ReturnType<typeof ep>[]> = {};
+  for (let i = 0; i < FLOOD_LIMIT + 1; i++) {
+    seed[`s${i}`] = [ep(`a${i}`, 1)];
+    next[`s${i}`] = [ep(`b${i}`, 2), ep(`a${i}`, 1)];
+  }
+  let s = applyObservation(emptyStore("u"), { eps: seed }, NOW);
+  s = applyObservation(s, { eps: next }, NOW + 1);
+  assert.equal(s.events.length, 1);
+  assert.equal(s.events[0].kind, "summary");
+  assert.equal(s.events[0].count, FLOOD_LIMIT + 1);
+  // at the limit it stays itemised
+  const small = applyObservation(applyObservation(emptyStore("u"), { eps: { s0: [ep("a", 1)] } }, NOW), { eps: { s0: [ep("b", 2), ep("a", 1)] } }, NOW + 1);
+  assert.equal(small.events[0].kind, "episode");
 });

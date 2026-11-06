@@ -8,12 +8,15 @@ export const THROTTLE_MS = 15 * 60_000;
 export const MAX_EVENTS = 200;
 export const MAX_TITLES = 500;
 export const MAX_EPS_PER_SERIES = 150;
-export const MAX_SERIES = 200;
+export const MAX_SERIES = 300;
+export const MAX_CHECKED = 800;
+/** More arrivals than this in one look collapse into a single summary event. */
+export const FLOOD_LIMIT = 20;
 export const MAX_REQUESTS = 100;
 
 /** 0 = not available anywhere the person can watch, 1 = on their IPTV, 2 = in the Jellyfin library. */
 export type Rank = 0 | 1 | 2;
-export type EventKind = "library" | "iptv" | "episode";
+export type EventKind = "library" | "iptv" | "episode" | "episodes" | "summary";
 
 export interface InboxEvent {
   /** Dedupe key: one event per (kind, title / episode). */
@@ -24,6 +27,8 @@ export interface InboxEvent {
   requested?: boolean;
   season?: number;
   episode?: number;
+  /** episodes / summary: how many arrivals this event stands for. */
+  count?: number;
   /** Where the event opens (a route path). */
   link: string;
   at: number;
@@ -52,6 +57,8 @@ export interface Store {
   snap: Snapshot;
   events: InboxEvent[];
   requests: RequestRec[];
+  /** key (series id or title key) → when its IPTV / episode lookup last ran, so capped looks go round-robin. */
+  checked: Record<string, number>;
 }
 
 export interface ObservedTitle {
@@ -77,11 +84,13 @@ export interface Observed {
   titles?: Record<string, ObservedTitle>;
   /** Series id → that series' newest episodes (every followed series is a key, even with none). */
   eps?: Record<string, ObservedEpisode[]>;
+  /** Keys looked up this time (series ids, title keys). */
+  checked?: string[];
 }
 
 export const reqKey = (media: "movie" | "tv", tmdbId: number) => `${media}:${tmdbId}`;
 
-export const emptyStore = (userId: string): Store => ({ v: 1, userId, seeded: false, lastRefresh: 0, snap: { titles: {}, eps: {} }, events: [], requests: [] });
+export const emptyStore = (userId: string): Store => ({ v: 1, userId, seeded: false, lastRefresh: 0, snap: { titles: {}, eps: {} }, events: [], requests: [], checked: {} });
 
 /** Parse what localStorage held for this person. Another person's data, junk and old shapes all come back empty. */
 export function parseStore(raw: string | null, userId: string): Store {
@@ -89,7 +98,7 @@ export function parseStore(raw: string | null, userId: string): Store {
   try {
     const o = JSON.parse(raw) as Partial<Store> | null;
     if (!o || o.v !== 1 || o.userId !== userId || !o.snap || !Array.isArray(o.events) || !Array.isArray(o.requests)) return emptyStore(userId);
-    const events = o.events.filter((e): e is InboxEvent => !!e && typeof e.id === "string" && typeof e.title === "string" && typeof e.at === "number" && typeof e.link === "string" && (e.kind === "library" || e.kind === "iptv" || e.kind === "episode")).map((e) => ({ ...e, read: e.read === true }));
+    const events = o.events.filter((e): e is InboxEvent => !!e && typeof e.id === "string" && typeof e.title === "string" && typeof e.at === "number" && typeof e.link === "string" && ["library", "iptv", "episode", "episodes", "summary"].includes(e.kind)).map((e) => ({ ...e, read: e.read === true }));
     const requests = o.requests.filter((r): r is RequestRec => !!r && typeof r.key === "string" && typeof r.tmdbId === "number" && typeof r.title === "string" && typeof r.at === "number" && (r.media === "movie" || r.media === "tv"));
     return {
       v: 1,
@@ -99,6 +108,7 @@ export function parseStore(raw: string | null, userId: string): Store {
       snap: { titles: o.snap.titles && typeof o.snap.titles === "object" ? o.snap.titles : {}, eps: o.snap.eps && typeof o.snap.eps === "object" ? o.snap.eps : {} },
       events,
       requests,
+      checked: o.checked && typeof o.checked === "object" ? o.checked : {},
     };
   } catch {
     return emptyStore(userId);
@@ -113,8 +123,8 @@ export function tidyEvents(events: InboxEvent[], now: number): InboxEvent[] {
   for (const e of events) {
     if (now - e.at > EXPIRY_MS) continue;
     const prev = seen.get(e.id);
-    if (!prev) seen.set(e.id, e);
-    else if (prev.read && !e.read) continue; // keep what the person already read as read
+    // Same key twice: one event, read if either copy was read, dated by the earliest detection
+    seen.set(e.id, prev ? { ...prev, read: prev.read || e.read, at: Math.min(prev.at, e.at) } : e);
   }
   return [...seen.values()].sort((a, b) => b.at - a.at).slice(0, MAX_EVENTS);
 }
@@ -149,30 +159,42 @@ export function applyObservation(s: Store, obs: Observed, now: number): Store {
       else if (r === 1 && o.iptvId) fresh.push({ id: `iptv:${key}`, kind: "iptv", title: o.title, requested: o.requested || undefined, link: `/iptv/item?id=${encodeURIComponent(o.iptvId)}`, at: now, read: false });
     }
   }
-  const eps: Snapshot["eps"] = obs.eps ? {} : { ...s.snap.eps };
+  // Series not looked at this time (not followed any more, or past this look's cap) are carried through untouched
+  let eps: Snapshot["eps"] = { ...s.snap.eps };
   if (obs.eps) {
     for (const [sid, list] of Object.entries(obs.eps)) {
       const prev = s.snap.eps[sid];
       const ids = list.slice().sort((a, b) => b.at - a.at).map((e) => e.id);
       if (!first && prev) {
         const known = new Set(prev);
-        for (const e of list) {
-          if (known.has(e.id)) continue;
-          fresh.push({ id: `ep:${e.id}`, kind: "episode", title: e.show, season: e.season, episode: e.episode, link: `/item/${e.id}`, at: Math.min(now, e.at > 0 ? e.at : now), read: false });
+        const added = list.filter((e) => !known.has(e.id));
+        if (added.length === 1) {
+          const e = added[0];
+          fresh.push({ id: `ep:${e.id}`, kind: "episode", title: e.show, season: e.season, episode: e.episode, link: `/item/${e.id}`, at: now, read: false });
+        } else if (added.length > 1) {
+          const key = added.map((e) => e.id).sort();
+          fresh.push({ id: `eps:${sid}:${key[0]}:${key.length}`, kind: "episodes", title: added[0].show, count: added.length, link: `/item/${sid}`, at: now, read: false });
         }
       }
+      delete eps[sid]; // re-insert last: the oldest-touched series are the ones the size cap drops
       eps[sid] = [...new Set([...ids, ...(prev ?? [])])].slice(0, MAX_EPS_PER_SERIES);
     }
   }
   const capped = (o: Snapshot["titles"]) => (Object.keys(o).length > MAX_TITLES ? Object.fromEntries(Object.entries(o).slice(-MAX_TITLES)) : o);
-  const seriesKeys = Object.keys(eps);
-  const cappedEps = seriesKeys.length > MAX_SERIES ? Object.fromEntries(Object.entries(eps).slice(-MAX_SERIES)) : eps;
+  const cappedEps = Object.keys(eps).length > MAX_SERIES ? Object.fromEntries(Object.entries(eps).slice(-MAX_SERIES)) : eps;
+  const checked = { ...s.checked };
+  for (const k of obs.checked ?? []) checked[k] = now;
+  const cappedChecked = Object.keys(checked).length > MAX_CHECKED ? Object.fromEntries(Object.entries(checked).sort((a, b) => a[1] - b[1]).slice(-MAX_CHECKED)) : checked;
+  // A look that found a lot is one summary, not a wall of events
+  const arrivals = fresh.reduce((n, e) => n + (e.count ?? 1), 0);
+  const events = fresh.length > FLOOD_LIMIT ? [{ id: `sum:${now}`, kind: "summary" as const, title: "New arrivals", count: arrivals, link: "/home", at: now, read: false }] : fresh;
   return {
     ...s,
     seeded: true,
     lastRefresh: now,
     snap: { titles: capped(titles), eps: cappedEps },
-    events: tidyEvents([...fresh, ...s.events], now),
+    checked: cappedChecked,
+    events: tidyEvents([...events, ...s.events], now),
   };
 }
 
@@ -184,6 +206,8 @@ export function eventText(e: InboxEvent): string {
     const num = e.season != null && e.episode != null ? ` S${e.season}E${e.episode}` : "";
     return `New episode: ${e.title}${num}`;
   }
+  if (e.kind === "episodes") return `${e.title}: ${e.count} new episodes`;
+  if (e.kind === "summary") return `${e.count} new arrivals for your shows and requests`;
   if (e.kind === "iptv") return `${e.title} is now available via IPTV`;
   return e.requested ? `Your request for ${e.title} is now in your library` : `${e.title} is now in your library`;
 }

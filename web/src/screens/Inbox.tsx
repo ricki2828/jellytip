@@ -15,11 +15,9 @@ export function Inbox() {
     <div className="inbox">
       <div className="inbox-head">
         <h1 className="page-title">Inbox</h1>
-        {unread > 0 && (
-          <button className="btn small" data-nav onClick={markRead}>
-            Mark all read
-          </button>
-        )}
+        <button className="btn small" data-nav disabled={unread === 0} onClick={markRead}>
+          Mark all read
+        </button>
       </div>
       {events.length === 0 ? (
         <p className="empty">Follow or request titles to hear when they arrive.</p>
