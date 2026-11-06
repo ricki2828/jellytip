@@ -37,3 +37,15 @@
   .fantasy-score-changed { animation: fantasy-score-flash .65s ease-out; }
   @keyframes fantasy-score-flash { 0% { color: var(--warm); transform: scale(1.06); } 100% { color: inherit; transform: scale(1); } }
 }
+.fantasy-summary { margin: 16px 0; }
+.fantasy-summary ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.fantasy-summary li { border: 1px solid var(--faint); border-radius: 12px; padding: 14px 16px; background: var(--tile); display: flex; flex-direction: column; gap: 4px; }
+.fantasy-sum-me { border-color: #22C55E !important; }
+.fantasy-sum-league, .fantasy-sum-teams, .fantasy-sum-state, .fantasy-sum-proj, .fantasy-sum-age { color: var(--dim); font-size: .85rem; }
+.fantasy-sum-score { font-size: 1.8rem; }
+.fantasy-sum-age { margin: 8px 0 0; }
+.fantasy-sum-age.stale { color: var(--warm); }
+.fantasy-watch { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 6px; }
+.fantasy-watch-btn { border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; padding: 0 14px; font-size: .85rem; }
+.fantasy-watch-none { color: var(--warm); font-size: .8rem; }
+.fantasy-lead + .fantasy-watch { align-items: flex-start; margin-bottom: 8px; }
