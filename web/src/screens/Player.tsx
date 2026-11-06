@@ -558,6 +558,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const shownCues = subIndex >= 0 ? activeCues(cues, time, delay) : [];
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
   const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
+  const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); if (o) setControls(true); }, []);
   const textSubs = subs.filter((x) => x.IsTextSubtitleStream);
   /** "What did they say?": back ~10 s with captions on, then the previous subtitle state returns once that span has played */
   const replayCaptions = () => {
@@ -677,7 +678,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
 
       <TrackMenu
         open={menu}
-        onOpenChange={(o) => { setMenu(o); if (o) setControls(true); }}
+        onOpenChange={onMenuOpenChange}
         audio={audios.map((a) => ({ id: String(a.Index), label: jellyfinAudioLabel(a), active: a.Index === audioIndex }))}
         subtitles={subs.map((x) => ({ id: String(x.Index), label: subLabel(x) + (x.IsTextSubtitleStream ? "" : " (image, not supported yet)"), active: x.Index === subIndex, disabled: !x.IsTextSubtitleStream }))}
         subtitlesOff={subIndex < 0}

@@ -168,6 +168,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     poke();
   };
 
+  const onTracksOpenChange = useCallback((o: boolean) => {
+    setTracksOpen(o);
+    if (o) { setControls(true); if (hideTimer.current) window.clearTimeout(hideTimer.current); refreshTracks(); }
+  }, [refreshTracks]);
+
   const teardown = useCallback(() => {
     setTracksOpen(false);
     replayRef.current = null;
@@ -789,7 +794,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       </div>
       {state.kind === "playing" && <TrackMenu
         open={tracksOpen}
-        onOpenChange={(o) => { setTracksOpen(o); if (o) { setControls(true); if (hideTimer.current) window.clearTimeout(hideTimer.current); refreshTracks(); } else poke(); }}
+        onOpenChange={onTracksOpenChange}
         audio={audioChoices.map((c) => ({ id: String(c.index), label: audioOptionLabel(c.label), active: c.active }))}
         subtitles={subtitleChoices.map((c) => ({ id: String(c.index), label: c.label, active: c.active }))}
         subtitlesOff={subtitleOff}

@@ -38,6 +38,12 @@ export function TrackMenu(p: TrackMenuProps) {
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
   const wasOpen = useRef(false);
+  const replayBtn = useRef<HTMLButtonElement>(null);
+  const replayDisabled = !!p.replay?.disabled;
+  // A focused replay button that becomes disabled would drop focus to <body>: hand it to the trigger
+  useEffect(() => {
+    if (replayDisabled && document.activeElement === replayBtn.current) trigger.current?.focus();
+  }, [replayDisabled]);
   const items = () => Array.from(menu.current?.querySelectorAll<HTMLElement>("[data-track-item]") ?? []);
 
   // Focus: into the menu on open (active choice first); back to the trigger on close if focus would otherwise be lost.
@@ -110,7 +116,7 @@ export function TrackMenu(p: TrackMenuProps) {
     <>
       <div className={p.barClassName}>
         {p.replay && (
-          <button type="button" className={`${BTN} track-replay`} data-nav disabled={p.replay.disabled} onClick={(e) => { e.stopPropagation(); p.replay!.run(); p.onActivity?.(); }} aria-label="What did they say? Replay the last 10 seconds with captions" title="Replay the last 10 seconds with captions">
+          <button ref={replayBtn} type="button" className={`${BTN} track-replay`} data-nav disabled={p.replay.disabled} onClick={(e) => { e.stopPropagation(); p.replay!.run(); p.onActivity?.(); }} aria-label="What did they say? Replay the last 10 seconds with captions" title="Replay the last 10 seconds with captions">
             What did they say?
           </button>
         )}
@@ -136,7 +142,7 @@ export function TrackMenu(p: TrackMenuProps) {
         <div ref={menu} id={`${id}-menu`} role="menu" aria-label="Audio and subtitles" tabIndex={-1} className={p.menuClassName} onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
           {p.unavailable ? (
             <>
-              <p role="note">{p.unavailable.note}</p>
+              <p role="presentation">{p.unavailable.note}</p>
               {p.unavailable.action && (
                 <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => { close(false); p.unavailable!.action!.run(); }}>
                   {p.unavailable.action.label}
@@ -148,10 +154,10 @@ export function TrackMenu(p: TrackMenuProps) {
               {audio.length > 0 ? (
                 <div role="group" aria-labelledby={`${id}-audio`}>
                   {head("Audio", "audio")}
-                  {selectable ? audio.map((o) => radio(o, "a", () => { close(); p.onPickAudio(o.id); })) : <p role="note">{audio[0].label} (only track)</p>}
+                  {selectable ? audio.map((o) => radio(o, "a", () => { close(); p.onPickAudio(o.id); })) : <p role="presentation">{audio[0].label} (only track)</p>}
                 </div>
               ) : (
-                p.audioEmptyNote && <p role="note">{p.audioEmptyNote}</p>
+                p.audioEmptyNote && <p role="presentation">{p.audioEmptyNote}</p>
               )}
               <div role="group" aria-labelledby={`${id}-subs`}>
                 {head("Subtitles", "subs")}
