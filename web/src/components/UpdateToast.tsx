@@ -52,7 +52,41 @@ export function UpdateToast() {
     };
   }, []);
 
-  if (decideToast({ running: BUILD.sha, latest, routeName: route, dismissedSha: dismissed }) !== "show") return null;
+  const visible = decideToast({ running: BUILD.sha, latest, routeName: route, dismissedSha: dismissed }) === "show";
+
+  // Never takes focus when it appears. While shown: remember what was focused outside it, dismiss on Esc / Back, and when it
+  // goes away with focus inside it, hand focus back (or to the main content if that element is gone).
+  useEffect(() => {
+    if (!visible) return;
+    let prev: HTMLElement | null = null;
+    let inside = false;
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      inside = !!t?.closest?.(".update-toast");
+      if (t && !inside) prev = t;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack") {
+        e.preventDefault();
+        e.stopPropagation();
+        setDismissed(latest?.sha ?? null);
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("keydown", onKey, true);
+      if (!inside) return;
+      const target = prev?.isConnected ? prev : document.querySelector<HTMLElement>("main [data-nav]") ?? document.querySelector<HTMLElement>("main");
+      if (target) {
+        if (!target.matches("[data-nav], button, a, input, [tabindex]")) target.tabIndex = -1;
+        target.focus({ preventScroll: true });
+      }
+    };
+  }, [visible, latest?.sha]);
+
+  if (!visible) return null;
   return (
     <div className="update-toast" role="status">
       <span>A new version is available</span>

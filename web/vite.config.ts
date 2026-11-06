@@ -41,7 +41,7 @@ function buildIdentity() {
   let sha = (process.env.JELLYTIP_BUILD_SHA ?? "").trim();
   if (!sha && existsSync(fileURLToPath(new URL("../.git", import.meta.url))) ) {
     try {
-      sha = execSync("git rev-parse --short HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      sha = execSync("git rev-parse --short=8 HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     } catch {
       // no git binary: fall through
     }

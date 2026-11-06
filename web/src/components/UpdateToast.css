@@ -2,7 +2,7 @@
   position: fixed;
   left: 50%;
   bottom: calc(var(--safe-b, 0px) + 24px);
-  z-index: 70;
+  z-index: 55; /* below bottom sheets / .toast (60) */
   transform: translateX(-50%);
   display: flex;
   align-items: center;
