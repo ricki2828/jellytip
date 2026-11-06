@@ -34,7 +34,8 @@ import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { alternatesAfterSwitch, shouldSurfaceLiveStall } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
-import { hlsChoices, nativeChoices, nativeSubtitlesOff, type TrackChoice } from "../../lib/iptvTracks";
+import { hlsChoices, nativeChoices, nativeSubtitlesOff, pickIptvTracks, type TrackChoice } from "../../lib/iptvTracks";
+import { getAlwaysSubs } from "../../lib/trackMemory";
 import "./iptv.css";
 
 const PROGRESS_MS = 30_000;
@@ -109,6 +110,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const [audioChoices, setAudioChoices] = useState<TrackChoice[]>([]);
   const [subtitleChoices, setSubtitleChoices] = useState<TrackChoice[]>([]);
   const [subtitleOff, setSubtitleOff] = useState(true);
+  // Start-of-playback language prefs: applied once per start, and never over a pick made in the track menu
+  const autoTracks = useRef({ done: false, manual: false });
+  const langPrefs = usePrefs({ defer: true }).prefs?.playback;
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
   const growRef = useRef(false);
@@ -365,8 +369,21 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   }, [target, isLive, attach]);
 
   useEffect(() => {
+    const a = autoTracks.current;
+    if (a.done || a.manual || !langPrefs || !audioChoices.length) return;
+    a.done = true; // the choice is made on the first full track list; later additions are left alone
+    const alwaysSubs = getAlwaysSubs(getSession()?.userId ?? "");
+    if (!langPrefs.audioLangs.length && !alwaysSubs) return;
+    const r = pickIptvTracks(audioChoices, subtitleChoices, { ...langPrefs, alwaysSubs });
+    if (r.audio != null) selectAudio(r.audio);
+    if (r.subtitle != null) selectSubtitle(r.subtitle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioChoices, subtitleChoices, langPrefs]);
+
+  useEffect(() => {
     alive.current = true;
     renewed.current = false;
+    autoTracks.current = { done: false, manual: false };
     void start();
     const onHide = () => { finishBuffer(); teardown(); };
     window.addEventListener("pagehide", onHide);
@@ -799,8 +816,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         subtitles={subtitleChoices.map((c) => ({ id: String(c.index), label: c.label, active: c.active }))}
         subtitlesOff={subtitleOff}
         audioEmptyNote="No selectable audio tracks exposed."
-        onPickAudio={(v) => selectAudio(Number(v))}
-        onPickSubtitle={(v) => { replayRef.current = null; selectSubtitle(v == null ? -1 : Number(v)); }}
+        onPickAudio={(v) => { autoTracks.current.manual = true; selectAudio(Number(v)); }}
+        onPickSubtitle={(v) => { autoTracks.current.manual = true; replayRef.current = null; selectSubtitle(v == null ? -1 : Number(v)); }}
         unavailable={playerEngine === "mpegts" ? {
           note: "This stream format can’t expose track controls.",
           action: isLive ? { label: "Switch to HLS and choose tracks", run: () => { fmtRef.current = "m3u8"; setTracksOpen(false); setState({ kind: "loading" }); teardown(); void start(); } } : undefined,

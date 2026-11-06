@@ -26,3 +26,28 @@ test("native subtitle choices filter metadata but preserve original indexes", ()
   assert.deepEqual(tracks.map(({ index }) => index), [1, 2]);
   assert.deepEqual(tracks.map(({ active }) => active), [true, false]);
 });
+
+import { pickIptvTracks, type TrackChoice } from "../src/lib/iptvTracks.ts";
+const C = (index: number, lang: string | undefined, name = "", active = false): TrackChoice => ({ index, label: name || `Track ${index + 1}`, active, lang, name });
+
+test("iptv: picks the first preferred audio language by declared tag", () => {
+  const r = pickIptvTracks([C(0, "spa", "", true), C(1, "eng")], [], { audioLangs: ["en"], subtitleLangs: [] });
+  assert.deepEqual(r, { audio: 1, subtitle: null });
+});
+
+test("iptv: never guesses language from the label; unknown stays unknown", () => {
+  const r = pickIptvTracks([C(0, undefined, "English", true), C(1, "und", "English")], [C(0, undefined, "English")], { audioLangs: ["en"], subtitleLangs: ["en"] });
+  assert.deepEqual(r, { audio: null, subtitle: null });
+});
+
+test("iptv: foreign audio turns on a preferred-language subtitle; matching audio does not", () => {
+  const subs = [C(0, "eng", "English")];
+  assert.equal(pickIptvTracks([C(0, "jpn", "", true)], subs, { audioLangs: ["en"], subtitleLangs: ["en"] }).subtitle, 0);
+  assert.equal(pickIptvTracks([C(0, "eng", "", true)], subs, { audioLangs: ["en"], subtitleLangs: ["en"] }).subtitle, null);
+  assert.equal(pickIptvTracks([C(0, "eng", "", true)], subs, { audioLangs: ["en"], subtitleLangs: ["en"], alwaysSubs: true }).subtitle, 0);
+});
+
+test("iptv: commentary audio avoided; forced subtitle on when audio matches", () => {
+  const r = pickIptvTracks([C(0, "eng", "Commentary", true), C(1, "eng", "Main")], [C(0, "eng", "English forced")], { audioLangs: ["en"], subtitleLangs: ["en"] });
+  assert.deepEqual(r, { audio: 1, subtitle: 0 });
+});
