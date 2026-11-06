@@ -1,6 +1,6 @@
 // Ranking, grouping and the stale-answer guard for Search (pure; tested in web/test/searchRank.test.ts).
 import type { SearchEntry, SearchResult } from "./search.ts";
-import type { SearchIntent } from "./searchIntent.ts";
+import { neutralIntent, type SearchIntent } from "./searchIntent.ts";
 
 export type Avail = "Library" | "IPTV" | "Not available";
 
@@ -29,11 +29,19 @@ export function matchTier(title: string, text: string): 0 | 1 | 2 {
 
 const SOURCE_ORDER = { library: 0, iptv: 1, discover: 2 } as const;
 
-/** Exact title matches first, then prefix matches, then the server's order (a stable sort on its score). Playable before not-available inside a tier. */
-export function rankEntries(list: SearchEntry[], text: string): SearchEntry[] {
+/** Best tier of a title against any of the texts (the raw query and the intent-stripped text). */
+const bestTier = (title: string, texts: string[]) => Math.min(...texts.map((t) => matchTier(title, t))) as 0 | 1 | 2;
+
+/**
+ * Exact title matches first, then prefix matches, then the server's order. Inside a tier: entries whose year is in the asked range,
+ * then library before IPTV before not-available.
+ */
+export function rankEntries(list: SearchEntry[], texts: string | string[], years: { from: number; to: number } | null = null): SearchEntry[] {
+  const ts = (Array.isArray(texts) ? texts : [texts]).filter(Boolean);
+  const yearMiss = (e: SearchEntry) => (years && !(e.year != null && e.year >= years.from && e.year <= years.to) ? 1 : 0);
   return list
-    .map((e, i) => ({ e, i, tier: matchTier(e.title, text) }))
-    .sort((a, b) => a.tier - b.tier || SOURCE_ORDER[a.e.source] - SOURCE_ORDER[b.e.source] || b.e.score - a.e.score || a.i - b.i)
+    .map((e, i) => ({ e, i, tier: ts.length ? bestTier(e.title, ts) : 2 }))
+    .sort((a, b) => a.tier - b.tier || yearMiss(a.e) - yearMiss(b.e) || SOURCE_ORDER[a.e.source] - SOURCE_ORDER[b.e.source] || b.e.score - a.e.score || a.i - b.i)
     .map((x) => x.e);
 }
 
@@ -47,22 +55,30 @@ export interface Grouped {
   /** Discover entries: not in the library or on IPTV. */
   missing: SearchEntry[];
   /** Section order for the page (Top match is always first unless live leads). */
+  /** The intent actually applied: neutral when a title matches the whole query. */
+  intent: SearchIntent;
   order: ("live" | "movies" | "shows" | "episodes" | "people" | "collections" | "missing")[];
 }
 
 const playable = (e: SearchEntry) => (e.source === "library" || e.source === "iptv") && (e.kind === "film" || e.kind === "series");
 
-/** Pick the top match and split the rest into groups; the intent decides who leads. */
-export function groupEntries(list: SearchEntry[], intent: SearchIntent, hasLive: boolean): Grouped {
-  const ranked = rankEntries(list, intent.text || intent.raw);
-  const personHit = intent.person ? ranked.find((e) => e.kind === "person" && (intent.person!.strong || matchTier(e.title, intent.person!.name) < 2)) : undefined;
+/** Pick the top match and split the rest into groups; the intent decides who leads, unless a title matches the whole query. */
+export function groupEntries(list: SearchEntry[], given: SearchIntent, hasLive: boolean): Grouped {
+  // A result titled like the whole query ("Play Misty for Me", "Live and Let Die", "Watch Dogs") means the words were the title
+  const literal = list.some((e) => e.kind !== "person" && matchTier(e.title, given.raw) < 2);
+  let intent = literal ? neutralIntent(given) : given;
+  if (!literal && given.xForm && !given.season) {
+    const { season, episode, rest } = given.xForm;
+    if (list.some((e) => e.kind === "series" && e.source === "library" && matchTier(e.title, rest) < 2)) intent = { ...given, season, episode, text: rest, xForm: null };
+  }
+  const ranked = rankEntries(list, [given.raw, intent.text], given.years);
+  const personHit = intent.person ? ranked.find((e) => e.kind === "person" && matchTier(e.title, intent.person!.name) < 2) : undefined;
   const wantPerson = !!personHit;
   let top: SearchEntry | null = null;
   if (wantPerson) top = personHit!;
   else if (intent.play) top = ranked.find(playable) ?? ranked[0] ?? null;
   else if (intent.season != null) top = ranked.find((e) => e.kind === "series" && e.source !== "discover") ?? ranked[0] ?? null;
   else top = ranked[0] ?? null;
-  // A live query with live results: the live row leads the page; the top card is still the best catalogue match
   const rest = ranked.filter((e) => e !== top);
   const g: Grouped = {
     top,
@@ -71,11 +87,12 @@ export function groupEntries(list: SearchEntry[], intent: SearchIntent, hasLive:
     people: rest.filter((e) => e.kind === "person"),
     collections: rest.filter((e) => e.kind === "collection"),
     missing: rest.filter((e) => e.source === "discover" && e.kind !== "person" && e.kind !== "collection"),
+    intent,
     order: [],
   };
   const base: Grouped["order"] = ["movies", "shows", "episodes", "people", "collections", "live", "missing"];
-  const lead = intent.live && hasLive ? ["live" as const] : wantPerson && intent.person!.strong ? ["people" as const] : [];
-  g.order = [...lead, ...base.filter((x) => !lead.includes(x as never))];
+  const lead: Grouped["order"] = intent.live && hasLive ? ["live"] : wantPerson && intent.person!.strong ? ["people"] : [];
+  g.order = [...lead, ...base.filter((x) => !lead.includes(x))];
   return g;
 }
 

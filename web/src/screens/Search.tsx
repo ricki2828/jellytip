@@ -25,6 +25,17 @@ import { GetItSheet, stateText } from "../components/GetItSheet";
 
 const DEBOUNCE_MS = 150;
 
+// Library items fetched for results, per signed-in user (a different user starts empty)
+let cacheUser = "";
+let cacheMap = new Map<string, Item>();
+function sessionItems(userId: string): Map<string, Item> {
+  if (userId !== cacheUser) {
+    cacheUser = userId;
+    cacheMap = new Map();
+  }
+  return cacheMap;
+}
+
 function LibGrid({ label, hits, untitled }: { label: string; hits: LibHit[]; untitled: Set<string> }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const ids = hits.map((h) => h.id).join(",");
@@ -139,7 +150,7 @@ function TopHit({ e, item, intent, onGetIt }: { e: SearchEntry; item: Item | und
         {facts && <p className="search-hero-facts">{facts}</p>}
         {note && <p className="search-hero-facts" role="status">{note}</p>}
         <div className="buttons">
-          <button className="btn primary" data-nav autoFocus={intent.play} onClick={go_} disabled={e.source === "discover" && !!e.requested}>
+          <button className="btn primary" data-nav onClick={go_} disabled={e.source === "discover" && !!e.requested}>
             {label}
           </button>
           {playable && openPath(e) && (
@@ -154,27 +165,36 @@ function TopHit({ e, item, intent, onGetIt }: { e: SearchEntry; item: Item | und
 }
 
 /** Server `results` as: Top match, then Movies, Shows, People, Collections, Live / IPTV, Not available, in the order the intent asks for. Each item says where it plays. */
-function Ranked({ r, intent, untitled, posterW, onGetIt }: { r: SearchResult; intent: SearchIntent; untitled: Set<string>; posterW: number; onGetIt: (d: DiscoverHit) => void }) {
+function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchResult; intent: SearchIntent; untitled: Set<string>; posterW: number; onGetIt: (d: DiscoverHit) => void }) {
   const list = r.results ?? [];
   const hasLive = !!(r.live && r.live.length) || !!(r.channels && r.channels.length);
-  const g = useMemo(() => groupEntries(list, intent, hasLive || r.sportQuery), [list, intent, hasLive, r.sportQuery]);
+  const g = useMemo(() => groupEntries(list, given, hasLive || r.sportQuery), [list, given, hasLive, r.sportQuery]);
+  const intent = g.intent;
   const top = g.top;
   const libIds = list.filter((e) => e.source === "library" && (e.kind === "film" || e.kind === "series")).map((e) => e.id!);
   const idKey = libIds.join(",");
-  const [items, setItems] = useState<Map<string, Item> | null>(null);
+  // Per-user session cache by id: tiles stay mounted when the id list changes or a late group merges in
+  const cache = sessionItems(uid());
+  const [fetched, setFetched] = useState("");
   useEffect(() => {
     let alive = true;
-    if (!idKey) {
-      setItems(new Map());
+    const missing = idKey ? idKey.split(",").filter((id) => !cache.has(id)) : [];
+    if (!missing.length) {
+      setFetched(idKey);
       return;
     }
-    itemsByIds(idKey.split(","))
-      .then((its) => alive && setItems(new Map(its.map((i) => [i.Id.toLowerCase().replace(/-/g, ""), i]))))
-      .catch(() => alive && setItems(new Map()));
+    itemsByIds(missing)
+      .then((its) => {
+        for (const i of its) cache.set(i.Id.toLowerCase().replace(/-/g, ""), i);
+        if (alive) setFetched(idKey);
+      })
+      .catch(() => alive && setFetched(idKey));
     return () => {
       alive = false;
     };
-  }, [idKey]);
+  }, [idKey, cache]);
+  const loading = fetched !== idKey;
+  const items = { get: (id: string) => cache.get(id) };
   const seen = new Set(list.filter((e) => e.source === "discover").map((e) => e.tmdbId));
   const missing = [...g.missing.map(toDiscover), ...r.discover.filter((d) => !seen.has(d.tmdbId))];
   const phone = useIsPhone();
@@ -184,8 +204,8 @@ function Ranked({ r, intent, untitled, posterW, onGetIt }: { r: SearchResult; in
     const hint = e.season != null ? seasonHint(e) : null;
     const tag = [avail, hint, note].filter(Boolean).join(" · ");
     if (e.source === "library") {
-      const it = items?.get(e.id!);
-      if (!it) return items ? null : <div key={e.key} className="poster card-skeleton" style={{ width: posterW }} />;
+      const it = items.get(e.id!);
+      if (!it) return loading ? <div key={e.key} className="poster card-skeleton" style={{ width: posterW }} /> : null;
       return (
         <span key={e.key} className="search-pos" data-key={e.key}>
           <PosterCard item={it} width={posterW} onOpen={() => go(`/item/${it.Id}`)} untitled={untitled.has(it.Id)} tag={tag} />
@@ -286,7 +306,7 @@ function Ranked({ r, intent, untitled, posterW, onGetIt }: { r: SearchResult; in
   return (
     <>
       {g.order[0] === "live" && sections.live}
-      {top && <TopHit e={top} item={top.id ? items?.get(top.id) : undefined} intent={intent} onGetIt={onGetIt} />}
+      {top && <TopHit e={top} item={top.id ? items.get(top.id) : undefined} intent={intent} onGetIt={onGetIt} />}
       {g.order.filter((k) => !(k === "live" && g.order[0] === "live")).map((k) => <span key={k} style={{ display: "contents" }}>{sections[k]}</span>)}
     </>
   );
@@ -442,6 +462,10 @@ export function Search({ initial }: { initial: string }) {
   const [retry, setRetry] = useState(0);
   const userId = uid();
   const [recent, setRecent] = useState<string[]>(() => loadRecent(localStorage, userId));
+  const mergedRecent = useMemo(() => {
+    const seen = new Set<string>();
+    return [...recent, ...(sugg?.recent ?? [])].filter((x) => !seen.has(x.toLowerCase()) && !!seen.add(x.toLowerCase())).slice(0, 10);
+  }, [recent, sugg]);
   const input = useRef<HTMLInputElement>(null);
   const guard = useRef(latestGuard());
   const term = q.trim();
@@ -527,9 +551,12 @@ export function Search({ initial }: { initial: string }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
+          if (e.key === "ArrowDown" || (e.key === "Enter" && term.length >= 2)) {
+            // Focus moves to the results only on an explicit key: the primary action when "watch X", else the first result
             e.preventDefault();
-            (document.querySelector(".search-results [data-nav]") as HTMLElement | null)?.focus();
+            const root = document.querySelector(".search-results");
+            const el = (intent.play && root?.querySelector<HTMLElement>(".search-hero .btn.primary")) || root?.querySelector<HTMLElement>("[data-nav]");
+            el?.focus();
           } else if (e.key === "Escape" && q) {
             // First Escape empties the box; with it already empty, Escape behaves as usual
             e.preventDefault();
@@ -547,12 +574,13 @@ export function Search({ initial }: { initial: string }) {
           const at = key && unified?.results ? unified.results.findIndex((x) => x.key === key) : -1;
           if (at >= 0) recordClick(term, unified!.results![at], at + 1);
         }}>
-        {term.length < 2 && (recent.length > 0 || sugg) && (
+        {term.length < 2 && (mergedRecent.length > 0 || sugg) && (
           <Suggest
-            s={{ recent, suggested: sugg?.suggested ?? [] }}
+            s={{ recent: mergedRecent, suggested: sugg?.suggested ?? [] }}
             onPick={pick}
             onClear={() => {
               setRecent(clearLocalRecent(localStorage, userId));
+              setSugg((x) => x && { ...x, recent: [] });
               void clearServerRecent();
             }}
           />

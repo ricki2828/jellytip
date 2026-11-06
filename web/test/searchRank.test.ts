@@ -103,3 +103,42 @@ test("IPTV language is flagged unconfirmed only when a language was asked for", 
   assert.equal(iptvLanguageNote(iptv, { filters: {} }), null);
   assert.equal(iptvLanguageNote(e("l", "Léon"), { filters: { language: "fr" } }), null);
 });
+
+const rank = (q: string, list: SearchEntry[], live = false) => groupEntries(list, parseIntent(q), live);
+
+test("literal titles beat intent words", () => {
+  for (const [q, title] of [["Play Misty for Me", "Play Misty for Me"], ["Live and Let Die", "Live and Let Die"], ["Play Dirty", "Play Dirty"], ["Watch Dogs", "Watch Dogs"], ["The Watch", "The Watch"]] as const) {
+    const list = [e("other", "Something Else", { score: 9 }), e("hit", title, { score: 1 }), e("p", title.split(" ").pop()!, { kind: "person", personId: "a" })];
+    const g = rank(q, list, true);
+    assert.equal(g.top?.key, "hit", q);
+    assert.equal(g.intent.play, false, q);
+    assert.equal(g.intent.live, false, q);
+    assert.notEqual(g.order[0], "live", q);
+  }
+});
+
+test("intent still applies when no title matches the whole query", () => {
+  const g = rank("watch Heat", [e("l", "Heat"), e("x", "Heat Wave")]);
+  assert.equal(g.intent.play, true);
+});
+
+test("strong person needs a matching name", () => {
+  const list = [e("m", "Forrest Gump"), e("p", "Alex Hanks", { kind: "person", personId: "a" })];
+  assert.equal(rank("movies with Tom Hanks", list).top?.key, "m");
+  const w = rank("With Honors", [e("f", "With Honors"), e("p", "Honor Blackman", { kind: "person", personId: "b" })]);
+  assert.equal(w.top?.key, "f");
+  assert.notEqual(w.order[0], "people");
+});
+
+test("year range boosts matching years inside a tier", () => {
+  const list = [e("a", "Wonder Woman", { year: 2017, score: 9 }), e("b", "Wonder Woman", { year: 1984, score: 1 })];
+  assert.deepEqual(rankEntries(list, "wonder woman", { from: 1984, to: 1984 }).map((x) => x.key), ["b", "a"]);
+  assert.deepEqual(rankEntries(list, "wonder woman").map((x) => x.key), ["a", "b"]);
+});
+
+test("NxM applies only when the rest matches a library show", () => {
+  const withShow = rank("lost 3x04", [e("s", "Lost", { kind: "series" })]);
+  assert.deepEqual([withShow.intent.season, withShow.intent.episode], [3, 4]);
+  const none = rank("4x4", [e("m", "Some Film")]);
+  assert.equal(none.intent.season, null);
+});

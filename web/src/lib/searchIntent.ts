@@ -18,6 +18,8 @@ export interface SearchIntent {
   years: { from: number; to: number } | null;
   genre: string | null;
   kind: "movie" | "series" | null;
+  /** "lost 3x04": only a season x episode when the rest names a known show (checked against the results), so "4x4" stays a title. */
+  xForm: { season: number; episode: number; rest: string } | null;
 }
 
 const GENRES: Record<string, string> = {
@@ -33,7 +35,7 @@ const SHOW_WORDS = new Set(["show", "shows", "series", "tv"]);
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
 export function parseIntent(raw: string): SearchIntent {
-  const intent: SearchIntent = { raw, text: "", play: false, season: null, episode: null, person: null, live: false, years: null, genre: null, kind: null };
+  const intent: SearchIntent = { raw, text: "", play: false, season: null, episode: null, person: null, live: false, years: null, genre: null, kind: null, xForm: null };
   let t = clean(raw);
 
   const play = /^(?:watch|play|stream|put on)\s+(.+)$/i.exec(t);
@@ -51,7 +53,6 @@ export function parseIntent(raw: string): SearchIntent {
   const se: [RegExp, number, number | null][] = [
     [/\bs(\d{1,2})\s*e(\d{1,3})\b/i, 1, 2],
     [/\bseason\s*(\d{1,2})\s*,?\s*(?:episode|ep)\s*(\d{1,3})\b/i, 1, 2],
-    [/\b(\d{1,2})x(\d{1,3})\b/i, 1, 2],
     [/\bseason\s*(\d{1,2})\b/i, 1, null],
     [/\bs(\d{1,2})\b/i, 1, null],
   ];
@@ -62,6 +63,12 @@ export function parseIntent(raw: string): SearchIntent {
     intent.episode = ei ? Number(m[ei]) : null;
     t = clean(t.replace(re, " "));
     break;
+  }
+
+  if (intent.season == null) {
+    const x = /\b(\d{1,2})x(\d{1,3})\b/i.exec(t);
+    const rest = x ? clean(t.replace(x[0], " ")) : "";
+    if (x && rest) intent.xForm = { season: Number(x[1]), episode: Number(x[2]), rest };
   }
 
   // Person: "movies with X" (strong) or "X films" (weak, needs a matching People hit)
@@ -89,22 +96,18 @@ export function parseIntent(raw: string): SearchIntent {
       years = { from: Number(yr[1]), to: Number(yr[1]) };
       t = clean(t.replace(yr[0], " "));
     }
-    const words = t.split(" ").filter(Boolean);
-    const hasKindWord = words.some((w) => MOVIE_WORDS.has(w.toLowerCase()) || SHOW_WORDS.has(w.toLowerCase()));
-    const genreWord = words.find((w) => GENRES[w.toLowerCase()]);
-    // A genre word is only a filter alongside a year or a kind word ("thriller" alone may be a title)
-    if (genreWord && (years || hasKindWord)) {
-      intent.genre = GENRES[genreWord.toLowerCase()];
-      t = clean(words.filter((w) => w !== genreWord).join(" "));
-    }
-    if (years || intent.genre || hasKindWord) {
-      const rest = t.split(" ").filter(Boolean);
-      const kw = rest.find((w) => MOVIE_WORDS.has(w.toLowerCase()) || SHOW_WORDS.has(w.toLowerCase()));
-      if (kw && (years || intent.genre || rest.length === 1)) {
-        intent.kind = MOVIE_WORDS.has(kw.toLowerCase()) ? "movie" : "series";
-        t = clean(rest.filter((w) => w !== kw).join(" "));
-      }
-    }
+    // Kind and genre come only from trailing modifier words ("90s horror movies"), never from words inside a title
+    const w = t.split(" ").filter(Boolean);
+    const isKind = (x: string) => MOVIE_WORDS.has(x.toLowerCase()) || SHOW_WORDS.has(x.toLowerCase());
+    const kindWord = w.length > 0 && isKind(w[w.length - 1]);
+    const gIdx = kindWord ? w.length - 2 : w.length - 1;
+    const genreWord = gIdx >= 0 && GENRES[w[gIdx].toLowerCase()] ? w[gIdx] : null;
+    const genreOk = !!genreWord && (!!years || kindWord);
+    const kindOk = kindWord && (!!years || genreOk || w.length === 1);
+    if (kindOk) intent.kind = MOVIE_WORDS.has(w[w.length - 1].toLowerCase()) ? "movie" : "series";
+    if (genreOk) intent.genre = GENRES[genreWord!.toLowerCase()];
+    const cut = genreOk ? gIdx : kindOk ? w.length - 1 : w.length;
+    t = clean(w.slice(0, cut).join(" "));
     intent.years = years;
   }
   intent.text = t;
@@ -135,7 +138,12 @@ export function jellyfinParams(i: SearchIntent): Record<string, string | number 
   return p;
 }
 
-/** The text to send the server: the query as typed, minus the leading "watch/play" so title matching isn't polluted. */
+/** What every source is asked: the query exactly as typed, so an intent word can never hurt a literal title. */
 export function serverQuery(i: SearchIntent): string {
-  return i.play ? clean(i.raw).replace(/^(?:watch|play|stream|put on)\s+/i, "") : clean(i.raw);
+  return clean(i.raw);
+}
+
+/** The intent with the layout-changing parts switched off (used when a result title matches the whole query literally). */
+export function neutralIntent(i: SearchIntent): SearchIntent {
+  return { ...i, play: false, live: false, season: null, episode: null, person: null, kind: null, xForm: null };
 }

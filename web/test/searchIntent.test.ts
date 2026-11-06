@@ -10,7 +10,8 @@ test("watch / play puts the title first and flags play", () => {
   }
   assert.equal(parseIntent("Playtime").play, false);
   assert.equal(parseIntent("Watchmen").play, false);
-  assert.equal(serverQuery(parseIntent("watch Heat")), "Heat");
+  // every source gets the query exactly as typed
+  assert.equal(serverQuery(parseIntent("watch Heat")), "watch Heat");
 });
 
 test("season and episode forms", () => {
@@ -18,7 +19,6 @@ test("season and episode forms", () => {
     ["breaking bad s2e5", "breaking bad", 2, 5],
     ["Breaking Bad S02E05", "Breaking Bad", 2, 5],
     ["Succession season 3", "Succession", 3, null],
-    ["lost 3x04", "lost", 3, 4],
     ["The Office s2", "The Office", 2, null],
     ["season 4 episode 2 fargo", "fargo", 4, 2],
   ];
@@ -27,6 +27,25 @@ test("season and episode forms", () => {
     assert.deepEqual([i.text, i.season, i.episode], [text, s, e], q);
   }
   for (const q of ["Se7en", "S1mone", "Seasons", "Sex Education"]) assert.equal(parseIntent(q).season, null, q);
+});
+
+test("NxM is only a candidate (resolved against results), 4x4 stays a title", () => {
+  const i = parseIntent("lost 3x04");
+  assert.deepEqual([i.season, i.xForm], [null, { season: 3, episode: 4, rest: "lost" }]);
+  assert.equal(parseIntent("4x4").xForm, null);
+  assert.equal(parseIntent("4x4").text, "4x4");
+});
+
+test("kind and genre come only from trailing modifiers, never from title words", () => {
+  for (const q of ["The Rocky Horror Picture Show", "Horror Express", "Movie 43", "Show Boat", "Crime and Punishment", "Drama Queen"]) {
+    const i = parseIntent(q);
+    assert.deepEqual([i.kind, i.genre, i.text], [null, null, q], q);
+  }
+  const m = parseIntent("90s horror movies");
+  assert.deepEqual([m.kind, m.genre, m.text], ["movie", "Horror", ""]);
+  const r = parseIntent("horror movies");
+  assert.deepEqual([r.kind, r.genre], ["movie", "Horror"]);
+  assert.equal(parseIntent("heat 1995 drama").genre, "Drama");
 });
 
 test("person intents: strong with 'with/by', weak with 'films'", () => {
