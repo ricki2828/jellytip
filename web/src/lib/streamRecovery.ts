@@ -51,7 +51,10 @@ export function claimEngine<T>(slot: { current: T | null }, destroy: (old: T) =>
 
 export const backoffMs = (attempt: number): number => Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, attempt - 1));
 
-export type Phase = "playing" | "stalled" | "reconnecting" | "switched" | "failed" | "blocked" | "ended";
+export type Phase = "playing" | "stalled" | "reconnecting" | "switched" | "failed" | "denied" | "blocked" | "ended";
+/** Why a stream will not be retried automatically (denied phase). Manual Retry now stays available. */
+export type DeniedReason = "auth" | "denied" | "missing" | "nocatchup" | "link" | "rate";
+export const RETRY_DEBOUNCE_MS = 1500;
 export type Conn = "held" | "releasing" | "closed" | "opening";
 export type StreamFormat = "ts" | "m3u8";
 
@@ -67,6 +70,8 @@ export interface RecoveryState {
   /** Tab hidden longer than HIDDEN_STOP_MS: retries are stopped until it is visible again. */
   /** Recovered but not yet stable: a new fault keeps counting attempts instead of starting over. */
   unstable: boolean;
+  reason: DeniedReason | null;
+  lastRetryAt: number | null;
   hiddenStop: boolean;
   hiddenSince: number | null;
   /** A (re)open waiting for the lease to be released, the network, or the tab. */
@@ -78,7 +83,8 @@ export interface RecoveryState {
 export type RecoveryEvent =
   | { t: "stall"; pos: number; canHls: boolean }
   | { t: "fault"; pos: number; canHls: boolean }
-  | { t: "retryNow"; pos: number; canHls: boolean }
+  | { t: "retryNow"; pos: number; canHls: boolean; now?: number }
+  | { t: "fatal"; reason: DeniedReason }
   | { t: "opened" }
   | { t: "recovered" }
   | { t: "stable" }
@@ -103,7 +109,7 @@ export interface Step {
 }
 
 export function initialRecovery(live: boolean, format: StreamFormat = "ts"): RecoveryState {
-  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, unstable: false, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
+  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, unstable: false, reason: null, lastRetryAt: null, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
 }
 
 const paused = (s: RecoveryState) => s.offline || s.hiddenStop;
@@ -195,6 +201,10 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       }
       break;
     case "retryNow":
+      // mashing Retry must not flood /play: ignore while an open is in flight and within the debounce window
+      if (s.conn === "opening" || (e.now != null && s.lastRetryAt != null && e.now - s.lastRetryAt < RETRY_DEBOUNCE_MS)) break;
+      if (e.now != null) s.lastRetryAt = e.now;
+      s.reason = null;
       s.hiddenStop = false;
       s.resumeAt = s.live ? null : e.pos > 5 ? e.pos : s.resumeAt;
       s.attempt = 1;
@@ -209,7 +219,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       if (s.conn === "opening") s.conn = "held";
       break;
     case "recovered":
-      if (s.phase !== "failed" && s.conn === "held") {
+      if (active(s) && s.conn === "held") {
         s.phase = "playing";
         // attempts are only forgiven after STABLE_MS of continuous playback ("stable")
         s.unstable = s.attempt > 0;
@@ -250,6 +260,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       s.hiddenSince = e.now;
       break;
     case "hiddenTimeout":
+      // Deliberate: a healthy stream in a background tab is left alone (people listen with the tab hidden); we only stop an active recovery.
       if (active(s) && s.hiddenSince != null) {
         s.hiddenStop = true;
         s.want = null;
@@ -271,6 +282,13 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       } else maybeOpen(s, fx);
       break;
     }
+    case "fatal":
+      s.phase = "denied";
+      s.reason = e.reason;
+      s.want = null;
+      fx.push({ do: "cancelTimers" });
+      release(s, fx);
+      break;
     case "blocked":
       s.phase = "blocked";
       s.want = null;
@@ -298,6 +316,16 @@ export function recoveryCopy(s: RecoveryState): string | null {
       if (s.offline) return "You're offline. Waiting for a connection…";
       if (s.phase === "switched" && s.attempt <= 1 && s.conn !== "held") return "Switched to a backup stream";
       return `Reconnecting… (${s.attempt} of ${s.max})`;
+    case "denied":
+      switch (s.reason) {
+        case "auth": return "The provider refused the login. Check it in Settings → Live TV / IPTV.";
+        case "denied": return "This stream isn't available to this account.";
+        case "missing": return "This stream couldn't be found.";
+        case "nocatchup": return "This channel has no catch-up for that time.";
+        case "link": return "The stream link is no longer valid. Retry to get a fresh one.";
+        case "rate": return "The provider is limiting connections; try again in a minute.";
+        default: return "This stream can't be played right now.";
+      }
     case "failed":
       return s.live ? "This channel isn't responding. Try another channel or retry." : "This stream isn't responding. Try again or go back.";
     default:
@@ -305,10 +333,21 @@ export function recoveryCopy(s: RecoveryState): string | null {
   }
 }
 
-/** Whether a failed stream link is worth retrying (network, server and playback faults) rather than final (auth, no catch-up…). */
+/** Final refusals: never put on the backoff. null = not a permanent refusal. */
+export function permanentReason(status: number, code?: string | null): DeniedReason | null {
+  if (code === "provider_auth") return "auth";
+  if (code === "no_catchup") return "nocatchup";
+  if (code === "bad_token" || code === "expired" || code === "stale" || status === 410) return "link";
+  if (status === 429) return "rate";
+  if (status === 401 || status === 403) return "denied";
+  if (status === 404) return "missing";
+  return null;
+}
+
+/** Whether a failed stream link is worth retrying (network, server and playback faults) rather than final. */
 export function isRetryable(status: number, code?: string | null): boolean {
-  if (code === "provider_auth" || code === "no_catchup" || code === "bad_token") return false;
-  if (status === 0 || status === 408 || status === 429) return true;
+  if (permanentReason(status, code)) return false;
+  if (status === 0 || status === 408) return true;
   if (status >= 500) return true;
   return status >= 200 && status < 300;
 }

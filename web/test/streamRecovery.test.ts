@@ -18,7 +18,7 @@ test("alternate switching keeps unselected candidates and appends the channel le
   ]);
 });
 
-import { beginExclusive, claimEngine, backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
+import { permanentReason, beginExclusive, claimEngine, backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
 
 /** Run events; "released" is answered automatically after each release effect, like the player does. */
 function run(s: RecoveryState, events: RecoveryEvent[]) {
@@ -126,10 +126,10 @@ test("single connection: open is never emitted while a stream is held or opening
   r = step(r.state, { t: "released" });
   assert.deepEqual(r.effects.map((f) => f.do), ["open"]);
   assert.equal(r.state.conn, "opening");
-  // retry-now while opening releases the in-flight open first
+  // retry-now while an open is in flight is ignored (no second /play)
   const retry = step(r.state, { t: "retryNow", pos: 0, canHls: false });
-  assert.deepEqual(retry.effects.map((f) => f.do), ["cancelTimers", "release"]);
-  assert.equal(retry.state.conn, "releasing");
+  assert.deepEqual(retry.effects, []);
+  assert.equal(retry.state.conn, "opening");
 });
 
 test("invariant over a long random-ish event stream: opens only follow a release", () => {
@@ -325,4 +325,64 @@ test("stall during reconnecting escalates through fault to the next attempt", ()
   assert.equal(r.s.phase, "reconnecting");
   r = run(r.s, [fault()]);
   assert.equal(r.s.attempt, 2);
+});
+
+test("retry now is ignored while an open is in flight and within the debounce window", () => {
+  const r0 = step(initialRecovery(true), fault());
+  const open = step(r0.state, { t: "released" }).state;
+  assert.equal(open.conn, "opening");
+  const ignored = step(open, { t: "retryNow", pos: 0, canHls: false, now: 1000 });
+  assert.deepEqual(ignored.effects, []);
+  assert.equal(ignored.state.attempt, open.attempt);
+  // after failure: first retry works, second within 1.5 s is dropped, later one works
+  const failed = run(initialRecovery(true), [fault(), { t: "opened" }, fault(), { t: "opened" }, fault(), { t: "opened" }, fault(), { t: "opened" }, fault()]).s;
+  assert.equal(failed.phase, "failed");
+  let r = run(failed, [{ t: "retryNow", pos: 0, canHls: false, now: 10_000 }]);
+  assert.equal(opens(r.fx).length, 1);
+  r = run({ ...r.s, conn: "held" }, [{ t: "retryNow", pos: 0, canHls: false, now: 10_500 }]);
+  assert.equal(opens(r.fx).length, 0);
+  r = run({ ...r.s, conn: "held" }, [{ t: "retryNow", pos: 0, canHls: false, now: 11_600 }]);
+  assert.equal(opens(r.fx).length, 1);
+});
+
+test("permanent refusals are classified and never retried automatically", () => {
+  assert.equal(permanentReason(429), "rate");
+  assert.equal(permanentReason(401), "denied");
+  assert.equal(permanentReason(403), "denied");
+  assert.equal(permanentReason(404), "missing");
+  assert.equal(permanentReason(200, "provider_auth"), "auth");
+  assert.equal(permanentReason(200, "no_catchup"), "nocatchup");
+  assert.equal(permanentReason(200, "bad_token"), "link");
+  assert.equal(permanentReason(503), null);
+  assert.equal(isRetryable(429), false);
+  assert.equal(isRetryable(404), false);
+});
+
+test("fatal enters denied with calm copy, releases, opens nothing; manual retry works", () => {
+  const expectCopy: [Parameters<typeof permanentReason>[0], string | null, RegExp][] = [[429, null, /limiting connections; try again in a minute/], [404, null, /couldn't be found/], [401, null, /isn't available/], [200, "provider_auth", /refused the login/], [200, "no_catchup", /no catch-up/], [200, "bad_token", /no longer valid/]];
+  for (const [status, code, re] of expectCopy) {
+    let r = run(initialRecovery(true), [{ t: "fatal", reason: permanentReason(status, code)! }]);
+    assert.equal(r.s.phase, "denied");
+    assert.match(recoveryCopy(r.s)!, re);
+    assert.ok(r.fx.some((f) => f.do === "release"));
+    assert.equal(opens(r.fx).length, 0);
+    assert.equal(r.s.conn, "closed");
+    r = run(r.s, [fault(), { t: "online" }, { t: "stall", pos: 0, canHls: false }]);
+    assert.equal(r.s.phase, "denied");
+    assert.equal(opens(r.fx).length, 0);
+    r = run(r.s, [{ t: "retryNow", pos: 0, canHls: false, now: 5000 }]);
+    assert.equal(r.s.phase, "reconnecting");
+    assert.equal(opens(r.fx).length, 1);
+  }
+});
+
+test("denied is distinct from blocked (409 -> StreamBusy)", () => {
+  assert.equal(run(initialRecovery(true), [{ t: "blocked" }]).s.phase, "blocked");
+  assert.equal(run(initialRecovery(true), [{ t: "fatal", reason: "rate" }]).s.phase, "denied");
+});
+
+test("a healthy playing stream is not released when the tab stays hidden", () => {
+  const r = run(initialRecovery(true), [{ t: "hidden", now: 0 }, { t: "hiddenTimeout" }]);
+  assert.equal(r.s.conn, "held");
+  assert.equal(r.fx.some((f) => f.do === "release"), false);
 });

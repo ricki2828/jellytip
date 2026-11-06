@@ -32,7 +32,7 @@ import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../l
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
-import { alternatesAfterSwitch, initialRecovery, isRetryable, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
+import { alternatesAfterSwitch, initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import { hlsChoices, nativeChoices, nativeSubtitlesOff, type TrackChoice } from "../../lib/iptvTracks";
 import "./iptv.css";
@@ -336,6 +336,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         dispatchRef.current({ t: "fault", pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts" });
         return;
       }
+      const perm = what !== "full" ? permanentReason(status, code) : null;
+      if (perm && recRef.current.phase !== "blocked" && recRef.current.phase !== "ended") {
+        dispatchRef.current({ t: "fatal", reason: perm });
+        return;
+      }
       if (what === "full") dispatchRef.current({ t: "blocked" });
       teardown();
       finishBuffer();
@@ -446,6 +451,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     if (recovering) {
       if (what !== "full" && isRetryable(a.status, a.data?.code)) {
         dispatchRef.current({ t: "fault", pos: 0, canHls: isLive && fmtRef.current === "ts" });
+        return false;
+      }
+      const perm = what === "full" ? null : permanentReason(a.status, a.data?.code);
+      if (perm) {
+        dispatchRef.current({ t: "fatal", reason: perm });
         return false;
       }
       dispatchRef.current({ t: "blocked" });
@@ -615,7 +625,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const retryNow = () => {
     const v = videoRef.current;
     debugEvent("iptv-player", "manual retry", { player: engineRef.current, format: fmtRef.current, phase: recRef.current.phase }, "info");
-    dispatchRef.current({ t: "retryNow", pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts" });
+    dispatchRef.current({ t: "retryNow", pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts", now: Date.now() });
   };
   const reportStall = () => {
     debugEvent("iptv-player", "user reported stall", { player: engineRef.current, format: fmtRef.current, firstFrame: firstFrame.current, rebufferCount: rebufferCount.current }, "info");
@@ -965,7 +975,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           <span>{copy}</span>
           <button className="btn primary small" data-nav data-autofocus onClick={retryNow}>Retry now</button>
           {rec.phase === "stalled" && <button className="btn small" data-nav onClick={() => { quietUntil.current = Date.now() + QUIET_MS; }}>Keep waiting</button>}
-          {(rec.phase === "failed" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
+          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
           <button className="btn small" data-nav onClick={() => dispatchRef.current({ t: "cancel" })}>Back</button>
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
@@ -982,7 +992,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
             <button className="btn ghost" data-nav onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
               −10s
             </button>
-            <button className="btn ghost" data-nav data-autofocus onClick={togglePlay}>
+            <button className="btn ghost" data-nav data-autofocus={!copy || undefined} onClick={togglePlay}>
               {paused ? "Play" : "Pause"}
             </button>
             <button className="btn ghost" data-nav onClick={() => seekBy(10)} aria-label="Forward 10 seconds">
