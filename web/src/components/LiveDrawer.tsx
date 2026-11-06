@@ -13,6 +13,7 @@ import { usePrefs } from "../api/me";
 import "../fonts";
 import { logoSrc } from "../api/iptv";
 import { FantasyTab } from "./Fantasy";
+import { FantasyYourPlayers } from "./FantasyYourPlayers";
 import { useFantasy } from "../api/fantasy";
 import { isNfl } from "../lib/fantasy";
 import { announceFlips } from "./FlipAlerts";
@@ -514,6 +515,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
                 </button>
               ))}
             </div>
+            {tab !== "fantasy" && <FantasyYourPlayers live={fantasy} fixture={fixture} />}
             {state === "loading" && <p className="iptv-hint">Loading…</p>}
             {state === "missing" && <p className="iptv-hint">Live stats aren't available for this match.</p>}
             {state === "error" && <p className="iptv-hint">Couldn't load live stats. Trying again…</p>}

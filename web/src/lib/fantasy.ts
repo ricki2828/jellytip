@@ -11,6 +11,8 @@ export interface Starter {
   /** The matchInfo.id of this player's NFL game (null when unknown): compare it with a match's id directly. */
   matchId: string | null;
   gameState: "pre" | "in" | "post" | null;
+  /** The provider's player id, when the server sends one. */
+  id?: string;
 }
 
 export interface FantasyLeague {
@@ -30,6 +32,9 @@ export interface FantasyEvent {
   side: "me" | "opp";
   /** What happened ("TD catch, 34 yds"), when the play-by-play matched. */
   reason: string | null;
+  /** The provider's player id and NFL team, when the server sends them. */
+  playerId?: string;
+  nflTeam?: string;
 }
 
 export interface FantasyProviders {
@@ -69,6 +74,7 @@ export function parseStarters(raw: unknown): Starter[] {
         pos: str(o.pos),
         nflTeam: str(o.nflTeam),
         points: num(o.points) ?? 0,
+        ...(str(o.playerId ?? o.id) ? { id: str(o.playerId ?? o.id)! } : {}),
         matchId: str(o.matchId),
         gameState: o.gameState === "pre" || o.gameState === "in" || o.gameState === "post" ? o.gameState : null,
       } as Starter,
@@ -101,7 +107,7 @@ export function parseFantasy(raw: unknown): FantasyLive | null {
     const at = timestamp(o?.at);
     const name = str(o?.name);
     const delta = num(o?.delta);
-    return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me", reason: str(o.reason) } as FantasyEvent] : [];
+    return o && at != null && name && delta != null ? [{ at, league: str(o.league) ?? "", name, delta, side: o.side === "opp" ? "opp" : "me", reason: str(o.reason), ...(str(o.playerId) ? { playerId: str(o.playerId)! } : {}), ...(str(o.nflTeam) ? { nflTeam: str(o.nflTeam)! } : {}) } as FantasyEvent] : [];
   });
   const pv = obj(r.providers);
   const providers: FantasyProviders = {

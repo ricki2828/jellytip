@@ -19,6 +19,7 @@ import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
 import { Discover } from "./screens/Discover";
+import { Manage } from "./screens/Manage";
 import { Settings } from "./screens/Settings";
 import { ListPage } from "./screens/ListPage";
 import { Taste } from "./screens/Taste";
@@ -58,7 +59,7 @@ export function App() {
 
   if (!session) return <Login />;
   // Discover is for admins; anyone else landing on it (old link, other account) goes Home
-  if (route.name === "discover" && !session.isAdmin) {
+  if ((route.name === "discover" || route.name === "manage") && !session.isAdmin) {
     go("/home", true);
     return null;
   }
@@ -96,6 +97,7 @@ export function App() {
         {route.name === "collectionrow" && <CollectionRow key={route.params.id} id={route.params.id} />}
         {route.name === "person" && <Person key={route.params.id} id={route.params.id} name={route.query.get("name")} />}
         {route.name === "discover" && session.isAdmin && <Discover />}
+        {route.name === "manage" && session.isAdmin && <Manage key={route.query.get("item") ?? ""} itemId={route.query.get("item")} />}
         {route.name === "collection" && <Collection key={route.params.id} tmdbId={Number(route.params.id)} />}
         {route.name === "item" && <Details key={route.params.id} id={route.params.id} />}
         {route.name === "settings" && <Settings />}
