@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FLOOD_LIMIT, MAX_SERIES, addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
+import { epKey, FLOOD_LIMIT, MAX_SERIES, addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
 
 const NOW = 1_800_000_000_000;
 const ep = (id: string, n: number, at = NOW - 1000) => ({ id, show: "Show", season: 2, episode: n, at });
@@ -12,7 +12,7 @@ test("first run seeds silently, even when everything is already available", () =
   assert.equal(s.seeded, true);
   assert.equal(s.events.length, 0);
   assert.equal(unreadCount(s, NOW), 0);
-  assert.deepEqual([...s.snap.eps.s1].sort(), ["e1", "e2"]);
+  assert.deepEqual([...s.snap.eps.s1].sort(), ["#2x1", "#2x2", "e1", "e2"]); // ids plus season+episode keys
   // same data again: still nothing
   assert.equal(applyObservation(s, obs, NOW + 1).events.length, 0);
 });
@@ -67,7 +67,7 @@ test("a source that failed leaves its part of the snapshot alone; partial IPTV l
   let s = applyObservation(emptyStore("u"), { titles: { "movie:1": title(1, { iptvId: "1:m:1" }) }, eps: { s1: [ep("e1", 1)] } }, NOW);
   s = applyObservation(s, { titles: undefined, eps: undefined }, NOW + 1);
   assert.equal(s.snap.titles["movie:1"].r, 1);
-  assert.deepEqual(s.snap.eps.s1, ["e1"]);
+  assert.deepEqual(s.snap.eps.s1, ["e1", "#2x1"]);
   s = applyObservation(s, { titles: { "movie:1": title(0, { partial: true }) } }, NOW + 2);
   assert.equal(s.snap.titles["movie:1"].r, 1);
   s = applyObservation(s, { titles: { "movie:1": title(2, { libId: "q" }) } }, NOW + 3);
@@ -139,7 +139,7 @@ test("events are stamped with detection time, not the episode's DateCreated", ()
 test("unobserved series carry through; a rescan with changed dates fires nothing", () => {
   let s = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1)], s2: [ep("f1", 1)] } }, NOW);
   s = applyObservation(s, { eps: { s2: [ep("f1", 1)] } }, NOW + 1); // s1 not asked this time
-  assert.deepEqual(s.snap.eps.s1, ["e1"]);
+  assert.deepEqual(s.snap.eps.s1, ["e1", "#2x1"]);
   s = applyObservation(s, { eps: { s1: [ep("e2", 2), ep("e1", 1)] } }, NOW + 2); // a finished series gets an episode
   assert.deepEqual(s.events.map((e) => e.id), ["ep:e2"]);
   const again = applyObservation(s, { eps: { s1: [ep("e2", 2, 5), ep("e1", 1, 9)], s2: [ep("f1", 1, 123)] } }, NOW + 3);
@@ -177,4 +177,45 @@ test("flood guard: more than 20 events in one look collapse to one summary", () 
   // at the limit it stays itemised
   const small = applyObservation(applyObservation(emptyStore("u"), { eps: { s0: [ep("a", 1)] } }, NOW), { eps: { s0: [ep("b", 2), ep("a", 1)] } }, NOW + 1);
   assert.equal(small.events[0].kind, "episode");
+});
+
+test("old or malformed stored shapes re-seed silently", () => {
+  const good = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1)] } }, NOW);
+  assert.equal(parseStore(JSON.stringify(good), "u").seeded, true);
+  assert.equal(parseStore(JSON.stringify({ ...good, v: 1 }), "u").seeded, false); // old version
+  assert.equal(parseStore(JSON.stringify({ ...good, snap: { titles: {}, eps: { s1: [{ id: "e1" }] } } }), "u").seeded, false); // eps not strings
+  assert.equal(parseStore(JSON.stringify({ ...good, snap: { titles: {}, eps: { s1: "e1" } } }), "u").seeded, false);
+  assert.equal(parseStore(JSON.stringify({ ...good, snap: { titles: { a: { r: 7 } }, eps: {} } }), "u").seeded, false);
+  assert.equal(parseStore(JSON.stringify({ ...good, checked: { a: "x" } }), "u").seeded, false);
+  assert.equal(parseStore(JSON.stringify({ ...good, snap: { titles: [], eps: {} } }), "u").seeded, false);
+  assert.equal(storageKey("u").includes("v2"), true);
+});
+
+test("partial lookup that finds nothing keeps the known rank, so no second library event", () => {
+  let s = applyObservation(emptyStore("u"), { titles: { "movie:1": title(0) } }, NOW);
+  s = applyObservation(s, { titles: { "movie:1": title(2, { libId: "a" }) } }, NOW + 1);
+  assert.equal(s.events.length, 1);
+  s = applyObservation(s, { titles: { "movie:1": title(0, { partial: true }) } }, NOW + 2);
+  assert.equal(s.snap.titles["movie:1"].r, 2);
+  s = applyObservation(s, { titles: { "movie:1": title(2, { libId: "a" }) } }, NOW + 3);
+  assert.equal(s.events.length, 1);
+});
+
+test("a re-import with new ids for the same season+episode does not re-fire", () => {
+  let s = applyObservation(emptyStore("u"), { eps: { s1: [ep("e1", 1), ep("e2", 2)] } }, NOW);
+  s = applyObservation(s, { eps: { s1: [ep("n1", 1), ep("n2", 2)] } }, NOW + 1);
+  assert.equal(s.events.length, 0);
+  s = applyObservation(s, { eps: { s1: [ep("n3", 3), ep("n1", 1), ep("n2", 2)] } }, NOW + 2);
+  assert.deepEqual(s.events.map((e) => e.id), ["ep:n3"]);
+  assert.equal(epKey({ season: 2, episode: 3 }), "#2x3");
+  assert.equal(epKey({ season: 2 }), null);
+  const d = applyObservation(applyObservation(emptyStore("u"), { eps: { s1: [ep("a", 1)] } }, NOW), { eps: { s1: [ep("x", 2), ep("y", 2), ep("a", 1)] } }, NOW + 1);
+  assert.equal(d.events.length, 1);
+  assert.equal(d.events[0].kind, "episode");
+});
+
+test("per-series snapshot is capped at 120 entries", () => {
+  const many = Array.from({ length: 300 }, (_, i) => ({ id: `e${i}`, show: "S", season: 1, episode: i, at: NOW - i }));
+  const s = applyObservation(emptyStore("u"), { eps: { s1: many } }, NOW);
+  assert.equal(s.snap.eps.s1.length, 120);
 });

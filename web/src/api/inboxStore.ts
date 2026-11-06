@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getItems, getSession, nextUp, type Item } from "./jellyfin";
 import { iptvGet, providers } from "./iptv";
+import { debugEvent } from "../lib/debugLog";
 import { afterStartup } from "../lib/startup";
 import { parseVodItems } from "../lib/iptvVod";
 import { observeEpisodes, observeTitles, type EpisodeDeps, type TitleDeps } from "../lib/inboxObserve";
@@ -38,12 +39,14 @@ function reload(): Store {
 
 function save(s: Store) {
   if (!s.userId) return;
-  cache = s;
   try {
     localStorage.setItem(storageKey(s.userId), JSON.stringify(s));
-  } catch {
-    // full or blocked: the in-memory copy still serves this visit
+  } catch (e) {
+    // Full or blocked: do not move ahead of what is stored (events would be lost on reload while the snapshot said "seen")
+    debugEvent("inbox", "could not save the inbox", { error: String((e as Error)?.message ?? e) });
+    return;
   }
+  cache = s;
   window.dispatchEvent(new Event(EVENT));
 }
 

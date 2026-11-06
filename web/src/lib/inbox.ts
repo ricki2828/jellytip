@@ -7,7 +7,7 @@ export const EXPIRY_MS = 30 * 24 * 3600_000;
 export const THROTTLE_MS = 15 * 60_000;
 export const MAX_EVENTS = 200;
 export const MAX_TITLES = 500;
-export const MAX_EPS_PER_SERIES = 150;
+export const MAX_EPS_PER_SERIES = 120;
 export const MAX_SERIES = 300;
 export const MAX_CHECKED = 800;
 /** More arrivals than this in one look collapse into a single summary event. */
@@ -50,7 +50,7 @@ export interface Snapshot {
 }
 
 export interface Store {
-  v: 1;
+  v: 2;
   userId: string;
   seeded: boolean;
   lastRefresh: number;
@@ -88,34 +88,43 @@ export interface Observed {
   checked?: string[];
 }
 
+/** "#2x5" for season 2 episode 5, or null when Jellyfin gave no numbers. */
+export const epKey = (e: { season?: number; episode?: number }): string | null => (e.season != null && e.episode != null ? `#${e.season}x${e.episode}` : null);
+
 export const reqKey = (media: "movie" | "tv", tmdbId: number) => `${media}:${tmdbId}`;
 
-export const emptyStore = (userId: string): Store => ({ v: 1, userId, seeded: false, lastRefresh: 0, snap: { titles: {}, eps: {} }, events: [], requests: [], checked: {} });
+export const emptyStore = (userId: string): Store => ({ v: 2, userId, seeded: false, lastRefresh: 0, snap: { titles: {}, eps: {} }, events: [], requests: [], checked: {} });
 
 /** Parse what localStorage held for this person. Another person's data, junk and old shapes all come back empty. */
 export function parseStore(raw: string | null, userId: string): Store {
   if (!raw) return emptyStore(userId);
   try {
     const o = JSON.parse(raw) as Partial<Store> | null;
-    if (!o || o.v !== 1 || o.userId !== userId || !o.snap || !Array.isArray(o.events) || !Array.isArray(o.requests)) return emptyStore(userId);
+    if (!o || o.v !== 2 || o.userId !== userId || !o.snap || !Array.isArray(o.events) || !Array.isArray(o.requests)) return emptyStore(userId);
+    // Any shape mismatch in the snapshot = start over (re-seed silently) rather than limp on with half-valid data
+    const obj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+    if (!obj(o.snap.titles) || !obj(o.snap.eps) || !obj(o.checked)) return emptyStore(userId);
+    if (!Object.values(o.snap.titles).every((t) => obj(t) && (t.r === 0 || t.r === 1 || t.r === 2))) return emptyStore(userId);
+    if (!Object.values(o.snap.eps).every((l) => Array.isArray(l) && l.every((x) => typeof x === "string"))) return emptyStore(userId);
+    if (!Object.values(o.checked).every((n) => typeof n === "number")) return emptyStore(userId);
     const events = o.events.filter((e): e is InboxEvent => !!e && typeof e.id === "string" && typeof e.title === "string" && typeof e.at === "number" && typeof e.link === "string" && ["library", "iptv", "episode", "episodes", "summary"].includes(e.kind)).map((e) => ({ ...e, read: e.read === true }));
     const requests = o.requests.filter((r): r is RequestRec => !!r && typeof r.key === "string" && typeof r.tmdbId === "number" && typeof r.title === "string" && typeof r.at === "number" && (r.media === "movie" || r.media === "tv"));
     return {
-      v: 1,
+      v: 2,
       userId,
       seeded: o.seeded === true,
       lastRefresh: typeof o.lastRefresh === "number" ? o.lastRefresh : 0,
-      snap: { titles: o.snap.titles && typeof o.snap.titles === "object" ? o.snap.titles : {}, eps: o.snap.eps && typeof o.snap.eps === "object" ? o.snap.eps : {} },
+      snap: { titles: o.snap.titles as Snapshot["titles"], eps: o.snap.eps as Snapshot["eps"] },
       events,
       requests,
-      checked: o.checked && typeof o.checked === "object" ? o.checked : {},
+      checked: o.checked as Record<string, number>,
     };
   } catch {
     return emptyStore(userId);
   }
 }
 
-export const storageKey = (userId: string) => `jellytip.inbox.v1.${userId}`;
+export const storageKey = (userId: string) => `jellytip.inbox.v2.${userId}`;
 
 /** Drop events past 30 days, dedupe by id (the earliest-detected wins), newest first, bounded. */
 export function tidyEvents(events: InboxEvent[], now: number): InboxEvent[] {
@@ -152,7 +161,7 @@ export function applyObservation(s: Store, obs: Observed, now: number): Store {
   if (obs.titles) {
     for (const [key, o] of Object.entries(obs.titles)) {
       const prev = s.snap.titles[key];
-      const r: Rank = o.partial && prev ? (Math.max(o.r, Math.min(prev.r, 1)) as Rank) : o.r;
+      const r: Rank = o.partial && prev ? (Math.max(o.r, prev.r) as Rank) : o.r;
       titles[key] = { r };
       if (first || !prev || r <= prev.r) continue;
       if (r === 2 && o.libId) fresh.push({ id: `lib:${key}`, kind: "library", title: o.title, requested: o.requested || undefined, link: `/item/${o.libId}`, at: now, read: false });
@@ -164,10 +173,19 @@ export function applyObservation(s: Store, obs: Observed, now: number): Store {
   if (obs.eps) {
     for (const [sid, list] of Object.entries(obs.eps)) {
       const prev = s.snap.eps[sid];
-      const ids = list.slice().sort((a, b) => b.at - a.at).map((e) => e.id);
+      const ids = list.slice().sort((a, b) => b.at - a.at).flatMap((e) => [e.id, epKey(e)].filter((x): x is string => !!x));
       if (!first && prev) {
+        // Known by Jellyfin id or by season+episode number: a re-import or quality upgrade gets new ids for the same episode
         const known = new Set(prev);
-        const added = list.filter((e) => !known.has(e.id));
+        const seenNow = new Set<string>();
+        const added = list.filter((e) => {
+          const sxe = epKey(e);
+          if (known.has(e.id) || (sxe && known.has(sxe))) return false;
+          const tok = sxe ?? e.id;
+          if (seenNow.has(tok)) return false;
+          seenNow.add(tok);
+          return true;
+        });
         if (added.length === 1) {
           const e = added[0];
           fresh.push({ id: `ep:${e.id}`, kind: "episode", title: e.show, season: e.season, episode: e.episode, link: `/item/${e.id}`, at: now, read: false });
