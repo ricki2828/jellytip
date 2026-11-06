@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { requestTitle, type RequestResult, type SeasonChoice } from "../api/companion";
 import { go } from "../lib/router";
+import { recordRequest } from "../api/inboxStore";
 import "./GetItSheet.css";
 
 export interface GetItPick {
@@ -158,7 +159,10 @@ export function GetItSheet({ pick, onClose, onRequested }: { pick: GetItPick; on
                     const a = await requestTitle(pick.tmdbId!, tv ? "tv" : "movie", false, tv ? seasons : undefined);
                     setDone(a);
                     setBusy(false);
-                    if (a.body.status === "added") onRequested?.();
+                    if (a.body.status === "added") {
+                      recordRequest(pick.tmdbId!, tv ? "tv" : "movie", pick.title);
+                      onRequested?.();
+                    }
                   }}
                 >
                   {busy ? "Adding…" : "Get it"}
