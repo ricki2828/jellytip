@@ -30,7 +30,7 @@ export function EpisodePlaceholder({
       )}
       {row.status === "missing" && !row.iptv && onRequest && (
         <button className="btn" data-nav onClick={onRequest}>
-          Request
+          Request show
         </button>
       )}
     </div>

@@ -67,7 +67,8 @@ export function Details({ id }: { id: string }) {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [seasonList, setSeasonList] = useState<Item[]>([]);
   const [season, setSeason] = useState<string | null>(null);
-  const [allEps, setAllEps] = useState<Item[] | null>(null);
+  const [allEps, setAllEps] = useState<{ season: string; items: Item[] } | null>(null);
+  const [iptvDone, setIptvDone] = useState(false);
   const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
   const [getIt, setGetIt] = useState(false);
   const [siblings, setSiblings] = useState<Item[]>([]);
@@ -101,6 +102,7 @@ export function Details({ id }: { id: string }) {
     setSeasonList([]);
     setAllEps(null);
     setIptvSeries(null);
+    setIptvDone(false);
     setGetIt(false);
     setSiblings([]);
     getItem(id)
@@ -143,7 +145,11 @@ export function Details({ id }: { id: string }) {
             setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
           });
           episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
-          iptvSeriesFor(it.Name, it.ProviderIds?.Tmdb).then((v) => alive && setIptvSeries(v));
+          iptvSeriesFor(it.Name, it.ProviderIds?.Tmdb).then((v) => {
+            if (!alive) return;
+            setIptvSeries(v);
+            setIptvDone(true);
+          });
         }
         if (it.Type === "Episode" && it.SeriesId) {
           getEpisodes(it.SeriesId).then((all) => alive && setSiblings(presentEpisodes(all)));
@@ -160,7 +166,7 @@ export function Details({ id }: { id: string }) {
     if (!item || item.Type !== "Series" || !season) return;
     let alive = true;
     setAllEps(null);
-    episodesComplete(item.Id, season).then((e) => alive && setAllEps(e));
+    episodesComplete(item.Id, season).then((e) => alive && setAllEps({ season, items: e }));
     return () => {
       alive = false;
     };
@@ -179,18 +185,19 @@ export function Details({ id }: { id: string }) {
   }, [showTrailer]);
 
   // Files only for play / download / Resume; the list below also shows placeholders and IPTV-only episodes
-  const eps = useMemo(() => (allEps ? presentEpisodes(allEps) : null), [allEps]);
+  const cur = allEps && allEps.season === season ? allEps.items : null;
+  const eps = useMemo(() => (cur ? presentEpisodes(cur) : null), [cur]);
   const seasonNo = seasonList.find((s) => s.Id === season)?.IndexNumber;
   const rows = useMemo(
-    () => (allEps ? mergeEpisodes(allEps, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null),
-    [allEps, iptvSeries, seasonNo],
+    () => (cur ? mergeEpisodes(cur, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null),
+    [cur, iptvSeries, seasonNo],
   );
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
   const playIptv = (episodeId: string) =>
     iptvSeries && go(`${targetPath({ series: iptvSeries.id, episode: episodeId })}&t=${encodeURIComponent(`${iptvSeries.title}`)}`);
   const ph = (r: NonNullable<typeof rows>[number]) => (
-    <EpisodePlaceholder key={r.key} row={r} now={new Date()} onIptv={playIptv} onRequest={admin && tmdb > 0 ? () => setGetIt(true) : undefined} />
+    <EpisodePlaceholder key={r.key} row={r} now={new Date()} onIptv={playIptv} onRequest={admin && iptvDone && tmdb > 0 ? () => setGetIt(true) : undefined} />
   );
 
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);

@@ -1,6 +1,6 @@
 // A series' season as a COMPLETE episode list (pure; tested in web/test/seasonEpisodes.test.ts):
 // Jellyfin's real files + its missing/unaired placeholders + episodes the person's own IPTV has.
-// Reasons are stated only from data the client holds; anything else is "Not available".
+// Reasons are stated only from data the client holds.
 import type { Item } from "../api/jellyfin.ts";
 import type { VodEpisode, VodItem } from "./iptvVod.ts";
 
@@ -96,25 +96,33 @@ export function mergeEpisodes(
         : {}),
     });
   }
-  const covered = new Set(out.filter((r) => r.index > 0).map((r) => r.index));
+  // IPTV only attaches to a Jellyfin placeholder (it pins season + episode); never a playable row of its own,
+  // as absolute numbering or folded specials would play the wrong episode
   for (const v of iptv ?? []) {
-    if (!v.episode) continue;
     const have = out.find(
-      (r) => r.index === v.episode && r.status === "missing",
+      (r) => r.status === "missing" && r.index === v.episode && !r.iptv,
     );
-    if (have) have.iptv = { id: v.id, title: v.title };
-    else if (!covered.has(v.episode)) {
-      covered.add(v.episode);
-      out.push({
-        key: `iptv:${v.id}`,
-        status: "missing",
-        index: v.episode,
-        name: v.title ?? `Episode ${v.episode}`,
-        iptv: { id: v.id, title: v.title },
-      });
-    }
+    if (have && titlesAgree(have.name, v.title))
+      have.iptv = { id: v.id, title: v.title };
   }
   return out.sort((a, b) => a.index - b.index);
+}
+
+const norm = (t: string) =>
+  t
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+const generic = (t: string) => !t || /^(episode|ep)\s*\d+$/.test(t);
+/** Rough title match; unknown or generic titles ("Episode 5") can't disagree. */
+export function titlesAgree(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const x = norm(a ?? ""),
+    y = norm(b ?? "");
+  if (generic(x) || generic(y)) return true;
+  return x === y || x.includes(y) || y.includes(x);
 }
 
 /** Plain-language state of a row, from the data we hold. Never invents a reason. */
@@ -125,11 +133,7 @@ export function reasonLabel(r: EpRow, now: Date): string | null {
     case "unaired":
       return airsLabel(r.airDate, now) ?? "Not released yet";
     case "missing":
-      return r.iptv
-        ? "Available via IPTV"
-        : r.item
-          ? "Not in your library"
-          : "Not available";
+      return r.iptv ? "Available via IPTV" : "Not in your library";
   }
 }
 

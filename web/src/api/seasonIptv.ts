@@ -3,23 +3,22 @@
 // GET v1/iptv/vod/{id} (seasons + episodes). Any failure = no IPTV info (null), never an error on the page.
 import { iptvGet, providers, vodItem } from "./iptv";
 import { parseVodItems, type VodDetail } from "../lib/iptvVod";
+import { getSession } from "./jellyfin";
+import { createLookupCache } from "../lib/lookupCache";
 import { pickIptvSeries } from "../lib/seasonEpisodes";
 
-const cache = new Map<string, Promise<VodDetail | null>>();
+const cache = createLookupCache<VodDetail>();
+// A different person (or none) must never see the previous person's provider titles
+if (typeof window !== "undefined")
+  window.addEventListener("jellytip-session", () => cache.clear());
 
 export function iptvSeriesFor(
   title: string,
   tmdbId: string | undefined,
 ): Promise<VodDetail | null> {
-  if (!tmdbId || !title) return Promise.resolve(null);
-  const key = `${tmdbId}`;
-  let p = cache.get(key);
-  if (!p) {
-    p = lookup(title, tmdbId).catch(() => null);
-    cache.set(key, p);
-    p.then((v) => v ?? cache.delete(key)); // a miss is retried on the next visit
-  }
-  return p;
+  const user = getSession()?.userId;
+  if (!user || !tmdbId || !title) return Promise.resolve(null);
+  return cache.get(user, tmdbId, () => lookup(title, tmdbId));
 }
 
 async function lookup(

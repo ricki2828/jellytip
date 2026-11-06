@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  titlesAgree,
   airsLabel,
   episodeStatus,
   mergeEpisodes,
@@ -99,23 +100,45 @@ test("merge: duplicate numbers with files are all kept; a placeholder shadowed b
   );
 });
 
-test("merge: IPTV fills a missing placeholder and episodes Jellyfin does not list, never a present or unaired one", () => {
+test("merge: IPTV attaches only to a missing placeholder, never creates a playable row or touches present/unaired", () => {
   const jf = [
     ep(1),
-    ep(2, { LocationType: "Virtual" }),
+    ep(2, { LocationType: "Virtual", Name: "Pilot Two" }),
     ep(4, { LocationType: "Virtual", PremiereDate: "2026-12-12T00:00:00Z" }),
   ];
-  const rows = mergeEpisodes(jf, [ve(1), ve(2), ve(3), ve(4)], now);
+  const rows = mergeEpisodes(
+    jf,
+    [ve(1), ve(2, "3:e:2", "Pilot Two"), ve(3), ve(4)],
+    now,
+  );
   assert.deepEqual(
     rows.map((r) => [r.index, r.status, r.iptv?.id ?? null]),
     [
       [1, "present", null],
       [2, "missing", "3:e:2"],
-      [3, "missing", "3:e:3"],
       [4, "unaired", null],
     ],
   );
-  assert.equal(rows[2].item, undefined);
+});
+
+test("merge: absolute numbering / offset IPTV episodes do not attach or create rows", () => {
+  // Jellyfin S2E1 is missing; the provider numbers it 13 (absolute) and has its own unrelated "episode 1"
+  const jf = [ep(1, { LocationType: "Virtual", Name: "The Return" })];
+  const rows = mergeEpisodes(
+    jf,
+    [ve(13, "3:e:13", "The Return"), ve(1, "3:e:1", "Season One Opener")],
+    now,
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].iptv, undefined);
+  assert.deepEqual(mergeEpisodes([], [ve(5)], now), []);
+});
+
+test("titles: generic or unknown agree, clear mismatches do not", () => {
+  assert.equal(titlesAgree("Episode 5", "Anything"), true);
+  assert.equal(titlesAgree("The Return", null), true);
+  assert.equal(titlesAgree("The Return", "the return!"), true);
+  assert.equal(titlesAgree("The Return", "Another One"), false);
 });
 
 test("merge: no IPTV info leaves the Jellyfin list as is", () => {
@@ -167,14 +190,6 @@ test("reasons come from real data only", () => {
     now,
   )[0];
   assert.equal(reasonLabel(viaIptv, now), "Available via IPTV");
-  assert.equal(
-    reasonLabel(mergeEpisodes([], [ve(7)], now)[0], now),
-    "Available via IPTV",
-  );
-  assert.equal(
-    reasonLabel({ key: "k", status: "missing", index: 1, name: "x" }, now),
-    "Not available",
-  );
 });
 
 const vod = (
