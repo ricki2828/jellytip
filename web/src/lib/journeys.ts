@@ -2,7 +2,6 @@
 // the app already has: franchises (companion collection), directors (the hub's own library credits) and Letterboxd lists.
 // No invented copy: titles are plain facts ("Hitchcock in order · 6 films").
 import type { CollectionSection } from "./collections.ts";
-import { createLookupCache } from "./lookupCache.ts";
 
 export type JourneyKind = "franchise" | "director" | "list";
 
@@ -27,12 +26,16 @@ export interface JourneyDef {
   /** The subject: a franchise name, a director's name, a list's name. */
   name: string;
   parts: Part[];
+  /** Films that qualified before the cap cut the path (parts.length when nothing was cut). */
+  total?: number;
 }
 
 export interface JourneySummary {
   id: string;
   kind: JourneyKind;
   title: string;
+  /** Small label above the title ("Director"). */
+  kicker?: string;
   films: number;
 }
 
@@ -58,30 +61,38 @@ export interface Entry {
 // ---------- ids (route-safe) ----------
 
 const PREFIX: Record<JourneyKind, string> = { franchise: "f", director: "d", list: "l" };
-const KEY_RE: Record<JourneyKind, RegExp> = { franchise: /^\d{1,9}$/, director: /^[0-9a-f]{32}$/i, list: /^[a-z0-9][a-z0-9_-]{0,120}$/i };
+const KEY_RE: Record<JourneyKind, RegExp> = { franchise: /^\d{1,9}$/, director: /^([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, list: /^[a-z0-9][a-z0-9_-]{0,120}$/i };
 
 export const journeyId = (kind: JourneyKind, key: string) => `${PREFIX[kind]}:${key}`;
 
 export function parseJourneyId(id: string): { kind: JourneyKind; key: string } | null {
-  const m = /^([fdl]):(.+)$/.exec(id);
+  const m = /^([fdl]):(.+)$/i.exec(id);
   if (!m) return null;
-  const kind = (Object.keys(PREFIX) as JourneyKind[]).find((k) => PREFIX[k] === m[1])!;
-  return KEY_RE[kind].test(m[2]) ? { kind, key: kind === "director" ? m[2].toLowerCase() : m[2] } : null;
+  const kind = (Object.keys(PREFIX) as JourneyKind[]).find((k) => PREFIX[k] === m[1].toLowerCase())!;
+  return KEY_RE[kind].test(m[2]) ? { kind, key: kind === "director" ? m[2].toLowerCase().replace(/-/g, "") : m[2] } : null;
 }
 
 // ---------- ordering ----------
 
-/** By release year; films without a year, and ties, keep the order they came in. */
+/** By release year. Films without a year stay at the position they came in; the dated ones fill the other slots in order (ties keep their order). */
 export function orderByRelease<T extends { year: number | null }>(parts: T[]): T[] {
-  return parts
+  const dated = parts
     .map((p, i) => ({ p, i }))
-    .sort((a, b) => (a.p.year ?? Infinity) - (b.p.year ?? Infinity) || a.i - b.i)
+    .filter((x) => x.p.year != null)
+    .sort((a, b) => a.p.year! - b.p.year! || a.i - b.i)
     .map((x) => x.p);
+  let k = 0;
+  return parts.map((p) => (p.year == null ? p : dated[k++]));
 }
 
 const titleFor = (name: string, films: number, kind: JourneyKind) =>
   kind === "list" ? `${name} · ${films} film${films === 1 ? "" : "s"}` : `${name} in order · ${films} film${films === 1 ? "" : "s"}`;
-export const journeyTitle = (d: Pick<JourneyDef, "kind" | "name" | "parts">) => titleFor(d.name, d.parts.length, d.kind);
+/** Headline; says so when the path is only the start of what qualifies ("Hitchcock: earliest 6 of 14 films"). */
+export function journeyTitle(d: Pick<JourneyDef, "kind" | "name" | "parts" | "total">): string {
+  const total = d.total ?? d.parts.length;
+  if (total > d.parts.length) return `${d.name}: ${d.kind === "director" ? "earliest" : "first"} ${d.parts.length} of ${total} films`;
+  return titleFor(d.name, d.parts.length, d.kind);
+}
 
 // ---------- definitions ----------
 
@@ -94,23 +105,29 @@ interface FranchisePageLike {
 export function franchiseDef(tmdbId: number | string, page: FranchisePageLike): JourneyDef | null {
   const parts: Part[] = page.partsOrder.map((p) => ({ itemId: p.itemId || null, title: p.title, year: typeof p.year === "number" ? p.year : null }));
   if (parts.filter((p) => p.itemId).length < FRANCHISE_MIN) return null;
-  return { id: journeyId("franchise", String(tmdbId)), kind: "franchise", name: page.name, parts: orderByRelease(parts) };
+  return { id: journeyId("franchise", String(tmdbId)), kind: "franchise", name: page.name, parts: orderByRelease(parts), total: parts.length };
 }
 
-/** A director's films from the library's own credits: eligible at DIRECTOR_MIN, chronological, first DIRECTOR_CAP. */
-export function directorDef(personId: string, name: string, films: StateItem[]): JourneyDef | null {
+/** Movies a director path can use: placeholders and duplicates out. */
+export function playableFilms(films: StateItem[]): StateItem[] {
   const seen = new Set<string>();
-  const movies = films.filter((f) => f.LocationType !== "Virtual" && !seen.has(f.Id) && !!seen.add(f.Id));
+  return films.filter((f) => f.LocationType !== "Virtual" && !seen.has(f.Id) && !!seen.add(f.Id));
+}
+
+/** A director's films from the library's own credits: eligible at DIRECTOR_MIN, chronological, first DIRECTOR_CAP. `total` = how many qualified. */
+export function directorDef(personId: string, name: string, films: StateItem[], total?: number): JourneyDef | null {
+  const movies = playableFilms(films);
   if (!name || movies.length < DIRECTOR_MIN) return null;
   const parts = orderByRelease(movies.map((f) => ({ itemId: f.Id, title: f.Name ?? "", year: f.ProductionYear ?? null }))).slice(0, DIRECTOR_CAP);
-  return { id: journeyId("director", personId), kind: "director", name, parts };
+  return { id: journeyId("director", personId), kind: "director", name, parts, total: Math.max(total ?? 0, movies.length) };
 }
 
 /** A Letterboxd list in the list's own order, first LIST_CAP. */
 export function listDef(list: { slug: string; name: string; itemIds: string[] }): JourneyDef | null {
-  const ids = [...new Set(list.itemIds)].slice(0, LIST_CAP);
+  const all = [...new Set(list.itemIds)];
+  const ids = all.slice(0, LIST_CAP);
   if (ids.length < 2) return null;
-  return { id: journeyId("list", list.slug), kind: "list", name: list.name, parts: ids.map((itemId) => ({ itemId, title: "", year: null })) };
+  return { id: journeyId("list", list.slug), kind: "list", name: list.name, parts: ids.map((itemId) => ({ itemId, title: "", year: null })), total: all.length };
 }
 
 // ---------- the journeys page (no per-journey calls: counts from the hub and manifest) ----------
@@ -132,10 +149,8 @@ export function summaries(hub: CollectionSection[] | null, lists: { slug: string
     .filter((c) => c.person && parseJourneyId(journeyId("director", c.person.id)) && c.mediaType !== "tv" && c.libCount >= DIRECTOR_MIN)
     .sort((a, b) => b.libCount - a.libCount)
     .slice(0, DIRECTORS_SHOWN)
-    .map((c) => {
-      const films = Math.min(c.libCount, DIRECTOR_CAP);
-      return { id: journeyId("director", c.person!.id), kind: "director" as const, title: titleFor(c.title, films, "director"), films };
-    });
+    // No film count on the card: the hub's count and the library's director credits can differ; the path states its own
+    .map((c) => ({ id: journeyId("director", c.person!.id), kind: "director" as const, title: c.title, kicker: "Director", films: 0 }));
   const list = (lists ?? [])
     .filter((l) => parseJourneyId(journeyId("list", l.slug)) && new Set(l.itemIds).size >= 2)
     .slice(0, LISTS_SHOWN)
@@ -177,9 +192,74 @@ export function progress(entries: Entry[]): { watched: number; playable: number;
   return { watched: entries.filter((e) => e.watched).length, playable: entries.filter((e) => e.playable).length, total: entries.length };
 }
 
-// ---------- session-scoped cache of definitions ----------
+// ---------- building (fetchers injected: tested without a server) ----------
 
-/** Definitions cached per user (a hit lives 10 min, a failure 2); clear() on sign-in/out. Watched state is never cached here. */
-export function createJourneyCache(now?: () => number) {
-  return createLookupCache<JourneyDef>(now);
+export type BuildResult =
+  | { kind: "ok"; def: JourneyDef }
+  /** The server has no such journey (or fewer than 2 films in the library). */
+  | { kind: "none" }
+  /** A director with fewer than DIRECTOR_MIN playable films in the library. */
+  | { kind: "short"; personId: string; films: number }
+  /** A fetch failed: not the same as "none", and never cached. */
+  | { kind: "error" };
+
+export interface BuildDeps {
+  collectionPage(tmdbId: number): Promise<FranchisePageLike | null>;
+  directorFilms(personId: string): Promise<{ items: StateItem[]; total?: number | null }>;
+  personName(personId: string): Promise<string>;
+  list(slug: string): Promise<{ slug: string; name: string; itemIds: string[] } | null>;
+}
+
+export const DIRECTOR_QUERY_LIMIT = 60;
+
+/** Jellyfin Items params for a director's films: credited as Director, movies, oldest first, one bounded call. */
+export function directorQuery(personId: string): Record<string, string | number | boolean> {
+  return { PersonIds: personId, PersonTypes: "Director", Recursive: true, IncludeItemTypes: "Movie", SortBy: "PremiereDate,SortName", SortOrder: "Ascending", Limit: DIRECTOR_QUERY_LIMIT, Fields: "" };
+}
+
+export async function buildJourney(id: string, deps: BuildDeps): Promise<BuildResult> {
+  const p = parseJourneyId(id);
+  if (!p) return { kind: "none" };
+  try {
+    if (p.kind === "franchise") {
+      const page = await deps.collectionPage(Number(p.key));
+      const def = page ? franchiseDef(p.key, page) : null;
+      return def ? { kind: "ok", def } : { kind: "none" };
+    }
+    if (p.kind === "director") {
+      const [r, name] = await Promise.all([deps.directorFilms(p.key), deps.personName(p.key)]);
+      const films = playableFilms(r.items);
+      const total = r.items.length < DIRECTOR_QUERY_LIMIT ? films.length : Math.max(films.length, r.total ?? 0);
+      const def = directorDef(p.key, name, r.items, total);
+      return def ? { kind: "ok", def } : { kind: "short", personId: p.key, films: films.length };
+    }
+    const l = await deps.list(p.key);
+    const def = l ? listDef(l) : null;
+    return def ? { kind: "ok", def } : { kind: "none" };
+  } catch {
+    return { kind: "error" };
+  }
+}
+
+// ---------- session-scoped cache of build results ----------
+
+const TTL_MS = 10 * 60_000;
+
+/** Results cached per user (10 min); errors are never kept, so a retry asks again. clear() on sign-in/out. Watched state is not cached here. */
+export function createJourneyCache(now: () => number = Date.now) {
+  const m = new Map<string, { at: number; p: Promise<BuildResult> }>();
+  return {
+    get(user: string, key: string, load: () => Promise<BuildResult>): Promise<BuildResult> {
+      const k = `${user}|${key}`;
+      const e = m.get(k);
+      if (e && now() - e.at < TTL_MS) return e.p;
+      const ent = { at: now(), p: load().catch((): BuildResult => ({ kind: "error" })) };
+      m.set(k, ent);
+      void ent.p.then((r) => {
+        if (r.kind === "error" && m.get(k) === ent) m.delete(k);
+      });
+      return ent.p;
+    },
+    clear: () => m.clear(),
+  };
 }

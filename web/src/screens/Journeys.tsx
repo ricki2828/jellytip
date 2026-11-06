@@ -42,6 +42,7 @@ export function Journeys() {
             <div className="journey-cards">
               {groups[g.key].map((s: JourneySummary) => (
                 <button key={s.id} className="journey-card" data-nav onClick={() => go(`/journeys/${encodeURIComponent(s.id)}`)}>
+                  {s.kicker && <span className="journey-kicker">{s.kicker}</span>}
                   {s.title}
                 </button>
               ))}

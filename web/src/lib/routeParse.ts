@@ -52,7 +52,7 @@ export function parseHash(hash: string): Route {
       } catch {
         return { name: "journeys", params: {}, query };
       }
-      if (!/^(f:\d{1,9}|d:[0-9a-f]{32}|l:[a-z0-9][a-z0-9_-]{0,120})$/i.test(id)) return { name: "journeys", params: {}, query };
+      if (!/^(f:\d{1,9}|d:([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})|l:[a-z0-9][a-z0-9_-]{0,120})$/i.test(id)) return { name: "journeys", params: {}, query };
       return { name: "journey", params: { id }, query };
     }
     case "iptv":

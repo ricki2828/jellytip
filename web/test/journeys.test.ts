@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildEntries, createJourneyCache, directorDef, franchiseDef, journeyId, journeyTitle, listDef, nextUp, orderByRelease, parseJourneyId, progress, summaries,
+  buildEntries, buildJourney, createJourneyCache, directorQuery, type BuildDeps, type BuildResult, directorDef, franchiseDef, journeyId, journeyTitle, listDef, nextUp, orderByRelease, parseJourneyId, progress, summaries,
   DIRECTOR_CAP, LIST_CAP, type JourneyDef,
 } from "../src/lib/journeys.ts";
 import { parseHash } from "../src/lib/routeParse.ts";
@@ -20,7 +20,7 @@ test("franchise: ordered by release year, ties and unknown years keep series ord
       { title: "B2", year: 1986, itemId: "b2" },
     ],
   })!;
-  assert.deepEqual(d.parts.map((p) => p.title), ["A", "B", "B2", "C", "X"]);
+  assert.deepEqual(d.parts.map((p) => p.title), ["A", "B", "X", "B2", "C"]); // X (no year) keeps its companion slot
   assert.equal(d.parts[1].itemId, null);
   assert.equal(journeyTitle(d), "Alien in order · 5 films");
 });
@@ -71,7 +71,10 @@ test("director: needs 4 films, chronological, capped at 6, de-duplicated, virtua
   const d = directorDef(id(1), "Hitchcock", many)!;
   assert.equal(d.parts.length, DIRECTOR_CAP);
   assert.deepEqual(d.parts.map((p) => p.year), [1992, 1993, 1994, 1995, 1996, 1997]);
-  assert.equal(journeyTitle(d), "Hitchcock in order · 6 films");
+  assert.equal(journeyTitle(d), "Hitchcock: earliest 6 of 9 films");
+  assert.equal(directorDef(id(1), "H", many.slice(0, 6))!.parts.length, 6);
+  assert.equal(journeyTitle(directorDef(id(1), "H", many.slice(0, 5))!), "H in order · 5 films");
+  assert.equal(journeyTitle(directorDef(id(1), "H", many.slice(0, 6), 14)!), "H: earliest 6 of 14 films");
 });
 
 test("list: list order kept, duplicates dropped, capped at 8; one film is no journey", () => {
@@ -80,7 +83,7 @@ test("list: list order kept, duplicates dropped, capped at 8; one film is no jou
   assert.equal(d.parts.length, LIST_CAP);
   assert.deepEqual(d.parts.map((p) => p.itemId), ids.slice(0, 8));
   assert.equal(listDef({ slug: "s", name: "S", itemIds: ["a", "a"] }), null);
-  assert.equal(journeyTitle(d), "Best · 8 films");
+  assert.equal(journeyTitle(d), "Best: first 8 of 12 films");
 });
 
 test("journeys page: directors under 4 films and TV are dropped, groups capped and biggest first, lists need 2 films", () => {
@@ -93,7 +96,7 @@ test("journeys page: directors under 4 films and TV are dropped, groups capped a
   });
   const g = summaries(hub, [{ slug: "a", name: "A", itemIds: ["1", "2", "3"] }, { slug: "b", name: "B", itemIds: ["1"] }, { slug: "bad slug", name: "C", itemIds: ["1", "2"] }]);
   assert.deepEqual(g.franchise.map((s) => s.title), ["Big in order · 9 films", "Small in order · 2 films"]);
-  assert.deepEqual(g.director.map((s) => [s.title, s.films]), [["Lots in order · 6 films", 6], ["Four in order · 4 films", 4]]);
+  assert.deepEqual(g.director.map((s) => [s.kicker, s.title]), [["Director", "Lots"], ["Director", "Four"]]); // no film count on director cards
   assert.deepEqual(g.list.map((s) => s.id), ["l:a"]);
   assert.deepEqual(summaries(null, null), { franchise: [], director: [], list: [] });
 });
@@ -110,6 +113,8 @@ test("ids round-trip and reject anything that could escape a path", () => {
   assert.deepEqual(parseJourneyId(journeyId("franchise", "10")), { kind: "franchise", key: "10" });
   assert.deepEqual(parseJourneyId(journeyId("director", id(5).toUpperCase())), { kind: "director", key: id(5) });
   assert.deepEqual(parseJourneyId("l:best-of_2020"), { kind: "list", key: "best-of_2020" });
+  assert.deepEqual(parseJourneyId("F:10"), { kind: "franchise", key: "10" });
+  assert.deepEqual(parseJourneyId("D:" + id(5).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5")), { kind: "director", key: id(5) });
   for (const bad of ["f:../x", "d:123", "x:1", "l:", "f:1/2", "f:abc", "l:a b"]) assert.equal(parseJourneyId(bad), null, bad);
 });
 
@@ -118,17 +123,70 @@ test("routes: #/journeys and #/journeys/<id> (percent-encoded colon)", () => {
   const r = parseHash("#/journeys/f%3A10");
   assert.deepEqual([r.name, r.params.id], ["journey", "f:10"]);
   assert.equal(parseHash("#/journeys/f%3A..%2Fx").name, "journeys");
+  assert.equal(parseHash("#/journeys/d%3A" + id(5).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5")).name, "journey");
   assert.equal(parseHash("#/journeys/%E0%A4%A").name, "journeys");
 });
 
-test("definitions are cached per user and cleared on session change", async () => {
+test("results are cached per user and cleared on session change; errors are never cached", async () => {
   const c = createJourneyCache(() => 0);
-  const def = (name: string): JourneyDef => ({ id: "l:x", kind: "list", name, parts: [] });
-  assert.equal((await c.get("a", "l:x", async () => def("A")))!.name, "A");
-  assert.equal((await c.get("b", "l:x", async () => def("B")))!.name, "B");
-  assert.equal((await c.get("a", "l:x", async () => def("again")))!.name, "A");
+  const ok = (name: string): BuildResult => ({ kind: "ok", def: { id: "l:x", kind: "list", name, parts: [] } });
+  const nm = (r: BuildResult) => (r.kind === "ok" ? r.def.name : r.kind);
+  assert.equal(nm(await c.get("a", "l:x", async () => ok("A"))), "A");
+  assert.equal(nm(await c.get("b", "l:x", async () => ok("B"))), "B");
+  assert.equal(nm(await c.get("a", "l:x", async () => ok("again"))), "A");
   c.clear();
-  assert.equal((await c.get("a", "l:x", async () => def("fresh")))!.name, "fresh");
+  assert.equal(nm(await c.get("a", "l:x", async () => ok("fresh"))), "fresh");
+  assert.equal(nm(await c.get("a", "e", async () => { throw new Error("x"); })), "error");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(nm(await c.get("a", "e", async () => ok("recovered"))), "recovered");
+  assert.equal(nm(await c.get("a", "n", async () => ({ kind: "none" }))), "none"); // "not found" is cached
+});
+
+// ---------- build() with injected fetchers ----------
+
+const calls: string[] = [];
+const deps = (over: Partial<BuildDeps> = {}): BuildDeps => ({
+  collectionPage: async () => ({ name: "Alien", partsOrder: [{ title: "a", year: 1979, itemId: "a" }, { title: "b", year: 1986, itemId: "b" }, { title: "c", year: 1992, itemId: null }] }),
+  directorFilms: async (p) => (calls.push(`films:${p}`), { items: Array.from({ length: 5 }, (_, i) => ({ Id: id(i + 1), Name: `F${i}`, ProductionYear: 1950 + i })) }),
+  personName: async () => "Hitchcock",
+  list: async (slug) => (slug === "best" ? { slug, name: "Best", itemIds: ["a", "b", "c"] } : null),
+  ...over,
+});
+
+test("director query: credited as Director, movies, oldest first, bounded, one call", async () => {
+  assert.deepEqual(directorQuery(id(7)), { PersonIds: id(7), PersonTypes: "Director", Recursive: true, IncludeItemTypes: "Movie", SortBy: "PremiereDate,SortName", SortOrder: "Ascending", Limit: 60, Fields: "" });
+  calls.length = 0;
+  const r = await buildJourney("d:" + id(7), deps());
+  assert.deepEqual(calls, ["films:" + id(7)]);
+  assert.equal(r.kind === "ok" && journeyTitle(r.def), "Hitchcock in order · 5 films");
+});
+
+test("director with a truncated result reports the library total from the server", async () => {
+  const items = Array.from({ length: 60 }, (_, i) => ({ Id: id(i + 1), Name: `F${i}`, ProductionYear: 1900 + i }));
+  const r = await buildJourney("d:" + id(7), deps({ directorFilms: async () => ({ items, total: 75 }) }));
+  assert.equal(r.kind === "ok" && journeyTitle(r.def), "Hitchcock: earliest 6 of 75 films");
+});
+
+test("director with under 4 playable films is 'short', not 'none'", async () => {
+  const r = await buildJourney("d:" + id(7), deps({ directorFilms: async () => ({ items: [{ Id: id(1) }, { Id: id(2) }, { Id: id(3) }, { Id: id(4), LocationType: "Virtual" }] }) }));
+  assert.deepEqual(r, { kind: "short", personId: id(7), films: 3 });
+});
+
+test("franchise path builds from the companion page; a 404 is 'none'", async () => {
+  const r = await buildJourney("f:10", deps());
+  assert.equal(r.kind === "ok" && r.def.parts.length, 3);
+  assert.deepEqual(await buildJourney("f:10", deps({ collectionPage: async () => null })), { kind: "none" });
+});
+
+test("a failed fetch is 'error', an empty result is 'none' or 'short'", async () => {
+  const boom = async () => { throw new Error("net"); };
+  assert.deepEqual(await buildJourney("f:10", deps({ collectionPage: boom })), { kind: "error" });
+  assert.deepEqual(await buildJourney("d:" + id(7), deps({ directorFilms: boom })), { kind: "error" });
+  assert.deepEqual(await buildJourney("d:" + id(7), deps({ personName: boom })), { kind: "error" });
+  assert.deepEqual(await buildJourney("l:best", deps({ list: boom })), { kind: "error" });
+  assert.deepEqual(await buildJourney("l:nope", deps()), { kind: "none" });
+  assert.deepEqual((await buildJourney("d:" + id(7), deps({ directorFilms: async () => ({ items: [] }) }))).kind, "short");
+  assert.deepEqual(await buildJourney("garbage", deps()), { kind: "none" });
 });
 
 test("orderByRelease is stable", () => {
