@@ -1,64 +1,79 @@
 // Browser side of trailer previews: waits out the debounce, checks the gate, resolves the source (cached per
 // session), and hands back a playable URL. Pure rules live in trailerPreview.ts.
 import { useEffect, useState } from "react";
-import { localTrailers } from "../api/jellyfin";
+import { jf, uid, type Item } from "../api/jellyfin";
 import { prefsNow } from "../api/me";
 import { streamUrl, vodItem } from "../api/iptv";
 import { trailerStreamUrl } from "../api/playback";
-import { acquirePreview, iptvPlayable, previewGate, readEnv, settle, targetKey, TrailerCache, type PreviewTarget, type Trigger } from "./trailerPreview";
+import { acquirePreview, previewGate, readEnv, settle, type PreviewTarget, type Trigger } from "./trailerPreview";
+import { createResolver } from "./trailerResolve";
 
 export const TRAILER_DELAY_MS = 2500;
 
-const cache = new TrailerCache(2);
-window.addEventListener("jellytip-session", () => cache.clear()); // per user (and token in the URL)
+const resolver = createResolver({
+  // jf() throws on failure, so a 401 or a network blip is a transient miss, never "this title has no trailer"
+  jf: async (id) => {
+    const t = (await jf<Item[]>(`/Users/${uid()}/Items/${id}/LocalTrailers`))[0];
+    return t ? trailerStreamUrl(t.Id) : null;
+  },
+  iptv: async (id) => {
+    const a = await vodItem(id);
+    return { status: a.status, trailer: a.status === 200 ? a.data?.trailer : null };
+  },
+  rel: streamUrl,
+});
+window.addEventListener("jellytip-session", () => resolver.reset()); // per user (and token in the URL); in-flight asks are orphaned
 
-async function resolve(t: Exclude<PreviewTarget, { kind: "direct" }>): Promise<string | null> {
-  const key = targetKey(t);
-  if (!cache.shouldFetch(key)) return cache.get(key);
-  try {
-    if (t.kind === "jf") {
-      const tr = (await localTrailers(t.id))[0];
-      const url = tr ? trailerStreamUrl(tr.Id) : null;
-      cache.record(key, url, true); // the library answers once
-      return url;
-    }
-    const a = await vodItem(t.id);
-    if (a.status !== 200 || !a.data) {
-      cache.record(key, null); // may be a hiccup: one re-check on a later focus
-      return null;
-    }
-    const raw = a.data.trailer;
-    const url = iptvPlayable(raw, streamUrl);
-    // A path the companion has not cached yet is a miss we ask again once; a web link will never play inline
-    cache.record(key, url, !!raw && !url);
-    return url;
-  } catch {
-    cache.record(key, null);
-    return null;
-  }
-}
+type Connection = EventTarget & { saveData?: boolean };
 
 /**
  * The URL to preview for `target`, or null. Starts after `delay` of rest on the same target and only when the
  * gate allows (prefs, rotating mix, touch, reduced motion, Save-Data, hidden tab). Changing target cancels the
- * pending start, so titles passed quickly cost nothing.
+ * pending start, so titles passed quickly cost nothing. A tab that was hidden at the start retries when it is
+ * shown; Save-Data or the autoplay pref turning off stops a preview that is playing.
  */
 export function useTrailerPreview(target: PreviewTarget | null, o: { trigger: Trigger; rotating?: boolean; delay?: number } = { trigger: "focus" }): string | null {
   const [url, setUrl] = useState<string | null>(null);
-  const key = target ? targetKey(target) : null;
+  const key = target ? (target.kind === "direct" ? `direct:${target.key}` : `${target.kind}:${target.id}`) : null;
   useEffect(() => {
     setUrl(null);
     if (!target) return;
-    let alive = true;
-    const cancel = settle(o.delay ?? TRAILER_DELAY_MS, () => {
-      const g = previewGate({ autoplayPref: prefsNow()?.playback.trailerAutoplay, env: readEnv(), trigger: o.trigger, rotating: o.rotating });
-      if (!g.ok) return;
+    let started = false;
+    let rested = false;
+    let cancelFetch: (() => void) | null = null;
+    const gate = () => previewGate({ autoplayPref: prefsNow()?.playback.trailerAutoplay, env: readEnv(), trigger: o.trigger, rotating: o.rotating });
+    const begin = () => {
+      if (started || !gate().ok) return;
+      started = true;
       if (target.kind === "direct") setUrl(target.url);
-      else void resolve(target).then((u) => alive && setUrl(u));
+      else cancelFetch = resolver.start(target, setUrl);
+    };
+    const stop = () => {
+      cancelFetch?.();
+      cancelFetch = null;
+      started = false;
+      setUrl(null);
+    };
+    const cancelRest = settle(o.delay ?? TRAILER_DELAY_MS, () => {
+      rested = true;
+      begin();
     });
+    const recheck = () => {
+      if (!rested) return;
+      const g = gate();
+      if (g.ok) begin();
+      else if (started && g.reason !== "hidden") stop(); // hidden only pauses the video (PreviewVideo / hero)
+    };
+    const conn = (navigator as Navigator & { connection?: Connection }).connection;
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("jellytip-prefs", recheck);
+    conn?.addEventListener?.("change", recheck);
     return () => {
-      alive = false;
-      cancel();
+      cancelRest();
+      cancelFetch?.();
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("jellytip-prefs", recheck);
+      conn?.removeEventListener?.("change", recheck);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, o.rotating, o.trigger]);

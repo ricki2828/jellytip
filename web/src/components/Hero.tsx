@@ -39,6 +39,11 @@ function useHeroVideo(id: string, url: string | null) {
     back.soundOn();
   };
   const mute = back.mute;
+  // A different trailer (or none) starts muted, and gives the Back entry up
+  useEffect(() => {
+    if (sound) mute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = !sound;
   }, [sound, live]);
@@ -74,7 +79,15 @@ export interface IptvHeroTile {
 }
 
 /** Hero for an IPTV title: its art, then the companion's cached trailer (if any) after a short rest. */
-export function IptvHero({ tile }: { tile: IptvHeroTile }) {
+export function IptvHero({ tile: wanted }: { tile: IptvHeroTile }) {
+  // Settles like the Jellyfin hero: tiles passed quickly do not each swap the hero
+  const [tile, setTile] = useState(wanted);
+  useEffect(() => {
+    if (wanted.id === tile.id) return;
+    const t = setTimeout(() => setTile(wanted), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted.id]);
   const target: PreviewTarget = { kind: "iptv", id: tile.id };
   const url = useTrailerPreview(target, { trigger: "focus" });
   const v = useHeroVideo("hero", url);

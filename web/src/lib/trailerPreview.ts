@@ -64,27 +64,37 @@ export function readEnv(): PreviewEnv {
 }
 
 /**
- * Per-session answers. A title with no trailer yet (the companion may not have cached it) is asked again at most
+ * Per-session answers. A 200 with no trailer yet (the companion may not have cached it) is asked again at most
  * `maxMisses - 1` more times, each on a later focus; a final answer (nothing playable there) is never re-asked.
+ * A transient failure (network, 401, 429, 5xx) is remembered only for `TRANSIENT_MS` and does not use up the budget.
  */
+export const TRANSIENT_MS = 60_000;
+
 export class TrailerCache {
-  private m = new Map<string, { url: string | null; misses: number; final: boolean }>();
+  private m = new Map<string, { url: string | null; misses: number; final: boolean; until: number }>();
   private maxMisses: number;
   constructor(maxMisses = 2) {
     this.maxMisses = maxMisses;
   }
-  /** True when the caller should fetch: never asked, or a not-final miss that has re-check budget left. */
-  shouldFetch(key: string): boolean {
+  /** True when the caller should fetch: never asked, or a not-final miss with re-check budget left (and not in a transient back-off). */
+  shouldFetch(key: string, now = Date.now()): boolean {
     const e = this.m.get(key);
     if (!e) return true;
-    return e.url === null && !e.final && e.misses < this.maxMisses;
+    if (e.until > now) return false;
+    return e.url === null && !e.final && (e.misses < this.maxMisses || e.until > 0);
   }
   get(key: string): string | null {
     return this.m.get(key)?.url ?? null;
   }
+  /** An authoritative answer. `final` = never ask again. */
   record(key: string, url: string | null, final = false) {
     const prev = this.m.get(key);
-    this.m.set(key, { url, misses: url ? 0 : (prev?.misses ?? 0) + 1, final: final || url !== null });
+    this.m.set(key, { url, misses: url ? 0 : (prev?.misses ?? 0) + 1, final: final || url !== null, until: 0 });
+  }
+  /** A failed ask: back off for a minute, keep the miss count as it was. */
+  transient(key: string, now = Date.now(), ms = TRANSIENT_MS) {
+    const prev = this.m.get(key);
+    this.m.set(key, { url: null, misses: prev?.misses ?? 0, final: false, until: now + ms });
   }
   clear() {
     this.m.clear();
