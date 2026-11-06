@@ -31,7 +31,7 @@ test("subtitles: only when the audio isn't a preferred language; full text subs 
   assert.equal(pickSubtitle(S, 3, prefs, 4), 4); // English audio: keep the file default (forced)
   assert.equal(pickSubtitle(S, 1, prefs, -1), 5); // French audio: English subtitles on
   assert.equal(pickSubtitle(S, 1, { audioLangs: ["en"], subtitleLangs: ["fr"] }, -1), -1); // only an image sub in French
-  assert.equal(pickSubtitle(S, 1, { audioLangs: ["en"], subtitleLangs: [] }, -1), -1);
+  assert.equal(pickSubtitle(S, 1, { audioLangs: ["en"], subtitleLangs: [] }, -1), 5); // falls back to the audio languages
 });
 
 import { canonLang, isCommentary } from "../src/lib/tracks.ts";
@@ -114,4 +114,19 @@ test("subtitles: preference order across languages; no match keeps the fallback"
 
 test("subtitles: old prefs shape (no alwaysSubs) behaves as before", () => {
   assert.equal(pickSubtitle(S, 1, { audioLangs: ["en"], subtitleLangs: ["en"] }, -1), 5);
+});
+
+test("commentary regex: bare 'ad' words do not match; 'AD' token and audio description do", () => {
+  const c = (t: string) => isCommentary({ Index: 1, Type: "Audio", Title: t });
+  assert.ok(!c("Ad-free dub"));
+  assert.ok(!c("Madagascar"));
+  assert.ok(!c("ad"));
+  assert.ok(c("English AD"));
+  assert.ok(c("Audio Description"));
+  assert.ok(c("Fully described"));
+});
+
+test("foreign audio with empty subtitleLangs falls back to the audio languages", () => {
+  const f = [A(1, "jpn"), T(2, "eng")];
+  assert.equal(pickSubtitle(f, 1, { audioLangs: ["en"], subtitleLangs: [] }, -1), 2);
 });

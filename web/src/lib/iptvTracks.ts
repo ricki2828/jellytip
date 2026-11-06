@@ -1,4 +1,4 @@
-import { canonLang, langIs, type LangPrefs } from "./tracks.ts";
+import { canonLang, isCommentaryText, langIs, type LangPrefs } from "./tracks.ts";
 
 export type TrackChoice = { index: number; label: string; active: boolean; /** Provider-declared language tag (never inferred from the label). */ lang?: string; name?: string };
 
@@ -21,7 +21,6 @@ export function nativeSubtitlesOff(tracks: ArrayLike<{ kind?: string; mode?: str
   return !Array.from(tracks).some((track) => (track.kind === "subtitles" || track.kind === "captions") && track.mode === "showing");
 }
 
-const COMMENTARY = /commentar|audio desc|descriptive|visually impaired|\bAD\b/i;
 
 /**
  * Start-of-playback track choice for IPTV: the same rules as Jellyfin, from the language tags the engine exposes.
@@ -29,7 +28,7 @@ const COMMENTARY = /commentar|audio desc|descriptive|visually impaired|\bAD\b/i;
  * Returns the audio index to switch to (null = leave) and the subtitle index (-1 = off, null = leave).
  */
 export function pickIptvTracks(audio: readonly TrackChoice[], subs: readonly TrackChoice[], prefs: LangPrefs): { audio: number | null; subtitle: number | null } {
-  const main = audio.filter((t) => !COMMENTARY.test(t.name ?? t.label));
+  const main = audio.filter((t) => !isCommentaryText(t.name ?? t.label));
   let audioPick: TrackChoice | undefined;
   for (const code of prefs.audioLangs) {
     const m = main.filter((t) => langIs(t.lang, code));
@@ -41,16 +40,17 @@ export function pickIptvTracks(audio: readonly TrackChoice[], subs: readonly Tra
   const matches = !!audioPick;
   const foreign = known && !matches && prefs.audioLangs.length > 0;
   let subtitle: number | null = null;
+  const subLangs = prefs.subtitleLangs.length ? prefs.subtitleLangs : prefs.audioLangs;
   if (foreign || prefs.alwaysSubs) {
-    for (const code of prefs.subtitleLangs) {
-      const m = subs.filter((t) => langIs(t.lang, code) && !COMMENTARY.test(t.name ?? t.label));
+    for (const code of subLangs) {
+      const m = subs.filter((t) => langIs(t.lang, code) && !isCommentaryText(t.name ?? t.label));
       if (m.length) {
         subtitle = (m.find((t) => !/forced/i.test(t.name ?? t.label)) ?? m[0]).index;
         break;
       }
     }
   } else if (matches) {
-    for (const code of prefs.subtitleLangs.length ? prefs.subtitleLangs : prefs.audioLangs) {
+    for (const code of subLangs) {
       const f = subs.find((t) => langIs(t.lang, code) && /forced/i.test(t.name ?? t.label));
       if (f) {
         subtitle = f.index;

@@ -2,14 +2,18 @@
 // re-applied before the global language prefs. Stored by language, not index, so it carries to the next episode.
 // localStorage keyed by user: the companion prefs API drops unknown keys (me.py _validate), so it can't hold this.
 // Pure parts tested in web/test/trackMemory.test.ts.
-import { canonLang, isCommentary, type Stream } from "./tracks.ts";
+import { canonLang, isCommentary, pickAudio, pickSubtitle, type LangPrefs, type Stream } from "./tracks.ts";
 
 export const MEMORY_MAX = 200;
 
-/** a: audio language; s: subtitle language, "" = subtitles off. t: last used (LRU). */
+/**
+ * a: audio language; s: subtitle language ("" = explicitly off, "?" = a track with no language tag, can't be generalised);
+ * sa: the audio language the subtitle choice was made under ("" = unknown). t: last used (LRU).
+ */
 export interface Entry {
   a?: string;
   s?: string;
+  sa?: string;
   t: number;
 }
 export type Store = Record<string, Entry>;
@@ -27,53 +31,88 @@ export function parseStore(raw: unknown): Store {
     const entry: Entry = { t: typeof e.t === "number" && isFinite(e.t) ? e.t : 0 };
     if (typeof e.a === "string" && e.a) entry.a = e.a;
     if (typeof e.s === "string") entry.s = e.s;
+    if (typeof e.sa === "string") entry.sa = e.sa;
     if (entry.a !== undefined || entry.s !== undefined) out[k] = entry;
   }
   return out;
 }
 
-/** Record a manual change (stream indexes in `streams`); unknown-language tracks can't be generalised and are skipped. */
-export function recordChoice(store: Store, key: string, streams: Stream[], change: { audio?: number; subtitle?: number }, now: number): Store {
+const langOf = (streams: Stream[], type: string, index: number | null | undefined) =>
+  canonLang(streams.find((s) => s.Type === type && s.Index === index)?.Language);
+
+/**
+ * Record a manual change (stream indexes in `streams`). `currentAudio` is the audio playing when a subtitle is picked.
+ * A subtitle remembered under one audio language is not applied under another; changing audio language without picking a
+ * subtitle in the same action forgets the old subtitle choice.
+ */
+export function recordChoice(store: Store, key: string, streams: Stream[], change: { audio?: number; subtitle?: number }, now: number, currentAudio?: number | null): Store {
   const prev = store[key];
   const e: Entry = { ...prev, t: now };
   if (change.audio !== undefined) {
-    const lang = canonLang(streams.find((s) => s.Type === "Audio" && s.Index === change.audio)?.Language);
+    const lang = langOf(streams, "Audio", change.audio);
     if (lang) e.a = lang;
-  }
-  if (change.subtitle !== undefined) {
-    if (change.subtitle < 0) e.s = "";
-    else {
-      const lang = canonLang(streams.find((s) => s.Type === "Subtitle" && s.Index === change.subtitle)?.Language);
-      if (lang) e.s = lang;
+    else delete e.a;
+    if (change.subtitle === undefined && (e.sa ?? "") !== lang) {
+      delete e.s;
+      delete e.sa;
     }
   }
-  if (e.a === prev?.a && e.s === prev?.s) return store;
+  if (change.subtitle !== undefined) {
+    e.s = change.subtitle < 0 ? "" : langOf(streams, "Subtitle", change.subtitle) || "?";
+    e.sa = langOf(streams, "Audio", change.audio ?? currentAudio);
+  }
+  if (e.a === prev?.a && e.s === prev?.s && e.sa === prev?.sa) return store;
+  if (e.a === undefined && e.s === undefined) {
+    const { [key]: _drop, ...rest } = store;
+    return rest;
+  }
   const next: Store = { ...store, [key]: e };
   const keys = Object.keys(next);
   if (keys.length > MEMORY_MAX) for (const k of keys.sort((x, y) => next[x].t - next[y].t).slice(0, keys.length - MEMORY_MAX)) delete next[k];
   return next;
 }
 
-/** The remembered choice as indexes in this file (undefined where the file doesn't have that language: prefs decide). */
-export function resolveMemory(streams: Stream[], e: Entry | undefined): { audio?: number; subtitle?: number } {
-  const out: { audio?: number; subtitle?: number } = {};
-  if (!e) return out;
-  const pick = (list: Stream[]) => {
-    const main = list.filter((s) => !isCommentary(s));
-    return main.find((s) => s.IsDefault) ?? main[0];
-  };
-  if (e.a) {
-    const a = pick(streams.filter((s) => s.Type === "Audio" && canonLang(s.Language) === e.a));
-    if (a) out.audio = a.Index;
-  }
-  if (e.s === "") out.subtitle = -1;
-  else if (e.s) {
-    const subs = streams.filter((s) => s.Type === "Subtitle" && s.IsTextSubtitleStream && canonLang(s.Language) === e.s);
-    const full = pick(subs.filter((s) => !s.IsForced));
-    const any = full ?? pick(subs);
-    if (any) out.subtitle = any.Index;
-  }
-  return out;
+const pickMain = (list: Stream[]) => {
+  const main = list.filter((s) => !isCommentary(s));
+  return main.find((s) => s.IsDefault) ?? main[0];
+};
+
+/** The remembered audio as an index in this file (undefined where the file doesn't have that language). */
+export function resolveAudio(streams: Stream[], e: Entry | undefined): number | undefined {
+  if (!e?.a) return undefined;
+  return pickMain(streams.filter((s) => s.Type === "Audio" && canonLang(s.Language) === e.a))?.Index;
+}
+
+/**
+ * The remembered subtitle (-1 = off) as an index, only when the audio chosen this time is in the language the choice was
+ * made under. Unknown-language ("?") and absent languages return undefined: the prefs decide.
+ */
+export function resolveSubtitle(streams: Stream[], e: Entry | undefined, audioIndex: number | null): number | undefined {
+  if (!e || e.s === undefined || e.s === "?") return undefined;
+  const under = e.sa ?? e.a;
+  if (under !== undefined && under !== langOf(streams, "Audio", audioIndex)) return undefined;
+  if (e.s === "") return -1;
+  const subs = streams.filter((s) => s.Type === "Subtitle" && s.IsTextSubtitleStream && canonLang(s.Language) === e.s);
+  return (pickMain(subs.filter((s) => !s.IsForced)) ?? pickMain(subs))?.Index;
+}
+
+/**
+ * The start-of-playback choice: remembered pick, then language prefs, then the file's defaults.
+ * `forceAudio` fixes the audio (e.g. the negotiated source differs from the one the audio was chosen on).
+ */
+export function chooseStart(
+  streams: Stream[],
+  entry: Entry | undefined,
+  prefs: LangPrefs | null,
+  opts: { defaultAudio?: number | null; defaultSub: number; forceAudio?: number | null },
+): { audio: number | null; subtitle: number } {
+  const audio =
+    opts.forceAudio !== undefined
+      ? opts.forceAudio
+      : resolveAudio(streams, entry) ?? (prefs?.audioLangs.length ? pickAudio(streams, prefs.audioLangs, opts.defaultAudio) : null);
+  const eff = audio ?? opts.defaultAudio ?? null;
+  const byPrefs = prefs ? pickSubtitle(streams, eff, prefs, opts.defaultSub) : opts.defaultSub;
+  return { audio, subtitle: resolveSubtitle(streams, entry, eff) ?? byPrefs };
 }
 
 // ---------- storage (per user, this browser) ----------

@@ -112,6 +112,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const [subtitleOff, setSubtitleOff] = useState(true);
   // Start-of-playback language prefs: applied once per start, and never over a pick made in the track menu
   const autoTracks = useRef({ done: false, manual: false });
+  const audioChoicesRef = useRef<TrackChoice[]>([]);
+  const subtitleChoicesRef = useRef<TrackChoice[]>([]);
+  audioChoicesRef.current = audioChoices;
+  subtitleChoicesRef.current = subtitleChoices;
   const langPrefs = usePrefs({ defer: true }).prefs?.playback;
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
@@ -371,12 +375,19 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   useEffect(() => {
     const a = autoTracks.current;
     if (a.done || a.manual || !langPrefs || !audioChoices.length) return;
-    a.done = true; // the choice is made on the first full track list; later additions are left alone
-    const alwaysSubs = getAlwaysSubs(getSession()?.userId ?? "");
-    if (!langPrefs.audioLangs.length && !alwaysSubs) return;
-    const r = pickIptvTracks(audioChoices, subtitleChoices, { ...langPrefs, alwaysSubs });
-    if (r.audio != null) selectAudio(r.audio);
-    if (r.subtitle != null) selectSubtitle(r.subtitle);
+    const apply = () => {
+      if (a.done || a.manual) return;
+      a.done = true;
+      const alwaysSubs = getAlwaysSubs(getSession()?.userId ?? "");
+      if (!langPrefs.audioLangs.length && !alwaysSubs) return;
+      const r = pickIptvTracks(audioChoicesRef.current, subtitleChoicesRef.current, { ...langPrefs, alwaysSubs });
+      if (r.audio != null) selectAudio(r.audio);
+      if (r.subtitle != null) selectSubtitle(r.subtitle);
+    };
+    // Latch once audio and text track lists are both there; text tracks can appear late, so wait up to 3 s for them
+    if (subtitleChoices.length) { apply(); return; }
+    const t = window.setTimeout(apply, 3000);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioChoices, subtitleChoices, langPrefs]);
 

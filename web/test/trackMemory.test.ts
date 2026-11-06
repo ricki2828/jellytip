@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MEMORY_MAX, getAlwaysSubs, loadStore, memoryKey, parseStore, recordChoice, resolveMemory, saveStore, setAlwaysSubs } from "../src/lib/trackMemory.ts";
+import { MEMORY_MAX, chooseStart, getAlwaysSubs, loadStore, memoryKey, parseStore, recordChoice, resolveAudio, resolveSubtitle, saveStore, setAlwaysSubs } from "../src/lib/trackMemory.ts";
 import { pickAudio, pickSubtitle } from "../src/lib/tracks.ts";
 
 const streams = [
@@ -25,32 +25,31 @@ test("key: episodes share the series, movies use the item", () => {
 
 test("manual choice carries to the next episode by language, not index", () => {
   let st = recordChoice({}, "s:S", streams, { audio: 2, subtitle: 5 }, 1);
-  const r = resolveMemory(next, st["s:S"]);
-  assert.equal(r.audio, 0);
-  assert.equal(r.subtitle, 2); // fre == fra
+  assert.equal(resolveAudio(next, st["s:S"]), 0);
+  assert.equal(resolveSubtitle(next, st["s:S"], 0), 2); // fre == fra, under the same (jpn) audio
 });
 
 test("subtitles off is remembered and beats prefs", () => {
-  const st = recordChoice({}, "s:S", streams, { subtitle: -1 }, 1);
-  assert.equal(resolveMemory(next, st["s:S"]).subtitle, -1);
+  const st = recordChoice({}, "s:S", streams, { subtitle: -1 }, 1, 1);
+  assert.equal(resolveSubtitle(next, st["s:S"], 1), -1);
 });
 
 test("precedence: memory wins over prefs; missing language falls back to prefs", () => {
   const prefs = { audioLangs: ["en"], subtitleLangs: ["en"] };
   const st = recordChoice({}, "s:S", streams, { audio: 2 }, 1);
-  const mem = resolveMemory(next, st["s:S"]);
-  assert.equal(mem.audio ?? pickAudio(next, prefs.audioLangs, null), 0);
+  assert.equal(resolveAudio(next, st["s:S"]) ?? pickAudio(next, prefs.audioLangs, null), 0);
   // remembered language absent from this file: prefs decide
   const only = [{ Index: 1, Type: "Audio", Language: "eng" }];
-  const m2 = resolveMemory(only, st["s:S"]);
-  assert.equal(m2.audio, undefined);
-  assert.equal(m2.audio ?? pickAudio(only, prefs.audioLangs, null), 1);
+  assert.equal(resolveAudio(only, st["s:S"]), undefined);
+  assert.equal(resolveAudio(only, st["s:S"]) ?? pickAudio(only, prefs.audioLangs, null), 1);
   assert.equal(pickSubtitle(next, 0, prefs, -1), 3);
 });
 
-test("unknown-language track choices are not remembered", () => {
-  const st = recordChoice({}, "s:S", streams, { audio: 3 }, 1);
-  assert.deepEqual(st, {});
+test("unknown-language audio is not remembered; an unknown-language subtitle is recorded as unknown and never applied", () => {
+  assert.deepEqual(recordChoice({}, "s:S", streams, { audio: 3 }, 1), {});
+  const st = recordChoice({}, "s:S", [...streams, { Index: 9, Type: "Subtitle", Language: "und", IsTextSubtitleStream: true }], { subtitle: 9 }, 1, 1);
+  assert.equal(st["s:S"].s, "?");
+  assert.equal(resolveSubtitle(next, st["s:S"], 1), undefined);
 });
 
 test("an unchanged choice returns the same store", () => {
@@ -60,8 +59,9 @@ test("an unchanged choice returns the same store", () => {
 
 test("later choice for a title replaces the earlier one, other half kept", () => {
   let st = recordChoice({}, "k", streams, { audio: 2, subtitle: 4 }, 1);
-  st = recordChoice(st, "k", streams, { audio: 1 }, 2);
-  assert.deepEqual(st.k, { a: "en", s: "en", t: 2 });
+  assert.deepEqual(st.k, { a: "ja", s: "en", sa: "ja", t: 1 });
+  st = recordChoice(st, "k", streams, { audio: 1, subtitle: 4 }, 2);
+  assert.deepEqual(st.k, { a: "en", s: "en", sa: "en", t: 2 });
 });
 
 test("LRU: bounded at 200, least recently used goes first, touching refreshes", () => {
@@ -91,4 +91,40 @@ test("parseStore tolerates junk; storage is per user", () => {
   assert.equal(getAlwaysSubs("u2", st), false);
   setAlwaysSubs("u1", false, st);
   assert.equal(getAlwaysSubs("u1", st), false);
+});
+
+const ja = [
+  { Index: 0, Type: "Audio", Language: "jpn", IsDefault: true },
+  { Index: 1, Type: "Audio", Language: "eng" },
+  { Index: 2, Type: "Subtitle", Language: "eng", IsTextSubtitleStream: true },
+];
+const prefsEn = { audioLangs: ["ja"], subtitleLangs: ["en"] };
+
+test("P1: Japanese show with English subs remembered; then the English dub: the subtitle is not carried over", () => {
+  // watching Japanese audio, picks English subs
+  let st = recordChoice({}, "s:S", ja, { subtitle: 2 }, 1, 0);
+  assert.equal(st["s:S"].sa, "ja");
+  // next episode, Japanese audio again: subs come back
+  assert.deepEqual(chooseStart(ja, st["s:S"], prefsEn, { defaultAudio: 0, defaultSub: -1 }), { audio: 0, subtitle: 2 });
+  // user switches to the English dub (no subtitle picked): the old choice is forgotten
+  st = recordChoice(st, "s:S", ja, { audio: 1 }, 2);
+  assert.equal(st["s:S"].s, undefined);
+  assert.deepEqual(chooseStart(ja, st["s:S"], { audioLangs: ["en"], subtitleLangs: ["en"] }, { defaultAudio: 0, defaultSub: -1 }), { audio: 1, subtitle: -1 });
+});
+
+test("P1: a subtitle remembered under Japanese audio does not apply when the dub is chosen (legacy-safe via sa)", () => {
+  const entry = { a: "en", s: "en", sa: "ja", t: 1 };
+  assert.equal(resolveSubtitle(ja, entry, 1), undefined);
+  assert.equal(resolveSubtitle(ja, entry, 0), 2);
+  assert.deepEqual(chooseStart(ja, entry, null, { defaultAudio: 0, defaultSub: -1 }), { audio: 1, subtitle: -1 });
+});
+
+test("explicit off is remembered under its audio and beats always-on prefs", () => {
+  const st = recordChoice({}, "k", ja, { subtitle: -1 }, 1, 0);
+  assert.deepEqual(chooseStart(ja, st.k, { audioLangs: ["ja"], subtitleLangs: ["en"], alwaysSubs: true }, { defaultAudio: 0, defaultSub: -1 }).subtitle, -1);
+});
+
+test("chooseStart without memory or prefs keeps file defaults; forceAudio wins", () => {
+  assert.deepEqual(chooseStart(ja, undefined, null, { defaultAudio: 0, defaultSub: 7 }), { audio: null, subtitle: 7 });
+  assert.equal(chooseStart(ja, { a: "en", t: 1 }, null, { defaultAudio: 0, defaultSub: -1, forceAudio: 0 }).audio, 0);
 });
