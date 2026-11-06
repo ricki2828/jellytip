@@ -9,6 +9,8 @@ import { useRecs } from "../api/recStore";
 import { shown, unwatchedCount } from "../lib/recs";
 import { useUpcoming } from "../api/upcomingStore";
 import { hubNow, loadHub, onHubChange } from "../api/collections";
+import { useInbox } from "../api/inboxStore";
+import { unreadCount } from "../lib/inbox";
 
 /** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
 function useLiveTv(): boolean {
@@ -100,6 +102,8 @@ export function Nav({ current }: { current: string }) {
   const recs = useRecs();
   const hasRecs = !!recs && shown(recs).length > 0;
   const ready = recs ? unwatchedCount(recs) : 0;
+  // Inbox: looks once at app start (at most every 15 min) and shows the unread count
+  const unreadN = unreadCount(useInbox({ soon: true, refresh: true }));
   const hasUpcoming = (useUpcoming()?.length ?? 0) > 0;
   // Collections: a link once the server has a hub (a 404 keeps it hidden)
   const [, hubTick] = useState(0);
@@ -115,7 +119,7 @@ export function Nav({ current }: { current: string }) {
     };
   }, []);
   const hasHub = (hubNow()?.length ?? 0) > 0;
-  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
+  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...([["inbox", "Inbox"]] as [string, string][]), ...(s?.isAdmin ? ([["discover", "Discover"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -141,6 +145,7 @@ export function Nav({ current }: { current: string }) {
         {links.map(([k, label]) => (
           <a key={k} href={`#/${k}`} data-nav className={current === k ? "active" : ""}>
             {label}
+            {k === "inbox" && unreadN > 0 && <span className="nav-badge" aria-label={`${unreadN} unread`}>{unreadN}</span>}
             {k === "recordings" && ready > 0 && <span className="nav-badge" aria-label={`${ready} ready to watch`}>{ready}</span>}
           </a>
         ))}
@@ -174,6 +179,13 @@ export function Nav({ current }: { current: string }) {
             </svg>
           </a>
         )}
+        <a href="#/inbox" className={`nav-icon nav-inbox${current === "inbox" ? " active" : ""}`} aria-label={unreadN > 0 ? `Inbox, ${unreadN} unread` : "Inbox"} title="Inbox">
+          <svg viewBox="0 0 24 24" aria-hidden>
+            <path d="M4 13.5 6.5 5.5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+            <path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20" />
+          </svg>
+          {unreadN > 0 && <span className="nav-badge">{unreadN}</span>}
+        </a>
         {hasRecs && (
           <a href="#/recordings" className={`nav-icon nav-recs${current === "recordings" ? " active" : ""}`} aria-label="Recordings" title="Recordings">
             <svg viewBox="0 0 24 24" aria-hidden>

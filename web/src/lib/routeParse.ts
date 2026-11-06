@@ -52,6 +52,7 @@ export function parseHash(hash: string): Route {
     case "livetv":
     case "recordings":
     case "upcoming":
+    case "inbox":
     case "discover":
     case "movies":
     case "shows":
