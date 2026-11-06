@@ -18,7 +18,7 @@ test("alternate switching keeps unselected candidates and appends the channel le
   ]);
 });
 
-import { backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
+import { beginExclusive, claimEngine, backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
 
 /** Run events; "released" is answered automatically after each release effect, like the player does. */
 function run(s: RecoveryState, events: RecoveryEvent[]) {
@@ -92,8 +92,9 @@ test("no HLS switch for VOD or when HLS is unavailable", () => {
 test("recovery returns to playing and resets the counters", () => {
   let r = run(initialRecovery(true), [fault(), { t: "opened" }, { t: "recovered" }]);
   assert.equal(r.s.phase, "playing");
-  assert.equal(r.s.attempt, 0);
   assert.equal(recoveryCopy(r.s), null);
+  r = run(r.s, [{ t: "stable" }]);
+  assert.equal(r.s.attempt, 0);
 });
 
 test("VOD / catch-up resumes at the stall position; live goes to the edge", () => {
@@ -239,4 +240,89 @@ test("copy never leaks codes", () => {
     const c = recoveryCopy({ ...initialRecovery(true), phase, attempt: 1 });
     assert.ok(c && !/\b(\d{3}|code|MediaError)\b/i.test(c.replace(/\(\d of \d\)/, "")));
   }
+});
+
+test("stale released is a no-op unless the machine is releasing", () => {
+  // held stream: a stale released from a previous run must not close it nor open a second one
+  let r = step(initialRecovery(true), { t: "released" });
+  assert.equal(r.state.conn, "held");
+  assert.deepEqual(r.effects, []);
+  // mid-attempt (opening): same
+  const mid = run(initialRecovery(true), [fault()]).s;
+  assert.equal(mid.conn, "opening");
+  r = step({ ...mid, want: { delayMs: 0 } }, { t: "released" });
+  assert.equal(r.state.conn, "opening");
+  assert.deepEqual(r.effects, []);
+  // a second stale released after the real one does not re-open
+  const rel = step(initialRecovery(true), fault());
+  const done = step(rel.state, { t: "released" });
+  assert.equal(done.effects.length, 1);
+  const again = step({ ...done.state, want: { delayMs: 0 } }, { t: "released" });
+  assert.deepEqual(again.effects, []);
+});
+
+test("beginExclusive: invalidates queued opens, clears the timer and tears down first", () => {
+  const gen = { current: 3 };
+  const log: string[] = [];
+  const g = beginExclusive(gen, () => log.push("clear"), () => log.push("teardown"));
+  assert.equal(g, 4);
+  assert.deepEqual(log, ["clear", "teardown"]);
+  // an open queued under gen 3 is now stale
+  assert.notEqual(gen.current, 3);
+});
+
+test("claimEngine destroys the old engine before the new one is stored (no leaked connection)", () => {
+  const slot = { current: "old" as string | null };
+  const log: string[] = [];
+  claimEngine(slot, (o) => log.push(`destroy ${o} while slot=${slot.current}`), "new");
+  assert.deepEqual(log, ["destroy old while slot=null"]);
+  assert.equal(slot.current, "new");
+});
+
+test("single connection across recovery + manual start entry points", () => {
+  // model: live engines counter; recovery opens only after release; manual start tears down first
+  let engines = 1;
+  const gen = { current: 0 };
+  let s = initialRecovery(true);
+  const queue: RecoveryEvent[] = [fault()];
+  let manualStarts = 0;
+  while (queue.length) {
+    const r = step(s, queue.shift()!);
+    s = r.state;
+    for (const f of r.effects) {
+      if (f.do === "release") { gen.current++; engines = 0; queue.push({ t: "released" }); }
+      if (f.do === "open") { engines++; assert.ok(engines <= 1, "second connection"); if (manualStarts++ < 2) { beginExclusive(gen, () => {}, () => { engines = 0; }); engines++; assert.ok(engines <= 1); queue.push({ t: "opened" }, fault()); } }
+    }
+  }
+});
+
+test("recovery does not forgive attempts until stable", () => {
+  let r = run(initialRecovery(true), [fault(), { t: "opened" }, { t: "recovered" }]);
+  assert.equal(r.s.phase, "playing");
+  assert.equal(r.s.attempt, 1);
+  assert.equal(r.s.unstable, true);
+  // flaps: next fault continues counting
+  r = run(r.s, [fault()]);
+  assert.equal(r.s.attempt, 2);
+  r = run(r.s, [{ t: "opened" }, { t: "recovered" }, fault(), { t: "opened" }, { t: "recovered" }, fault(), { t: "opened" }, { t: "recovered" }, fault()]);
+  assert.equal(r.s.phase, "failed");
+  // stable forgives
+  const ok = run(initialRecovery(true), [fault(), { t: "opened" }, { t: "recovered" }, { t: "stable" }]);
+  assert.equal(ok.s.attempt, 0);
+  assert.equal(ok.s.unstable, false);
+});
+
+test("a plain stall that clears needs no stability window", () => {
+  const r = run(initialRecovery(true), [{ t: "stall", pos: 0, canHls: false }, { t: "recovered" }]);
+  assert.equal(r.s.phase, "playing");
+  assert.equal(r.s.unstable, false);
+});
+
+test("stall during reconnecting escalates through fault to the next attempt", () => {
+  let r = run(initialRecovery(true), [fault(), { t: "opened" }]);
+  assert.equal(r.s.attempt, 1);
+  r = run(r.s, [{ t: "stall", pos: 0, canHls: false }]);
+  assert.equal(r.s.phase, "reconnecting");
+  r = run(r.s, [fault()]);
+  assert.equal(r.s.attempt, 2);
 });

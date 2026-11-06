@@ -23,6 +23,31 @@ export const SWITCH_ATTEMPTS = 2;
 export const BACKOFF_BASE_MS = 1000;
 export const BACKOFF_CAP_MS = 8000;
 export const HIDDEN_STOP_MS = 60_000;
+/** Continuous playback needed before earlier attempts are forgiven. */
+export const STABLE_MS = 20_000;
+/** "Keep waiting" silences stall escalation this long. */
+export const QUIET_MS = 60_000;
+/** VOD / catch-up: escalate only after this long with no movement and no network/seek activity. */
+export const VOD_IDLE_MS = 30_000;
+
+/**
+ * Every start that is not a recovery open goes through this first: it invalidates any queued/in-flight open (gen), cancels
+ * the pending open timer and tears down the stream we hold, so two streams never exist at once.
+ */
+export function beginExclusive(gen: { current: number }, clearOpenTimer: () => void, teardown: () => void): number {
+  gen.current += 1;
+  clearOpenTimer();
+  teardown();
+  return gen.current;
+}
+
+/** Replace the engine held in a slot: the old one is destroyed before the new one is stored. */
+export function claimEngine<T>(slot: { current: T | null }, destroy: (old: T) => void, next: T): void {
+  const old = slot.current;
+  slot.current = null;
+  if (old) destroy(old);
+  slot.current = next;
+}
 
 export const backoffMs = (attempt: number): number => Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, attempt - 1));
 
@@ -40,6 +65,8 @@ export interface RecoveryState {
   conn: Conn;
   offline: boolean;
   /** Tab hidden longer than HIDDEN_STOP_MS: retries are stopped until it is visible again. */
+  /** Recovered but not yet stable: a new fault keeps counting attempts instead of starting over. */
+  unstable: boolean;
   hiddenStop: boolean;
   hiddenSince: number | null;
   /** A (re)open waiting for the lease to be released, the network, or the tab. */
@@ -54,6 +81,7 @@ export type RecoveryEvent =
   | { t: "retryNow"; pos: number; canHls: boolean }
   | { t: "opened" }
   | { t: "recovered" }
+  | { t: "stable" }
   | { t: "released" }
   | { t: "offline" }
   | { t: "online" }
@@ -75,7 +103,7 @@ export interface Step {
 }
 
 export function initialRecovery(live: boolean, format: StreamFormat = "ts"): RecoveryState {
-  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
+  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, unstable: false, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
 }
 
 const paused = (s: RecoveryState) => s.offline || s.hiddenStop;
@@ -144,7 +172,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
   const s: RecoveryState = { ...prev, want: prev.want && { ...prev.want } };
   const fx: RecoveryEffect[] = [];
   if (s.phase === "ended" || s.phase === "blocked") {
-    if (e.t === "released") s.conn = "closed";
+    if (e.t === "released" && s.conn === "releasing") s.conn = "closed";
     return { state: s, effects: fx };
   }
   switch (e.t) {
@@ -155,7 +183,11 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       }
       break;
     case "fault":
-      if (s.phase === "playing" || s.phase === "stalled") begin(s, fx, e);
+      if ((s.phase === "playing" || s.phase === "stalled") && s.unstable) {
+        if (!s.live && e.pos > 5) s.resumeAt = e.pos;
+        s.unstable = false;
+        nextAttempt(s, fx, e.canHls);
+      } else if (s.phase === "playing" || s.phase === "stalled") begin(s, fx, e);
       else if (s.phase === "reconnecting" || s.phase === "switched") {
         // a failure while an attempt is already being released/queued is the same failure
         if (s.conn === "releasing" || s.conn === "closed") break;
@@ -168,6 +200,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       s.attempt = 1;
       s.max = MAX_ATTEMPTS;
       s.switched = false;
+      s.unstable = false;
       s.phase = "reconnecting";
       fx.push({ do: "cancelTimers" });
       reopen(s, fx, 0);
@@ -178,12 +211,21 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
     case "recovered":
       if (s.phase !== "failed" && s.conn === "held") {
         s.phase = "playing";
-        s.attempt = 0;
-        s.max = MAX_ATTEMPTS;
+        // attempts are only forgiven after STABLE_MS of continuous playback ("stable")
+        s.unstable = s.attempt > 0;
         s.resumeAt = null;
       }
       break;
+    case "stable":
+      if (s.phase === "playing" && s.unstable) {
+        s.unstable = false;
+        s.attempt = 0;
+        s.max = MAX_ATTEMPTS;
+      }
+      break;
     case "released":
+      // only the release we asked for counts; a stale one must never close a stream that is held
+      if (s.conn !== "releasing") break;
       s.conn = "closed";
       maybeOpen(s, fx);
       break;
@@ -221,6 +263,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       s.hiddenStop = false;
       if (long && active(s)) {
         // fresh attempt on return
+        s.unstable = false;
         s.attempt = 1;
         s.max = s.switched ? SWITCH_ATTEMPTS : MAX_ATTEMPTS;
         s.phase = s.switched ? "switched" : "reconnecting";
