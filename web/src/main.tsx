@@ -3,6 +3,7 @@ import { App } from "./App";
 import { installSpatialNav } from "./lib/spatial";
 import { isNative } from "./lib/native";
 import { onRootBack, systemBack } from "./lib/router";
+import { UpdateToast } from "./components/UpdateToast";
 import "./styles.css";
 
 installSpatialNav();
@@ -16,6 +17,13 @@ if (isNative) {
   });
 }
 createRoot(document.getElementById("root")!).render(<App />);
+
+// "New version available" notice (production web build only; the Android bundle ships inside the APK)
+if (import.meta.env.PROD && !isNative) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  createRoot(host).render(<UpdateToast />);
+}
 
 // Installable PWA: app-shell service worker (production build only; dev serves modules the shell list doesn't know)
 if (import.meta.env.PROD && !isNative && "serviceWorker" in navigator) {

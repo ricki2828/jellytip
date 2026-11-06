@@ -1,7 +1,8 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 // Production is served from https://ricki28.palawan.usbx.me/jellytip/, same origin as /jellyfin and /jellytip-api.
@@ -34,6 +35,24 @@ function securityMeta(): Plugin {
   };
 }
 
+// Build identity. The deploy script exports JELLYTIP_BUILD_SHA / JELLYTIP_BUILD_TIME (it builds from a `git archive`, no .git);
+// otherwise ask git when a repo is there, else "dev".
+function buildIdentity() {
+  let sha = (process.env.JELLYTIP_BUILD_SHA ?? "").trim();
+  if (!sha && existsSync(fileURLToPath(new URL("../.git", import.meta.url))) ) {
+    try {
+      sha = execSync("git rev-parse --short HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      // no git binary: fall through
+    }
+  }
+  if (!/^[0-9a-z]{4,40}$/i.test(sha)) sha = "dev";
+  const t = (process.env.JELLYTIP_BUILD_TIME ?? "").trim();
+  const builtAt = sha === "dev" && !t ? "" : Number.isNaN(Date.parse(t)) ? new Date().toISOString() : t;
+  return { sha, builtAt };
+}
+const BUILD = buildIdentity();
+
 /**
  * Emits sw.js: an app-shell-only service worker. It precaches index + the hashed build assets + manifest/icons and
  * never touches /jellyfin, /jellytip-api or media (they don't fall under the /jellytip/ scope prefix it checks).
@@ -53,6 +72,8 @@ function appShellWorker(): Plugin {
         .replace("__VERSION__", version)
         .replace("__SHELL__", JSON.stringify(shell));
       this.emitFile({ type: "asset", fileName: "sw.js", source });
+      // Polled by the app (cache: no-store) to notice a newer deploy; assetsVersion = the sw cache version above
+      this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ sha: BUILD.sha, builtAt: BUILD.builtAt, assetsVersion: version }) + "\n" });
     },
   };
 }
@@ -64,6 +85,7 @@ export default defineConfig(({ mode }) => {
   const app = mode === "android";
   return {
     base: app ? "./" : "/jellytip/",
+    define: { __BUILD_SHA__: JSON.stringify(BUILD.sha), __BUILD_TIME__: JSON.stringify(BUILD.builtAt) },
     plugins: app ? [react()] : [react(), securityMeta(), appShellWorker()],
     server: {
       port: 5178,

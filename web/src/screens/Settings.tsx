@@ -6,6 +6,7 @@ import { savePrefs, usePrefs } from "../api/me";
 import { dropPersonalCaches } from "../api/companion";
 import type { Prefs } from "../lib/prefs";
 import { go } from "../lib/router";
+import { aboutLine } from "../lib/buildInfo";
 import { IntegrationsSettings } from "../components/IntegrationsSettings";
 import { SportSettings } from "../components/SportSettings";
 
@@ -162,6 +163,17 @@ export function Settings() {
               <span className="settings-sub">Signed in as {s?.userName}</span>
             </span>
           </button>
+        </li>
+      </ul>
+      <h2 className="settings-head">About</h2>
+      <ul className="settings-list">
+        <li>
+          <span className="settings-item">
+            <span>
+              <strong>Jellytip Web</strong>
+              <span className="settings-sub">{aboutLine()}</span>
+            </span>
+          </span>
         </li>
       </ul>
     </div>

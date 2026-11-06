@@ -1,0 +1,30 @@
+.update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-b, 0px) + 24px);
+  z-index: 70;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 16px;
+  border-radius: 8px;
+  background: rgba(28, 28, 28, 0.96);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.update-toast button {
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.14);
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.update-toast button.x {
+  background: none;
+  padding: 5px 8px;
+  opacity: 0.7;
+}
