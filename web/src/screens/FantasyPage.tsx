@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fantasyMissing, fantasyRefreshStatus, retryFantasyRefresh, subscribeFantasyRefresh, useFantasy } from "../api/fantasy";
 import { FantasyMatchups } from "../components/FantasyMatchups";
+import { FantasySummary } from "../components/FantasySummary";
 import { snapshotStale, sourceAgeSeconds } from "../lib/fantasyPage";
 import "./fantasy.css";
 
@@ -20,7 +21,7 @@ export function FantasyPage() {
     });
     const resetForSession = () => { setFailed(false); setChecked(false); setLastCheck(null); };
     window.addEventListener("jellytip-session", resetForSession);
-    const ageTimer = setInterval(() => setNow(Date.now()), 15_000);
+    const ageTimer = setInterval(() => setNow(Date.now()), 5_000);
     return () => { unsubscribe(); window.removeEventListener("jellytip-session", resetForSession); clearInterval(ageTimer); };
   }, []);
   const status = live?.providers.yahoo.status;
@@ -35,6 +36,7 @@ export function FantasyPage() {
   return <div className="fantasy-page">
     <h1>Fantasy{live?.week ? ` · Week ${live.week}` : ""}</h1>
     <p>All starters across your linked leagues.</p>
+    {live && hasScores && <FantasySummary live={live} age={age} stale={stale} />}
     {live && <div className="fantasy-freshness"><p>Source updated: {live.updatedAt != null ? new Date(live.updatedAt * 1000).toLocaleString() : "Unavailable"}{age != null && ` · ${age}s ago`}</p><p>Last successful check: {lastCheck != null ? new Date(lastCheck).toLocaleTimeString() : "Not yet checked"}</p></div>}
     {yahooNotice && !hasScores && yahooNotice}
     {status === "ready" && !hasScores && <p>Yahoo is connected and ready.</p>}
