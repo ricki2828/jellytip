@@ -31,15 +31,18 @@ const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/
 export function sideIs(side: { name: string; short: string | null }, abbr: string | null | undefined): boolean {
   const c = canonTeam(abbr);
   if (!c) return false;
-  if (canonTeam(side.short) === c || canonTeam(side.name) === c) return true;
-  const [city, nick] = TEAMS[c];
   const n = norm(side.name);
   const words = ` ${n} `;
-  if (!n) return false;
-  // The nickname decides ("Giants" vs "Jets"); a bare city only when the city has one team
-  if (words.includes(` ${nick} `)) return true;
-  const shared = city === "los angeles" || city === "new york";
-  return !shared && n === city;
+  // The full name decides when it names a team: "Los Angeles Chargers" with a short of "LA" is not the Rams
+  const named = Object.keys(TEAMS).filter((k) => words.includes(` ${TEAMS[k][1]} `));
+  const byName = canonTeam(side.name);
+  if (byName) return byName === c;
+  if (named.length) return named.includes(c);
+  const sc = canonTeam(side.short);
+  if (sc) return sc === c;
+  // A bare city only when the city has one team
+  const [city] = TEAMS[c];
+  return !!n && n === city && city !== "los angeles" && city !== "new york";
 }
 
 export function fixtureHasTeam(f: Pick<Fixture, "home" | "away">, abbr: string | null | undefined): boolean {
@@ -77,10 +80,10 @@ function extrasOf(o: OnNow, now: number): LiveExtras {
 export function findGameChannel(starter: Pick<Starter, "matchId" | "nflTeam">, list: OnNow[], now: number): GameChannel | null {
   const games = list.filter((o) => {
     const f = o.info.fixture;
-    return !!f && f.kind === "match" && !f.replay && o.info.kind !== "replay" && o.info.kind !== "highlights" && o.stop > now;
+    return !!f && f.kind === "match" && f.status !== "post" && !f.replay && o.info.kind !== "replay" && o.info.kind !== "highlights" && o.stop > now;
   });
   let pool = starter.matchId ? games.filter((o) => o.info.fixture!.id === starter.matchId) : [];
-  if (!pool.length && !starter.matchId) pool = games.filter((o) => (isNfl(o.info.fixture!.leagueKey) || !o.info.fixture!.leagueKey) && fixtureHasTeam(o.info.fixture!, starter.nflTeam));
+  if (!pool.length && !starter.matchId) pool = games.filter((o) => isNfl(o.info.fixture!.leagueKey) && fixtureHasTeam(o.info.fixture!, starter.nflTeam));
   if (!pool.length) return null;
   const rank = (o: OnNow) => {
     const f = o.info.fixture!;
@@ -111,15 +114,19 @@ export interface GameLeague {
   players: GamePlayer[];
 }
 
-const lastToken = (s: string) => norm(s).split(" ").pop() ?? "";
-
-function lastEvent(events: FantasyEvent[], league: FantasyLeague, s: Starter): GamePlayer["last"] {
+/**
+ * The starter's newest scoring event. By player id when both sides carry one, else by full name plus team (when the event names a
+ * team). Never by bare last name. An event belongs to a league by its id; a name is accepted only when no other league shares it.
+ */
+function lastEvent(events: FantasyEvent[], live: FantasyLive, league: FantasyLeague, s: Starter): GamePlayer["last"] {
+  const nameUnique = live.leagues.filter((l) => l.name === league.name).length === 1;
   const full = norm(s.name);
   const mine = events
-    .filter((e) => e.side === "me" && (e.league === league.id || e.league === league.name))
+    .filter((e) => e.side === "me" && (e.league === league.id || (nameUnique && e.league === league.name)))
     .filter((e) => {
-      const n = norm(e.name);
-      return n === full || (!!n && n === lastToken(s.name)) || (!!n && lastToken(e.name) === lastToken(s.name) && full.startsWith(n.charAt(0)));
+      if (e.playerId && s.id) return e.playerId === s.id;
+      if (!full || norm(e.name) !== full) return false;
+      return !e.nflTeam || canonTeam(e.nflTeam) === canonTeam(s.nflTeam);
     })
     .sort((a, b) => b.at - a.at)[0];
   return mine ? { reason: mine.reason, delta: mine.delta, at: mine.at } : null;
@@ -132,7 +139,7 @@ export function playersInGame(live: FantasyLive | null, fixture: Pick<Fixture, "
     const players = l.starters
       .filter((s) => s.side === "me" && (s.matchId ? s.matchId === fixture.id : fixtureHasTeam(fixture, s.nflTeam)))
       .sort((a, b) => b.points - a.points)
-      .map((s) => ({ name: s.name, pos: s.pos, nflTeam: s.nflTeam, points: s.points, state: s.gameState, last: lastEvent(live.events, l, s) }));
+      .map((s) => ({ name: s.name, pos: s.pos, nflTeam: s.nflTeam, points: s.points, state: s.gameState, last: lastEvent(live.events, live, l, s) }));
     return players.length ? [{ id: l.id, league: l.name, players }] : [];
   });
 }

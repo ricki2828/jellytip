@@ -1,11 +1,10 @@
 // Matchup-first summary at the top of the Fantasy page: my score vs the opponent's, the projection when the server sent one, and the source age.
-import { ageLabel, matchupSummaries } from "../lib/fantasyGame";
+import { matchupSummaries } from "../lib/fantasyGame";
 import type { FantasyLive } from "../lib/fantasy";
 
-export function FantasySummary({ live, age, stale }: { live: FantasyLive; age: number | null; stale: boolean }) {
+export function FantasySummary({ live }: { live: FantasyLive }) {
   const rows = matchupSummaries(live);
   if (!rows.length) return null;
-  const label = ageLabel(age);
   return (
     <section className="fantasy-summary" aria-label="Matchup summary">
       <ul>
@@ -19,7 +18,6 @@ export function FantasySummary({ live, age, stale }: { live: FantasyLive; age: n
           </li>
         ))}
       </ul>
-      <p className={stale ? "fantasy-sum-age stale" : "fantasy-sum-age"}>{label ?? "update time unavailable"}</p>
     </section>
   );
 }

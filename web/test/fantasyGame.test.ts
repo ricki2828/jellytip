@@ -71,7 +71,7 @@ const live = parseFantasy({
       { side: "me", name: "No Id", pos: "TE", nflTeam: "WSH", points: 1, matchId: null, gameState: "in" },
       { side: "opp", name: "Their Guy", pos: "QB", nflTeam: "DET", points: 20, matchId: "g1", gameState: "in" },
     ] }],
-  events: [{ at: 900, league: "CCP Dynasty", name: "Gibbs", delta: 6.4, side: "me", reason: "TD run, 12 yds" }, { at: 800, league: "CCP Dynasty", name: "Gibbs", delta: 1, side: "me", reason: "Rush" }],
+  events: [{ at: 900, league: "CCP Dynasty", name: "Jamarr Gibbs", delta: 6.4, side: "me", reason: "TD run, 12 yds" }, { at: 800, league: "CCP Dynasty", name: "Jamarr Gibbs", delta: 1, side: "me", reason: "Rush" }],
 })!;
 const fx = (id: string, home: string, away: string) => parseFixture(mi(id, [home, ""], [away, ""], NOW))!;
 
@@ -123,4 +123,51 @@ test("matchup summary shows only data the server sent", () => {
   assert.equal(ageLabel(40), "updated 40 s ago");
   assert.equal(ageLabel(300), "updated 5 min ago");
   assert.equal(ageLabel(null), null);
+});
+
+test("finished games are never offered, even by id", () => {
+  const l = list(chan(1, mi("g1", ["Seattle Seahawks", "SEA"], ["49ers", "SF"], NOW - 9000, { status: "post" })));
+  assert.equal(findGameChannel({ matchId: "g1", nflTeam: "SEA" }, l, NOW), null);
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "SEA" }, l, NOW), null);
+});
+
+test("no league key: never guessed to be NFL", () => {
+  const l = list(
+    chan(1, mi("m1", ["San Francisco Giants", "SF"], ["Dodgers", "LAD"], NOW - 3000, { leagueKey: null })),
+    chan(2, mi("m2", ["Florida Panthers", "FLA"], ["Bruins", "BOS"], NOW - 3000, { leagueKey: null })),
+  );
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "NYG" }, l, NOW), null);
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "CAR" }, l, NOW), null);
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "SF" }, l, NOW), null);
+});
+
+test("a full team name vetoes a conflicting short", () => {
+  assert.ok(!sideIs({ name: "Los Angeles Chargers", short: "LA" }, "LAR"));
+  assert.ok(sideIs({ name: "Los Angeles Chargers", short: "LA" }, "LAC"));
+  const l = list(chan(1, mi("g1", ["Los Angeles Chargers", "LA"], ["Raiders", "LV"], NOW - 3000)));
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "LAR" }, l, NOW), null);
+  assert.equal(findGameChannel({ matchId: null, nflTeam: "LAC" }, l, NOW)?.channelId, "p:1");
+});
+
+test("last event: by id, else full name plus team, never a bare last name; leagues by id", () => {
+  const mk = (starters: unknown[], events: unknown[], leagues = 1) => parseFantasy({
+    providers: {}, updatedAt: 1,
+    leagues: Array.from({ length: leagues }, (_, i) => ({ id: `L${i + 1}`, name: "Same Name", me: { team: "A", points: 1 }, opp: { team: "B", points: 1 }, starters })),
+    events,
+  })!;
+  const f = fx("g1", "Detroit Lions", "Chicago Bears");
+  const st = (o: Record<string, unknown>) => ({ side: "me", name: "Jamarr Gibbs", pos: "RB", nflTeam: "DET", points: 5, matchId: "g1", gameState: "in", ...o });
+  const ev = (o: Record<string, unknown>) => ({ at: 10, league: "L1", name: "Jamarr Gibbs", delta: 3, side: "me", reason: "TD", ...o });
+  // id wins over differing names
+  assert.equal(playersInGame(mk([st({ playerId: "77" })], [ev({ name: "J. Gibbs", playerId: "77" })]), f)[0].players[0].last?.reason, "TD");
+  assert.equal(playersInGame(mk([st({ playerId: "77" })], [ev({ playerId: "99" })]), f)[0].players[0].last, null);
+  // bare last name never matches
+  assert.equal(playersInGame(mk([st({})], [ev({ name: "Gibbs" })]), f)[0].players[0].last, null);
+  // a different player with the same name on another team
+  assert.equal(playersInGame(mk([st({})], [ev({ nflTeam: "CHI" })]), f)[0].players[0].last, null);
+  assert.equal(playersInGame(mk([st({})], [ev({ nflTeam: "DET" })]), f)[0].players[0].last?.delta, 3);
+  // two leagues with the same display name: by id only, never merged by name
+  const two = playersInGame(mk([st({})], [ev({ league: "L2" }), ev({ league: "Same Name", at: 99, delta: 9 })], 2), f);
+  assert.equal(two[0].players[0].last, null);
+  assert.equal(two[1].players[0].last?.delta, 3);
 });
