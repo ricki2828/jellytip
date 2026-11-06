@@ -57,7 +57,7 @@ export function Ask() {
     setShuffle(false);
     setNonce((n) => n + 1);
   };
-  const notes = appliedNotes(chips);
+  const notes = [...reading.notes, ...appliedNotes(chips)];
   const hasAsk = asked.length > 0;
 
   return (
@@ -121,7 +121,14 @@ export function Ask() {
                 </button>
               ))}
               {removed.length > 0 && (
-                <button className="chip" data-nav onClick={() => setRemoved([])}>
+                <button
+                  className="chip"
+                  data-nav
+                  onClick={() => {
+                    refocus.current = 0;
+                    setRemoved([]);
+                  }}
+                >
                   Put back
                 </button>
               )}
@@ -139,7 +146,6 @@ export function Ask() {
       )}
 
       {hasAsk && chips.length === 0 && reading.chips.length > 0 && <p className="empty">Every filter is removed. Put one back, or ask again.</p>}
-      {state.kind === "loading" && <div className="grid ask-grid" aria-busy="true">{Array.from({ length: 8 }, (_, i) => <div key={i} className="card fluid card-skeleton" />)}</div>}
       {state.kind === "error" && (
         <div className="rows-error" role="alert">
           <p>Couldn't reach your library.</p>
@@ -148,16 +154,16 @@ export function Ask() {
           </button>
         </div>
       )}
-      {state.kind === "done" && (
+      {(state.kind === "done" || state.kind === "loading") && (
         <section>
           <div className="ask-bar">
             <p className="ask-coverage" role="status">
-              {state.picks.items.length === 0 ? "Nothing fits. " : ""}
-              {state.picks.note}
+              {state.kind === "done" ? `${state.picks.items.length === 0 ? "Nothing fits. " : ""}${state.picks.note}` : "Looking…"}
             </p>
             <button
               className="btn small"
               data-nav
+              disabled={state.kind === "loading"}
               onClick={() => {
                 setShuffle(true);
                 setNonce((n) => n + 1);
@@ -166,11 +172,19 @@ export function Ask() {
               Shuffle
             </button>
           </div>
-          <div className="grid ask-grid">
-            {state.picks.items.map((it) => (
-              <Card key={it.Id} item={it} width={0} />
-            ))}
-          </div>
+          {state.kind === "loading" ? (
+            <div className="grid ask-grid" aria-busy="true">
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="card fluid card-skeleton" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid ask-grid">
+              {state.picks.items.map((it) => (
+                <Card key={it.Id} item={it} width={0} />
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>

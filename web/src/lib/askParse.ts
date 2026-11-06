@@ -19,16 +19,21 @@ export interface Chip {
   id: string;
   label: string;
   data: ChipData;
+  /** Where in the text it was read, and the words (used to resolve contradictions). */
+  pos?: number;
+  src?: string;
 }
 
 export interface Reading {
   chips: Chip[];
   /** Words that matched nothing (filler words are dropped silently). */
   ignored: string[];
+  /** Things the person should know about how this was read (negatives, contradictions). */
+  notes: string[];
 }
 
 export const KIDS_RATINGS = ["G", "PG", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "U"];
-export const KIDS_GENRES = ["Family", "Animation"];
+export const KIDS_GENRES = ["Family", "Animation", "Kids"];
 /** How many matches are requested in one go: runtime and season limits are checked client-side over this page. */
 export const FETCH_LIMIT = 300;
 export const PICKS = 24;
@@ -42,26 +47,26 @@ export const EXAMPLES = [
 ];
 
 const MOODS: [RegExp, string[], string][] = [
-  [/\b(?:feel[- ]?good|heart-?warming|uplifting|wholesome)\b/, ["Comedy", "Family", "Animation"], "Feel-good"],
-  [/\b(?:mind[- ]?bending|twisty|trippy|head[- ]?scratcher)\b/, ["Science Fiction", "Mystery"], "Mind-bending"],
+  [/\b(?:feel[- ]?good|heart-?warming|uplifting|wholesome)\b/, ["Comedy", "Family", "Animation", "Kids"], "Feel-good"],
+  [/\b(?:mind[- ]?bending|twisty|trippy|head[- ]?scratcher)\b/, ["Science Fiction", "Sci-Fi & Fantasy", "Mystery"], "Mind-bending"],
   [/\b(?:funny|comedy|comedies|hilarious|laugh|comic)\b/, ["Comedy"], "Comedy"],
   [/\b(?:scary|horror|creepy|spooky|frightening|terrifying)\b/, ["Horror"], "Horror"],
   [/\b(?:tense|thriller|thrillers|suspenseful|suspense|gripping|edge of (?:my|your) seat)\b/, ["Thriller"], "Thriller"],
   [/\b(?:romantic|romance|rom-?coms?|date night)\b/, ["Romance"], "Romance"],
-  [/\b(?:action|action-packed|explosive)\b/, ["Action"], "Action"],
-  [/\b(?:sci-?fi|science fiction|futuristic|space)\b/, ["Science Fiction"], "Sci-fi"],
+  [/\b(?:action|action-packed|explosive)\b/, ["Action", "Action & Adventure"], "Action"],
+  [/\b(?:sci-?fi|science fiction|futuristic|space)\b/, ["Science Fiction", "Sci-Fi & Fantasy"], "Sci-fi"],
   [/\b(?:mystery|mysteries|whodunn?it|detective)\b/, ["Mystery"], "Mystery"],
   [/\b(?:crime|heist|gangster|mob)\b/, ["Crime"], "Crime"],
   [/\b(?:animated|animation|cartoon|cartoons)\b/, ["Animation"], "Animation"],
   [/\b(?:documentary|documentaries)\b/, ["Documentary"], "Documentary"],
-  [/\b(?:war)\b/, ["War"], "War"],
+  [/\b(?:war)\b/, ["War", "War & Politics"], "War"],
   [/\b(?:westerns?)\b/, ["Western"], "Western"],
-  [/\b(?:fantasy|magical)\b/, ["Fantasy"], "Fantasy"],
+  [/\b(?:fantasy|magical)\b/, ["Fantasy", "Sci-Fi & Fantasy"], "Fantasy"],
   [/\b(?:drama|dramas|emotional|tearjerker|sad)\b/, ["Drama"], "Drama"],
-  [/\b(?:adventure|adventures)\b/, ["Adventure"], "Adventure"],
+  [/\b(?:adventure|adventures)\b/, ["Adventure", "Action & Adventure"], "Adventure"],
   [/\b(?:musical|musicals)\b/, ["Music"], "Music"],
   [/\b(?:history|historical)\b/, ["History"], "History"],
-  [/\b(?:family)\b/, ["Family"], "Family"],
+  [/\b(?:family)\b/, ["Family", "Kids"], "Family"],
 ];
 
 const DECADE_WORDS: Record<string, number> = {
@@ -70,7 +75,7 @@ const DECADE_WORDS: Record<string, number> = {
 
 /** Filler that carries no filter and is not worth reporting as ignored. */
 const FILLER = new Set(
-  "a an the some something anything one me my i we us you to for of with that which is are be it its in on and or but like want wanna need watch watching see find give recommend recommendation please tonight today good great nice really very maybe about got have has had just any kind sort type from at as by if so then than this these those there something's what whats who idea ideas pick picks suggest suggestion movie-night night evening weekend".split(" "),
+  "a an the some something one me my i we us you to for of with that which is are be it its in on and or like want wanna need watch watching see find give recommend recommendation please tonight today good great nice really very maybe about got have has had just any kind sort type from at as by if so then than this these those there something's what whats who idea ideas pick picks suggest suggestion movie-night night evening weekend".split(" "),
 );
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -84,18 +89,33 @@ function toMinutes(n: number, unit: string): number {
 export function parseAsk(raw: string, now = new Date()): Reading {
   let t = " " + raw.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9'.+\- ]+/g, " ") + " ";
   const chips: Chip[] = [];
+  const notes: string[] = [];
+  const ignored: string[] = [];
+  let cur = { pos: 0, src: "" };
   const add = (c: Chip) => {
-    if (!chips.some((x) => x.id === c.id)) chips.push(c);
+    if (!chips.some((x) => x.id === c.id)) chips.push({ ...c, pos: cur.pos, src: cur.src });
   };
   // Take a match out of the text so later rules and the "ignored" pass do not see it
   const take = (re: RegExp, fn: (m: RegExpExecArray) => void) => {
     const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
     t = t.replace(g, (...args) => {
       const m = args.slice(0, -2) as unknown as RegExpExecArray;
+      cur = { pos: args[args.length - 2] as number, src: clean(String(args[0])) };
       fn(m);
-      return " ";
+      return " ".repeat(String(args[0]).length);
     });
   };
+
+  // Negatives are not supported: left out of the reading (never inverted into a filter) and reported
+  const NEG = /\b(?:not|no|non[- ]?|without|except|excluding|nothing|anything but|but not)\s+(?:(?:too|very|so|really)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*/g;
+  t = t.replace(NEG, (m, off: number, whole: string) => {
+    const rest = whole.slice(off + m.length);
+    // Phrases that are supported and are not negations of a filter
+    if (/^(?:not|no)\s+(?:more than|seen|watched|played)\b/.test(whole.slice(off)) || /^no more than\b/.test(whole.slice(off)) || /^(?:not|no)\s+(?:seen|watched|played)\b/.test(m + rest)) return m;
+    ignored.push(clean(m));
+    if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives like 'not scary' aren't supported yet.");
+    return " ".repeat(m.length);
+  });
 
   // "show me" / "give me" are requests, not the word "show"
   take(/\b(?:show|give|find|get|pick|recommend)\s+(?:me|us)\b/, () => {});
@@ -173,6 +193,11 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     const to = Number(m[1]) - 1;
     if (to >= 1900) yearChip(1900, to, `before ${m[1]}`);
   });
+  take(/\b((?:19|20)\d\d)\s*(?:to|-|until|through|till)\s*((?:19|20)\d\d)\b/, (m) => {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a <= b) yearChip(a, b, `${a}-${b}`);
+  });
   take(/\b((?:19|20)\d\d)\b/, (m) => yearChip(Number(m[1]), Number(m[1]), m[1]));
   take(/\b(?:recent|recently released|latest|new releases?|newer)\b/, () => yearChip(thisYear - 4, thisYear, `${thisYear - 4}-${thisYear}`));
 
@@ -181,12 +206,24 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     take(re, () => add({ id: `genre:${label}`, label, data: { t: "genre", genres } }));
   }
 
-  const ignored: string[] = [];
+  // Contradictions: keep the later one, report the earlier
+  const clash = (a: string, b: string, what: string) => {
+    const ca = chips.find((c) => c.id === a);
+    const cb = chips.find((c) => c.id === b);
+    if (!ca || !cb) return;
+    const [drop, keep] = (ca.pos ?? 0) < (cb.pos ?? 0) ? [ca, cb] : [cb, ca];
+    chips.splice(chips.indexOf(drop), 1);
+    ignored.push(drop.src ?? drop.label);
+    notes.push(`${what} contradict each other: kept “${keep.label}”, ignored “${drop.src ?? drop.label}”.`);
+  };
+  clash("kind:Movie", "kind:Series", "Movies and shows");
+  clash("unplayed", "played", "Unwatched and rewatch");
+
   for (const w of clean(t).split(" ")) {
     const word = w.replace(/^['.\-+]+|['.\-+]+$/g, "");
     if (word && !FILLER.has(word) && !ignored.includes(word)) ignored.push(word);
   }
-  return { chips, ignored };
+  return { chips, ignored, notes };
 }
 
 export function removeChip(removed: string[], id: string): string[] {
@@ -209,7 +246,8 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
   const kids = of(chips, "kids")[0];
   // "for kids" adds Family/Animation only when no mood already chose genres
   if (kids && genres.size === 0) kids.data.genres.forEach((g) => genres.add(g));
-  const years = of(chips, "years")[0]?.data;
+  const yearSet = new Set<number>();
+  for (const c of of(chips, "years")) for (let y = c.data.from; y <= c.data.to; y++) yearSet.add(y);
   const flags: string[] = [];
   if (of(chips, "unplayed").length) flags.push("IsUnplayed");
   if (of(chips, "played").length) flags.push("IsPlayed");
@@ -220,15 +258,21 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
     Recursive: true,
     SortBy: opts.shuffle ? "Random" : "CommunityRating,SortName",
     SortOrder: opts.shuffle ? undefined : "Descending,Ascending",
-    Limit: opts.limit ?? FETCH_LIMIT,
+    Limit: opts.limit ?? fetchLimit(chips),
     StartIndex: 0,
-    Fields: "Overview,Genres,ProviderIds,PrimaryImageAspectRatio,ChildCount",
+    // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
+    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
     Genres: genres.size ? [...genres].join("|") : undefined,
-    Years: years ? Array.from({ length: years.to - years.from + 1 }, (_, i) => years.from + i).join(",") : undefined,
+    Years: yearSet.size ? [...yearSet].sort((a, b) => a - b).join(",") : undefined,
     Filters: flags.length ? flags.join(",") : undefined,
     OfficialRatings: kids ? kids.data.ratings.join("|") : undefined,
     MinCommunityRating: minRating > 0 ? minRating : undefined,
   };
+}
+
+/** Ask for the full page only when something has to be checked over it; otherwise the picks themselves. */
+export function fetchLimit(chips: Chip[]): number {
+  return needsClientFilter(chips) ? FETCH_LIMIT : PICKS;
 }
 
 /** True when some of the chips can only be checked over the fetched page. */
@@ -269,12 +313,17 @@ export function pickFrom(items: Item[], total: number | undefined, chips: Chip[]
   const kept = filterItems(items, chips);
   const out = kept.slice(0, PICKS);
   const n = items.length;
-  const partial = total != null ? total > n : n >= FETCH_LIMIT;
+  const partial = total != null ? total > n : n >= fetchLimit(chips);
+  const checks = [
+    of(chips, "maxRuntime").length + of(chips, "minRuntime").length > 0 ? "length" : "",
+    of(chips, "maxSeasons").length > 0 ? "season" : "",
+    of(chips, "genre").length > 1 ? "all-moods" : "",
+  ].filter(Boolean);
   let note: string;
   if (!partial) note = filtered ? `Checked all ${n} matches in your library.` : `All ${n} matches in your library.`;
   else {
     const set = shuffled ? `a random ${n} of ${total ?? "many"}` : `the first ${n}${total != null ? ` of ${total}` : ""}`;
-    note = filtered ? `From ${set} matches: length and season limits are only checked within those, so some fits may be missing.` : `From ${set} matches.`;
+    note = filtered ? `From ${set} matches: the ${checks.join(", ")} check${checks.length > 1 ? "s are" : " is"} only checked within those, so some fits may be missing.` : `From ${set} matches.`;
   }
   if (kept.length > out.length) note += ` Showing ${out.length} of ${kept.length} that fit.`;
   return { items: out, note };
@@ -289,6 +338,8 @@ export function appliedNotes(chips: Chip[]): string[] {
     notes.push(`For kids: rated ${kids.data.ratings.join(", ")}${moods ? "" : `, genres ${kids.data.genres.join(" or ")}`}. Unrated titles are left out.`);
   }
   if (of(chips, "maxRuntime").length || of(chips, "minRuntime").length) notes.push("Length: shows are judged by episode length; titles without a known length are left out.");
+  if (of(chips, "genre").length > 1) notes.push("Several moods: a title must match each one (any of that mood's genres).");
+  if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");
   return notes;
 }
 

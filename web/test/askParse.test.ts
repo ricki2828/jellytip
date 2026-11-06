@@ -27,21 +27,21 @@ test("feel-good for the kids shows what was applied", () => {
   const r = parseAsk("feel-good for the kids", NOW);
   assert.deepEqual(r.chips.map((c) => c.id).sort(), ["genre:Feel-good", "kids"]);
   const q = buildQuery(r.chips);
-  assert.equal(q.Genres, "Comedy|Family|Animation");
+  assert.equal(q.Genres, "Comedy|Family|Animation|Kids");
   assert.equal(q.OfficialRatings, "G|PG|TV-Y|TV-Y7|TV-G|TV-PG|U");
   assert.match(appliedNotes(r.chips).join(" "), /rated G, PG/);
 });
 
 test("kids alone adds Family|Animation, and the note says so", () => {
   const r = parseAsk("something for the kids", NOW);
-  assert.equal(buildQuery(r.chips).Genres, "Family|Animation");
+  assert.equal(buildQuery(r.chips).Genres, "Family|Animation|Kids");
   assert.match(appliedNotes(r.chips)[0], /Family or Animation/);
 });
 
 test("mood map", () => {
   const cases: [string, string][] = [
-    ["scary", "Horror"], ["tense", "Thriller"], ["mind-bending", "Science Fiction|Mystery"], ["mindbending", "Science Fiction|Mystery"],
-    ["hilarious", "Comedy"], ["romantic", "Romance"], ["sci-fi", "Science Fiction"], ["cartoon", "Animation"], ["heartwarming", "Comedy|Family|Animation"],
+    ["scary", "Horror"], ["tense", "Thriller"], ["mind-bending", "Science Fiction|Sci-Fi & Fantasy|Mystery"], ["mindbending", "Science Fiction|Sci-Fi & Fantasy|Mystery"],
+    ["hilarious", "Comedy"], ["romantic", "Romance"], ["sci-fi", "Science Fiction|Sci-Fi & Fantasy"], ["war", "War|War & Politics"], ["action", "Action|Action & Adventure"], ["family", "Family|Kids"], ["cartoon", "Animation"], ["heartwarming", "Comedy|Family|Animation|Kids"],
   ];
   for (const [w, g] of cases) assert.equal(buildQuery(parseAsk(w, NOW).chips).Genres, g, w);
 });
@@ -100,8 +100,8 @@ test("nothing readable", () => {
   const r = parseAsk("xyzzy plugh", NOW);
   assert.equal(r.chips.length, 0);
   assert.deepEqual(r.ignored, ["xyzzy", "plugh"]);
-  assert.deepEqual(parseAsk("", NOW), { chips: [], ignored: [] });
-  assert.deepEqual(parseAsk("   ", NOW), { chips: [], ignored: [] });
+  assert.deepEqual(parseAsk("", NOW), { chips: [], ignored: [], notes: [] });
+  assert.deepEqual(parseAsk("   ", NOW), { chips: [], ignored: [], notes: [] });
 });
 
 test("every example prompt reads cleanly", () => {
@@ -129,7 +129,8 @@ test("query: sort, shuffle, limit", () => {
   const chips = parseAsk("funny", NOW).chips;
   const a = buildQuery(chips);
   assert.equal(a.SortBy, "CommunityRating,SortName");
-  assert.equal(a.Limit, FETCH_LIMIT);
+  assert.equal(a.Limit, PICKS);
+  assert.equal(buildQuery(chips, { limit: 50 }).Limit, 50);
   const b = buildQuery(chips, { shuffle: true });
   assert.equal(b.SortBy, "Random");
   assert.equal(b.SortOrder, undefined);
@@ -174,4 +175,65 @@ test("coverage disclosure never implies more than was checked", () => {
   assert.match(pickFrom([item({})], 1, parseAsk("funny", NOW).chips, false).note, /^All 1 matches/);
   // total unknown but page full: still partial
   assert.match(pickFrom(page, undefined, parseAsk("funny", NOW).chips, false).note, /the first 300 matches/);
+});
+
+test("negatives are never inverted: left out, listed as ignored, with a note", () => {
+  for (const [q, ign] of [["not scary", "not scary"], ["no horror", "no horror"], ["anything but comedy", "anything but comedy"], ["not sad", "not sad"]] as const) {
+    const r = parseAsk(q, NOW);
+    assert.equal(r.chips.length, 0, q);
+    assert.deepEqual(r.ignored, [ign], q);
+    assert.match(r.notes.join(" "), /Negatives like 'not scary' aren't supported yet/, q);
+  }
+  const r = parseAsk("funny but not for kids", NOW);
+  assert.deepEqual(r.chips.map((c) => c.id), ["genre:Comedy"]);
+  assert.equal(buildQuery(r.chips).OfficialRatings, undefined);
+  assert.ok(r.ignored.includes("but not for kids"));
+  // supported phrases that contain "not"/"no" still work
+  assert.ok(ids("not seen yet").includes("unplayed"));
+  assert.ok(ids("no more than 90 minutes").includes("maxrt:90"));
+  assert.ok(!parseAsk("funny", NOW).notes.length);
+});
+
+test("several year ranges are unioned", () => {
+  const years = (q: string) => buildQuery(parseAsk(q, NOW).chips).Years;
+  const dec = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i).join(",");
+  assert.equal(years("80s or 90s"), dec(1980, 1999));
+  assert.equal(years("1980s and 1990s"), dec(1980, 1999));
+  assert.equal(years("2010 to 2015"), dec(2010, 2015));
+});
+
+test("contradictions keep the later one and say so", () => {
+  const b = parseAsk("movie or series", NOW);
+  assert.deepEqual(b.chips.map((c) => c.id), ["kind:Series"]);
+  assert.ok(b.ignored.includes("movie"));
+  assert.match(b.notes.join(" "), /contradict/);
+  const c = parseAsk("rewatch but unwatched", NOW);
+  assert.deepEqual(c.chips.map((x) => x.id), ["unplayed"]);
+  assert.ok(c.ignored.includes("rewatch"));
+});
+
+test("fields and limit are minimal", () => {
+  const plain = buildQuery(parseAsk("funny", NOW).chips);
+  assert.equal(plain.Fields, "PrimaryImageAspectRatio");
+  assert.equal(plain.Limit, PICKS);
+  const two = buildQuery(parseAsk("scary comedy", NOW).chips);
+  assert.equal(two.Fields, "PrimaryImageAspectRatio,Genres");
+  assert.equal(two.Limit, FETCH_LIMIT);
+  const se = buildQuery(parseAsk("short series", NOW).chips);
+  assert.equal(se.Fields, "PrimaryImageAspectRatio,ChildCount");
+  assert.equal(buildQuery(parseAsk("under 90 minutes", NOW).chips).Limit, FETCH_LIMIT);
+});
+
+test("TV genre aliases satisfy the client mood check", () => {
+  const chips = parseAsk("sci-fi action", NOW).chips;
+  const out = filterItems([item({ Type: "Series", Genres: ["Sci-Fi & Fantasy", "Action & Adventure"] }), item({ Genres: ["Science Fiction"] })], chips);
+  assert.equal(out.length, 1);
+});
+
+test("disclosure mentions the multi-mood check and unrated exclusion", () => {
+  const chips = parseAsk("scary comedy well rated", NOW).chips;
+  const page = Array.from({ length: FETCH_LIMIT }, () => item({ Genres: ["Horror", "Comedy"] }));
+  assert.match(pickFrom(page, 900, chips, false).note, /all-moods check is only checked within those/);
+  assert.match(appliedNotes(chips).join(" "), /must match each one/);
+  assert.match(appliedNotes(chips).join(" "), /without a community rating/);
 });
