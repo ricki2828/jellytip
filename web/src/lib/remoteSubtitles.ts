@@ -12,6 +12,9 @@ export type SubtitleAccessSession = { isAdmin?: boolean; canManageSubtitles?: bo
 
 export const canManageSubtitles = (s: SubtitleAccessSession): boolean => !!s && (s.isAdmin === true || s.canManageSubtitles === true);
 
+/** The companion's season routes (POST v1/subtitles/season) answer 403 "admin only" to everyone else: the policy is not enough. */
+export const canSearchSeasons = (s: SubtitleAccessSession): boolean => !!s && s.isAdmin === true;
+
 /** A session stored before the flag existed: the policy has to be read once (admins and known answers need no lookup). */
 export const needsPolicyLookup = (s: SubtitleAccessSession): boolean => !!s && s.isAdmin !== true && s.canManageSubtitles === undefined;
 

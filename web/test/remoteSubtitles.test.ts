@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SubtitleError, addedSubtitle, canManageSubtitles, classifyError, defaultSearchLanguage, downloadPath, errorMessage, initialPhase, languageChoices, mapResults,
-  needsPolicyLookup, reduce, remapActive, resultFlags, resultMeta, searchPath, sortResults, toSearchLanguage, waitForNewSubtitle, withDeadline, addedMessage,
+  needsPolicyLookup, reduce, remapActive, resultFlags, resultMeta, searchPath, sortResults, toSearchLanguage, waitForNewSubtitle, withDeadline, addedMessage, canSearchSeasons,
   type Event, type Phase, type RemoteSubtitle, type StreamLike,
 } from "../src/lib/remoteSubtitles.ts";
 
@@ -209,4 +209,13 @@ test("added messages say plainly what happened", () => {
   assert.match(addedMessage(true, "page", "X"), /Audio & subtitles menu/);
   assert.match(addedMessage(false, "player", "X"), /restart playback/);
   assert.match(addedMessage(false, "page", "X"), /reopen this page/);
+});
+
+test("gating split: the policy opens the per-item dialog, only admins get the season chips", () => {
+  const policyOnly = { isAdmin: false, canManageSubtitles: true };
+  assert.equal(canManageSubtitles(policyOnly), true);
+  assert.equal(canSearchSeasons(policyOnly), false);
+  assert.equal(canSearchSeasons({ isAdmin: true }), true);
+  assert.equal(canSearchSeasons({}), false);
+  assert.equal(canSearchSeasons(null), false);
 });

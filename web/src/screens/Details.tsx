@@ -2,6 +2,7 @@
 // series get season chips + episodes, episodes get prev/next; cast and more-like-this sit further down.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  getSession,
   episodes as getEpisodes,
   getItem,
   localTrailers,
@@ -33,7 +34,7 @@ import { companionCall } from "../api/companionCall";
 import { usePrefs } from "../api/me";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
-import { defaultSearchLanguage } from "../lib/remoteSubtitles";
+import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
 
 function fmtClock(ticks: number) {
@@ -63,6 +64,7 @@ export function Details({ id }: { id: string }) {
   const [subtitleActive, setSubtitleActive] = useState(false);
   const subtitleLock = useRef(false);
   const canSubs = useCanManageSubtitles();
+  const canSeasons = canSearchSeasons(getSession());
   const [findSubs, setFindSubs] = useState(false);
   const { prefs } = usePrefs({ defer: true });
   const phone = useIsPhone();
@@ -330,10 +332,10 @@ export function Details({ id }: { id: string }) {
                 </button>
               ))}
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
-              {canSubs && season && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
-              {canSubs && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
+              {canSeasons && season && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
+              {canSeasons && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
             </div>
-            {canSubs && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
+            {canSeasons && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
             {phone ? (
               // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
               <div className="ep-list">

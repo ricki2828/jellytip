@@ -31,7 +31,7 @@ export async function runSeasonSubtitles(ids: string[], language: string, call: 
         const start = await call("POST", "v1/subtitles/season", { seasonId, language });
         if (start.status === 429) { await pause(Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5))); continue; }
         if (start.status !== 202 || typeof obj(start.data).jobId !== "string") {
-          result.summary = start.status === 401 || start.status === 403 ? "Your account can't manage subtitles" : `Subtitle service error (${start.status || "offline"})`;
+          result.summary = start.status === 401 || start.status === 403 ? "Admin authorization required" : `Subtitle service error (${start.status || "offline"})`;
           break;
         }
         const jobId = obj(start.data).jobId as string;
@@ -39,7 +39,7 @@ export async function runSeasonSubtitles(ids: string[], language: string, call: 
           await pause(4000);
           const status = await call("GET", `v1/subtitles/jobs/${encodeURIComponent(jobId)}`);
           if (status.status !== 200) {
-            if (status.status === 401 || status.status === 403) { result.summary = "Your account can't manage subtitles"; break; }
+            if (status.status === 401 || status.status === 403) { result.summary = "Admin authorization required"; break; }
             if (poll < 5) continue;
             result.summary = `Lost contact with subtitle service (${status.status || "offline"})`; break;
           }
