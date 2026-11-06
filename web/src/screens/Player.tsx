@@ -11,8 +11,8 @@ import { prefsSoon } from "../api/me";
 import { pickAudio, pickSubtitle } from "../lib/tracks";
 import { TrackMenu } from "../components/TrackMenu.tsx";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
-import { jellyfinAudioLabel } from "../lib/trackMenu.ts";
-import { replayDone, replayTarget, startReplay, type Replay } from "../lib/captionReplay.ts";
+import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
+import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } from "../lib/captionReplay.ts";
 import { isPhone } from "../lib/device";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
@@ -96,7 +96,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
 
   const position = () => (videoRef.current?.currentTime ?? 0) * TICKS_PER_SECOND;
   const report = useCallback(
-    () => ({ itemId: id, plan: planRef.current!, positionTicks: position(), paused: videoRef.current?.paused, subtitleStreamIndex: subIndexRef.current }),
+    () => ({ itemId: id, plan: planRef.current!, positionTicks: position(), paused: videoRef.current?.paused, subtitleStreamIndex: reportedSubtitle(subIndexRef.current, replayRef.current) }),
     [id],
   );
 
@@ -485,9 +485,17 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (menu && e.key !== "Escape") {
+      const mk = playerKeyWhileMenu(menu, e.key);
+      if (mk === "close") {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenu(false);
         poke();
-        return; // let spatial nav move in the menu
+        return;
+      }
+      if (mk === "defer") {
+        poke();
+        return; // the menu handles its own keys
       }
       let handled = true;
       switch (e.key) {

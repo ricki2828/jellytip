@@ -104,6 +104,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const [tracksOpen, setTracksOpen] = useState(false);
   const { prefs: subPrefs, setPrefs: setSubPrefs, vars: subVars } = useSubtitlePrefs();
   const replayRef = useRef<Replay | null>(null);
+  const tracksOpenRef = useRef(false);
+  tracksOpenRef.current = tracksOpen;
   const [audioChoices, setAudioChoices] = useState<TrackChoice[]>([]);
   const [subtitleChoices, setSubtitleChoices] = useState<TrackChoice[]>([]);
   const [subtitleOff, setSubtitleOff] = useState(true);
@@ -420,8 +422,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   const poke = useCallback(() => {
     setControls(true);
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    if (!tracksOpen) hideTimer.current = window.setTimeout(() => setControls(false), 3500);
-  }, [tracksOpen]);
+    if (!tracksOpenRef.current) hideTimer.current = window.setTimeout(() => setControls(false), 3500);
+  }, []);
+  // The menu closing (any route: pick, Escape, replay, teardown) restarts the auto-hide timer
+  useEffect(() => { if (!tracksOpen) poke(); }, [tracksOpen, poke]);
   useEffect(() => {
     poke();
     return () => {

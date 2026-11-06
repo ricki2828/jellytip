@@ -991,7 +991,7 @@ button.overview.open {
 }
 .player-track-trigger {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   top: 12px;
   right: var(--pad);
   display: flex;
@@ -1245,9 +1245,16 @@ button.overview.open {
 
 /* ---------- touch + phone ---------- */
 .tabbar,
-.sheet-scrim,
-.track-scrim {
+.sheet-scrim {
   display: none;
+}
+/* click-away layer under the track menu: swallows the tap so it never toggles playback; dimmed on phones */
+.track-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: transparent;
 }
 .seek-flash {
   position: absolute;
@@ -1660,12 +1667,13 @@ button.overview.open {
     bottom: 110px;
   }
   /* audio / subtitle menu as a bottom sheet */
-  .sheet-scrim,
-  .track-scrim {
+  .sheet-scrim {
     display: block;
     position: absolute;
     inset: 0;
-    z-index: 3;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .track-scrim {
     background: rgba(0, 0, 0, 0.45);
   }
   .sub-menu {

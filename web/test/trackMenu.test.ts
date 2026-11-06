@@ -39,3 +39,35 @@ test("opening focuses the active choice, else the first enabled one", () => {
   assert.equal(initialFocus([{ active: true, disabled: true }, { active: false }]), 1);
   assert.equal(initialFocus([]), -1);
 });
+
+import { menuKeyAction, playerKeyWhileMenu, rowTarget, tabTarget } from "../src/lib/trackMenu.ts";
+
+test("menu keys: arrows stay inside the menu, Escape/Backspace close, unrelated keys pass", () => {
+  assert.deepEqual(menuKeyAction("Escape"), { kind: "close" });
+  assert.deepEqual(menuKeyAction("Backspace"), { kind: "close" });
+  assert.deepEqual(menuKeyAction("ArrowDown"), { kind: "move", key: "ArrowDown" });
+  assert.deepEqual(menuKeyAction("ArrowLeft"), { kind: "row", dir: -1 });
+  assert.deepEqual(menuKeyAction("ArrowRight"), { kind: "row", dir: 1 });
+  assert.deepEqual(menuKeyAction("Tab", true), { kind: "tab", shift: true });
+  assert.deepEqual(menuKeyAction("Enter"), { kind: "swallow" });
+  assert.deepEqual(menuKeyAction("x"), { kind: "pass" });
+});
+
+test("player-level keys: closed menu is untouched; open menu closes on Back even off-focus, defers the rest", () => {
+  assert.equal(playerKeyWhileMenu(false, "ArrowDown"), "normal");
+  assert.equal(playerKeyWhileMenu(false, "Backspace"), "normal");
+  assert.equal(playerKeyWhileMenu(true, "Backspace"), "close");
+  assert.equal(playerKeyWhileMenu(true, "Escape"), "close");
+  assert.equal(playerKeyWhileMenu(true, "ArrowDown"), "defer");
+});
+
+test("Tab is trapped and Left/Right step along a row without wrapping", () => {
+  assert.equal(tabTarget(4, 3, false), 0);
+  assert.equal(tabTarget(4, 0, true), 3);
+  assert.equal(tabTarget(4, -1, false), 0);
+  assert.equal(tabTarget(0, 0, false), -1);
+  assert.equal(rowTarget([false, false, false, false], 1, 1), 2);
+  assert.equal(rowTarget([false, false, false, false], 3, 1), 3);
+  assert.equal(rowTarget([false, true, false], 0, 1), 2);
+  assert.equal(rowTarget([false, false], 0, -1), 0);
+});

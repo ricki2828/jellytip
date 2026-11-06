@@ -2,7 +2,7 @@
 // Keyboard: Arrow Up/Down/Home/End move, Escape closes and returns focus to the trigger; a click outside closes.
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import "./TrackMenu.css";
-import { audioSelectable, initialFocus, nextFocus, type NavKey, type TrackOption } from "../lib/trackMenu.ts";
+import { audioSelectable, initialFocus, menuKeyAction, nextFocus, rowTarget, tabTarget, type TrackOption } from "../lib/trackMenu.ts";
 import { SUB_BACKGROUNDS, SUB_SIZES, offsetLabel, stepOffset, SUB_OFFSET_MAX, SUB_OFFSET_MIN, type SubtitlePrefs } from "../lib/subtitlePrefs.ts";
 
 export type TrackMenuProps = {
@@ -54,17 +54,6 @@ export function TrackMenu(p: TrackMenuProps) {
     wasOpen.current = open;
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const down = (e: Event) => {
-      const t = e.target as Node;
-      if (menu.current?.contains(t) || trigger.current?.contains(t)) return;
-      onOpenChange(false);
-    };
-    document.addEventListener("pointerdown", down, true);
-    return () => document.removeEventListener("pointerdown", down, true);
-  }, [open, onOpenChange]);
-
   const close = (refocus = true) => {
     onOpenChange(false);
     if (refocus) trigger.current?.focus();
@@ -72,22 +61,25 @@ export function TrackMenu(p: TrackMenuProps) {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     p.onActivity?.();
-    if (e.key === "Escape" || e.key === "Backspace") {
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-      return;
+    const act = menuKeyAction(e.key, e.shiftKey);
+    if (act.kind === "pass") return;
+    e.stopPropagation();
+    if (act.kind === "swallow") return; // let the button's click happen, but nothing reaches playback
+    e.preventDefault();
+    const els = items();
+    const cur = els.indexOf(document.activeElement as HTMLElement);
+    const dis = els.map((el) => (el as HTMLButtonElement).disabled);
+    if (act.kind === "close") close();
+    else if (act.kind === "move") els[nextFocus(dis, cur < 0 ? 0 : cur, act.key)]?.focus();
+    else if (act.kind === "tab") els[tabTarget(els.length, cur, act.shift)]?.focus();
+    else {
+      // Left/Right: along the S/M/L/XL, None/Shadow/Box or Lower/Higher row only
+      const row = (document.activeElement as HTMLElement | null)?.closest(".track-appearance-row");
+      if (!row) return;
+      const rowEls = Array.from(row.querySelectorAll<HTMLElement>("[data-track-item]"));
+      const at = rowEls.indexOf(document.activeElement as HTMLElement);
+      rowEls[rowTarget(rowEls.map((el) => (el as HTMLButtonElement).disabled), at, act.dir)]?.focus();
     }
-    if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
-      e.preventDefault();
-      e.stopPropagation();
-      const els = items();
-      const cur = els.indexOf(document.activeElement as HTMLElement);
-      const next = nextFocus(els.map((el) => (el as HTMLButtonElement).disabled), cur < 0 ? 0 : cur, e.key as NavKey);
-      els[next]?.focus();
-      return;
-    }
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " " || e.key === "Enter") e.stopPropagation(); // never seek / toggle playback from inside the menu
   };
 
   const radio = (o: TrackOption, group: string, pick: () => void) => (
@@ -135,18 +127,11 @@ export function TrackMenu(p: TrackMenuProps) {
             onOpenChange(!open);
             p.onActivity?.();
           }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown" && !open) {
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenChange(true);
-            }
-          }}
         >
           Audio &amp; subtitles
         </button>
       </div>
-      {open && <div className="track-scrim" onClick={() => close()} />}
+      {open && <div className="track-scrim" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.preventDefault(); e.stopPropagation(); close(); }} />}
       {open && (
         <div ref={menu} id={`${id}-menu`} role="menu" aria-label="Audio and subtitles" tabIndex={-1} className={p.menuClassName} onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
           {p.unavailable ? (

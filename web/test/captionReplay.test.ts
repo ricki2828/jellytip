@@ -46,3 +46,11 @@ test("no caption track or no room to seek: no replay", () => {
   assert.equal(startReplay(100, -1, null, 0, null), null);
   assert.equal(startReplay(1, -1, 3, 0, null), null);
 });
+
+import { reportedSubtitle } from "../src/lib/captionReplay.ts";
+
+test("progress reports carry the viewer's real choice, not the temporary replay track", () => {
+  assert.equal(reportedSubtitle(3, { restore: -1, until: 100, from: 90 }), -1);
+  assert.equal(reportedSubtitle(3, null), 3);
+  assert.equal(reportedSubtitle(-1, null), -1);
+});

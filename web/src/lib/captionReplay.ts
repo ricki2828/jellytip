@@ -39,3 +39,8 @@ export function startReplay(time: number, current: number, fallback: number | nu
 export function replayDone(r: Replay, time: number): boolean {
   return time >= r.until || time < r.from - 1;
 }
+
+/** What progress/stopped reports should say: the viewer's real choice, never the temporary replay track. */
+export function reportedSubtitle(current: number, replay: Replay | null): number {
+  return replay ? replay.restore : current;
+}
