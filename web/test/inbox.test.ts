@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { epKey, FLOOD_LIMIT, MAX_SERIES, addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
+import { EPISODE_FETCH_WINDOW, MAX_EPS_PER_SERIES, epKey, FLOOD_LIMIT, MAX_SERIES, addRequest, applyObservation, ago, dueForRefresh, emptyStore, eventText, markAllRead, parseStore, pickIptv, reqKey, storageKey, tidyEvents, unreadCount, EXPIRY_MS, THROTTLE_MS, type Observed } from "../src/lib/inbox.ts";
 
 const NOW = 1_800_000_000_000;
 const ep = (id: string, n: number, at = NOW - 1000) => ({ id, show: "Show", season: 2, episode: n, at });
@@ -214,8 +214,22 @@ test("a re-import with new ids for the same season+episode does not re-fire", ()
   assert.equal(d.events[0].kind, "episode");
 });
 
-test("per-series snapshot is capped at 120 entries", () => {
+test("per-series snapshot: ids and season+episode keys are capped separately, and the cap covers the fetch window", () => {
+  assert.ok(MAX_EPS_PER_SERIES >= EPISODE_FETCH_WINDOW);
   const many = Array.from({ length: 300 }, (_, i) => ({ id: `e${i}`, show: "S", season: 1, episode: i, at: NOW - i }));
   const s = applyObservation(emptyStore("u"), { eps: { s1: many } }, NOW);
-  assert.equal(s.snap.eps.s1.length, 120);
+  assert.equal(s.snap.eps.s1.filter((x) => !x.startsWith("#")).length, MAX_EPS_PER_SERIES);
+  assert.equal(s.snap.eps.s1.filter((x) => x.startsWith("#")).length, MAX_EPS_PER_SERIES);
+});
+
+test("a 100-episode show seen twice (even with new ids and dates) produces no events the second time", () => {
+  const show = (prefix: string, at: number) => Array.from({ length: EPISODE_FETCH_WINDOW }, (_, i) => ({ id: `${prefix}${i}`, show: "Long", season: 1 + Math.floor(i / 20), episode: (i % 20) + 1, at: at - i }));
+  let s = applyObservation(emptyStore("u"), { eps: { s1: show("a", NOW) } }, NOW);
+  s = applyObservation(s, { eps: { s1: show("a", NOW) } }, NOW + 1);
+  assert.equal(s.events.length, 0);
+  s = applyObservation(s, { eps: { s1: show("b", NOW + 5) } }, NOW + 2); // re-import: new ids, same episodes
+  assert.equal(s.events.length, 0);
+  // and a later look after many looks still sees nothing new
+  for (let i = 3; i < 8; i++) s = applyObservation(s, { eps: { s1: show("a", NOW) } }, NOW + i);
+  assert.equal(s.events.length, 0);
 });

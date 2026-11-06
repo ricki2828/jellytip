@@ -8,7 +8,7 @@ import { afterStartup } from "../lib/startup";
 import { parseVodItems } from "../lib/iptvVod";
 import { observeEpisodes, observeTitles, type EpisodeDeps, type TitleDeps } from "../lib/inboxObserve";
 import {
-  addRequest, applyObservation, dueForRefresh, emptyStore, markAllRead, parseStore, reqKey, storageKey, unreadCount,
+  addRequest, EPISODE_FETCH_WINDOW, applyObservation, dueForRefresh, emptyStore, markAllRead, parseStore, reqKey, storageKey, unreadCount,
   type Observed, type RequestRec, type Store,
 } from "../lib/inbox";
 
@@ -110,7 +110,7 @@ const episodeDeps: EpisodeDeps = {
     return (await nextUp()).filter((e) => e.SeriesId).map((e) => ({ id: e.SeriesId!, name: e.SeriesName ?? "" }));
   },
   async episodesOf(seriesId) {
-    const r = await getItems({ ParentId: seriesId, IncludeItemTypes: "Episode", Recursive: true, SortBy: "DateCreated", SortOrder: "Descending", Fields: "DateCreated", EnableUserData: false, Limit: 100 });
+    const r = await getItems({ ParentId: seriesId, IncludeItemTypes: "Episode", Recursive: true, SortBy: "DateCreated", SortOrder: "Descending", Fields: "DateCreated", EnableUserData: false, Limit: EPISODE_FETCH_WINDOW });
     return r.Items.map((e) => ({ id: e.Id, name: e.Name, seriesName: e.SeriesName, season: e.ParentIndexNumber, episode: e.IndexNumber, virtual: e.LocationType === "Virtual", created: (e as Item & { DateCreated?: string }).DateCreated }));
   },
 };

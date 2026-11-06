@@ -7,7 +7,11 @@ export const EXPIRY_MS = 30 * 24 * 3600_000;
 export const THROTTLE_MS = 15 * 60_000;
 export const MAX_EVENTS = 200;
 export const MAX_TITLES = 500;
-export const MAX_EPS_PER_SERIES = 120;
+/** How many of a series' newest episodes one look asks for. */
+export const EPISODE_FETCH_WINDOW = 100;
+/** Episode ids, and separately season+episode keys, remembered per series. Must cover the fetch window, or a long show would re-fire what was pruned. */
+export const MAX_EPS_PER_SERIES = 150;
+if (MAX_EPS_PER_SERIES < EPISODE_FETCH_WINDOW) throw new Error("MAX_EPS_PER_SERIES must be at least EPISODE_FETCH_WINDOW");
 export const MAX_SERIES = 300;
 export const MAX_CHECKED = 800;
 /** More arrivals than this in one look collapse into a single summary event. */
@@ -173,7 +177,9 @@ export function applyObservation(s: Store, obs: Observed, now: number): Store {
   if (obs.eps) {
     for (const [sid, list] of Object.entries(obs.eps)) {
       const prev = s.snap.eps[sid];
-      const ids = list.slice().sort((a, b) => b.at - a.at).flatMap((e) => [e.id, epKey(e)].filter((x): x is string => !!x));
+      const newest = list.slice().sort((a, b) => b.at - a.at);
+      const ids = newest.map((e) => e.id);
+      const keys = newest.map(epKey).filter((x): x is string => !!x);
       if (!first && prev) {
         // Known by Jellyfin id or by season+episode number: a re-import or quality upgrade gets new ids for the same episode
         const known = new Set(prev);
@@ -195,7 +201,10 @@ export function applyObservation(s: Store, obs: Observed, now: number): Store {
         }
       }
       delete eps[sid]; // re-insert last: the oldest-touched series are the ones the size cap drops
-      eps[sid] = [...new Set([...ids, ...(prev ?? [])])].slice(0, MAX_EPS_PER_SERIES);
+      // Ids and "#SxE" keys are two sets (ids are hex, so they never collide), each with its own cap
+      const old = prev ?? [];
+      const keep = (mine: string[], more: string[]) => [...new Set([...mine, ...more])].slice(0, MAX_EPS_PER_SERIES);
+      eps[sid] = [...keep(ids, old.filter((x) => !x.startsWith("#"))), ...keep(keys, old.filter((x) => x.startsWith("#")))];
     }
   }
   const capped = (o: Snapshot["titles"]) => (Object.keys(o).length > MAX_TITLES ? Object.fromEntries(Object.entries(o).slice(-MAX_TITLES)) : o);
