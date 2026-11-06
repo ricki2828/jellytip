@@ -48,7 +48,8 @@ export function rowLabel(o: { next: boolean; episode: string | null; pos: number
 
 /** True when an in-progress title is finished: from 95 % watched, or under two minutes left (needs a known length). */
 export function nearlyDone(pos: number, dur: number): boolean {
-  if (!(dur > 0)) return false;
+  // Only titles actually started: a short unstarted one is not "finished"
+  if (!(dur > 0) || !(pos > 0)) return false;
   return (pos / dur) * 100 >= DONE_PCT || dur - pos < DONE_LEFT_S;
 }
 
@@ -93,18 +94,22 @@ function fromIptv(e: ContinueEntry, next: boolean): RowEntry {
   };
 }
 
-export interface BuildOpts {
-  /** Keys the person removed (see the dismiss store); an entry played since stays out of it. */
-  dismissed?: Record<string, number>;
-  /** Keys hidden right now by an optimistic action in flight. */
-  hidden?: ReadonlySet<string>;
+/** A hide/removal: the server's last-played time (epoch s, 0 = none) at that moment, and when it was made (ms). */
+export interface Dismissal {
+  at: number;
+  t: number;
 }
 
-/** Whether a removal (ms timestamp) still hides this entry: played again after the removal brings it back. */
-export const isDismissed = (e: RowEntry, dismissed: Record<string, number> | undefined) => {
-  const at = dismissed?.[e.key];
-  return at != null && e.at * 1000 <= at;
-};
+export interface BuildOpts {
+  /** Keys the person hid (see the dismiss store). */
+  dismissed?: Record<string, Dismissal>;
+  /** Keys hidden right now by an optimistic action: key -> server last-played (epoch s) when hidden. */
+  hidden?: ReadonlyMap<string, number>;
+}
+
+/** Hidden while the server's last-played time hasn't moved past the one seen at hide time; played again brings it back. */
+const stillHidden = (e: RowEntry, at: number | undefined) => at != null && e.at <= at;
+export const isDismissed = (e: RowEntry, dismissed: Record<string, Dismissal> | undefined) => stillHidden(e, dismissed?.[e.key]?.at);
 
 /**
  * The row: in-progress titles (library and IPTV) newest played first, then up-next episodes (the server's order; they carry
@@ -113,16 +118,9 @@ export const isDismissed = (e: RowEntry, dismissed: Record<string, number> | und
  * of one show can't be matched (different ids), so they stay separate tiles.
  */
 export function buildContinue(resume: Item[], next: Item[], iptvResume: ContinueEntry[], iptvNext: ContinueEntry[], opts: BuildOpts = {}): RowEntry[] {
-  const keep = (e: RowEntry) => !opts.hidden?.has(e.key) && !isDismissed(e, opts.dismissed);
-  // Jellyfin returns resume newest first: an undated one is no newer than the one before it
-  let prevAt = Infinity;
+  const keep = (e: RowEntry) => !stillHidden(e, opts.hidden?.get(e.key)) && !isDismissed(e, opts.dismissed);
   const progress = [
-    ...resume.map((i) => {
-      const e = fromLib(i, false);
-      if (!e.at) e.at = prevAt === Infinity ? Number.MAX_SAFE_INTEGER / 1000 : prevAt - 1;
-      prevAt = e.at;
-      return e;
-    }),
+    ...resume.map((i) => fromLib(i, false)),
     ...iptvResume.map((c) => fromIptv(c, false)),
   ].filter((e) => !nearlyDone(e.pos, e.dur));
   const best = new Map<string, RowEntry>();
@@ -130,8 +128,9 @@ export function buildContinue(resume: Item[], next: Item[], iptvResume: Continue
     const cur = best.get(e.group);
     if (!cur || e.at > cur.at) best.set(e.group, e);
   }
-  // A series whose in-progress episode was removed must not be replaced by an older one of the same series
+  // A hidden in-progress episode must not let its series reappear as next up
   const live = new Set(progress.map((e) => e.group));
+  // Newest played first; titles with no play time keep the server's order after the dated ones (the sort is stable)
   const tier1 = [...best.values()].filter(keep).sort((a, b) => b.at - a.at);
   const tier2: RowEntry[] = [];
   const seen = new Set<string>();
@@ -154,12 +153,12 @@ export interface ActionSet {
 }
 
 /**
- * What each tile may offer. Library: all three. IPTV: the companion has only a progress write (no remove route, so no
- * Remove); "Mark as watched" needs a known length (progress is written as finished) and an in-progress tile.
+ * What each tile may offer. Hide is local, so every tile has it. IPTV "Mark as watched" needs a known length (written as
+ * finished, played:true) and an in-progress tile; restart only makes sense for a started title.
  */
 export function actionsFor(e: RowEntry): ActionSet {
   if (e.source === "lib") return { remove: true, watched: true, restart: !e.next };
-  return { remove: false, watched: !e.next && e.dur > 0, restart: !e.next };
+  return { remove: true, watched: !e.next && e.dur > 0, restart: !e.next };
 }
 
 /**
@@ -194,28 +193,41 @@ type Store = Pick<Storage, "getItem" | "setItem">;
 /** Removals are kept per signed-in user (and server), so nothing carries over when someone else signs in. */
 export const dismissKey = (userId: string) => `${DISMISS_PREFIX}${userId}`;
 
-export function readDismissed(store: Store, userId: string): Record<string, number> {
+export function readDismissed(store: Store, userId: string): Record<string, Dismissal> {
   if (!userId) return {};
   try {
     const v = JSON.parse(store.getItem(dismissKey(userId)) ?? "{}") as unknown;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    return Object.fromEntries(Object.entries(v).filter(([, t]) => typeof t === "number" && isFinite(t)));
+    const out: Record<string, Dismissal> = {};
+    for (const [k, x] of Object.entries(v)) {
+      if (typeof x === "number" && isFinite(x)) out[k] = { at: Math.floor(x / 1000), t: x }; // older format: a ms timestamp
+      else if (x && typeof x === "object" && typeof (x as Dismissal).at === "number" && typeof (x as Dismissal).t === "number") out[k] = { at: (x as Dismissal).at, t: (x as Dismissal).t };
+    }
+    return out;
   } catch {
     return {};
   }
 }
 
-export function writeDismissed(store: Store, userId: string, key: string, on: boolean, now = Date.now()): Record<string, number> {
+/** Hide (on) or un-hide (off) a key; `serverAt` is the entry's server last-played time (epoch s) now. */
+export function writeDismissed(store: Store, userId: string, key: string, on: boolean, serverAt = 0, now = Date.now()): Record<string, Dismissal> {
   if (!userId) return {};
   const d = readDismissed(store, userId);
-  if (on) d[key] = now;
+  if (on) d[key] = { at: serverAt, t: now };
   else delete d[key];
-  const keys = Object.keys(d).sort((a, b) => d[b] - d[a]);
+  const keys = Object.keys(d).sort((a, b) => d[b].t - d[a].t);
   for (const k of keys.slice(MAX_DISMISSED)) delete d[k];
   try {
     store.setItem(dismissKey(userId), JSON.stringify(d));
   } catch {
-    // storage full or blocked: the removal still holds for this visit
+    // storage full or blocked: the hide still holds for this visit
   }
   return d;
+}
+
+/** After a refetch: forget hides for items the server no longer returns, or has since been played again. */
+export function pruneHidden(hidden: ReadonlyMap<string, number>, present: readonly RowEntry[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [k, at] of hidden) if (present.some((e) => e.key === k && e.at <= at)) out.set(k, at);
+  return out;
 }

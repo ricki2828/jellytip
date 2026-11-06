@@ -2368,3 +2368,8 @@ button.overview.open {
   flex-direction: column;
   align-items: stretch;
 }
+.continue-undo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

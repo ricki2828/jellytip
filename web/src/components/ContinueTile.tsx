@@ -10,7 +10,7 @@ import { actionsFor, type ActionId, type RowEntry } from "../lib/continueRow";
 import { go } from "../lib/router";
 
 const LONG_PRESS_MS = 550;
-const LABELS: Record<ActionId, string> = { remove: "Remove from Continue Watching", watched: "Mark as watched", restart: "Start from beginning" };
+const LABELS: Record<ActionId, string> = { remove: "Hide from Continue Watching", watched: "Mark as watched", restart: "Start from beginning" };
 
 export function restartPath(e: RowEntry): string {
   if (e.iptv) return continuePath({ ...e.iptv, pos: 0 });
@@ -23,6 +23,9 @@ interface Props {
   onFocusItem?: (item: Item) => void;
   onAction: (a: ActionId, e: RowEntry, wrap: HTMLElement | null) => void;
 }
+
+/** Events from the menu bubble through its portal to the tile: they are not the tile's gestures. */
+const fromMenu = (ev: { target: EventTarget }) => (ev.target as HTMLElement | null)?.closest?.(".tile-menu-back") != null;
 
 export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props) {
   const wrap = useRef<HTMLSpanElement>(null);
@@ -46,10 +49,12 @@ export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props)
   };
   const handlers = {
     onContextMenuCapture: (ev: React.MouseEvent) => {
+      if (fromMenu(ev)) return;
       stop(ev);
       setAt({ x: ev.clientX, y: ev.clientY });
     },
     onKeyDownCapture: (ev: React.KeyboardEvent) => {
+      if (fromMenu(ev)) return;
       if (ev.target !== ev.currentTarget && (ev.target as HTMLElement).closest(".continue-more")) return;
       if (ev.key === "ContextMenu" || (ev.key === "F10" && ev.shiftKey) || ((ev.key === "m" || ev.key === "M") && !ev.ctrlKey && !ev.metaKey && !ev.altKey)) {
         stop(ev);
@@ -58,7 +63,7 @@ export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props)
       }
     },
     onPointerDownCapture: (ev: React.PointerEvent) => {
-      if (ev.pointerType !== "touch" || (ev.target as HTMLElement).closest(".continue-more")) return;
+      if (fromMenu(ev) || ev.pointerType !== "touch" || (ev.target as HTMLElement).closest(".continue-more")) return;
       fired.current = false;
       start.current = { x: ev.clientX, y: ev.clientY };
       const { clientX, clientY } = ev;
@@ -75,7 +80,7 @@ export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props)
     onPointerCancel: clear,
     // A long-press must not also open the title
     onClickCapture: (ev: React.MouseEvent) => {
-      if (fired.current) {
+      if (!fromMenu(ev) && fired.current) {
         fired.current = false;
         stop(ev);
       }
@@ -95,9 +100,10 @@ export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props)
           onOpen={() => go(continuePath(e.iptv!))}
         />
       )}
+      {/* Not a spatial-nav stop (left/right moves tile to tile): the menu opens with the menu key / M, long-press, right-click or this button for mouse and touch */}
       <button
         className="continue-more"
-        data-nav
+        tabIndex={-1}
         aria-label={`More options for ${name}`}
         aria-haspopup="menu"
         title="More options"
@@ -129,31 +135,39 @@ export function ContinueTile({ entry, autoFocus, onFocusItem, onAction }: Props)
 function ActionMenu({ at, title, acts, onClose, onPick, returnTo }: { at: { x: number; y: number }; title: string; acts: ReturnType<typeof actionsFor>; onClose: () => void; onPick: (a: ActionId) => void; returnTo: React.RefObject<HTMLElement | null> }) {
   const box = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
+  // The parent re-renders freely: keep the latest callbacks in refs so the effect (and its focus grab) runs once per open
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const returnRef = useRef(returnTo);
+  returnRef.current = returnTo;
   useEffect(() => {
     box.current?.querySelector<HTMLElement>("button")?.focus();
+    const cycle = (dir: 1 | -1) => {
+      const bs = [...(box.current?.querySelectorAll<HTMLElement>("button") ?? [])];
+      const i = bs.indexOf(document.activeElement as HTMLElement);
+      bs[(i + dir + bs.length) % bs.length]?.focus();
+    };
     const key = (ev: KeyboardEvent) => {
       if (ev.key === "Escape" || ev.key === "Backspace") {
         ev.preventDefault();
         ev.stopPropagation();
-        onClose();
-        (opener.current && document.contains(opener.current) ? opener.current : returnTo.current?.querySelector<HTMLElement>("button"))?.focus();
-      } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-        // Keep arrows inside the menu (the page's tile navigation would walk away from it)
+        closeRef.current();
+        (opener.current && document.contains(opener.current) ? opener.current : returnRef.current.current?.querySelector<HTMLElement>("button"))?.focus();
+      } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp" || ev.key === "Tab") {
+        // Focus stays inside the menu (the page's tile navigation would walk away from it)
         ev.preventDefault();
         ev.stopPropagation();
-        const bs = [...(box.current?.querySelectorAll<HTMLElement>("button") ?? [])];
-        const i = bs.indexOf(document.activeElement as HTMLElement);
-        bs[(i + (ev.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length]?.focus();
+        cycle(ev.key === "ArrowDown" || (ev.key === "Tab" && !ev.shiftKey) ? 1 : -1);
       }
     };
-    const hash = () => onClose();
+    const hash = () => closeRef.current();
     document.addEventListener("keydown", key, true);
     window.addEventListener("hashchange", hash);
     return () => {
       document.removeEventListener("keydown", key, true);
       window.removeEventListener("hashchange", hash);
     };
-  }, [onClose, returnTo]);
+  }, []);
   const W = 250;
   const order: ActionId[] = ["watched", "restart", "remove"];
   return createPortal(

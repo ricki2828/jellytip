@@ -14,8 +14,8 @@ import { RecordingsRow } from "../components/RecordingsRow";
 import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
 import type { ContinueEntry } from "../lib/continue";
-import { actionsFor, buildContinue, optimisticHide, readDismissed, writeDismissed, type ActionId, type RowEntry } from "../lib/continueRow";
-import { markWatched, removeFromContinue } from "../api/continueActions";
+import { actionsFor, buildContinue, optimisticHide, pruneHidden, readDismissed, writeDismissed, type ActionId, type RowEntry } from "../lib/continueRow";
+import { markWatched } from "../api/continueActions";
 import { ContinueTile } from "../components/ContinueTile";
 import { flashNote } from "../components/TasteButtons";
 import { RemindersRow } from "../components/Reminders";
@@ -76,8 +76,12 @@ interface ContinueSrc {
 export function Home() {
   useHubTick();
   const [src, setSrc] = useState<ContinueSrc | null>(null);
-  // Tiles hidden by an action in flight (or just done); keys, so two actions never undo each other
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  // Tiles hidden by an action in flight (or just done): key -> the server's last-played time then. Keys, not a snapshot of
+  // the row, so two actions never undo each other.
+  const [hidden, setHidden] = useState<ReadonlyMap<string, number>>(new Map());
+  // Newest fetch wins: an older answer arriving late must not overwrite it
+  const seq = useRef(0);
+  const [undo, setUndo] = useState<{ msg: string; run: () => void } | null>(null);
   const [dismissVer, setDismissVer] = useState(0);
   const user = uid();
   const entries = useMemo(
@@ -90,7 +94,9 @@ export function Home() {
   useEffect(() => {
     const on = () => {
       setSrc(null);
-      setHidden(new Set());
+      setHidden(new Map());
+      setUndo(null);
+      seq.current++;
     };
     window.addEventListener("jellytip-session", on);
     return () => window.removeEventListener("jellytip-session", on);
@@ -126,8 +132,9 @@ export function Home() {
     // Continue Watching paints from the library at once. The IPTV part (in progress / up next) is asked for after the
     // rows request is answered, so it never holds the first screen up or takes a connection from it, and is merged in when it arrives.
     const me = uid();
+    const mine = ++seq.current;
     const apply = (v: ContinueSrc) => {
-      if (!alive || uid() !== me) return; // a late answer for someone who has since signed out
+      if (!alive || uid() !== me || seq.current !== mine) return; // late: someone else signed in, or a newer fetch landed
       setSrc(v);
     };
     const libP = Promise.all([resumeItems().catch(() => [] as Item[]), nextUp().catch(() => [] as Item[])]).then(([resume, next]) => {
@@ -176,40 +183,62 @@ export function Home() {
   const onAction = useCallback(
     (a: ActionId, e: RowEntry, wrap: HTMLElement | null) => {
       const me = uid();
-      // Focus moves to the neighbour, not the page top, when the tile goes
-      const neighbour = (wrap?.nextElementSibling ?? wrap?.previousElementSibling) as HTMLElement | null;
-      const io = {
-        hide: (k: string) => {
-          setHidden((h) => new Set(h).add(k));
-          requestAnimationFrame(() => neighbour?.querySelector<HTMLElement>("button.card")?.focus());
-        },
-        unhide: (k: string) =>
-          setHidden((h) => {
-            const n = new Set(h);
-            n.delete(k);
-            return n;
-          }),
-        notify: flashNote,
+      // Focus moves to a neighbouring tile, else the next (or previous) row, never the page top, when the tile goes
+      const row = wrap?.closest("section.row");
+      const target =
+        (wrap?.nextElementSibling ?? wrap?.previousElementSibling)?.querySelector<HTMLElement>("button.card") ??
+        row?.nextElementSibling?.querySelector<HTMLElement>("[data-nav]") ??
+        row?.previousElementSibling?.querySelector<HTMLElement>("[data-nav]") ??
+        document.querySelector<HTMLElement>(".home [data-nav]");
+      const focusAway = () => requestAnimationFrame(() => target && document.contains(target) && target.focus());
+      const hide = (k: string) => {
+        setHidden((h) => new Map(h).set(k, e.at));
+        focusAway();
       };
-      const refresh = () =>
-        Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
-          if (uid() !== me || !resume || !next) return;
-          setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
+      const unhide = (k: string) =>
+        setHidden((h) => {
+          const n = new Map(h);
+          n.delete(k);
+          return n;
         });
+      const refresh = () => {
+        const mine = ++seq.current;
+        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
+          if (uid() !== me || seq.current !== mine || !resume || !next) return;
+          setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
+          // Hides for items the server no longer returns, or has since seen played again, are done with
+          const present = buildContinue(resume, next, ic ?? [], inx ?? []);
+          setHidden((h) => pruneHidden(h, present));
+        });
+      };
       if (a === "remove") {
-        void optimisticHide(io, e.key, () => removeFromContinue(e), "Couldn't remove it. Try again.", "Removed from Continue Watching").then((ok) => {
-          if (!ok || uid() !== me) return;
-          writeDismissed(localStorage, me, e.key, true);
-          setDismissVer((n) => n + 1);
+        // Local only: nothing on the server changes
+        writeDismissed(localStorage, me, e.key, true, e.at);
+        setDismissVer((n) => n + 1);
+        focusAway();
+        setUndo({
+          msg: "Hidden on this device.",
+          run: () => {
+            if (uid() !== me) return;
+            writeDismissed(localStorage, me, e.key, false);
+            setDismissVer((n) => n + 1);
+            setUndo(null);
+          },
         });
       } else if (a === "watched" && actionsFor(e).watched) {
-        void optimisticHide(io, e.key, () => markWatched(e), "Couldn't mark it as watched. Try again.", "Marked as watched").then((ok) => {
+        void optimisticHide({ hide, unhide, notify: flashNote }, e.key, () => markWatched(e), "Couldn't mark it as watched. Try again.", "Marked as watched").then((ok) => {
           if (ok) void refresh();
         });
       }
     },
     [],
   );
+
+  useEffect(() => {
+    if (!undo) return;
+    const t = window.setTimeout(() => setUndo(null), 7000);
+    return () => window.clearTimeout(t);
+  }, [undo]);
 
   // No Continue Watching: the hero starts on the first carousel's first title
   useEffect(() => {
@@ -279,6 +308,14 @@ export function Home() {
 
   return (
     <div className="home">
+      {undo && (
+        <p className="taste-note continue-undo" role="status">
+          {undo.msg}{" "}
+          <button className="btn small" data-nav onClick={undo.run}>
+            Undo
+          </button>
+        </p>
+      )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
       <div className="rows">
         {entries && entries.length > 0 && (
