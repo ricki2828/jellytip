@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getItems, nextUp, resumeItems, uid, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
-import { withSpecials } from "../components/specials/Specials";
+import { SpecialBlock } from "../components/specials/Specials";
 import { Hero, IptvHero, type IptvHeroTile } from "../components/Hero";
 import { onIptvFocus } from "../lib/iptvFocus";
 import { buildSlides, excludedIds, heroSources, SLIDE_MS, type HeroSlide } from "../lib/heroMix";
 import { Row } from "../components/Row";
 import { itemsByIds, serverRowElement } from "../components/ServerRow";
 import { rememberRowTitles } from "../lib/rowTitles";
-import { HomeEdit } from "../components/HomeEdit";
+import { HomeEdit, type Placement } from "../components/HomeEdit";
+import { interleaveSpecials, planHome, readLocalHome, shouldDefer, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { useHubTick } from "../api/collections";
@@ -20,13 +21,18 @@ import { ContinueTile } from "../components/ContinueTile";
 import { flashNote } from "../components/TasteButtons";
 import { RemindersRow } from "../components/Reminders";
 import { UpcomingRow } from "../components/Upcoming";
-import { usePrefs } from "../api/me";
+import { savePrefs, usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
 const ROW_LIMIT = 24;
+const WATCHED_SAMPLE = 40; // ids per row asked for to tell how much of it is watched
+const WATCHED_WAIT_MS = 1200; // rows wait this long at most for that answer
+
+/** Rows the quality filter may judge by their library ids: plain lists. Ranked, person, collection and IPTV rows are shown as sent. */
+const filterable = (r: ServerRow) => r.layout !== "franchise" && !r.person && !r.collection && !r.order.length && !r.missing.length && !r.iptvItems.length && !r.id.startsWith("trending-top10");
 
 export const LETTERBOXD_PREFIX = "Letterboxd · ";
 
@@ -291,19 +297,152 @@ export function Home() {
     if (userInput.current) setEngaged(true);
   }, []);
 
+  // ---- Row plan: first screen / More rows / left out (rules in lib/homePlan.ts) ----
+  const [watched, setWatched] = useState<ReadonlySet<string> | null>(null);
+  const [watchedReady, setWatchedReady] = useState(false);
+  useEffect(() => {
+    if (!rows) return setWatchedReady(true);
+    let alive = true;
+    setWatchedReady(false);
+    const ids = [...new Set(rows.filter(filterable).flatMap((r) => r.itemIds.slice(0, WATCHED_SAMPLE)))];
+    const t = window.setTimeout(() => alive && setWatchedReady(true), WATCHED_WAIT_MS);
+    (ids.length ? itemsByIds(ids) : Promise.resolve([] as Item[]))
+      .then((items) => alive && setWatched(new Set(items.filter((it) => it.UserData?.Played).map((it) => undash(it.Id)))))
+      .catch(() => undefined)
+      .finally(() => {
+        if (!alive) return;
+        window.clearTimeout(t);
+        setWatchedReady(true);
+      });
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [rows]);
+
+  const [local, setLocal] = useState<UserHome>(() => readLocalHome(localStorage, uid()));
+  useEffect(() => {
+    const on = () => setLocal(readLocalHome(localStorage, uid()));
+    window.addEventListener("jellytip-session", on);
+    return () => window.removeEventListener("jellytip-session", on);
+  }, []);
+  const userHome: UserHome = useMemo(() => (personal && prefs ? { pinned: prefs.home.pinned, hidden: prefs.home.hidden } : personal === false ? local : { pinned: [], hidden: [] }), [personal, prefs, local]);
+
+  const cands = useMemo<Cand[]>(() => {
+    const out: Cand[] = [];
+    if (rows) {
+      for (const r of rows) out.push({ key: r.id, ids: filterable(r) ? r.itemIds.map(undash) : null, count: r.itemIds.length + r.iptvItems.length + r.missing.length });
+    } else {
+      for (const c of carousels) out.push({ key: c.id, ids: null, count: MIN_UNKNOWN });
+      for (const l of lists) out.push({ key: l.slug, ids: null, count: l.itemIds.length });
+    }
+    let pickTaken = false;
+    for (const s of specials) {
+      const pick = s.layout === "tonights_pick" && !pickTaken;
+      if (pick) pickTaken = true;
+      out.push({ key: `special-${s.id}`, ids: null, count: MIN_UNKNOWN, pick });
+    }
+    return out;
+  }, [rows, carousels, lists, specials]);
+  const planReady = rowsReady && watchedReady;
+  const target = useMemo<HomePlan | null>(() => {
+    if (!planReady) return null;
+    // Specials keep their place relative to the rows only through the plan: pick first, the rest ordered by position among rows
+    return planHome(interleaveSpecials(cands, specials), userHome, watched);
+  }, [planReady, cands, specials, userHome, watched]);
+
+  // What is on screen. A late change that would move the row in focus waits until focus leaves that spot.
+  const [shown, setShown] = useState<HomePlan | null>(null);
+  const shownRef = useRef<HomePlan | null>(null);
+  const targetRef = useRef<HomePlan | null>(null);
+  const focusKey = useRef<string | null>(null);
+  const moreOpenRef = useRef(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  moreOpenRef.current = moreOpen;
+  const seqOf = (p: HomePlan) => (moreOpenRef.current ? [...p.visible, ...p.more] : p.visible);
+  const settle = useCallback(() => {
+    const t = targetRef.current;
+    const cur = shownRef.current;
+    if (!t || t === cur) return;
+    if (cur && shouldDefer(seqOf(cur), seqOf(t), focusKey.current)) return;
+    shownRef.current = t;
+    setShown(t);
+  }, []);
+  useEffect(() => {
+    targetRef.current = target;
+    settle();
+  }, [target, settle]);
+  // Another person signing in: nothing of the last one's plan stays
+  useEffect(() => {
+    const on = () => {
+      shownRef.current = null;
+      focusKey.current = null;
+      setShown(null);
+      setMoreOpen(false);
+    };
+    window.addEventListener("jellytip-session", on);
+    return () => window.removeEventListener("jellytip-session", on);
+  }, []);
+  const rowFocus = useCallback(
+    (e: React.FocusEvent) => {
+      const k = (e.target as HTMLElement).closest<HTMLElement>("[data-rowkey]")?.dataset.rowkey ?? null;
+      if (k !== focusKey.current) {
+        focusKey.current = k;
+        settle();
+      }
+    },
+    [settle],
+  );
+  const rowBlur = useCallback(
+    (e: React.FocusEvent) => {
+      if (!e.relatedTarget) {
+        focusKey.current = null;
+        settle();
+      }
+    },
+    [settle],
+  );
+
   // Hovering or focusing a tile changes `focused` (the hero follows): unchanged elements keep React from re-rendering every row
-  const body = useMemo(
-    () =>
-      withSpecials(
-        rows
-          ? rows.map((r) => serverRowElement(r, { onFocusItem }))
-          : [
-              ...carousels.map((c) => <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />),
-              ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />),
-            ],
-        rowsReady ? specials : [],
-      ),
-    [rows, carousels, lists, specials, rowsReady, onFocusItem],
+  const elements = useMemo(() => {
+    const m = new Map<string, React.ReactNode>();
+    if (rows) for (const r of rows) {
+      const ids = shown?.ids[r.id];
+      m.set(r.id, serverRowElement(ids ? { ...r, itemIds: ids } : r, { onFocusItem }));
+    }
+    else {
+      for (const c of carousels) m.set(c.id, <Row key={c.id} title={c.title} load={carouselLoader(c)} onFocusItem={onFocusItem} />);
+      for (const l of lists) m.set(l.slug, <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} onFocusItem={onFocusItem} />);
+    }
+    for (const s of specials) m.set(`special-${s.id}`, <SpecialBlock key={`special-${s.id}`} s={s} />);
+    return m;
+  }, [rows, carousels, lists, specials, shown, onFocusItem]);
+  const wrap = (k: string) => {
+    const el = elements.get(k);
+    return el ? (
+      <div key={k} data-rowkey={k} style={{ display: "contents" }}>
+        {el}
+      </div>
+    ) : null;
+  };
+  const placement = useMemo(() => {
+    const p: Record<string, Placement> = {};
+    if (target) {
+      target.visible.forEach((k) => (p[k] = "first"));
+      target.more.forEach((k) => (p[k] = "more"));
+      target.dropped.forEach((k) => (p[k] = "auto"));
+    }
+    return p;
+  }, [target]);
+  const saveHome = useCallback(
+    async (home: { pinned: string[]; hidden: string[]; order: string[]; specialsPerDay: number }) => {
+      if (personal) return savePrefs({ home });
+      const h = { pinned: home.pinned, hidden: home.hidden };
+      if (!writeLocalHome(localStorage, uid(), h)) return "Couldn't save on this device.";
+      setLocal(h);
+      return null;
+    },
+    [personal],
   );
 
   return (
@@ -317,7 +456,7 @@ export function Home() {
         </p>
       )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
-      <div className="rows">
+      <div className="rows" onFocusCapture={rowFocus} onBlurCapture={rowBlur}>
         {entries && entries.length > 0 && (
           <Row
             title="Continue Watching"
@@ -339,26 +478,39 @@ export function Home() {
             }}
           />
         )}
-        {!rowsFailed && body}
-        {personal && prefs && rows && rows.length > 0 && (
+        {!rowsFailed && shown && shown.visible.map(wrap)}
+        {!rowsFailed && shown && shown.more.length > 0 && (
+          <div className="home-more">
+            <button className="btn" data-nav aria-expanded={moreOpen} onClick={() => setMoreOpen((o) => !o)}>
+              {moreOpen ? "Fewer rows" : `More rows (${shown.more.length})`}
+            </button>
+          </div>
+        )}
+        {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
             Edit Home
           </button>
         )}
       </div>
-      {editing && prefs && rows && (
+      {editing && rows && (
         <HomeEdit
-            rows={rows}
-            prefs={prefs}
-            onClose={(saved) => {
-              setEditing(false);
-              if (saved) {
-                dropPersonalCaches();
-                setReload((n) => n + 1);
-              }
-            }}
-          />
+          rows={rows}
+          home={personal && prefs ? prefs.home : { ...local, order: local.pinned, specialsPerDay: 3 }}
+          onSave={saveHome}
+          placement={placement}
+          specials={!!personal}
+          onClose={(saved) => {
+            setEditing(false);
+            if (saved && personal) {
+              dropPersonalCaches();
+              setReload((n) => n + 1);
+            }
+          }}
+        />
       )}
     </div>
   );
 }
+
+const MIN_UNKNOWN = 99; // carousels and specials: size not known up front, so the minimum never applies

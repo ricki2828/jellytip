@@ -81,3 +81,14 @@
 .home-edit-open {
   margin: 8px var(--pad) 40px;
 }
+
+.home-edit-place {
+  font-size: 0.8em;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.home-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
