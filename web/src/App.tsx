@@ -15,6 +15,7 @@ import { Player } from "./screens/Player";
 import { Collections } from "./screens/Collections";
 import { CollectionRow } from "./screens/CollectionRow";
 import { Search } from "./screens/Search";
+import { Ask } from "./screens/Ask";
 import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
@@ -93,6 +94,7 @@ export function App() {
         {route.name === "movies" && <Library key="movie" kind="movie" />}
         {route.name === "shows" && <Library key="tv" kind="tv" />}
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
+        {route.name === "ask" && <Ask key={session.userId} />}
         {route.name === "downloads" && isNative && <Downloads />}
         {route.name === "collections" && <Collections />}
         {route.name === "collectionrow" && <CollectionRow key={route.params.id} id={route.params.id} />}

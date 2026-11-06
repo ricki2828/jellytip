@@ -58,6 +58,7 @@ export function parseHash(hash: string): Route {
     case "movies":
     case "shows":
     case "search":
+    case "ask":
     case "downloads":
     case "home":
       return { name: seg[0], params: {}, query };
