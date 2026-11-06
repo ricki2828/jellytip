@@ -342,4 +342,3 @@ export function appliedNotes(chips: Chip[]): string[] {
   if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");
   return notes;
 }
-
