@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { imageUrl, type Item } from "../api/jellyfin";
+import type { Way } from "../lib/availability";
+import { AvailBadge } from "./AvailBadge";
 import { TechBadges } from "./TechBadges";
 import { useTileMenu } from "./TasteButtons";
 import { techOf, tileBadges } from "../lib/techBadges";
@@ -13,7 +15,7 @@ const POSTER_IMG_H = 450;
  * dark tile until the picture loads (never blank), stays when there is no picture, and is drawn over art known to have
  * no title in it (`untitled`).
  */
-export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip, tech: techProp, watched }: {
+export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip, avail, tech: techProp, watched }: {
   item?: Item;
   width?: number;
   onOpen?: () => void;
@@ -30,6 +32,8 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   untitled?: boolean;
   /** Small corner chip (franchise part number). */
   tag?: string;
+  /** Availability chip (Library / IPTV / Downloaded / Request); drawn only when passed. */
+  avail?: Way["badge"];
   /** Premium formats (defaults to what the server said for `item`). */
   tech?: readonly string[];
   /** Watched tick for tiles without a Jellyfin item (IPTV). */
@@ -53,6 +57,7 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
       {overlay && <span className="poster-fade" />}
       {(!hasImg || !loaded || overlay) && <span className={`poster-title${hasImg && !loaded ? " pending" : ""}`}>{name}</span>}
       {chip && <span className="card-tag">{chip}</span>}
+      {avail && <span className="card-avail"><AvailBadge badge={avail} /></span>}
       {techShown && <TechBadges tech={tech} />}
       {(item?.UserData?.Played || watched) && <span className="card-watched">✓</span>}
     </>

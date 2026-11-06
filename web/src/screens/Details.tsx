@@ -46,6 +46,10 @@ import type { VodDetail } from "../lib/iptvVod";
 import { targetPath } from "../lib/iptvPlay";
 import { EpisodePlaceholder } from "../components/EpisodePlaceholder";
 import { GetItSheet } from "../components/GetItSheet";
+import { WaysToWatch, useDownloaded } from "../components/WaysToWatch";
+import { availabilityOf, type IptvCopy, type Way } from "../lib/availability";
+import { iptvMovieFor, type MovieIptv } from "../api/movieIptv";
+import { vodPath } from "../lib/iptvVod";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -71,6 +75,9 @@ export function Details({ id }: { id: string }) {
   const [iptvDone, setIptvDone] = useState(false);
   const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
   const [getIt, setGetIt] = useState(false);
+  const [movieIptv, setMovieIptv] = useState<MovieIptv | null>(null);
+  const [movieDone, setMovieDone] = useState(false);
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [subtitleProgress, setSubtitleProgress] = useState<Progress | null>(null);
@@ -103,6 +110,8 @@ export function Details({ id }: { id: string }) {
     setAllEps(null);
     setIptvSeries(null);
     setIptvDone(false);
+    setMovieIptv(null);
+    setMovieDone(false);
     setGetIt(false);
     setSiblings([]);
     getItem(id)
@@ -149,6 +158,13 @@ export function Details({ id }: { id: string }) {
             if (!alive) return;
             setIptvSeries(v);
             setIptvDone(true);
+          });
+        }
+        if (it.Type === "Movie") {
+          iptvMovieFor(it.Name, it.ProviderIds?.Tmdb).then((v) => {
+            if (!alive) return;
+            setMovieIptv(v);
+            setMovieDone(true);
           });
         }
         if (it.Type === "Episode" && it.SeriesId) {
@@ -199,6 +215,36 @@ export function Details({ id }: { id: string }) {
   const ph = (r: NonNullable<typeof rows>[number]) => (
     <EpisodePlaceholder key={r.key} row={r} now={new Date()} onIptv={playIptv} onRequest={admin && iptvDone && tmdb > 0 ? () => setGetIt(true) : undefined} />
   );
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  const downloaded = useDownloaded(item?.Id);
+  const ways = useMemo<Way[]>(() => {
+    if (!item) return [];
+    const iptv: IptvCopy[] =
+      item.Type === "Series" && iptvSeries
+        ? [{ id: iptvSeries.id, providerName: iptvSeries.providerName, quality: iptvSeries.quality, tech: iptvSeries.tech }]
+        : item.Type === "Movie"
+          ? movieIptv?.copies ?? []
+          : [];
+    const missing = item.Type === "Series" && !!rows?.some((r) => r.status === "missing" && !r.iptv);
+    return availabilityOf(item, {
+      online,
+      downloaded,
+      iptv,
+      allowedProviderIds: item.Type === "Movie" ? movieIptv?.providerIds : undefined,
+      iptvChecked: item.Type === "Series" ? iptvDone : item.Type === "Movie" ? movieDone : false,
+      requestable: admin && iptvDone && tmdb > 0 && missing,
+    });
+  }, [item, online, downloaded, iptvSeries, movieIptv, rows, admin, iptvDone, movieDone, tmdb]);
 
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);
 
@@ -365,6 +411,17 @@ export function Details({ id }: { id: string }) {
       )}
 
       <div className="details-below">
+        {(item.Type === "Movie" || item.Type === "Series" || item.Type === "Episode") && ways.length > 0 && (
+          <WaysToWatch
+            ways={ways}
+            onAct={(w) => {
+              if (w.kind === "request") setGetIt(true);
+              else if (w.kind === "iptv" && w.iptvId) go(item.Type === "Series" ? vodPath(w.iptvId) : `${targetPath({ vod: w.iptvId })}&t=${encodeURIComponent(item.Name)}`);
+              else if (item.Type === "Series") seriesNext && go(`/play/${seriesNext.Id}`);
+              else go(`/play/${item.Id}`);
+            }}
+          />
+        )}
         {item.Type === "Series" && seasonList.length > 0 && (
           <section className="row">
             <div className="chips">

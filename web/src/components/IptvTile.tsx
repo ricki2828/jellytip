@@ -1,6 +1,7 @@
 // An IPTV film / series tile: same shapes as the library tiles (16:9 backdrop card or 2:3 poster) plus a small corner
 // dot, the one cue that it comes from the person's IPTV provider. Opens the IPTV details (#/iptv/item?id=…).
 import { useState } from "react";
+import type { Way } from "../lib/availability";
 import { logoSrc } from "../api/iptv";
 import { vodPath, vodTech, type IptvPart, type VodItem } from "../lib/iptvVod";
 import { tileBadges } from "../lib/techBadges";
@@ -27,7 +28,7 @@ export function IptvDot() {
   return <span className="iptv-corner-dot" aria-hidden title="via IPTV" />;
 }
 
-export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvPart; width: number; tag?: string; autoFocus?: boolean }) {
+export function IptvPoster({ item, width, tag, avail, autoFocus }: { item: Tile | IptvPart; width: number; tag?: string; avail?: Way["badge"]; autoFocus?: boolean }) {
   return (
     <span className="iptv-tile-wrap" style={width ? { width } : undefined}>
       <PosterCard
@@ -36,6 +37,7 @@ export function IptvPoster({ item, width, tag, autoFocus }: { item: Tile | IptvP
         name={item.title}
         label={label(item as Tile)}
         tag={tag}
+        avail={avail}
         tech={vodTech(item)}
         autoFocus={autoFocus}
         watched={!!(item as Tile).played || !!(item as Tile).progress?.played}

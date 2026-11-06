@@ -1,5 +1,7 @@
 // Landscape titled tile (see cardLayers for the fallback chain). Nothing is drawn below the tile, and it is never blank:
 // the title sits on the dark tile until the picture has loaded.
+import type { Way } from "../lib/availability";
+import { AvailBadge } from "./AvailBadge";
 import { memo, useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
 import { backdropInfo, episodeArtFor, peekBackdropInfo, peekEpisodeArt } from "../api/companion";
@@ -70,11 +72,13 @@ interface Props {
   caption?: string;
   /** Small chip in the top-left corner (e.g. "Nadine finished · 2d ago"). */
   tag?: string;
+  /** Availability chip (Library / IPTV / Downloaded / Request); drawn only when passed, never fetched here. */
+  avail?: Way["badge"];
   /** The art is known to carry no title (specials payload `untitled`): draw the title over it. */
   untitled?: boolean;
 }
 
-function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, label, caption, tag, untitled }: Props) {
+function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, label, caption, tag, avail, untitled }: Props) {
   const phone = useIsPhone();
   const width = widthProp ?? (phone ? PHONE_CARD_W : CARD_W);
   const ref = useRef<HTMLButtonElement>(null);
@@ -154,6 +158,7 @@ function CardImpl({ item, onFocusItem, width: widthProp, autoFocus, onOpen, labe
         </span>
       )}
       {tag && <span className="card-tag">{tag}</span>}
+      {avail && <span className="card-avail"><AvailBadge badge={avail} /></span>}
       {techShown && <TechBadges tech={tech} />}
       {ud?.Played && <span className="card-watched" aria-label="Watched">✓</span>}
       {progress > 0 && (
