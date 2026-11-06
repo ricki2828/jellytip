@@ -108,6 +108,8 @@ export interface Item {
   LocalTrailerCount?: number;
   Status?: string;
   EndDate?: string;
+  /** "Virtual" = a missing/unaired placeholder Jellyfin lists without a file. */
+  LocationType?: string;
 }
 
 export interface ItemsResult {
@@ -288,6 +290,14 @@ export async function seasons(seriesId: string): Promise<Item[]> {
 export async function episodes(seriesId: string, seasonId?: string): Promise<Item[]> {
   const r = await jf<ItemsResult>(
     `/Shows/${seriesId}/Episodes${qs({ UserId: uid(), SeasonId: seasonId, Fields: "Overview,MediaSources", EnableUserData: true })}`,
+  );
+  return r.Items;
+}
+
+/** Every episode of a season, with Jellyfin's missing/unaired placeholders (LocationType "Virtual") when the server lists them. */
+export async function episodesComplete(seriesId: string, seasonId: string): Promise<Item[]> {
+  const r = await jf<ItemsResult>(
+    `/Shows/${seriesId}/Episodes${qs({ UserId: uid(), SeasonId: seasonId, Fields: "Overview,MediaSources,LocationType,PremiereDate", EnableUserData: true })}`,
   );
   return r.Items;
 }

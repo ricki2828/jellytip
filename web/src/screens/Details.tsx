@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getSession,
   episodes as getEpisodes,
+  episodesComplete,
   getItem,
   localTrailers,
   personImage,
@@ -39,6 +40,12 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
+import { mergeEpisodes, presentEpisodes } from "../lib/seasonEpisodes";
+import { iptvSeriesFor } from "../api/seasonIptv";
+import type { VodDetail } from "../lib/iptvVod";
+import { targetPath } from "../lib/iptvPlay";
+import { EpisodePlaceholder } from "../components/EpisodePlaceholder";
+import { GetItSheet } from "../components/GetItSheet";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -60,7 +67,10 @@ export function Details({ id }: { id: string }) {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [seasonList, setSeasonList] = useState<Item[]>([]);
   const [season, setSeason] = useState<string | null>(null);
-  const [eps, setEps] = useState<Item[] | null>(null);
+  const [allEps, setAllEps] = useState<{ season: string; items: Item[] } | null>(null);
+  const [iptvDone, setIptvDone] = useState(false);
+  const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
+  const [getIt, setGetIt] = useState(false);
   const [siblings, setSiblings] = useState<Item[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [subtitleProgress, setSubtitleProgress] = useState<Progress | null>(null);
@@ -90,7 +100,10 @@ export function Details({ id }: { id: string }) {
     setShowTrailer(false);
     setOverviewOpen(false);
     setSeasonList([]);
-    setEps(null);
+    setAllEps(null);
+    setIptvSeries(null);
+    setIptvDone(false);
+    setGetIt(false);
     setSiblings([]);
     getItem(id)
       .then((it) => {
@@ -132,9 +145,14 @@ export function Details({ id }: { id: string }) {
             setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
           });
           episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
+          iptvSeriesFor(it.Name, it.ProviderIds?.Tmdb).then((v) => {
+            if (!alive) return;
+            setIptvSeries(v);
+            setIptvDone(true);
+          });
         }
         if (it.Type === "Episode" && it.SeriesId) {
-          getEpisodes(it.SeriesId).then((all) => alive && setSiblings(all));
+          getEpisodes(it.SeriesId).then((all) => alive && setSiblings(presentEpisodes(all)));
         }
         setTimeout(() => focusFirst(document.querySelector(".details") ?? document), 0);
       })
@@ -147,8 +165,8 @@ export function Details({ id }: { id: string }) {
   useEffect(() => {
     if (!item || item.Type !== "Series" || !season) return;
     let alive = true;
-    setEps(null);
-    getEpisodes(item.Id, season).then((e) => alive && setEps(e));
+    setAllEps(null);
+    episodesComplete(item.Id, season).then((e) => alive && setAllEps({ season, items: e }));
     return () => {
       alive = false;
     };
@@ -165,6 +183,22 @@ export function Details({ id }: { id: string }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [showTrailer]);
+
+  // Files only for play / download / Resume; the list below also shows placeholders and IPTV-only episodes
+  const cur = allEps && allEps.season === season ? allEps.items : null;
+  const eps = useMemo(() => (cur ? presentEpisodes(cur) : null), [cur]);
+  const seasonNo = seasonList.find((s) => s.Id === season)?.IndexNumber;
+  const rows = useMemo(
+    () => (cur ? mergeEpisodes(cur, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null),
+    [cur, iptvSeries, seasonNo],
+  );
+  const admin = !!getSession()?.isAdmin;
+  const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
+  const playIptv = (episodeId: string) =>
+    iptvSeries && go(`${targetPath({ series: iptvSeries.id, episode: episodeId })}&t=${encodeURIComponent(`${iptvSeries.title}`)}`);
+  const ph = (r: NonNullable<typeof rows>[number]) => (
+    <EpisodePlaceholder key={r.key} row={r} now={new Date()} onIptv={playIptv} onRequest={admin && iptvDone && tmdb > 0 ? () => setGetIt(true) : undefined} />
+  );
 
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);
 
@@ -346,26 +380,28 @@ export function Details({ id }: { id: string }) {
             {phone ? (
               // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
               <div className="ep-list">
-                {(eps ?? []).map((e) => (
-                  <div key={e.Id} className="ep-row">
-                    <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} />
-                    <button className="ep-text" onClick={() => go(`/item/${e.Id}`)}>
-                      <span className="ep-name">
-                        {e.IndexNumber}. {e.Name}
-                      </span>
-                      <span className="ep-meta">{[runtimeText(e.RunTimeTicks), e.UserData?.Played ? "Watched" : null].filter(Boolean).join("  ·  ")}</span>
-                      {e.Overview && <span className="ep-overview">{e.Overview}</span>}
-                    </button>
-                  </div>
-                ))}
-                {!eps && Array.from({ length: 3 }, (_, i) => <div key={i} className="ep-row card-skeleton" />)}
+                {(rows ?? []).map((r) => {
+                  const e = r.item;
+                  if (r.status !== "present" || !e) return ph(r);
+                  return (
+                    <div key={e.Id} className="ep-row">
+                      <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} />
+                      <button className="ep-text" onClick={() => go(`/item/${e.Id}`)}>
+                        <span className="ep-name">
+                          {e.IndexNumber}. {e.Name}
+                        </span>
+                        <span className="ep-meta">{[runtimeText(e.RunTimeTicks), e.UserData?.Played ? "Watched" : null].filter(Boolean).join("  ·  ")}</span>
+                        {e.Overview && <span className="ep-overview">{e.Overview}</span>}
+                      </button>
+                    </div>
+                  );
+                })}
+                {!rows && Array.from({ length: 3 }, (_, i) => <div key={i} className="ep-row card-skeleton" />)}
               </div>
             ) : (
               <div className="row-scroll">
-                {(eps ?? []).map((e) => (
-                  <Card key={e.Id} item={e} caption={`${e.IndexNumber ?? ""} · ${e.Name}`} />
-                ))}
-                {!eps && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
+                {(rows ?? []).map((r) => (r.status !== "present" || !r.item ? ph(r) : <Card key={r.key} item={r.item} caption={`${r.item.IndexNumber ?? ""} · ${r.item.Name}`} />))}
+                {!rows && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
               </div>
             )}
           </section>
@@ -401,6 +437,7 @@ export function Details({ id }: { id: string }) {
         {loadSimilar && <Row key={`sim-${item.Id}`} title="More like this" load={loadSimilar} />}
       </div>
 
+      {getIt && tmdb > 0 && <GetItSheet pick={{ title: item.Name, year: item.ProductionYear, tmdbId: tmdb, mediaType: "tv" }} onClose={() => setGetIt(false)} />}
       {notice && <div className="toast">{notice}</div>}
       {showTrailer && trailerId && (
         <div className="trailer-modal" onClick={() => setShowTrailer(false)}>
