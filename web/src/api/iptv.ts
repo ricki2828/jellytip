@@ -21,7 +21,7 @@ export interface Answer<T> {
   data: (T & IptvError) | null;
 }
 
-async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<Answer<T>> {
+async function call<T>(method: "GET" | "POST", path: string, body?: unknown, timeoutMs = 0): Promise<Answer<T>> {
   const token = getSession()?.token;
   if (!token) return { status: 401, data: { code: "signed_out", error: "Signed out" } as T & IptvError };
   const url = `${COMPANION_BASE}/${path.replace(/^\//, "")}`;
@@ -31,18 +31,22 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
       const r = method === "GET" ? await nativeGetJson<T & IptvError>(url, headers, 15000) : await nativePostJson<T & IptvError>(url, headers, body ?? {});
       return { status: r.status, data: r.data };
     }
+    const ctl = timeoutMs > 0 ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : undefined;
     const res = await fetch(url, {
+      signal: ctl?.signal,
       method,
       headers: method === "POST" ? { ...headers, "Content-Type": "application/json" } : headers,
       body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
     });
+    clearTimeout(timer);
     return { status: res.status, data: ((await res.json().catch(() => null)) as (T & IptvError) | null) ?? null };
   } catch (e) {
     return { status: 0, data: { code: "network", error: String((e as Error).message ?? e) } as T & IptvError };
   }
 }
 
-export const iptvGet = <T>(path: string) => call<T>("GET", path);
+export const iptvGet = <T>(path: string, timeoutMs = 0) => call<T>("GET", path, undefined, timeoutMs);
 export const iptvPost = <T>(path: string, body?: unknown) => call<T>("POST", path, body);
 
 /** Human text for a failed answer. */
@@ -274,7 +278,8 @@ export const epg = (channels: string[], from: number, to: number) =>
     `v1/iptv/epg?channels=${channels.map(encodeURIComponent).join(",")}&from=${from}&to=${to}`,
   );
 export const setFavourite = (channel: string, on: boolean) => iptvPost<{ ok: boolean }>("v1/iptv/favourites", { channel, on });
-export const play = (query: string) => iptvGet<PlayAnswer & { connection?: Connection }>(query);
+/** A hung /play must become a normal network fault (status 0) so recovery cannot wedge. */
+export const play = (query: string) => iptvGet<PlayAnswer & { connection?: Connection }>(query, 15_000);
 export const addRecording = (channel: string, programme: number) =>
   iptvPost<{ recording: Recording; warning: string | null }>("v1/iptv/recordings", { channel, programme });
 /** `series`: the pid:s:sid id when `item` is an episode (so Next Up can find the show). */

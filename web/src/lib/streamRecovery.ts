@@ -55,6 +55,10 @@ export type Phase = "playing" | "stalled" | "reconnecting" | "switched" | "faile
 /** Why a stream will not be retried automatically (denied phase). Manual Retry now stays available. */
 export type DeniedReason = "auth" | "denied" | "missing" | "nocatchup" | "link" | "rate";
 export const RETRY_DEBOUNCE_MS = 1500;
+/** After releasing a stream, wait this long before opening another (provider-side grace). */
+export const GRACE_MS = 750;
+/** A 409 on a recovery open gets one more attempt after this long before it counts as blocked. */
+export const BUSY_RETRY_MS = 3000;
 export type Conn = "held" | "releasing" | "closed" | "opening";
 export type StreamFormat = "ts" | "m3u8";
 
@@ -71,6 +75,7 @@ export interface RecoveryState {
   /** Recovered but not yet stable: a new fault keeps counting attempts instead of starting over. */
   unstable: boolean;
   reason: DeniedReason | null;
+  busyRetried: boolean;
   lastRetryAt: number | null;
   hiddenStop: boolean;
   hiddenSince: number | null;
@@ -82,7 +87,8 @@ export interface RecoveryState {
 
 export type RecoveryEvent =
   | { t: "stall"; pos: number; canHls: boolean }
-  | { t: "fault"; pos: number; canHls: boolean }
+  | { t: "fault"; pos: number; canHls: boolean; now?: number }
+  | { t: "busy" }
   | { t: "retryNow"; pos: number; canHls: boolean; now?: number }
   | { t: "fatal"; reason: DeniedReason }
   | { t: "opened" }
@@ -109,7 +115,7 @@ export interface Step {
 }
 
 export function initialRecovery(live: boolean, format: StreamFormat = "ts"): RecoveryState {
-  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, unstable: false, reason: null, lastRetryAt: null, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
+  return { phase: "playing", live, attempt: 0, max: MAX_ATTEMPTS, format, switched: false, conn: "held", offline: false, unstable: false, reason: null, busyRetried: false, lastRetryAt: null, hiddenStop: false, hiddenSince: null, want: null, resumeAt: null };
 }
 
 const paused = (s: RecoveryState) => s.offline || s.hiddenStop;
@@ -131,7 +137,8 @@ function release(s: RecoveryState, fx: RecoveryEffect[]): void {
 
 /** Queue an open after `delayMs`; the old stream is released first. */
 function reopen(s: RecoveryState, fx: RecoveryEffect[], delayMs: number): void {
-  s.want = { delayMs };
+  const hadStream = s.conn === "held" || s.conn === "opening";
+  s.want = { delayMs: hadStream ? Math.max(delayMs, GRACE_MS) : delayMs };
   release(s, fx);
   maybeOpen(s, fx);
 }
@@ -199,12 +206,31 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
         if (s.conn === "releasing" || s.conn === "closed") break;
         nextAttempt(s, fx, e.canHls);
       }
+      // already hidden for over a minute when recovery starts: stop and release, resume on return
+      if (e.now != null && s.hiddenSince != null && e.now - s.hiddenSince >= HIDDEN_STOP_MS && active(s) && !s.hiddenStop) {
+        s.hiddenStop = true;
+        s.want = null;
+        fx.push({ do: "cancelTimers" });
+        release(s, fx);
+      }
+      break;
+    case "busy":
+      if (!s.busyRetried && (s.phase === "reconnecting" || s.phase === "switched")) {
+        s.busyRetried = true;
+        reopen(s, fx, BUSY_RETRY_MS);
+      } else {
+        s.phase = "blocked";
+        s.want = null;
+        fx.push({ do: "cancelTimers" });
+        release(s, fx);
+      }
       break;
     case "retryNow":
       // mashing Retry must not flood /play: ignore while an open is in flight and within the debounce window
       if (s.conn === "opening" || (e.now != null && s.lastRetryAt != null && e.now - s.lastRetryAt < RETRY_DEBOUNCE_MS)) break;
       if (e.now != null) s.lastRetryAt = e.now;
       s.reason = null;
+      s.busyRetried = false;
       s.hiddenStop = false;
       s.resumeAt = s.live ? null : e.pos > 5 ? e.pos : s.resumeAt;
       s.attempt = 1;
@@ -223,6 +249,7 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
         s.phase = "playing";
         // attempts are only forgiven after STABLE_MS of continuous playback ("stable")
         s.unstable = s.attempt > 0;
+        s.busyRetried = false;
         s.resumeAt = null;
       }
       break;
@@ -243,17 +270,17 @@ export function step(prev: RecoveryState, e: RecoveryEvent): Step {
       s.offline = true;
       fx.push({ do: "cancelTimers" });
       // a queued open that has not started yet waits for the network, with no extra backoff when it returns
-      if (s.want) s.want = { delayMs: 0 };
+      if (s.want) s.want = { delayMs: GRACE_MS };
       // an open already scheduled or in flight is rolled back (its timer was just cancelled)
       else if (s.conn === "opening") {
-        s.want = { delayMs: 0 };
+        s.want = { delayMs: GRACE_MS };
         release(s, fx);
       }
       break;
     case "online":
       if (!s.offline) break;
       s.offline = false;
-      if (s.want) s.want = { delayMs: 0 };
+      if (s.want) s.want = { delayMs: GRACE_MS };
       maybeOpen(s, fx);
       break;
     case "hidden":

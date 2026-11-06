@@ -18,7 +18,7 @@ test("alternate switching keeps unselected candidates and appends the channel le
   ]);
 });
 
-import { permanentReason, beginExclusive, claimEngine, backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
+import { GRACE_MS, BUSY_RETRY_MS, HIDDEN_STOP_MS, permanentReason, beginExclusive, claimEngine, backoffMs, initialRecovery, isRetryable, recoveryCopy, step, type RecoveryEvent, type RecoveryEffect, type RecoveryState } from "../src/lib/streamRecovery.ts";
 
 /** Run events; "released" is answered automatically after each release effect, like the player does. */
 function run(s: RecoveryState, events: RecoveryEvent[]) {
@@ -158,7 +158,7 @@ test("offline pauses retries without using attempts; online resumes immediately"
   const attempt = r.s.attempt;
   r = run(r.s, [{ t: "online" }]);
   assert.equal(opens(r.fx).length, 1);
-  assert.equal(opens(r.fx)[0].delayMs, 0);
+  assert.equal(opens(r.fx)[0].delayMs, GRACE_MS);
   assert.equal(r.s.attempt, attempt);
   // failure while offline again does not consume an attempt
   r = run(r.s, [{ t: "offline" }, fault()]);
@@ -385,4 +385,51 @@ test("a healthy playing stream is not released when the tab stays hidden", () =>
   const r = run(initialRecovery(true), [{ t: "hidden", now: 0 }, { t: "hiddenTimeout" }]);
   assert.equal(r.s.conn, "held");
   assert.equal(r.fx.some((f) => f.do === "release"), false);
+});
+
+test("a rejected player load (fault while opening) never wedges: attempts continue and Retry works afterwards", () => {
+  let r = run(initialRecovery(true), [fault()]);
+  assert.equal(r.s.conn, "opening");
+  // the load rejects: the player reports a fault instead of staying "opening" forever
+  for (let i = 0; i < 4; i++) r = run(r.s, [fault()]);
+  assert.equal(r.s.phase, "failed");
+  assert.equal(r.s.conn, "closed");
+  r = run(r.s, [{ t: "retryNow", pos: 0, canHls: false, now: 100_000 }]);
+  assert.equal(opens(r.fx).length, 1);
+  assert.equal(r.s.conn, "opening");
+});
+
+test("opens right after a release wait the provider grace period", () => {
+  const sw = run(initialRecovery(true), [fault(0, true), { t: "opened" }, fault(0, true), { t: "opened" }, fault(0, true), { t: "opened" }, fault(0, true), { t: "opened" }, fault(0, true)]);
+  assert.equal(sw.s.phase, "switched");
+  assert.equal(opens(sw.fx).at(-1)!.delayMs, GRACE_MS);
+  const held = run(initialRecovery(true), [fault(), { t: "opened" }]).s;
+  const retry = run(held, [{ t: "retryNow", pos: 0, canHls: false, now: 9000 }]);
+  assert.equal(opens(retry.fx)[0].delayMs, GRACE_MS);
+});
+
+test("409 on a recovery open gets one delayed retry, then blocks", () => {
+  let r = run(initialRecovery(true), [fault()]);
+  r = run(r.s, [{ t: "busy" }]);
+  assert.equal(r.s.phase, "reconnecting");
+  assert.equal(opens(r.fx)[0].delayMs, BUSY_RETRY_MS);
+  r = run(r.s, [{ t: "busy" }]);
+  assert.equal(r.s.phase, "blocked");
+  assert.equal(opens(r.fx).length, 0);
+});
+
+test("already hidden over 60 s when recovery starts: stop and release, resume on return", () => {
+  let r = run(initialRecovery(true), [{ t: "hidden", now: 0 }, { t: "fault", pos: 0, canHls: false, now: HIDDEN_STOP_MS + 1 }]);
+  assert.equal(r.s.hiddenStop, true);
+  assert.equal(r.s.conn, "closed");
+  assert.equal(opens(r.fx).length, 0);
+  r = run(r.s, [{ t: "visible", now: HIDDEN_STOP_MS + 5000 }]);
+  assert.equal(opens(r.fx).length, 1);
+  assert.equal(r.s.attempt, 1);
+});
+
+test("hidden under 60 s when recovery starts keeps going", () => {
+  const r = run(initialRecovery(true), [{ t: "hidden", now: 0 }, { t: "fault", pos: 0, canHls: false, now: 30_000 }]);
+  assert.equal(r.s.hiddenStop, false);
+  assert.equal(opens(r.fx).length, 1);
 });

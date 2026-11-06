@@ -249,7 +249,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
           if (!alive.current || gen.current !== my) return;
           fmtRef.current = f.format;
           seekTo.current = f.resumeAt ?? 0;
-          void startRef.current(false, true).then((ok) => { if (ok && alive.current && gen.current === my) dispatchRef.current({ t: "opened" }); });
+          startRef.current(false, true).then(
+            (ok) => { if (ok && alive.current && gen.current === my) dispatchRef.current({ t: "opened" }); },
+            () => { if (alive.current && gen.current === my) dispatchRef.current({ t: "fault", now: Date.now(), pos: 0, canHls: false }); },
+          );
         }, f.delayMs);
       } else if (f.do === "exit") exitRef.current();
     }
@@ -333,7 +336,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       }
       if (what === "fatal" && isRetryable(status, code) && recRef.current.phase !== "blocked" && recRef.current.phase !== "ended") {
         // Recovery owns the retry: it releases this stream before opening another
-        dispatchRef.current({ t: "fault", pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts" });
+        dispatchRef.current({ t: "fault", now: Date.now(), pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts" });
         return;
       }
       const perm = what !== "full" ? permanentReason(status, code) : null;
@@ -341,7 +344,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         dispatchRef.current({ t: "fatal", reason: perm });
         return;
       }
-      if (what === "full") dispatchRef.current({ t: "blocked" });
+      if (what === "full") {
+        dispatchRef.current({ t: "busy" });
+        if (recRef.current.phase !== "blocked" && recRef.current.phase !== "playing") return;
+        dispatchRef.current({ t: "blocked" });
+      }
       teardown();
       finishBuffer();
       debugEvent("iptv-player", "terminal failure", { errorClass: what, player: engine, format: fmtRef.current, status });
@@ -425,32 +432,48 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
 
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
   const start = useCallback(async (retry = false, recovering = false): Promise<boolean> => {
+    // A player chunk that failed to load (offline, stale deploy) is a retryable fault when recovering, else an error screen
+    const loadFailed = (): boolean => {
+      if (!alive.current || g !== gen.current) return false;
+      debugEvent("iptv-player", "player load failed", { player: engineRef.current, format: fmtRef.current });
+      if (recovering) dispatchRef.current({ t: "fault", now: Date.now(), pos: 0, canHls: isLive && fmtRef.current === "ts" });
+      else setState({ kind: "error", text: "The player couldn't load. Check your connection and try again." });
+      return false;
+    };
     const g = recovering ? gen.current : beginExclusive(gen, () => window.clearTimeout(openTimer.current), teardown);
     if (!recovering) {
       // not a recovery: the machine starts over (nothing held until this start succeeds)
-      recRef.current = { ...initialRecovery(isLive, fmtRef.current), conn: "closed" };
+      recRef.current = { ...initialRecovery(isLive, fmtRef.current), conn: "closed", offline: recRef.current.offline };
       setRec(recRef.current);
     }
     if (!retry && !recovering) setState({ kind: "loading" });
     if (!retry) attemptStarted.current = Date.now();
-    if (isLive && fmtRef.current === "ts" && !(await loadMpegts()).default.getFeatureList().mseLivePlayback) fmtRef.current = "m3u8";
+    try {
+      if (isLive && fmtRef.current === "ts" && !(await loadMpegts()).default.getFeatureList().mseLivePlayback) fmtRef.current = "m3u8";
+    } catch {
+      return loadFailed();
+    }
     const a = await play(playQuery(target, iptvDevice(), fmtRef.current));
     if (!alive.current || g !== gen.current) return false;
     if (a.status === 200 && a.data?.url) {
       if (!recovering) {
-        recRef.current = initialRecovery(isLive, fmtRef.current);
+        recRef.current = { ...initialRecovery(isLive, fmtRef.current), offline: recRef.current.offline };
         setRec(recRef.current);
       }
       setAnswer(a.data);
       setState({ kind: "playing" });
-      await attach(a.data);
+      try {
+        await attach(a.data);
+      } catch {
+        return loadFailed();
+      }
       return true;
     }
     const what = linkFailure(a.status, a.data?.code);
     debugEvent("iptv-player", "terminal failure", { errorClass: what, status: a.status, player: engineRef.current, format: fmtRef.current });
     if (recovering) {
       if (what !== "full" && isRetryable(a.status, a.data?.code)) {
-        dispatchRef.current({ t: "fault", pos: 0, canHls: isLive && fmtRef.current === "ts" });
+        dispatchRef.current({ t: "fault", now: Date.now(), pos: 0, canHls: isLive && fmtRef.current === "ts" });
         return false;
       }
       const perm = what === "full" ? null : permanentReason(a.status, a.data?.code);
@@ -458,7 +481,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         dispatchRef.current({ t: "fatal", reason: perm });
         return false;
       }
-      dispatchRef.current({ t: "blocked" });
+      if (what === "full") {
+        dispatchRef.current({ t: "busy" });
+        if (recRef.current.phase !== "blocked") return false; // one delayed retry scheduled
+      } else dispatchRef.current({ t: "blocked" });
     }
     if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
     else if (what === "full") {
@@ -473,6 +499,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   useEffect(() => {
     alive.current = true;
     gen.current++;
+    quietUntil.current = 0;
+    playingSince.current = null;
+    lastMove.current = Date.now();
     renewed.current = false;
     startRef.current = start;
     recRef.current = initialRecovery(isLive);
@@ -617,7 +646,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         // Escalate in any recovery phase. VOD / catch-up: only when the element is not loading and nothing happened for VOD_IDLE_MS.
         const idleFor = isLive ? now - lastMove.current - thresh : Math.min(now - lastMove.current, now - lastNet.current);
         const need = isLive ? RECONNECT_AFTER_MS : v.readyState < 3 ? VOD_IDLE_MS : Infinity;
-        if (r.phase !== "playing" && r.conn === "held" && idleFor >= need) dispatchRef.current({ t: "fault", pos: v.currentTime, canHls });
+        if (r.phase !== "playing" && r.conn === "held" && idleFor >= need) dispatchRef.current({ t: "fault", now: Date.now(), pos: v.currentTime, canHls });
       }
     }, 1000);
     return () => { active = false; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); if (frameId) v?.cancelVideoFrameCallback?.(frameId); };
