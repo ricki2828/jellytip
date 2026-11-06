@@ -463,6 +463,7 @@ fun HomePageContent(
     val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
     val headerItem = if (specialFocus?.showHeader == false) null else focusedItem
 
+    val currentEntries by rememberUpdatedState(entries)
     val currentFocusedEntry by rememberUpdatedState(focusedEntry)
     val focusedKey = entries.getOrNull(focusedEntry)?.key
     val currentFocusedKey by rememberUpdatedState(focusedKey)
@@ -586,6 +587,8 @@ fun HomePageContent(
     }
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     var firstFocused by remember { mutableStateOf(false) }
+    val firstFocusRuns = remember { intArrayOf(0) } // effect runs that failed to land row focus; no recomposition needed
+    var firstFocusGaveUp by remember { mutableStateOf(false) }
 
     val currentPosition by rememberUpdatedState(position)
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
@@ -603,21 +606,47 @@ fun HomePageContent(
                 withFrameNanos { }
                 if (special.tryRequestFocus()) firstFocused = true
             }
-            if (!firstFocused && homeRows.isNotEmpty()) {
-                if (position.row >= 0) {
-                    val index = position.row.coerceIn(0, rowFocusRequesters.lastIndex)
-                    rowFocusRequesters.getOrNull(index)?.tryRequestFocus()
-                    firstFocused = true
-                } else {
-                    // Waiting for the first home row to load, then focus on it
-                    homeRows
-                        .indexOfFirstOrNull { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
-                        ?.let {
-                            rowFocusRequesters[it].tryRequestFocus()
-                            firstFocused = true
-                            delay(50)
-                            listState.scrollToItem(it)
+            if (!firstFocused && !firstFocusGaveUp && homeRows.isNotEmpty()) {
+                val row =
+                    if (position.row >= 0) {
+                        position.row.coerceIn(0, rowFocusRequesters.lastIndex)
+                    } else {
+                        // Waiting for the first home row to load, then focus on it
+                        homeRows.indexOfFirstOrNull { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
+                    }
+                if (row != null) {
+                    // Jellytip: rows sit among specials/server rows, so scroll by the merged entry index (not the
+                    // homeRows index) and only count focus as taken once it actually lands. A failed request (row not
+                    // composed yet) retries a few frames, then on later homeRows changes, capped so a user who has
+                    // moved to the nav rail meanwhile isn't pulled back indefinitely.
+                    withFrameNanos { } // let the list measure so restored scroll state is visible before we judge it
+                    for (attempt in 1..3) {
+                        if (attempt > 1) delay(100) // slow TV boxes need time to compose a row after scrollToItem
+                        if (firstFocused) break
+                        if (currentHasFocus) {
+                            firstFocused = true // something on Home already holds focus (restored or another effect)
+                            break
                         }
+                        val target =
+                            currentEntries.indexOfFirst { it is JellytipHomeEntry.Row && it.index == row }.takeIf { it >= 0 }
+                                ?.let { it to row }
+                                ?: currentEntries.withIndex().firstOrNull { it.value is JellytipHomeEntry.Row }
+                                    ?.let { it.index to (it.value as JellytipHomeEntry.Row).index }
+                                ?: break
+                        val (entryIndex, targetRow) = target
+                        val layout = listState.layoutInfo
+                        if (layout.totalItemsCount > 0 && layout.visibleItemsInfo.none { it.index == entryIndex }) {
+                            listState.scrollToItem(entryIndex)
+                        }
+                        withFrameNanos { }
+                        if (rowFocusRequesters.getOrNull(targetRow)?.tryRequestFocus("home-first") == true) {
+                            withFrameNanos { }
+                            if (currentHasFocus) firstFocused = true
+                        }
+                        if (!firstFocused) JellytipTrace.focus("home: first focus on row $targetRow (entry $entryIndex) failed, attempt $attempt")
+                    }
+                    // Give up after 3 runs and leave focus where it is (firstFocused stays false: it means focused, not done)
+                    if (!firstFocused && ++firstFocusRuns[0] >= 3) firstFocusGaveUp = true
                 }
             }
         }
