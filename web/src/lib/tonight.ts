@@ -13,7 +13,6 @@ export const MIN_LEFT_MIN = 10;
 export const HIGH_RATING = 7.5;
 /** IPTV titles are added only when fewer than this many candidates remain from the library and Continue Watching. */
 export const THIN = PICKS * 2;
-export const CACHE_MS = 10 * 60_000;
 
 export type Source = "resume" | "nextup" | "recs" | "rated" | "iptv";
 const TIER: Record<Source, number> = { resume: 0, nextup: 1, recs: 2, rated: 3, iptv: 4 };
@@ -38,6 +37,8 @@ export interface Cand {
   probe: Item;
   /** Already begun (resume / next episode of a show in progress). */
   started: boolean;
+  /** Undashed series id of an episode (a blocked series blocks its episodes). */
+  series?: string;
   /** Order within its tier. */
   rank: number;
 }
@@ -47,6 +48,8 @@ const TICKS_MIN = 600_000_000;
 const rt = (m: number | null) => (m == null ? undefined : Math.round(m * TICKS_MIN));
 const se = (s?: number, e?: number) => (s != null && e != null ? `S${s} E${e}` : e != null ? `E${e}` : null);
 const mins = (s: number) => Math.max(1, Math.round(s / 60));
+/** Under two minutes in is not worth quoting. */
+const into = (pos: number) => (pos < 120 ? "Started recently" : `You're ${mins(pos)} min into this`);
 
 /** Where the client-side ranking gets its pool (all already loaded; see screens/Tonight.tsx). */
 export interface Pool {
@@ -74,7 +77,7 @@ function fromEntry(e: RowEntry): Cand | null {
       source: e.next ? "nextup" : "resume",
       title: ep ? (it.SeriesName ?? it.Name) : it.Name,
       sub: ep ? [label, it.Name].filter(Boolean).join(" · ") : null,
-      reason: e.next ? `Next episode of ${it.SeriesName ?? it.Name}` : `You're ${mins(e.pos)} min into this`,
+      reason: e.next ? `Next episode of ${it.SeriesName ?? it.Name}` : into(e.pos),
       play: `/play/${it.Id}`,
       playLabel: e.next ? "Play" : "Resume",
       artId: ep ? (it.SeriesId ?? it.Id) : it.Id,
@@ -82,6 +85,7 @@ function fromEntry(e: RowEntry): Cand | null {
       minutes: e.next ? (it.RunTimeTicks ? it.RunTimeTicks / TICKS_MIN : null) : left,
       probe: itemProbe(it, e.next ? (it.RunTimeTicks ? it.RunTimeTicks / TICKS_MIN : null) : left),
       started: true,
+      series: ep && it.SeriesId ? undash(it.SeriesId) : undefined,
       rank: 0,
     };
   }
@@ -94,7 +98,7 @@ function fromEntry(e: RowEntry): Cand | null {
     source: e.next ? "nextup" : "resume",
     title: v.seriesTitle ?? v.title,
     sub: v.kind === "episode" ? [se(v.season ?? undefined, v.episode ?? undefined), v.title].filter(Boolean).join(" · ") : null,
-    reason: e.next ? `Next episode of ${v.seriesTitle ?? v.title}` : `You're ${mins(v.pos)} min into this`,
+    reason: e.next ? `Next episode of ${v.seriesTitle ?? v.title}` : into(v.pos),
     play: continuePath(v),
     playLabel: e.next ? "Play" : "Resume",
     artId: null,
@@ -111,7 +115,7 @@ export function candidates(pool: Pool): Cand[] {
   const out: Cand[] = [];
   const seen = new Set<string>();
   const add = (c: Cand | null) => {
-    if (!c || seen.has(c.key) || pool.blocked.has(c.key)) return;
+    if (!c || seen.has(c.key) || pool.blocked.has(c.key) || (c.series && pool.blocked.has(c.series))) return;
     seen.add(c.key);
     out.push(c);
   };
@@ -178,7 +182,6 @@ export function applyConstraints(cands: Cand[], ids: ConstraintId[]): Cand[] {
   if (!ids.length) return cands;
   const chips = chipsFor(ids);
   const kids = chips.find((c) => c.data.t === "kids");
-  const mood = chips.some((c) => c.data.t === "genre");
   const wantNew = chips.some((c) => c.data.t === "unplayed");
   const fits = new Set(filterItems(cands.map((c) => c.probe), chips.filter((c) => c.data.t === "genre" || c.data.t === "maxRuntime")).map((i) => i.Id));
   return cands.filter((c) => {
@@ -187,10 +190,9 @@ export function applyConstraints(cands: Cand[], ids: ConstraintId[]): Cand[] {
     if (kids && kids.data.t === "kids") {
       const r = c.probe.OfficialRating;
       if (!r || !kids.data.ratings.includes(r)) return false;
-      if (!mood) {
-        const have = new Set((c.probe.Genres ?? []).map((g) => g.toLowerCase()));
-        if (!kids.data.genres.some((g) => have.has(g.toLowerCase()))) return false;
-      }
+      // Always a Family / Animation / Kids genre as well: a PG comedy alone is not kids-safe
+      const have = new Set((c.probe.Genres ?? []).map((g) => g.toLowerCase()));
+      if (!kids.data.genres.some((g) => have.has(g.toLowerCase()))) return false;
     }
     return true;
   });

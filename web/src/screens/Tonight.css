@@ -51,6 +51,10 @@
 .tonight-more {
   display: flex;
 }
+/* Last in the DOM so initial focus lands on Continue Watching / the first row, drawn just above the first row */
 .tonight-open {
-  margin: 0 0 14px var(--pad);
+  position: absolute;
+  top: 0;
+  left: var(--pad);
+  transform: translateY(-110%);
 }

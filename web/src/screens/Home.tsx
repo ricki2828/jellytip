@@ -484,7 +484,6 @@ export function Home() {
       )}
       <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
-        <button className="btn tonight-open" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
         {entries && entries.length > 0 && (
           <Row
             title="Continue Watching"
@@ -522,6 +521,7 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        <button className="btn tonight-open" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
         {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
             Edit Home

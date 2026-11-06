@@ -133,3 +133,25 @@ test("exactly three, then a different three that never repeats", () => {
   // a different constraint set starts fresh, and the order is deterministic
   assert.deepEqual(nextThree(c, ["new"], shownFor(store, ["new"])).map((x) => x.key), a.map((x) => x.key));
 });
+
+test("kids + light still need a Family/Animation/Kids genre", () => {
+  const c = candidates(
+    pool({
+      recs: [
+        { item: film("pgcom", { Genres: ["Comedy"], OfficialRating: "PG" }), from: { title: "R" } },
+        { item: film("fam", { Genres: ["Comedy", "Family"], OfficialRating: "PG" }), from: { title: "R" } },
+      ],
+    }),
+  );
+  assert.deepEqual(applyConstraints(c, ["kids", "light"]).map((x) => x.key), ["fam"]);
+});
+
+test("a not-interested series blocks its episodes", () => {
+  const c = candidates(pool({ next: [ep("n1", "s1", 1, 2), ep("n2", "s2", 1, 2)], blocked: new Set(["s1"]) }));
+  assert.deepEqual(c.map((x) => x.key), ["n2"]);
+});
+
+test("resume under two minutes in says started recently", () => {
+  const c = candidates(pool({ resume: [{ ...film("r1", { min: 100 }), UserData: { PlaybackPositionTicks: 1 * T, LastPlayedDate: "2026-11-01T10:00:00Z" } } as Item] }));
+  assert.equal(c[0].reason, "Started recently");
+});
