@@ -564,7 +564,7 @@ export function Search({ initial }: { initial: string }) {
           }
         }}
       />
-      <a className="link" href="#/ask" data-nav>Not sure? Ask</a>
+      <a className="chip search-ask" href="#/ask" data-nav title="Describe what you feel like watching">Not sure? Ask</a>
       {/* Opening any result remembers the query (recent searches) */}
       <div className="search-results" onClickCapture={(e) => {
           const el = e.target as HTMLElement;

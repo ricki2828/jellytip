@@ -73,15 +73,13 @@ img {
   background: rgba(10, 10, 10, 0.94);
   transition: background 0.2s;
 }
-.nav-discover {
-  display: none;
-}
-/* Settings gear (and, on a phone, Live TV) as icons in the top bar */
+/* Icon buttons in the top bar: Search, Inbox bell */
 .nav-icon {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   color: var(--dim);
 }
@@ -90,6 +88,9 @@ img {
 .nav-icon.active {
   color: var(--vanilla);
   background: rgba(255, 255, 255, 0.1);
+}
+.nav-icon.active {
+  box-shadow: inset 0 0 0 1.5px var(--jelly);
 }
 .nav-icon svg {
   width: 19px;
@@ -100,22 +101,123 @@ img {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.nav-livetv,
-.nav-collections,
-.nav-recs {
-  display: none;
+/* Recordings ready: a dot on Live */
+.nav-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--jelly);
+  vertical-align: 6px;
 }
-/* Desktop: the cog carries its name, so Settings is easy to find */
-.nav-settings {
+/* Avatar + menu */
+.avatar-wrap {
+  position: relative;
+}
+.avatar-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #3a2a22;
+  color: var(--vanilla);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.avatar-btn:hover,
+.avatar-btn:focus-visible,
+.avatar-btn[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px rgba(242, 242, 240, 0.6);
+}
+.avatar-btn.active {
+  box-shadow: 0 0 0 2px var(--jelly);
+}
+.avatar-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  min-width: 220px;
+  max-width: calc(100vw - 2 * var(--pad));
+  padding: 6px;
+  border-radius: 12px;
+  background: #151515;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   display: flex;
+  flex-direction: column;
+}
+.avatar-menu a,
+.avatar-menu button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--vanilla);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+.avatar-menu a:hover,
+.avatar-menu button:hover,
+.avatar-menu a:focus-visible,
+.avatar-menu button:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+}
+.avatar-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.avatar-name {
+  color: var(--faint);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+/* Live sub-tabs, above the Live screens */
+.live-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 62px var(--pad) -34px;
+  position: relative;
+  z-index: 2;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.live-tabs a {
+  flex: none;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  width: auto;
-  padding: 0 12px 0 8px;
-  border-radius: 16px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  color: var(--dim);
+  font-weight: 500;
+  white-space: nowrap;
 }
-.nav-settings-label {
-  font-size: 0.9rem;
+.live-tabs a.active {
+  color: var(--vanilla);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 -2px 0 var(--jelly);
+}
+.live-tabs a:hover,
+.live-tabs a:focus-visible {
+  color: var(--vanilla);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ---------- settings ---------- */
@@ -221,6 +323,8 @@ img {
   gap: 4px;
 }
 .nav-links a {
+  position: relative;
+  white-space: nowrap;
   padding: 5px 10px;
   border-radius: 6px;
   color: var(--dim);
@@ -228,6 +332,17 @@ img {
 }
 .nav-links a.active {
   color: var(--vanilla);
+}
+/* Active is more than colour: an underline */
+.nav-links a.active::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--jelly);
 }
 .nav-links a:hover,
 .nav-links a:focus-visible,
@@ -238,7 +353,7 @@ img {
 .nav-user {
   margin-left: auto;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   color: var(--faint);
   font-size: 13px;
@@ -1273,9 +1388,6 @@ button.overview.open {
   :root {
     --card-w: 200px;
   }
-  .nav-user span {
-    display: none;
-  }
   .title-text.big {
     font-size: 30px;
   }
@@ -1346,8 +1458,7 @@ button.overview.open {
     gap: 12px;
     padding: calc(10px + env(safe-area-inset-top, 0px)) max(var(--pad), env(safe-area-inset-right, 0px)) 10px max(var(--pad), env(safe-area-inset-left, 0px));
   }
-  .nav-links,
-  .nav-user span {
+  .nav-links {
     display: none;
   }
   /* back arrow: 44px target, reads on any artwork; it takes the logo's place */
@@ -1367,21 +1478,12 @@ button.overview.open {
   .nav.has-back .nav-logo {
     display: none;
   }
-  /* admins: Discover as a compass in the top bar, so the bottom tab bar keeps its 4-5 tabs */
-  .nav-discover {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    margin: -6px 0;
-    border-radius: 50%;
-    color: var(--dim);
+  /* 44px targets: Inbox bell, avatar; Search lives in the tab bar */
+  .nav-search {
+    display: none;
   }
   .nav-icon,
-  .nav-livetv,
-  .nav-collections,
-  .nav-recs {
-    display: grid;
+  .avatar-btn {
     width: 44px;
     height: 44px;
     margin: -6px 0;
@@ -1390,26 +1492,18 @@ button.overview.open {
     width: 22px;
     height: 22px;
   }
-  .nav-settings {
-    padding: 0;
-    border-radius: 50%;
+  .avatar-menu {
+    min-width: 240px;
   }
-  .nav-settings-label {
-    display: none;
+  .live-tabs {
+    margin-top: calc(58px + env(safe-area-inset-top, 0px));
   }
-  .nav-discover.active {
-    color: var(--jelly);
+  .live-tabs {
+    gap: 0;
   }
-  .nav-discover svg {
-    width: 24px;
-    height: 24px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linejoin: round;
-  }
-  .nav-user .link {
-    font-size: 12px;
+  .live-tabs a {
+    min-height: 44px;
+    padding: 0 10px;
   }
   .tabbar {
     display: flex;
@@ -1423,6 +1517,7 @@ button.overview.open {
     border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
   .tabbar a {
+    position: relative;
     flex: 1;
     min-height: 50px;
     display: flex;
@@ -1436,6 +1531,22 @@ button.overview.open {
   }
   .tabbar a.active {
     color: var(--vanilla);
+  }
+  .tabbar a.active::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 28%;
+    right: 28%;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--jelly);
+  }
+  .tabbar .nav-dot {
+    position: absolute;
+    top: 8px;
+    left: calc(50% + 8px);
+    margin: 0;
   }
   .tabbar svg {
     width: 22px;

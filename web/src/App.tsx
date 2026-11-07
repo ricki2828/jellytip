@@ -6,6 +6,9 @@ import { SportSetup } from "./components/SportSetup";
 import { SportMuteHost } from "./components/SportMute";
 import { ReminderNudge } from "./components/Reminders";
 import { Nav } from "./components/Nav";
+import { LiveTabs } from "./components/LiveTabs";
+import { LiveHome } from "./components/LiveHome";
+import { LIVE_ROUTES } from "./lib/navModel";
 import { Login } from "./screens/Login";
 import { FantasyPage } from "./screens/FantasyPage";
 import { Home } from "./screens/Home";
@@ -86,6 +89,7 @@ export function App() {
   if (route.name === "play")
     return <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} />;
 
+  const liveHub = route.name !== "live" && LIVE_ROUTES.includes(route.name);
   return (
     <>
       <Nav current={route.name} />
@@ -95,6 +99,8 @@ export function App() {
       {session && <MatchInfoHost />}
       {session && <ReminderNudge />}
       <main>
+        {route.name === "live" && <LiveHome />}
+        {liveHub && <LiveTabs current={route.name} />}
         {route.name === "fantasy" && <FantasyPage />}
         {route.name === "home" && <Home />}
         {route.name === "movies" && <Library key="movie" kind="movie" />}

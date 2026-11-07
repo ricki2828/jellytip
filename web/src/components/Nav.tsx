@@ -1,36 +1,12 @@
 import { useEffect, useState } from "react";
-import { useFantasy } from "../api/fantasy";
-import { getSession, logout } from "../api/jellyfin";
 import { go, isRootRoute, systemBack } from "../lib/router";
-import { isNative } from "../lib/native";
-import { hasLiveTv, iptvChanged } from "../api/iptv";
 import { afterStartup } from "../lib/startup";
-import { useRecs } from "../api/recStore";
-import { shown, unwatchedCount } from "../lib/recs";
-import { useUpcoming } from "../api/upcomingStore";
 import { hubNow, loadHub, onHubChange } from "../api/collections";
 import { useInbox } from "../api/inboxStore";
 import { unreadCount } from "../lib/inbox";
-
-/** Live TV shows in the nav only for someone with opted-in channels (their own provider or one shared with them). */
-function useLiveTv(): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    // After the first screen's requests: the Live TV link can appear a moment later
-    const check = () => void afterStartup().then(hasLiveTv).then((v) => alive && setOn(v));
-    const onSession = () => iptvChanged();
-    check();
-    window.addEventListener("jellytip-iptv", check);
-    window.addEventListener("jellytip-session", onSession);
-    return () => {
-      alive = false;
-      window.removeEventListener("jellytip-iptv", check);
-      window.removeEventListener("jellytip-session", onSession);
-    };
-  }, []);
-  return on;
-}
+import { navActive } from "../lib/navModel";
+import { AvatarMenu } from "./AvatarMenu";
+import { useLiveFlags } from "./navFlags";
 
 export function Logo({ large = false }: { large?: boolean }) {
   return (
@@ -69,43 +45,36 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="m15 15 5.5 5.5" />
     </>
   ),
-  downloads: (
+  live: (
     <>
-      <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
-      <path d="M5 19.5h14" />
-    </>
-  ),
-  fantasy: (
-    <>
-      <path d="M4 16c1.5-6 7-11 16-12-1 9-6 14.5-12 16-2-1-3-2-4-4Z" />
-      <path d="m9 13 4 4m-2-6 4 4m-2-6 4 4" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+      <path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2" />
     </>
   ),
 };
 
-const LINKS: [string, string][] = [
+/** The five fixed phone tabs, and the first four desktop links (Collections joins them when the hub exists). */
+const TABS: [string, string][] = [
   ["home", "Home"],
   ["movies", "Movies"],
   ["shows", "Shows"],
+  ["live", "Live"],
   ["search", "Search"],
-  // Offline downloads exist only in the Android app
-  ...(isNative ? ([["downloads", "Downloads"]] as [string, string][]) : []),
 ];
 
+const BELL = (
+  <svg viewBox="0 0 24 24" aria-hidden>
+    <path d="M4 13.5 6.5 5.5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+    <path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20" />
+  </svg>
+);
+
 export function Nav({ current }: { current: string }) {
-  const s = getSession();
-  // Admins also get Discover: a top-bar link on desktop, a compass in the phone top bar (the tab bar stays as is)
-  const liveTv = useLiveTv();
-  const fantasy = useFantasy(true, true);
-  const fantasyLinked = !!(fantasy?.providers.yahoo.linked || fantasy?.providers.sleeper.linked || fantasy?.leagues.length);
-  // Recordings: a link once there are any, with the count of ready, unwatched ones
-  const recs = useRecs();
-  const hasRecs = !!recs && shown(recs).length > 0;
-  const ready = recs ? unwatchedCount(recs) : 0;
+  const { hasRecs, ready } = useLiveFlags();
+  const active = navActive(current);
   // Inbox: looks once at app start (at most every 15 min) and shows the unread count
   const unreadN = unreadCount(useInbox({ soon: true, refresh: true }));
-  const hasUpcoming = (useUpcoming()?.length ?? 0) > 0;
-  // Collections: a link once the server has a hub (a 404 keeps it hidden)
+  // Collections: the last link of the left group, once the server has a hub (a 404 keeps it hidden)
   const [, hubTick] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -119,7 +88,7 @@ export function Nav({ current }: { current: string }) {
     };
   }, []);
   const hasHub = (hubNow()?.length ?? 0) > 0;
-  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...([["ask", "Ask"], ["channels", "My Channels"]] as [string, string][]), ...([["inbox", "Inbox"]] as [string, string][]), ...(s?.isAdmin ? ([["discover", "Discover"], ["manage", "Manage"]] as [string, string][]) : [])];
+  const links: [string, string][] = [...TABS.filter(([k]) => k !== "search"), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
@@ -128,6 +97,13 @@ export function Nav({ current }: { current: string }) {
     return () => window.removeEventListener("scroll", on);
   }, []);
   const root = isRootRoute(current);
+  // Tapping the current room again must not push a duplicate history entry: scroll to top instead
+  const again = (k: string) => (e: React.MouseEvent) => {
+    if (active === k) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
   return (
     <nav className={`nav${scrolled ? " solid" : ""}${root ? "" : " has-back"}`}>
       {/* Every non-root screen: same Back as Android's (sheet / sound first, then the previous screen, else Home) */}
@@ -143,78 +119,33 @@ export function Nav({ current }: { current: string }) {
       </button>
       <div className="nav-links">
         {links.map(([k, label]) => (
-          <a key={k} href={`#/${k}`} data-nav className={current === k ? "active" : ""}>
+          <a key={k} href={`#/${k}`} data-nav onClick={again(k)} className={active === k ? "active" : ""} aria-current={active === k ? "page" : undefined}>
             {label}
-            {k === "inbox" && unreadN > 0 && <span className="nav-badge" aria-label={`${unreadN} unread`}>{unreadN}</span>}
-            {k === "recordings" && ready > 0 && <span className="nav-badge" aria-label={`${ready} ready to watch`}>{ready}</span>}
+            {k === "live" && ready > 0 && <span className="nav-dot" aria-label={`${ready} recordings ready`} />}
           </a>
         ))}
       </div>
       <div className="nav-user">
-        {s?.isAdmin && (
-          <a href="#/discover" className={`nav-discover${current === "discover" ? " active" : ""}`} aria-label="Discover" title="Discover">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <circle cx="12" cy="12" r="8.5" />
-              <path d="m15.5 8.5-2 5-5 2 2-5z" />
-            </svg>
-          </a>
-        )}
-        {/* Phone: Live TV as an icon in the top bar (the bottom tab bar keeps its 4-5 tabs) */}
-        {liveTv && (
-          <a href="#/livetv" className={`nav-icon nav-livetv${current === "livetv" ? " active" : ""}`} aria-label="Live TV" title="Live TV">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <rect x="3" y="6" width="18" height="13" rx="2" />
-              <path d="M8.5 2.5 12 6l3.5-3.5" />
-              <circle cx="17.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
-            </svg>
-          </a>
-        )}
-        {hasHub && (
-          <a href="#/collections" className={`nav-icon nav-collections${current === "collections" ? " active" : ""}`} aria-label="Collections" title="Collections">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
-              <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
-              <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
-              <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
-            </svg>
-          </a>
-        )}
-        <a href="#/inbox" className={`nav-icon nav-inbox${current === "inbox" ? " active" : ""}`} aria-label={unreadN > 0 ? `Inbox, ${unreadN} unread` : "Inbox"} title="Inbox">
+        <a href="#/search" className={`nav-icon nav-search${active === "search" ? " active" : ""}`} aria-label="Search" title="Search" data-nav>
           <svg viewBox="0 0 24 24" aria-hidden>
-            <path d="M4 13.5 6.5 5.5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
-            <path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20" />
+            {ICONS.search}
           </svg>
+        </a>
+        <a href="#/inbox" className={`nav-icon nav-inbox${active === "inbox" ? " active" : ""}`} aria-label={unreadN > 0 ? `Inbox, ${unreadN} unread` : "Inbox"} title="Inbox" data-nav>
+          {BELL}
           {unreadN > 0 && <span className="nav-badge">{unreadN}</span>}
         </a>
-        {hasRecs && (
-          <a href="#/recordings" className={`nav-icon nav-recs${current === "recordings" ? " active" : ""}`} aria-label="Recordings" title="Recordings">
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <circle cx="12" cy="12" r="8.5" />
-              <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
-            </svg>
-            {ready > 0 && <span className="nav-badge">{ready}</span>}
-          </a>
-        )}
-        <a href="#/settings" className={`nav-icon nav-settings${current === "settings" || current === "iptv" ? " active" : ""}`} aria-label="Settings" title="Settings" data-nav>
-          <svg viewBox="0 0 24 24" aria-hidden>
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-          <span className="nav-settings-label">Settings</span>
-        </a>
-        <span>{s?.userName}</span>
-        <button data-nav className="link" onClick={() => logout()}>
-          Sign out
-        </button>
+        <AvatarMenu active={active === "you"} />
       </div>
-      {/* Phone: the same links as a bottom tab bar (shown by the phone media query only) */}
+      {/* Phone: exactly five fixed tabs as a bottom bar (shown by the phone media query only) */}
       <div className="tabbar" role="tablist">
-        {[...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : [])].map(([k, label]) => (
-          <a key={k} href={`#/${k}`} role="tab" aria-selected={current === k} className={current === k ? "active" : ""}>
+        {TABS.map(([k, label]) => (
+          <a key={k} href={`#/${k}`} role="tab" onClick={again(k)} aria-selected={active === k} className={active === k ? "active" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden>
               {ICONS[k]}
             </svg>
             <span>{label}</span>
+            {k === "live" && hasRecs && ready > 0 && <span className="nav-dot" aria-label={`${ready} recordings ready`} />}
           </a>
         ))}
       </div>

@@ -61,6 +61,7 @@ export function parseHash(hash: string): Route {
     case "settings":
     case "fantasy":
     case "taste":
+    case "live":
     case "livetv":
     case "recordings":
     case "upcoming":
