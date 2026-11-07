@@ -1230,7 +1230,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
-            Live
+            Companion
           </button>
         )}
         {kickoff && state.kind === "playing" && (
