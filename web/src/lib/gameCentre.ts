@@ -402,7 +402,7 @@ export function groupFixtures(items: FxItem[], refs: { teamId: string; leagueKey
   const groups: FxGroup[] = [
     { id: "live", label: "Live now", items: pick((x) => x.status === "in") },
     { id: "yours", label: "Your teams", items: pick((x) => x.status === "pre" && !!fav.get(x.fid)) },
-    { id: "big", label: "Big games", items: pick((x) => x.status === "pre" && !fav.get(x.fid)) },
+    { id: "big", label: "More games", items: pick((x) => x.status === "pre" && !fav.get(x.fid)) },
     { id: "finished", label: "Finished", items: pick((x) => x.status === "post").sort((a, b) => b.kickoff - a.kickoff) },
   ];
   return groups.filter((g) => g.items.length > 0);

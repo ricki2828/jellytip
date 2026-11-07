@@ -120,7 +120,7 @@ function LegacyGameCentre() {
 
 // ---------- fixture-first ----------
 
-function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined }) {
+function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean }) {
   const w = waysForFixture(f, rec, now);
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
@@ -140,9 +140,9 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
             {x.label}
           </button>
         ))}
-        {w.canSuggestRecord && (
-          <button className="btn small" data-nav onClick={onRecord}>
-            Suggest record
+        {w.canSuggestRecord && !msg?.startsWith("Recording") && (
+          <button className="btn small" data-nav aria-disabled={busy || undefined} onClick={busy ? undefined : onRecord}>
+            {busy ? "Recording…" : "Suggest record"}
           </button>
         )}
         {!pref && w.phase !== "upcoming" && (
@@ -168,6 +168,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   const [scores, setScores] = useState<Record<string, string | null>>({});
   const [gates, setGates] = useState<Record<string, Gate>>({});
   const [msgs, setMsgs] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const pref = spoilersOn(prefs);
 
   useEffect(() => {
@@ -210,7 +211,13 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   const record = useCallback(async (f: FxItem) => {
     const c = bestChannel(f);
     if (!c) return;
+    setBusy((b) => new Set(b).add(f.fid));
     const a = await addRecording(c.id, c.start ?? f.kickoff);
+    setBusy((b) => {
+      const n = new Set(b);
+      n.delete(f.fid);
+      return n;
+    });
     const ok = a.status === 200 || a.status === 201;
     setMsgs((m) => ({ ...m, [f.fid]: ok ? a.data?.warning || "Recording scheduled. It'll appear on Home." : errorText(a) }));
     if (ok) {
@@ -241,6 +248,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
                 onPress={() => press(f)}
                 onRecord={() => void record(f)}
                 msg={msgs[f.fid]}
+                busy={busy.has(f.fid)}
               />
             ))}
           </ul>
