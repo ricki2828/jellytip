@@ -60,6 +60,21 @@ export async function addReminder(e: UpEvent): Promise<string | null> {
   return null;
 }
 
+/** Remind me for a fixture / legacy card: {fid} first (no channel needed); an older server answers 400/404, then {matchId} when known. */
+export async function addFixtureReminder(o: { fid?: string | null; matchId?: string | null }): Promise<string | null> {
+  let a = o.fid ? await iptvPost<{ id?: number | string; error?: string }>("v1/iptv/reminders", { fid: o.fid }) : null;
+  if ((!a || a.status === 400 || a.status === 404) && o.matchId) a = await iptvPost<{ id?: number | string; error?: string }>("v1/iptv/reminders", { matchId: o.matchId });
+  if (!a) return "Can't set a reminder for this one.";
+  if (a.status === 404 && !o.matchId && !a.data?.error) {
+    unavailable = true;
+    emit();
+    return "Reminders aren't available on this server yet.";
+  }
+  if (a.status !== 200 && a.status !== 201) return a.data?.error ?? `Server said ${a.status}`;
+  await refreshReminders(true);
+  return null;
+}
+
 export async function removeReminder(id: string | number): Promise<string | null> {
   const a = await iptvPost<{ ok?: boolean }>(`v1/iptv/reminders/${id}/delete`);
   if (a.status !== 200 && a.status !== 204 && a.status !== 404) return a.data?.error ?? `Server said ${a.status}`;
