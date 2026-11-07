@@ -34,6 +34,7 @@ import { matchDetailCached } from "../../api/matchInfo";
 import { refreshRecs } from "../../api/recStore";
 import { matchupTitle } from "../../lib/matchInfo";
 import { nextChannelPath, rejoinPlan } from "../../api/channels";
+import { RecordingDelete } from "../../components/RecordingDelete";
 import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
@@ -1246,6 +1247,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
             From kick-off
           </button>
         )}
+        {target.recording && meta?.state !== "recording" && <RecordingDelete id={String(target.recording)} />}
         <button className="btn small" data-nav aria-pressed={fs.active} aria-label={fs.active ? "Exit fullscreen" : "Fullscreen"} onClick={fs.toggle}>
           {fs.active ? "Exit fullscreen" : "Fullscreen"}
         </button>
