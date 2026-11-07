@@ -1091,6 +1091,22 @@ button.overview.open {
   opacity: 1;
   pointer-events: auto;
 }
+/* Audio & subtitles / "What did they say?" fade with the rest of the controls; stay while their menu is open or focused */
+.player .player-track-trigger,
+.player .iptv-tracks-button {
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.player.show .player-track-trigger,
+.player.show .iptv-tracks-button,
+.player .player-track-trigger:focus-within,
+.player .iptv-tracks-button:focus-within,
+.player .player-track-trigger:has([aria-expanded="true"]),
+.player .iptv-tracks-button:has([aria-expanded="true"]) {
+  opacity: 1;
+  pointer-events: auto;
+}
 .player-top {
   top: 0;
   display: flex;
