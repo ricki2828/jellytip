@@ -120,6 +120,11 @@ export function IptvDetails({ id }: { id: string }) {
                 {b}
               </span>
             ))}
+            {d.langUnknown && (
+              <span className="badge lang-unknown" title="Couldn't confirm this copy's audio language">
+                Language unknown
+              </span>
+            )}
           </div>
           <div className="line dim iptv-via">
             <IptvDot />

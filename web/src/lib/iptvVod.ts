@@ -19,6 +19,8 @@ export interface VodItem {
   quality: string[];
   /** Premium formats from the provider's title tokens (contract "Tech badges"); [] when not said. */
   tech: string[];
+  /** The server could not confirm this copy's audio is English (best copy available, language unknown); absent otherwise. */
+  langUnknown?: boolean;
   poster?: string | null;
   backdrop?: string | null;
   overview?: string | null;
@@ -101,6 +103,7 @@ export function parseVodItem(raw: unknown): VodItem | null {
     releaseDate: str(r.releaseDate),
     quality: strs(r.quality),
     tech: parseTech(r.tech),
+    ...(r.langUnknown === true ? { langUnknown: true } : {}),
     poster: str(r.poster),
     backdrop: str(r.backdrop),
     overview: str(r.overview),
