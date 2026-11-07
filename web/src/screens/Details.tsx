@@ -353,11 +353,18 @@ export function Details({ id }: { id: string }) {
           <ScoreLine extras={ext} />
           <div className="buttons">
             {item.Type === "Series" ? (
-              seriesNext && (
+              iptvOnlyNo != null ? (
+                rows?.[0]?.iptv && (
+                  <button className="btn primary" data-nav data-autofocus onClick={() => playIptv(rows[0]!.iptv!.id)}>
+                    Play S{iptvOnlyNo} E{rows[0]!.index} via IPTV
+                  </button>
+                )
+              ) : (
+                seriesNext && (
                 <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${seriesNext.Id}`)}>
                   {(seriesNext.UserData?.PlaybackPositionTicks ?? 0) > 0 ? "Resume" : "Play"} S{seriesNext.ParentIndexNumber} E{seriesNext.IndexNumber}
                 </button>
-              )
+              ))
             ) : (
               <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${item.Id}`)}>
                 {resumeTicks > 0 ? `Resume ${fmtClock(resumeTicks)}` : "Play"}
