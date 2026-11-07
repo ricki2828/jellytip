@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
 import { isPre, parsePhase, parseStartsAt } from "../../lib/preGame";
-import { BackArrow, SheetClose, useEscapeClose } from "../../components/BackArrow";
+import { SheetClose, useEscapeClose } from "../../components/BackArrow";
 import { liveExtrasQuery, targetPath, type LiveExtras, type PlayTarget } from "../../lib/iptvPlay";
 import { useIsPhone } from "../../lib/device";
 import { OnNowStrip } from "../../components/OnNowStrip";
@@ -181,7 +181,6 @@ export function LiveTv() {
     <div className="livetv">
       <div className="livetv-head">
         <div className="page-head">
-          <BackArrow />
           <h1 className="page-title">Live TV</h1>
         </div>
         <div className="livetv-window">
