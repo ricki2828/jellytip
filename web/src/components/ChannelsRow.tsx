@@ -54,19 +54,22 @@ export function ChannelsRow() {
   const [inView, setInView] = useState(false);
   const el = useRef<HTMLElement>(null);
 
-  // Load after startup, a couple of channels at a time (cached for hours, so this is usually no request)
+  // Load after startup, a couple of channels at a time (cached for hours, so this is usually no request). Hidden channels are not asked for.
   useEffect(() => {
     let alive = true;
+    let gen = 0;
     const run = async () => {
+      const mine = ++gen;
       await afterStartup();
-      if (!alive) return;
-      setHidden(readHiddenChannels());
-      const queue = [...CHANNELS];
+      if (!alive || mine !== gen) return;
+      const hid = readHiddenChannels();
+      setHidden(hid);
+      const queue = CHANNELS.filter((c) => !hid.includes(c.id));
       const worker = async () => {
-        for (let def = queue.shift(); def && alive; def = queue.shift()) {
+        for (let def = queue.shift(); def && alive && mine === gen; def = queue.shift()) {
           const d = def;
           await channelItems(d).then(
-            (items) => alive && setLoads((l) => ({ ...l, [d.id]: items })),
+            (items) => alive && mine === gen && setLoads((l) => ({ ...l, [d.id]: items })),
             () => undefined, // a channel that can't load is just not shown
           );
         }
@@ -74,9 +77,10 @@ export function ChannelsRow() {
       await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     };
     void run();
+    // Another person: drop the last one's channels and load this person's
     const onSession = () => {
       setLoads({});
-      setHidden(readHiddenChannels());
+      void run();
     };
     window.addEventListener("jellytip-session", onSession);
     return () => {
@@ -95,7 +99,10 @@ export function ChannelsRow() {
     if (typeof IntersectionObserver === "undefined") return setInView(true);
     const io = new IntersectionObserver((es) => setInView(es.some((e) => e.isIntersecting)));
     io.observe(node);
-    return () => io.disconnect();
+    return () => {
+      io.disconnect();
+      setInView(false);
+    };
   }, [present]);
 
   // Now/next follow the clock only while visible: refresh on becoming visible, then every TICK_MS
