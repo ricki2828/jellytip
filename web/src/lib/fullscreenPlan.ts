@@ -9,6 +9,16 @@ export function fullscreenStep(o: { native: boolean; active: boolean; canElement
   return o.canVideo ? "video" : "none";
 }
 
+/** A channel hop remounts the player inside the same fullscreen host: stay fullscreen. Only leaving the host (or no host) ends it. */
+export function keepFullscreenOnUnmount(hostStillConnected: boolean | undefined): boolean {
+  return hostStillConnected === true;
+}
+
+/** Escape can reach us after the browser already left fullscreen: that press was the exit, not "leave the player". */
+export function exitAlreadyConsumed(now: number, lastExitAt: number, windowMs = 300): boolean {
+  return now - lastExitAt >= 0 && now - lastExitAt < windowMs;
+}
+
 /** Keys that must not toggle fullscreen: typing in the companion's ask box, or a modified shortcut. */
 export function isFullscreenKey(e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }, typing: boolean): boolean {
   return !typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "f" || e.key === "F");

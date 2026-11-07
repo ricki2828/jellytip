@@ -81,9 +81,11 @@ export function App() {
       return null;
     }
     return (
-      <Suspense fallback={null}>
-        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />
-      </Suspense>
+      <div data-fs-host>
+        <Suspense fallback={null}>
+          <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />
+        </Suspense>
+      </div>
     );
   }
   if (route.name === "play")

@@ -19,7 +19,7 @@ import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
 import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
 import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } from "../lib/captionReplay.ts";
 import { isPhone } from "../lib/device";
-import { useFullscreen } from "../lib/useFullscreen";
+import { noteNativeFullscreen, useFullscreen } from "../lib/useFullscreen";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
@@ -41,6 +41,7 @@ type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<v
 /** Rotation is an explicit player action; fullscreen remains a separate choice. */
 async function rotatePlayer(box: HTMLElement | null) {
   if (isNative) {
+    noteNativeFullscreen(false);
     await NativeDownloads.setPlayerMode({ fullscreen: false, rotate: true }).catch(() => undefined);
     return;
   }
