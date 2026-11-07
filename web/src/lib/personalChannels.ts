@@ -2,7 +2,7 @@
 // their own: each is cut from the pools of the built-in channels (already loaded and cached), so they cost no requests and
 // stay put between refreshes. Hidden (not defined) when the profile gives fewer than MIN_ITEMS playable items.
 import { CHANNELS, MIN_ITEMS, byEpisodeOrder, hashString, isIptvId, meanAff, playable, type ChanItem, type ChannelDef } from "./channels.ts";
-import { topGenres, type TasteProfile } from "./tasteProfile.ts";
+import { canonGenres, topGenres, type TasteProfile } from "./tasteProfile.ts";
 
 /** Fits the person's taste at least this well to be picked for a personal channel. */
 export const FIT_MIN = 0.55;
@@ -50,7 +50,7 @@ function topSeries(eps: ChanItem[], seriesMax: number, per: number): ChanItem[] 
 }
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-const hasGenre = (it: ChanItem, g: string): boolean => (it.G ?? []).some((x) => x.toLowerCase() === g);
+const hasGenre = (it: ChanItem, g: string): boolean => (it.G ?? []).flatMap(canonGenres).includes(g);
 
 /** The items a personal channel plays, from the built-in channels' pools. */
 export function personalItems(def: ChannelDef, base: Record<string, ChanItem[] | undefined>, genre?: string): ChanItem[] {

@@ -20,7 +20,7 @@ let inflight: { u: string; p: Promise<ProfileAnswer> } | null = null;
 
 async function fetchProfile(): Promise<ProfileAnswer> {
   const a = await companionCall("GET", "v1/me/taste");
-  if (a.status === 200) return { profile: parseProfile(a.data), settled: true };
+  if (a.status === 200) return { profile: parseProfile((a.data as { profile?: unknown } | null)?.profile ?? a.data), settled: true };
   if (a.status === 0) return { profile: null, settled: false };
   return { profile: null, settled: true }; // 404/501: no taste on this server; 401: signed out
 }

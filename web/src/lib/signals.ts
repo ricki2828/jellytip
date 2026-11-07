@@ -21,6 +21,8 @@ export const TRAILER_MIN_S = 5;
 export const DETAIL_MIN_MS = 8_000;
 export const DETAIL_MAX_MS = 10 * 60_000;
 export const SKIP_UNDER_S = 120;
+/** Less than this is a mis-click or a channel flick, not a verdict. */
+export const SKIP_MIN_PLAYED_S = 10;
 /** A film must be at least this long for leaving early to read as "not for me". */
 export const SKIP_MIN_RUNTIME_S = 40 * 60;
 export const FINISH_FRACTION = 0.9;
@@ -111,7 +113,7 @@ export function watchSignal(meta: WatchMeta, playedS: number, runtimeS: number, 
   const ms = Math.round(Math.max(0, playedS) * 1000);
   if (meta.channel) return playedS >= CHANNEL_PLAY_MIN_S ? { ...base, type: "play", ms } : null;
   if (ended || (runtimeS > 0 && playedS >= runtimeS * FINISH_FRACTION)) return playedS >= PLAY_MIN_S ? { ...base, type: "finish", ms } : null;
-  if (meta.isFilm && runtimeS >= SKIP_MIN_RUNTIME_S && playedS < SKIP_UNDER_S) return { ...base, type: "skip", ms };
+  if (meta.isFilm && runtimeS >= SKIP_MIN_RUNTIME_S && playedS >= SKIP_MIN_PLAYED_S && playedS < SKIP_UNDER_S) return { ...base, type: "skip", ms };
   return playedS >= PLAY_MIN_S ? { ...base, type: "play", ms } : null;
 }
 
@@ -129,4 +131,37 @@ export function libraryTarget(it: { Id: string; Type?: string; SeriesId?: string
   if (!id) return null;
   const tm = Number(it.ProviderIds?.Tmdb);
   return { kind: it.Type === "Movie" ? "movie" : "series", itemId: id, ...(!ep && tm > 0 ? { tmdbId: tm } : {}) };
+}
+
+/**
+ * One title's watch: real playing time, the meta and runtime as they were when it started playing (a screen that moves on to
+ * another title must not close this one with the next one's), and closed once so a finish is never followed by a second event.
+ */
+export class WatchSession {
+  private tracker = new PlayTracker();
+  private meta: WatchMeta | null = null;
+  private runtimeS = 0;
+  private closed = false;
+  tick(t: number, maxStep: number | undefined, meta: WatchMeta | null, runtimeS: number): void {
+    if (this.closed) return;
+    if (!this.meta && meta) this.meta = meta;
+    if (!this.runtimeS && runtimeS > 0) this.runtimeS = runtimeS;
+    this.tracker.tick(t, maxStep);
+  }
+  seeked(): void {
+    this.tracker.seeked();
+  }
+  /** The event for this watch, once; later calls (and calls for a watch that never played) give null. */
+  end(ended: boolean, at: number): Signal | null {
+    if (this.closed) return null;
+    this.closed = true;
+    return this.meta ? watchSignal(this.meta, this.tracker.playedS, this.runtimeS, ended, at) : null;
+  }
+  /** A new title: forget everything. */
+  reset(): void {
+    this.tracker.reset();
+    this.meta = null;
+    this.runtimeS = 0;
+    this.closed = false;
+  }
 }

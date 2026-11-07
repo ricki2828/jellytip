@@ -10,14 +10,31 @@ export interface TasteProfile {
   updatedAt: string | null;
 }
 
+/** TMDB/Jellyfin/IPTV spell genres differently ("Sci-Fi & Fantasy", "Action & Adventure"): one set of lowercase names to compare. */
+const GENRE_ALIASES: Record<string, string[]> = {
+  "sci-fi": ["science fiction"],
+  scifi: ["science fiction"],
+  "sci-fi & fantasy": ["science fiction", "fantasy"],
+  "science fiction & fantasy": ["science fiction", "fantasy"],
+  "action & adventure": ["action", "adventure"],
+  "war & politics": ["war"],
+  "kids": ["family"],
+  "talk": ["talk show"],
+  "musical": ["music"],
+};
+export const canonGenres = (name: string): string[] => {
+  const k = name.trim().toLowerCase();
+  return GENRE_ALIASES[k] ?? [k];
+};
+
 const num = (v: unknown): number | null => (typeof v === "number" && isFinite(v) ? Math.max(-1, Math.min(1, v)) : null);
 
-function weights(v: unknown): Record<string, number> {
+function weights(v: unknown, kind = ""): Record<string, number> {
   const out: Record<string, number> = {};
   if (!v || typeof v !== "object" || Array.isArray(v)) return out;
   for (const [k, w] of Object.entries(v as Record<string, unknown>)) {
     const n = num(w);
-    if (k && n != null) out[k.toLowerCase()] = n;
+    if (k && n != null) for (const c of kind === "genres" ? canonGenres(k) : [k.toLowerCase()]) out[c] = Math.max(out[c] ?? -1, n);
   }
   return out;
 }
@@ -28,7 +45,7 @@ export function parseProfile(raw: unknown): TasteProfile | null {
   const r = raw as Record<string, unknown>;
   const m = r.media && typeof r.media === "object" ? (r.media as Record<string, unknown>) : {};
   const p: TasteProfile = {
-    genres: weights(r.genres),
+    genres: weights(r.genres, "genres"),
     people: weights(r.people),
     decades: weights(r.decades),
     keywords: weights(r.keywords),
@@ -54,7 +71,7 @@ export interface Scorable {
 
 /** 0..1, 0.5 = no opinion. Genres lead (best match and the average), then the decade and film-vs-show lean. */
 export function affinity(p: TasteProfile, it: Scorable): number {
-  const gs = (it.genres ?? []).map((g) => p.genres[g.toLowerCase()]).filter((w): w is number => w != null);
+  const gs = (it.genres ?? []).flatMap(canonGenres).map((g) => p.genres[g]).filter((w): w is number => w != null);
   const known = gs.length ? 0.6 * Math.max(...gs) + 0.4 * (gs.reduce((a, b) => a + b, 0) / gs.length) : 0;
   const dec = it.year ? p.decades[String(Math.floor(it.year / 10) * 10)] ?? 0 : 0;
   const lean = it.kind === "movie" ? p.media.movie : p.media.series;

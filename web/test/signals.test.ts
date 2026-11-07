@@ -94,3 +94,26 @@ test("libraryTarget: films by id + tmdb, episodes by their series, other types n
   assert.equal(libraryTarget({ Id: "e", Type: "Episode" }), null);
   assert.equal(libraryTarget({ Id: "x", Type: "Person" }), null);
 });
+
+import { WatchSession } from "../src/lib/signals.ts";
+
+test("WatchSession: a finish is not followed by a skip; ends once", () => {
+  const s = new WatchSession();
+  const meta: WatchMeta = { kind: "movie", tmdbId: 1, isFilm: true, channel: false };
+  for (let t = 0; t <= 5400; t += 2) s.tick(t, undefined, meta, 6000);
+  assert.equal(s.end(true, 1)?.type, "finish");
+  assert.equal(s.end(false, 2), null);
+});
+
+test("WatchSession: under 10 s is no skip; the meta from the start is kept when the screen moves on", () => {
+  const s = new WatchSession();
+  const a: WatchMeta = { kind: "movie", tmdbId: 1, isFilm: true, channel: false };
+  s.tick(0, undefined, a, 6000);
+  s.tick(2, undefined, { ...a, tmdbId: 2 }, 7000);
+  assert.equal(s.end(false, 1), null);
+  s.reset();
+  for (let t = 0; t <= 30; t++) s.tick(t, undefined, t === 0 ? a : { ...a, tmdbId: 2 }, 6000);
+  const e = s.end(false, 1)!;
+  assert.equal(e.type, "skip");
+  assert.equal(e.tmdbId, 1);
+});

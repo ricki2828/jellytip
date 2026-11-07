@@ -5,7 +5,7 @@ import { getSession } from "./jellyfin";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative } from "../lib/native";
-import { BATCH_MAX, PlayTracker, createQueue, detailSignal, trailerSignal, watchSignal, type Signal, type WatchMeta } from "../lib/signals";
+import { BATCH_MAX, WatchSession, createQueue, detailSignal, trailerSignal, type Signal, type WatchMeta } from "../lib/signals";
 
 const FLUSH_MS = 30_000;
 const queue = createQueue();
@@ -135,25 +135,20 @@ export interface PlayWatch {
 
 /** Play start/finish/skip for the title being watched. `meta` null (unknown yet, or a context that sends nothing) records nothing. */
 export function usePlayWatch(meta: WatchMeta | null, runtimeS: () => number, id: string): PlayWatch {
-  const tracker = useRef(new PlayTracker());
+  const session = useRef(new WatchSession());
   const m = useRef(meta);
   const rt = useRef(runtimeS);
   m.current = meta;
   rt.current = runtimeS;
-  const end = useCallback((ended: boolean) => {
-    const t = tracker.current;
-    const played = t.playedS;
-    t.reset();
-    if (m.current) emitSignal(watchSignal(m.current, played, rt.current(), ended, Date.now()));
-  }, []);
-  // a new title (or leaving the screen) closes the previous watch
+  const end = useCallback((ended: boolean) => emitSignal(session.current.end(ended, Date.now())), []);
+  // a new title (or leaving the screen) closes the previous watch, once, with the meta it started with
   useEffect(() => {
-    tracker.current.reset();
+    session.current.reset();
     return () => end(false);
   }, [id, end]);
   return {
-    tick: useCallback((t: number, maxStep?: number) => tracker.current.tick(t, maxStep), []),
-    seeked: useCallback(() => tracker.current.seeked(), []),
+    tick: useCallback((t: number, maxStep?: number) => session.current.tick(t, maxStep, m.current, rt.current()), []),
+    seeked: useCallback(() => session.current.seeked(), []),
     end,
   };
 }

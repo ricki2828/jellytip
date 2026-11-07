@@ -24,3 +24,10 @@ test("affinity: liked genre high, disliked low, unknown neutral", () => {
   assert.ok(Math.abs(a(["Western"], undefined, "series") - 0.5) < 0.05);
   assert.ok(a(["Thriller"]) > a(["Comedy"]));
 });
+
+test("genre names are canonicalised on both sides", () => {
+  const p = parseProfile({ genres: { "Sci-Fi & Fantasy": 0.8 }, media: { movie: 0.1 } })!;
+  assert.equal(p.genres["science fiction"], 0.8);
+  assert.ok(affinity(p, { genres: ["Science Fiction"], kind: "movie" }) > 0.65);
+  assert.ok(affinity(p, { genres: ["Sci-Fi"], kind: "series" }) > 0.65);
+});
