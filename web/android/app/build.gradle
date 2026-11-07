@@ -57,6 +57,8 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer-hls:$media3Version"
     implementation "androidx.media3:media3-ui:$media3Version"
     implementation "org.jellyfin.media3:media3-ffmpeg-decoder:$media3FfmpegVersion"
+    // Sport reminders: the 15-min sync job
+    implementation "androidx.work:work-runtime:2.9.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { iptvGet, iptvPost } from "./iptv";
 import { afterStartup } from "../lib/startup";
 import { parseReminders, type Reminder } from "../lib/reminders";
+import { isNative, NativeReminders } from "../lib/native";
 import type { UpEvent } from "../lib/upcoming";
 
 const EVENT = "jellytip-reminders";
@@ -57,6 +58,12 @@ export async function addReminder(e: UpEvent): Promise<string | null> {
   }
   if (a.status !== 200 && a.status !== 201) return a.data?.error ?? `Server said ${a.status}`;
   await refreshReminders(true);
+  if (isNative) {
+    // Phone: ask for notification permission once (Android 13+); say so if it was refused earlier
+    const n = await NativeReminders.ensureNotifications().catch(() => null);
+    void NativeReminders.sync().catch(() => undefined);
+    if (n?.denied) return "Reminder set, but phone notifications are off. Turn them on in Android Settings > Apps > Jellytip > Notifications.";
+  }
   return null;
 }
 

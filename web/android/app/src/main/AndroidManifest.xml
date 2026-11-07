@@ -3,6 +3,8 @@
 
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -47,6 +49,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Sport reminders: a local alarm per reminder posts the notification (ReminderSync schedules them) -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".ReminderBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -63,4 +79,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Live alerts (fantasy scoring, odds flips) as heads-up notifications while the mini player is open -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Sport reminders at the minute; where the user hasn't allowed exact alarms it falls back to a 2-minute window -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>
