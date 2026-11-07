@@ -284,6 +284,10 @@
   .iptv-page {
     padding-top: calc(58px + env(safe-area-inset-top, 0px));
   }
+  /* under the Live tab strip, which already clears the notch */
+  .live-tabs + .iptv-page {
+    padding-top: 58px;
+  }
   .iptv-card {
     margin: 0 10px 14px;
     padding: 14px;
