@@ -5,6 +5,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
 import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type TowerRow } from "../lib/liveStats";
+import { advanceNewKeys, newKeysInit, type NewKeysState } from "../lib/newKeys";
 import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
 import { Odo } from "./Odo";
@@ -37,15 +38,11 @@ const LABEL: Record<Tab, string> = { stats: "Stats", plays: "Plays", odds: "Odds
 const CDN = /^https:\/\/(a\.espncdn\.com|[a-z0-9-]+\.thesportsdb\.com)\//i;
 const imgSrc = (u: string | null | undefined, size: 96 | 192 = 96): string | null => (u ? (CDN.test(u) ? u : /^https?:\/\//i.test(u) ? null : logoSrc(u, size)) : null);
 
-/** Keys seen on earlier renders: what is not in the set is new (the first batch is never new). */
+/** Keys that are new since the last batch (the first batch is never new). Recomputed only when the key list changes. */
 function useNewKeys(keys: string[]): Set<string> {
-  const seen = useRef<Set<string> | null>(null);
-  const fresh = new Set<string>();
-  if (seen.current && keys.length) for (const k of keys) if (!seen.current.has(k)) fresh.add(k);
-  useEffect(() => {
-    seen.current = new Set([...(seen.current ?? []), ...keys]);
-  });
-  return fresh;
+  const st = useRef<NewKeysState>(null as unknown as NewKeysState);
+  if (!st.current) st.current = newKeysInit();
+  return advanceNewKeys(st.current, keys);
 }
 
 function Crest({ f, side }: { f: Fixture | null; side: "home" | "away" }) {
@@ -54,7 +51,7 @@ function Crest({ f, side }: { f: Fixture | null; side: "home" | "away" }) {
   const [failed, setFailed] = useState(false);
   // Tennis: a country flag instead of a crest
   if (!src && s?.country && flagOf(s.country)) return <span className="ld-crest flag" aria-label={s.country}>{flagOf(s.country)}</span>;
-  return src && !failed ? <img className="ld-crest" src={src} alt="" onError={() => setFailed(true)} /> : <span className="ld-crest blank">{(s?.short ?? s?.name ?? side).slice(0, 3)}</span>;
+  return src && !failed ? <img className="ld-crest" src={src} alt="" width={34} height={34} decoding="async" onError={() => setFailed(true)} /> : <span className="ld-crest blank">{(s?.short ?? s?.name ?? side).slice(0, 3)}</span>;
 }
 
 /** The score shown, held back while a moment's wipe covers the strip so the swap happens underneath it. */
@@ -407,7 +404,7 @@ function SituationView({ blocks, hc, ac }: { blocks: Block[]; hc: string; ac: st
   );
 }
 
-export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; onClose: () => void }) {
+export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("stats");
   const [d, setD] = useState<LiveStats | null>(null);
   const [fixture, setFixture] = useState<Fixture | null>(null);
@@ -443,7 +440,7 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
   useEffect(() => {
     if (!tabs.some(([k]) => k === tab)) setTab("stats");
   }, [tabs.map(([k]) => k).join(), tab]);
-  const newPlays = useNewKeys(d?.plays.map((p, i) => `${p.period}${p.clock}${p.text}${i === 0 ? "" : ""}`) ?? []);
+  const newPlays = useNewKeys(d?.plays.map((p) => p.id ?? `${p.period}${p.clock}${p.text}`) ?? []);
   const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
   useEffect(() => {
@@ -475,13 +472,30 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
           }
         }
       }
-      timer = window.setTimeout(load, REFRESH_MS);
+      timer = window.setTimeout(tick, REFRESH_MS);
     };
+    // A hidden tab skips the poll and catches up the moment it is visible again
+    let waiting = false;
+    const tick = () => {
+      if (document.hidden) {
+        waiting = true;
+        return;
+      }
+      void load();
+    };
+    const onVisible = () => {
+      if (!document.hidden && waiting && alive) {
+        waiting = false;
+        void load();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     void load();
     // Team names, crests and colours
     void matchDetailCached(matchId).then((m) => alive && m && m !== "missing" && setFixture(m.fixture));
     return () => {
       alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
       window.clearTimeout(timer);
       window.clearTimeout(flashTimer);
     };
@@ -619,4 +633,4 @@ export function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: s
       </aside>
     </div>
   );
-}
+});

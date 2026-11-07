@@ -1,6 +1,6 @@
 // The ONE audio / subtitle control for both players: trigger + menu (+ "What did they say?" replay).
 // Keyboard: Arrow Up/Down/Home/End move, Escape closes and returns focus to the trigger; a click outside closes.
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import "./TrackMenu.css";
 import { audioSelectable, initialFocus, menuKeyAction, nextFocus, rowTarget, tabTarget, type TrackOption } from "../lib/trackMenu.ts";
 import { SUB_BACKGROUNDS, SUB_SIZES, offsetLabel, stepOffset, SUB_OFFSET_MAX, SUB_OFFSET_MIN, type SubtitlePrefs } from "../lib/subtitlePrefs.ts";
@@ -21,7 +21,8 @@ export type TrackMenuProps = {
   prefs: SubtitlePrefs;
   onPrefs: (patch: Partial<SubtitlePrefs>) => void;
   /** "What did they say?"; omit when no caption track exists */
-  replay?: { disabled: boolean; run: () => void };
+  /** `disabled` may be a thunk: it is re-read every 500 ms while the menu is open, so a parent that no longer re-renders on time stays right */
+  replay?: { disabled: boolean | (() => boolean); run: () => void };
   /** class of the bar holding trigger (+ replay); carries the positioning */
   barClassName: string;
   menuClassName: string;
@@ -41,7 +42,14 @@ export function TrackMenu(p: TrackMenuProps) {
   const id = useId();
   const wasOpen = useRef(false);
   const replayBtn = useRef<HTMLButtonElement>(null);
-  const replayDisabled = !!p.replay?.disabled;
+  const [, tick] = useState(0);
+  const dis = p.replay?.disabled;
+  useEffect(() => {
+    if (!open || typeof dis !== "function") return;
+    const t = window.setInterval(() => tick((n) => n + 1), 500);
+    return () => window.clearInterval(t);
+  }, [open, typeof dis === "function"]);
+  const replayDisabled = typeof dis === "function" ? dis() : !!dis;
   // A focused replay button that becomes disabled would drop focus to <body>: hand it to the trigger
   useEffect(() => {
     if (replayDisabled && document.activeElement === replayBtn.current) trigger.current?.focus();
@@ -118,7 +126,7 @@ export function TrackMenu(p: TrackMenuProps) {
     <>
       <div className={p.barClassName}>
         {p.replay && (
-          <button ref={replayBtn} type="button" className={`${BTN} track-replay`} data-nav disabled={p.replay.disabled} onClick={(e) => { e.stopPropagation(); p.replay!.run(); p.onActivity?.(); }} aria-label="What did they say? Replay the last 10 seconds with captions" title="Replay the last 10 seconds with captions">
+          <button ref={replayBtn} type="button" className={`${BTN} track-replay`} data-nav disabled={replayDisabled} onClick={(e) => { e.stopPropagation(); p.replay!.run(); p.onActivity?.(); }} aria-label="What did they say? Replay the last 10 seconds with captions" title="Replay the last 10 seconds with captions">
             What did they say?
           </button>
         )}

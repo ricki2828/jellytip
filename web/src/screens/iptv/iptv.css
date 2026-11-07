@@ -1383,8 +1383,8 @@
   padding: 14px 14px 12px;
   box-sizing: border-box;
   overflow-y: auto;
-  background: rgba(14, 14, 14, 0.94);
-  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.5);
+  background: rgb(14, 14, 14);
+  contain: layout paint;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1876,7 +1876,7 @@
 
 /* Live panel redesign: team-colour strip, pill tabs, split bars, leader cards, plays timeline, situation (opacity / transform motion only) */
 .live-drawer {
-  background: linear-gradient(180deg, rgba(16, 18, 26, 0.97), rgba(10, 11, 16, 0.97));
+  background: linear-gradient(180deg, rgb(16, 18, 26), rgb(10, 11, 16));
 }
 .ld-strip {
   position: relative;
