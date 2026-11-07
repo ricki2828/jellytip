@@ -23,6 +23,8 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
 import { remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
+import { channelById, poolOf, schedule, tunePath, tuneTarget, type ChanItem } from "../lib/channels.ts";
+import { channelItems } from "../api/channels";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -69,7 +71,10 @@ function clock(s: number) {
 const subLabel = (s: MediaStream) => s.DisplayTitle || [s.Language, s.Codec].filter(Boolean).join(" ") || `Track ${s.Index}`;
 
 /** @param thenId double feature: play this item when the first one ends (instead of the next episode) */
-export function Player({ id, startParam, thenId }: { id: string; startParam: string | null; thenId?: string | null }) {
+export function Player({ id, startParam, thenId, chId }: { id: string; startParam: string | null; thenId?: string | null; chId?: string | null }) {
+  // A personal channel (#/channels): follows the clock, so it never reports progress or plays to Jellyfin's history
+  const channel = channelById(chId);
+  const poolRef = useRef<ChanItem[] | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const planRef = useRef<PlayPlan | null>(null);
@@ -114,24 +119,29 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
   const localRef = useRef<DownloadRecord | null>(null);
   const runtime = () => localRef.current?.item.RunTimeTicks ?? (videoRef.current?.duration ?? 0) * TICKS_PER_SECOND;
   const progress = () => {
+    if (channel) return;
     if (localRef.current) recordProgress(id, position(), runtime());
     else reportProgress(report());
   };
   const started = () => {
-    if (!localRef.current) reportStart(report());
+    if (!localRef.current && !channel) reportStart(report());
   };
 
   const stop = useCallback(() => {
     const p = planRef.current;
     if (!p || stoppedRef.current) return;
     stoppedRef.current = true;
+    if (channel) {
+      stopEncoding(p); // free the transcode; nothing goes into the watch history
+      return;
+    }
     if (localRef.current) {
       if (startedRef.current) recordProgress(id, position(), runtime());
       return;
     }
     if (startedRef.current) reportStopped(report());
     else stopEncoding(p); // never started: no session to stop, but the server may already be transcoding
-  }, [report]);
+  }, [report, channel]);
 
   /** Close out the current plan before switching to another (fallback, audio change); the new one reports its own start. */
   const abandonPlan = useCallback(() => {
@@ -255,6 +265,16 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
       setError(String((e as Error).message ?? e));
     }
   };
+
+  // Channel: the pool is needed at the end of the item to find what is on next (cached, so usually no request)
+  useEffect(() => {
+    if (!channel) return;
+    let alive = true;
+    channelItems(channel).then((items) => alive && (poolRef.current = poolOf(items, channel)), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [channel]);
 
   useEffect(() => {
     let alive = true;
@@ -423,14 +443,24 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
     stop();
     leaveLandscape();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
-    back(`/item/${id}`);
-  }, [stop, id]);
+    back(channel ? "/channels" : `/item/${id}`);
+  }, [stop, id, channel]);
 
   const playNext = useCallback(() => {
+    if (channel) {
+      // Whatever the clock says is on now: the next scheduled item at its scheduled offset, never a saved resume position
+      const pool = poolRef.current;
+      const sch = pool ? schedule(pool, channel.id, Date.now(), 3) : null;
+      const t = sch ? tuneTarget(sch.slots, sch.offsetS) : next ? { id: next.Id, startS: 0, thenId: null } : null;
+      if (!t) return;
+      stop();
+      go(tunePath(t, channel.id), true);
+      return;
+    }
     if (!next) return;
     stop();
     go(`/play/${next.Id}`, true);
-  }, [next, stop]);
+  }, [next, stop, channel]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -760,7 +790,7 @@ export function Player({ id, startParam, thenId }: { id: string; startParam: str
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND)}
         onEnded={() => {
           stop();
-          if (next) playNext();
+          if (next || channel) playNext();
           else exit();
         }}
         onError={() => {

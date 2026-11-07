@@ -521,7 +521,10 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
-        <button className="btn tonight-open" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
+        <div className="home-open">
+          <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
+          <button className="btn" data-nav onClick={() => go("/channels")}>My Channels</button>
+        </div>
         {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
             Edit Home
