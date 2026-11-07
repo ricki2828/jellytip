@@ -405,7 +405,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       }
       if (what === "fatal" && isRetryable(status, code) && recRef.current.phase !== "blocked" && recRef.current.phase !== "ended") {
         // Recovery owns the retry: it releases this stream before opening another
-        dispatchRef.current({ t: "fault", now: Date.now(), pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts" });
+        dispatchRef.current({ t: "fault", now: Date.now(), pos: toTimeline(v?.currentTime ?? 0, remuxRef.current?.off ?? 0), canHls: isLive && fmtRef.current === "ts" });
         return;
       }
       const perm = what !== "full" ? permanentReason(status, code) : null;
@@ -779,7 +779,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         const canHls = isLive && fmtRef.current === "ts";
         if (!stallReported.current) {
           stallReported.current = true;
-          dispatchRef.current({ t: "stall", pos: v.currentTime, canHls });
+          dispatchRef.current({ t: "stall", pos: toTimeline(v.currentTime, remuxRef.current?.off ?? 0), canHls });
           debugEvent("iptv-player", "stall detected", {
             player: engineRef.current,
             format: fmtRef.current,
@@ -791,7 +791,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         // Escalate in any recovery phase. VOD / catch-up: only when the element is not loading and nothing happened for VOD_IDLE_MS.
         const idleFor = isLive ? now - lastMove.current - thresh : Math.min(now - lastMove.current, now - lastNet.current);
         const need = isLive ? RECONNECT_AFTER_MS : v.readyState < 3 ? VOD_IDLE_MS : Infinity;
-        if (r.phase !== "playing" && r.conn === "held" && idleFor >= need) dispatchRef.current({ t: "fault", now: Date.now(), pos: v.currentTime, canHls });
+        if (r.phase !== "playing" && r.conn === "held" && idleFor >= need) dispatchRef.current({ t: "fault", now: Date.now(), pos: toTimeline(v.currentTime, remuxRef.current?.off ?? 0), canHls });
       }
     }, 1000);
     return () => { active = false; clearInterval(t); document.removeEventListener("visibilitychange", onVisible); if (frameId) v?.cancelVideoFrameCallback?.(frameId); };
@@ -799,7 +799,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const retryNow = () => {
     const v = videoRef.current;
     debugEvent("iptv-player", "manual retry", { player: engineRef.current, format: fmtRef.current, phase: recRef.current.phase }, "info");
-    dispatchRef.current({ t: "retryNow", pos: v?.currentTime ?? 0, canHls: isLive && fmtRef.current === "ts", now: Date.now() });
+    dispatchRef.current({ t: "retryNow", pos: toTimeline(v?.currentTime ?? 0, remuxRef.current?.off ?? 0), canHls: isLive && fmtRef.current === "ts", now: Date.now() });
   };
   const reportStall = () => {
     debugEvent("iptv-player", "user reported stall", { player: engineRef.current, format: fmtRef.current, firstFrame: firstFrame.current, rebufferCount: rebufferCount.current }, "info");
@@ -1314,7 +1314,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         audio={audioChoices.map((c) => ({ id: String(c.index), label: audioOptionLabel(c.label), active: c.active }))}
         subtitles={subtitleChoices.map((c) => ({ id: String(c.index), label: c.label, active: c.active }))}
         subtitlesOff={subtitleOff}
-        audioEmptyNote="No selectable audio tracks exposed."
+        audioEmptyNote={remux ? "Audio was converted for this browser. Built-in subtitles aren't available with converted audio." : "No selectable audio tracks exposed."}
         onPickAudio={(v) => { autoTracks.current.manual = true; manualPick.current.audio = makePick(audioChoices, Number(v)); selectAudio(Number(v)); }}
         onPickSubtitle={(v) => { autoTracks.current.manual = true; manualPick.current.subtitle = v == null ? { off: true } : makePick(subtitleChoices, Number(v)); replayRef.current = null; selectSubtitle(v == null ? -1 : Number(v)); }}
         unavailable={playerEngine === "mpegts" ? {

@@ -64,3 +64,16 @@ test("playQuery: films and episodes ask for compat=web and carry the start", () 
   assert.equal(n.has("compat"), false); // the TV/phone plays AC-3 natively
   assert.equal(n.has("start"), false);
 });
+
+import { initialRecovery, step } from "../src/lib/streamRecovery.ts";
+
+test("recovery on a remux resumes at the title position (element time + offset), not the element time", () => {
+  const off = 600;
+  const pos = toTimeline(42, off); // 42 s into a stream that began at 600
+  const r = step(initialRecovery(false), { t: "stall", pos, canHls: false });
+  const open = r.effects.find((f) => f.do === "open");
+  assert.ok(!open || (open as { resumeAt: number | null }).resumeAt === 642 || r.state.resumeAt === 642);
+  assert.equal(r.state.resumeAt, 642);
+  const raw = step(initialRecovery(false), { t: "stall", pos: 42, canHls: false });
+  assert.equal(raw.state.resumeAt, 42); // what the bug did
+});
