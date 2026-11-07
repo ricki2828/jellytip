@@ -8,8 +8,15 @@ export const SOON_S = 15 * 60;
 export interface Reminder {
   id: number | string;
   event: UpEvent;
-  /** Fixture id when set from Game Centre. */
+  /** Fixture id when this is a fixture reminder. */
   fid: string | null;
+  /** The fixture's match-info id (what the match sheet, player and Game Centre cards know), when the server says. */
+  matchId: string | null;
+}
+
+/** The person's reminder for an event, by whichever id the caller has: the event key, the fixture id, or the match-info id. */
+export function findReminder(items: Reminder[] | null | undefined, o: { key?: string | null; fid?: string | null; matchId?: string | null }): Reminder | null {
+  return items?.find((r) => (!!o.key && r.event.key === o.key) || (!!o.fid && r.fid === o.fid) || (!!o.matchId && r.matchId === o.matchId)) ?? null;
 }
 
 /** A reminder set before any stream is linked carries a channel with an empty id ("No stream yet"). */
@@ -32,7 +39,7 @@ export function parseReminders(raw: unknown): Reminder[] {
     const ev = parseUpcoming({ items: [noChan && typeof o.fid === "string" && o.fid ? { ...o, channel: { id: "_", name: NO_STREAM } } : o] })[0];
     if (!ev) continue;
     const event = noChan ? { ...ev, channels: [{ ...ev.channels[0], id: "" }] } : ev;
-    out.push({ id, fid: typeof o.fid === "string" && o.fid ? o.fid : null, event: { ...event, reminderId: id } });
+    out.push({ id, fid: typeof o.fid === "string" && o.fid ? o.fid : null, matchId: typeof o.matchId === "string" && o.matchId ? o.matchId : null, event: { ...event, reminderId: id } });
   }
   return out.sort((a, b) => a.event.start - b.event.start);
 }

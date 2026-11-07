@@ -20,6 +20,8 @@ export interface UpEvent {
   sportName?: string | null;
   startOver?: boolean;
   fixture?: Fixture | null;
+  /** The sport fixture id, when the server knows this event is a fixture. */
+  fid?: string | null;
   phase?: Phase | null;
   startsAt?: number | null;
   /** The person's team or league that matched (the ★). */
@@ -73,6 +75,7 @@ export function parseUpcoming(raw: unknown): UpEvent[] {
       sportName: str(e.sportName) ?? str(e.sport),
       startOver: e.startOver === true,
       fixture: parseFixture(e.matchInfo),
+      fid: str(e.fid),
       phase: parsePhase(e.phase),
       startsAt: parseStartsAt(e.startsAt),
       favourite: !!(str(m?.team) || str(m?.league)),

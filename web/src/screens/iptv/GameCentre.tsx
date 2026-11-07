@@ -10,6 +10,7 @@ import { matchDetail } from "../../api/matchInfo";
 import { usePrefs } from "../../api/me";
 import { refreshRecs, useRecs } from "../../api/recStore";
 import { addFixtureReminder, addReminder, refreshReminders, removeReminder, useReminders } from "../../api/reminderStore";
+import { findReminder } from "../../lib/reminders";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
@@ -212,12 +213,13 @@ function LegacyGameCentre() {
                 scoreLine={pref ? scoreText(g.fixture) : scores[g.key]}
                 gate={gates[g.key] ?? gateStart}
                 onPress={() => press(g)}
-                remId={g.event ? rem.items?.find((r) => r.event.key === g.event!.key)?.id ?? g.event.reminderId ?? null : rem.items?.find((r) => r.event.key === g.fixture?.id)?.id ?? null}
+                remId={findReminder(rem.items, { key: g.event?.key, fid: g.event?.fid, matchId: g.fixture?.id })?.id ?? g.event?.reminderId ?? null}
                 remBusy={rem.busy.has(g.key)}
                 remMsg={rem.msgs[g.key]}
                 onRemind={() => {
-                  const id = g.event ? rem.items?.find((r) => r.event.key === g.event!.key)?.id ?? g.event.reminderId ?? null : null;
-                  void rem.toggle(g.key, id, () => (g.event && g.event.channels[0]?.id ? addReminder(g.event) : addFixtureReminder({ matchId: g.fixture?.id })));
+                  const id = findReminder(rem.items, { key: g.event?.key, fid: g.event?.fid, matchId: g.fixture?.id })?.id ?? g.event?.reminderId ?? null;
+                  // A game with a fixture is a fixture reminder; the channel path is only for a programme with none
+                  void rem.toggle(g.key, id, () => (g.event ? addReminder(g.event, { matchId: g.fixture?.id }) : addFixtureReminder({ matchId: g.fixture?.id })));
                 }}
               />
             ))}
@@ -290,7 +292,7 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const pref = spoilersOn(prefs);
   const rem = useRemind();
-  const remIdOf = (f: FxItem) => (rem.items ? rem.items.find((r) => r.fid === f.fid || (f.reminderId != null && String(r.id) === String(f.reminderId)))?.id ?? null : f.reminderId);
+  const remIdOf = (f: FxItem) => (rem.items ? (findReminder(rem.items, { fid: f.fid, matchId: f.matchId }) ?? rem.items.find((r) => f.reminderId != null && String(r.id) === String(f.reminderId)))?.id ?? null : f.reminderId);
   const lapse = useRef<number | undefined>(undefined);
 
   useEffect(() => {

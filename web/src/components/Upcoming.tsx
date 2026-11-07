@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { addRecording, errorText, logoSrc, recordings } from "../api/iptv";
 import { refreshRecs } from "../api/recStore";
 import { addReminder, refreshReminders, removeReminder, useReminders } from "../api/reminderStore";
+import { findReminder } from "../lib/reminders";
 import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
 import { livePath, type LiveExtras } from "../lib/iptvPlay";
 import { go } from "../lib/router";
@@ -79,7 +80,7 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
   const best = e.channels[0];
   const { items: rems, available } = useReminders();
   const [busyRem, setBusyRem] = useState(false);
-  const remId = rems?.find((r) => r.event.key === e.key)?.id ?? e.reminderId ?? null;
+  const remId = findReminder(rems, { key: e.key, fid: e.fid, matchId: e.fixture?.id })?.id ?? e.reminderId ?? null;
   useEffect(() => void refreshReminders(), []);
   // Why there is no Record button: the server turns recording off (e.g. seedbox nearly full); say so instead of hiding it
   const [recOff, setRecOff] = useState<string | null>(null);
