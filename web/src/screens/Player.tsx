@@ -19,6 +19,7 @@ import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
 import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
 import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } from "../lib/captionReplay.ts";
 import { isPhone } from "../lib/device";
+import { useFullscreen } from "../lib/useFullscreen";
 import { localPosition, playableDownload, recordProgress, subtitleText, type DownloadRecord } from "../lib/downloads";
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
@@ -586,27 +587,9 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     ramp.current = { target: to, dir, presses: 1, burstStart: performance.now(), lastAt: performance.now() };
     commitSeek();
   };
-  const nativeFs = useRef(false);
-  const toggleFs = () => {
-    if (isNative) {
-      nativeFs.current = !nativeFs.current;
-      NativeDownloads.setPlayerMode({ fullscreen: nativeFs.current }).catch(() => undefined);
-      return;
-    }
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => undefined);
-      return;
-    }
-    const box = document.querySelector<HTMLElement>(".player");
-    if (box?.requestFullscreen) box.requestFullscreen().catch(() => undefined);
-    else {
-      // iPhone Safari has no element fullscreen: only the video itself can go fullscreen (native controls)
-      const v = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-      v?.webkitEnterFullscreen?.();
-    }
-  };
-  const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
   const boxRef = useRef<HTMLDivElement>(null);
+  const { toggle: toggleFs } = useFullscreen(boxRef, videoRef);
+  const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
   const onRotate = () => {
     void rotatePlayer(boxRef.current);
   };

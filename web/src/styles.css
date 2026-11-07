@@ -2526,3 +2526,7 @@ button.overview.open {
   align-items: center;
   gap: 10px;
 }
+
+/* Fullscreen container (video + companion + overlays): fill the screen, keep the 72/28 squeeze grid inside it */
+.iptv-player:fullscreen { width: 100vw; height: 100vh; background: #000; }
+.iptv-player:fullscreen .cp-stage { position: absolute; inset: 0; }
