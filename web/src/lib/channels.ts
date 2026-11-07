@@ -279,10 +279,29 @@ export const playedEnough = (playedS: number, expectedLeftS: number): boolean =>
  * Where a tune target plays. A library item: "/play/<id>?start=<s>&then=<id>&ch=<channel>". An IPTV film: the IPTV player at the
  * same offset ("/iptv/play?vod=<id>&resume=<s>&t=<title>&ch=<channel>"); either way the player moves on by the clock at the end.
  */
-export function tunePath(t: { id: string; startS: number; thenId: string | null; title?: string }, channelId: string): string {
+export function tunePath(t: { id: string; startS: number; thenId: string | null; title?: string }, channelId: string, off = false): string {
   const ch = encodeURIComponent(channelId);
-  if (isIptvId(t.id)) return `/iptv/play?vod=${encodeURIComponent(t.id)}&t=${encodeURIComponent(t.title ?? "")}${t.startS > 0 ? `&resume=${t.startS}` : ""}&ch=${ch}`;
-  return `/play/${t.id}?start=${t.startS}${t.thenId && !isIptvId(t.thenId) ? `&then=${t.thenId}` : ""}&ch=${ch}`;
+  const o = off ? "&off=1" : "";
+  if (isIptvId(t.id)) return `/iptv/play?vod=${encodeURIComponent(t.id)}&t=${encodeURIComponent(t.title ?? "")}${t.startS > 0 ? `&resume=${t.startS}` : ""}&ch=${ch}${o}`;
+  return `/play/${t.id}?start=${t.startS}${t.thenId && !isIptvId(t.thenId) ? `&then=${t.thenId}` : ""}&ch=${ch}${o}`;
+}
+
+type Target = { id: string; startS: number; thenId: string | null; title: string };
+
+/** "From start": the item on now, from 0, opened off the clock (`off=1`). Null when nothing is scheduled. */
+export function fromStartTarget(slots: Slot[]): Target | null {
+  if (!slots.length) return null;
+  return { id: slots[0].item.Id, startS: 0, thenId: slots[1]?.item.Id ?? null, title: itemLabel(slots[0].item).title };
+}
+
+/**
+ * "Back to live" from an off-schedule item: if `currentId` is still what the clock says is on, seek it to the clock offset;
+ * otherwise open whatever the clock says is on now (the tune target).
+ */
+export function rejoinLive(slots: Slot[], offsetS: number, currentId: string): { kind: "seek"; s: number } | { kind: "go"; target: Target } | null {
+  const t = tuneTarget(slots, offsetS);
+  if (!t) return null;
+  return t.id === currentId ? { kind: "seek", s: t.startS } : { kind: "go", target: t };
 }
 
 /** A channel id from a URL, or null if it is not a built-in one. */

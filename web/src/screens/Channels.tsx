@@ -2,7 +2,7 @@
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { channelItems, readHiddenChannels, writeHiddenChannels } from "../api/channels";
-import { CHANNELS, channelViable, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
+import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
 import "./Channels.css";
 
@@ -44,6 +44,9 @@ function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: Cha
       <div className="ch-actions">
         <button className="btn primary small" data-nav onClick={() => go(tunePath(target, def.id))}>
           Tune in
+        </button>
+        <button className="btn small" data-nav onClick={() => { const t = fromStartTarget(slots); if (t) go(tunePath(t, def.id, true)); }} aria-label={`${def.name}: play ${cur.title} from the start`}>
+          From start
         </button>
         <button className="btn small" data-nav onClick={onHide} aria-label={`${hidden ? "Show" : "Hide"} ${def.name}`}>
           {hidden ? "Show" : "Hide"}

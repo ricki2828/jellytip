@@ -24,7 +24,7 @@ import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
 import { remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
 import { chainTarget, channelById, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels.ts";
-import { channelItems, takeChainHop } from "../api/channels";
+import { channelItems, rejoinPlan, takeChainHop } from "../api/channels";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -71,10 +71,12 @@ function clock(s: number) {
 const subLabel = (s: MediaStream) => s.DisplayTitle || [s.Language, s.Codec].filter(Boolean).join(" ") || `Track ${s.Index}`;
 
 /** @param thenId double feature: play this item when the first one ends (instead of the next episode) */
-export function Player({ id, startParam, thenId, chId }: { id: string; startParam: string | null; thenId?: string | null; chId?: string | null }) {
+export function Player({ id, startParam, thenId, chId, offSchedule = false }: { id: string; startParam: string | null; thenId?: string | null; chId?: string | null; offSchedule?: boolean }) {
   // A personal channel (#/channels): follows the clock, so it never reports progress or plays to Jellyfin's history
   const channel = channelById(chId);
   const poolRef = useRef<ChanItem[] | null>(null);
+  // Off the clock: this item was started from 0 (or restarted); at its end the channel still goes to whatever the clock says is on
+  const [off, setOff] = useState(offSchedule);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const planRef = useRef<PlayPlan | null>(null);
@@ -466,6 +468,31 @@ export function Player({ id, startParam, thenId, chId }: { id: string; startPara
     go(`/play/${next.Id}`, true);
   }, [next, stop, channel, id, exit]);
 
+  const fromStart = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    seekTarget.current = 0;
+    v.currentTime = 0;
+    setOff(true);
+    if (v.paused) tryPlay(v);
+  };
+  const backToLive = () => {
+    if (!channel) return;
+    void rejoinPlan(channel.id, id).then((r) => {
+      if (!r) return;
+      if (r.kind === "seek") {
+        const v = videoRef.current;
+        if (!v) return;
+        seekTarget.current = r.s;
+        v.currentTime = r.s;
+        setOff(false);
+      } else {
+        stop();
+        go(r.path, true);
+      }
+    });
+  };
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -845,6 +872,7 @@ export function Player({ id, startParam, thenId, chId }: { id: string; startPara
           ‹ Back
         </button>
         <span className="player-title">{title}</span>
+        {channel && off && <span className="player-method">Off schedule</span>}
         {plan && <span className="player-method">{plan.method === "DirectPlay" ? "Direct" : plan.method === "DirectStream" ? "Remux" : "Transcode"}</span>}
       </div>
 
@@ -914,6 +942,15 @@ export function Player({ id, startParam, thenId, chId }: { id: string; startPara
               <HoldButton label="+" onStep={(s) => stepDelay(s)} />
             </span>
           )}
+          {channel && (off ? (
+            <button className="btn ghost" data-nav onClick={backToLive}>
+              Back to live
+            </button>
+          ) : (
+            <button className="btn ghost" data-nav onClick={fromStart}>
+              From start
+            </button>
+          ))}
           {next && (
             <button className="btn ghost" data-nav onClick={playNext}>
               Next ›

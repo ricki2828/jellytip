@@ -82,12 +82,12 @@ export function App() {
     }
     return (
       <Suspense fallback={null}>
-        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} />
+        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />
       </Suspense>
     );
   }
   if (route.name === "play")
-    return <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} />;
+    return <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />;
 
   const liveHub = route.name !== "live" && LIVE_ROUTES.includes(route.name);
   return (

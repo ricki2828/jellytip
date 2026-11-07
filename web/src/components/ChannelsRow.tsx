@@ -4,7 +4,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { channelItems, readHiddenChannels } from "../api/channels";
 import { imageUrl } from "../api/jellyfin";
-import { CHANNELS, tunePath, type ChanItem } from "../lib/channels";
+import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels";
 import { cardModel, visibleChannels } from "../lib/channelsRow";
 import { afterStartup } from "../lib/startup";
 import { go } from "../lib/router";
@@ -22,7 +22,12 @@ const Card = memo(function Card({ id, items, now }: { id: string; items: ChanIte
   if (!m) return null;
   const art = m.artUrl ?? (m.artId ? imageUrl(m.artId, "Backdrop", { maxWidth: 640, quality: 70 }) : null);
   const pct = Math.round(m.progress * 100);
+  const fromStart = () => {
+    const t = fromStartTarget(schedule(poolOf(items, def), def.id, Date.now(), 2).slots); // the clock, not the card's last tick
+    if (t) go(tunePath(t, def.id, true));
+  };
   return (
+    <div className="chrow-wrap">
     <button
       className="chrow-card"
       data-nav
@@ -44,6 +49,10 @@ const Card = memo(function Card({ id, items, now }: { id: string; items: ChanIte
         <span style={{ width: `${pct}%` }} />
       </span>
     </button>
+    <button className="chrow-start" data-nav onClick={fromStart} aria-label={`${def.name}: play ${m.nowTitle} from the start`}>
+      From start
+    </button>
+    </div>
   );
 });
 

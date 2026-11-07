@@ -3,7 +3,7 @@
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { chainBudget, chainTarget, channelById, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { chainBudget, chainTarget, channelById, rejoinLive, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
 import { iptvGet } from "./iptv";
 
 const TTL_MS = 6 * 3600 * 1000;
@@ -170,6 +170,21 @@ export async function nextChannelPath(channelId: string, currentId?: string, pla
     const sch = schedule(pool, def.id, Date.now(), 4);
     const t = chainTarget(sch.slots, sch.offsetS, currentId);
     return t ? tunePath(t, def.id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Back to live" for a channel player that is off the clock: seek in place, or the path of what is on now. Takes no chain-hop budget. */
+export async function rejoinPlan(channelId: string, currentId: string): Promise<{ kind: "seek"; s: number } | { kind: "go"; path: string } | null> {
+  const def = channelById(channelId);
+  if (!def) return null;
+  try {
+    const pool = poolOf(await channelItems(def), def);
+    const sch = schedule(pool, def.id, Date.now(), 3);
+    const r = rejoinLive(sch.slots, sch.offsetS, currentId);
+    if (!r) return null;
+    return r.kind === "seek" ? r : { kind: "go", path: tunePath(r.target, def.id) };
   } catch {
     return null;
   }
