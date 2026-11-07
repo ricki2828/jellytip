@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip
 
+import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteInfo
+import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteResult
 import androidx.datastore.core.DataStore
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
