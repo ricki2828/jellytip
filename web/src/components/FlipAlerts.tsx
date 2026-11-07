@@ -10,6 +10,7 @@ import { isBlowout, isLateGame, parseAlertMode, pickAlert, SHOW_MS, sharedGate, 
 import { newMoments, pct, type LiveStats } from "../lib/liveStats";
 import { GOLD, teamColors } from "../lib/broadcast";
 import { BroadcastToast, type ToastData } from "./BroadcastToast";
+import type { LiveSource } from "./Companion/useLiveFeed";
 import "../screens/iptv/iptv.css";
 
 const EVENT = "jellytip-flip";
@@ -24,7 +25,7 @@ export const announceFlips = (matchId: string, d: LiveStats) => {
   if (d.market?.flip && !d.market.thin) window.dispatchEvent(new CustomEvent(EVENT, { detail: { matchId, at: d.market.flip.at, to: d.market.flip.to, prob: d.market.flip.prob } }));
 };
 
-export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false, blowout }: {
+export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false, blowout, source }: {
   matchId: string | null | undefined;
   active: boolean;
   drawerOpen: boolean;
@@ -33,6 +34,8 @@ export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false
   replay?: boolean;
   /** Overrides the blowout the component works out from the score. */
   blowout?: boolean;
+  /** The player's feed: when given, its answers are used and this component asks /live for nothing. */
+  source?: LiveSource;
 }) {
   const { prefs } = usePrefs({ defer: true });
   const mode = parseAlertMode(prefs?.sport.alerts);
@@ -117,9 +120,56 @@ export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, live]);
 
-  // Poll while the drawer is closed
+  const blowoutGiven = useRef(blowout != null);
+  blowoutGiven.current = blowout != null;
+  /** One /live answer: a flip, the blowout state and any new moments become candidates. */
+  const ingest = (d: LiveStats) => {
+    if (d.market?.flip && !d.market.thin) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
+    const late = isLateGame(d.layout, d.period, d.clock);
+    if (!blowoutGiven.current) blowRef.current = isBlowout(d.layout, d.score?.home, d.score?.away, late);
+    const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);
+    if (seenMoment.current == null) seenMoment.current = latest; // the first answer is the baseline
+    else {
+      const fresh = newMoments(d.moments, seenMoment.current);
+      seenMoment.current = Math.max(seenMoment.current, latest);
+      for (const m of fresh) {
+        const who = m.team ? names.current[m.team] : null;
+        offer({
+          id: `m:${m.at}:${m.kind}:${m.team ?? ""}`,
+          kind: m.kind,
+          at: m.at,
+          favourite: SCORING.has(m.kind) && !!who && favs.current.includes(norm(who)),
+          late,
+          payload: { color: m.team ? colors.current[m.team] : GOLD, kicker: "MOMENT", text: m.label.toUpperCase(), sub: who, icon: "moment" },
+        });
+      }
+    }
+  };
+
+  // The player's feed (one /live poll for the whole player): every new answer goes through ingest
   useEffect(() => {
-    if (!matchId || !live || drawerOpen) return;
+    if (!source || !matchId || !live) return;
+    let last: LiveStats | null = null;
+    const run = () => {
+      const snap = source.get();
+      if (snap.fixture) {
+        names.current = { home: snap.fixture.home.name, away: snap.fixture.away.name };
+        const c = teamColors(snap.fixture);
+        colors.current = c.known ? { home: c.home, away: c.away } : { home: GOLD, away: GOLD };
+      }
+      if (snap.raw && snap.raw !== last) {
+        last = snap.raw;
+        ingest(snap.raw);
+      }
+    };
+    run();
+    return source.subscribe(run);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, matchId, live]);
+
+  // Poll while the drawer is closed (standalone: no feed)
+  useEffect(() => {
+    if (!matchId || !live || drawerOpen || source) return;
     let alive = true;
     let t: number | undefined;
     const poll = async () => {
@@ -127,28 +177,7 @@ export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false
       const d = await liveStats(matchId, "market,moments,score");
       if (!alive) return;
       if (d === "missing") return; // no live route: stop asking
-      if (d?.market?.flip && !d.market.thin) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
-      if (d) {
-        const late = isLateGame(d.layout, d.period, d.clock);
-        if (blowout == null) blowRef.current = isBlowout(d.layout, d.score?.home, d.score?.away, late);
-        const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);
-        if (seenMoment.current == null) seenMoment.current = latest; // the first answer is the baseline
-        else {
-          const fresh = newMoments(d.moments, seenMoment.current);
-          seenMoment.current = Math.max(seenMoment.current, latest);
-          for (const m of fresh) {
-            const who = m.team ? names.current[m.team] : null;
-            offer({
-              id: `m:${m.at}:${m.kind}:${m.team ?? ""}`,
-              kind: m.kind,
-              at: m.at,
-              favourite: SCORING.has(m.kind) && !!who && favs.current.includes(norm(who)),
-              late,
-              payload: { color: m.team ? colors.current[m.team] : GOLD, kicker: "MOMENT", text: m.label.toUpperCase(), sub: who, icon: "moment" },
-            });
-          }
-        }
-      }
+      if (d) ingest(d);
       t = window.setTimeout(poll, POLL_MS);
     };
     t = window.setTimeout(poll, 1500);
@@ -157,7 +186,7 @@ export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false
       window.clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, live, drawerOpen]);
+  }, [matchId, live, drawerOpen, source]);
 
   return toast ? <BroadcastToast t={toast.t} id={toast.n} /> : null;
 }

@@ -1217,7 +1217,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       />}
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
-      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
+      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
