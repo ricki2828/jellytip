@@ -440,7 +440,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   useEffect(() => {
     if (!tabs.some(([k]) => k === tab)) setTab("stats");
   }, [tabs.map(([k]) => k).join(), tab]);
-  const newPlays = useNewKeys(d?.plays.map((p, i) => `${p.period}${p.clock}${p.text}${i === 0 ? "" : ""}`) ?? []);
+  const newPlays = useNewKeys(d?.plays.map((p) => p.id ?? `${p.period}${p.clock}${p.text}`) ?? []);
   const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
   useEffect(() => {

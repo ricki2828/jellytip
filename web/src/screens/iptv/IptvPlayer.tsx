@@ -674,7 +674,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         if (!active) return;
         // Bookkeeping at most every ~250 ms of media time (the first frame always passes)
         const mt = meta?.mediaTime;
-        if (mt != null && lastMedia >= 0 && Math.abs(mt - lastMedia) < 0.25) {
+        if (mt != null && lastMedia >= 0 && Math.abs(mt - lastMedia) < 0.25 && Date.now() - lastMove.current < 1000) {
           frameId = v.requestVideoFrameCallback(frame);
           return;
         }
@@ -788,11 +788,28 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   };
 
   const kickoff = isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop ? extras.kickoff : null;
+  // The clock no longer re-renders this tree: a growing recording's length (it is derived from now) and the
+  // "From kick-off" button's expiry each get one timed render instead
+  const [, bump] = useState(0);
+  const kickoffStop = isLive ? extras?.kickoff?.stop : undefined;
+  useEffect(() => {
+    if (kickoffStop == null) return;
+    const ms = kickoffStop * 1000 - Date.now();
+    if (ms <= 0) return;
+    const t = window.setTimeout(() => bump((n) => n + 1), ms + 50);
+    return () => window.clearTimeout(t);
+  }, [kickoffStop]);
 
   const growing = !!answer?.growing || meta?.state === "recording";
   growRef.current = growing;
   const length = isLive ? 0 : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
   lenRef.current = length;
+  const growingVod = growing && !isLive;
+  useEffect(() => {
+    if (!growingVod) return;
+    const t = window.setInterval(() => bump((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [growingVod]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -1029,7 +1046,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         } : undefined}
         prefs={subPrefs}
         onPrefs={setSubPrefs}
-        replay={playerEngine !== "mpegts" && subtitleChoices.length ? { disabled: replayTarget(videoRef.current?.currentTime ?? 0, seekableStart()) == null, run: replayCaptions } : undefined}
+        replay={playerEngine !== "mpegts" && subtitleChoices.length ? { disabled: () => replayTarget(videoRef.current?.currentTime ?? 0, seekableStart()) == null, run: replayCaptions } : undefined}
         barClassName="iptv-tracks-button"
         menuClassName="iptv-track-menu"
         onActivity={poke}

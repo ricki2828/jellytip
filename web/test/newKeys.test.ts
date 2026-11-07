@@ -21,10 +21,9 @@ test("same batch re-read is idempotent (double render, 4/s re-renders)", () => {
   assert.deepEqual([...f], ["b"]);
 });
 
-test("seen is replaced, not accumulated", () => {
+test("seen accumulates: a line that leaves the window and returns is not new again", () => {
   const s = newKeysInit();
   advanceNewKeys(s, ["a", "b"]);
   advanceNewKeys(s, ["b", "c"]);
-  assert.equal(s.seen!.size, 2);
-  assert.equal(s.seen!.has("a"), false);
+  assert.equal(advanceNewKeys(s, ["a", "b", "c"]).size, 0);
 });
