@@ -5,7 +5,7 @@ import { RemindControl } from "../../components/TeamRemind";
 import { fixtureSides, type TeamSide } from "../../lib/teamReminders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, errorText } from "../../api/iptv";
-import { refreshFixtures, useFixtures } from "../../api/fixtures";
+import { refreshFixtures, showAllLeague, useFixtures } from "../../api/fixtures";
 import { matchDetail } from "../../api/matchInfo";
 import { usePrefs } from "../../api/me";
 import { refreshRecs, useRecs } from "../../api/recStore";
@@ -13,7 +13,7 @@ import { addFixtureReminder, addReminder, refreshReminders, removeReminder, useR
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
-import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
+import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, todayMore, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type FxMore, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
 import { go, useRoute } from "../../lib/router";
 import "./iptv.css";
@@ -278,7 +278,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   );
 }
 
-function FixtureGameCentre({ items, degraded, focusFid }: { items: FxItem[]; degraded: boolean; focusFid: string | null }) {
+function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { items: FxItem[]; degraded: boolean; more: FxMore[]; expanded: ReadonlySet<string>; focusFid: string | null }) {
   const { prefs } = usePrefs({ defer: true });
   const recs = useRecs(false);
   const [now, setNow] = useState(() => Date.now() / 1000);
@@ -396,6 +396,15 @@ function FixtureGameCentre({ items, degraded, focusFid }: { items: FxItem[]; deg
               />
             ))}
           </ul>
+          {g.id === "big" &&
+            todayMore(more, now, expanded).map((m) => (
+              <p key={m.key} className="iptv-hint gc-more">
+                +{m.hidden} more {m.league} {m.hidden === 1 ? "game" : "games"} today ·{" "}
+                <button className="btn small" data-nav onClick={() => void showAllLeague(m.key)}>
+                  Show all
+                </button>
+              </p>
+            ))}
         </section>
       ))}
     </>
@@ -428,7 +437,7 @@ export function GameCentre() {
       <div className="page-head">
         <h1 className="page-title">Game Centre</h1>
       </div>
-      {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} focusFid={focusFid} />}
+      {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} more={data.more} expanded={data.expanded} focusFid={focusFid} />}
     </div>
   );
 }

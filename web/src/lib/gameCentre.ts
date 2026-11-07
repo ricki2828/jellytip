@@ -343,6 +343,42 @@ function kickoffOf(v: unknown): number | null {
   return isFinite(t) ? Math.floor(t / 1000) : null;
 }
 
+/** Per-league daily cap hint (contract: top-level `more`): `hidden` upcoming games of `league` on local `day` (YYYY-MM-DD in the tz we sent) were left out. */
+export interface FxMore {
+  league: string;
+  leagueKey: string | null;
+  day: string;
+  hidden: number;
+}
+export function parseMore(raw: unknown): FxMore[] {
+  const m = o(raw)?.more;
+  if (!Array.isArray(m)) return [];
+  const out: FxMore[] = [];
+  for (const x of m) {
+    const e = o(x);
+    const league = s(e?.league);
+    const day = s(e?.day);
+    if (e && league && day && typeof e.hidden === "number" && e.hidden > 0) out.push({ league, leagueKey: s(e.leagueKey), day, hidden: Math.floor(e.hidden) });
+  }
+  return out;
+}
+/** Local calendar day (YYYY-MM-DD) of `t` epoch s in the device timezone. */
+export function localDay(t: number): string {
+  const d = new Date(t * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** "+N more NBA games today" rows for today only, one per league, skipping leagues already shown in full. */
+export function todayMore(more: FxMore[], now: number, expanded: ReadonlySet<string>): { league: string; key: string; hidden: number }[] {
+  const day = localDay(now);
+  const by = new Map<string, { league: string; key: string; hidden: number }>();
+  for (const m of more) {
+    const key = m.leagueKey ?? m.league;
+    if (m.day !== day || expanded.has(key)) continue;
+    by.set(key, { league: m.league, key, hidden: (by.get(key)?.hidden ?? 0) + m.hidden });
+  }
+  return [...by.values()];
+}
+
 /** Answer -> fixture items. Items without an id, sides, kickoff or status are dropped; duplicate ids keep the first. */
 export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boolean } {
   const r = o(raw);
