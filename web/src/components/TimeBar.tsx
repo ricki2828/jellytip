@@ -4,12 +4,12 @@ import { useEffect, useState, type RefObject } from "react";
 import { Scrubber } from "./Scrubber";
 
 /** The video element's current time, re-read on timeupdate/seeked. Only the component that calls this re-renders. */
-export function useVideoTime(videoRef: RefObject<HTMLVideoElement | null>, wholeSeconds = false): number {
-  const [time, setTime] = useState(() => videoRef.current?.currentTime ?? 0);
+export function useVideoTime(videoRef: RefObject<HTMLVideoElement | null>, wholeSeconds = false, offset = 0): number {
+  const [time, setTime] = useState(() => (videoRef.current?.currentTime ?? 0) + offset);
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const read = () => setTime((t) => (wholeSeconds && Math.floor(t) === Math.floor(v.currentTime) ? t : v.currentTime));
+    const read = () => setTime((t) => (wholeSeconds && Math.floor(t) === Math.floor(v.currentTime + offset) ? t : v.currentTime + offset));
     read();
     v.addEventListener("timeupdate", read);
     v.addEventListener("seeked", read);
@@ -17,17 +17,17 @@ export function useVideoTime(videoRef: RefObject<HTMLVideoElement | null>, whole
       v.removeEventListener("timeupdate", read);
       v.removeEventListener("seeked", read);
     };
-  }, [videoRef, wholeSeconds]);
+  }, [videoRef, wholeSeconds, offset]);
   return time;
 }
 
-export function TimeBarScrubber({ videoRef, max, fmt, onActivity, onSeek }: { videoRef: RefObject<HTMLVideoElement | null>; max: number; fmt: (s: number) => string; onActivity?: () => void; onSeek: (to: number) => void }) {
-  const time = useVideoTime(videoRef);
+export function TimeBarScrubber({ videoRef, max, fmt, onActivity, onSeek, offset = 0 }: { offset?: number; videoRef: RefObject<HTMLVideoElement | null>; max: number; fmt: (s: number) => string; onActivity?: () => void; onSeek: (to: number) => void }) {
+  const time = useVideoTime(videoRef, false, offset);
   return <Scrubber time={time} max={max} fmt={fmt} onActivity={onActivity} onSeek={onSeek} />;
 }
 
-export function TimeBarClock({ videoRef, fmt, length, seekable, growing }: { videoRef: RefObject<HTMLVideoElement | null>; fmt: (s: number) => string; length: number; seekable: boolean; growing: boolean }) {
-  const time = useVideoTime(videoRef, true);
+export function TimeBarClock({ videoRef, fmt, length, seekable, growing, offset = 0 }: { offset?: number; videoRef: RefObject<HTMLVideoElement | null>; fmt: (s: number) => string; length: number; seekable: boolean; growing: boolean }) {
+  const time = useVideoTime(videoRef, true, offset);
   return (
     <span className="clock">
       {fmt(time)}

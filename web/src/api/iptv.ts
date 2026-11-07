@@ -256,6 +256,10 @@ export interface PlayAnswer {
    * link (credentials inside: never log it). The one-connection guard can't be enforced for it.
    */
   direct?: boolean;
+  /** compat=web film/episode with AC-3/DTS audio: fMP4 + AAC from [startAt] seconds in (no byte ranges); [duration] is the title's length. */
+  remux?: boolean;
+  startAt?: number;
+  duration?: number | null;
 }
 
 type GroupsAnswer = Answer<{ groups: LiveGroup[]; defaultGroup?: string }>;
