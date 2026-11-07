@@ -1,6 +1,8 @@
 // #/games: Game Centre. Followed teams' games from today and recent days, each with its ways to watch. Spoiler-safe by
 // default: no scores, results, art or programme descriptions; scores only behind a two-press reveal (or when "Show scores
 // (spoilers)" is on in Settings). Logic in lib/gameCentre.ts.
+import { TeamRemind } from "../../components/TeamRemind";
+import { fixtureSides, type TeamSide } from "../../lib/teamReminders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, errorText } from "../../api/iptv";
 import { refreshFixtures, useFixtures } from "../../api/fixtures";
@@ -131,6 +133,7 @@ function GameCard({ g, now, pref, shown, scoreLine, gate, onPress, remId, remBus
         )}
         {w.phase === "upcoming" && (g.event || mid) && <RemindButton set={remId != null} busy={remBusy} title={g.title} onToggle={onRemind} />}
       </div>
+      {w.phase === "upcoming" && g.event?.fixture && <TeamRemind className="gc-team-remind" sides={fixtureSides(g.event.fixture, g.event.sportName ?? null)} />}
       {remMsg && (
         <p className="gc-note" role="status">
           {remMsg}
@@ -232,6 +235,9 @@ function LegacyGameCentre() {
 
 // ---------- fixture-first ----------
 
+const fxSides = (f: FxItem): TeamSide[] =>
+  f.away ? [{ teamId: f.homeId, name: f.home, short: f.homeShort, sport: f.sport, league: f.league }, { teamId: f.awayId, name: f.away, short: f.awayShort, sport: f.sport, league: f.league }] : [];
+
 function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded, remId, remBusy, remMsg, onRemind }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
   const w = waysForFixture(f, rec, now);
   const armed = gateArmed(gate, Date.now());
@@ -268,6 +274,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
         )}
         {w.phase === "upcoming" && <RemindButton set={remId != null} busy={remBusy} title={title} onToggle={onRemind} />}
       </div>
+      {w.phase === "upcoming" && <TeamRemind className="gc-team-remind" sides={fxSides(f)} />}
       {(msg || remMsg) && (
         <p className="gc-note" role="status">
           {remMsg ?? msg}

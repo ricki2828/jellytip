@@ -1,5 +1,7 @@
 // Match info: an ⓘ button for sport tiles and the player, and the modal it opens (header, where to watch, odds, line-ups,
 // form and head to head, Watch / Remind me / Record, "Show score"). Every field is optional. Contract: ~/ai/plans/jellytip-live-sport.md.
+import { TeamRemind } from "./TeamRemind";
+import { fixtureSides } from "../lib/teamReminders";
 import { useEffect, useState } from "react";
 import { addRecording } from "../api/iptv";
 import { addReminderFor } from "../api/reminderStore";
@@ -306,6 +308,7 @@ export function MatchInfoHost() {
             )}
 
             {msg && <p className="iptv-hint">{msg}</p>}
+            {f.status === "pre" && <TeamRemind sides={fixtureSides(f, f.leagueKey)} />}
             <div className="buttons">
               {best && f.status !== "post" && (
                 <button className="btn primary" data-nav data-autofocus onClick={() => (close(), go(livePath(best.id, best.name, { alternates: d.channels.slice(1).map((x) => ({ id: x.id, name: x.name })), matchId: f.id })))}>

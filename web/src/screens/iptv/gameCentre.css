@@ -27,3 +27,11 @@
 @keyframes gc-flash { 0%, 60% { box-shadow: inset 0 0 0 2px var(--jelly), 0 0 18px rgba(255, 255, 255, 0.25); } 100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); } }
 .gc-card.gc-flash { animation: gc-flash 2.5s ease-out; }
 @media (prefers-reduced-motion: reduce) { .gc-card.gc-flash { animation: none; box-shadow: inset 0 0 0 2px var(--jelly); } }
+
+.team-remind { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-top: 0.5rem; }
+.team-remind-on { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.85rem; opacity: 0.9; }
+.team-remind [aria-disabled="true"] { opacity: 0.6; }
+.gc-team-remind { padding: 0 0.25rem 0.5rem; }
+.rem-page .rem-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: 0.5rem; }
+.rem-page .rem-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+.rem-page .rem-item span small { display: block; opacity: 0.7; }

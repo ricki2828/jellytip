@@ -3,7 +3,7 @@
 export type LiveTabKey = "guide" | "channels" | "sport" | "fantasy" | "recordings";
 
 /** Routes that belong to the Live room. Old links (#/livetv, #/channels, ...) keep working and light Live. */
-export const LIVE_ROUTES: readonly string[] = ["live", "livetv", "channels", "upcoming", "games", "fantasy", "recordings"];
+export const LIVE_ROUTES: readonly string[] = ["live", "livetv", "channels", "upcoming", "games", "reminders", "fantasy", "recordings"];
 
 /** Routes reached from the avatar menu (the avatar shows as current). */
 const YOU_ROUTES = new Set(["settings", "taste", "iptv", "downloads", "discover", "manage"]);
@@ -59,6 +59,7 @@ export function liveTabFor(route: string): LiveTabKey | null {
       return "channels";
     case "upcoming":
     case "games":
+    case "reminders":
       return "sport";
     case "fantasy":
       return "fantasy";

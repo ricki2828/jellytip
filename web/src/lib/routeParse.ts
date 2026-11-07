@@ -66,6 +66,7 @@ export function parseHash(hash: string): Route {
     case "recordings":
     case "upcoming":
     case "games":
+    case "reminders":
     case "inbox":
     case "discover":
     case "manage":
