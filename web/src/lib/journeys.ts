@@ -217,6 +217,10 @@ export function directorQuery(personId: string): Record<string, string | number 
   return { PersonIds: personId, PersonTypes: "Director", Recursive: true, IncludeItemTypes: "Movie", SortBy: "PremiereDate,SortName", SortOrder: "Ascending", Limit: DIRECTOR_QUERY_LIMIT, Fields: "" };
 }
 
+/** A companion miss is "not found" only for an explicit 404 (the server knows no such collection). No status at all (offline,
+ *  timeout) or any other status is a load failure, which the journey screen offers to retry. */
+export const isNotFoundStatus = (status: number | undefined): boolean => status === 404;
+
 export async function buildJourney(id: string, deps: BuildDeps): Promise<BuildResult> {
   const p = parseJourneyId(id);
   if (!p) return { kind: "none" };

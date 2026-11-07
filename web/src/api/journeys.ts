@@ -2,14 +2,14 @@
 // (director; one bounded call, never one per person), companion carousels manifest (Letterboxd). Results are cached per user
 // for the session (errors are not); watched state is fetched fresh on each visit (one bounded Ids call).
 import { getItems, jf, uid, type Item } from "./jellyfin";
-import { collectionPage, manifest } from "./companion";
+import { collectionPageOrThrow, manifest } from "./companion";
 import { buildEntries, buildJourney, createJourneyCache, directorQuery, type BuildDeps, type BuildResult, type Entry, type JourneyDef } from "../lib/journeys";
 
 const cache = createJourneyCache();
 window.addEventListener("jellytip-session", () => cache.clear());
 
 const deps: BuildDeps = {
-  collectionPage: (tmdbId) => collectionPage(tmdbId),
+  collectionPage: (tmdbId) => collectionPageOrThrow(tmdbId),
   directorFilms: async (personId) => {
     const r = await getItems(directorQuery(personId));
     return { items: r.Items, total: r.TotalRecordCount };
