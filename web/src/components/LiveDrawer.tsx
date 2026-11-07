@@ -6,7 +6,7 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import type { LiveSource } from "./Companion/useLiveFeed";
 import { holdSecs } from "../lib/companion";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
-import { agoText, applyReveal, liveTabs, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
+import { agoText, applyReveal, liveTabs, scorecardBlocks, TIMELINE_POINTS, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
 import { blowoutLine, closerGame, deciderRows, favouriteSide, gameStateOf, recapPlays, resultLine, type CloserGame, type GameState, type Row } from "../lib/gameState";
 import { startsText } from "../lib/gameCentre";
 import { playersInGame } from "../lib/fantasyGame";
@@ -609,7 +609,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   useEffect(() => {
     if (!tabs.some(([k]) => k === tab)) setTab("stats");
   }, [tabs.map(([k]) => k).join(), tab]);
-  const newPlays = useNewKeys(d?.plays.map((p) => p.id ?? `${p.period}${p.clock}${p.text}`) ?? []);
+  const newPlays = useNewKeys([...(d?.plays.map((p) => p.id ?? `${p.period}${p.clock}${p.text}`) ?? []), ...(d?.timeline.map((t) => t.id) ?? [])]);
   const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
   // A big moment (already past the delay) flashes the strip in that team's colour; the first batch only sets the baseline.
@@ -716,7 +716,11 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
     () => (kind === "break" && showFantasy && revealFn(undefined) ? playersInGame(fantasy, fixture).flatMap((g) => g.players.flatMap((p) => (p.last ? [{ name: p.name, delta: p.last.delta }] : []))).slice(0, 4) : []),
     [kind, showFantasy, fantasy, fixture, revealFn],
   );
-  const blocks0 = useMemo(() => (d ? situationBlocks(d.layout, d.situation, { home, away }) : []), [d?.layout, d?.situation, home, away]);
+  const blocks0 = useMemo(() => {
+    if (!d) return [];
+    const card = d.layout === "cricket" ? scorecardBlocks(d.scorecard, { home, away }) : [];
+    return card.length ? card : situationBlocks(d.layout, d.situation, { home, away });
+  }, [d?.layout, d?.situation, d?.scorecard, home, away]);
   const blocks = useMemo(() => (decide.length ? withoutCovered(blocks0, decide) : blocks0), [blocks0, decide]);
   const teamColor = (t: "home" | "away" | null) => (t === "away" ? ac : t === "home" ? hc : "rgba(255,255,255,0.5)");
 
@@ -778,9 +782,16 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
                   )}
                   {tab === "plays" && (
                     <>
-                      {d.plays.length === 0 && <p className="iptv-hint">No plays yet.</p>}
+                      {d.plays.length === 0 && d.timeline.length === 0 && <p className="iptv-hint">No plays yet.</p>}
+                      {d.timeline.length > 0 && (
+                        <ul className="ld-plays">
+                          {[...d.timeline].reverse().map((t) => (
+                            <PlayRow key={t.id} when={t.clock ?? ""} text={t.score ? `${t.text} (${t.score.home}–${t.score.away})` : t.text} scoring={t.kind in TIMELINE_POINTS} delta={TIMELINE_POINTS[t.kind] ?? null} color={teamColor(t.team)} fresh={newPlays.has(t.id)} />
+                          ))}
+                        </ul>
+                      )}
                       <ul className="ld-plays">
-                        {d.plays.map((p, i) => {
+                        {(d.timeline.length > 0 ? [] : d.plays).map((p, i) => {
                           const k = p.id ?? `${p.period}${p.clock}${p.text}`;
                           return <PlayRow key={p.id ?? `${k}${i}`} when={[p.period, p.clock].filter(Boolean).join(" ")} text={p.text} scoring={p.scoring} delta={p.delta} color={teamColor(p.team)} fresh={newPlays.has(k)} />;
                         })}
