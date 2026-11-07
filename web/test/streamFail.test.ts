@@ -97,3 +97,38 @@ test("OutcomeSession: one failure per session (user_report always), success only
   assert.deepEqual(sent[2], { id: "a:1", kind: "live", ok: true, posSec: 61 });
   assert.equal(s.fail(null, "stall"), false);
 });
+
+import { alternateEpisode, findEpisodeCopy } from "../src/lib/streamCopies.ts";
+import { parseVodDetail } from "../src/lib/iptvVod.ts";
+test("findEpisodeCopy / alternateEpisode: same season+episode on the first copy that has not failed", async () => {
+  const seasons = [{ season: 1, episodes: [{ id: "b:e:9", episode: 1 }, { id: "b:e:10", episode: 2 }] }];
+  assert.equal(findEpisodeCopy({ season: 1, episode: 2 }, seasons)?.id, "b:e:10");
+  assert.equal(findEpisodeCopy({ season: 2, episode: 1 }, seasons), null);
+  const calls: string[] = [];
+  const detail = async (id: string) => { calls.push(id); return id === "c:s:2" ? { seasons } : { seasons: [{ season: 1, episodes: [{ id: "x:e:1", episode: 1 }] }] }; };
+  const bad = (id: string) => id === "d:s:3" || id === "x:e:1";
+  const copies = [{ id: "a:s:1", name: "Current" }, { id: "d:s:3", name: "Dinged" }, { id: "e:s:4", name: "No ep 2" }, { id: "c:s:2", name: "Good" }];
+  const r = await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", copies, detail, bad);
+  assert.equal(r?.copy.name, "Good");
+  assert.equal(r?.episode.id, "b:e:10");
+  assert.deepEqual(calls, ["e:s:4", "c:s:2"]); // never fetched the current copy or the dinged one
+  assert.equal(await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", [{ id: "d:s:3", name: "Dinged" }], detail, bad), null);
+});
+
+test("parseVodDetail: lastFail on the item, copies and episodes; list notes reach failOf by id", () => {
+  clearLocalFails();
+  const lfRaw = { at: NOW - 7200, reason: "refused", count7d: 2 };
+  const d = parseVodDetail({
+    id: "aaaaaaaa:s:1", title: "Show", kind: "series", lastFail: lfRaw,
+    copies: [{ id: "bbbbbbbb:s:2", providerTitle: "Other", quality: ["4k"], lastFail: { at: NOW - 100, reason: "stall", count7d: 4 } }, { id: "cccccccc:s:3" }, { id: "bad" }],
+    seasons: [{ season: 1, episodes: [{ id: "aaaaaaaa:e:5", episode: 1, lastFail: lfRaw }] }],
+  });
+  assert.equal(d?.lastFail?.reason, "refused");
+  assert.equal(d?.copies?.length, 2);
+  assert.equal(d?.copies?.[0].lastFail?.count7d, 4);
+  assert.equal(d?.copies?.[1].lastFail, null);
+  assert.equal(d?.seasons?.[0].episodes[0].lastFail?.at, NOW - 7200);
+  assert.equal(failNote(failOf("bbbbbbbb:s:2"), NOW), "Failed 4× this week"); // remembered by id for the player / pickers
+  assert.equal(failNote(failOf("cccccccc:s:3"), NOW), null);
+  clearLocalFails();
+});

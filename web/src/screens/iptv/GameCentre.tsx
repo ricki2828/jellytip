@@ -16,6 +16,9 @@ import { logoSrc } from "../../api/iptv";
 import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, todayMore, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type FxMore, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
 import { go, useRoute } from "../../lib/router";
+import { FailNote } from "../../components/FailNote";
+import { flashNote } from "../../components/TasteButtons";
+import { skippedNote } from "../../lib/streamFail";
 import "./iptv.css";
 import "./gameCentre.css";
 
@@ -238,7 +241,8 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
   const canRec = !!w.recordOn && !recorded && !busy;
-  const act = w.ways[0] ? () => go(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
+  const press = (path: string) => { if (w.skipped) flashNote(skippedNote(w.skipped)); go(path); }; // a channel that failed earlier is passed over, and we say so
+  const act = w.ways[0] ? () => press(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
   const best = bestChannel(f);
   return (
     <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
@@ -249,11 +253,11 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
         {best && <ChannelLogo logo={best.logo} name={best.name} />}
       </div>
       <Matchup title={title} home={f.away ? f.home : null} away={f.away || null} homeLogo={f.homeLogo} awayLogo={f.awayLogo} />
-      <p className="gc-note">{w.note}</p>
+      <p className="gc-note">{w.note}{best && <> <FailNote id={best.id} lastFail={best.lastFail} /></>}</p>
       {shown && w.phase !== "upcoming" && <p className="gc-score">{scoreLine === undefined ? "Fetching the score…" : scoreLine ?? "No score available"}</p>}
       <div className="gc-actions">
         {w.ways.map((x, i) => (
-          <button key={x.kind} className={`btn small${i === 0 ? " primary" : ""}`} data-nav onClick={() => go(x.path)}>
+          <button key={x.kind} className={`btn small${i === 0 ? " primary" : ""}`} data-nav onClick={() => press(x.path)}>
             {x.label}
           </button>
         ))}

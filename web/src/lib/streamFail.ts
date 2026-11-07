@@ -20,6 +20,13 @@ export const DING_S = 24 * 3600;
 /** A success counts (resets the server's streak) only after this much playback. */
 export const GOOD_PLAY_S = 60;
 
+/** Parse a payload's lastFail for an id and remember it (lists -> player). */
+export function parseFailFor(id: string, raw: unknown): LastFail | null {
+  const lf = parseLastFail(raw);
+  noteServerFail(id, lf);
+  return lf;
+}
+
 export function parseLastFail(raw: unknown): LastFail | null {
   const r = raw as Record<string, unknown> | null;
   if (!r || typeof r !== "object") return null;
@@ -44,10 +51,19 @@ export function rememberLocalFail(id: string, reason: FailReason, nowS: number):
 export function forgetLocalFail(id: string): void {
   if (local.delete(id)) changed();
 }
-export function clearLocalFails(): void { local.clear(); changed(); }
+export function clearLocalFails(): void { local.clear(); server.clear(); changed(); }
 
-/** The failure to show for an id: the newer of the payload's lastFail and this device's own report. */
-export function failOf(id: string, fromPayload?: LastFail | null): LastFail | null {
+// ---- what the latest payloads said about an id (so a list's note survives into the player, which only gets ids and names) ----
+const server = new Map<string, LastFail>();
+export function noteServerFail(id: string, lf: LastFail | null | undefined): void {
+  if (lf) server.set(id, lf);
+  else server.delete(id);
+}
+export function clearServerFails(): void { server.clear(); }
+
+/** The failure to show for an id: the newer of the payload's lastFail (given, else the last one a list reported) and this device's own report. */
+export function failOf(id: string, given?: LastFail | null): LastFail | null {
+  const fromPayload = given ?? server.get(id) ?? null;
   const l = local.get(id) ?? null;
   if (l && fromPayload) return l.at > fromPayload.at ? { ...l, count7d: Math.max(l.count7d, fromPayload.count7d) } : fromPayload;
   return l ?? fromPayload ?? null;

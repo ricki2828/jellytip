@@ -18,6 +18,9 @@ import { detailBadges } from "../../lib/techBadges";
 import { WaysToWatch } from "../../components/WaysToWatch";
 import { availabilityOf, type IptvCopy } from "../../lib/availability";
 import { vodPath } from "../../lib/iptvVod";
+import { flashNote } from "../../components/TasteButtons";
+import { failedLately, failOf, pickPlayable, skippedNote } from "../../lib/streamFail";
+import { alternateEpisode } from "../../lib/streamCopies";
 import "./iptv.css";
 
 const mins = (s?: number | null) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`) : null);
@@ -88,7 +91,23 @@ export function IptvDetails({ id }: { id: string }) {
   const formats = detailBadges(vodTech(d));
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
-  const playEp = (s: number, e: VodEpisode, from = resumeAt(e.progress)) => go(playPath({ series: d.id, episode: e.id }, `${d.title} · S${s} E${e.episode}`, from));
+  // Play skips a copy that failed in the last 24 h for one that did not (and says so); picking a copy by hand never does
+  const playEp = async (s: number, e: VodEpisode, from = resumeAt(e.progress)) => {
+    const title = `${d.title} · S${s} E${e.episode}`;
+    const nowS = Date.now() / 1000;
+    if (failedLately(failOf(e.id, e.lastFail), nowS)) {
+      const alt = await alternateEpisode({ season: s, episode: e.episode }, d.id, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })),
+        async (id) => (await vodItem(id)).data, (id, lf) => failedLately(failOf(id, lf), nowS));
+      if (alt) { flashNote(skippedNote(d.providerName ?? d.title)); return go(playPath({ series: alt.copy.id, episode: alt.episode.id }, title, from)); }
+    }
+    go(playPath({ series: d.id, episode: e.id }, title, from));
+  };
+  const playFilm = (from: number) => {
+    const first = { id: d.id, name: d.providerName ?? d.title, lastFail: d.lastFail };
+    const p = pickPlayable(first, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })), Date.now() / 1000);
+    if (p.skipped) flashNote(skippedNote(p.skipped));
+    go(playPath({ vod: p.chosen.id }, d.title, from));
+  };
   // Every copy the companion returned for this title (own + shared providers); this page's own id first
   const copies: IptvCopy[] = [
     { id: d.id, providerName: d.providerName, quality: d.quality, tech: d.tech },
@@ -147,11 +166,11 @@ export function IptvDetails({ id }: { id: string }) {
               )
             ) : (
               <>
-                <button className="btn primary" data-nav data-autofocus onClick={() => go(playPath({ vod: d.id }, d.title, resume))}>
+                <button className="btn primary" data-nav data-autofocus onClick={() => playFilm(resume)}>
                   {resume ? `Resume ${mins(resume)}` : "Play"}
                 </button>
                 {resume > 0 && (
-                  <button className="btn" data-nav onClick={() => go(playPath({ vod: d.id }, d.title))}>
+                  <button className="btn" data-nav onClick={() => playFilm(0)}>
                     From start
                   </button>
                 )}
@@ -194,7 +213,7 @@ export function IptvDetails({ id }: { id: string }) {
             if (!w.iptvId) return;
             if (w.iptvId !== d.id) go(vodPath(w.iptvId));
             else if (d.kind === "series") nextEp && playEp(nextEp.s, nextEp.e);
-            else go(playPath({ vod: d.id }, d.title, resume));
+            else playFilm(resume);
           }}
         />
       </div>

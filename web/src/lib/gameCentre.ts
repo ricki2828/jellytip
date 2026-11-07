@@ -2,7 +2,7 @@
 // Followed teams' games from the upcoming-sport feed and the person's recordings, each with its ways to watch, and a
 // title sanitiser so no score or result leaks through EPG strings. Scores are shown only after a reveal (or when the
 // person's "Show scores (spoilers)" setting is on).
-import { parseLastFail, type LastFail } from "./streamFail.ts";
+import { parseFailFor, pickPlayable, type LastFail } from "./streamFail.ts";
 import { targetPath, liveExtrasQuery, type LiveExtras } from "./iptvPlay.ts";
 import type { Fixture } from "./matchInfo.ts";
 import type { Rec } from "./recs.ts";
@@ -336,7 +336,7 @@ function fxChannel(raw: unknown): FxChannel | null {
     stop: n(c.stop),
     startOver: c.startOver === true,
     autoRecord: typeof c.autoRecord === "boolean" ? c.autoRecord : null,
-    lastFail: parseLastFail(c.lastFail),
+    lastFail: parseFailFor(id, c.lastFail),
   };
 }
 
@@ -477,14 +477,28 @@ const bucketRank = (c: FxChannel) => {
   const i = BUCKET.indexOf(c.quality?.bucket ?? "unknown");
   return i < 0 ? 4 : i;
 };
-/** The channel to open: the server's `best` when it is a solid link, else solid links first, then quality bucket, dormant last. */
-export function bestChannel(f: Pick<FxItem, "channels" | "best">): FxChannel | null {
+/** Channels in the order to try them: the server's `best` when it is a solid link, then solid links first, then quality bucket, dormant last. */
+function rankedChannels(f: Pick<FxItem, "channels" | "best">): FxChannel[] {
   const given = f.channels.find((c) => c.id === f.best);
-  if (given && isSolid(given)) return given;
   const ranked = f.channels
     .map((c, i) => ({ c, i }))
-    .sort((a, b) => Number(a.c.dormant) - Number(b.c.dormant) || Number(a.c.maybe) - Number(b.c.maybe) || bucketRank(a.c) - bucketRank(b.c) || a.i - b.i);
-  return ranked[0]?.c ?? null;
+    .sort((a, b) => Number(a.c.dormant) - Number(b.c.dormant) || Number(a.c.maybe) - Number(b.c.maybe) || bucketRank(a.c) - bucketRank(b.c) || a.i - b.i)
+    .map((x) => x.c);
+  return given && isSolid(given) ? [given, ...ranked.filter((c) => c !== given)] : ranked;
+}
+/**
+ * The channel to open, and the one passed over because it failed in the last 24 h (null = none skipped). A channel that failed lately
+ * gives way to the next one that did not; if every channel failed lately the first choice stays. Failures: the payload's `lastFail`
+ * plus this device's own reports.
+ */
+export function pickChannel(f: Pick<FxItem, "channels" | "best">, nowS: number = Date.now() / 1000): { channel: FxChannel | null; skipped: string | null } {
+  const order = rankedChannels(f);
+  if (!order.length) return { channel: null, skipped: null };
+  const p = pickPlayable(order[0], order, nowS);
+  return { channel: p.chosen, skipped: p.skipped };
+}
+export function bestChannel(f: Pick<FxItem, "channels" | "best">, nowS: number = Date.now() / 1000): FxChannel | null {
+  return pickChannel(f, nowS).channel;
 }
 
 export interface FxWays {
@@ -498,13 +512,15 @@ export interface FxWays {
   canRecord: boolean;
   /** The channel that button records (null when canRecord is false). */
   recordOn: FxChannel | null;
+  /** Name of the channel passed over because it failed earlier (the card says so when the person presses Play); null = none. */
+  skipped: string | null;
 }
 
 /** The ways to watch a fixture and the line that says so. Only what the API returned; every path is spoiler-free. */
 export function waysForFixture(f: FxItem, rec: Rec | null, now: number): FxWays {
   const phase: Phase = f.status === "in" ? "live" : f.status === "post" ? "finished" : "upcoming";
   const t = encodeURIComponent(fxTitle(f));
-  const best = bestChannel(f);
+  const { channel: best, skipped } = pickChannel(f, now);
   const solid = best ? isSolid(best) : false;
   const ways: Way[] = [];
   if (rec && rec.playable !== false && (rec.state === "done" || rec.state === "recording"))
@@ -522,7 +538,7 @@ export function waysForFixture(f: FxItem, rec: Rec | null, now: number): FxWays 
   else note = ways.length ? "Finished — watch from the start" : "Finished — no replay available";
   const auto = best?.autoRecord ?? f.autoRecord;
   const recordOn = phase !== "finished" && best && best.start != null && !best.dormant && !auto && f.recordingId == null && !rec ? best : null;
-  return { phase, ways, note, noStream, canRecord: !!recordOn, recordOn };
+  return { phase, ways, note, noStream, canRecord: !!recordOn, recordOn, skipped };
 }
 
 /** "Warriors 24–18 Panthers"-style line for a fixture score; null when none. Called only after the gate. */

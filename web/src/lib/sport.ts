@@ -2,7 +2,7 @@
 // §2-§4). Everything is optional: a server without them gives no badges and the old behaviour. Pure; tested in
 // web/test/sport.test.ts. The server decides the order; nothing here sorts.
 
-import { parseLastFail, type LastFail } from "./streamFail.ts";
+import { parseFailFor, type LastFail } from "./streamFail.ts";
 import { parseFixture, type Fixture } from "./matchInfo.ts";
 import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
 
@@ -96,7 +96,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     alternateChannels: (Array.isArray(ev?.alternateChannels) ? (ev!.alternateChannels as unknown[]) : []).flatMap((x) => {
       const c = obj(x);
       const id = str(c?.id);
-      return c && id ? [{ id, name: str(c.name) ?? "Another channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality), lastFail: parseLastFail(c.lastFail) }] : [];
+      return c && id ? [{ id, name: str(c.name) ?? "Another channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality), lastFail: parseFailFor(id, c.lastFail) }] : [];
     }),
     alternates: Array.isArray(ev?.alternates) ? (ev!.alternates as unknown[]).filter((x): x is string => typeof x === "string") : [],
     eventKey: str(ev?.key),

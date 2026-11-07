@@ -3156,3 +3156,7 @@
   background: var(--jelly);
   color: #fff;
 }
+
+/* failed-stream notes ("Failed 2 h ago") */
+.fail-note { color: #ffb86b; font-size: 0.85em; font-weight: 600; white-space: nowrap; }
+.btn .fail-note { margin-left: 6px; }
