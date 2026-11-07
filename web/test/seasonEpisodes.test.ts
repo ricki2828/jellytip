@@ -7,6 +7,7 @@ import {
   mergeEpisodes,
   mergeSeasons,
   iptvSeasonRows,
+  mergeSeasonBlocks,
   ownedVod,
   pickIptvSeries,
   presentEpisodes,
@@ -260,4 +261,25 @@ test("iptvSeasonRows: sorted, playable via IPTV, language flag", () => {
   assert.equal(reasonLabel(rows[0]!, now), "Available via IPTV");
   assert.equal(rows[0]!.iptv!.id, "p:e:21");
   assert.equal(rows[0]!.langUnknown, true);
+});
+
+test("pickIptvSeries: prefers confirmed English over langUnknown, never a foreign dub", () => {
+  const mk = (id: string, title: string, extra: Partial<VodItem> = {}): VodItem =>
+    ({ id, source: "iptv", kind: "series", tmdbId: 5, title, quality: [], tech: [], ...extra }) as VodItem;
+  const unk = mk("1:s:1", "Show (2023)", { langUnknown: true });
+  const en = mk("1:s:2", "Show (2023)_eng");
+  const de = mk("1:s:3", "Show (2023)_ger");
+  assert.equal(pickIptvSeries([de, unk, en], 5, [1])!.id, "1:s:2");
+  assert.equal(pickIptvSeries([de, unk], 5, [1])!.id, "1:s:1");
+  assert.equal(pickIptvSeries([de], 5, [1]), null);
+});
+
+test("mergeSeasonBlocks: duplicate season numbers merge, deduped by episode number", () => {
+  const out = mergeSeasonBlocks([
+    { season: 2, episodes: vodEps(2).slice(0, 5) },
+    { season: 2, episodes: vodEps(2).slice(3) },
+  ]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0]!.episodes.map((e) => e.episode), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(mergeSeasons([season(1)], [{ season: 2, episodes: vodEps(2).slice(0, 2) }, { season: 2, episodes: vodEps(2) }]).filter((s) => s.iptvOnly).length, 1);
 });

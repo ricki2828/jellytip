@@ -165,11 +165,36 @@ export function pickIptvSeries(
 ): VodItem | null {
   const want = Number(tmdbId);
   if (!isFinite(want) || want <= 0) return null;
-  return (
-    ownedVod(items, allowedProviderIds).find(
-      (i) => i.kind === "series" && i.tmdbId === want,
-    ) ?? null
+  const ok = ownedVod(items, allowedProviderIds).filter(
+    (i) => i.kind === "series" && i.tmdbId === want && !foreignCopy(i),
   );
+  // English-confirmed first (no langUnknown flag, or an explicit English token), then language-unknown
+  const rank = (i: VodItem) => (i.langUnknown ? 1 : 0);
+  return [...ok].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+}
+
+const LANG_TOKEN = /[_\-\s]\(?([a-z]{2,3})\)?$/i;
+const FOREIGN = new Set([
+  "ger", "de", "deu", "fra", "fre", "fr", "spa", "es", "ita", "it", "por", "pt", "rus", "ru", "tur", "tr", "ara", "ar",
+  "pol", "pl", "nld", "dut", "nl", "swe", "sv", "dan", "da", "nor", "no", "fin", "fi", "hin", "hi", "jpn", "ja", "kor", "ko", "chi", "zh",
+]);
+/** A copy whose provider title ends in a non-English language token ("Show (2023)_ger"): a confirmed foreign dub. */
+export function foreignCopy(i: { title: string }): boolean {
+  const m = LANG_TOKEN.exec(i.title.trim());
+  return !!m && FOREIGN.has(m[1]!.toLowerCase());
+}
+
+/** Several blocks for one season number (duplicate IPTV copies) become one, episodes deduped by number. */
+export function mergeSeasonBlocks(
+  blocks: { season: number; episodes: VodEpisode[] }[] | null | undefined,
+): { season: number; episodes: VodEpisode[] }[] {
+  const by = new Map<number, Map<number, VodEpisode>>();
+  for (const b of blocks ?? []) {
+    const m = by.get(b.season) ?? new Map<number, VodEpisode>();
+    for (const e of b.episodes ?? []) if (!m.has(e.episode)) m.set(e.episode, e);
+    by.set(b.season, m);
+  }
+  return [...by].map(([season, m]) => ({ season, episodes: [...m.values()] }));
 }
 
 /** A season chip: a Jellyfin season, or one only the person's IPTV has (key `iptv-season:N`, no Jellyfin item). */
@@ -199,7 +224,7 @@ export function mergeSeasons(
     name: s.Name,
     item: s,
   }));
-  for (const s of iptv ?? []) {
+  for (const s of mergeSeasonBlocks(iptv)) {
     if (!(s.season >= 1) || !s.episodes?.length || have.has(s.season)) continue;
     have.add(s.season);
     out.push({

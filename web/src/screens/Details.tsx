@@ -43,7 +43,7 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
-import { IPTV_SEASON_PREFIX, iptvSeasonRows, mergeEpisodes, mergeSeasons, presentEpisodes } from "../lib/seasonEpisodes";
+import { IPTV_SEASON_PREFIX, iptvSeasonRows, mergeEpisodes, mergeSeasonBlocks, mergeSeasons, presentEpisodes } from "../lib/seasonEpisodes";
 import { iptvSeriesFor } from "../api/seasonIptv";
 import type { VodDetail } from "../lib/iptvVod";
 import { targetPath } from "../lib/iptvPlay";
@@ -211,8 +211,9 @@ export function Details({ id }: { id: string }) {
   const eps = useMemo(() => (cur ? presentEpisodes(cur) : null), [cur]);
   const seasonNo = seasonList.find((s) => s.Id === season)?.IndexNumber;
   const rows = useMemo(() => {
-    if (iptvOnlyNo != null) return iptvSeasonRows(iptvSeries?.seasons?.find((s) => s.season === iptvOnlyNo)?.episodes ?? [], iptvSeries?.langUnknown);
-    return cur ? mergeEpisodes(cur, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null;
+    const blocks = mergeSeasonBlocks(iptvSeries?.seasons);
+    if (iptvOnlyNo != null) return iptvSeasonRows(blocks.find((s) => s.season === iptvOnlyNo)?.episodes ?? [], iptvSeries?.langUnknown);
+    return cur ? mergeEpisodes(cur, blocks.find((s) => s.season === seasonNo)?.episodes, new Date()) : null;
   }, [cur, iptvSeries, seasonNo, iptvOnlyNo]);
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
