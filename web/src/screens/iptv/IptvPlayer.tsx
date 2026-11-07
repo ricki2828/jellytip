@@ -38,6 +38,7 @@ import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../l
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
+import { switchExtras } from "../../lib/companion";
 import { alternatesAfterSwitch, initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import { hlsChoices, nativeChoices, nativeSubtitlesOff, makePick, matchPick, pickIptvTracks, type SubtitlePick, type TrackChoice, type TrackPick } from "../../lib/iptvTracks";
@@ -754,9 +755,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     const t = setInterval(() => {
       const n = Date.now() / 1000;
       setNowS(n);
-      if (n >= startsAt && !started.current) {
-        started.current = true;
-        flashNote("Started");
+      if (n >= startsAt) {
+        // kicked off: one last render flips the pre-game state, then no more per-second root renders
+        clearInterval(t);
+        if (!started.current) {
+          started.current = true;
+          flashNote("Started");
+        }
       }
     }, 1000);
     return () => clearInterval(t);
@@ -789,7 +794,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const revealClock = useRevealClock({ video: videoEl, channelKey: isLive ? target.channel ?? null : null, isLive, replay: !!extras?.replay });
   const panelAvail = live_ok && !!extras?.matchId;
   const liveNow = isLive && !extras?.replay;
-  const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal });
+  const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
   const blowout = feed.kind === "blowout";
   const openedBy = useRef<{ by: OpenReason; at: number; touched: boolean }>({ by: "user", at: 0, touched: false });
   const userClosedAt = useRef<number | null>(null);
@@ -811,7 +816,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const lastMomentN = useRef(0);
   useEffect(() => {
     if (!panelAvail || !liveNow) return;
-    const fresh = feed.momentN !== lastMomentN.current;
+    const fresh = feed.momentN > lastMomentN.current; // a feed reset drops the count to 0: that is not news
     lastMomentN.current = feed.momentN;
     const by = autoOpenDecision({ nowMs: Date.now(), replay: revealClock.replay, panelOpen: drawer, userClosedAtMs: userClosedAt.current, kind: feed.kind, freshMoment: fresh });
     if (by) openPanel(by);
@@ -842,7 +847,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   othersRef.current = { open: others, n: nAlt };
   const switchAlt = (i: number) => {
     const alts = extras!.alternates!;
-    go(livePath(alts[i].id, alts[i].name, { alternates: [...alts.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey, matchId: extras!.matchId, nospoil: extras!.nospoil }), true);
+    go(livePath(alts[i].id, alts[i].name, switchExtras(extras!, alts[i].id, { id: target.channel!, name: title })), true);
   };
   const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
@@ -1024,7 +1029,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         }
         // OK on the picture with the controls idle brings them up: focus moves to the Live button, then arrows navigate as usual
         if (keyState.current.avail && !inUse && e.key === "Enter" && !btn) {
-          const first = document.querySelector<HTMLElement>(".player-top [data-nav]");
+          const first = document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ?? document.querySelector<HTMLElement>(".player-top [data-nav]");
           if (first) { e.preventDefault(); e.stopPropagation(); first.focus(); navAt.current = Date.now(); return; }
         }
       }
@@ -1184,7 +1189,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
         {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={revealClock.calibrate} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
-          <button className="btn small" data-nav aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
+          <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
             Live
           </button>
         )}

@@ -57,6 +57,12 @@ export function calibratedDelay(latestEventSec: number | null, nowSec: number, l
   return d < -5 ? null : clampDelay(d);
 }
 
+/** The latest key-moment time seen so far (epoch s), ignoring times from the future: the only anchor "that just happened" may use. */
+export function noteEvent(latest: number | null, atSec: number, nowSec: number): number | null {
+  if (!isFinite(atSec) || atSec > nowSec + 5) return latest;
+  return latest == null || atSec > latest ? atSec : latest;
+}
+
 /** A channel is "pid:sid" (provider, stream); a bare key gets provider "_". */
 export function parseChannelKey(key: string): { pid: string; sid: string } {
   const i = key.indexOf(":");

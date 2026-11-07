@@ -52,6 +52,12 @@ export function autoCloseDecision(i: AutoCloseIn): boolean {
   return i.kind !== "break";
 }
 
+/** Index of the newest snapshot the delay has released (-1 if none). Snapshots are oldest first; each is asked with its own time. */
+export function newestRevealedIndex(snaps: readonly { updatedAt: number | null }[], reveal: (atSec?: number) => boolean): number {
+  for (let i = snaps.length - 1; i >= 0; i--) if (reveal(snaps[i].updatedAt ?? undefined)) return i;
+  return -1;
+}
+
 export const DROP_KEY = "jellytip.companionPanelMode";
 
 /** Which presentation to use: the phone in portrait is always the overlay (bottom sheet); otherwise what this device remembers; else squeeze. */
@@ -84,8 +90,9 @@ export interface PanelKeyIn {
  * first. With controls in use the arrows are focus navigation. Back always closes an open panel, controls or not. Null = not ours.
  */
 export function panelKeyAction(i: PanelKeyIn): PanelKeyAction | null {
-  if (!i.available) return null;
+  // Back closes an open panel whatever is playing (a recording's panel too)
   if ((i.key === "Escape" || i.key === "Backspace" || i.key === "GoBack") && i.panelOpen) return "close-panel";
+  if (!i.available) return null;
   if (i.controlsInUse) return null;
   switch (i.key) {
     case "ArrowUp":
@@ -160,4 +167,20 @@ export function clockRunning(kind: GameStateKind | null, prev: { clock: string |
   if (kind === "break" || kind === "final" || kind === "pre") return false;
   if (prev && cur.atMs - prev.atMs >= 10_000 && prev.clock === cur.clock && prev.period === cur.period) return false;
   return true;
+}
+
+/** Extras for the channel switched to: this one joins the alternates, and the match, replay and no-spoil state all carry over. */
+export function switchExtras(
+  extras: { alternates?: { id: string; name: string }[]; startsAt?: number | null; eventKey?: string | null; matchId?: string | null; replay?: boolean; nospoil?: boolean },
+  pickId: string,
+  current: { id: string; name: string },
+) {
+  return {
+    alternates: [...(extras.alternates ?? []).filter((c) => c.id !== pickId && c.id !== current.id), current],
+    startsAt: extras.startsAt,
+    eventKey: extras.eventKey,
+    matchId: extras.matchId,
+    replay: extras.replay,
+    nospoil: extras.nospoil,
+  };
 }

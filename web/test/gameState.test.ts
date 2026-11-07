@@ -307,7 +307,9 @@ test("a hidden score cannot drive the state (blowout masked to live)", () => {
   const d = D({ layout: "basketball", score: { home: 120, away: 70 }, period: "Q4", clock: "5:00", updatedAt: 1000 });
   assert.equal(classify({ sport: "nba", status: d.status, score: d.score, period: d.period, clock: d.clock }).kind, "blowout");
   const m = applyReveal(d, (at) => at !== 1000);
-  assert.equal(classify({ sport: "nba", status: m.status, score: m.score, period: m.period, clock: m.clock }).kind, "live");
+  // status is masked too (an unreleased "final" must not leak): with nothing revealed the state is the neutral "pre", never blowout or final
+  assert.equal(m.status, null);
+  assert.equal(classify({ sport: "nba", status: m.status, score: m.score, period: m.period, clock: m.clock }).kind, "pre");
 });
 
 test("tabsFor: no Odds tab with spoilers off", () => {

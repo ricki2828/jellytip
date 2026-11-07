@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, tickClock, clockRunning, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
+import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, newestRevealedIndex, switchExtras, tickClock, clockRunning, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
 
 const base = { nowMs: 1_000_000, replay: false, panelOpen: false, userClosedAtMs: null, kind: "live" as const, freshMoment: false };
 
@@ -64,7 +64,8 @@ test("keys: controls in use keep focus navigation, but Back still closes the pan
   assert.equal(k("ArrowRight", true, true), null);
   assert.equal(k("Escape", true, true), "close-panel");
   assert.equal(k("ArrowUp", false, false, false), null);
-  assert.equal(k("Escape", true, false, false), null);
+  assert.equal(k("Escape", true, false, false), "close-panel"); // Back closes an open panel on a recording too
+  assert.equal(k("ArrowUp", true, false, false), null);
 });
 test("stepTab clamps at the ends", () => {
   assert.equal(stepTab(0, 4, -1), 0);
@@ -82,7 +83,8 @@ test("scorebug: text only with a revealed score; visibility rules", () => {
   assert.equal(scorebugVisible({ ...v, pinned: true, panelOpen: true }), false);
   assert.equal(scorebugVisible({ ...v, changedAtMs: null }), false);
 });
-import { parseLive } from "../src/lib/liveStats.ts";
+import { applyReveal, parseLive } from "../src/lib/liveStats.ts";
+import { noteEvent } from "../src/lib/delayMath.ts";
 test("parseLive: a moment's wallclock wins over the first-observed time", () => {
   const d = parseLive({ moments: [{ at: 2000, wallclock: 1990, kind: "goal", label: "Goal", team: "home" }, { at: 2100, kind: "card", label: "Red" }] });
   assert.deepEqual(d?.moments.map((m) => m.at), [1990, 2100]);
@@ -111,4 +113,37 @@ test("clockRunning: stopped at breaks, final, pre, or an unchanged clock 10+ s a
   assert.equal(clockRunning("live", { clock: "5:00", period: "Q2", atMs: 85_000 }, cur), false);
   assert.equal(clockRunning("live", { clock: "5:15", period: "Q2", atMs: 85_000 }, cur), true);
   assert.equal(clockRunning("live", { clock: "5:00", period: "Q2", atMs: 95_000 }, cur), true);
+});
+
+// P1-1: the panel shows the newest RELEASED snapshot, not the newest arrival
+test("newestRevealedIndex: the newest snapshot the delay has released, -1 when none", () => {
+  const snaps = [{ updatedAt: 100 }, { updatedAt: 115 }, { updatedAt: 130 }];
+  assert.equal(newestRevealedIndex(snaps, (at) => at == null || at <= 120), 1);
+  assert.equal(newestRevealedIndex(snaps, (at) => at == null || at <= 99), -1);
+  assert.equal(newestRevealedIndex(snaps, () => true), 2);
+  assert.equal(newestRevealedIndex([], () => true), -1);
+});
+test("applyReveal: an unreleased snapshot leaks nothing, status included", () => {
+  const d = parseLive({ status: "post", score: { home: 3, away: 1 }, clock: "0:00", period: "Q4", updatedAt: 500, moments: [{ at: 490, kind: "goal", label: "Goal" }] })!;
+  const hidden = applyReveal(d, (at) => at == null || at < 400);
+  assert.equal(hidden.status, null);
+  assert.equal(hidden.score, null);
+  assert.equal(hidden.moments.length, 0);
+  assert.equal(applyReveal(d, () => true), d);
+});
+// P1-2: calibration anchors on key moments only
+test("noteEvent: only past moment times move the anchor", () => {
+  assert.equal(noteEvent(null, 1000, 1010), 1000);
+  assert.equal(noteEvent(1000, 990, 1010), 1000); // older never lowers it
+  assert.equal(noteEvent(1000, 1005, 1010), 1005);
+  assert.equal(noteEvent(1000, 1100, 1010), 1000); // a time from the future is ignored
+  assert.equal(noteEvent(null, NaN, 1010), null);
+});
+// P1-3: switching channel keeps replay / no-spoil / match
+test("switchExtras: replay, nospoil and match carry over; the channel left joins the alternates", () => {
+  const x = switchExtras({ alternates: [{ id: "p:1", name: "A" }, { id: "p:2", name: "B" }], matchId: "m1", replay: true, nospoil: true, eventKey: "e", startsAt: 5 }, "p:1", { id: "p:0", name: "Now" });
+  assert.equal(x.replay, true);
+  assert.equal(x.nospoil, true);
+  assert.equal(x.matchId, "m1");
+  assert.deepEqual(x.alternates, [{ id: "p:2", name: "B" }, { id: "p:0", name: "Now" }]);
 });

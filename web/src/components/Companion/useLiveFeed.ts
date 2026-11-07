@@ -5,12 +5,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { liveStats, matchDetailCached } from "../../api/matchInfo";
 import { applyReveal, mayShow, type LiveStats, type Moment } from "../../lib/liveStats";
 import { gameStateOf, type GameStateKind, type Sport } from "../../lib/gameState";
-import { clockRunning } from "../../lib/companion";
+import { clockRunning, newestRevealedIndex } from "../../lib/companion";
 import { announceFlips } from "../FlipAlerts";
 import type { Fixture } from "../../lib/matchInfo";
 
 const POLL_MS = 15_000;
-const KEEP = 8;
+/** Safety cap only: snapshots are normally dropped as soon as a newer one has been revealed (so retention follows delay + lag). */
+const KEEP = 80;
+const MOMENTS_KEEP = 300;
 
 export interface FeedView {
   score: { home: number; away: number } | null;
@@ -32,6 +34,10 @@ export interface FeedView {
 /** What the player's feed has fetched, for the embedded drawer to show instead of polling again. */
 export interface FeedSnapshot {
   raw: LiveStats | null;
+  /** The newest snapshot the spoiler delay has released, with every released moment: what the panel may show. Null until one is. */
+  shown: LiveStats | null;
+  /** Which raw snapshot `shown` was built from (so the feed can tell a new one). */
+  shownFrom?: LiveStats | null;
   fixture: Fixture | null;
   state: "loading" | "ok" | "missing" | "error";
 }
@@ -44,11 +50,11 @@ const EMPTY: FeedView = { score: null, clock: null, period: null, kind: null, ho
 const same = (a: FeedView, b: FeedView) =>
   a.score?.home === b.score?.home && a.score?.away === b.score?.away && a.clock === b.clock && a.period === b.period && a.kind === b.kind && a.home === b.home && a.away === b.away && a.changedAtMs === b.changedAtMs && a.momentN === b.momentN && a.shownAtMs === b.shownAtMs && a.clockRunning === b.clockRunning;
 
-export function useLiveFeed(o: { matchId: string | null | undefined; enabled: boolean; liveNow: boolean; spoilers: boolean; reveal: (atSec?: number) => boolean }): { view: FeedView; source: LiveSource } {
+export function useLiveFeed(o: { matchId: string | null | undefined; enabled: boolean; liveNow: boolean; spoilers: boolean; reveal: (atSec?: number) => boolean; noteMoment?: (atSec: number) => void }): { view: FeedView; source: LiveSource } {
   const { matchId, enabled, liveNow, spoilers } = o;
   const [view, setView] = useState<FeedView>(EMPTY);
   const store = useMemo(() => {
-    let snap: FeedSnapshot = { raw: null, fixture: null, state: "loading" };
+    let snap: FeedSnapshot = { raw: null, shown: null, fixture: null, state: "loading" };
     const subs = new Set<() => void>();
     const source: LiveSource = { get: () => snap, subscribe: (cb) => (subs.add(cb), () => void subs.delete(cb)) };
     const set = (p: Partial<FeedSnapshot>) => {
@@ -60,17 +66,20 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
   const flashedFor = useRef<string | null>(null);
   const revealRef = useRef(o.reveal);
   revealRef.current = o.reveal;
+  const noteRef = useRef(o.noteMoment);
+  noteRef.current = o.noteMoment;
   const allowed = enabled && !!matchId && mayShow(liveNow, spoilers);
 
   useEffect(() => {
     setView(EMPTY);
-    store.set({ raw: null, fixture: null, state: "loading" });
+    store.set({ raw: null, shown: null, fixture: null, state: "loading" });
     if (!allowed || !matchId) return;
     let alive = true;
     let timer: number | undefined;
     let waiting = false;
-    const snaps: LiveStats[] = [];
+    let snaps: LiveStats[] = [];
     let fixture: Fixture | null = null;
+    const momMap = new Map<string, Moment>();
     const seen = new Set<string>();
     let baseline = true;
     let momentN = 0;
@@ -78,6 +87,7 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
     let prevKey = "";
     let cur = EMPTY;
     let shownSnap: LiveStats | null = null;
+    let shownCount = -1;
     let shownAt: number | null = null;
     let prevClock: { clock: string | null; period: string | null; atMs: number } | null = null;
     let lastClock: { clock: string | null; period: string | null; atMs: number } | null = null;
@@ -85,26 +95,38 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
     const derive = () => {
       const reveal = revealRef.current;
       if (!reveal()) return; // replay / reveal off: nothing new is shown (what was shown stays until the player leaves replay)
-      const snap = [...snaps].reverse().find((s) => reveal(s.updatedAt ?? undefined));
-      if (!snap) return;
-      const d = applyReveal(snap, reveal);
+      // key moments: each released on its own time, whether or not a snapshot has been released yet
+      const released: Moment[] = [];
+      let fresh = false;
+      for (const [k, m] of momMap) {
+        if (!reveal(m.at)) continue;
+        released.push(m);
+        if (!seen.has(k)) {
+          seen.add(k);
+          if (!baseline) fresh = true; // moments already released when the player opened are the baseline, not news
+        }
+      }
+      released.sort((a, b) => a.at - b.at);
+      if (fresh) momentN++;
+      const idx = newestRevealedIndex(snaps, reveal);
+      if (idx < 0) return;
+      const snap = snaps[idx];
+      snaps = snaps.slice(idx); // older snapshots are superseded: retention follows how far the delay holds things back
+      const d0 = applyReveal(snap, reveal);
+      const d: LiveStats = { ...d0, moments: released };
       if (snap !== shownSnap) {
-        // this snapshot has just become revealed: the clock runs on from here
+        // this snapshot has just become revealed: the clock runs on from here, and a flip in it may toast
         shownSnap = snap;
         shownAt = Date.now();
         prevClock = lastClock;
         lastClock = { clock: d.clock, period: d.period, atMs: snap.updatedAt != null ? snap.updatedAt * 1000 : shownAt };
+        if (spoilers && matchId) announceFlips(matchId, d);
       }
-      // key moments across the snapshots kept, each past the delay on its own time
-      let fresh = false;
-      for (const s of snaps)
-        for (const m of s.moments as Moment[]) {
-          const k = `${m.at}|${m.kind}|${m.team}`;
-          if (seen.has(k) || !reveal(m.at)) continue;
-          seen.add(k);
-          if (!baseline) fresh = true;
-        }
-      if (fresh) momentN++;
+      const count = released.length * 1000 + (d.chat?.comments.length ?? 0);
+      if (snap !== store.source.get().shownFrom || count !== shownCount) {
+        shownCount = count;
+        store.set({ shown: d, shownFrom: snap });
+      }
       const names = { home: fixture?.home.short ?? fixture?.home.name ?? "HOME", away: fixture?.away.short ?? fixture?.away.name ?? "AWAY" };
       const key = `${d.score?.home}-${d.score?.away}|${d.period}`;
       if (key !== prevKey) {
@@ -130,12 +152,17 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
         if (store.source.get().state !== "ok") store.set({ state: "error" }); // keep what we have when a refresh fails
       } else {
         store.set({ raw: a, state: "ok" });
-        // Odds flips toast only with spoilers on, and only as far as the delay allows (a flip seen twice toasts once)
-        if (spoilers) announceFlips(matchId, applyReveal(a, revealRef.current));
       }
       if (a && a !== "missing") {
         snaps.push(a);
         if (snaps.length > KEEP) snaps.shift();
+        for (const m of a.moments) {
+          const k = `${m.at}|${m.kind}|${m.team}`;
+          if (momMap.has(k)) continue;
+          momMap.set(k, m);
+          noteRef.current?.(m.at); // the only thing "that just happened" calibrates against
+        }
+        if (momMap.size > MOMENTS_KEEP) for (const k of [...momMap.keys()].slice(0, momMap.size - MOMENTS_KEEP)) momMap.delete(k);
         derive();
         // the first batch only sets the baseline: moments already on it are not "new"
         if (baseline) {

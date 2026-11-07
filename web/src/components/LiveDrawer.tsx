@@ -19,7 +19,7 @@ import { ThinPill, WinnerList } from "./WinnerList";
 import { usePrefs } from "../api/me";
 import "../fonts";
 import { logoSrc } from "../api/iptv";
-import { FantasyTab } from "./Fantasy";
+import { FantasyTab, useRevealedFantasy } from "./Fantasy";
 import { FantasyYourPlayers } from "./FantasyYourPlayers";
 import { useFantasy } from "../api/fantasy";
 import { isNfl } from "../lib/fantasy";
@@ -31,7 +31,7 @@ import "./LiveDrawerState.css";
 type Tab = "stats" | "plays" | "odds" | "chat" | "fantasy";
 const REFRESH_MS = 15_000;
 const NOOP_SUB = () => () => undefined;
-const NOOP_GET = () => ({ raw: null, fixture: null, state: "loading" as const });
+const NOOP_GET = () => ({ raw: null, shown: null, fixture: null, state: "loading" as const });
 const OUT_MS = 200;
 const FLASH_MS = 3200;
 
@@ -581,7 +581,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   const [full, setFull] = useState(false);
   const allowed = mayShow(liveNow, spoilers);
   // Fantasy: only for an NFL game with leagues from either source
-  const fantasy = useFantasy(liveNow);
+  const fantasy = useRevealedFantasy(useFantasy(liveNow), revealFn);
   const showFantasy = !!fantasy && fantasy.leagues.length > 0 && !!fixture && isNfl(fixture.leagueKey);
   // Slides out for 200 ms before it goes
   const [leaving, setLeaving] = useState(false);
@@ -636,8 +636,9 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
     if (!source) return;
     setNow(Date.now() / 1000);
     if (ext.fixture) setFixture(ext.fixture);
-    if (ext.raw) setRaw(ext.raw);
-    setState(ext.state);
+    // What the spoiler delay has released (the newest released snapshot plus every released moment), never the newest raw answer
+    if (ext.shown) setRaw(ext.shown);
+    setState(ext.state === "ok" && !ext.shown ? "loading" : ext.state);
   }, [source, ext]);
   useEffect(() => {
     if (!allowed || source) return;

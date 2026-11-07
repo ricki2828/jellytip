@@ -506,7 +506,7 @@ export function applyReveal(d: LiveStats, reveal: Reveal): LiveStats {
   if (snap && plays && moments.length === d.moments.length && (!d.chat || comments!.length === d.chat.comments.length)) return d;
   return {
     ...d,
-    ...(snap ? {} : { score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
+    ...(snap ? {} : { status: null, score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
     plays: plays ? d.plays : [],
     moments,
     chat: d.chat && comments ? { ...d.chat, comments } : d.chat,

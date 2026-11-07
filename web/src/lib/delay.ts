@@ -2,13 +2,15 @@
 // live information (LiveDrawer, FlipAlerts, FantasyAlerts, FantasyChip). Maths and policy live in delayMath.ts (pure, tested).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChannelDelay, putChannelDelay, usePrefs } from "../api/me";
-import { calibratedDelay, clampDelay, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
+import { calibratedDelay, clampDelay, noteEvent, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
 
 export * from "./delayMath.ts";
 
 export interface RevealClock {
-  /** Whether an event at `atSec` (epoch seconds) may be shown now. No argument: is live reveal on at all (false in replay). */
+  /** Whether an event at `atSec` (epoch seconds) may be shown now. No argument: is live reveal on at all (false in replay). Asking never moves the calibration anchor. */
   reveal: (atSec?: number) => boolean;
+  /** A key moment (goal, try, wicket...) at `atSec` exists: the only thing "that just happened" calibrates against. */
+  noteMoment: (atSec: number) => void;
   delaySec: number;
   replay: boolean;
   /** "That just happened": sets the delay so the latest event this clock was asked about is revealed right now. */
@@ -96,9 +98,12 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
 
   const reveal = useCallback((atSec?: number) => {
     const rp = inReplay();
-    if (atSec != null && isFinite(atSec) && (ref.current.latest == null || atSec > ref.current.latest) && atSec <= Date.now() / 1000 + 5) ref.current.latest = atSec;
     return isRevealed(atSec, Date.now() / 1000, ref.current.delaySec, lag(), rp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const noteMoment = useCallback((atSec: number) => {
+    ref.current.latest = noteEvent(ref.current.latest, atSec, Date.now() / 1000);
   }, []);
 
   const calibrate = useCallback(() => {
@@ -113,5 +118,5 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelKey]);
 
-  return { reveal, delaySec, replay, calibrate };
+  return { reveal, noteMoment, delaySec, replay, calibrate };
 }

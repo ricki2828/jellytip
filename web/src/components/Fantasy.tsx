@@ -24,14 +24,55 @@ export function useFixture(matchId: string | null | undefined): Fixture | null {
   return f;
 }
 
+/**
+ * Fantasy points are as late as the picture too: each answer is released on its own time (the server's update time, else when it
+ * arrived), and until the newest is released the last released one stays. Nothing in replay. Without `reveal` the live answer is as is.
+ */
+export function useRevealedFantasy(live: FantasyLive | null, reveal?: (atSec?: number) => boolean): FantasyLive | null {
+  const [shown, setShown] = useState<FantasyLive | null>(null);
+  const queue = useRef<{ live: FantasyLive; at: number }[]>([]);
+  const last = useRef<FantasyLive | null>(null);
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  useEffect(() => {
+    if (!live) {
+      queue.current = [];
+      last.current = null;
+      setShown(null);
+      return;
+    }
+    if (live !== last.current) {
+      last.current = live;
+      queue.current = [...queue.current, { live, at: live.updatedAt ?? Date.now() / 1000 }].slice(-8);
+    }
+    const step = () => {
+      const r = revealRef.current;
+      if (!r) return setShown(live);
+      if (!r()) return setShown(null); // replay
+      const q = queue.current;
+      for (let i = q.length - 1; i >= 0; i--) {
+        if (r(q[i].at)) {
+          queue.current = q.slice(i);
+          setShown((p) => (p === q[i].live ? p : q[i].live));
+          return;
+        }
+      }
+    };
+    step();
+    const t = window.setInterval(step, 1000);
+    return () => window.clearInterval(t);
+  }, [live]);
+  return shown;
+}
+
 /** "🏈 CCP 87.4 – 79.2": my matchups while an NFL game plays. */
 export function FantasyChip({ matchId, active, reveal, replay = false }: { matchId: string | null | undefined; active: boolean; reveal?: (atSec?: number) => boolean; replay?: boolean }) {
   const fixture = useFixture(active ? matchId : null);
   const nfl = !!fixture && isNfl(fixture.leagueKey);
-  const live = useFantasy(active && nfl);
+  const live = useRevealedFantasy(useFantasy(active && nfl), reveal);
   const text = live ? chipText(live) : null;
-  // Scores are a spoiler: hidden in replay, and until the spoiler delay allows live information at all
-  if (!text || replay || (reveal && !reveal())) return null;
+  // Scores are a spoiler: hidden in replay, and until the spoiler delay releases the answer behind them
+  if (!text || replay) return null;
   return (
     <span className="fantasy-chip" title="Your fantasy matchups">
       {text}
