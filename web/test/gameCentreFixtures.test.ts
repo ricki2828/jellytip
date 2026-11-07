@@ -149,3 +149,9 @@ test("legacy flag", () => {
   assert.equal(legacyForced(() => null), false);
   assert.equal(legacyForced(() => "0"), false);
 });
+
+test("parser: team logos carried from home/away objects", () => {
+  const [a] = parse(fx("l", { home: { name: "Warriors", logo: "https://a.espncdn.com/x.png" }, away: "Magic" }));
+  assert.equal(a.homeLogo, "https://a.espncdn.com/x.png");
+  assert.equal(a.awayLogo, null);
+});

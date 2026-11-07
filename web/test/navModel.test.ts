@@ -35,3 +35,11 @@ test("other routes", () => {
   assert.equal(navActive("item"), null);
   assert.equal(navActive("home"), "home");
 });
+
+test("every Live sub-route is a root (no Back arrow)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/lib/router.ts", import.meta.url), "utf8");
+  const roots = src.match(/const ROOTS = new Set\(\[([^\]]*)\]/)?.[1] ?? "";
+  for (const r of LIVE_ROUTES) assert.ok(roots.includes(`"${r}"`), r);
+  assert.equal(liveTabFor("games"), "sport");
+});

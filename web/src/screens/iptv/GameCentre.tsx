@@ -8,24 +8,72 @@ import { matchDetail } from "../../api/matchInfo";
 import { usePrefs } from "../../api/me";
 import { refreshRecs, useRecs } from "../../api/recStore";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
-import { BackArrow } from "../../components/BackArrow";
-import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
+import { openMatchInfo } from "../../components/MatchInfo";
+import { logoSrc } from "../../api/iptv";
+import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
 import { go } from "../../lib/router";
 import "./iptv.css";
 import "./gameCentre.css";
 
+
+/** Crest hosts the page's CSP allows (public CDNs); anything else must be a companion-proxied path. */
+const CDN = /^https:\/\/(a\.espncdn\.com|[a-z0-9-]+\.thesportsdb\.com)\//i;
+const crestSrc = (u: string | null | undefined, size: 96 | 192): string | null => (u ? (CDN.test(u) ? u : logoSrc(u, size)) : null);
+const initials = (name: string): string => {
+  const w = name.replace(/[^\p{L}\p{N}\s]/gu, "").split(/\s+/).filter(Boolean);
+  return (w.length > 1 ? w.slice(0, 3).map((x) => x[0]).join("") : (w[0] ?? "?").slice(0, 3)).toUpperCase();
+};
+
+function Crest({ logo, name }: { logo: string | null | undefined; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? null : crestSrc(logo, 96);
+  return src ? <img className="gc-crest" src={src} width={44} height={44} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} /> : <span className="gc-crest blank" aria-hidden>{initials(name)}</span>;
+}
+
+function ChannelLogo({ logo, name }: { logo: string | null | undefined; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? null : logoSrc(logo, 96);
+  return src ? <img className="gc-chan" src={src} width={36} height={20} alt="" title={name} loading="lazy" decoding="async" onError={() => setFailed(true)} /> : null;
+}
+
+/** Two crests + names; a sideless event shows its title alone. */
+function Matchup({ title, home, away, homeLogo, awayLogo }: { title: string; home: string | null; away: string | null; homeLogo?: string | null; awayLogo?: string | null }) {
+  if (!home || !away) return <h3 className="gc-title">{title}</h3>;
+  return (
+    <h3 className="gc-title gc-vs" aria-label={title}>
+      <span className="gc-side"><Crest logo={homeLogo} name={home} /><span className="gc-name">{home}</span></span>
+      <span className="gc-v" aria-hidden>v</span>
+      <span className="gc-side"><Crest logo={awayLogo} name={away} /><span className="gc-name">{away}</span></span>
+    </h3>
+  );
+}
+
+/** The whole card is the primary action: Enter / click. Inner buttons keep their own handlers and never bubble here. */
+const cardProps = (act: (() => void) | null) => ({
+  "data-nav": true as const,
+  tabIndex: 0,
+  role: act ? ("link" as const) : undefined,
+  onClick: act ? (e: React.MouseEvent) => { if (!(e.target as HTMLElement).closest("button, a")) act(); } : undefined,
+  onKeyDown: act ? (e: React.KeyboardEvent) => { if (e.target === e.currentTarget && e.key === "Enter") { e.preventDefault(); act(); } } : undefined,
+});
+
 function GameCard({ g, now, pref, shown, scoreLine, gate, onPress }: { g: Game; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void }) {
   const w = waysFor(g, now);
   const armed = gateArmed(gate, Date.now());
+  const fx = g.fixture && g.fixture.kind === "match" ? g.fixture : null;
+  const mid = g.fixture?.id ?? null;
+  const act = w.ways[0] ? () => go(w.ways[0].path) : mid ? () => openMatchInfo(mid) : null;
+  const chan = g.event?.channels[0];
   return (
-    <li className={`gc-card ${w.phase}`}>
+    <li className={`gc-card ${w.phase}${act ? " tap" : ""}`} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {g.league && <span className="gc-league">{g.league}</span>}
         {g.channel && <span className="gc-league">{g.channel}</span>}
+        {chan && <ChannelLogo logo={chan.logo} name={chan.name} />}
       </div>
-      <h3 className="gc-title">{g.title}</h3>
+      <Matchup title={g.title} home={fx?.home.name ?? null} away={fx?.away.name ?? null} homeLogo={fx?.home.logo} awayLogo={fx?.away.logo} />
       <p className="gc-note">{w.note}</p>
       {shown && w.phase !== "upcoming" && <p className="gc-score">{scoreLine === undefined ? "Fetching the score…" : scoreLine ?? "No score available"}</p>}
       <div className="gc-actions">
@@ -98,7 +146,6 @@ function LegacyGameCentre() {
   return (
     <div className="iptv-page gc-page">
       <div className="page-head">
-        <BackArrow />
         <h1 className="page-title">Game Centre</h1>
       </div>
       <p className="iptv-hint">{pref ? "Scores are on (Settings → Live sport)." : "Spoiler-safe: no scores or results on this screen."}</p>
@@ -122,18 +169,20 @@ function LegacyGameCentre() {
 
 function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean }) {
   const w = waysForFixture(f, rec, now);
-  // A card with no button would be skipped by D-pad navigation: let the card itself take focus
-  const idle = !w.ways.length && !(w.recordOn && !recorded) && (pref || w.phase === "upcoming");
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
+  const canRec = !!w.recordOn && !recorded && !busy;
+  const act = w.ways[0] ? () => go(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
+  const best = bestChannel(f);
   return (
-    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}`} data-nav={idle || undefined} tabIndex={idle ? 0 : undefined}>
+    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
         {f.stage && <span className="gc-league">{f.stage}</span>}
+        {best && <ChannelLogo logo={best.logo} name={best.name} />}
       </div>
-      <h3 className="gc-title">{title}</h3>
+      <Matchup title={title} home={f.away ? f.home : null} away={f.away || null} homeLogo={f.homeLogo} awayLogo={f.awayLogo} />
       <p className="gc-note">{w.note}</p>
       {shown && w.phase !== "upcoming" && <p className="gc-score">{scoreLine === undefined ? "Fetching the score…" : scoreLine ?? "No score available"}</p>}
       <div className="gc-actions">
@@ -289,7 +338,6 @@ export function GameCentre() {
   return (
     <div className="iptv-page gc-page">
       <div className="page-head">
-        <BackArrow />
         <h1 className="page-title">Game Centre</h1>
       </div>
       {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} />}
