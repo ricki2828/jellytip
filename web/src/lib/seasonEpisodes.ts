@@ -20,6 +20,8 @@ export interface EpRow {
   airDate?: string;
   /** A missing episode this person's IPTV has (their own / shared provider). */
   iptv?: { id: string; title?: string | null };
+  /** The IPTV copy's audio language is not confirmed (the companion's `langUnknown`). */
+  langUnknown?: boolean;
 }
 
 const isVirtual = (e: Item) => e.LocationType === "Virtual";
@@ -168,4 +170,62 @@ export function pickIptvSeries(
       (i) => i.kind === "series" && i.tmdbId === want,
     ) ?? null
   );
+}
+
+/** A season chip: a Jellyfin season, or one only the person's IPTV has (key `iptv-season:N`, no Jellyfin item). */
+export interface SeasonEntry {
+  key: string;
+  number: number;
+  name: string;
+  item?: Item;
+  iptvOnly?: boolean;
+}
+
+export const IPTV_SEASON_PREFIX = "iptv-season:";
+export const iptvSeasonKey = (n: number) => `${IPTV_SEASON_PREFIX}${n}`;
+
+/**
+ * Library seasons plus every IPTV season (number >= 1, at least one episode) the library lacks, in season-number
+ * order. Specials (season 0) are never added from IPTV.
+ */
+export function mergeSeasons(
+  jf: Item[],
+  iptv: { season: number; episodes: VodEpisode[] }[] | null | undefined,
+): SeasonEntry[] {
+  const have = new Set(jf.map((s) => s.IndexNumber).filter((n) => n != null));
+  const out: SeasonEntry[] = jf.map((s) => ({
+    key: s.Id,
+    number: s.IndexNumber ?? 0,
+    name: s.Name,
+    item: s,
+  }));
+  for (const s of iptv ?? []) {
+    if (!(s.season >= 1) || !s.episodes?.length || have.has(s.season)) continue;
+    have.add(s.season);
+    out.push({
+      key: iptvSeasonKey(s.season),
+      number: s.season,
+      name: `Season ${s.season} \u00b7 via IPTV`,
+      iptvOnly: true,
+    });
+  }
+  // stable: Jellyfin order is kept among library seasons (specials first)
+  return out
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => a.e.number - b.e.number || a.i - b.i)
+    .map((x) => x.e);
+}
+
+/** Rows for an IPTV-only season: each episode is a playable-via-IPTV row. */
+export function iptvSeasonRows(episodes: VodEpisode[], langUnknown?: boolean): EpRow[] {
+  return [...episodes]
+    .sort((a, b) => a.episode - b.episode)
+    .map((v) => ({
+      key: `iptv:${v.id}`,
+      status: "missing" as const,
+      index: v.episode,
+      name: v.title || `Episode ${v.episode}`,
+      iptv: { id: v.id, title: v.title },
+      ...(langUnknown ? { langUnknown: true } : {}),
+    }));
 }

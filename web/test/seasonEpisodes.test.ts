@@ -5,6 +5,8 @@ import {
   airsLabel,
   episodeStatus,
   mergeEpisodes,
+  mergeSeasons,
+  iptvSeasonRows,
   ownedVod,
   pickIptvSeries,
   presentEpisodes,
@@ -227,4 +229,35 @@ test("pick series: same TMDB id, series kind, owned provider; otherwise null", (
   assert.equal(pickIptvSeries(items, "10", [4]), null);
   assert.equal(pickIptvSeries(items, undefined, [3]), null);
   assert.equal(pickIptvSeries(items, "abc", [3]), null);
+});
+
+const season = (n: number): Item => ({ Id: `s${n}`, Name: `Season ${n}`, IndexNumber: n, Type: "Season" }) as Item;
+const vodEps = (n: number): VodEpisode[] =>
+  Array.from({ length: 8 }, (_, i) => ({ id: `p:e:${n}${i + 1}`, episodeId: `${n}${i + 1}`, episode: i + 1, title: `T${i + 1}` }));
+
+test("mergeSeasons: library {1,3} + IPTV {1,2,3} gives 1, 2 (IPTV), 3", () => {
+  const out = mergeSeasons([season(1), season(3)], [
+    { season: 1, episodes: vodEps(1) },
+    { season: 2, episodes: vodEps(2) },
+    { season: 3, episodes: vodEps(3) },
+  ]);
+  assert.deepEqual(out.map((s) => s.number), [1, 2, 3]);
+  assert.deepEqual(out.map((s) => !!s.iptvOnly), [false, true, false]);
+  assert.equal(out[1]!.name, "Season 2 · via IPTV");
+  assert.equal(out[1]!.key, "iptv-season:2");
+});
+
+test("mergeSeasons: no IPTV, empty/special IPTV seasons add nothing; specials stay first", () => {
+  const sp = { ...season(0), Name: "Specials" };
+  assert.equal(mergeSeasons([season(1)], null).length, 1);
+  assert.equal(mergeSeasons([season(1)], [{ season: 0, episodes: vodEps(0) }, { season: 2, episodes: [] }]).length, 1);
+  assert.deepEqual(mergeSeasons([season(1), sp], []).map((s) => s.number), [0, 1]);
+});
+
+test("iptvSeasonRows: sorted, playable via IPTV, language flag", () => {
+  const rows = iptvSeasonRows([...vodEps(2)].reverse(), true);
+  assert.deepEqual(rows.map((r) => r.index), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(reasonLabel(rows[0]!, now), "Available via IPTV");
+  assert.equal(rows[0]!.iptv!.id, "p:e:21");
+  assert.equal(rows[0]!.langUnknown, true);
 });

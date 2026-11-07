@@ -1,4 +1,5 @@
 // A season-list row for an episode with no file: "Not in your library", "Airs 12 Dec" or "Available via IPTV".
+import { LANGUAGE_UNCONFIRMED } from "../lib/availability";
 import { reasonDetail, reasonLabel, type EpRow } from "../lib/seasonEpisodes";
 import "./EpisodePlaceholder.css";
 
@@ -23,6 +24,7 @@ export function EpisodePlaceholder({
       {reasonDetail(row, now) && (
         <span className="ep-ph-why dim">{reasonDetail(row, now)}</span>
       )}
+      {row.langUnknown && <span className="ep-ph-why dim">{LANGUAGE_UNCONFIRMED}</span>}
       {row.iptv && onIptv && (
         <button className="btn" data-nav onClick={() => onIptv(row.iptv!.id)}>
           Play via IPTV

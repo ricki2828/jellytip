@@ -43,7 +43,7 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
-import { mergeEpisodes, presentEpisodes } from "../lib/seasonEpisodes";
+import { IPTV_SEASON_PREFIX, iptvSeasonRows, mergeEpisodes, mergeSeasons, presentEpisodes } from "../lib/seasonEpisodes";
 import { iptvSeriesFor } from "../api/seasonIptv";
 import type { VodDetail } from "../lib/iptvVod";
 import { targetPath } from "../lib/iptvPlay";
@@ -185,6 +185,7 @@ export function Details({ id }: { id: string }) {
     if (!item || item.Type !== "Series" || !season) return;
     let alive = true;
     setAllEps(null);
+    if (season.startsWith(IPTV_SEASON_PREFIX)) return;
     episodesComplete(item.Id, season).then((e) => alive && setAllEps({ season, items: e }));
     return () => {
       alive = false;
@@ -204,13 +205,15 @@ export function Details({ id }: { id: string }) {
   }, [showTrailer]);
 
   // Files only for play / download / Resume; the list below also shows placeholders and IPTV-only episodes
+  const seasonEntries = useMemo(() => mergeSeasons(seasonList, iptvSeries?.seasons), [seasonList, iptvSeries]);
+  const iptvOnlyNo = season?.startsWith(IPTV_SEASON_PREFIX) ? Number(season.slice(IPTV_SEASON_PREFIX.length)) : null;
   const cur = allEps && allEps.season === season ? allEps.items : null;
   const eps = useMemo(() => (cur ? presentEpisodes(cur) : null), [cur]);
   const seasonNo = seasonList.find((s) => s.Id === season)?.IndexNumber;
-  const rows = useMemo(
-    () => (cur ? mergeEpisodes(cur, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null),
-    [cur, iptvSeries, seasonNo],
-  );
+  const rows = useMemo(() => {
+    if (iptvOnlyNo != null) return iptvSeasonRows(iptvSeries?.seasons?.find((s) => s.season === iptvOnlyNo)?.episodes ?? [], iptvSeries?.langUnknown);
+    return cur ? mergeEpisodes(cur, iptvSeries?.seasons?.find((s) => s.season === seasonNo)?.episodes, new Date()) : null;
+  }, [cur, iptvSeries, seasonNo, iptvOnlyNo]);
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
   const playIptv = (episodeId: string) =>
@@ -434,18 +437,18 @@ export function Details({ id }: { id: string }) {
             }}
           />
         )}
-        {item.Type === "Series" && seasonList.length > 0 && (
+        {item.Type === "Series" && seasonEntries.length > 0 && (
           <section className="row">
             <div className="chips">
-              {seasonList.map((s) => (
-                <button key={s.Id} data-nav className={`chip${s.Id === season ? " on" : ""}`} onClick={() => setSeason(s.Id)}>
-                  {s.Name}
+              {seasonEntries.map((s) => (
+                <button key={s.key} data-nav className={`chip${s.key === season ? " on" : ""}`} onClick={() => setSeason(s.key)}>
+                  {s.name}
                 </button>
               ))}
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
-              {canSeasons && season && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
+              {canSeasons && season && iptvOnlyNo == null && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
               {canSeasons && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
-              {season && (
+              {season && iptvOnlyNo == null && (
                 <DeleteFromServer
                   id={season}
                   className="chip danger"
