@@ -868,15 +868,6 @@
   line-height: 16px;
   text-align: center;
 }
-.nav-recs {
-  position: relative;
-}
-.nav-recs .nav-badge {
-  position: absolute;
-  top: -2px;
-  right: -4px;
-  margin: 0;
-}
 .livetv-toast button {
   margin-left: 12px;
   border: 0;
