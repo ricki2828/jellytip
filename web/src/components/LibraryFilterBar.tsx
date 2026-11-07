@@ -1,6 +1,7 @@
 // Sort row + active-filter chips + the filter sheet (bottom sheet on phones, centred panel on desktop) for the All movies / All shows grid.
 // Facets come from Jellyfin's /Items/Filters; studios and people are searched live (/Studios, /Persons).
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { jf, qs, uid } from "../api/jellyfin";
 import {
   activeChips, clearAll, DECADES, dirWords, effectiveDir, facetsQuery, flipDir, isFiltered, MIN_RATINGS, parseFacets, parseSearchItems, removeChip, RUNTIME_BANDS, setSort, SORTS, toggle,
@@ -113,7 +114,8 @@ function FilterSheet({ kind, value, onChange, onClose }: { kind: Kind; value: Li
   }, [onClose]);
 
   const set = (patch: Partial<LibraryFilters>) => onChange({ ...value, ...patch });
-  return (
+  // Portal: the bar is a sticky stacking context, which would keep the sheet below the phone tab bar
+  return createPortal(
     <div className="filter-scrim" onClick={onClose}>
       <div ref={box} className="filter-sheet" data-modal role="dialog" aria-modal="true" aria-label="Filters" onClick={(e) => e.stopPropagation()}>
         <div className="filter-sheet-head">
@@ -222,7 +224,8 @@ function FilterSheet({ kind, value, onChange, onClose }: { kind: Kind; value: Li
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

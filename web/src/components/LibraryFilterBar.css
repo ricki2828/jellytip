@@ -139,12 +139,14 @@
   .lib-filters .chips.lib-active {
     padding: 0 var(--pad);
   }
-  .lib-filters .chips.lib-sorts {
+  .lib-filters .chips.lib-sorts,
+  .lib-filters .chips.lib-active {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .lib-filters .chips.lib-sorts::-webkit-scrollbar {
+  .lib-filters .chips.lib-sorts::-webkit-scrollbar,
+  .lib-filters .chips.lib-active::-webkit-scrollbar {
     display: none;
   }
 }

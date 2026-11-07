@@ -2627,7 +2627,7 @@ button.overview.open {
 }
 @media (max-width: 720px) {
   .browse-bar {
-    top: calc(52px + env(safe-area-inset-top, 0px));
+    top: calc(48px + env(safe-area-inset-top, 0px));
   }
   .lib-title-row {
     gap: 10px;
