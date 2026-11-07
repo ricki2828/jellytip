@@ -1,7 +1,7 @@
 // #/games: Game Centre. Followed teams' games from today and recent days, each with its ways to watch. Spoiler-safe by
 // default: no scores, results, art or programme descriptions; scores only behind a two-press reveal (or when "Show scores
 // (spoilers)" is on in Settings). Logic in lib/gameCentre.ts.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, errorText } from "../../api/iptv";
 import { refreshFixtures, useFixtures } from "../../api/fixtures";
 import { matchDetail } from "../../api/matchInfo";
@@ -9,7 +9,7 @@ import { usePrefs } from "../../api/me";
 import { refreshRecs, useRecs } from "../../api/recStore";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { BackArrow } from "../../components/BackArrow";
-import { bestChannel, buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
+import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
 import { go } from "../../lib/router";
 import "./iptv.css";
@@ -120,12 +120,14 @@ function LegacyGameCentre() {
 
 // ---------- fixture-first ----------
 
-function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean }) {
+function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean }) {
   const w = waysForFixture(f, rec, now);
+  // A card with no button would be skipped by D-pad navigation: let the card itself take focus
+  const idle = !w.ways.length && !(w.recordOn && !recorded) && (pref || w.phase === "upcoming");
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
   return (
-    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}`}>
+    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}`} data-nav={idle || undefined} tabIndex={idle ? 0 : undefined}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
@@ -140,9 +142,9 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
             {x.label}
           </button>
         ))}
-        {w.canSuggestRecord && !msg?.startsWith("Recording") && (
+        {w.recordOn && !recorded && (
           <button className="btn small" data-nav aria-disabled={busy || undefined} onClick={busy ? undefined : onRecord}>
-            {busy ? "Recording…" : "Suggest record"}
+            {busy ? "Recording…" : `Record on ${w.recordOn.name}${w.recordOn.maybe ? " (may carry it)" : ""}`}
           </button>
         )}
         {!pref && w.phase !== "upcoming" && (
@@ -168,8 +170,10 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   const [scores, setScores] = useState<Record<string, string | null>>({});
   const [gates, setGates] = useState<Record<string, Gate>>({});
   const [msgs, setMsgs] = useState<Record<string, string>>({});
+  const [done, setDone] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const pref = spoilersOn(prefs);
+  const lapse = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     void refreshRecs(true);
@@ -182,10 +186,12 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
       setScores({});
       setGates({});
       setMsgs({});
+      setDone(new Set());
     };
     window.addEventListener("jellytip-session", reset);
     return () => {
       clearInterval(t);
+      window.clearTimeout(lapse.current);
       window.removeEventListener("jellytip-session", reset);
     };
   }, []);
@@ -197,7 +203,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
       const r = gatePress(gates[f.fid] ?? gateStart, Date.now());
       setGates((x) => ({ ...x, [f.fid]: r.gate }));
       if (!r.revealed) {
-        window.setTimeout(() => setNow(Date.now() / 1000), 4100);
+        lapse.current = window.setTimeout(() => setNow(Date.now() / 1000), 4100);
         return;
       }
       setRevealed((s) => new Set(s).add(f.fid));
@@ -209,7 +215,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   );
 
   const record = useCallback(async (f: FxItem) => {
-    const c = bestChannel(f);
+    const c = waysForFixture(f, null, Date.now() / 1000).recordOn;
     if (!c) return;
     setBusy((b) => new Set(b).add(f.fid));
     const a = await addRecording(c.id, c.start ?? f.kickoff);
@@ -221,6 +227,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
     const ok = a.status === 200 || a.status === 201;
     setMsgs((m) => ({ ...m, [f.fid]: ok ? a.data?.warning || "Recording scheduled. It'll appear on Home." : errorText(a) }));
     if (ok) {
+      setDone((d) => new Set(d).add(f.fid));
       void refreshRecs(true);
       void refreshFixtures(true);
     }
@@ -249,6 +256,7 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
                 onRecord={() => void record(f)}
                 msg={msgs[f.fid]}
                 busy={busy.has(f.fid)}
+                recorded={done.has(f.fid)}
               />
             ))}
           </ul>

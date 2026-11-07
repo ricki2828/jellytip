@@ -242,8 +242,10 @@ export function sectionGames(games: Game[], now: number): { day: string; label: 
 //   score       { home, away, clock?, period? } | null     null unless the person's spoilers pref is on; shown only past the gate
 //   interest, significance, rank   numbers (rank 1 = first); the server's order is `rank`
 //   favourite   boolean, decided by the server from teamRef ids; the client never matches titles or names for it
-//   channels    [{ id, name, num?, logo?, quality?, confidence 0-1, why?, region?, lang?, dormant?, start? }]
-//               confidence >= 0.7 = a real link; below = "may carry this"; dormant = "may be live"; start = programme start (epoch s)
+//   autoRecord  boolean, the server will record this fixture by itself (default false); a channel's own autoRecord overrides it
+//   channels    [{ id, name, num?, logo?, quality?, confidence 0-1, why?, region?, lang?, maybe?, dormant?, start?, stop?, startOver?, autoRecord? }]
+//               maybe = "may carry this" (server's call; absent -> confidence < 0.8); dormant = league feed "may be live";
+//               start/stop = the programme's epoch s; startOver = catch-up exists, plays from `start` (needs start and stop)
 //   best        channel id | null (default: channels[0])
 //   reminderId?, recordingId?, matchId?
 // Order on screen: live first, then favourites, then significance; finished last.
@@ -258,8 +260,12 @@ export interface FxChannel {
   why: string | null;
   region: string | null;
   lang: string | null;
+  maybe: boolean;
   dormant: boolean;
   start: number | null;
+  stop: number | null;
+  startOver: boolean;
+  autoRecord: boolean | null;
 }
 
 export interface FxItem {
@@ -279,6 +285,7 @@ export interface FxItem {
   significance: number;
   rank: number | null;
   favourite: boolean;
+  autoRecord: boolean;
   channels: FxChannel[];
   best: string | null;
   reminderId: string | number | null;
@@ -286,6 +293,8 @@ export interface FxItem {
   matchId: string | null;
 }
 
+/** Fallback when the server sends no `maybe`: a link below this confidence is a guess. */
+export const MAYBE_BELOW = 0.8;
 const o = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const n = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
@@ -314,8 +323,12 @@ function fxChannel(raw: unknown): FxChannel | null {
     why: s(c.why),
     region: s(c.region),
     lang: s(c.lang),
+    maybe: typeof c.maybe === "boolean" ? c.maybe : (conf == null ? 0.5 : conf) < MAYBE_BELOW,
     dormant: c.dormant === true,
     start: n(c.start),
+    stop: n(c.stop),
+    startOver: c.startOver === true,
+    autoRecord: typeof c.autoRecord === "boolean" ? c.autoRecord : null,
   };
 }
 
@@ -361,6 +374,7 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       significance: n(e.significance) ?? 0,
       rank: n(e.rank),
       favourite: e.favourite === true,
+      autoRecord: e.autoRecord === true,
       channels,
       best: idOf(e.best),
       reminderId: idOf(e.reminderId),
@@ -389,13 +403,13 @@ export interface FxGroup {
   items: FxItem[];
 }
 
-/** Live first, then favourites, then significance (server rank, then kickoff, break ties); finished games last. */
+/** Live first, then favourites, then the server rank, then significance (then kickoff); finished games last. */
 export function groupFixtures(items: FxItem[], refs: { teamId: string; leagueKey?: string | null }[] = []): FxGroup[] {
   const fav = new Map(items.map((f) => [f.fid, isFavourite(f, refs)]));
   const cmp = (a: FxItem, b: FxItem) =>
     Number(fav.get(b.fid)) - Number(fav.get(a.fid)) ||
-    b.significance - a.significance ||
     (a.rank ?? Infinity) - (b.rank ?? Infinity) ||
+    b.significance - a.significance ||
     a.kickoff - b.kickoff ||
     a.fid.localeCompare(b.fid);
   const pick = (f: (x: FxItem) => boolean) => items.filter(f).sort(cmp);
@@ -408,11 +422,22 @@ export function groupFixtures(items: FxItem[], refs: { teamId: string; leagueKey
   return groups.filter((g) => g.items.length > 0);
 }
 
-export const MIN_LINK = 0.7;
-/** The channel to open: the server's `best`, else the first. */
-export const bestChannel = (f: Pick<FxItem, "channels" | "best">): FxChannel | null => f.channels.find((c) => c.id === f.best) ?? f.channels[0] ?? null;
-/** A real link (not a "may carry this" guess, not a dormant league feed). */
-export const isSolid = (c: FxChannel): boolean => c.confidence >= MIN_LINK && !c.dormant;
+/** A real link: not a "may carry this" guess, not a dormant league feed. */
+export const isSolid = (c: FxChannel): boolean => !c.maybe && !c.dormant;
+const BUCKET = ["uhd", "fhd50", "fhd", "hd", "unknown", "sd", "slow", "dead"];
+const bucketRank = (c: FxChannel) => {
+  const i = BUCKET.indexOf(c.quality?.bucket ?? "unknown");
+  return i < 0 ? 4 : i;
+};
+/** The channel to open: the server's `best` when it is a solid link, else solid links first, then quality bucket, dormant last. */
+export function bestChannel(f: Pick<FxItem, "channels" | "best">): FxChannel | null {
+  const given = f.channels.find((c) => c.id === f.best);
+  if (given && isSolid(given)) return given;
+  const ranked = f.channels
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => Number(a.c.dormant) - Number(b.c.dormant) || Number(a.c.maybe) - Number(b.c.maybe) || bucketRank(a.c) - bucketRank(b.c) || a.i - b.i);
+  return ranked[0]?.c ?? null;
+}
 
 export interface FxWays {
   phase: Phase;
@@ -421,8 +446,10 @@ export interface FxWays {
   note: string;
   /** No usable link: the card says so instead of hiding. */
   noStream: boolean;
-  /** Offer "Suggest record": a not-finished fixture with a channel and no recording yet. */
-  canSuggestRecord: boolean;
+  /** "Record on X": a not-finished fixture, no recording, the server not auto-recording it, and a channel with a known programme start that is not dormant. */
+  canRecord: boolean;
+  /** The channel that button records (null when canRecord is false). */
+  recordOn: FxChannel | null;
 }
 
 /** The ways to watch a fixture and the line that says so. Only what the API returned; every path is spoiler-free. */
@@ -434,6 +461,8 @@ export function waysForFixture(f: FxItem, rec: Rec | null, now: number): FxWays 
   const ways: Way[] = [];
   if (rec && rec.playable !== false && (rec.state === "done" || rec.state === "recording"))
     ways.push({ kind: "recording", label: "Your recording, from the start", path: `${targetPath({ recording: String(rec.id) })}&t=${t}${liveExtrasQuery({ nospoil: true })}` });
+  if (best?.startOver && best.start != null && best.stop != null && best.stop > best.start && phase !== "upcoming" && !best.dormant)
+    ways.push({ kind: "catchup", label: `Catch-up on ${best.name}, from the start`, path: `${targetPath({ channel: best.id, start: best.start, stop: best.stop })}&t=${t}${liveExtrasQuery({ nospoil: true, alternates: f.channels.filter((c) => c.id !== best.id).map((c) => ({ id: c.id, name: c.name })) })}` });
   if (phase === "live" && best) {
     const alternates = f.channels.filter((c) => c.id !== best.id).map((c) => ({ id: c.id, name: c.name }));
     ways.push({ kind: "live", label: `${solid ? "Live on" : "May be live on"} ${best.name}`, path: `${targetPath({ channel: best.id })}&t=${t}${liveExtrasQuery({ nospoil: true, alternates })}` });
@@ -443,7 +472,9 @@ export function waysForFixture(f: FxItem, rec: Rec | null, now: number): FxWays 
   if (phase === "upcoming") note = best ? `${startsText(f.kickoff, now)} · ${solid ? best.name : `may be on ${best.name}`}` : `${startsText(f.kickoff, now)} · No stream found yet`;
   else if (phase === "live") note = !best ? "Live · No stream found yet" : solid ? `Live on ${best.name}` : `Live · may be on ${best.name}`;
   else note = ways.length ? "Finished — watch from the start" : "Finished — no replay available";
-  return { phase, ways, note, noStream, canSuggestRecord: phase !== "finished" && !!best && f.recordingId == null && !rec };
+  const auto = best?.autoRecord ?? f.autoRecord;
+  const recordOn = phase !== "finished" && best && best.start != null && !best.dormant && !auto && f.recordingId == null && !rec ? best : null;
+  return { phase, ways, note, noStream, canRecord: !!recordOn, recordOn };
 }
 
 /** "Warriors 24–18 Panthers"-style line for a fixture score; null when none. Called only after the gate. */
