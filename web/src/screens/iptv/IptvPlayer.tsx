@@ -8,7 +8,12 @@ import { addReminderFor, removeReminder, useReminders } from "../../api/reminder
 import { isPre, preGameCard } from "../../lib/preGame";
 import { FantasyAlerts, FantasyChip } from "../../components/Fantasy";
 import { FlipAlerts } from "../../components/FlipAlerts";
-import { LiveDrawer } from "../../components/LiveDrawer";
+import { DelayChip } from "../../components/DelayChip";
+import { Scorebug } from "../../components/Companion/Scorebug";
+import { Panel, useDropWatch, usePhonePortrait } from "../../components/Companion/Panel";
+import { useLiveFeed } from "../../components/Companion/useLiveFeed";
+import { calibrateMessage, useRevealClock } from "../../lib/delay";
+import { autoCloseDecision, autoOpenDecision, DROP_KEY, panelKeyAction, panelModeFor, stepTab, type OpenReason } from "../../lib/companion";
 import { usePrefs } from "../../api/me";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
@@ -33,7 +38,8 @@ import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../l
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
-import { alternatesAfterSwitch, initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
+import { switchExtras } from "../../lib/companion";
+import { initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import { hlsChoices, nativeChoices, nativeSubtitlesOff, makePick, matchPick, pickIptvTracks, type SubtitlePick, type TrackChoice, type TrackPick } from "../../lib/iptvTracks";
 import { getAlwaysSubs } from "../../lib/trackMemory";
@@ -749,9 +755,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     const t = setInterval(() => {
       const n = Date.now() / 1000;
       setNowS(n);
-      if (n >= startsAt && !started.current) {
-        started.current = true;
-        flashNote("Started");
+      if (n >= startsAt) {
+        // kicked off: one last render flips the pre-game state, then no more per-second root renders
+        clearInterval(t);
+        if (!started.current) {
+          started.current = true;
+          flashNote("Started");
+        }
       }
     }, 1000);
     return () => clearInterval(t);
@@ -774,11 +784,71 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       document.removeEventListener("pointerdown", show);
     };
   }, [preNow]);
-  const [drawer, setDrawer] = useState(false);
-  const closeDrawer = useCallback(() => setDrawer(false), []);
   const sportPrefs = usePrefs({ defer: true }).prefs?.sport;
   const spoilers = !!sportPrefs?.spoilers;
   const live_ok = shouldShowLiveExtras(extras);
+  // ---- Companion (T2.1): the Live drawer as a side panel, the scorebug pill, the spoiler delay. `drawer` = panel open.
+  const [drawer, setDrawer] = useState(false);
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  useEffect(() => setVideoEl(videoRef.current), []);
+  const revealClock = useRevealClock({ video: videoEl, channelKey: isLive ? target.channel ?? null : null, isLive, replay: !!extras?.replay });
+  const panelAvail = live_ok && !!extras?.matchId;
+  const liveNow = isLive && !extras?.replay;
+  const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
+  const blowout = feed.kind === "blowout";
+  const openedBy = useRef<{ by: OpenReason; at: number; touched: boolean }>({ by: "user", at: 0, touched: false });
+  const userClosedAt = useRef<number | null>(null);
+  const openPanel = useCallback((by: OpenReason) => {
+    openedBy.current = { by, at: Date.now(), touched: by === "user" };
+    setDrawer(true);
+  }, []);
+  const closePanel = useCallback((byUser = true) => {
+    if (byUser) userClosedAt.current = Date.now();
+    setDrawer(false);
+  }, []);
+  const closeDrawer = closePanel;
+  const touchPanel = useCallback(() => { openedBy.current.touched = true; }, []);
+  const phonePortrait = usePhonePortrait();
+  const [rememberedMode, setRememberedMode] = useState<string | null>(() => { try { return localStorage.getItem(DROP_KEY); } catch { return null; } });
+  const panelMode = panelModeFor(phonePortrait, rememberedMode);
+  useDropWatch(videoEl, drawer && panelMode === "squeeze", () => setRememberedMode("overlay"));
+  // Auto-open at breaks and for 6 s after a revealed key moment; tuck away again (never in replay, never just after the viewer closed it)
+  const lastMomentN = useRef(0);
+  useEffect(() => {
+    if (!panelAvail || !liveNow) return;
+    const fresh = feed.momentN > lastMomentN.current; // a feed reset drops the count to 0: that is not news
+    lastMomentN.current = feed.momentN;
+    const by = autoOpenDecision({ nowMs: Date.now(), replay: revealClock.replay, panelOpen: drawer, userClosedAtMs: userClosedAt.current, kind: feed.kind, freshMoment: fresh });
+    if (by) openPanel(by);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed, panelAvail, liveNow, revealClock.replay]);
+  const feedKind = useRef(feed.kind);
+  feedKind.current = feed.kind;
+  useEffect(() => {
+    if (!drawer || openedBy.current.by === "user") return;
+    const t = window.setInterval(() => {
+      const o = openedBy.current;
+      if (autoCloseDecision({ nowMs: Date.now(), openedBy: o.by, openedAtMs: o.at, kind: feedKind.current, touched: o.touched, replay: revealClock.replay })) closePanel(false);
+    }, 1000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer]);
+  const keyState = useRef({ avail: false, open: false, replay: false });
+  keyState.current = { avail: panelAvail && isLive, open: drawer, replay: revealClock.replay };
+  const navAt = useRef(0);
+  useEffect(() => {
+    const t = () => { navAt.current = Date.now(); };
+    document.addEventListener("focusin", t);
+    return () => document.removeEventListener("focusin", t);
+  }, []);
+  // Down with the controls idle: this match's "Other channels" (the same sheet and switch route as the pre-game card); nothing without alternates
+  const nAlt = extras?.alternates?.length ?? 0;
+  const othersRef = useRef({ open: false, n: 0 });
+  othersRef.current = { open: others, n: nAlt };
+  const switchAlt = (i: number) => {
+    const alts = extras!.alternates!;
+    go(livePath(alts[i].id, alts[i].name, switchExtras(extras!, alts[i].id, { id: target.channel!, name: title })), true);
+  };
   const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
   const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
@@ -929,6 +999,40 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if ((e.key === "Escape" || e.key === "Backspace") && tracksOpen) { e.preventDefault(); e.stopPropagation(); setTracksOpen(false); return; }
+      if ((e.key === "Escape" || e.key === "Backspace") && othersRef.current.open && !keyState.current.open) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); setOthers(false); return; }
+      // Companion keys (T2.1): Back closes the panel first; with the controls idle Up = panel, Down = channels, Left/Right = panel tabs
+      {
+        const ae = document.activeElement as HTMLElement | null;
+        const btn = ae?.tagName === "BUTTON";
+        const inUse = tracksOpen || (btn && Date.now() - navAt.current < 4000);
+        const act = panelKeyAction({ key: e.key, panelOpen: keyState.current.open, controlsInUse: inUse, available: keyState.current.avail, alternates: othersRef.current.n });
+        if (act) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          if (btn) ae!.blur();
+          if (act === "close-panel") closePanel(true);
+          else if (act === "toggle-panel") (keyState.current.open ? closePanel(true) : openPanel("user"));
+          else if (act === "channels") {
+            if (othersRef.current.n > 0) {
+              if (othersRef.current.open) document.querySelector<HTMLElement>(".cp-others [data-nav]")?.focus();
+              else setOthers(true);
+            }
+          }
+          else {
+            const tabs = Array.from(document.querySelectorAll<HTMLElement>(".cp-panel .bc-tab"));
+            const at = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+            tabs[stepTab(at < 0 ? 0 : at, tabs.length, act === "tab-next" ? 1 : -1)]?.click();
+            touchPanel();
+          }
+          return;
+        }
+        // OK on the picture with the controls idle brings them up: focus moves to the Live button, then arrows navigate as usual
+        if (keyState.current.avail && !inUse && e.key === "Enter" && !btn) {
+          const first = document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ?? document.querySelector<HTMLElement>(".player-top [data-nav]");
+          if (first) { e.preventDefault(); e.stopPropagation(); first.focus(); navAt.current = Date.now(); return; }
+        }
+      }
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         e.stopPropagation();
@@ -1005,6 +1109,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         else if (!isLive) poke();
       }}
     >
+      <div className={`cp-stage ${panelMode}${drawer ? " open" : ""}`}>
+      <div className="cp-video">
       <video
         ref={videoRef}
         className="player-video"
@@ -1042,6 +1148,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onLoadedData={() => { lastNet.current = Date.now(); }}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
+      {panelAvail && liveNow && !revealClock.replay && <Scorebug view={feed} panelOpen={drawer} />}
+      </div>
+      {panelAvail && extras?.matchId && (
+        <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} source={liveNow ? feedSource : undefined} onClose={closeDrawer} onTouch={touchPanel} />
+      )}
+      </div>
       {state.kind === "loading" && <div className="spinner" role="status" aria-label={retrying ? "Retrying stream" : "Connecting to stream"} />}
       {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
       {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
@@ -1074,9 +1186,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
         {live_ok && isLive && <MatchInfoButton id={extras?.matchId} />}
-        {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />}
+        {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
+        {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
-          <button className="btn small" data-nav aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}>
+          <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
             Live
           </button>
         )}
@@ -1108,9 +1221,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onActivity={poke}
       />}
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
-      {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />}
-      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />}
-      {live_ok && drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive && !extras?.replay} spoilers={spoilers} onClose={closeDrawer} />}
+      {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
+      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
@@ -1128,12 +1240,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           </div>
           {others && (
             <div className="buttons">
-              {extras!.alternates!.map((a, i) => (
+              {extras!.alternates!.map((a) => (
                 <button
                   key={a.id}
                   className="btn small"
                   data-nav
-                  onClick={() => go(livePath(a.id, a.name, { alternates: [...extras!.alternates!.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey, nospoil: extras!.nospoil }), true)}
+                  onClick={() => go(livePath(a.id, a.name, switchExtras(extras!, a.id, { id: target.channel!, name: title })), true)}
                 >
                   {a.name}
                 </button>
@@ -1142,12 +1254,27 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           )}
         </div>
       )}
+      {others && !(preNow && startsAt && cardOn) && nAlt > 0 && (
+        <div className="pregame-card cp-others" role="group" aria-label="Other channels">
+          <span>Other channels</span>
+          <div className="buttons">
+            {extras!.alternates!.map((a, i) => (
+              <button key={a.id} className="btn small" data-nav onClick={() => switchAlt(i)}>
+                {a.name}
+              </button>
+            ))}
+            <button className="btn small ghost" data-nav onClick={() => setOthers(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       {copy && state.kind === "playing" && (
         <div className="iptv-stall" role="alert" aria-live="polite">
           <span>{copy}</span>
           <button className="btn primary small" data-nav data-autofocus onClick={retryNow}>Retry now</button>
           {rec.phase === "stalled" && <button className="btn small" data-nav onClick={() => { quietUntil.current = Date.now() + QUIET_MS; }}>Keep waiting</button>}
-          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, nospoil: extras?.nospoil, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
+          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, switchExtras(extras ?? {}, a.id, { id: target.channel!, name: title })), true)}>Switch to {a.name}</button>)}
           <button className="btn small" data-nav onClick={() => dispatchRef.current({ t: "cancel" })}>Back</button>
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
@@ -1353,7 +1480,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
         const pick = extras?.alternates?.find((x) => x.id === switchTo.current);
         switchTo.current = null;
         if (pick) {
-          go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey, nospoil: extras?.nospoil }), true);
+          go(livePath(pick.id, pick.name, switchExtras(extras ?? {}, pick.id, { id: target.channel, name: title })), true);
           return;
         }
       }

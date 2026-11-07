@@ -179,3 +179,21 @@ export async function taste(): Promise<{ status: number; taste: Taste | null }> 
   const a = await companionCall("GET", "v1/me/taste");
   return { status: a.status, taste: a.status === 200 ? parseTaste(a.data) : null };
 }
+
+// ---------- spoiler delay (T2.3; server: GET/PUT v1/me/sport/delay, prefs sport.delaySec / sport.alerts) ----------
+
+/** The person's saved delay for one channel (seconds), or null when never calibrated (or the server has no route). */
+export async function getChannelDelay(pid: string, sid: string): Promise<number | null> {
+  const a = await companionCall("GET", `v1/me/sport/delay?pid=${encodeURIComponent(pid)}&sid=${encodeURIComponent(sid)}`);
+  const sec = a.status === 200 && a.data && typeof a.data === "object" ? (a.data as { sec?: unknown }).sec : null;
+  return typeof sec === "number" && isFinite(sec) ? sec : null;
+}
+
+/** Save the calibrated delay for one channel; returns false when the server could not take it (the caller keeps it locally). */
+export async function putChannelDelay(pid: string, sid: string, sec: number | null): Promise<boolean> {
+  const a = await companionCall("PUT", "v1/me/sport/delay", { pid, sid, sec });
+  return a.status === 200;
+}
+
+export const saveSportDelay = (delaySec: number) => savePrefs({ sport: { delaySec } });
+export const saveSportAlerts = (alerts: "key" | "all" | "off") => savePrefs({ sport: { alerts } });

@@ -63,5 +63,7 @@ export async function liveStats(id: string, fields?: string): Promise<LiveStats 
   const a = await companionCall("GET", `v1/sport/match/${encodeURIComponent(id)}/live${fields ? `?fields=${encodeURIComponent(fields)}` : ""}`);
   const g = gate(id, a.status, a.data);
   if (g) return g;
-  return a.status === 200 ? parseLive(a.data) : null;
+  const d = a.status === 200 ? parseLive(a.data) : null;
+  // No snapshot time from the server: the moment we got it stands in, so the spoiler delay still applies to it
+  return d && d.updatedAt == null ? { ...d, updatedAt: Date.now() / 1000 } : d;
 }

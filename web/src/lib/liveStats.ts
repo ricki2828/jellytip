@@ -74,6 +74,8 @@ export interface LiveStats {
   chat: { source: string; thread: string | null; comments: { author: string; text: string; score: number | null; at: number | null }[] } | null;
   updatedAt: number | null;
   pending: boolean;
+  /** Set by applyReveal when the snapshot is not released yet: every snapshot field is masked (so nothing may fall back to the match's own status). */
+  hidden?: boolean;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -185,7 +187,7 @@ export function parseLive(raw: unknown): LiveStats | null {
     situation: obj(r.situation),
     moments: arr(r.moments).flatMap((x) => {
       const o = obj(x);
-      const at = parseStartsAt(o?.at);
+      const at = parseStartsAt(o?.wallclock) ?? parseStartsAt(o?.at);
       const label = str(o?.label) ?? str(o?.kind);
       return o && at != null && label ? [{ at, kind: str(o.kind) ?? label, team: side(o.team), label } as Moment] : [];
     }),
@@ -483,3 +485,38 @@ export function situationBlocks(layout: string | null, s: Record<string, unknown
   }
   return out;
 }
+
+// ---------- spoiler / delay gate (plan "Delay model", T2.2 hook; the clock itself is lib/delay.ts, T2.3) ----------
+
+/**
+ * Whether what happened at `atSec` (epoch seconds; undefined when the item carries no time) may be shown yet. The drawer routes every
+ * score, clock, stat, event, moment, win probability, odds and chat line through this. The default shows everything.
+ */
+export type Reveal = (atSec: number | undefined) => boolean;
+export const revealAll: Reveal = () => true;
+
+/**
+ * The answer as the viewer may see it. The snapshot parts (score, clock, period, stats, leaders, situation, games, win probability, market)
+ * are as of `updatedAt` and are asked about with it; plays carry no time and are asked with `undefined` (and need the snapshot);
+ * moments and chat comments are asked one by one with their own time. Pure; `d` is returned as is when nothing is hidden.
+ */
+export function applyReveal(d: LiveStats, reveal: Reveal): LiveStats {
+  const snap = reveal(d.updatedAt ?? undefined);
+  const plays = snap && reveal(undefined);
+  const moments = d.moments.filter((m) => reveal(m.at));
+  const comments = d.chat ? d.chat.comments.filter((c) => reveal(c.at ?? undefined)) : null;
+  if (snap && plays && moments.length === d.moments.length && (!d.chat || comments!.length === d.chat.comments.length)) return d;
+  return {
+    ...d,
+    ...(snap ? {} : { hidden: true, status: null, score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
+    plays: plays ? d.plays : [],
+    moments,
+    chat: d.chat && comments ? { ...d.chat, comments } : d.chat,
+  };
+}
+
+/** Odds and win probability spoil blowouts: they exist only with spoilers on (the plan's rule), and never before the snapshot is revealed. */
+export const oddsAllowed = (spoilers: boolean) => spoilers;
+
+/** Tabs without Odds when the odds are not allowed. */
+export const tabsFor = (tabs: [string, string][], spoilers: boolean): [string, string][] => (oddsAllowed(spoilers) ? tabs : tabs.filter(([k]) => k !== "odds"));

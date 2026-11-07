@@ -2,9 +2,16 @@
 // performance"): a scoreboard strip in the team colours, pill tabs (Stats · Plays · Odds · Chat · Fantasy), split-bar stats, leader
 // cards, a plays timeline, the odds bar with a sparkline and a per-sport "situation". Polls every 15 s while open only; rows are
 // memoised and keyed so a poll re-renders only what changed; motion is transform and opacity only.
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { LiveSource } from "./Companion/useLiveFeed";
+import { holdSecs } from "../lib/companion";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
-import { agoText, liveTabs, maskText, mayShow, newMoments, pct, situationBlocks, sparkPoints, statShare, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type TowerRow } from "../lib/liveStats";
+import { agoText, applyReveal, liveTabs, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
+import { blowoutLine, closerGame, deciderRows, favouriteSide, gameStateOf, recapPlays, resultLine, type CloserGame, type GameState, type Row } from "../lib/gameState";
+import { startsText } from "../lib/gameCentre";
+import { playersInGame } from "../lib/fantasyGame";
+import { useFixtures } from "../api/fixtures";
+import { go } from "../lib/router";
 import { advanceNewKeys, newKeysInit, type NewKeysState } from "../lib/newKeys";
 import { flagOf, readable, type Fixture } from "../lib/matchInfo";
 import { GOLD, onColor, teamColors, washBackground } from "../lib/broadcast";
@@ -13,16 +20,19 @@ import { ThinPill, WinnerList } from "./WinnerList";
 import { usePrefs } from "../api/me";
 import "../fonts";
 import { logoSrc } from "../api/iptv";
-import { FantasyTab } from "./Fantasy";
+import { FantasyTab, useRevealedFantasy } from "./Fantasy";
 import { FantasyYourPlayers } from "./FantasyYourPlayers";
 import { useFantasy } from "../api/fantasy";
 import { isNfl } from "../lib/fantasy";
 import { announceFlips } from "./FlipAlerts";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import "../screens/iptv/iptv.css";
+import "./LiveDrawerState.css";
 
 type Tab = "stats" | "plays" | "odds" | "chat" | "fantasy";
 const REFRESH_MS = 15_000;
+const NOOP_SUB = () => () => undefined;
+const NOOP_GET = () => ({ raw: null, shown: null, fixture: null, state: "loading" as const });
 const OUT_MS = 200;
 const FLASH_MS = 3200;
 
@@ -404,29 +414,188 @@ function SituationView({ blocks, hc, ac }: { blocks: Block[]; hc: string; ac: st
   );
 }
 
-export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; onClose: () => void }) {
+
+/** Labels the lead card already says; the matching rows of the sport block are dropped under it. */
+const COVERS: Record<string, string> = { "Down & distance": "Down & distance", "Ball on": "Ball on", Run: "Run", Required: "Required rate", "Run rate": "Required rate" };
+function withoutCovered(blocks: Block[], lead: Row[]): Block[] {
+  const have = new Set(lead.map(([k]) => k));
+  return blocks.flatMap((b): Block[] => {
+    if (b.kind === "bar") return b.label.toLowerCase() === "fouls" && have.has("Team fouls") ? [] : [b];
+    if (b.kind !== "kv") return [b];
+    const rows = b.rows.filter(([k]) => !(COVERS[k] && have.has(COVERS[k])));
+    return rows.length ? [{ ...b, rows }] : [];
+  });
+}
+
+const Mine = () => <span className="ld-mine">YOUR TEAM</span>;
+
+/** Pre-game: when it starts. Line-ups, where to watch and form are in Match info. */
+const PreCard = memo(function PreCard({ startsAt, now }: { startsAt: number | null; now: number }) {
+  const left = startsAt != null ? startsAt - now : null;
+  const text = left == null ? "Not started yet" : left <= 0 ? "Starting now" : left < 5400 ? `Kick-off in ${Math.max(1, Math.round(left / 60))} min` : startsText(startsAt!, now);
+  return (
+    <div className="ld-state pre">
+      <h4>Up next</h4>
+      <p className="ld-oneline">{text}</p>
+      <p className="iptv-hint">Line-ups, form and where to watch are in Match info.</p>
+    </div>
+  );
+});
+
+/** Tight game: what decides it, first. */
+const DecideCard = memo(function DecideCard({ rows, mine }: { rows: Row[]; mine: boolean }) {
+  return (
+    <div className="ld-state tight">
+      <h4>
+        What decides it{mine && <Mine />}
+      </h4>
+      <ul className="ld-decide">
+        {rows.map(([k, v]) => (
+          <li key={k}>
+            <span>{k}</span>
+            <b>{v}</b>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+});
+
+/** Blowout: one line, a way out to a closer game, and the full stats behind a toggle. */
+const BlowoutCard = memo(function BlowoutCard({ line, closer, full, onToggle }: { line: string; closer: CloserGame | null; full: boolean; onToggle: () => void }) {
+  return (
+    <div className="ld-state blowout">
+      <p className="ld-oneline">{line}</p>
+      {closer && (
+        <button className="ld-closer" data-nav onClick={() => go(closer.path)}>
+          <span>
+            Closer game
+            <small>{[closer.title, closer.item.league].filter(Boolean).join(" · ")}</small>
+          </span>
+          <span aria-hidden>›</span>
+        </button>
+      )}
+      <button className="ld-more" data-nav aria-expanded={full} onClick={onToggle}>
+        {full ? "Hide full stats" : "Show full stats"}
+      </button>
+    </div>
+  );
+});
+
+/** Break: what scored, who is playing well, and what moved your fantasy players. */
+const RecapCard = memo(function RecapCard({ plays, leaders, fantasy, title }: { plays: ReturnType<typeof recapPlays>; leaders: LiveStats["leaders"]; fantasy: { name: string; delta: number }[]; title: string }) {
+  return (
+    <div className="ld-state break">
+      <h4>{title}</h4>
+      {plays.length > 0 ? (
+        <ul className="ld-recap">
+          {plays.map((p, i) => (
+            <li key={`${p.when}${p.text}${i}`} className={p.mine ? "mine" : undefined}>
+              <span className="ld-when">{p.when}</span>
+              <span className="ld-text">{p.text}</span>
+              {p.delta != null && <b>+{p.delta}</b>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="iptv-hint">No scoring yet.</p>
+      )}
+      {leaders.length > 0 && (
+        <>
+          <p className="ld-sub">Top performers</p>
+          <ul className="ld-recap">
+            {leaders.slice(0, 3).map((l) => (
+              <li key={l.name}>
+                <span className="ld-text">
+                  <strong>{l.name}</strong> {[l.team, l.line].filter(Boolean).join(" · ")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {fantasy.length > 0 && (
+        <>
+          <p className="ld-sub">Your fantasy players</p>
+          <ul className="ld-recap">
+            {fantasy.map((f) => (
+              <li key={f.name}>
+                <span className="ld-text">{f.name}</span>
+                <b>
+                  {f.delta >= 0 ? "+" : ""}
+                  {(Math.round(f.delta * 10) / 10).toFixed(1)}
+                </b>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+});
+
+/** Final: the result and the key moments. */
+const FinalCard = memo(function FinalCard({ result, moments, plays }: { result: string | null; moments: Moment[]; plays: ReturnType<typeof recapPlays> }) {
+  return (
+    <div className="ld-state final">
+      <h4>Full time</h4>
+      {result && <p className="ld-oneline">{result}</p>}
+      {moments.length > 0 ? (
+        <ul className="ld-recap">
+          {moments.map((m) => (
+            <li key={`${m.at}${m.label}`}>
+              <span className="ld-text">{m.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        plays.length > 0 && (
+          <ul className="ld-recap">
+            {plays.map((p, i) => (
+              <li key={`${p.when}${i}`} className={p.mine ? "mine" : undefined}>
+                <span className="ld-when">{p.when}</span>
+                <span className="ld-text">{p.text}</span>
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+    </div>
+  );
+});
+
+export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, reveal, embedded = false, source, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; reveal?: Reveal; /** Hosted by the player's companion panel: no slide-in, no scrim, and Back is the player's to handle. */ embedded?: boolean; /** The player's own feed (one /live poll): the drawer shows what it has instead of polling. Without it the drawer polls itself. */ source?: LiveSource; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("stats");
-  const [d, setD] = useState<LiveStats | null>(null);
+  const [raw, setRaw] = useState<LiveStats | null>(null);
+  // Everything shown goes through `reveal` (the broadcast delay, T2.3): a new function identity means its answers may have changed
+  const revealFn = reveal ?? revealAll;
+  const revealRef = useRef(revealFn);
+  revealRef.current = revealFn;
+  const d = useMemo(() => (raw ? applyReveal(raw, revealFn) : null), [raw, revealFn]);
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
   const [now, setNow] = useState(() => Date.now() / 1000);
   const [flash, setFlash] = useState<{ label: string; team: "home" | "away" | null; n: number } | null>(null);
   const seenMoment = useRef<number | null>(null);
   const flashN = useRef(0);
+  const flashTimer = useRef<number | undefined>(undefined);
+  const [full, setFull] = useState(false);
   const allowed = mayShow(liveNow, spoilers);
   // Fantasy: only for an NFL game with leagues from either source
-  const fantasy = useFantasy(liveNow);
+  const fantasy = useRevealedFantasy(useFantasy(liveNow), revealFn);
   const showFantasy = !!fantasy && fantasy.leagues.length > 0 && !!fixture && isNfl(fixture.leagueKey);
   // Slides out for 200 ms before it goes
   const [leaving, setLeaving] = useState(false);
   const close = () => {
+    if (embedded) return onClose();
     if (leaving) return;
     setLeaving(true);
     window.setTimeout(onClose, OUT_MS);
   };
-  useEscapeClose(close);
+  useEscapeClose(close, !embedded);
   const multi = fixture?.kind === "multi";
-  let tabs = liveTabs(!!d?.chat, showFantasy) as [Tab, string][];
+  // Odds and win probability spoil blowouts: they exist only with spoilers on
+  let tabs = tabsFor(liveTabs(!!d?.chat, showFantasy), spoilers) as [Tab, string][];
   // RedZone: no single game, no market. Fantasy leads, then the multi-game scoreboard
   if (multi) tabs = [...tabs.filter(([k]) => k === "fantasy"), ...tabs.filter(([k]) => k !== "fantasy" && k !== "odds")];
   const defaulted = useRef(false);
@@ -443,11 +612,48 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   const newPlays = useNewKeys(d?.plays.map((p) => p.id ?? `${p.period}${p.clock}${p.text}`) ?? []);
   const newChat = useNewKeys(d?.chat?.comments.map((c) => `${c.author}${c.text}`) ?? []);
 
+  // A big moment (already past the delay) flashes the strip in that team's colour; the first batch only sets the baseline.
+  // In a blowout only the viewer's own team's moments flash.
   useEffect(() => {
-    if (!allowed) return;
+    if (!d) return;
+    const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);
+    if (seenMoment.current == null) {
+      seenMoment.current = latest;
+      return;
+    }
+    const fresh: Moment[] = newMoments(d.moments, seenMoment.current);
+    seenMoment.current = Math.max(seenMoment.current, latest);
+    const m = fresh.filter((x) => kind !== "blowout" || (fav != null && x.team === fav)).pop();
+    if (m) {
+      setFlash({ label: m.label.toUpperCase(), team: m.team, n: ++flashN.current });
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlash(null), FLASH_MS);
+    }
+  }, [d?.moments]);
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  const ext = useSyncExternalStore(source?.subscribe ?? NOOP_SUB, source?.get ?? NOOP_GET);
+  // Until the first answer is released the drawer says how long: "Live info in N s", counting down
+  const waiting = !!source && ext.state === "ok" && !ext.shown && !!ext.raw;
+  const [, setHoldTick] = useState(0);
+  useEffect(() => {
+    if (!waiting) return;
+    const t = window.setInterval(() => setHoldTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [waiting]);
+  const hold = waiting ? holdSecs(ext.raw!.updatedAt, revealFn, Date.now() / 1000) : null;
+  useEffect(() => {
+    if (!source) return;
+    setNow(Date.now() / 1000);
+    if (ext.fixture) setFixture(ext.fixture);
+    // What the spoiler delay has released (the newest released snapshot plus every released moment), never the newest raw answer
+    if (ext.shown) setRaw(ext.shown);
+    setState(ext.state === "ok" && !ext.shown ? "loading" : ext.state);
+  }, [source, ext]);
+  useEffect(() => {
+    if (!allowed || source) return;
     let alive = true;
     let timer: number | undefined;
-    let flashTimer: number | undefined;
     const load = async () => {
       const a = await liveStats(matchId);
       if (!alive) return;
@@ -455,22 +661,10 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
       if (a === "missing") setState("missing");
       else if (!a) setState((s) => (s === "ok" ? s : "error")); // keep what we have when a refresh fails
       else {
-        setD(a);
+        setRaw(a);
         setState("ok");
-        announceFlips(matchId, a);
-        // A big moment since the last poll flashes the strip in that team's colour with its label; the first answer only sets the baseline
-        const latest = a.moments.reduce((m, x) => Math.max(m, x.at), 0);
-        if (seenMoment.current == null) seenMoment.current = latest;
-        else {
-          const fresh: Moment[] = newMoments(a.moments, seenMoment.current);
-          seenMoment.current = Math.max(seenMoment.current, latest);
-          const m = fresh[fresh.length - 1];
-          if (m) {
-            setFlash({ label: m.label.toUpperCase(), team: m.team, n: ++flashN.current });
-            window.clearTimeout(flashTimer);
-            flashTimer = window.setTimeout(() => setFlash(null), FLASH_MS);
-          }
-        }
+        // Odds flips are odds: only with spoilers on, and only as far as the delay allows
+        if (spoilers) announceFlips(matchId, applyReveal(a, revealRef.current));
       }
       timer = window.setTimeout(tick, REFRESH_MS);
     };
@@ -497,22 +691,38 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
       alive = false;
       document.removeEventListener("visibilitychange", onVisible);
       window.clearTimeout(timer);
-      window.clearTimeout(flashTimer);
     };
-  }, [matchId, allowed]);
+  }, [matchId, allowed, spoilers, source]);
 
   const home = fixture?.home.name ?? "Home";
   const away = fixture?.away.name ?? "Away";
+  const names = useMemo(() => ({ home, away }), [home, away]);
+  // The tight card is narrow: short names there
+  const shortNames = useMemo(() => ({ home: fixture?.home.short ?? home, away: fixture?.away.short ?? away }), [fixture, home, away]);
   const colors = teamColors(fixture);
   // Bars and names sit on near-black cards: a dark team colour is lightened there (the slabs keep the real colours)
   const [hc, ac] = [readable(colors.home), readable(colors.away)];
-  const floating = usePrefs({ defer: true }).prefs?.sport.panelStyle === "floating";
-  const blocks = useMemo(() => (d ? situationBlocks(d.layout, d.situation, { home, away }) : []), [d?.layout, d?.situation, home, away]);
+  const sportPrefs = usePrefs({ defer: true }).prefs?.sport;
+  const floating = sportPrefs?.panelStyle === "floating";
+  // Game state: derived from the revealed answer only, so a hidden score can never drive a blowout line
+  const fav = useMemo(() => favouriteSide(fixture, [...(sportPrefs?.teams ?? []), ...(sportPrefs?.teamRefs ?? []).map((r) => r.name)]), [fixture, sportPrefs?.teams, sportPrefs?.teamRefs]);
+  const gs: GameState | null = useMemo(() => (d && !multi ? gameStateOf(d, fixture, spoilers) : null), [d, fixture, spoilers, multi]);
+  const kind = gs?.kind ?? null;
+  const decide = useMemo(() => (d && gs && kind === "live-tight" ? deciderRows(d, gs, shortNames, spoilers) : []), [d, gs, kind, shortNames, spoilers]);
+  const fx = useFixtures(kind === "blowout");
+  const closer = useMemo(() => (kind === "blowout" ? closerGame(fx.data?.items ?? [], { fixtureId: fixture?.id, matchId }) : null), [kind, fx.data, fixture?.id, matchId]);
+  const recap = useMemo(() => (d && (kind === "break" || kind === "final") ? recapPlays(d, fav) : []), [d, kind, fav]);
+  const fantasyRows = useMemo(
+    () => (kind === "break" && showFantasy && revealFn(undefined) ? playersInGame(fantasy, fixture).flatMap((g) => g.players.flatMap((p) => (p.last ? [{ name: p.name, delta: p.last.delta }] : []))).slice(0, 4) : []),
+    [kind, showFantasy, fantasy, fixture, revealFn],
+  );
+  const blocks0 = useMemo(() => (d ? situationBlocks(d.layout, d.situation, { home, away }) : []), [d?.layout, d?.situation, home, away]);
+  const blocks = useMemo(() => (decide.length ? withoutCovered(blocks0, decide) : blocks0), [blocks0, decide]);
   const teamColor = (t: "home" | "away" | null) => (t === "away" ? ac : t === "home" ? hc : "rgba(255,255,255,0.5)");
 
   return (
-    <div className={`ld-wrap${floating ? " floating" : ""}${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
-      <aside className="live-drawer bc" role="dialog" aria-label="Live stats" style={{ background: washBackground(colors) }}>
+    <div className={`ld-wrap${embedded ? " embedded" : floating ? " floating" : ""}${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
+      <aside className="live-drawer bc" data-state={kind ?? undefined} role="dialog" aria-label="Live stats" style={{ background: washBackground(colors) }}>
         <SheetClose onClose={close} />
         {!allowed ? (
           <p className="iptv-hint">Live stats would spoil this recording. You can turn on "Show scores (spoilers)" in Settings → Live sport.</p>
@@ -529,15 +739,20 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
                 </button>
               ))}
             </div>
-            {tab !== "fantasy" && <FantasyYourPlayers live={fantasy} fixture={fixture} />}
-            {state === "loading" && <p className="iptv-hint">Loading…</p>}
+            {tab !== "fantasy" && revealFn(undefined) && <FantasyYourPlayers live={fantasy} fixture={fixture} />}
+            {state === "loading" && (waiting && hold != null ? <p className="iptv-hint" role="status">Live info in {hold} s — held back to match your picture</p> : <p className="iptv-hint">Loading…</p>)}
             {state === "missing" && <p className="iptv-hint">Live stats aren't available for this match.</p>}
             {state === "error" && <p className="iptv-hint">Couldn't load live stats. Trying again…</p>}
             {d && (
               <div className="ld-body">
                 <div key={tab} className="ld-tab">
                   {tab === "stats" && multi && <GamesBoard games={d.games} />}
-                  {tab === "stats" && !multi && (
+                  {tab === "stats" && !multi && kind === "pre" && <PreCard startsAt={fixture?.startsAt ?? null} now={now} />}
+                  {tab === "stats" && !multi && kind === "live-tight" && decide.length > 0 && <DecideCard rows={decide} mine={fav != null} />}
+                  {tab === "stats" && !multi && kind === "blowout" && gs && <BlowoutCard line={blowoutLine(d, gs, names, fav)} closer={closer} full={full} onToggle={() => setFull((x) => !x)} />}
+                  {tab === "stats" && !multi && kind === "break" && <RecapCard title="Break recap" plays={recap} leaders={d.leaders} fantasy={fantasyRows} />}
+                  {tab === "stats" && !multi && kind === "final" && <FinalCard result={resultLine(d, names)} moments={d.moments.slice(-6)} plays={recap} />}
+                  {tab === "stats" && !multi && (kind !== "blowout" || full) && (
                     <>
                       <SituationView blocks={blocks} hc={hc} ac={ac} />
                       {d.stats.length === 0 && d.leaders.length === 0 && blocks.length === 0 && <p className="iptv-hint">No stats yet.</p>}
@@ -610,7 +825,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
                       )}
                     </>
                   )}
-                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} multi={multi} />}
+                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} multi={multi} reveal={revealFn} />}
                   {tab === "chat" && d.chat && d.chat.comments.length > 0 && (
                     <>
                       <ul className="ld-chat">
