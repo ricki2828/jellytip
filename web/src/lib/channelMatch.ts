@@ -24,4 +24,3 @@ export function resolveChannelMatch(items: FxItem[], channel: string | null | un
   }
   return best?.m ?? null;
 }
-
