@@ -11,25 +11,45 @@ type WriteStore = Pick<Storage, "setItem" | "removeItem">;
 export const clampNudge = (n: number) => (Number.isFinite(n) ? Math.min(NUDGE_MAX, Math.max(-NUDGE_MAX, Math.round(n * 10) / 10)) : 0);
 /** One nudge step (dir -1 earlier / +1 later) from the current value. */
 export const stepNudge = (cur: number, dir: 1 | -1) => clampNudge(cur + dir * NUDGE_STEP);
-export const nudgeKey = (itemId: string, subIndex: number) => `${NUDGE_PREFIX}${itemId}.${subIndex}`;
+/** Short stable hash (djb2) so a long identity string makes a compact storage key. */
+const hash = (t: string) => {
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+};
+export const nudgeKey = (itemId: string, identity: string) => `${NUDGE_PREFIX}${itemId}.${hash(identity)}`;
+
+type IdentStream = { Index: number; Type?: string; Codec?: string; Language?: string; DisplayTitle?: string; Title?: string; Path?: string; IsExternal?: boolean };
+const base = (p?: string) => (p ?? "").split(/[\\/]/).pop() ?? "";
+
+/** Who a subtitle track IS, independent of its index (Jellyfin renumbers when an external file is added): kind, language, codec, title,
+ * the external file's name, plus a count to tell apart identical-looking tracks. null = no such subtitle. */
+export function trackIdentity(streams: readonly IdentStream[], index: number): string | null {
+  const subs = streams.filter((s) => s.Type === "Subtitle").sort((a, b) => a.Index - b.Index);
+  const key = (s: IdentStream) => [s.IsExternal ? "x" : "e", s.Language ?? "", s.Codec ?? "", s.DisplayTitle ?? s.Title ?? "", s.IsExternal ? base(s.Path) : ""].join("|");
+  const cur = subs.find((s) => s.Index === index);
+  if (!cur) return null;
+  const k = key(cur);
+  return `${k}|${subs.filter((s) => key(s) === k).indexOf(cur)}`;
+}
 export const nudgeLabel = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)} s`;
 
-export function loadNudge(itemId: string, subIndex: number, store?: ReadStore): number {
+export function loadNudge(itemId: string, identity: string, store?: ReadStore): number {
   try {
     const s = store ?? (typeof localStorage !== "undefined" ? localStorage : undefined);
-    const raw = s?.getItem(nudgeKey(itemId, subIndex));
+    const raw = s?.getItem(nudgeKey(itemId, identity));
     return raw == null ? 0 : clampNudge(Number(raw));
   } catch {
     return 0;
   }
 }
 
-export function saveNudge(itemId: string, subIndex: number, value: number, store?: WriteStore): void {
+export function saveNudge(itemId: string, identity: string, value: number, store?: WriteStore): void {
   try {
     const s = store ?? (typeof localStorage !== "undefined" ? localStorage : undefined);
     const v = clampNudge(value);
-    if (v === 0) s?.removeItem(nudgeKey(itemId, subIndex));
-    else s?.setItem(nudgeKey(itemId, subIndex), String(v));
+    if (v === 0) s?.removeItem(nudgeKey(itemId, identity));
+    else s?.setItem(nudgeKey(itemId, identity), String(v));
   } catch {
     /* storage blocked: the shift still applies for this session */
   }
@@ -41,6 +61,8 @@ export interface SyncResult {
   confidence: number;
   label: string;
   newStreamIndex: number | null;
+  /** the new track's file name (cached hits: the existing track), to find it by name when indices have shifted */
+  fileName: string | null;
   alreadySynced: boolean;
 }
 export type SyncPoll = { state: "queued" | "running"; etaSec: number | null } | { state: "done"; result: SyncResult } | { state: "failed"; error: string };
@@ -51,7 +73,7 @@ export function parseResult(raw: unknown): SyncResult | null {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
   const offsetSec = num(o?.offsetSec);
   if (!o || offsetSec == null) return null;
-  return { offsetSec, speed: num(o.speed) ?? 1, confidence: num(o.confidence) ?? 0, label: typeof o.label === "string" ? o.label : "", newStreamIndex: num(o.newStreamIndex), alreadySynced: o.alreadySynced === true };
+  return { offsetSec, speed: num(o.speed) ?? 1, confidence: num(o.confidence) ?? 0, label: typeof o.label === "string" ? o.label : "", newStreamIndex: num(o.newStreamIndex), fileName: typeof o.fileName === "string" && o.fileName ? o.fileName : null, alreadySynced: o.alreadySynced === true };
 }
 
 /** POST reply -> jobId to poll, a cached result, or a message to show. */
@@ -101,11 +123,16 @@ export function doneNote(r: SyncResult): string {
 
 export const progressText = (etaSec: number | null): string => (etaSec != null && etaSec > 0 ? `Matching… about ${Math.max(5, Math.round(etaSec / 5) * 5)} s` : "Matching…");
 
-/** After the server added a track: its index if the list has it, else the one subtitle that is new since `before`, else null (not listed yet). */
-export function findNewTrack(before: ReadonlyArray<{ Index: number; Type?: string }>, after: ReadonlyArray<{ Index: number; Type?: string }>, hint: number | null): number | null {
+/** After the server added (or already had) a track: found by its file name when given (works for a cached hit and after Jellyfin renumbered),
+ * else by the hinted index if that is new, else the one subtitle that is new since `before`; null = not listed yet. */
+export function findNewTrack(before: ReadonlyArray<IdentStream>, after: ReadonlyArray<IdentStream>, hint: number | null, fileName: string | null = null): number | null {
   const subs = after.filter((s) => s.Type === "Subtitle");
+  if (fileName) return subs.find((s) => s.IsExternal && base(s.Path) === fileName)?.Index ?? null;
   if (hint != null && subs.some((s) => s.Index === hint) && !before.some((s) => s.Index === hint && s.Type === "Subtitle")) return hint;
   const had = new Set(before.filter((s) => s.Type === "Subtitle").map((s) => s.Index));
   const fresh = subs.filter((s) => !had.has(s.Index));
   return fresh.length ? fresh[fresh.length - 1].Index : null;
 }
+
+/** Tracks the server wrote itself: matching one again would only repeat it. */
+export const isAutoMatched = (s: { Path?: string }) => /\.automatch\.srt$/i.test(s.Path ?? "");

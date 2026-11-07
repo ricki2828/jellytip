@@ -4,8 +4,8 @@ import { parsePoll, parseStart, type SyncPoll, type SyncResult } from "../lib/su
 const POLL_MS = 1500;
 const GIVE_UP_MS = 11 * 60_000; // the server times a job out at 10 min
 
-export async function startAutoMatch(itemId: string, streamIndex: number, signal?: AbortSignal) {
-  const r = await companionCall("POST", "v1/subs/sync", { itemId, streamIndex }, { signal });
+export async function startAutoMatch(itemId: string, streamIndex: number, mediaSourceId: string | undefined, signal?: AbortSignal) {
+  const r = await companionCall("POST", "v1/subs/sync", { itemId, streamIndex, mediaSourceId }, { signal });
   return parseStart(r.status, r.data);
 }
 
@@ -15,8 +15,8 @@ export async function pollAutoMatch(jobId: string, signal?: AbortSignal): Promis
 }
 
 /** Start and wait. `onProgress` gets the server's remaining-seconds estimate. Resolves to a result or a message. */
-export async function autoMatch(itemId: string, streamIndex: number, onProgress: (etaSec: number | null) => void, signal: AbortSignal): Promise<{ result: SyncResult } | { error: string }> {
-  const s = await startAutoMatch(itemId, streamIndex, signal);
+export async function autoMatch(itemId: string, streamIndex: number, mediaSourceId: string | undefined, onProgress: (etaSec: number | null) => void, signal: AbortSignal): Promise<{ result: SyncResult } | { error: string }> {
+  const s = await startAutoMatch(itemId, streamIndex, mediaSourceId, signal);
   if ("error" in s || "result" in s) return s;
   const t0 = Date.now();
   let misses = 0;

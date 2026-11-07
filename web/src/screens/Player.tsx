@@ -17,7 +17,7 @@ import { chooseStart, getAlwaysSubs, loadStore, memoryKey, recordChoice, saveSto
 import { TrackMenu } from "../components/TrackMenu.tsx";
 import { flashNote } from "../components/TasteButtons";
 import { autoMatch } from "../api/subSync";
-import { clampNudge, doneNote, findNewTrack, loadNudge, progressText, saveNudge, stepNudge } from "../lib/subSync.ts";
+import { clampNudge, doneNote, findNewTrack, isAutoMatched, loadNudge, progressText, saveNudge, stepNudge, trackIdentity } from "../lib/subSync.ts";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
 import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
 import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } from "../lib/captionReplay.ts";
@@ -445,19 +445,23 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
 
   // The shift belongs to one title + one track: load it when either changes, save on every change (never from an effect, so a track
   // switch can't write the old value under the new key)
+  // Keyed on the track's identity (kind, language, codec, title, file), not its index: Jellyfin renumbers when a file is added
+  const subIdent = subIndex >= 0 ? trackIdentity(plan?.source.MediaStreams ?? [], subIndex) : null;
+  const subIdentRef = useRef<string | null>(null);
+  subIdentRef.current = subIdent;
   useEffect(() => {
-    const v = subIndex >= 0 ? loadNudge(id, subIndex) : 0;
+    const v = subIdent ? loadNudge(id, subIdent) : 0;
     delayRef.current = v;
     setDelayState(v);
     setMatch({ status: "idle" });
-  }, [id, subIndex]);
+  }, [id, subIdent]);
   const applyDelay = (v: number) => {
     const n = clampNudge(v);
     delayRef.current = n;
     setDelayState(n);
-    if (subIndexRef.current >= 0) saveNudge(id, subIndexRef.current, n);
+    if (subIdentRef.current) saveNudge(id, subIdentRef.current, n);
   };
-  useEffect(() => () => matchCtl.current?.abort(), []);
+  useEffect(() => () => { matchCtl.current?.abort(); matchCtl.current = null; }, [id]);
 
   // ---- controls visibility ----
   const poke = useCallback(() => {
@@ -777,29 +781,34 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     matchCtl.current = ctl;
     setMatch({ status: "matching", text: progressText(null) });
     void (async () => {
-      const out = await autoMatch(id, idx, (eta) => setMatch({ status: "matching", text: progressText(eta) }), ctl.signal);
-      matchCtl.current = null;
-      if (ctl.signal.aborted) return;
-      if ("error" in out) { setMatch({ status: "failed", text: out.error }); flashNote(out.error); return; }
-      setMatch({ status: "idle" });
-      const r = out.result;
-      flashNote(doneNote(r));
-      if (r.alreadySynced) return;
-      // The new track: the server gives its index when Jellyfin had listed it; otherwise re-read the item a few times
-      for (let i = 0; i < 4; i++) {
-        const fresh = await getItem(id).catch(() => null);
-        const streams = fresh?.MediaSources?.find((m) => m.Id === planRef.current?.source.Id)?.MediaStreams;
-        const at = streams ? findNewTrack(planRef.current?.source.MediaStreams ?? [], streams, r.newStreamIndex) : null;
-        if (fresh && at != null) {
-          addedSubtitles(fresh);
-          replayRef.current = null;
-          remember({ subtitle: at });
-          setSubIndex(at);
-          return;
+      try {
+        const out = await autoMatch(id, idx, planRef.current?.source.Id, (eta) => !ctl.signal.aborted && setMatch({ status: "matching", text: progressText(eta) }), ctl.signal);
+        if (ctl.signal.aborted) return;
+        if ("error" in out) { setMatch({ status: "failed", text: out.error }); flashNote(out.error); return; }
+        setMatch({ status: "idle" });
+        const r = out.result;
+        flashNote(doneNote(r));
+        if (r.alreadySynced) return;
+        // The new track (or, for a repeat, the one already made): by file name, since indices shift; re-read the item a few times
+        for (let i = 0; i < 4; i++) {
+          const fresh = await getItem(id).catch(() => null);
+          if (ctl.signal.aborted) return;
+          const streams = fresh?.MediaSources?.find((m) => m.Id === planRef.current?.source.Id)?.MediaStreams;
+          const at = streams ? findNewTrack(planRef.current?.source.MediaStreams ?? [], streams, r.newStreamIndex, r.fileName) : null;
+          if (fresh && at != null) {
+            addedSubtitles(fresh);
+            replayRef.current = null;
+            remember({ subtitle: at });
+            setSubIndex(at);
+            return;
+          }
+          await new Promise((res) => setTimeout(res, 2000));
+          if (ctl.signal.aborted) return;
         }
-        await new Promise((res) => setTimeout(res, 2000));
+        flashNote("Matched, but the new track isn't listed yet. Check the menu in a moment.");
+      } finally {
+        if (matchCtl.current === ctl) matchCtl.current = null;
       }
-      flashNote("Matched, but the new track isn't listed yet. Check the menu in a moment.");
     })();
   };
   const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); menuRef.current = o; if (o) setControls(true); else poke(); }, [poke]);
@@ -940,7 +949,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         onActivity={poke}
         findSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs(true) : undefined}
         timing={item && !localRef.current ? {
-          canMatch: textSubs.some((x) => x.Index === subIndex),
+          canMatch: textSubs.some((x) => x.Index === subIndex && !isAutoMatched(x)),
           status: match.status,
           text: match.text,
           onMatch: runAutoMatch,
