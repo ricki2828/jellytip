@@ -1,6 +1,6 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { uid } from "../api/jellyfin";
 import { channelItems } from "../api/channels";
 import { CHANNELS, channelViable, itemLabel, parseHidden, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
@@ -68,6 +68,7 @@ export function Channels() {
   const [showHidden, setShowHidden] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [attempt, setAttempt] = useState(0);
+  const failed = useRef(new Set<string>());
 
   useEffect(() => {
     const prev = document.title;
@@ -82,9 +83,17 @@ export function Channels() {
   useEffect(() => {
     let alive = true;
     for (const def of CHANNELS) {
-      channelItems(def, attempt > 0).then(
-        (items) => alive && setLoads((l) => ({ ...l, [def.id]: { state: "ok", items } })),
-        () => alive && setLoads((l) => ({ ...l, [def.id]: { state: "error" } })),
+      channelItems(def, attempt > 0 && failed.current.has(def.id)).then(
+        (items) => {
+          if (!alive) return;
+          failed.current.delete(def.id);
+          setLoads((l) => ({ ...l, [def.id]: { state: "ok", items } }));
+        },
+        () => {
+          if (!alive) return;
+          failed.current.add(def.id);
+          setLoads((l) => ({ ...l, [def.id]: { state: "error" } }));
+        },
       );
     }
     return () => {
@@ -115,18 +124,18 @@ export function Channels() {
   return (
     <div className="channels">
       <h1 className="page-title">Channels</h1>
-      <p className="ask-sub">Always-on channels made from your own library. What's on is the same whenever you tune in, and the order is reshuffled after each full run through a channel.</p>
+      <p className="ask-sub">Always-on channels made from your own library. What's on is the same whenever you tune in (on devices that see the same library), and the order is reshuffled after each full run through a channel.</p>
       {errored > 0 && !pending && (
-        <p className="ask-sub">
+        <p className="ask-sub" role="status">
           Couldn't load {errored === CHANNELS.length ? "your library" : "some channels"}.{" "}
           <button className="btn small" data-nav data-autofocus onClick={() => setAttempt((n) => n + 1)}>
             Try again
           </button>
         </p>
       )}
-      {pending && shown.length === 0 && <p className="ask-sub">Looking…</p>}
-      {!pending && errored === 0 && viable.length === 0 && <p className="ask-sub">Not enough in your library yet to make a channel (each needs at least 3 titles).</p>}
-      <ul className="ch-list" aria-live="polite">
+      {pending && shown.length === 0 && <p className="ask-sub" role="status">Looking…</p>}
+      {!pending && errored === 0 && viable.length === 0 && <p className="ask-sub" role="status">Not enough in your library yet to make a channel (each needs at least 3 titles).</p>}
+      <ul className="ch-list">
         {shown.map((c) => {
           const l = loads[c.id];
           return l.state === "ok" ? <Card key={c.id} def={c} items={l.items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} /> : null;

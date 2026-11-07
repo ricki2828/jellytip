@@ -17,7 +17,7 @@ interface Entry {
 }
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<ChanItem[]>>();
-const keyFor = (def: ChannelDef) => `jellytip.channel.v2.${uid()}.${def.id}`;
+const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v2.${u}.${def.id}`;
 
 const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks });
 
@@ -68,7 +68,8 @@ async function fetchItems(def: ChannelDef): Promise<ChanItem[]> {
 
 /** The channel's candidate items (cached ~6 h per person). Rejects when Jellyfin can't be reached. */
 export function channelItems(def: ChannelDef, fresh = false): Promise<ChanItem[]> {
-  const key = keyFor(def);
+  const u = uid(); // the person this request is for: a switch of account mid-fetch discards the answer
+  const key = keyFor(u, def);
   if (!fresh) {
     const hit = read(key);
     if (hit) return Promise.resolve(hit);
@@ -77,6 +78,7 @@ export function channelItems(def: ChannelDef, fresh = false): Promise<ChanItem[]
   if (running) return running;
   const p = fetchItems(def)
     .then((items) => {
+      if (uid() !== u) throw new Error("account changed");
       write(key, items);
       return items;
     })
