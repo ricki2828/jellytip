@@ -13,16 +13,20 @@ let inflight: Promise<void> | null = null;
 const emit = () => window.dispatchEvent(new Event(EVENT));
 
 export function refreshTeamReminders(force = false): Promise<void> {
-  if (inflight) return inflight;
+  if (inflight && !force) return inflight;
   if (unavailable || (!force && state)) return Promise.resolve();
-  inflight = iptvGet<unknown>("v1/iptv/reminders/teams")
-    .then((a) => {
+  const run = () =>
+    iptvGet<unknown>("v1/iptv/reminders/teams").then((a) => {
       if (a.status === 404) unavailable = true;
       else if (a.status === 200) state = parseTeamReminders(a.data);
       emit();
-    })
-    .finally(() => (inflight = null));
-  return inflight;
+    });
+  // A forced refresh (after an add / stop) must see the change: it queues behind a GET already in flight instead of reusing its older answer
+  const p: Promise<void> = (inflight ? inflight.then(run, run) : run()).finally(() => {
+    if (inflight === p) inflight = null;
+  });
+  inflight = p;
+  return p;
 }
 
 window.addEventListener("jellytip-session", () => {

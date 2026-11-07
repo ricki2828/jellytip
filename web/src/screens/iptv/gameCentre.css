@@ -35,3 +35,7 @@
 .rem-page .rem-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: 0.5rem; }
 .rem-page .rem-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
 .rem-page .rem-item span small { display: block; opacity: 0.7; }
+.remind-ctl { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; max-width: 100%; }
+.remind-ctl > .btn { max-width: 100%; white-space: normal; text-align: left; }
+.remind-menu { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.35rem; border-radius: 10px; background: rgba(255, 255, 255, 0.08); max-width: 100%; }
+.remind-menu .btn { text-align: left; white-space: normal; }
