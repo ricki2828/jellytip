@@ -277,6 +277,8 @@ export interface FxItem {
   away: string;
   homeId: string | null;
   awayId: string | null;
+  homeShort: string | null;
+  awayShort: string | null;
   homeLogo: string | null;
   awayLogo: string | null;
   kickoff: number;
@@ -302,11 +304,11 @@ const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const n = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
 const idOf = (v: unknown) => (typeof v === "string" && v ? v : typeof v === "number" && isFinite(v) ? String(v) : null);
 
-function fxSide(v: unknown): { name: string; id: string | null; logo: string | null } | null {
-  if (typeof v === "string") return s(v) ? { name: s(v)!, id: null, logo: null } : null;
+function fxSide(v: unknown): { name: string; id: string | null; logo: string | null; short: string | null } | null {
+  if (typeof v === "string") return s(v) ? { name: s(v)!, id: null, logo: null, short: null } : null;
   const x = o(v);
   const name = s(x?.name) ?? s(x?.short);
-  return x && name ? { name, id: idOf(x.teamId), logo: s(x.logo) } : null;
+  return x && name ? { name, id: idOf(x.teamId), logo: s(x.logo), short: s(x.short) } : null;
 }
 
 function fxChannel(raw: unknown): FxChannel | null {
@@ -353,8 +355,8 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
     const kickoff = kickoffOf(e?.kickoff);
     const status = e?.status === "pre" || e?.status === "in" || e?.status === "post" ? e.status : null;
     const title = s(e?.title);
-    const home = fxSide(e?.home) ?? (title ? { name: title, id: null, logo: null } : null);
-    const away = fxSide(e?.away) ?? (title ? { name: "", id: null, logo: null } : null);
+    const home = fxSide(e?.home) ?? (title ? { name: title, id: null, logo: null, short: null } : null);
+    const away = fxSide(e?.away) ?? (title ? { name: "", id: null, logo: null, short: null } : null);
     if (!e || !fid || kickoff == null || !status || !home || !away || seen.has(fid)) continue;
     seen.add(fid);
     const sc = o(e.score);
@@ -368,6 +370,8 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       away: away.name,
       homeId: home.id,
       awayId: away.id,
+      homeShort: home.short,
+      awayShort: away.short,
       homeLogo: home.logo,
       awayLogo: away.logo,
       kickoff,

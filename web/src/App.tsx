@@ -4,6 +4,7 @@ import { useRoute } from "./lib/router";
 import { MatchInfoHost } from "./components/MatchInfo";
 import { SportSetup } from "./components/SportSetup";
 import { SportMuteHost } from "./components/SportMute";
+import { RemindersPage } from "./screens/iptv/RemindersPage";
 import { ReminderNudge } from "./components/Reminders";
 import { Nav } from "./components/Nav";
 import { LiveTabs } from "./components/LiveTabs";
@@ -132,6 +133,7 @@ export function App() {
           {route.name === "recordings" && <RecordingsPage />}
           {route.name === "upcoming" && <UpcomingPage />}
           {route.name === "games" && <GameCentre />}
+          {route.name === "reminders" && <RemindersPage />}
           {route.name === "iptvitem" && VOD_ID_RE.test(route.query.get("id") ?? "") && <IptvDetails key={route.query.get("id")} id={route.query.get("id")!} />}
         </Suspense>
       </main>

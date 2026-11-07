@@ -14,6 +14,8 @@ export interface Side {
   altColor: string | null;
   /** Tennis: the player's country (a flag instead of a crest). */
   country: string | null;
+  /** Catalogue team id ("espn:nba:13"), when the server states one: what "remind me for every game" is keyed on. */
+  teamId: string | null;
 }
 
 export interface Fixture {
@@ -98,7 +100,7 @@ export function hex(v: unknown): string | null {
 function side(raw: unknown): Side | null {
   const o = obj(raw);
   const name = str(o?.name) ?? str(o?.short);
-  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record), color: hex(o.color), altColor: hex(o.altColor), country: str(o.country) } : null;
+  return o && name ? { name, short: str(o.short), logo: str(o.logo), record: str(o.record), color: hex(o.color), altColor: hex(o.altColor), country: str(o.country), teamId: str(o.teamId) } : null;
 }
 
 /** `matchInfo` on a programme / item: a fixture, or null when it has no id or either side. (`match` is the favourite marker and is not read here.) */
@@ -113,8 +115,8 @@ export function parseFixture(raw: unknown): Fixture | null {
   if (event) {
     // F1 and golf: no home / away, the title is the hero
     if (!title) return null;
-    home = home ?? { name: title, short: null, logo: null, record: null, color: null, altColor: null, country: null };
-    away = away ?? { name: "", short: null, logo: null, record: null, color: null, altColor: null, country: null };
+    home = home ?? { name: title, short: null, logo: null, record: null, color: null, altColor: null, country: null, teamId: null };
+    away = away ?? { name: "", short: null, logo: null, record: null, color: null, altColor: null, country: null, teamId: null };
   } else if (!home || !away) return null;
   const sc = obj(o.score);
   const status = o.status === "pre" || o.status === "in" || o.status === "post" ? o.status : null;

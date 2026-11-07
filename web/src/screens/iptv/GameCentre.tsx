@@ -1,6 +1,8 @@
 // #/games: Game Centre. Followed teams' games from today and recent days, each with its ways to watch. Spoiler-safe by
 // default: no scores, results, art or programme descriptions; scores only behind a two-press reveal (or when "Show scores
 // (spoilers)" is on in Settings). Logic in lib/gameCentre.ts.
+import { RemindControl } from "../../components/TeamRemind";
+import { fixtureSides, type TeamSide } from "../../lib/teamReminders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addRecording, errorText } from "../../api/iptv";
 import { refreshFixtures, useFixtures } from "../../api/fixtures";
@@ -60,12 +62,8 @@ const cardProps = (act: (() => void) | null) => ({
 });
 
 /** "Remind me" / "Reminder set ✓ (tap to remove)": a plain toggle, ignored while a request is in flight (double-press guard). */
-function RemindButton({ set, busy, title, onToggle }: { set: boolean; busy: boolean; title: string; onToggle: () => void }) {
-  return (
-    <button className={`btn small gc-remind${set ? " on" : ""}`} data-nav aria-pressed={set} aria-disabled={busy || undefined} aria-label={set ? `Remove reminder for ${title}` : `Remind me about ${title}`} onClick={busy ? undefined : onToggle}>
-      {busy ? "Saving…" : set ? "Reminder set ✓ (tap to remove)" : "Remind me"}
-    </button>
-  );
+function RemindButton({ set, busy, title, onToggle, sides }: { set: boolean; busy: boolean; title: string; onToggle: () => void; sides: TeamSide[] }) {
+  return <RemindControl thisOn={set} busy={busy} label={title} sides={sides} onThis={onToggle} />;
 }
 
 /** Reminder toggling shared by both screens; `run` does the add, the id (when set) is removed. Errors show on the card. */
@@ -129,7 +127,7 @@ function GameCard({ g, now, pref, shown, scoreLine, gate, onPress, remId, remBus
             {shown ? "Score shown" : armed ? "Press again to reveal" : "Reveal score"}
           </button>
         )}
-        {w.phase === "upcoming" && (g.event || mid) && <RemindButton set={remId != null} busy={remBusy} title={g.title} onToggle={onRemind} />}
+        {w.phase === "upcoming" && (g.event || mid) && <RemindButton set={remId != null} busy={remBusy} title={g.title} onToggle={onRemind} sides={g.event?.fixture ? fixtureSides(g.event.fixture, g.event.sportName ?? null) : []} />}
       </div>
       {remMsg && (
         <p className="gc-note" role="status">
@@ -232,6 +230,9 @@ function LegacyGameCentre() {
 
 // ---------- fixture-first ----------
 
+const fxSides = (f: FxItem): TeamSide[] =>
+  f.away ? [{ teamId: f.homeId, name: f.home, short: f.homeShort, sport: f.sport, league: f.league }, { teamId: f.awayId, name: f.away, short: f.awayShort, sport: f.sport, league: f.league }] : [];
+
 function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded, remId, remBusy, remMsg, onRemind }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
   const w = waysForFixture(f, rec, now);
   const armed = gateArmed(gate, Date.now());
@@ -266,7 +267,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
             {shown ? "Score shown" : armed ? "Press again to reveal" : "Reveal score"}
           </button>
         )}
-        {w.phase === "upcoming" && <RemindButton set={remId != null} busy={remBusy} title={title} onToggle={onRemind} />}
+        {w.phase === "upcoming" && <RemindButton set={remId != null} busy={remBusy} title={title} onToggle={onRemind} sides={fxSides(f)} />}
       </div>
       {(msg || remMsg) && (
         <p className="gc-note" role="status">

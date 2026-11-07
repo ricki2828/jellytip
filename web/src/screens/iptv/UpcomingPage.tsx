@@ -17,6 +17,7 @@ export function UpcomingPage() {
       <div className="page-head">
         <h1 className="page-title">Upcoming sport</h1>
         <button className="btn small" data-nav onClick={() => go("/games")}>Game Centre</button>
+        <button className="btn small" data-nav onClick={() => go("/reminders")}>Reminders</button>
       </div>
       {ev === null && <p className="iptv-hint">Loading…</p>}
       {ev && days.length === 0 && <p className="iptv-hint">Nothing coming up in the guide.</p>}

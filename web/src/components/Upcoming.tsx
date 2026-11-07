@@ -1,5 +1,7 @@
 // Upcoming sport: a tile, the overlay it opens (matchup, time, channels best first with quality, Record, Watch when
 // live) and the Home row. The page (screens/iptv/UpcomingPage) reuses the tile and overlay.
+import { RemindControl } from "./TeamRemind";
+import { fixtureSides } from "../lib/teamReminders";
 import { useEffect, useState } from "react";
 import { addRecording, errorText, logoSrc, recordings } from "../api/iptv";
 import { refreshRecs } from "../api/recStore";
@@ -138,9 +140,7 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
             </button>
           )}
           {available && !live && e.start > Date.now() / 1000 && (
-            <button className="btn" data-nav disabled={busyRem} aria-pressed={remId != null} onClick={() => void toggleRemind()}>
-              {remId != null ? "Reminder set ✓" : "Remind me"}
-            </button>
+            <RemindControl className="btn" thisOn={remId != null} busy={busyRem} label={e.title} sides={e.fixture ? fixtureSides(e.fixture, e.sportName ?? null) : []} onThis={toggleRemind} />
           )}
           {recorded && (
             <button className="btn" data-nav onClick={() => go("/recordings")}>

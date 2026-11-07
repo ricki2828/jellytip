@@ -1,5 +1,7 @@
 // Match info: an ⓘ button for sport tiles and the player, and the modal it opens (header, where to watch, odds, line-ups,
 // form and head to head, Watch / Remind me / Record, "Show score"). Every field is optional. Contract: ~/ai/plans/jellytip-live-sport.md.
+import { RemindControl } from "./TeamRemind";
+import { fixtureSides } from "../lib/teamReminders";
 import { useEffect, useState } from "react";
 import { addRecording } from "../api/iptv";
 import { addReminderFor } from "../api/reminderStore";
@@ -313,13 +315,14 @@ export function MatchInfoHost() {
                 </button>
               )}
               {f.status === "pre" && f.startsAt && best && (
-                <button
+                <RemindControl
                   className="btn"
-                  data-nav
-                  onClick={async () => setMsg((await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt!, stop: f.startsAt! + 3 * 3600, channelId: best.id, channelName: best.name })) ?? "We'll remind you before it starts.")}
-                >
-                  Remind me
-                </button>
+                  thisOn={false}
+                  busy={false}
+                  label={matchupTitle(f)}
+                  sides={fixtureSides(f, f.leagueKey)}
+                  onThis={async () => setMsg((await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt!, stop: f.startsAt! + 3 * 3600, channelId: best.id, channelName: best.name })) ?? "We'll remind you before it starts.")}
+                />
               )}
               {f.status !== "post" && f.startsAt && best && (
                 <button
