@@ -47,6 +47,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- Sport reminders: a local alarm per reminder posts the notification (ReminderSync schedules them) -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -63,4 +68,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Live alerts (fantasy scoring, odds flips) as heads-up notifications while the mini player is open -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Sport reminders at the minute; where the user hasn't allowed exact alarms it falls back to a 2-minute window -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 </manifest>

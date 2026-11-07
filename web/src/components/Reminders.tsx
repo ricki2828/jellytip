@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useReminders } from "../api/reminderStore";
 import { livePath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
+import { isNative, NativeReminders } from "../lib/native";
+import { COMPANION_BASE } from "../api/companion";
+import { getSession } from "../api/jellyfin";
 import { countdown, dueNudges, nudgeText, stateOf, type Nudge } from "../lib/reminders";
 import { UpcomingSheet, watchExtras } from "./Upcoming";
 import { SportBadges } from "./SportBadges";
@@ -63,9 +66,37 @@ export function RemindersRow() {
 
 const SHOW_MS = 15_000;
 
+/** Phone app: hand native the token (it schedules the notifications itself), sync on open/resume, open a tapped link. */
+function useNativeReminders() {
+  useEffect(() => {
+    if (!isNative) return;
+    const token = getSession()?.token ?? "";
+    void NativeReminders.configure({ apiBase: COMPANION_BASE, token }).catch(() => undefined);
+    const takeLink = () =>
+      NativeReminders.takeDeepLink()
+        .then((r) => {
+          if (r.deepLink) go(r.deepLink.replace(/^#/, ""));
+        })
+        .catch(() => undefined);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void NativeReminders.sync().catch(() => undefined);
+      void takeLink();
+    };
+    void takeLink();
+    window.addEventListener("jellytip-native-deeplink", takeLink);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("jellytip-native-deeplink", takeLink);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+}
+
 /** Mounted once in the app shell: also what keeps the reminders polled while the app is open. */
 export function ReminderNudge() {
   const { items } = useReminders();
+  useNativeReminders();
   const now = useNow();
   const seen = useRef(new Set<string>());
   const [nudge, setNudge] = useState<Nudge | null>(null);
