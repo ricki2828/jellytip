@@ -296,20 +296,21 @@ export function filtersToParams(f: LibraryFilters): URLSearchParams {
 /** null when the URL carries no filter keys at all (then the stored state applies). */
 export function filtersFromParams(q: URLSearchParams): LibraryFilters | null {
   if (!KEYS.some((k) => q.has(k))) return null;
-  const list = (k: string, sep: string) => (q.get(k) ?? "").split(sep).filter(Boolean);
-  const nums = (k: string) => list(k, ",").map(Number).filter(Number.isFinite);
+  // Caps: a pasted link can't make an enormous query (each value ≤ 60 chars, refs ≤ 120; y ≤ 20, g / r ≤ 15 entries)
+  const list = (k: string, sep: string, max = 20, len = 60) => (q.get(k) ?? "").split(sep).filter(Boolean).map((v) => v.slice(0, len)).slice(0, max);
+  const nums = (k: string) => list(k, ",", 20).map(Number).filter(Number.isFinite);
   const refs = (k: string) =>
-    list(k, "|").map((p) => {
+    list(k, "|", 10, 120).map((p) => {
       const i = p.indexOf("~");
       return { id: p.slice(0, i), name: p.slice(i + 1) };
     });
   return parseFilters({
     sort: q.get("sort") ?? DEFAULT_FILTERS.sort,
     dir: q.get("dir"),
-    genres: list("g", "|"),
+    genres: list("g", "|", 15),
     years: nums("y"),
     decades: nums("d"),
-    ratings: list("r", "|"),
+    ratings: list("r", "|", 15),
     minRating: q.has("min") ? Number(q.get("min")) : null,
     watched: q.get("w"),
     favorite: q.get("fav") === "1",

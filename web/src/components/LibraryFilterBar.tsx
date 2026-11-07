@@ -92,6 +92,8 @@ function FilterSheet({ kind, value, onChange, onClose }: { kind: Kind; value: Li
   const [olderYears, setOlderYears] = useState(false);
   const { facets, failed, retry } = useFacets(kind, true);
   const box = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose); // onClose is a new arrow each render: the effect must not re-run (it refocuses Done)
+  closeRef.current = onClose;
   const noun = kind === "movie" ? "movies" : "shows";
 
   // Focus moves into the sheet (not on touch), back to the opener on close; Escape closes it before it can mean "Back"
@@ -104,14 +106,14 @@ function FilterSheet({ kind, value, onChange, onClose }: { kind: Kind; value: Li
       if (t && t.tagName === "INPUT" && (t as HTMLInputElement).value) return; // first Esc clears nothing, but never closes mid-typing
       e.preventDefault();
       e.stopPropagation();
-      onClose();
+      closeRef.current();
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
       opener?.focus?.({ preventScroll: true });
     };
-  }, [onClose]);
+  }, []);
 
   const set = (patch: Partial<LibraryFilters>) => onChange({ ...value, ...patch });
   // Portal: the bar is a sticky stacking context, which would keep the sheet below the phone tab bar

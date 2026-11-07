@@ -208,3 +208,11 @@ test("My list: routes, nav highlight, and picking the row for the page's kind", 
   assert.equal(pickMyList([row("a", "movie", 0)], "movie"), null);
   assert.equal(pickMyList(null, "tv"), null);
 });
+
+test("URL arrays are capped so a pasted link can't build a huge query", () => {
+  const many = (n: number, f: (i: number) => string) => Array.from({ length: n }, (_, i) => f(i)).join(",");
+  const f = filtersFromParams(new URLSearchParams({ y: many(50, (i) => String(1950 + i)), g: Array.from({ length: 40 }, (_, i) => `G${i}`).join("|"), r: "R".repeat(200) }))!;
+  assert.equal(f.years.length, 20);
+  assert.equal(f.genres.length, 15);
+  assert.equal(f.ratings[0].length, 60);
+});

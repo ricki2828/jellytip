@@ -16,7 +16,8 @@ const store = (): Storage | null => {
 
 const base = (kind: Kind) => (kind === "movie" ? "/movies/all" : "/shows/all");
 const MIN_PAGE_FILL = 24; // client-side filters keep fetching until a page has this many
-const MAX_FETCHES = 8;
+const MAX_FETCHES = 10;
+const SCAN_STEP = 600; // runtime bands scan at most this many titles before asking "Load more"
 
 export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) {
   const user = uid();
@@ -56,6 +57,8 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
   const [failed, setFailed] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const gen = useRef(0);
+  const scanLimit = useRef(SCAN_STEP);
+  const [capped, setCapped] = useState(false);
   const next = useRef(0); // server index of the next page (items.length differs once a client-side filter drops rows)
   const client = needsClientFilter(kind, filters);
 
@@ -67,16 +70,19 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
       const random = sortFor(filters.sort).by === "Random";
       let kept: Item[] = [];
       let serverTotal = 0;
+      let emptyPage = false;
       for (let n = 0; n < MAX_FETCHES; n++) {
         const r = await getItems(toQuery(kind, filters, next.current));
         if (g !== gen.current) return;
         next.current += r.Items.length;
         serverTotal = random ? next.current : r.TotalRecordCount ?? next.current;
         kept = kept.concat(client ? r.Items.filter((i) => runtimeOk(filters.runtime, i.RunTimeTicks)) : r.Items);
-        if (!client || kept.length >= MIN_PAGE_FILL || next.current >= serverTotal || r.Items.length === 0) break;
+        emptyPage = r.Items.length === 0;
+        if (!client || kept.length >= MIN_PAGE_FILL || next.current >= serverTotal || emptyPage || next.current >= scanLimit.current) break;
       }
-      const more = next.current < serverTotal && !random;
+      const more = next.current < serverTotal && !random && !emptyPage;
       setHasMore(more);
+      setCapped(client && more && next.current >= scanLimit.current);
       setItems((prev) => {
         const merged = [...prev, ...kept];
         const seen = new Set<string>();
@@ -93,6 +99,8 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
   useEffect(() => {
     const g = ++gen.current;
     next.current = 0;
+    scanLimit.current = SCAN_STEP;
+    setCapped(false);
     setItems([]);
     setTotal(null);
     setHasMore(false);
@@ -103,7 +111,7 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
 
   useEffect(() => {
     const el = sentinel.current;
-    if (!el || failed || !hasMore) return;
+    if (!el || failed || !hasMore || capped) return;
     const io = new IntersectionObserver(
       (es) => {
         if (es.some((e) => e.isIntersecting) && !loading) loadPage(gen.current);
@@ -113,7 +121,7 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
     io.observe(el);
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, hasMore, loading, failed]);
+  }, [items.length, hasMore, loading, failed, capped]);
 
   const count = total != null ? String(total) : items.length ? `${items.length}${hasMore ? "+" : ""}` : "";
   return (
@@ -135,6 +143,22 @@ export function Browse({ kind, query }: { kind: Kind; query: URLSearchParams }) 
         </div>
         <div ref={sentinel} className="sentinel">
           {loading && "Loading…"}
+          {capped && !loading && (
+            <span className="load-failed">
+              Showing matches from the first {scanLimit.current} titles
+              <button
+                data-nav
+                className="chip"
+                onClick={() => {
+                  scanLimit.current += SCAN_STEP;
+                  setCapped(false);
+                  loadPage(gen.current);
+                }}
+              >
+                Load more
+              </button>
+            </span>
+          )}
           {failed && (
             <span className="load-failed">
               {items.length === 0 ? `Couldn't load ${noun}.` : "Couldn't load more."}
