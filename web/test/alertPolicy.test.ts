@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EXPIRE_SEC, isBlowout, isKeyEvent, isLateGame, MIN_GAP_SEC, parseAlertMode, pickAlert, QUEUE_MAX, type Candidate } from "../src/lib/alertPolicy.ts";
+import { EXPIRE_SEC, MAX_PENDING_SEC, isBlowout, isKeyEvent, isLateGame, MIN_GAP_SEC, parseAlertMode, pickAlert, QUEUE_MAX, type Candidate } from "../src/lib/alertPolicy.ts";
 
 const c = (id: string, kind: string, at: number, o: Partial<Candidate<string>> = {}): Candidate<string> => ({ id, kind, at, payload: id, ...o });
 const all = () => true;
@@ -67,7 +67,7 @@ test("unrevealed events never block revealed ones", () => {
 
 test("stale, duplicate and non-key candidates are dropped", () => {
   const p = [c("old", "goal", 100), c("dup", "goal", 500), c("dup", "goal", 500), c("meh", "clutch", 500)];
-  const r = pickAlert(p, { lastShownAt: 499 }, 100 + EXPIRE_SEC + 1 + 300, { reveal: all, mode: "key" });
+  const r = pickAlert(p, { lastShownAt: 640 }, 100 + MAX_PENDING_SEC + 1, { reveal: all, mode: "key" });
   assert.deepEqual(r.pending.map((x) => x.id), ["dup"]);
 });
 
@@ -95,4 +95,23 @@ test("late game and blowout by sport", () => {
   assert.equal(isBlowout("football", 2, 0, true), false);
   assert.equal(isBlowout("cricket", 300, 0, true), false);
   assert.equal(isBlowout("football", null, 0, true), false);
+});
+
+test("a long calibrated delay does not expire alerts before they can be revealed", () => {
+  // delay 200 s: the event at 100 is released at 300, well past EXPIRE_SEC from its own time
+  const p = [c("g", "goal", 100)];
+  const reveal = (now: number) => (at: number) => now >= at + 200;
+  let r = pickAlert(p, { lastShownAt: null }, 250, { reveal: reveal(250), mode: "key" });
+  assert.equal(r.show, null);
+  assert.equal(r.pending.length, 1); // still waiting, not expired
+  r = pickAlert(r.pending, { lastShownAt: null }, 301, { reveal: reveal(301), mode: "key" });
+  assert.equal(r.show?.id, "g");
+});
+test("expiry counts from the release: a released alert held by the 30 s gap goes stale after EXPIRE_SEC, a never-released one at the hard cap", () => {
+  let r = pickAlert([c("g", "goal", 100)], { lastShownAt: 299 }, 300, { reveal: (at) => 300 >= at + 200, mode: "key" });
+  assert.equal(r.pending[0]?.revealedAt, 300);
+  r = pickAlert(r.pending, { lastShownAt: 299 + EXPIRE_SEC + 5 }, 300 + EXPIRE_SEC + 1, { reveal: () => true, mode: "key" });
+  assert.equal(r.pending.length, 0);
+  r = pickAlert([c("x", "goal", 100)], { lastShownAt: null }, 100 + MAX_PENDING_SEC + 1, { reveal: () => false, mode: "key" });
+  assert.equal(r.pending.length, 0);
 });

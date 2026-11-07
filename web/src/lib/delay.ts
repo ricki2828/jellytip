@@ -2,7 +2,7 @@
 // live information (LiveDrawer, FlipAlerts, FantasyAlerts, FantasyChip). Maths and policy live in delayMath.ts (pure, tested).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChannelDelay, putChannelDelay, usePrefs } from "../api/me";
-import { calibratedDelay, clampDelay, noteEvent, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
+import { type CalibrateResult, calibratedDelay, clampDelay, noteEvent, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
 
 export * from "./delayMath.ts";
 
@@ -14,7 +14,7 @@ export interface RevealClock {
   delaySec: number;
   replay: boolean;
   /** "That just happened": sets the delay so the latest event this clock was asked about is revealed right now. */
-  calibrate: () => void;
+  calibrate: () => CalibrateResult;
 }
 
 export interface RevealOpts {
@@ -106,15 +106,16 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
     ref.current.latest = noteEvent(ref.current.latest, atSec, Date.now() / 1000);
   }, []);
 
-  const calibrate = useCallback(() => {
-    if (inReplay()) return;
+  const calibrate = useCallback((): CalibrateResult => {
+    if (inReplay()) return { kind: "replay" };
     const d = calibratedDelay(ref.current.latest, Date.now() / 1000, lag());
-    if (d == null) return;
+    if (d == null) return { kind: "none" };
     setChannelDelay(d);
-    if (!channelKey) return;
+    if (!channelKey) return { kind: "set", sec: d };
     writeLocal(channelKey, d);
     const { pid, sid } = parseChannelKey(channelKey);
     void putChannelDelay(pid, sid, d); // a server without the route keeps the browser copy
+    return { kind: "set", sec: d };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelKey]);
 

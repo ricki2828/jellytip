@@ -63,6 +63,15 @@ export function noteEvent(latest: number | null, atSec: number, nowSec: number):
   return latest == null || atSec > latest ? atSec : latest;
 }
 
+export type CalibrateResult = { kind: "set"; sec: number } | { kind: "none" } | { kind: "replay" };
+
+/** What to tell the viewer after tapping Adjust. */
+export function calibrateMessage(r: CalibrateResult): string {
+  if (r.kind === "set") return `Delay set to ${r.sec} s`;
+  if (r.kind === "replay") return "Updates are off while you watch a replay";
+  return "Nothing to line up yet. Tap Adjust right after something happens on screen.";
+}
+
 /** A channel is "pid:sid" (provider, stream); a bare key gets provider "_". */
 export function parseChannelKey(key: string): { pid: string; sid: string } {
   const i = key.indexOf(":");

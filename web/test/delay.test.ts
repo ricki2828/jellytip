@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calibratedDelay, clampDelay, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, REPLAY_EXIT_LAG_SEC, REPLAY_LAG_SEC, replayState, revealAt } from "../src/lib/delayMath.ts";
+import { calibrateMessage, calibratedDelay, clampDelay, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, REPLAY_EXIT_LAG_SEC, REPLAY_LAG_SEC, replayState, revealAt } from "../src/lib/delayMath.ts";
 import { parsePrefs } from "../src/lib/prefs.ts";
 
 const ranges = (...ends: number[]) => ({ length: ends.length, end: (i: number) => ends[i]! });
@@ -96,4 +96,10 @@ test("prefs: sport.delaySec and sport.alerts parse, with defaults", () => {
   assert.equal(parsePrefs({ sport: { delaySec: 45, alerts: "off" } }).sport.alerts, "off");
   assert.equal(parsePrefs({ sport: { delaySec: 9999, alerts: "wat" } }).sport.delaySec, 300);
   assert.equal(parsePrefs({ sport: { alerts: "wat" } }).sport.alerts, "key");
+});
+
+test("calibrate feedback: set, nothing to anchor on, replay", () => {
+  assert.equal(calibrateMessage({ kind: "set", sec: 42 }), "Delay set to 42 s");
+  assert.match(calibrateMessage({ kind: "none" }), /^Nothing to line up yet/);
+  assert.match(calibrateMessage({ kind: "replay" }), /replay/);
 });

@@ -7,8 +7,10 @@ export const parseAlertMode = (v: unknown): AlertMode => (v === "all" || v === "
 
 export const MIN_GAP_SEC = 30;
 export const SHOW_MS = 4000;
-/** An event this long past its own time is stale and dropped rather than shown late. */
+/** An event is stale, and dropped rather than shown late, this long after it was RELEASED by the spoiler delay (not after its own time: a long delay would expire everything). */
 export const EXPIRE_SEC = 120;
+/** Hard cap from the event's own time: the longest delay (300 s) + the replay lag (120 s) + the stale window, so a candidate that never gets released still goes. */
+export const MAX_PENDING_SEC = 300 + 120 + EXPIRE_SEC;
 export const QUEUE_MAX = 4;
 export const FANTASY_SWING_MIN = 5;
 
@@ -24,6 +26,8 @@ export interface Candidate<T = unknown> {
   late?: boolean;
   /** Fantasy points swing (absolute). */
   swing?: number;
+  /** Set by the gate the first tick the spoiler delay released this event (epoch s). */
+  revealedAt?: number;
   payload: T;
 }
 
@@ -59,11 +63,14 @@ export interface Pick<T> {
  */
 export function pickAlert<T>(pending: Candidate<T>[], state: GateState, nowSec: number, o: { reveal: (at: number) => boolean; mode: AlertMode; blowout?: boolean }): Pick<T> {
   const seen = new Set<string>();
-  let keep = pending.filter((c) => {
-    if (seen.has(c.id) || nowSec - c.at > EXPIRE_SEC || !isKeyEvent(c, o.mode, o.blowout)) return false;
-    seen.add(c.id);
-    return true;
-  });
+  let keep = pending
+    .map((c) => (c.revealedAt == null && o.reveal(c.at) ? { ...c, revealedAt: nowSec } : c))
+    .filter((c) => {
+      const stale = c.revealedAt != null ? nowSec - c.revealedAt > EXPIRE_SEC : false;
+      if (seen.has(c.id) || stale || nowSec - c.at > MAX_PENDING_SEC || !isKeyEvent(c, o.mode, o.blowout)) return false;
+      seen.add(c.id);
+      return true;
+    });
   if (keep.length > QUEUE_MAX) keep = keep.slice(keep.length - QUEUE_MAX);
   if (state.lastShownAt != null && nowSec - state.lastShownAt < MIN_GAP_SEC) return { show: null, pending: keep };
   const ready = keep.filter((c) => o.reveal(c.at)).sort((a, b) => prio(b) - prio(a) || a.at - b.at);

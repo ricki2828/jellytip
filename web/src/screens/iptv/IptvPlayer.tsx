@@ -12,7 +12,7 @@ import { DelayChip } from "../../components/DelayChip";
 import { Scorebug } from "../../components/Companion/Scorebug";
 import { Panel, useDropWatch, usePhonePortrait } from "../../components/Companion/Panel";
 import { useLiveFeed } from "../../components/Companion/useLiveFeed";
-import { useRevealClock } from "../../lib/delay";
+import { calibrateMessage, useRevealClock } from "../../lib/delay";
 import { autoCloseDecision, autoOpenDecision, DROP_KEY, panelKeyAction, panelModeFor, stepTab, type OpenReason } from "../../lib/companion";
 import { usePrefs } from "../../api/me";
 import { MatchInfoButton } from "../../components/MatchInfo";
@@ -1187,7 +1187,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
         {live_ok && isLive && <MatchInfoButton id={extras?.matchId} />}
         {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
-        {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={revealClock.calibrate} />}
+        {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
             Live
