@@ -43,7 +43,7 @@ function subscribe(f: () => void) {
 export function useAvatarUrl(size = 96): string | null {
   const t = useSyncExternalStore(subscribe, () => (sync(), tag));
   const id = getSession()?.userId;
-  return id && t ? `${JF_BASE}/Users/${id}/Images/Primary${qs({ tag: t, width: size, quality: 90 })}` : null;
+  return id && t ? `${JF_BASE}/UserImage${qs({ userId: id, tag: t, width: size, quality: 90 })}` : null;
 }
 
 /** Decode, center-crop to a square and resize to 512x512 JPEG. Returns the blob and a data URL for preview. */
@@ -85,18 +85,18 @@ async function toBase64(blob: Blob): Promise<string> {
   return btoa(s);
 }
 
-/** Jellyfin wants the base64 text of the image as the body, Content-Type = the image's type. */
+/** Current route (Jellyfin 10.9+, verified on 12.1): /UserImage?userId=. Jellyfin wants the base64 text of the image as the body, Content-Type = the image's type. */
 export async function uploadAvatar(blob: Blob): Promise<void> {
   const id = getSession()?.userId;
   if (!id) throw new Error("Not signed in");
-  await jf(`/Users/${id}/Images/Primary`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: await toBase64(blob) });
+  await jf(`/UserImage${qs({ userId: id })}`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: await toBase64(blob) });
   await refreshAvatarTag();
 }
 
 export async function removeAvatar(): Promise<void> {
   const id = getSession()?.userId;
   if (!id) throw new Error("Not signed in");
-  await jf(`/Users/${id}/Images/Primary`, { method: "DELETE" });
+  await jf(`/UserImage${qs({ userId: id })}`, { method: "DELETE" });
   tag = undefined;
   emit();
 }
