@@ -470,10 +470,10 @@ export function waysForFixture(f: FxItem, rec: Rec | null, now: number): FxWays 
   if (rec && rec.playable !== false && (rec.state === "done" || rec.state === "recording"))
     ways.push({ kind: "recording", label: "Your recording, from the start", path: `${targetPath({ recording: String(rec.id) })}&t=${t}${liveExtrasQuery({ nospoil: true })}` });
   if (best?.startOver && best.start != null && best.stop != null && best.stop > best.start && phase !== "upcoming" && !best.dormant)
-    ways.push({ kind: "catchup", label: `Catch-up on ${best.name}, from the start`, path: `${targetPath({ channel: best.id, start: best.start, stop: best.stop })}&t=${t}${liveExtrasQuery({ nospoil: true, alternates: f.channels.filter((c) => c.id !== best.id).map((c) => ({ id: c.id, name: c.name })) })}` });
+    ways.push({ kind: "catchup", label: `Catch-up on ${best.name}, from the start`, path: `${targetPath({ channel: best.id, start: best.start, stop: best.stop })}&t=${t}${liveExtrasQuery({ nospoil: true, matchId: f.matchId ?? f.fid, alternates: f.channels.filter((c) => c.id !== best.id).map((c) => ({ id: c.id, name: c.name })) })}` });
   if (phase === "live" && best) {
     const alternates = f.channels.filter((c) => c.id !== best.id).map((c) => ({ id: c.id, name: c.name }));
-    ways.push({ kind: "live", label: `${solid ? "Live on" : "May be live on"} ${best.name}`, path: `${targetPath({ channel: best.id })}&t=${t}${liveExtrasQuery({ nospoil: true, alternates })}` });
+    ways.push({ kind: "live", label: `${solid ? "Live on" : "May be live on"} ${best.name}`, path: `${targetPath({ channel: best.id })}&t=${t}${liveExtrasQuery({ matchId: f.matchId ?? f.fid, alternates })}` });
   }
   const noStream = phase !== "finished" && !best;
   let note: string;
