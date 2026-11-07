@@ -19,7 +19,7 @@ test("starting within 15 min counts; later or finished does not", () => {
   assert.equal(resolveChannelMatch([fx({ status: "pre", kickoff: NOW + 3600, channels: [ch("1:2")] })], "1:2", NOW), null);
   assert.equal(resolveChannelMatch([fx({ status: "post", channels: [ch("1:2")] })], "1:2", NOW), null);
 });
-test("other channel or no matchId gives null", () => {
+test("other channel gives null; no matchId falls back to the fixture id (same rule as Game Centre launches)", () => {
   assert.equal(resolveChannelMatch([fx({ channels: [ch("9:9")] })], "1:2", NOW), null);
-  assert.equal(resolveChannelMatch([fx({ matchId: null, channels: [ch("1:2")] })], "1:2", NOW), null);
+  assert.equal(resolveChannelMatch([fx({ matchId: null, channels: [ch("1:2")] })], "1:2", NOW)?.matchId, "f");
 });
