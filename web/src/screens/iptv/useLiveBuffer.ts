@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import type Hls from "hls.js";
 import { debugEvent } from "../../lib/debugLog";
 import {
-  HOLD_MAX_MS, HOLD_NO_GROWTH_MS, chaseTarget, effectiveProfile, hlsConfig, holdTarget, initAuto, loadChannelLevel, loadDefaultMode, onStall, onTick,
+  HOLD_MAX_MS, HOLD_NO_GROWTH_MS, chaseTarget, effectiveProfile, holdAllowed, hlsRuntime, holdTarget, initAuto, loadChannelLevel, loadDefaultMode, onStall, onTick,
   saveChannelLevel, toastDue, type AutoState, type Mode, type Profile,
 } from "../../lib/liveBuffer";
 
@@ -46,8 +46,9 @@ export function useLiveBuffer(o: LiveBufferOpts) {
   const expectPause = useRef(false);
   const startDoneFor = useRef<string | null>(null);
   const lastToast = useRef(0);
+  const lastBadHold = useRef(0);
   const stallsThisSession = useRef(0);
-  const appliedHls = useRef<{ hls: Hls | null; p: Profile | null }>({ hls: null, p: null });
+  const appliedHls = useRef<{ hls: Hls | null; p: Profile | null; key: string }>({ hls: null, p: null, key: "" });
   const optsRef = useRef(o);
   optsRef.current = o;
 
@@ -72,6 +73,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     holdingRef.current = false;
     expectPause.current = false;
     setHolding(false);
+    if (why === "no new media" || why === "max hold") lastBadHold.current = Date.now();
     const v = optsRef.current.videoRef.current;
     if (resume && v && v.paused) void v.play().catch(() => { /* the <video> onPause handler shows the paused UI */ });
     debugEvent("iptv-player", "live buffer hold end", { why, phase: h.phase, heldMs: Date.now() - h.at, profile: profile(), player: optsRef.current.engineRef.current }, "info");
@@ -84,6 +86,13 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     if (expectPause.current) { expectPause.current = false; return true; }
     if (hold.current) release("user paused", false);
     return false;
+  }, [release]);
+
+  /** The user hit pause/play while a hold is active: cancel it without resuming. True if there was one. */
+  const cancelHold = useCallback((): boolean => {
+    if (!hold.current) return false;
+    release("user paused", false);
+    return true;
   }, [release]);
 
   /** The <video> fired `waiting` after the first frame (the caller already de-duplicates per rebuffer). */
@@ -134,17 +143,21 @@ export function useLiveBuffer(o: LiveBufferOpts) {
         const h = hlsRef.current;
         if (!h || !kindIsLive()) return;
         const ap = appliedHls.current;
-        if (ap.hls === h && ap.p === p) return;
-        const cfg = hlsConfig(p);
+        const det = h.latestLevelDetails;
+        const td = det?.targetduration ?? 0;
+        const cfg = hlsRuntime(p, det?.fragments?.length ?? 0, td);
+        const key = `${p}:${cfg.liveSyncDurationCount}:${cfg.liveMaxLatencyDuration ?? ""}`;
+        if (ap.hls === h && ap.key === key) return;
         Object.assign(h.config, cfg);
-        // Further from the edge than before: step back inside the window we already hold (no reload; segments come from the same playlist)
+        // Profile moved further from the edge: step back inside the window we already hold (no reload; same playlist).
+        // Skipped when the window has less than one target duration to go back into.
         const sync = h.liveSyncPosition;
         const s = v.seekable;
-        if (ap.hls === h && sync != null && s.length && v.currentTime > sync + 2 && sync >= s.start(0)) {
+        if (ap.hls === h && ap.p !== p && sync != null && s.length && v.currentTime > sync + 2 && sync - s.start(0) >= (td || 1)) {
           debugEvent("iptv-player", "live buffer seek", { jumpSec: Math.round((v.currentTime - sync) * 10) / 10, profile: p }, "info");
           v.currentTime = sync;
         }
-        appliedHls.current = { hls: h, p };
+        appliedHls.current = { hls: h, p, key };
         return;
       }
       if (engine !== "mpegts" || !kindIsLive()) return;
@@ -173,7 +186,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
       if (phase) {
         pendingStall.current = false;
         if (phase === "start") startDoneFor.current = lk;
-        const target = holdTarget(p, phase, runway);
+        const target = holdAllowed(lastBadHold.current, now) ? holdTarget(p, phase, runway) : 0;
         if (target > 0) {
           hold.current = { phase, target, at: now, lastEnd: end, lastGrowth: now };
           holdingRef.current = true;
@@ -201,5 +214,5 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  return { mode, setMode, effective: profile(), profileRef, handlePause, noteRebuffer, toast, holding };
+  return { mode, setMode, effective: profile(), profileRef, handlePause, cancelHold, noteRebuffer, toast, holding };
 }

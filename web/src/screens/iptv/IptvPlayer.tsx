@@ -903,6 +903,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
+    if (liveBuf.cancelHold()) { setPaused(true); return; } // a live-buffer hold looks like playback: the press means pause
     if (v.paused) void v.play().catch(() => undefined);
     else v.pause();
   };

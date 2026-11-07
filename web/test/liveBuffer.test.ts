@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEBOUNCE_MS, GRACE_MS, SPEC, STEP_DOWN_MS, TOAST_EVERY_MS, chaseTarget, effectiveProfile, hlsConfig, holdTarget, initAuto, loadChannelLevel, loadDefaultMode,
-  modeLabel, onStall, onTick, saveChannelLevel, saveDefaultMode, toastDue, type KV,
+  modeLabel, hlsRuntime, holdAllowed, HOLD_COOLDOWN_MS, onStall, onTick, saveChannelLevel, saveDefaultMode, toastDue, type KV,
 } from "../src/lib/liveBuffer.ts";
 
 const mem = (): KV & { m: Map<string, string> } => {
@@ -114,4 +114,29 @@ test("chase and hold decisions", () => {
   assert.equal(holdTarget("high", "start", 1), 6);
   assert.equal(holdTarget("normal", "start", 0), 0); // channel changes stay instant
   assert.equal(holdTarget("low", "start", 0), 0);
+});
+
+test("hls runtime: short DVR window caps the sync count", () => {
+  assert.equal(hlsRuntime("max", 5, 6).liveSyncDurationCount, 3);
+  assert.equal(hlsRuntime("high", 3, 6).liveSyncDurationCount, 1);
+  assert.equal(hlsRuntime("normal", 20, 6).liveSyncDurationCount, 3);
+  assert.equal(hlsRuntime("max", 0, 0).liveMaxLatencyDuration, undefined); // playlist not known yet: counts only
+});
+
+test("hls runtime: max never crosses the 120 s replay line", () => {
+  for (const p of ["low", "normal", "high", "max"] as const) {
+    for (const td of [2, 6, 10, 15, 30]) {
+      const c = hlsRuntime(p, 50, td);
+      assert.ok(c.liveMaxLatencyDuration! <= 100);
+      assert.ok(c.liveSyncDurationCount * td <= 90);
+      assert.ok(c.liveMaxLatencyDuration! > c.liveSyncDurationCount * td);
+    }
+  }
+  assert.equal(hlsRuntime("max", 50, 10).liveMaxLatencyDuration, 100);
+});
+
+test("no chained holds within a minute of a bad one", () => {
+  assert.equal(holdAllowed(0, 5), true);
+  assert.equal(holdAllowed(1000, 1000 + HOLD_COOLDOWN_MS - 1), false);
+  assert.equal(holdAllowed(1000, 1000 + HOLD_COOLDOWN_MS), true);
 });

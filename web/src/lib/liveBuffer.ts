@@ -47,6 +47,35 @@ export function hlsConfig(p: Profile) {
   return { liveSyncDurationCount: s.syncCount, liveMaxLatencyDurationCount: s.maxLatencyCount, maxBufferLength: s.maxBufferLength, maxMaxBufferLength: s.maxMaxBufferLength };
 }
 
+/** Live window this deep is the most a profile may sit behind: the spoiler delay treats 120 s as a replay (delayMath REPLAY_LAG_SEC). */
+export const HLS_SYNC_CAP_SEC = 90;
+export const HLS_MAX_LATENCY_CAP_SEC = 100;
+
+/**
+ * Runtime hls.js numbers once the playlist is known: the sync distance never exceeds what the live window can hold (fragments - 2),
+ * nor 90 s; max latency is set in seconds so it can never cross the 120 s replay threshold.
+ */
+export function hlsRuntime(p: Profile, fragments: number, targetDuration: number) {
+  const s = SPEC[p];
+  const td = targetDuration > 0 ? targetDuration : 0;
+  let sync = s.syncCount;
+  if (fragments > 0) sync = Math.min(sync, fragments - 2);
+  if (td > 0) sync = Math.min(sync, Math.floor(HLS_SYNC_CAP_SEC / td));
+  sync = Math.max(1, sync);
+  const maxCount = Math.max(sync + 1, s.maxLatencyCount);
+  return {
+    liveSyncDurationCount: sync,
+    liveMaxLatencyDurationCount: maxCount,
+    liveMaxLatencyDuration: td > 0 ? Math.min(maxCount * td, HLS_MAX_LATENCY_CAP_SEC) : undefined,
+    maxBufferLength: s.maxBufferLength,
+    maxMaxBufferLength: s.maxMaxBufferLength,
+  };
+}
+
+/** A hold that ended on max-hold or no-new-media says the transport is not delivering: do not chain another hold for this long. */
+export const HOLD_COOLDOWN_MS = 60_000;
+export const holdAllowed = (lastBadEnd: number, now: number) => !lastBadEnd || now - lastBadEnd >= HOLD_COOLDOWN_MS;
+
 // ---- Auto policy -----------------------------------------------------------------------------------------------------
 
 /** Auto only ever climbs to High by itself; Max is a manual choice. It never drops below Normal, so a quiet channel does not oscillate. */
