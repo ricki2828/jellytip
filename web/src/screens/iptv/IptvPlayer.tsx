@@ -20,7 +20,7 @@ import { usePlayWatch } from "../../api/signals";
 import type { WatchMeta } from "../../lib/signals";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { TrackMenu } from "../../components/TrackMenu";
 import { useSubtitlePrefs } from "../../lib/useSubtitlePrefs";
 import { audioOptionLabel } from "../../lib/trackMenu";
@@ -43,6 +43,7 @@ import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { switchExtras } from "../../lib/companion";
+import { useChannelMatch } from "../../lib/useChannelMatch";
 import { hlsConfig, SPEC } from "../../lib/liveBuffer";
 import { useFullscreen } from "../../lib/useFullscreen";
 import { isFullscreenKey } from "../../lib/fullscreenPlan";
@@ -121,7 +122,11 @@ const VOD_STALL_MS = 15_000;
 /** Still no movement this long after a stall is shown: reconnect on our own. */
 const RECONNECT_AFTER_MS = 6_000;
 
-function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedule = false }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId, offSchedule = false }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+  // Channel opened directly (no matchId in the link): look the match up from the fixtures list. Links that carry a matchId are untouched.
+  const detected = useChannelMatch(target.channel, !!target.channel && target.start == null && !extrasIn?.matchId && !extrasIn?.nospoil && !extrasIn?.replay);
+  const extras = useMemo<LiveExtras | undefined>(() => (detected && !extrasIn?.matchId ? { ...extrasIn, matchId: detected.matchId } : extrasIn), [extrasIn, detected]);
+  const guessedMatch = !!detected && !extrasIn?.matchId && detected.maybe;
   const curId = target.vod ?? target.episode; // the channel item playing: a film, or an IPTV episode
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -1224,7 +1229,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       {panelAvail && liveNow && !revealClock.replay && <Scorebug view={feed} panelOpen={drawer} />}
       </div>
       {panelAvail && extras?.matchId && (
-        <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} source={liveNow ? feedSource : undefined} onClose={closeDrawer} onTouch={touchPanel} />
+        <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} source={liveNow ? feedSource : undefined} onClose={closeDrawer} onTouch={touchPanel} hint={guessedMatch ? "Match detected from the guide" : undefined} />
       )}
       </div>
       {state.kind === "loading" && <div className="spinner" role="status" aria-label={retrying ? "Retrying stream" : "Connecting to stream"} />}

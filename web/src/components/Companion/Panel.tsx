@@ -51,6 +51,8 @@ export function Panel(props: {
   reveal: (atSec?: number) => boolean;
   source?: LiveSource;
   onClose: () => void;
+  /** Small dismissible note above the drawer (e.g. the match was guessed from the guide). */
+  hint?: string;
   onTouch: () => void;
 }) {
   const { open, mode, onTouch } = props;
@@ -68,9 +70,16 @@ export function Panel(props: {
     const bar = document.querySelector<HTMLElement>(".player-top");
     if (bar) setBarH(Math.ceil(bar.getBoundingClientRect().height));
   }, [mounted, mode]);
+  const [hintGone, setHintGone] = useState(false);
   if (!mounted) return null;
   return (
     <div className={`cp-panel ${mode}${open ? " on" : ""}`} style={{ "--cp-top": `${barH}px` } as React.CSSProperties} aria-hidden={!open} onPointerDown={onTouch} onFocusCapture={onTouch}>
+      {props.hint && !hintGone && (
+        <p className="iptv-hint cp-hint" data-testid="cp-hint" style={{ margin: 0, padding: "4px 10px", fontSize: 12, opacity: 0.75, display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <span>{props.hint}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setHintGone(true)} style={{ background: "none", border: 0, color: "inherit", cursor: "pointer" }}>×</button>
+        </p>
+      )}
       {!props.liveNow ? (
         <aside className="live-drawer bc cp-replay" role="dialog" aria-label="Live stats">
           <SheetClose onClose={props.onClose} />
