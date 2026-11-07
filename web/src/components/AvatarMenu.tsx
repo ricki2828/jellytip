@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { getSession, logout } from "../api/jellyfin";
 import { isNative } from "../lib/native";
+import { useAvatarUrl } from "../lib/avatar";
+import { ProfilePhotoSheet } from "./ProfilePhotoSheet";
 
 /** The avatar button and its menu: Settings, Taste, Live TV setup, Downloads (app), Admin tools, Sign out. */
 export function AvatarMenu({ active }: { active: boolean }) {
   const s = getSession();
   const [open, setOpen] = useState(false);
+  const [photo, setPhoto] = useState(false);
+  const photoUrl = useAvatarUrl(72);
   const box = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
 
@@ -65,13 +69,14 @@ export function AvatarMenu({ active }: { active: boolean }) {
         aria-label={`Account menu, ${s?.userName ?? ""}`}
         onClick={() => setOpen((o) => !o)}
       >
-        {initial}
+        {photoUrl ? <img className="avatar-img" src={photoUrl} alt="" /> : initial}
       </button>
       {open && (
         <div className="avatar-menu" role="menu" aria-label="Account" onClick={(e) => (e.target as HTMLElement).closest("a, button") && setOpen(false)}>
           <a role="menuitem" href="#/settings" data-nav>Settings</a>
           <a role="menuitem" href="#/taste" data-nav>Taste</a>
           <a role="menuitem" href="#/iptv" data-nav>Live TV setup</a>
+          <button role="menuitem" data-nav onClick={() => setPhoto(true)}>Profile photo</button>
           {isNative && <a role="menuitem" href="#/downloads" data-nav>Downloads</a>}
           {s?.isAdmin && (
             <>
@@ -86,6 +91,7 @@ export function AvatarMenu({ active }: { active: boolean }) {
           </button>
         </div>
       )}
+      {photo && <ProfilePhotoSheet onClose={() => { setPhoto(false); btn.current?.focus(); }} />}
     </div>
   );
 }

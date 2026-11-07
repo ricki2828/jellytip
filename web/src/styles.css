@@ -129,6 +129,16 @@ img {
   font-weight: 700;
   cursor: pointer;
 }
+.avatar-btn {
+  overflow: hidden;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
 .avatar-btn:hover,
 .avatar-btn:focus-visible,
 .avatar-btn[aria-expanded="true"] {
