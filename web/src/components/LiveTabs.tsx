@@ -7,7 +7,7 @@ export function LiveTabs({ current }: { current: string }) {
   const active = liveTabFor(current);
   return (
     <div className="live-tabs" role="tablist" aria-label="Live">
-      {liveTabs(f).map((k) => (
+      {liveTabs({ ...f, liveTv: f.liveTv || current === "livetv" }).map((k) => (
         <a key={k} href={liveTabHref(k)} role="tab" aria-selected={active === k} data-nav className={active === k ? "active" : ""}>
           {LIVE_TAB_LABEL[k]}
           {k === "recordings" && f.ready > 0 && <span className="nav-badge" aria-label={`${f.ready} ready to watch`}>{f.ready}</span>}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFantasy } from "../api/fantasy";
-import { hasLiveTv, iptvChanged } from "../api/iptv";
+import { hasLiveTv } from "../api/iptv";
 import { afterStartup } from "../lib/startup";
 import { useRecs } from "../api/recStore";
 import { shown, unwatchedCount } from "../lib/recs";
@@ -14,14 +14,11 @@ export function useLiveTv(): boolean {
     let alive = true;
     // After the first screen's requests: the Guide tab can appear a moment later
     const check = () => void afterStartup().then(hasLiveTv).then((v) => alive && setOn(v));
-    const onSession = () => iptvChanged();
     check();
     window.addEventListener("jellytip-iptv", check);
-    window.addEventListener("jellytip-session", onSession);
     return () => {
       alive = false;
       window.removeEventListener("jellytip-iptv", check);
-      window.removeEventListener("jellytip-session", onSession);
     };
   }, []);
   return on;

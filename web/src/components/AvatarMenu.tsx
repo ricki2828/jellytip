@@ -14,13 +14,23 @@ export function AvatarMenu({ active }: { active: boolean }) {
     const down = (e: MouseEvent | TouchEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
     };
+    // Back (hardware / on-screen) dispatches Escape on document first: closing the menu consumes it
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpen(false);
+      btn.current?.focus();
+    };
     document.addEventListener("mousedown", down);
     document.addEventListener("touchstart", down);
+    document.addEventListener("keydown", esc, true);
     // Open: focus the first item so keys and the D-pad land inside
     box.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
     return () => {
       document.removeEventListener("mousedown", down);
       document.removeEventListener("touchstart", down);
+      document.removeEventListener("keydown", esc, true);
     };
   }, [open]);
 
@@ -33,13 +43,7 @@ export function AvatarMenu({ active }: { active: boolean }) {
 
   const items = () => [...(box.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      setOpen(false);
-      btn.current?.focus();
-      return;
-    }
+    if (!open) return;
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
     e.preventDefault();
     e.stopPropagation();
@@ -64,7 +68,7 @@ export function AvatarMenu({ active }: { active: boolean }) {
         {initial}
       </button>
       {open && (
-        <div className="avatar-menu" role="menu" aria-label="Account">
+        <div className="avatar-menu" role="menu" aria-label="Account" onClick={(e) => (e.target as HTMLElement).closest("a, button") && setOpen(false)}>
           <a role="menuitem" href="#/settings" data-nav>Settings</a>
           <a role="menuitem" href="#/taste" data-nav>Taste</a>
           <a role="menuitem" href="#/iptv" data-nav>Live TV setup</a>

@@ -295,6 +295,8 @@ let liveCheck: Promise<boolean> | null = null;
 export function hasLiveTv(): Promise<boolean> {
   return (liveCheck ??= liveGroups().then((a) => a.status === 200 && !!a.data?.groups.some((g) => g.id !== "fav" && !g.default && (g.count ?? 0) > 0)));
 }
+// A different account must not inherit the last one's answer (registered once, not per hook)
+if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => iptvChanged());
 /** Settings changed what's opted in: ask again and tell the nav. */
 export function iptvChanged() {
   liveCheck = null;

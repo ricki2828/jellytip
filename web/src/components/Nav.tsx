@@ -97,6 +97,13 @@ export function Nav({ current }: { current: string }) {
     return () => window.removeEventListener("scroll", on);
   }, []);
   const root = isRootRoute(current);
+  // Tapping the current room again must not push a duplicate history entry: scroll to top instead
+  const again = (k: string) => (e: React.MouseEvent) => {
+    if (active === k) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
   return (
     <nav className={`nav${scrolled ? " solid" : ""}${root ? "" : " has-back"}`}>
       {/* Every non-root screen: same Back as Android's (sheet / sound first, then the previous screen, else Home) */}
@@ -112,7 +119,7 @@ export function Nav({ current }: { current: string }) {
       </button>
       <div className="nav-links">
         {links.map(([k, label]) => (
-          <a key={k} href={`#/${k}`} data-nav className={active === k ? "active" : ""} aria-current={active === k ? "page" : undefined}>
+          <a key={k} href={`#/${k}`} data-nav onClick={again(k)} className={active === k ? "active" : ""} aria-current={active === k ? "page" : undefined}>
             {label}
             {k === "live" && ready > 0 && <span className="nav-dot" aria-label={`${ready} recordings ready`} />}
           </a>
@@ -133,7 +140,7 @@ export function Nav({ current }: { current: string }) {
       {/* Phone: exactly five fixed tabs as a bottom bar (shown by the phone media query only) */}
       <div className="tabbar" role="tablist">
         {TABS.map(([k, label]) => (
-          <a key={k} href={`#/${k}`} role="tab" aria-selected={active === k} className={active === k ? "active" : ""}>
+          <a key={k} href={`#/${k}`} role="tab" onClick={again(k)} aria-selected={active === k} className={active === k ? "active" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden>
               {ICONS[k]}
             </svg>
