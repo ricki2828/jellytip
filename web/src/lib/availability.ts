@@ -30,6 +30,10 @@ export interface IptvCopy {
   tech?: string[];
   /** Only when the companion said so; absent = "Language not confirmed". */
   language?: string | null;
+  /** Companion resolution word (4k | fhd | hd | sd) for copies whose provider tokens say nothing. */
+  res?: string | null;
+  /** False = the copy sits outside the person's switched-on IPTV groups (found in the whole provider catalogue). */
+  opted?: boolean;
 }
 
 export interface AvailContext {
@@ -39,6 +43,8 @@ export interface AvailContext {
   downloaded?: boolean;
   /** IPTV copies already loaded for this title. */
   iptv?: readonly IptvCopy[];
+  /** The IPTV copies arrive ranked by the companion (failures, language, quality): keep that order instead of sorting by quality. */
+  iptvRanked?: boolean;
   /** The person's own + shared provider ids; copies from any other provider are dropped (session-scoped ownership). */
   allowedProviderIds?: Iterable<string | number>;
   /** The IPTV lookup has finished (so "not on IPTV" may be stated). */
@@ -99,16 +105,19 @@ export function sourceQuality(ms: MediaSource, tech: readonly string[] = []): st
 const score = (q: readonly string[]) => (RES_SCORE[q[0] ?? ""] ?? 0) * 10 + (q.some((b) => b === "Dolby Vision" || b === "HDR" || b === "HDR10+") ? 1 : 0);
 
 /** IPTV copies only carry provider tokens ("4k", "hdr", maybe "1080p"); map them to the same words, nothing invented. */
-export function iptvQuality(c: Pick<IptvCopy, "quality" | "tech">): string[] {
+export function iptvQuality(c: Pick<IptvCopy, "quality" | "tech" | "res">): string[] {
   const toks = new Set((c.quality ?? []).map((x) => x.toLowerCase()));
   const t = vodTech({ tech: c.tech, quality: c.quality });
   const out: string[] = [];
   if (t.includes("4K") || toks.has("4k") || toks.has("uhd")) out.push("4K");
   else if (toks.has("1080p") || toks.has("fhd")) out.push("1080p");
   else if (toks.has("720p") || toks.has("hd")) out.push("720p");
+  if (!out.length && c.res) out.push(RES_WORD[c.res] ?? c.res);
   for (const b of detailBadges(t)) if (b !== "4K" && !out.includes(b)) out.push(b);
   return out;
 }
+const RES_WORD: Record<string, string> = { "4k": "4K", fhd: "1080p", hd: "720p", sd: "SD" };
+export const OUTSIDE_GROUPS = "Outside your switched-on groups";
 
 // ---------- the function ----------
 /**
@@ -152,13 +161,13 @@ export function availabilityOf(item: Item | null | undefined, ctx: AvailContext 
       key: `iptv:${c.id}`,
       title: c.providerName ? `IPTV · ${c.providerName}` : "IPTV",
       quality: iptvQuality(c),
-      detail: null,
+      detail: c.opted === false ? OUTSIDE_GROUPS : null,
       language: lang || LANGUAGE_UNCONFIRMED,
       iptvId: c.id,
       badge: "IPTV",
     });
   }
-  iptv.sort((a, b) => score(b.quality) - score(a.quality)); // stable: equal quality keeps the server's order
+  if (!ctx.iptvRanked) iptv.sort((a, b) => score(b.quality) - score(a.quality)); // stable: equal quality keeps the server's order
 
   const downloaded: Way | null =
     inLibrary && item && ctx.downloaded

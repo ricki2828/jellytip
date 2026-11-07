@@ -49,6 +49,23 @@ export interface VodEpisode {
   lastFail?: LastFail | null;
 }
 
+/** One way to watch the title (companion `copies`, best first). The server fields after lastFail are additive: older servers omit them. */
+export interface VodCopy {
+  id: string;
+  providerTitle?: string;
+  providerName?: string;
+  quality?: string[];
+  /** 4k | fhd | hd | sd; absent when the name and panel say nothing. */
+  res?: string | null;
+  /** en | multi | unknown | sub | foreign, with a display label ("English", "Subtitled", "German"). */
+  lang?: string | null;
+  langLabel?: string | null;
+  /** The copy's group is switched on in the person's IPTV settings (false = found in the whole provider catalogue). */
+  opted?: boolean;
+  current?: boolean;
+  lastFail?: LastFail | null;
+}
+
 export interface VodDetail extends VodItem {
   runtime?: number | null;
   genre?: string | null;
@@ -60,7 +77,7 @@ export interface VodDetail extends VodItem {
   /** Trailer address: a web link, or a companion-relative video path. */
   trailer?: string | null;
   director?: string | null;
-  copies?: { id: string; providerTitle?: string; quality?: string[]; lastFail?: LastFail | null }[];
+  copies?: VodCopy[];
   seasons?: { season: number; episodes: VodEpisode[] }[];
 }
 
@@ -182,7 +199,18 @@ export function parseVodDetail(raw: unknown): VodDetail | null {
     copies: Array.isArray(r.copies)
       ? (r.copies as Record<string, unknown>[])
           .filter((c) => c && typeof c.id === "string" && VOD_ID_RE.test(c.id))
-          .map((c) => ({ id: c.id as string, providerTitle: str(c.providerTitle) ?? undefined, quality: strs(c.quality), lastFail: parseFailFor(c.id as string, c.lastFail) }))
+          .map((c) => ({
+            id: c.id as string,
+            providerTitle: str(c.providerTitle) ?? undefined,
+            providerName: str(c.providerName) ?? undefined,
+            quality: strs(c.quality),
+            res: str(c.res),
+            lang: str(c.lang),
+            langLabel: str(c.langLabel),
+            ...(typeof c.opted === "boolean" ? { opted: c.opted } : {}),
+            ...(c.current === true ? { current: true } : {}),
+            lastFail: parseFailFor(c.id as string, c.lastFail),
+          }))
       : undefined,
   };
 }

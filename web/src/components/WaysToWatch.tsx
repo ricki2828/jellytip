@@ -26,7 +26,7 @@ export function useDownloaded(itemId: string | null | undefined): boolean {
 /** Button label per kind. */
 const ACTION: Record<Way["kind"], string | null> = { library: "Play", downloaded: "Play offline", iptv: "Play via IPTV", request: "Request", unavailable: null };
 
-export function WaysToWatch({ ways, onAct }: { ways: readonly Way[]; onAct: (w: Way) => void }) {
+export function WaysToWatch({ ways, onAct, currentIptvId }: { ways: readonly Way[]; onAct: (w: Way) => void; currentIptvId?: string }) {
   return (
     <section className="row ways" aria-label="Ways to watch">
       <h2 className="row-title">Ways to watch</h2>
@@ -39,15 +39,22 @@ export function WaysToWatch({ ways, onAct }: { ways: readonly Way[]; onAct: (w: 
                 <span className="way-title">
                   {w.title} <AvailBadge badge={w.badge} />
                 </span>
-                {(w.quality.length > 0 || w.language) && (
-                  <span className="way-meta">{[...w.quality, w.language].filter(Boolean).join("  ·  ")}</span>
+                {w.kind === "iptv" ? (
+                  <span className="way-chips">
+                    {[...w.quality, w.language].filter(Boolean).map((t) => (
+                      <span key={t} className="way-chip">{t}</span>
+                    ))}
+                    {w.iptvId && w.iptvId === currentIptvId && <span className="way-chip way-chip-on">Selected</span>}
+                  </span>
+                ) : (
+                  (w.quality.length > 0 || w.language) && <span className="way-meta">{[...w.quality, w.language].filter(Boolean).join("  ·  ")}</span>
                 )}
                 {w.detail && <span className="way-meta dim">{w.detail}</span>}
                 {w.iptvId && <FailNote id={w.iptvId} className="way-meta fail-note" />}
               </div>
               {label && (
                 <button className={`btn${i === 0 ? " primary" : ""}`} data-nav onClick={() => onAct(w)} aria-label={`${label}: ${w.title}`}>
-                  {label}
+                  {w.iptvId && currentIptvId && w.iptvId !== currentIptvId ? "Pick this copy" : label}
                 </button>
               )}
             </li>
