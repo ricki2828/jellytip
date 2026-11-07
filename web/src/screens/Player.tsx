@@ -15,6 +15,9 @@ import { usePlayWatch } from "../api/signals";
 import { libraryTarget } from "../lib/signals";
 import { chooseStart, getAlwaysSubs, loadStore, memoryKey, recordChoice, saveStore } from "../lib/trackMemory";
 import { TrackMenu } from "../components/TrackMenu.tsx";
+import { flashNote } from "../components/TasteButtons";
+import { autoMatch } from "../api/subSync";
+import { clampNudge, doneNote, findNewTrack, loadNudge, progressText, saveNudge, stepNudge } from "../lib/subSync.ts";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
 import { jellyfinAudioLabel, playerKeyWhileMenu } from "../lib/trackMenu.ts";
 import { replayDone, replayTarget, reportedSubtitle, startReplay, type Replay } from "../lib/captionReplay.ts";
@@ -32,7 +35,6 @@ import { channelItems, rejoinPlan, takeChainHop } from "../api/channels";
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
 const NEXT_UP_SECONDS = 40;
-const DELAY_KEY = "jellytip.subDelay";
 const NET_RETRIES = 3;
 const DOUBLE_TAP_MS = 300;
 
@@ -105,7 +107,10 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   const replayRef = useRef<Replay | null>(null);
   const [subIndex, setSubIndex] = useState<number>(-1);
   const [cues, setCues] = useState<Cue[]>([]);
-  const [delay, setDelay] = useState<number>(() => Number(localStorage.getItem(DELAY_KEY) ?? 0) || 0);
+  const [delay, setDelayState] = useState<number>(0); // per title + subtitle track, see applyDelay
+  const delayRef = useRef(0);
+  const [match, setMatch] = useState<{ status: "idle" | "matching" | "failed"; text?: string }>({ status: "idle" });
+  const matchCtl = useRef<AbortController | null>(null);
   const [next, setNext] = useState<Item | null>(null);
   const [audioIndex, setAudioIndex] = useState<number | null>(null);
   const memKeyRef = useRef<string | null>(null);
@@ -438,9 +443,21 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     return () => ctl.abort();
   }, [subIndex, planSourceId, id]);
 
+  // The shift belongs to one title + one track: load it when either changes, save on every change (never from an effect, so a track
+  // switch can't write the old value under the new key)
   useEffect(() => {
-    localStorage.setItem(DELAY_KEY, String(delay));
-  }, [delay]);
+    const v = subIndex >= 0 ? loadNudge(id, subIndex) : 0;
+    delayRef.current = v;
+    setDelayState(v);
+    setMatch({ status: "idle" });
+  }, [id, subIndex]);
+  const applyDelay = (v: number) => {
+    const n = clampNudge(v);
+    delayRef.current = n;
+    setDelayState(n);
+    if (subIndexRef.current >= 0) saveNudge(id, subIndexRef.current, n);
+  };
+  useEffect(() => () => matchCtl.current?.abort(), []);
 
   // ---- controls visibility ----
   const poke = useCallback(() => {
@@ -595,7 +612,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   };
   const boxRef = useRef<HTMLDivElement>(null);
   const { toggle: toggleFs } = useFullscreen(boxRef, videoRef);
-  const stepDelay = (d: number) => setDelay((x) => Math.round((x + d) * 10) / 10);
+  const stepDelay = (d: number) => applyDelay(delayRef.current + d);
   const onRotate = () => {
     void rotatePlayer(boxRef.current);
   };
@@ -752,6 +769,39 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     planRef.current = np;
     setPlan(np);
   };
+  /** Auto-match timing: server aligns the selected subtitle to the audio and adds a new track; switch to it when it is listed. */
+  const runAutoMatch = () => {
+    const idx = subIndexRef.current;
+    if (idx < 0 || matchCtl.current) return;
+    const ctl = new AbortController();
+    matchCtl.current = ctl;
+    setMatch({ status: "matching", text: progressText(null) });
+    void (async () => {
+      const out = await autoMatch(id, idx, (eta) => setMatch({ status: "matching", text: progressText(eta) }), ctl.signal);
+      matchCtl.current = null;
+      if (ctl.signal.aborted) return;
+      if ("error" in out) { setMatch({ status: "failed", text: out.error }); flashNote(out.error); return; }
+      setMatch({ status: "idle" });
+      const r = out.result;
+      flashNote(doneNote(r));
+      if (r.alreadySynced) return;
+      // The new track: the server gives its index when Jellyfin had listed it; otherwise re-read the item a few times
+      for (let i = 0; i < 4; i++) {
+        const fresh = await getItem(id).catch(() => null);
+        const streams = fresh?.MediaSources?.find((m) => m.Id === planRef.current?.source.Id)?.MediaStreams;
+        const at = streams ? findNewTrack(planRef.current?.source.MediaStreams ?? [], streams, r.newStreamIndex) : null;
+        if (fresh && at != null) {
+          addedSubtitles(fresh);
+          replayRef.current = null;
+          remember({ subtitle: at });
+          setSubIndex(at);
+          return;
+        }
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+      flashNote("Matched, but the new track isn't listed yet. Check the menu in a moment.");
+    })();
+  };
   const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); menuRef.current = o; if (o) setControls(true); else poke(); }, [poke]);
   const textSubs = subs.filter((x) => x.IsTextSubtitleStream);
   /** "What did they say?": back ~10 s with captions on, then the previous subtitle state returns once that span has played */
@@ -889,8 +939,16 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         menuClassName="sub-menu"
         onActivity={poke}
         findSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs(true) : undefined}
+        timing={item && !localRef.current ? {
+          canMatch: textSubs.some((x) => x.Index === subIndex),
+          status: match.status,
+          text: match.text,
+          onMatch: runAutoMatch,
+          nudge: delay,
+          onNudge: (dir) => applyDelay(stepNudge(delayRef.current, dir)),
+        } : undefined}
         extra={subIndex >= 0 ? (
-          <button type="button" role="menuitem" data-track-item data-nav className="btn small" onClick={() => setDelay(0)}>
+          <button type="button" role="menuitem" data-track-item data-nav className="btn small" onClick={() => applyDelay(0)}>
             Reset delay ({delay.toFixed(1)} s)
           </button>
         ) : undefined}
