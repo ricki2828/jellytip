@@ -1435,8 +1435,9 @@ function nativeFailureText(r: NativePlayerResult): string {
  * /v1/debug/report like the web player's.
  */
 function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+  // The native bridge has one matchId for the Companion and the alerts alike, so a merely guessed match is not passed to it.
   const detected = useChannelMatch(target.channel, !!target.channel && target.start == null && !extrasIn?.matchId && !extrasIn?.nospoil && !extrasIn?.replay);
-  const extras = useMemo<LiveExtras | undefined>(() => (detected && !extrasIn?.matchId ? { ...extrasIn, matchId: detected.matchId } : extrasIn), [extrasIn, detected]);
+  const extras = useMemo<LiveExtras | undefined>(() => (detected && !detected.maybe && !extrasIn?.matchId ? { ...extrasIn, matchId: detected.matchId } : extrasIn), [extrasIn, detected]);
   const curId = target.vod ?? target.episode;
   const nativeLen = useRef(0);
   const watch = usePlayWatch(signalMeta(target, channelId), () => nativeLen.current, curId ?? "");
