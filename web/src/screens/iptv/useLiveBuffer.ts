@@ -34,6 +34,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
   const [mode, setModeState] = useState<Mode>(() => loadDefaultMode(store()));
   const [, rerender] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [holding, setHolding] = useState(false);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const auto = useRef<AutoState>(initAuto(null, Date.now()));
@@ -56,6 +57,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     auto.current = initAuto(loadChannelLevel(store(), o.channelKey), Date.now());
     hold.current = null;
     holdingRef.current = false;
+    expectPause.current = false;
     pendingStall.current = false;
   }
 
@@ -69,6 +71,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     hold.current = null;
     holdingRef.current = false;
     expectPause.current = false;
+    setHolding(false);
     const v = optsRef.current.videoRef.current;
     if (resume && v && v.paused) void v.play().catch(() => { /* the <video> onPause handler shows the paused UI */ });
     debugEvent("iptv-player", "live buffer hold end", { why, phase: h.phase, heldMs: Date.now() - h.at, profile: profile(), player: optsRef.current.engineRef.current }, "info");
@@ -137,7 +140,10 @@ export function useLiveBuffer(o: LiveBufferOpts) {
         // Further from the edge than before: step back inside the window we already hold (no reload; segments come from the same playlist)
         const sync = h.liveSyncPosition;
         const s = v.seekable;
-        if (ap.hls === h && sync != null && s.length && v.currentTime > sync + 2 && sync >= s.start(0)) v.currentTime = sync;
+        if (ap.hls === h && sync != null && s.length && v.currentTime > sync + 2 && sync >= s.start(0)) {
+          debugEvent("iptv-player", "live buffer seek", { jumpSec: Math.round((v.currentTime - sync) * 10) / 10, profile: p }, "info");
+          v.currentTime = sync;
+        }
         appliedHls.current = { hls: h, p };
         return;
       }
@@ -172,6 +178,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
           hold.current = { phase, target, at: now, lastEnd: end, lastGrowth: now };
           holdingRef.current = true;
           expectPause.current = true;
+          setHolding(true);
           v.pause();
           touch();
           debugEvent("iptv-player", "live buffer hold start", { phase, target, runway: Math.round(runway * 10) / 10, profile: p }, "info");
@@ -194,5 +201,5 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  return { mode, setMode, effective: profile(), profileRef, handlePause, noteRebuffer, toast };
+  return { mode, setMode, effective: profile(), profileRef, handlePause, noteRebuffer, toast, holding };
 }

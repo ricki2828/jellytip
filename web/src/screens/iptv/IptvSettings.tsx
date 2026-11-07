@@ -690,11 +690,11 @@ function LiveBufferDefault() {
   return (
     <section className="iptv-card" aria-label="Live buffer">
       <h2>Live buffer</h2>
-      <p className="iptv-hint">How far behind live to sit so a network hiccup doesn't freeze the picture. Auto starts at Normal, steps up when a channel stalls and remembers it per channel. Takes effect on the next channel you open.</p>
+      <p className="iptv-hint">How far behind live to sit so a network hiccup doesn't freeze the picture. Auto starts at Normal, steps up when a channel stalls and remembers it per channel. HLS channels sit a number of segments behind instead, so the delay can be longer. Takes effect on the next channel you open.</p>
       <div className="buttons" role="radiogroup" aria-label="Live buffer default">
         {MODES.map((m) => (
           <button key={m} type="button" role="radio" aria-checked={mode === m} data-nav className={`btn small${mode === m ? " on" : ""}`} onClick={() => pick(m)}>
-            {m === "auto" ? "Auto" : `${modeLabel(m, "normal")} (~${SPEC[m].behindSec} s)`}
+            {m === "auto" ? "Auto" : `${modeLabel(m, "normal")} (~${SPEC[m].behindSec} s TS)`}
           </button>
         ))}
       </div>
