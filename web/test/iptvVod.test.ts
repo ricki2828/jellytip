@@ -90,3 +90,11 @@ test("person credits: IPTV titles and the pending flag, tolerant of odd shapes",
   assert.deepEqual(parseCredits(null), { iptvItems: [], pending: false });
   assert.deepEqual(parseCredits({ iptv: [] }), { iptvItems: [], pending: false });
 });
+
+test("langUnknown: parsed only when the server says true, absent otherwise", () => {
+  const [a, b, c] = parseVodItems([{ ...vod, id: "3:m:990", langUnknown: true }, vod, { ...vod, id: "3:m:992", langUnknown: "yes" }]);
+  assert.equal(a.langUnknown, true);
+  assert.equal("langUnknown" in b, false);
+  assert.equal("langUnknown" in c, false);
+  assert.equal(parseVodDetail({ ...vod, langUnknown: true })?.langUnknown, true);
+});
