@@ -72,6 +72,7 @@ const BELL = (
 export function Nav({ current }: { current: string }) {
   const { hasRecs, ready } = useLiveFlags();
   const active = navActive(current);
+  const dot = hasRecs && ready > 0;
   // Inbox: looks once at app start (at most every 15 min) and shows the unread count
   const unreadN = unreadCount(useInbox({ soon: true, refresh: true }));
   // Collections: the last link of the left group, once the server has a hub (a 404 keeps it hidden)
@@ -119,9 +120,9 @@ export function Nav({ current }: { current: string }) {
       </button>
       <div className="nav-links">
         {links.map(([k, label]) => (
-          <a key={k} href={`#/${k}`} data-nav onClick={again(k)} className={active === k ? "active" : ""} aria-current={active === k ? "page" : undefined}>
+          <a key={k} href={`#/${k}`} aria-label={k === "live" && dot ? `Live, ${ready} recordings ready` : undefined} data-nav onClick={again(k)} className={active === k ? "active" : ""} aria-current={active === k ? "page" : undefined}>
             {label}
-            {k === "live" && ready > 0 && <span className="nav-dot" aria-label={`${ready} recordings ready`} />}
+            {k === "live" && dot && <span className="nav-dot" aria-hidden />}
           </a>
         ))}
       </div>
@@ -140,12 +141,12 @@ export function Nav({ current }: { current: string }) {
       {/* Phone: exactly five fixed tabs as a bottom bar (shown by the phone media query only) */}
       <div className="tabbar" role="tablist">
         {TABS.map(([k, label]) => (
-          <a key={k} href={`#/${k}`} role="tab" onClick={again(k)} aria-selected={active === k} className={active === k ? "active" : ""}>
+          <a key={k} href={`#/${k}`} role="tab" aria-label={k === "live" && dot ? `Live, ${ready} recordings ready` : undefined} onClick={again(k)} aria-selected={active === k} className={active === k ? "active" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden>
               {ICONS[k]}
             </svg>
             <span>{label}</span>
-            {k === "live" && hasRecs && ready > 0 && <span className="nav-dot" aria-label={`${ready} recordings ready`} />}
+            {k === "live" && dot && <span className="nav-dot" aria-hidden />}
           </a>
         ))}
       </div>

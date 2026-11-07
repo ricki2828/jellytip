@@ -55,7 +55,7 @@ export function AvatarMenu({ active }: { active: boolean }) {
 
   const initial = (s?.userName?.trim()[0] ?? "?").toUpperCase();
   return (
-    <div className="avatar-wrap" ref={box} onKeyDown={onKey}>
+    <div className="avatar-wrap" ref={box} onKeyDown={onKey} onBlur={(e) => open && e.relatedTarget && !box.current?.contains(e.relatedTarget as Node) && setOpen(false)}>
       <button
         ref={btn}
         className={`avatar-btn${active ? " active" : ""}`}
