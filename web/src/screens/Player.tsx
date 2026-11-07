@@ -96,6 +96,8 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   const [buffering, setBuffering] = useState(true);
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState(false);
+  const menuRef = useRef(false);
+  menuRef.current = menu;
   const [findSubs, setFindSubs] = useState(false);
   const canFindSubs = useCanManageSubtitles();
   const { prefs } = usePrefs({ defer: true });
@@ -445,7 +447,10 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     setControls(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
-      if (!videoRef.current?.paused) setControls(false);
+      if (menuRef.current || videoRef.current?.paused) return;
+      setControls(false);
+      const ae = document.activeElement as HTMLElement | null;
+      if (ae && ae.closest(".player-top, .player-bottom, .player-track-trigger")) ae.blur();
     }, HIDE_MS);
   }, []);
 
@@ -747,7 +752,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     planRef.current = np;
     setPlan(np);
   };
-  const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); if (o) setControls(true); }, []);
+  const onMenuOpenChange = useCallback((o: boolean) => { setMenu(o); menuRef.current = o; if (o) setControls(true); else poke(); }, [poke]);
   const textSubs = subs.filter((x) => x.IsTextSubtitleStream);
   /** "What did they say?": back ~10 s with captions on, then the previous subtitle state returns once that span has played */
   const replayCaptions = () => {

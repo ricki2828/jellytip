@@ -671,6 +671,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     return () => window.clearTimeout(t);
   }, [state.kind, answer]);
 
+  const blurHidden = () => {
+    const ae = document.activeElement as HTMLElement | null;
+    if (ae && ae.closest(".player-top, .player-bottom, .iptv-tracks-button, .player-track-trigger")) ae.blur();
+  };
+  const blurHiddenRef = useRef(blurHidden);
+  blurHiddenRef.current = blurHidden;
   const poke = useCallback(() => {
     setControls(true);
     controlsRef.current = true;
@@ -679,8 +685,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       controlsRef.current = false;
       setControls(false);
       // A focused (now invisible) control must not keep eating keys: hand the arrows back to the companion scheme
-      const ae = document.activeElement as HTMLElement | null;
-      if (ae && ae.closest(".player-top, .player-bottom, .iptv-tracks-button, .player-track-trigger")) ae.blur();
+      blurHiddenRef.current();
     }, 3500);
   }, []);
   // The menu closing (any route: pick, Escape, replay, teardown) restarts the auto-hide timer
@@ -1040,7 +1045,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     const wasShown = controlsRef.current;
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
-      if (wasShown && !videoRef.current?.paused) { if (hideTimer.current) window.clearTimeout(hideTimer.current); controlsRef.current = false; setControls(false); }
+      if (wasShown && !videoRef.current?.paused) { if (hideTimer.current) window.clearTimeout(hideTimer.current); controlsRef.current = false; setControls(false); blurHiddenRef.current(); }
       else poke();
     }, 300);
   };
@@ -1079,7 +1084,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           return;
         }
         // OK on the picture with the controls idle brings them up: focus moves to the Live button, then arrows navigate as usual
-        if (keyState.current.avail && !inUse && e.key === "Enter" && !btn) {
+        if (isLive && !inUse && e.key === "Enter" && !btn) {
           const first = document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ?? document.querySelector<HTMLElement>(".player-top [data-nav]");
           if (first) { e.preventDefault(); e.stopPropagation(); poke(); first.focus(); navAt.current = Date.now(); return; }
         }
@@ -1163,7 +1168,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       ref={boxRef}
       style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${controls || others || paused || state.kind !== "playing" || tracksOpen || delayOpen ? " show" : ""}`}
       onMouseMove={poke}
-      onClick={() => {
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest(".cp-panel, .live-drawer, .cp-bug, .delay-chip")) return;
         if (touchClick.current) touchClick.current = false;
         else poke();
       }}
