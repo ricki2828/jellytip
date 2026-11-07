@@ -1,0 +1,168 @@
+.mnight {
+  padding: 84px var(--pad) 48px;
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+}
+.mnight-start,
+.mnight-night,
+.mnight-pick {
+  display: grid;
+  gap: 14px;
+}
+.mnight-card {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.mnight-card h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.mnight-head {
+  grid-auto-flow: column;
+  justify-content: space-between;
+  align-items: center;
+}
+.mnight-label {
+  color: var(--dim);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mnight-code {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+.mnight-join {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.mnight-code-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+}
+.mnight-code-input:focus {
+  outline: 2px solid var(--vanilla);
+}
+.mnight-err {
+  margin: 0;
+  color: #ff8a80;
+}
+.mnight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mnight-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mnight-person {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+.mnight-person.done {
+  background: rgba(242, 242, 240, 0.85);
+  color: var(--night);
+}
+.mnight-list,
+.mnight-films {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.mnight-opt,
+.mnight-film {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.mnight-opt {
+  cursor: pointer;
+}
+.mnight-opt:not(.on) {
+  opacity: 0.55;
+}
+.mnight-opt input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+.mnight-opt-text,
+.mnight-film-body,
+.mnight-winner-text {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 0;
+}
+.mnight-art {
+  flex: none;
+  width: 64px;
+  aspect-ratio: 2 / 3;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+.mnight-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mnight-film.lead {
+  outline: 2px solid var(--vanilla);
+}
+.mnight-votes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.mnight-votes .chip {
+  padding: 9px 18px;
+  font-size: 15px;
+}
+.mnight-winner-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.mnight-winner .mnight-art {
+  width: 96px;
+}
+.mnight-winner h2 {
+  font-size: 24px;
+}
+@media (max-width: 480px) {
+  .mnight-code {
+    font-size: 32px;
+  }
+  .mnight-head {
+    grid-auto-flow: row;
+    justify-items: start;
+  }
+}
