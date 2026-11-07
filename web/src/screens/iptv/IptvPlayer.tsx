@@ -8,6 +8,7 @@ import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
 import { alternateEpisode } from "../../lib/streamCopies";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
+import { findReminder } from "../../lib/reminders";
 import { isPre, preGameCard } from "../../lib/preGame";
 import { FantasyAlerts, FantasyChip } from "../../components/Fantasy";
 import { FlipAlerts } from "../../components/FlipAlerts";
@@ -965,7 +966,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   };
   const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
-  const remId = extras?.eventKey ? remItems?.find((r) => r.event.key === extras.eventKey)?.id ?? null : null;
+  const remMatchId = guessedMatch ? undefined : extras?.matchId;
+  const remId = extras?.eventKey || remMatchId ? findReminder(remItems, { key: extras?.eventKey, matchId: remMatchId })?.id ?? null : null;
   const [remBusy, setRemBusy] = useState(false);
   const toggleRemind = async () => {
     if (!startsAt || !extras?.eventKey || !target.channel) return;
@@ -973,7 +975,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     const err =
       remId != null
         ? await removeReminder(remId)
-        : await addReminderFor({ key: extras.eventKey, title, start: startsAt, stop: startsAt + 3 * 3600, channelId: target.channel, channelName: title });
+        : await addReminderFor({ key: extras.eventKey, title, start: startsAt, stop: startsAt + 3 * 3600, channelId: target.channel, channelName: title, matchId: remMatchId });
     setRemBusy(false);
     flashNote(err ?? (remId != null ? "Reminder removed" : "We'll remind you before it starts"));
   };
@@ -1566,7 +1568,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         // Pre-game card buttons: Remind me sets the reminder here; Other channels asks to reopen on the pick when the player closes
         await NativePlayer.addListener("pregameAction", (e) => {
           if (e.action === "remind" && extras?.eventKey && extras.startsAt) {
-            void addReminderFor({ key: extras.eventKey, title, start: extras.startsAt, stop: extras.startsAt + 3 * 3600, channelId: e.channelId ?? target.channel!, channelName: title }).then((err) =>
+            void addReminderFor({ key: extras.eventKey, title, start: extras.startsAt, stop: extras.startsAt + 3 * 3600, channelId: e.channelId ?? target.channel!, channelName: title, matchId: extras.matchId }).then((err) =>
               flashNote(err ?? "We'll remind you before it starts"),
             );
           } else if (e.action === "channel" && e.channelId) switchTo.current = e.channelId;
@@ -1584,7 +1586,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
             const channel = e.channelId ?? target.channel;
             if (!channel || !f.startsAt) return flashNote("Nothing to schedule yet.");
             if (e.action === "remind") {
-              const err = await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt, stop: f.startsAt + 3 * 3600, channelId: channel, channelName: title });
+              const err = await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt, stop: f.startsAt + 3 * 3600, channelId: channel, channelName: title, matchId: f.id });
               flashNote(err ?? "We'll remind you before it starts");
             } else {
               const a = await addRecording(channel, f.startsAt);

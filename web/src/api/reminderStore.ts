@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { iptvGet, iptvPost } from "./iptv";
 import { afterStartup } from "../lib/startup";
-import { parseReminders, type Reminder } from "../lib/reminders";
+import { hasStream, parseReminders, sameGame, type Reminder } from "../lib/reminders";
 import { isNative, NativeReminders } from "../lib/native";
 import type { UpEvent } from "../lib/upcoming";
 
@@ -47,8 +47,24 @@ window.addEventListener("jellytip-session", () => {
   emit();
 });
 
-/** Set a reminder for an event; returns an error text, or null when it worked. */
-export async function addReminder(e: UpEvent): Promise<string | null> {
+/** After a reminder was set: on the phone, ask for notification permission once (Android 13+) and sync; says so if it was refused earlier. */
+async function afterAdd(): Promise<string | null> {
+  if (!isNative) return null;
+  const n = await NativeReminders.ensureNotifications().catch(() => null);
+  void NativeReminders.sync().catch(() => undefined);
+  return n?.denied ? "Reminder set, but phone notifications are off. Turn them on in Android Settings > Apps > Jellytip > Notifications." : null;
+}
+
+/** Set a reminder for an event; returns an error text, or null when it worked. A game with a fixture (fixture id or match id, from
+ * `o` or the event itself) is ALWAYS a fixture reminder: the server picks the best channel when it fires. The channel path is only
+ * for events with no fixture at all (a non-sport programme), or when the server refused the fixture one. */
+export async function addReminder(e: UpEvent, o: { fid?: string | null; matchId?: string | null } = {}): Promise<string | null> {
+  const fid = o.fid ?? e.fid ?? null;
+  const matchId = o.matchId ?? e.fixture?.id ?? null;
+  if (fid || matchId) {
+    const r = await addFx({ fid, matchId });
+    if (r.ok || !hasStream(e)) return r.msg;
+  }
   const best = e.channels[0];
   const a = await iptvPost<{ id?: number | string }>("v1/iptv/reminders", { key: e.key, channelId: best.id, start: e.start, stop: e.stop, title: e.title, league: e.league ?? undefined });
   if (a.status === 404) {
@@ -58,35 +74,41 @@ export async function addReminder(e: UpEvent): Promise<string | null> {
   }
   if (a.status !== 200 && a.status !== 201) return a.data?.error ?? `Server said ${a.status}`;
   await refreshReminders(true);
-  if (isNative) {
-    // Phone: ask for notification permission once (Android 13+); say so if it was refused earlier
-    const n = await NativeReminders.ensureNotifications().catch(() => null);
-    void NativeReminders.sync().catch(() => undefined);
-    if (n?.denied) return "Reminder set, but phone notifications are off. Turn them on in Android Settings > Apps > Jellytip > Notifications.";
-  }
-  return null;
+  return afterAdd();
 }
 
 /** Remind me for a fixture / legacy card: {fid} first (no channel needed); an older server answers 400/404, then {matchId} when known. */
 export async function addFixtureReminder(o: { fid?: string | null; matchId?: string | null }): Promise<string | null> {
+  return (await addFx(o)).msg;
+}
+
+/** ok: the server has the reminder (msg may still carry the phone-notifications hint); !ok: msg is the error. */
+async function addFx(o: { fid?: string | null; matchId?: string | null }): Promise<{ ok: boolean; msg: string | null }> {
+  const fail = (msg: string) => ({ ok: false, msg });
   let a = o.fid ? await iptvPost<{ id?: number | string; error?: string }>("v1/iptv/reminders", { fid: o.fid }) : null;
   if ((!a || a.status === 400 || a.status === 404) && o.matchId) a = await iptvPost<{ id?: number | string; error?: string }>("v1/iptv/reminders", { matchId: o.matchId });
-  if (!a) return "Can't set a reminder for this one.";
+  if (!a) return fail("Can't set a reminder for this one.");
   if (a.status === 404 && !o.matchId && !a.data?.error) {
     unavailable = true;
     emit();
-    return "Reminders aren't available on this server yet.";
+    return fail("Reminders aren't available on this server yet.");
   }
-  if (a.status !== 200 && a.status !== 201) return a.data?.error ?? `Server said ${a.status}`;
+  if (a.status !== 200 && a.status !== 201) return fail(a.data?.error ?? `Server said ${a.status}`);
   await refreshReminders(true);
-  return null;
+  return { ok: true, msg: await afterAdd() };
 }
 
+/** Switch a reminder off: every row for the same game goes (key, fixture id or match id), so no twin keeps notifying. */
 export async function removeReminder(id: string | number): Promise<string | null> {
-  const a = await iptvPost<{ ok?: boolean }>(`v1/iptv/reminders/${id}/delete`);
-  if (a.status !== 200 && a.status !== 204 && a.status !== 404) return a.data?.error ?? `Server said ${a.status}`;
+  const me = state?.find((r) => String(r.id) === String(id));
+  const ids = new Set<string | number>([id, ...(me ? sameGame(state, me).map((r) => r.id) : [])]);
+  let err: string | null = null;
+  for (const x of ids) {
+    const a = await iptvPost<{ ok?: boolean }>(`v1/iptv/reminders/${x}/delete`);
+    if (a.status !== 200 && a.status !== 204 && a.status !== 404) err = a.data?.error ?? `Server said ${a.status}`;
+  }
   await refreshReminders(true);
-  return null;
+  return err;
 }
 
 /** items: null until known or when the server has no route; available: false once it answered 404. */
@@ -106,7 +128,7 @@ export function useReminders(): { items: Reminder[] | null; available: boolean }
 }
 
 /** Set a reminder from just the basics (the player knows the event key, start and channel but has no upcoming item). */
-export const addReminderFor = (o: { key: string; title: string; start: number; stop: number; channelId: string; channelName: string }) =>
+export const addReminderFor = (o: { key: string; title: string; start: number; stop: number; channelId: string; channelName: string; fid?: string | null; matchId?: string | null }) =>
   addReminder({
     key: o.key,
     title: o.title,
@@ -119,4 +141,4 @@ export const addReminderFor = (o: { key: string; title: string; start: number; s
     art: null,
     recordable: false,
     recordingId: null,
-  });
+  }, { fid: o.fid, matchId: o.matchId });

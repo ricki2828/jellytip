@@ -321,7 +321,7 @@ export function MatchInfoHost() {
                   busy={false}
                   label={matchupTitle(f)}
                   sides={fixtureSides(f, f.leagueKey)}
-                  onThis={async () => setMsg((await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt!, stop: f.startsAt! + 3 * 3600, channelId: best.id, channelName: best.name })) ?? "We'll remind you before it starts.")}
+                  onThis={async () => setMsg((await addReminderFor({ key: f.id, title: matchupTitle(f), start: f.startsAt!, stop: f.startsAt! + 3 * 3600, channelId: best.id, channelName: best.name, matchId: f.id })) ?? "We'll remind you before it starts.")}
                 />
               )}
               {f.status !== "post" && f.startsAt && best && (

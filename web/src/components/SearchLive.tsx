@@ -83,7 +83,7 @@ export function LiveRow({ hits, title = "Live & upcoming" }: { hits: LiveHit[]; 
                 data-nav
                 data-autofocus
                 onClick={async () => {
-                  const err = await addReminderFor({ key: ahead.fixture?.id ?? `${ahead.channel.id}:${ahead.start}`, title: displayTitle(ahead.title, ahead.fixture), start: ahead.startsAt ?? ahead.start, stop: ahead.stop, channelId: ahead.channel.id, channelName: ahead.channel.name });
+                  const err = await addReminderFor({ key: ahead.fixture?.id ?? `${ahead.channel.id}:${ahead.start}`, title: displayTitle(ahead.title, ahead.fixture), start: ahead.startsAt ?? ahead.start, stop: ahead.stop, channelId: ahead.channel.id, channelName: ahead.channel.name, matchId: ahead.fixture?.id ?? null });
                   if (err) setMsg(err);
                   else {
                     flashNote("We'll remind you before it starts");
