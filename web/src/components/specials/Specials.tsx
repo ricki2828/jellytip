@@ -2,7 +2,7 @@
 // contract in ~/ai/plans/jellytip-specials.md). Each special renders as one block between the normal rows; unknown
 // layouts render nothing. Item data comes from one Jellyfin call per special; nothing per tile hits the companion.
 import { useEffect, useRef, useState } from "react";
-import { getItems, getSession, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
+import { getItems, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
 import {
   backdropInfo,
   companionMediaUrl,
@@ -12,6 +12,7 @@ import {
   type BecauseLoved,
   type ClosetPick,
   type ClosetPicks,
+  type FourFavourites,
   type DoubleFeature,
   type PersonSpotlight,
   type Special,
@@ -34,6 +35,7 @@ import { IptvCard, IptvDot, IptvPoster, safeArt } from "../IptvTile";
 import { tmdbSized } from "../FranchiseRow";
 import { vodPath, type VodItem } from "../../lib/iptvVod";
 import { PosterCard } from "../PosterCard";
+import { atLabel, pickState } from "../../lib/clipPicks";
 import { GetItSheet } from "../GetItSheet";
 import { filmCount, PersonTile } from "../PersonTile";
 import "./specials.css";
@@ -490,9 +492,17 @@ function AroundHouseBlock({ s }: { s: AroundHouse }) {
   );
 }
 
-// ---------- closet_picks ----------
+// ---------- closet_picks + four_favourites (one component: a clip on one side, the guest's picks on the other) ----------
 
 function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
+  return <ClipPicksBlock s={s} kicker="Closet picks" fallback={`${s.guest} in the Criterion Closet`} />;
+}
+
+function FourFavouritesBlock({ s }: { s: FourFavourites }) {
+  return <ClipPicksBlock s={s} kicker="Four favourites" fallback={`${s.guest}'s four favourites`} wide />;
+}
+
+function ClipPicksBlock({ s, kicker, fallback, wide }: { s: ClosetPicks | FourFavourites; kicker: string; fallback: string; wide?: boolean }) {
   const libIds = s.picks.map((p) => p.itemId).filter((x): x is string => !!x);
   const items = useItems(libIds);
   const untitled = untitledSet(s);
@@ -505,8 +515,9 @@ function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
   const [getIt, setGetIt] = useState<ClosetPick | null>(null);
   const blocked = useVideoBlocked(s.id);
   const { soundOn, mute } = useSoundBack(s.id, sound, () => setSound(false));
-  const admin = !!getSession()?.isAdmin;
-  const wantPlay = inView || focused;
+  const admin = !!s.canRequest; // the server decides who may "Get it" (admin-only; re-checked per request)
+  const [forced, setForced] = useState(false); // a seek chip was pressed: play even if the block is not mostly in view
+  const wantPlay = inView || focused || forced;
 
   // Focus (re)claims, so the block being used wins over another one that is merely on screen
   useEffect(() => {
@@ -529,14 +540,18 @@ function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
     else v.pause();
   }, [wantPlay, blocked, sound]);
 
+  useEffect(() => {
+    if (!inView && !focused) setForced(false); // scrolled away after a seek: normal rules again
+  }, [inView, focused]);
+
   if (!items) return null;
   const byId = new Map(items.map((i) => [i.Id, i]));
   // Lit: the video has passed the pick's moment; the latest one passed is the "current" pick
   const passed = s.picks.filter((p) => p.atSec != null && t >= p.atSec);
   const current = passed.length ? passed[passed.length - 1] : null;
   return (
-    <section className="special closet-picks" ref={box}>
-      <SpecialHeader kicker="Closet picks" title={s.title ?? `${s.guest} in the Criterion Closet`} />
+    <section className={`special closet-picks${wide ? " four-fav" : ""}`} ref={box}>
+      <SpecialHeader kicker={kicker} title={s.title ?? fallback} />
       <div className="closet">
         <div className="closet-video">
           <video
@@ -580,23 +595,48 @@ function ClosetPicksBlock({ s }: { s: ClosetPicks }) {
         <div className="closet-picks-list">
           {s.picks.map((p, n) => {
             const item = p.itemId ? byId.get(p.itemId) : undefined;
-            const inLib = !!item;
+            const state = pickState(p, !!item, admin);
+            const inLib = state === "library";
             const lit = p.atSec != null && t >= p.atSec;
-            const label = `${p.title}${p.year ? ` (${p.year})` : ""}${inLib ? "" : " · not in the library"}`;
-            const open = inLib ? () => go(`/item/${item!.Id}`) : admin && p.tmdbId ? () => setGetIt(p) : undefined;
-            return (
+            const label = `${p.title}${p.year ? ` (${p.year})` : ""}${inLib ? "" : state === "iptv" ? " · via IPTV" : " · not in the library"}`;
+            const open = inLib ? () => go(`/item/${item!.Id}`) : state === "iptv" ? () => go(vodPath(p.iptv!.id)) : state === "get" ? () => setGetIt(p) : undefined;
+            const card = (
               <PosterCard
-                key={`${p.title}-${n}`}
                 item={item}
                 width={112}
-                src={item ? undefined : p.posterUrl ? companionMediaUrl(p.posterUrl) : null}
-                faded={!inLib}
+                src={item ? undefined : p.iptv ? safeArt(p.iptv.poster ?? p.iptv.backdrop, 480) : p.posterUrl ? companionMediaUrl(p.posterUrl) : null}
+                faded={state === "none" || state === "get"}
                 lit={lit && current === p}
                 label={label}
                 name={p.title}
                 untitled={!!item && untitled.has(item.Id)}
+                avail={wide ? (inLib ? "Library" : state === "iptv" ? "IPTV" : state === "get" ? "Request" : null) : undefined}
                 onOpen={open}
               />
+            );
+            return (
+              <span className="clip-pick" key={`${p.title}-${n}`}>
+                {card}
+                {wide && p.atSec != null && (
+                  <button
+                    className="clip-seek"
+                    data-nav
+                    aria-label={`Watch ${s.guest} pick ${p.title}`}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    onClick={() => {
+                      const v = video.current;
+                      if (!v) return;
+                      claimVideo(s.id);
+                      setForced(true);
+                      v.currentTime = p.atSec!;
+                      v.play().catch(() => undefined);
+                    }}
+                  >
+                    ▶ {atLabel(p.atSec)}
+                  </button>
+                )}
+              </span>
             );
           })}
         </div>
@@ -626,6 +666,8 @@ export function SpecialBlock({ s }: { s: Special }) {
       return <AroundHouseBlock s={s} />;
     case "closet_picks":
       return <ClosetPicksBlock s={s} />;
+    case "four_favourites":
+      return <FourFavouritesBlock s={s} />;
     default:
       return null; // newer server, older app: skip
   }

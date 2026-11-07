@@ -4,6 +4,7 @@
 import { getSession } from "./jellyfin";
 import { isNative, nativeGetJson, nativePostJson, SERVER_ORIGIN } from "../lib/native";
 import { parseVodItems, type VodItem } from "../lib/iptvVod";
+import { parseClipPicks } from "../lib/clipPicks";
 import { parseFeaturePairs } from "../lib/specialsIptv";
 import { parseCollection, parseRows, type Collection, type ServerRow } from "../lib/rows";
 import { registerLogoStyles } from "../lib/logoStyle";
@@ -463,6 +464,8 @@ export interface ClosetPick {
   tmdbId?: number | null;
   posterUrl?: string | null;
   atSec?: number | null;
+  /** four_favourites: the IPTV copy of a film the library lacks (best copy for this person). */
+  iptv?: VodItem | null;
 }
 export interface ClosetPicks extends SpecialBase {
   layout: "closet_picks";
@@ -470,12 +473,18 @@ export interface ClosetPicks extends SpecialBase {
   videoUrl: string;
   posterUrl?: string | null;
   durationSec?: number;
+  /** Server says this caller may "Get it" (admin); false/absent hides it. */
+  canRequest?: boolean;
   picks: ClosetPick[];
 }
+/** Letterboxd "Four Favorites": same shape as the closet, a guest naming four films in a clip. */
+export interface FourFavourites extends Omit<ClosetPicks, "layout"> {
+  layout: "four_favourites";
+}
 
-export type Special = TrailerBreak | PersonSpotlight | TonightsPick | Top10 | DoubleFeature | BecauseLoved | AroundHouse | ClosetPicks;
+export type Special = TrailerBreak | PersonSpotlight | TonightsPick | Top10 | DoubleFeature | BecauseLoved | AroundHouse | ClosetPicks | FourFavourites;
 
-export const SPECIAL_LAYOUTS = ["trailer_break", "person_spotlight", "tonights_pick", "top10", "double_feature", "because_loved", "around_house", "closet_picks"];
+export const SPECIAL_LAYOUTS = ["trailer_break", "person_spotlight", "tonights_pick", "top10", "double_feature", "because_loved", "around_house", "closet_picks", "four_favourites"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -505,6 +514,7 @@ function specialExtras(s: Partial<Special>): Record<string, unknown> {
   if (s.layout === "person_spotlight") return { iptvItems: parseVodItems(raw.iptvItems) };
   if (s.layout === "tonights_pick") return { iptvItem: parseVodItems([raw.iptvItem])[0] ?? null, itemId: typeof raw.itemId === "string" && raw.itemId ? raw.itemId : null };
   if (s.layout === "double_feature") return { pairs: parseFeaturePairs(raw.pairs) };
+  if (s.layout === "closet_picks" || s.layout === "four_favourites") return { picks: parseClipPicks((s as { picks?: unknown }).picks) };
   return {};
 }
 
