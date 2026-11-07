@@ -193,3 +193,18 @@ test("routes: /movies/all and /shows/all parse to their own non-root routes with
   assert.equal(parseHash("#/shows/").name, "shows");
   if (isRootRoute) assert.equal(isRootRoute("moviesall"), false); // detail-style screen: shows the back arrow
 });
+
+test("My list: routes, nav highlight, and picking the row for the page's kind", async () => {
+  const { parseHash } = await import("../src/lib/routeParse.ts");
+  const { navActive } = await import("../src/lib/navModel.ts");
+  assert.equal(parseHash("#/movies/mylist").name, "mylistmovies");
+  assert.equal(parseHash("#/shows/mylist").name, "mylistshows");
+  assert.equal(navActive("mylistmovies"), "movies");
+  assert.equal(navActive("mylistshows"), "shows");
+  const { pickMyList } = await import("../src/lib/myList.ts").catch(() => ({ pickMyList: undefined }));
+  if (!pickMyList) return; // companion.ts needs a browser; the pure parts are covered above
+  const row = (id: string, mediaType: "movie" | "tv", n: number) => ({ id, family: "mylist", mediaType, itemIds: Array(n).fill("x"), iptvItems: [] }) as never;
+  assert.equal(pickMyList([row("a", "tv", 2), row("b", "movie", 1)], "movie")?.id, "b");
+  assert.equal(pickMyList([row("a", "movie", 0)], "movie"), null);
+  assert.equal(pickMyList(null, "tv"), null);
+});

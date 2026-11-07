@@ -2633,3 +2633,16 @@ button.overview.open {
     gap: 10px;
   }
 }
+.btn.browse-all.my-list-btn {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--vanilla);
+}
+.btn.browse-all.my-list-btn:focus,
+.btn.browse-all.my-list-btn:hover {
+  background: var(--vanilla);
+  color: var(--night);
+}
+.my-list-hint {
+  margin: 0 var(--pad) 14px;
+  font-size: 13px;
+}

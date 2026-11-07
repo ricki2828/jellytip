@@ -14,8 +14,8 @@ export type NavItem = "home" | "movies" | "shows" | "live" | "collections" | "se
 export function navActive(route: string): NavItem | null {
   if (LIVE_ROUTES.includes(route)) return "live";
   if (route === "ask") return "search";
-  if (route === "moviesall") return "movies";
-  if (route === "showsall") return "shows";
+  if (route === "moviesall" || route === "mylistmovies") return "movies";
+  if (route === "showsall" || route === "mylistshows") return "shows";
   if (route === "collectionrow" || route === "journeys" || route === "journey") return "collections";
   if (YOU_ROUTES.has(route)) return "you";
   switch (route) {

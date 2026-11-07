@@ -58,6 +58,7 @@ export function parseHash(hash: string): Route {
     case "movies":
     case "shows":
       // #/movies = the Movies page; #/movies/all?… = the full filterable grid (same for shows)
+      if (seg[1] === "mylist") return { name: seg[0] === "movies" ? "mylistmovies" : "mylistshows", params: {}, query };
       if (seg[1] === "all") return { name: seg[0] === "movies" ? "moviesall" : "showsall", params: {}, query };
       return { name: seg[0], params: {}, query };
     case "iptv":
