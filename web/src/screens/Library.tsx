@@ -82,8 +82,13 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
     };
   }, [kind, reload]);
 
+  // The hero (Tonight's pick, position 0) always comes first; title, My list and Browse all sit under it (Ricki 7-Nov)
+  const shown = rowsReady ? specials : [];
+  const heroSpecials = shown.filter((sp) => sp.position === 0);
+  const restSpecials = shown.filter((sp) => sp.position !== 0);
   return (
     <div className="library">
+      {heroSpecials.length > 0 && withSpecials([], heroSpecials)}
       <div className="lib-title-row">
         <h1 className="page-title">{kind === "movie" ? "Movies" : "Shows"}</h1>
         <button data-nav className="btn browse-all my-list-btn" onClick={() => go(listPath)}>
@@ -113,7 +118,7 @@ export function Library({ kind }: { kind: "movie" | "tv" }) {
               ...carousels.map((c, i) => <Row key={c.id} title={c.title} load={carouselLoader(c)} autoFocusFirst={i === 0} />),
               ...lists.map((l) => <Row key={l.slug} title={LETTERBOXD_PREFIX + l.name} load={letterboxdLoader(l)} />),
             ],
-        rowsReady ? specials : [],
+        restSpecials,
       )}
       <section className="grid-section">
         <button data-nav className="browse-all-card" onClick={() => go(allPath)}>
