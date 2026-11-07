@@ -60,3 +60,39 @@ export function pickIptvTracks(audio: readonly TrackChoice[], subs: readonly Tra
   }
   return { audio: audioPick && !audioPick.active ? audioPick.index : null, subtitle };
 }
+
+/** A manual track pick, remembered by identity (lang/name) so it survives an engine rebuild that renumbers tracks. */
+export type TrackPick = { index: number; lang?: string; name?: string };
+export type SubtitlePick = { off: true } | ({ off?: false } & TrackPick);
+
+export function makePick(choices: readonly TrackChoice[], index: number): TrackPick {
+  const c = choices.find((t) => t.index === index);
+  return { index, lang: c?.lang, name: c?.name };
+}
+
+const norm = (s?: string) => (s ?? "").trim().toLowerCase();
+const known = (s?: string) => norm(s) !== "" && norm(s) !== "und";
+
+/**
+ * Index of the track in `choices` that matches a remembered pick, or null. lang+name, then name, then a unique lang match.
+ * The old index is only trusted when the pick carried neither a name nor a language.
+ */
+export function matchPick(choices: readonly TrackChoice[], pick: TrackPick): number | null {
+  const hasName = known(pick.name);
+  const hasLang = known(pick.lang);
+  if (hasName && hasLang) {
+    const m = choices.find((t) => norm(t.name) === norm(pick.name) && norm(t.lang) === norm(pick.lang));
+    if (m) return m.index;
+  }
+  if (hasName) {
+    const m = choices.filter((t) => norm(t.name) === norm(pick.name));
+    if (m.length === 1 || (m.length > 1 && hasLang && m.find((t) => norm(t.lang) === norm(pick.lang)))) return (m.length === 1 ? m[0] : m.find((t) => norm(t.lang) === norm(pick.lang))!).index;
+  }
+  if (hasLang) {
+    const m = choices.filter((t) => norm(t.lang) === norm(pick.lang));
+    if (m.length === 1) return m[0].index;
+    return null;
+  }
+  if (!hasName) return choices.find((t) => t.index === pick.index)?.index ?? null;
+  return null;
+}
