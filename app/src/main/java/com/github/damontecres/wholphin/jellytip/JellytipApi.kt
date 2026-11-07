@@ -611,10 +611,11 @@ class JellytipApi
             return info
         }
 
-        /** Companion library delete (Radarr/Sonarr aware). Returns null when the endpoint is missing (404) or unreachable. */
-        suspend fun deleteLibraryItem(itemId: UUID): JellytipDeleteResult? {
-            val (code, body) = userCall("v1/library/items/$itemId/delete", "{}", timeoutMs = 60_000L) ?: return null
-            if (code == 404) return null
+        /** Companion library delete (Radarr/Sonarr aware). Unreachable gives an error result; [JellytipDeleteResult.unsupported] means an old server without the route (404). */
+        suspend fun deleteLibraryItem(itemId: UUID): JellytipDeleteResult {
+            val (code, body) = userCall("v1/library/items/$itemId/delete", "{}", timeoutMs = 60_000L)
+                ?: return JellytipDeleteResult(false, "Couldn't reach the Jellytip server, try again")
+            if (code == 404) return JellytipDeleteResult(false, null, unsupported = true)
             val obj = runCatching { JSONObject(body) }.getOrNull()
             return when {
                 code == 403 -> JellytipDeleteResult(false, "You are not allowed to delete this.")

@@ -120,6 +120,8 @@ data class JellytipDeleteInfo(
 data class JellytipDeleteResult(
     val ok: Boolean,
     val error: String?,
+    /** 404: an old server without the route; only then may the app fall back to a plain Jellyfin delete. */
+    val unsupported: Boolean = false,
 )
 
 private const val CONFIRM_GRACE_MS = 600L

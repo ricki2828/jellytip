@@ -106,9 +106,10 @@ class MediaManagementService
                         null
                     }
                 // Companion first: it deletes via Radarr/Sonarr (unmonitored, no re-download) or Jellyfin.
-                // Only a missing/unreachable companion falls back to a plain Jellyfin delete.
+                // Only an old server without the route (404) falls back to a plain Jellyfin delete;
+                // unreachable is an error, since a plain delete would let Radarr/Sonarr re-download it.
                 val viaCompanion = jellytipApi.deleteLibraryItem(item.id)
-                if (viaCompanion == null) {
+                if (viaCompanion.unsupported) {
                     api.libraryApi.deleteItem(item.id)
                 } else if (!viaCompanion.ok) {
                     return DeleteResult.Error(Exception(viaCompanion.error ?: "Delete failed"))
