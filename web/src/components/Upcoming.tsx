@@ -12,6 +12,7 @@ import { IdentifiedMark, MatchInfoButton } from "./MatchInfo";
 import { displayTitle } from "../lib/matchInfo";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { isPre, startsLine } from "../lib/preGame";
+import { starredFirst } from "../lib/upcoming";
 import { MuteButton } from "./SportMute";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
@@ -141,12 +142,13 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
   );
 }
 
-/** Home: "Coming up in sport", the server's order (favourites first); hidden when there is nothing or no route. */
+/** Home: "Coming up in sport", starred first; hidden when there is nothing or no route. */
 export function UpcomingRow() {
   const ev = useUpcoming();
   const [open, setOpen] = useState<UpEvent | null>(null);
   const now = Date.now() / 1000;
-  const list = (ev ?? []).filter((e) => e.stop > now).slice(0, 14);
+  // Starred (favourite team/league) first, live before upcoming within each group, then by start time
+  const list = starredFirst((ev ?? []).filter((e) => e.stop > now), now).slice(0, 14);
   if (!list.length) return null;
   return (
     <section className="row up-row">

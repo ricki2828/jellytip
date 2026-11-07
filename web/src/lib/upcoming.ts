@@ -124,3 +124,9 @@ export function groupByDay(events: UpEvent[], now: Date = new Date()): { day: st
 }
 
 export const isLive = (e: Pick<UpEvent, "start" | "stop">, now = Date.now() / 1000) => e.start <= now && now < e.stop;
+
+/** Starred events first; within starred / not starred, live (started) before upcoming, then by start. Stable. */
+export function starredFirst<T extends { favourite?: boolean; start: number }>(list: T[], now: number): T[] {
+  const band = (e: T) => (e.favourite ? 0 : 2) + (e.start <= now ? 0 : 1);
+  return list.map((e, i) => ({ e, i })).sort((a, b) => band(a.e) - band(b.e) || a.e.start - b.e.start || a.i - b.i).map((x) => x.e);
+}
