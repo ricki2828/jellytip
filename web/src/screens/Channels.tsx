@@ -1,22 +1,13 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { uid } from "../api/jellyfin";
-import { channelItems } from "../api/channels";
-import { CHANNELS, channelViable, itemLabel, parseHidden, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
+import { channelItems, readHiddenChannels, writeHiddenChannels } from "../api/channels";
+import { CHANNELS, channelViable, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
 import "./Channels.css";
 
 type Load = { state: "loading" } | { state: "error" } | { state: "ok"; items: ChanItem[] };
 
-const hiddenKey = () => `jellytip.channels.hidden.${uid()}`;
-const readHidden = () => {
-  try {
-    return parseHidden(localStorage.getItem(hiddenKey()));
-  } catch {
-    return [];
-  }
-};
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean }) {
@@ -64,7 +55,7 @@ function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: Cha
 
 export function Channels() {
   const [loads, setLoads] = useState<Record<string, Load>>(() => Object.fromEntries(CHANNELS.map((c) => [c.id, { state: "loading" } as Load])));
-  const [hidden, setHidden] = useState<string[]>(readHidden);
+  const [hidden, setHidden] = useState<string[]>(readHiddenChannels);
   const [showHidden, setShowHidden] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [attempt, setAttempt] = useState(0);
@@ -104,11 +95,7 @@ export function Channels() {
   const toggle = (id: string) => {
     const next = toggleHidden(hidden, id);
     setHidden(next);
-    try {
-      localStorage.setItem(hiddenKey(), JSON.stringify(next));
-    } catch {
-      // private mode: lasts until reload
-    }
+    writeHiddenChannels(next);
   };
 
   const viable = CHANNELS.filter((c) => {

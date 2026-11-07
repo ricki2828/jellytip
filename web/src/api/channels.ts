@@ -1,11 +1,14 @@
-// Library queries for the personal channels (lib/channels.ts has the schedule maths). One query per channel (two for an
+// Library + IPTV queries for the personal channels (lib/channels.ts has the schedule maths). One query per channel (two for an
 // episode channel: matching series, then all episodes, filtered here), bare Fields. The result is kept in memory and in
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { playable, sample, sampleByGroup, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { channelById, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, schedule, tunePath, tuneTarget, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { iptvGet } from "./iptv";
 
 const TTL_MS = 6 * 3600 * 1000;
+/** While the server is still fetching runtimes for IPTV films, look again sooner. */
+const PENDING_TTL_MS = 15 * 60 * 1000;
 /** Most items a channel keeps (a deterministic hash sample of what the library has). */
 const CAP = 150;
 const PER_SERIES = 15;
@@ -14,22 +17,24 @@ const EPISODE_CAP = 300;
 interface Entry {
   at: number;
   items: ChanItem[];
+  /** Shorter life than TTL_MS (an answer the server says is still filling in). */
+  ttl?: number;
 }
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<ChanItem[]>>();
-const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v2.${u}.${def.id}`;
+const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v3.${u}.${def.id}`;
 
-const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks });
+const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks, Tmdb: i.Tmdb, Art: i.Art });
 
 function read(key: string): ChanItem[] | null {
   const now = Date.now();
   const m = mem.get(key);
-  if (m && now - m.at < TTL_MS) return m.items;
+  if (m && now - m.at < (m.ttl ?? TTL_MS)) return m.items;
   try {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const e = JSON.parse(raw) as Entry;
-    if (!Array.isArray(e.items) || typeof e.at !== "number" || now - e.at >= TTL_MS) return null;
+    if (!Array.isArray(e.items) || typeof e.at !== "number" || now - e.at >= (e.ttl ?? TTL_MS)) return null;
     mem.set(key, e);
     return e.items;
   } catch {
@@ -37,8 +42,8 @@ function read(key: string): ChanItem[] | null {
   }
 }
 
-function write(key: string, items: ChanItem[]) {
-  const e = { at: Date.now(), items };
+function write(key: string, items: ChanItem[], ttl?: number) {
+  const e: Entry = { at: Date.now(), items, ...(ttl ? { ttl } : {}) };
   mem.set(key, e);
   try {
     sessionStorage.setItem(key, JSON.stringify(e));
@@ -50,20 +55,45 @@ function write(key: string, items: ChanItem[]) {
 // No Limit and no SortBy (a cut-off would be a name-ordered slice); no extra Fields, no images, no user data
 const common = { Recursive: true, EnableUserData: false, EnableImages: false, Fields: "", IsMissing: false } as const;
 
-async function fetchItems(def: ChannelDef): Promise<ChanItem[]> {
+// IPTV films for a Movie channel: ONE catalogue call (metadata only: the server never opens a stream or calls /play to answer it).
+// A server without the route, or a person without IPTV, just means no IPTV films. Playing one is the normal IPTV player's job.
+const noIptv = new Set<string>();
+async function iptvFilms(def: ChannelDef, u: string): Promise<{ items: ChanItem[]; pending: number }> {
+  if (def.type !== "Movie" || !def.tmdbGenres?.length || noIptv.has(u)) return { items: [], pending: 0 };
+  const q = new URLSearchParams({ genres: def.tmdbGenres.join(","), limit: "200" });
+  if (def.yearFrom != null) q.set("yearFrom", String(def.yearFrom));
+  if (def.yearTo != null) q.set("yearTo", String(def.yearTo));
+  try {
+    const a = await iptvGet<unknown>(`v1/iptv/channel-pool?${q}`, 20_000);
+    if (a.status === 404 || a.status === 501 || a.status === 401 || a.status === 403) noIptv.add(u);
+    return a.status === 200 ? iptvPoolItems(a.data) : { items: [], pending: 0 };
+  } catch {
+    return { items: [], pending: 0 };
+  }
+}
+window.addEventListener("jellytip-session", () => noIptv.clear());
+
+interface Fetched {
+  items: ChanItem[];
+  pending: number;
+}
+
+async function fetchItems(def: ChannelDef, u: string): Promise<Fetched> {
   const genres = def.genres?.length ? def.genres.join("|") : undefined;
   if (def.type === "Movie") {
-    const r = await getItems({ ...common, IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def) });
-    return sample(playable(r.Items.map(slim), def), CAP, def.id);
+    // ProviderIds carries the TMDB id: the same film on IPTV is left out in favour of the library copy
+    const [r, v] = await Promise.all([getItems({ ...common, Fields: "ProviderIds", IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def) }), iptvFilms(def, u)]);
+    const lib = sample(playable(r.Items.map((i) => slim({ ...i, Tmdb: i.ProviderIds?.Tmdb } as ChanItem)), def), CAP, def.id);
+    return { items: mixItems(lib, v.items), pending: v.pending };
   }
   // Genres sit on the series, and this server ignores AncestorIds: find the matching series, take the episodes (they carry
   // their SeriesId) and keep those of that set, a few per series
   const s = await getItems({ ...common, IncludeItemTypes: "Series", Genres: genres });
   const ids = new Set(s.Items.map((x) => x.Id));
-  if (!ids.size) return [];
+  if (!ids.size) return { items: [], pending: 0 };
   const r = await getItems({ ...common, IncludeItemTypes: "Episode" });
   const mine = playable(r.Items.map(slim), def).filter((e) => e.SeriesId && ids.has(e.SeriesId));
-  return sampleByGroup(mine, (e) => e.SeriesId, PER_SERIES, EPISODE_CAP, def.id);
+  return { items: sampleByGroup(mine, (e) => e.SeriesId, PER_SERIES, EPISODE_CAP, def.id), pending: 0 };
 }
 
 /** The channel's candidate items (cached ~6 h per person). Rejects when Jellyfin can't be reached. */
@@ -76,13 +106,44 @@ export function channelItems(def: ChannelDef, fresh = false): Promise<ChanItem[]
   }
   const running = inflight.get(key);
   if (running) return running;
-  const p = fetchItems(def)
-    .then((items) => {
+  const p = fetchItems(def, u)
+    .then(({ items, pending }) => {
       if (uid() !== u) throw new Error("account changed");
-      write(key, items);
+      write(key, items, pending > 0 ? PENDING_TTL_MS : undefined);
       return items;
     })
     .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
+}
+
+// ---------- hidden channels (per person), shared by #/channels and the Home row ----------
+
+const hiddenKey = () => `jellytip.channels.hidden.${uid()}`;
+export function readHiddenChannels(): string[] {
+  try {
+    return parseHidden(localStorage.getItem(hiddenKey()));
+  } catch {
+    return [];
+  }
+}
+export function writeHiddenChannels(ids: string[]) {
+  try {
+    localStorage.setItem(hiddenKey(), JSON.stringify(ids));
+  } catch {
+    // private mode: lasts until reload
+  }
+}
+
+/** Where a channel's player goes when its item ends: what the clock says is on now (null: unknown channel or nothing to show). */
+export async function nextChannelPath(channelId: string): Promise<string | null> {
+  const def = channelById(channelId);
+  if (!def) return null;
+  try {
+    const sch = schedule(poolOf(await channelItems(def), def), def.id, Date.now(), 3);
+    const t = tuneTarget(sch.slots, sch.offsetS);
+    return t ? tunePath(t, def.id) : null;
+  } catch {
+    return null;
+  }
 }

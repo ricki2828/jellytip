@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, hashString, itemLabel, lineup, parseHidden, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, type ChanItem } from "../src/lib/channels.ts";
+import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
 const it = (id: string, min: number | undefined, o: Partial<ChanItem> = {}): ChanItem => ({ Id: id, Name: `Item ${id}`, Type: "Movie", RunTimeTicks: min == null ? undefined : min * MIN, ...o });
@@ -127,14 +127,15 @@ test("tuneTarget: current item at its offset, chained to the next, with the chan
   const s = schedule(POOL, "ch", now, 4);
   const o = orderAt(1);
   const t = tuneTarget(s.slots, s.offsetS)!;
-  assert.deepEqual(t, { id: o[0], startS: 750, thenId: o[1] });
+  assert.deepEqual({ id: t.id, startS: t.startS, thenId: t.thenId }, { id: o[0], startS: 750, thenId: o[1] });
   assert.equal(tunePath(t, "ch"), `/play/${o[0]}?start=750&then=${o[1]}&ch=ch`);
 });
 
 test("tuneTarget: nearly over → next item from the start; next across a pass boundary", () => {
   const now = EP + 2 * T - 5000; // 5 s left of the last item of pass 1
   const s = schedule(POOL, "ch", now, 4);
-  assert.deepEqual(tuneTarget(s.slots, s.offsetS), { id: orderAt(2)[0], startS: 0, thenId: orderAt(2)[1] });
+  const t2 = tuneTarget(s.slots, s.offsetS)!;
+  assert.deepEqual({ id: t2.id, startS: t2.startS, thenId: t2.thenId }, { id: orderAt(2)[0], startS: 0, thenId: orderAt(2)[1] });
   assert.equal(tuneTarget([], 0), null);
 });
 
@@ -179,4 +180,68 @@ test("yearsParam expands a range and refuses nonsense", () => {
 test("built-in channel ids are unique", () => {
   assert.equal(new Set(CHANNELS.map((c) => c.id)).size, CHANNELS.length);
   assert.ok(CHANNELS.length >= 5 && CHANNELS.length <= 6);
+});
+
+// ---------- IPTV films in channels ----------
+
+const V = (n: number, o: Record<string, unknown> = {}) => ({ id: `p:m:${n}`, title: `Film ${n}`, tmdbId: 1000 + n, year: 1995, runtime: 100 * 60, backdrop: "https://image.tmdb.org/t/p/w780/x.jpg", ...o });
+
+test("iptvPoolItems: keeps films with a trustworthy runtime, drops the rest", () => {
+  const r = iptvPoolItems({
+    items: [V(1), V(2, { runtime: 10 * 60 }), V(3, { runtime: 400 * 60 }), V(4, { runtime: undefined }), V(5, { langUnknown: true }), V(6, { id: "bad id" }), V(7, { title: "" }), V(1), V(8, { id: "p:s:8" }), null, "x"],
+    pending: 3,
+  });
+  assert.deepEqual(r.items.map((x) => x.Id), ["p:m:1"]);
+  assert.equal(r.pending, 3);
+  const f = r.items[0];
+  assert.equal(f.RunTimeTicks, 100 * 60 * TICKS_PER_SECOND);
+  assert.equal(f.Tmdb, "1001");
+  assert.equal(f.Type, "Movie");
+  assert.equal(f.Art, "https://image.tmdb.org/t/p/w780/x.jpg");
+  assert.equal(iptvPoolItems(V(1)).items.length, 0);
+  assert.equal(iptvPoolItems(undefined).pending, 0);
+});
+
+test("iptvPoolItems: art only from TMDB https, and an IPTV film passes playable()", () => {
+  const f = iptvPoolItems({ items: [V(1, { backdrop: "http://evil/x.jpg", poster: "https://provider.example/p.jpg" })] }).items[0];
+  assert.equal(f.Art, undefined);
+  assert.equal(playable([f]).length, 1);
+});
+
+test("mixItems: the library copy wins when both have the TMDB title; IPTV-only dupes collapse", () => {
+  const lib = [it("a".repeat(32), 100, { Tmdb: "1001" }), it("b".repeat(32), 100)];
+  const iptv = iptvPoolItems({ items: [V(1), V(2), V(2, { id: "q:m:2" }), V(3, { tmdbId: undefined })] }).items;
+  const mixed = mixItems(lib, iptv);
+  assert.deepEqual(mixed.map((x) => x.Id).sort(), ["a".repeat(32), "b".repeat(32), "p:m:2", "p:m:3"].sort());
+});
+
+test("mixItems: caps IPTV films with a stable sample, library untouched", () => {
+  const lib = [it("a", 100)];
+  const iptv = iptvPoolItems({ items: Array.from({ length: 300 }, (_, i) => V(i)) }).items;
+  const m1 = mixItems(lib, iptv);
+  assert.equal(m1.length, 1 + IPTV_CAP);
+  assert.deepEqual(m1.map((x) => x.Id).sort(), mixItems(lib, [...iptv].reverse()).map((x) => x.Id).sort());
+  assert.equal(mixItems(lib, iptv, 5).length, 6);
+});
+
+test("mix is schedulable: a mixed pool schedules, and an IPTV slot tunes through the IPTV player at its offset", () => {
+  const lib = [it("a".repeat(32), 60), it("b".repeat(32), 60)];
+  const iptv = iptvPoolItems({ items: [V(1), V(2)] }).items;
+  const pool = poolOf(mixItems(lib, iptv), { maxMinutes: undefined });
+  assert.equal(pool.length, 4);
+  const now = EP + 5 * 3600_000 + 17 * 60_000 + 5000;
+  const s = schedule(pool, "c1", now, 4);
+  const iptvSlot = s.slots.find((x) => isIptvId(x.item.Id))!;
+  assert.ok(iptvSlot);
+  const path = tunePath({ id: iptvSlot.item.Id, startS: 1037, thenId: "z".repeat(32), title: "A & B" }, "c1");
+  assert.equal(path, `/iptv/play?vod=${encodeURIComponent(iptvSlot.item.Id)}&t=A%20%26%20B&resume=1037&ch=c1`);
+  assert.equal(tunePath({ id: iptvSlot.item.Id, startS: 0, thenId: null, title: "T" }, "c1"), `/iptv/play?vod=${encodeURIComponent(iptvSlot.item.Id)}&t=T&ch=c1`);
+});
+
+test("tunePath: a library item never chains with an IPTV id as then= (the player follows the clock)", () => {
+  assert.equal(tunePath({ id: "a".repeat(32), startS: 5, thenId: "p:m:1" }, "c"), `/play/${"a".repeat(32)}?start=5&ch=c`);
+});
+
+test("iptv channels: every Movie channel declares TMDB genres, episode channels do not", () => {
+  for (const c of CHANNELS) assert.equal(!!c.tmdbGenres?.length, c.type === "Movie", c.id);
 });

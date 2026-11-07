@@ -12,6 +12,7 @@ import { HomeEdit, type Placement } from "../components/HomeEdit";
 import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
+import { ChannelsRow } from "../components/ChannelsRow";
 import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
 import type { ContinueEntry } from "../lib/continue";
@@ -497,6 +498,8 @@ export function Home() {
         {/* People with an IPTV provider: live sport right now, only when there are at least two */}
         <OnNowStrip title="Live sport on now" sportOnly min={2} checkProvider />
         <UpcomingRow />
+        {/* Personal scheduled channels: wide cards with what's on now; hidden until a channel is viable */}
+        <ChannelsRow />
         {rowsFailed && (
           <RowsError
             onRetry={() => {
@@ -523,7 +526,6 @@ export function Home() {
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
         <div className="home-open">
           <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
-          <button className="btn" data-nav onClick={() => go("/channels")}>My Channels</button>
         </div>
         {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
           <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
