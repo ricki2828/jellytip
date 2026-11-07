@@ -1,0 +1,12 @@
+.pp-scrim { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); }
+.pp { width: min(360px, 92vw); padding: 20px; border-radius: 14px; background: #171717; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.pp-title { margin: 0; font-size: 17px; align-self: flex-start; }
+.pp-preview { width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: #3a2a22; display: grid; place-items: center; color: var(--faint); font-size: 13px; }
+.pp-preview img { width: 100%; height: 100%; object-fit: cover; }
+.pp-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
+.pp-btn { min-height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: var(--vanilla); font: inherit; cursor: pointer; }
+.pp-btn.primary { background: var(--jelly); }
+.pp-btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.pp:focus { outline: none; }
+.pp-status { min-height: 18px; font-size: 13px; color: var(--dim); }
+.pp-btn:hover:not([aria-disabled="true"]), .pp-btn:focus-visible { box-shadow: 0 0 0 2px rgba(242, 242, 240, 0.6); outline: none; }
