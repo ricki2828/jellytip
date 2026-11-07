@@ -821,6 +821,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   useEffect(() => setVideoEl(videoRef.current), []);
   const revealClock = useRevealClock({ video: videoEl, channelKey: isLive ? target.channel ?? null : null, isLive, replay: !!extras?.replay });
+  const delayChipShown = shouldShowLiveExtras(extras) && isLive && !!extras?.matchId && state.kind === "playing" && !revealClock.replay;
+  useEffect(() => { if (!delayChipShown) setDelayOpen(false); }, [delayChipShown]);
   const panelAvail = live_ok && !!extras?.matchId;
   const liveNow = isLive && !extras?.replay;
   const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
@@ -1039,7 +1041,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       {
         const ae = document.activeElement as HTMLElement | null;
         const btn = ae?.tagName === "BUTTON";
-        const inUse = tracksOpen || (btn && Date.now() - navAt.current < 4000);
+        const inUse = tracksOpen || delayOpenRef.current || (btn && Date.now() - navAt.current < 4000);
         const act = panelKeyAction({ key: e.key, panelOpen: keyState.current.open, controlsInUse: inUse, available: keyState.current.avail, alternates: othersRef.current.n });
         if (act) {
           e.preventDefault();

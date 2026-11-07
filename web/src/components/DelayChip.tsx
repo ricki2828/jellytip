@@ -21,6 +21,12 @@ export function DelayChip({ delaySec, replay, open, onOpenChange, onSet, onCalib
   useEffect(() => {
     if (open) box.current?.querySelector<HTMLElement>(".delay-pop [data-nav]")?.focus();
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) onOpenChange(false); };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [open, onOpenChange]);
   if (replay) return <span className="delay-chip replay" role="status">Replay · live updates off</span>;
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
