@@ -105,7 +105,14 @@ class MediaManagementService
                         Timber.w(ex, "Jellytip: could not read path for %s", item.id)
                         null
                     }
-                api.libraryApi.deleteItem(item.id)
+                // Companion first: it deletes via Radarr/Sonarr (unmonitored, no re-download) or Jellyfin.
+                // Only a missing/unreachable companion falls back to a plain Jellyfin delete.
+                val viaCompanion = jellytipApi.deleteLibraryItem(item.id)
+                if (viaCompanion == null) {
+                    api.libraryApi.deleteItem(item.id)
+                } else if (!viaCompanion.ok) {
+                    return DeleteResult.Error(Exception(viaCompanion.error ?: "Delete failed"))
+                }
                 JellytipDeleteLog.record(item)
                 JellytipTrailerCleanup.notifyDeleted(jellytipApi, item, path)
                 _deletedItemFlow.emit(DeletedItem(item))

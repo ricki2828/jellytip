@@ -35,6 +35,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.ui.components.BasicDialog
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
 import java.time.Instant
@@ -71,6 +72,56 @@ object JellytipDeleteLog {
     }
 }
 
+/** Companion `GET /v1/library/items/{id}/delete-info`. */
+data class JellytipDeleteInfo(
+    val canDelete: Boolean,
+    val reason: String?,
+    val title: String?,
+    val kind: String?,
+    val bytes: Long?,
+    val via: String?,
+    val note: String?,
+) {
+    /** "Whole series, 42.3 GB" / "This film, 8.1 GB" */
+    fun summary(): String {
+        val what =
+            when (kind) {
+                "movie" -> "This film"
+                "series" -> "The whole series"
+                "season" -> "This whole season"
+                "episode" -> "This episode"
+                else -> "This title"
+            }
+        val size =
+            bytes?.takeIf { it > 0 }?.let { b ->
+                val gb = b / 1_073_741_824.0
+                if (gb >= 1.0) String.format(java.util.Locale.US, "%.1f GB", gb) else String.format(java.util.Locale.US, "%d MB", b / 1_048_576)
+            }
+        return listOfNotNull(what, size).joinToString(", ")
+    }
+
+    companion object {
+        fun parse(json: String): JellytipDeleteInfo {
+            val o = JSONObject(json)
+            return JellytipDeleteInfo(
+                canDelete = o.optBoolean("canDelete", false),
+                reason = o.optString("reason").takeIf { it.isNotBlank() },
+                title = o.optString("title").takeIf { it.isNotBlank() },
+                kind = o.optString("kind").takeIf { it.isNotBlank() },
+                bytes = if (o.has("bytes") && !o.isNull("bytes")) o.optLong("bytes") else null,
+                via = o.optString("via").takeIf { it.isNotBlank() },
+                note = o.optString("note").takeIf { it.isNotBlank() },
+            )
+        }
+    }
+}
+
+/** Outcome of the companion delete call. */
+data class JellytipDeleteResult(
+    val ok: Boolean,
+    val error: String?,
+)
+
 private const val CONFIRM_GRACE_MS = 600L
 
 /**
@@ -91,6 +142,11 @@ fun JellytipDeleteConfirm(
     val audience by produceState<String?>(null, item?.id) {
         value = item?.let { JellytipApi.shared?.getAudience(it)?.summary() }
     }
+    // Companion delete-info: what goes, size, and whether this person may delete it at all
+    val info by produceState<JellytipDeleteInfo?>(null, item?.id) {
+        value = item?.let { JellytipApi.shared?.deleteInfo(it.id) }
+    }
+    val blocked = info?.canDelete == false
     BasicDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -124,6 +180,27 @@ fun JellytipDeleteConfirm(
                     textAlign = TextAlign.Center,
                 )
             }
+            info?.let { i ->
+                Text(
+                    text =
+                        if (blocked) {
+                            i.reason ?: stringResource(R.string.jellytip_delete_not_allowed)
+                        } else {
+                            i.summary() + "  ·  " + stringResource(R.string.jellytip_delete_cant_undo)
+                        },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (blocked) Color.Red.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center,
+                )
+                i.note?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
             audience?.takeIf { it.isNotEmpty() }?.let {
                 Text(
                     text = it,
@@ -139,7 +216,7 @@ fun JellytipDeleteConfirm(
                 ) {
                     Text(text = stringResource(R.string.cancel))
                 }
-                key(step) {
+                if (!blocked) key(step) {
                 Button(
                     onClick = {
                         // A fast double OK (or a repeat) must not walk straight through both steps

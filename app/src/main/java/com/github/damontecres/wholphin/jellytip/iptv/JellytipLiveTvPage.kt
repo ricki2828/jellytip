@@ -69,6 +69,7 @@ import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.ui.components.ConfirmDeleteDialog
 import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -973,6 +974,7 @@ private fun RecordingsList(
     onDelete: (IptvRecording) -> Unit,
 ) {
     var menu by remember { mutableStateOf<IptvRecording?>(null) }
+    var confirmDelete by remember { mutableStateOf<IptvRecording?>(null) }
     Column(Modifier.fillMaxSize()) {
         state.space?.let { sp ->
             Text(
@@ -1036,9 +1038,19 @@ private fun RecordingsList(
             buildList {
                 if (r.playable && r.state != "recording") add(DialogItem("Play", dismissOnClick = true) { onPlay(r) })
                 addAll(recordingSheetItems(r, onPlay = { onPlay(r) }, onCancel = { onCancel(r) }))
-                if (!r.upcoming) add(DialogItem("Delete", dismissOnClick = true) { onDelete(r) })
+                if (!r.upcoming) add(DialogItem("Delete", dismissOnClick = true) { confirmDelete = r })
             }
         DialogPopup(showDialog = true, title = recordingSheetTitle(r, r.title), dialogItems = items, onDismissRequest = { menu = null })
+    }
+    confirmDelete?.let { r ->
+        ConfirmDeleteDialog(
+            itemTitle = r.title,
+            onCancel = { confirmDelete = null },
+            onConfirm = {
+                confirmDelete = null
+                onDelete(r)
+            },
+        )
     }
 }
 

@@ -599,6 +599,30 @@ class JellytipApi
             }
         }
 
+        private val deleteInfoCache = BoundedCache<UUID, Pair<Long, JellytipDeleteInfo>>(MAX_CACHED)
+
+        /** Companion delete-info for a library title (what goes, size, whether the caller may delete). Null on failure or 404. */
+        suspend fun deleteInfo(itemId: UUID): JellytipDeleteInfo? {
+            deleteInfoCache[itemId]?.let { (at, v) -> if (System.currentTimeMillis() - at < DELETE_INFO_TTL_MS) return v }
+            val (code, body) = userCall("v1/library/items/$itemId/delete-info") ?: return null
+            if (code != 200) return null
+            val info = runCatching { JellytipDeleteInfo.parse(body) }.getOrNull() ?: return null
+            deleteInfoCache[itemId] = System.currentTimeMillis() to info
+            return info
+        }
+
+        /** Companion library delete (Radarr/Sonarr aware). Returns null when the endpoint is missing (404) or unreachable. */
+        suspend fun deleteLibraryItem(itemId: UUID): JellytipDeleteResult? {
+            val (code, body) = userCall("v1/library/items/$itemId/delete", "{}", timeoutMs = 60_000L) ?: return null
+            if (code == 404) return null
+            val obj = runCatching { JSONObject(body) }.getOrNull()
+            return when {
+                code == 403 -> JellytipDeleteResult(false, "You are not allowed to delete this.")
+                code in 200..299 && obj?.optBoolean("ok", false) == true -> JellytipDeleteResult(true, null)
+                else -> JellytipDeleteResult(false, obj?.optString("error")?.takeIf { it.isNotBlank() } ?: "The server refused (HTTP $code).")
+            }
+        }
+
         /** The companion base URL (no trailing slash); stream links and image paths from IPTV answers are relative to it. */
         suspend fun companionBase(): String = JellytipPreferences.apiBase(preferences.data.first().jellytipApiUrl)
 
@@ -688,6 +712,7 @@ class JellytipApi
             private const val MAX_CACHED = 500
             private const val TIMEOUT_MS = 3_000L
             private const val FAILURE_TTL_MS = 60_000L
+            private const val DELETE_INFO_TTL_MS = 60_000L
             private const val AUDIENCE_TTL_MS = 10 * 60_000L
             private const val REVIEWS_TTL_MS = 30 * 60_000L
             private val AUDIENCE_KINDS = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)

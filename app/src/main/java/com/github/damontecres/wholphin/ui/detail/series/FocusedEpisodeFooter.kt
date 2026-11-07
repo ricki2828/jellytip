@@ -55,6 +55,7 @@ fun FocusedEpisodeFooter(
             trailerOnClick = {},
             canDelete = canDelete,
             onConfirmDelete = onConfirmDelete,
+            deleteItem = ep,
             chooseVersionParams =
                 remember(chosenStreams, ep, onChooseVersion) {
                     ChooseVersionParams(

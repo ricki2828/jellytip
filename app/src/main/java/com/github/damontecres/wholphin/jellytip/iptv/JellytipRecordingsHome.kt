@@ -44,6 +44,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
+import com.github.damontecres.wholphin.ui.components.ConfirmDeleteDialog
 import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -76,6 +77,14 @@ class JellytipRecordingsHomeViewModel
             val pos = r.positionSecs ?: 0.0
             val resume = (pos * 1000).toLong().takeIf { r.durationSecs == null || pos < r.durationSecs * 0.9 } ?: 0L
             navigationManager.navigateTo(Destination.JellytipIptvPlay(title = r.title, recordingId = r.id, resumeMs = resume), "home recording OK ${r.id}")
+        }
+
+        fun delete(r: IptvRecording) {
+            viewModelScope.launch {
+                val ok = service.deleteRecording(r.id)
+                JellytipTrace.log("iptv", "home delete recording ${r.id} ok=$ok")
+                reload.value++
+            }
         }
 
         fun cancel(r: IptvRecording) {
@@ -123,6 +132,7 @@ fun JellytipRecordingsRow(
         }
     }
     var sheet by remember { mutableStateOf<IptvRecording?>(null) }
+    var confirmDelete by remember { mutableStateOf<IptvRecording?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Recordings")
         LazyRow(
@@ -135,6 +145,7 @@ fun JellytipRecordingsRow(
                     r,
                     now,
                     onClick = { if (r.playable && r.state != "recording") viewModel.play(r) else sheet = r },
+                    onLongClick = { sheet = r },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
                 )
             }
@@ -144,6 +155,7 @@ fun JellytipRecordingsRow(
         val options =
             buildList {
                 addAll(recordingSheetItems(r, onPlay = { viewModel.play(r) }, onCancel = { viewModel.cancel(r) }))
+                if (!r.upcoming && r.state != "recording") add(DialogItem("Delete", dismissOnClick = true) { confirmDelete = r })
                 add(
                     DialogItem("All recordings", dismissOnClick = true) {
                         viewModel.navigationManager.navigateTo(Destination.JellytipRecordings, "home recording sheet")
@@ -151,6 +163,16 @@ fun JellytipRecordingsRow(
                 )
             }
         DialogPopup(showDialog = true, title = recordingSheetTitle(r, "${r.title}  ·  ${whenLabel(r.start)}"), dialogItems = options, onDismissRequest = { sheet = null })
+    }
+    confirmDelete?.let { r ->
+        ConfirmDeleteDialog(
+            itemTitle = r.title,
+            onCancel = { confirmDelete = null },
+            onConfirm = {
+                confirmDelete = null
+                viewModel.delete(r)
+            },
+        )
     }
 }
 
@@ -160,9 +182,11 @@ private fun RecordingCard(
     now: Long,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =

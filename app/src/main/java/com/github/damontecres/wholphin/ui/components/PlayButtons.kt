@@ -89,6 +89,7 @@ fun ExpandablePlayButtons(
     chooseVersionParams: ChooseVersionParams?,
     buttonOnFocusChanged: (FocusState) -> Unit,
     modifier: Modifier = Modifier,
+    deleteItem: com.github.damontecres.wholphin.data.model.BaseItem? = null,
 ) {
     val resources = LocalResources.current
     val firstFocus = remember { FocusRequester() }
@@ -196,6 +197,7 @@ fun ExpandablePlayButtons(
                 DeleteButton(
                     title = title,
                     onConfirmDelete = onConfirmDelete,
+                    item = deleteItem,
                     modifier =
                         Modifier
                             .onFocusChanged(buttonOnFocusChanged),
@@ -427,6 +429,7 @@ fun DeleteButton(
     title: String,
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    item: com.github.damontecres.wholphin.data.model.BaseItem? = null,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -466,6 +469,7 @@ fun DeleteButton(
     if (showDeleteDialog) {
         ConfirmDeleteDialog(
             itemTitle = title,
+            item = item,
             onCancel = { showDeleteDialog = false },
             onConfirm = {
                 onConfirmDelete.invoke()
