@@ -119,7 +119,7 @@ export function Nav({ current }: { current: string }) {
     };
   }, []);
   const hasHub = (hubNow()?.length ?? 0) > 0;
-  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...([["ask", "Ask"]] as [string, string][]), ...([["inbox", "Inbox"]] as [string, string][]), ...(s?.isAdmin ? ([["discover", "Discover"], ["manage", "Manage"]] as [string, string][]) : [])];
+  const links: [string, string][] = [...LINKS, ...(fantasyLinked ? ([["fantasy", "Fantasy"]] as [string, string][]) : []), ...(liveTv ? ([["livetv", "Live TV"]] as [string, string][]) : []), ...(hasRecs ? ([["recordings", "Recordings"]] as [string, string][]) : []), ...(hasUpcoming ? ([["upcoming", "Upcoming sport"]] as [string, string][]) : []), ...(hasHub ? ([["collections", "Collections"]] as [string, string][]) : []), ...([["ask", "Ask"], ["channels", "Channels"]] as [string, string][]), ...([["inbox", "Inbox"]] as [string, string][]), ...(s?.isAdmin ? ([["discover", "Discover"], ["manage", "Manage"]] as [string, string][]) : [])];
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);

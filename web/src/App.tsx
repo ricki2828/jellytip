@@ -17,6 +17,7 @@ import { CollectionRow } from "./screens/CollectionRow";
 import { Search } from "./screens/Search";
 import { Ask } from "./screens/Ask";
 import { Tonight } from "./screens/Tonight";
+import { Channels } from "./screens/Channels";
 import { Downloads } from "./screens/Downloads";
 import { Person } from "./screens/Person";
 import { Collection } from "./screens/Collection";
@@ -100,6 +101,7 @@ export function App() {
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "ask" && <Ask key={session.userId} />}
         {route.name === "tonight" && <Tonight key={session.userId} />}
+        {route.name === "channels" && <Channels key={session.userId} />}
         {route.name === "downloads" && isNative && <Downloads />}
         {route.name === "collections" && <Collections />}
         {route.name === "collectionrow" && <CollectionRow key={route.params.id} id={route.params.id} />}

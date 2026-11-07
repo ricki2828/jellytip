@@ -1,0 +1,109 @@
+.channels {
+  padding: 84px var(--pad) 48px;
+  display: grid;
+  gap: 14px;
+}
+.ch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+}
+.ch-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  align-content: start;
+}
+.ch-card.hidden {
+  opacity: 0.6;
+}
+.ch-head {
+  display: grid;
+  gap: 2px;
+}
+.ch-name {
+  margin: 0;
+  font-size: 22px;
+}
+.ch-blurb,
+.ch-sub,
+.ch-times {
+  margin: 0;
+  opacity: 0.7;
+  font-size: 14px;
+}
+.ch-chip {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.ch-now {
+  display: grid;
+  gap: 4px;
+}
+.ch-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ch-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  margin: 6px 0 2px;
+}
+.ch-bar span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+.ch-next {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+.ch-next li {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+.ch-at {
+  flex: none;
+  min-width: 64px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.ch-nt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ch-toggle {
+  justify-self: start;
+}
+/* Home: sits beside the "Pick for tonight" button, drawn above the first row like it */
+.channels-open {
+  position: absolute;
+  top: 0;
+  left: calc(var(--pad) + 176px);
+  transform: translateY(-110%);
+}
