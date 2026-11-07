@@ -709,8 +709,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     if (returned.current || !target.channel) return;
     returned.current = true;
     flashNote("Back to live");
-    go(livePath(target.channel, title, extras), true);
-  }, [target.channel, title, extras]);
+    go(livePath(target.channel, title, extrasIn), true);
+  }, [target.channel, title, extrasIn]);
   useEffect(() => {
     if (!kickoffRun.current || state.kind !== "playing") return;
     // mpegts has no "ended": the stream finished loading and playback has stopped moving
@@ -1265,7 +1265,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
         {live_ok && isLive && <MatchInfoButton id={extras?.matchId} />}
-        {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
+        {live_ok && <FantasyChip matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
         {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} open={delayOpen} onOpenChange={setDelayOpen} onSet={(n) => flashNote(`Delay set to ${revealClock.setDelay(n)} s`)} canCalibrate={revealClock.canCalibrate()} onCalibrate={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
@@ -1273,7 +1273,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
           </button>
         )}
         {kickoff && state.kind === "playing" && (
-          <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extras)}`, true)}>
+          <button className="btn small" data-nav onClick={() => go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true)}>
             From kick-off
           </button>
         )}
@@ -1307,8 +1307,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       {liveBuf.holding && <div className="iptv-buffer-toast" role="status" aria-live="polite">Buffering…</div>}
       {liveBuf.toast && <div className="iptv-buffer-toast" role="status" aria-live="polite">{liveBuf.toast}</div>}
-      {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
-      {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
+      {live_ok && <FantasyAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
+      {live_ok && <FlipAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
@@ -1434,7 +1434,9 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
-function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+  const detected = useChannelMatch(target.channel, !!target.channel && target.start == null && !extrasIn?.matchId && !extrasIn?.nospoil && !extrasIn?.replay);
+  const extras = useMemo<LiveExtras | undefined>(() => (detected && !extrasIn?.matchId ? { ...extrasIn, matchId: detected.matchId } : extrasIn), [extrasIn, detected]);
   const curId = target.vod ?? target.episode;
   const nativeLen = useRef(0);
   const watch = usePlayWatch(signalMeta(target, channelId), () => nativeLen.current, curId ?? "");
