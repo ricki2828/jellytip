@@ -1131,7 +1131,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
         onEnded={() => (kickoffRun.current ? backToLive() : nextOnChannel())}
-        onPause={() => { if (!liveBuf.holdingRef.current) setPaused(true); }}
+        onPause={() => { if (!liveBuf.handlePause()) setPaused(true); }}
         onTimeUpdate={(e) => {
           if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
             stallReported.current = false;

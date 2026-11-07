@@ -39,9 +39,10 @@ export function useLiveBuffer(o: LiveBufferOpts) {
   const auto = useRef<AutoState>(initAuto(null, Date.now()));
   const keyRef = useRef<string | null>(null);
   const hold = useRef<Hold | null>(null);
-  /** read by the video's pause / play handlers: our own pause must not show the paused UI */
   const holdingRef = useRef(false);
   const pendingStall = useRef(false);
+  /** our own v.pause() has been issued and its `pause` event is still to come */
+  const expectPause = useRef(false);
   const startDoneFor = useRef<string | null>(null);
   const lastToast = useRef(0);
   const stallsThisSession = useRef(0);
@@ -67,12 +68,20 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     if (!h) return;
     hold.current = null;
     holdingRef.current = false;
+    expectPause.current = false;
     const v = optsRef.current.videoRef.current;
     if (resume && v && v.paused) void v.play().catch(() => { /* the <video> onPause handler shows the paused UI */ });
     debugEvent("iptv-player", "live buffer hold end", { why, phase: h.phase, heldMs: Date.now() - h.at, profile: profile(), player: optsRef.current.engineRef.current }, "info");
   }, []);
 
   const setMode = useCallback((m: Mode) => { setModeState(m); debugEvent("iptv-player", "live buffer mode", { mode: m }, "info"); }, []);
+
+  /** The <video> `pause` event. True = it was our own hold pause (swallow it). A pause during a hold is the user's: the hold is cancelled, never auto-resumed. */
+  const handlePause = useCallback((): boolean => {
+    if (expectPause.current) { expectPause.current = false; return true; }
+    if (hold.current) release("user paused", false);
+    return false;
+  }, [release]);
 
   /** The <video> fired `waiting` after the first frame (the caller already de-duplicates per rebuffer). */
   const noteRebuffer = useCallback(() => {
@@ -162,6 +171,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
         if (target > 0) {
           hold.current = { phase, target, at: now, lastEnd: end, lastGrowth: now };
           holdingRef.current = true;
+          expectPause.current = true;
           v.pause();
           touch();
           debugEvent("iptv-player", "live buffer hold start", { phase, target, runway: Math.round(runway * 10) / 10, profile: p }, "info");
@@ -184,5 +194,5 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  return { mode, setMode, effective: profile(), profileRef, holdingRef, noteRebuffer, toast };
+  return { mode, setMode, effective: profile(), profileRef, handlePause, noteRebuffer, toast };
 }

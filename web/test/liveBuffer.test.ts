@@ -111,4 +111,7 @@ test("chase and hold decisions", () => {
   assert.equal(holdTarget("normal", "stall", 0.2), 6);
   assert.equal(holdTarget("normal", "stall", 6), 0);
   assert.equal(holdTarget("max", "start", 1), 6);
+  assert.equal(holdTarget("high", "start", 1), 6);
+  assert.equal(holdTarget("normal", "start", 0), 0); // channel changes stay instant
+  assert.equal(holdTarget("low", "start", 0), 0);
 });

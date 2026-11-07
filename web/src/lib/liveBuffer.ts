@@ -2,7 +2,7 @@
 //
 // A profile is "how far behind the live edge we are willing to sit so a network hiccup does not freeze the picture".
 //   mpegts (.ts): the library's own latency chaser is OFF; the hook runs the same direct seek itself from `chaseMax`/`chaseTo`, and
-//     builds a cushion by briefly holding playback (`startHold` after a (re)attach, `stallHold` after a rebuffer), all at runtime.
+//     builds a cushion by briefly holding playback (`stallHold` after a rebuffer; `startHold` after a (re)attach only for High/Max, so zapping stays instant), all at runtime.
 //   hls.js (.m3u8): liveSyncDurationCount / liveMaxLatencyDurationCount in SEGMENTS (a fixed 8 s would sit inside one segment on
 //     6-10 s playlists), plus maxBufferLength. hls.config is read live, so changing profile needs no reload.
 
@@ -32,7 +32,7 @@ export interface ProfileSpec {
 export const SPEC: Record<Profile, ProfileSpec> = {
   // Low = the behaviour before profiles existed (chase 6 s -> 1.5 s, library default stash), hls.js 2 segments
   low: { behindSec: 3, chaseMax: 6, chaseTo: 1.5, startHold: 0, stallHold: 0, syncCount: 2, maxLatencyCount: 4, maxBufferLength: 30, maxMaxBufferLength: 60 },
-  normal: { behindSec: 8, chaseMax: 14, chaseTo: 8, startHold: 4, stallHold: 6, stashInitialSize: 384 * 1024, syncCount: 3, maxLatencyCount: 6, maxBufferLength: 30, maxMaxBufferLength: 60 },
+  normal: { behindSec: 8, chaseMax: 14, chaseTo: 8, startHold: 0, stallHold: 6, stashInitialSize: 384 * 1024, syncCount: 3, maxLatencyCount: 6, maxBufferLength: 30, maxMaxBufferLength: 60 },
   high: { behindSec: 15, chaseMax: 22, chaseTo: 15, startHold: 6, stallHold: 11, stashInitialSize: 768 * 1024, syncCount: 5, maxLatencyCount: 9, maxBufferLength: 45, maxMaxBufferLength: 90 },
   max: { behindSec: 30, chaseMax: 38, chaseTo: 30, startHold: 6, stallHold: 22, stashInitialSize: 1536 * 1024, syncCount: 8, maxLatencyCount: 14, maxBufferLength: 60, maxMaxBufferLength: 120 },
 };
