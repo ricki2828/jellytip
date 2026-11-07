@@ -362,8 +362,9 @@ export function Home() {
   const shownRef = useRef<HomePlan | null>(null);
   const targetRef = useRef<HomePlan | null>(null);
   const rowsEl = useRef<HTMLDivElement>(null);
-  const moreOpenRef = useRef(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  // Ricki 7-Nov: show every row, no "More rows" toggle (all rows start open)
+  const moreOpenRef = useRef(true);
+  const [moreOpen, setMoreOpen] = useState(true);
   moreOpenRef.current = moreOpen;
   const seqOf = (p: HomePlan) => (moreOpenRef.current ? [...p.visible, ...p.more] : p.visible);
   /** Where focus is now, asked of the DOM each time (a row that unmounted under focus leaves nothing stale). */
@@ -393,7 +394,7 @@ export function Home() {
     const on = () => {
       shownRef.current = null;
       setShown(null);
-      setMoreOpen(false);
+      setMoreOpen(true);
       settle();
     };
     window.addEventListener("jellytip-session", on);
@@ -406,30 +407,6 @@ export function Home() {
     },
     [settle],
   );
-
-  // More rows: expanding moves focus to the first row it shows; if the button goes while focused, focus goes to the last row
-  const moreBtn = useRef<HTMLButtonElement>(null);
-  const moreFocused = useRef(false);
-  const focusRow = (key: string | undefined, tries = 12) => {
-    if (!key) return;
-    const el = rowsEl.current?.querySelector<HTMLElement>(`[data-rowkey="${CSS.escape(key)}"] [data-nav]`);
-    if (el) el.focus();
-    else if (tries > 0) requestAnimationFrame(() => focusRow(key, tries - 1));
-  };
-  const toggleMore = () => {
-    const open = !moreOpen;
-    setMoreOpen(open);
-    if (open) requestAnimationFrame(() => focusRow(shown?.more[0]));
-  };
-  const moreCount = shown?.more.length ?? 0;
-  useEffect(() => {
-    if (moreCount === 0 && moreFocused.current) {
-      moreFocused.current = false;
-      const last = shown?.visible[shown.visible.length - 1];
-      requestAnimationFrame(() => focusRow(last));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moreCount]);
 
   // Hovering or focusing a tile changes `focused` (the hero follows): unchanged elements keep React from re-rendering every row
   const elements = useMemo(() => {
@@ -514,13 +491,6 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && shown.visible.map(wrap)}
-        {!rowsFailed && shown && shown.more.length > 0 && (
-          <div className="home-more">
-            <button ref={moreBtn} className="btn" data-nav aria-expanded={moreOpen} onClick={toggleMore} onFocus={() => (moreFocused.current = true)} onBlur={() => (moreFocused.current = false)}>
-              {moreOpen ? "Fewer rows" : `More rows (${shown.more.length})`}
-            </button>
-          </div>
-        )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
         {/* Personal scheduled channels, after the main rows: it appears late (after startup), so it must not push them or steal their focus */}
         <ChannelsRow />
