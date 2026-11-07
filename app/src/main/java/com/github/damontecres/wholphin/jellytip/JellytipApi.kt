@@ -617,7 +617,8 @@ class JellytipApi
         suspend fun deleteLibraryItem(itemId: UUID): JellytipDeleteResult {
             val (code, body) = userCall("v1/library/items/$itemId/delete", "{}", timeoutMs = 60_000L)
                 ?: return JellytipDeleteResult(false, "Couldn't reach the Jellytip server, try again")
-            if (code == 404 || code == 422) return JellytipDeleteResult(false, null, unsupported = true)
+            if (code == 404) return JellytipDeleteResult(false, null, unsupported = true)
+            if (code == 422) return JellytipDeleteResult(false, "The server can't delete this kind of item.", unprocessable = true)
             val obj = runCatching { JSONObject(body) }.getOrNull()
             return when {
                 code == 403 -> JellytipDeleteResult(false, "You are not allowed to delete this.")

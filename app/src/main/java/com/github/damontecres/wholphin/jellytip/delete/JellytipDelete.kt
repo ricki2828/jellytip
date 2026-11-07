@@ -122,6 +122,8 @@ data class JellytipDeleteResult(
     val error: String?,
     /** 404: an old server without the route; only then may the app fall back to a plain Jellyfin delete. */
     val unsupported: Boolean = false,
+    /** 422: the server doesn't handle this item type; only non-library kinds may fall back to a plain Jellyfin delete. */
+    val unprocessable: Boolean = false,
 )
 
 private val INFO_KINDS = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)

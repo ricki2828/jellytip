@@ -109,7 +109,8 @@ class MediaManagementService
                 // Only an old server without the route (404) falls back to a plain Jellyfin delete;
                 // unreachable is an error, since a plain delete would let Radarr/Sonarr re-download it.
                 val viaCompanion = jellytipApi.deleteLibraryItem(item.id)
-                if (viaCompanion.unsupported) {
+                val libraryKind = item.type in setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)
+                if (viaCompanion.unsupported || (viaCompanion.unprocessable && !libraryKind)) {
                     api.libraryApi.deleteItem(item.id)
                 } else if (!viaCompanion.ok) {
                     return DeleteResult.Error(Exception(viaCompanion.error ?: "Delete failed"))
