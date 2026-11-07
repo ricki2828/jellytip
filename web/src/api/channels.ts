@@ -1,14 +1,15 @@
 // Library queries for the personal channels (lib/channels.ts has the schedule maths). One query per channel (two for an
-// episode channel: matching series, then their episodes), limited Fields. The result is kept in memory and in
+// episode channel: matching series, then all episodes, filtered here), bare Fields. The result is kept in memory and in
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { playable, sample, sampleByGroup, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
 
 const TTL_MS = 6 * 3600 * 1000;
-const LIMIT = 500;
-const SERIES_LIMIT = 25;
-const FIELDS = "PrimaryImageAspectRatio";
+/** Most items a channel keeps (a deterministic hash sample of what the library has). */
+const CAP = 150;
+const PER_SERIES = 15;
+const EPISODE_CAP = 300;
 
 interface Entry {
   at: number;
@@ -16,9 +17,9 @@ interface Entry {
 }
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<ChanItem[]>>();
-const keyFor = (def: ChannelDef) => `jellytip.channel.${uid()}.${def.id}`;
+const keyFor = (def: ChannelDef) => `jellytip.channel.v2.${uid()}.${def.id}`;
 
-const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks });
+const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks });
 
 function read(key: string): ChanItem[] | null {
   const now = Date.now();
@@ -46,19 +47,23 @@ function write(key: string, items: ChanItem[]) {
   }
 }
 
-const common = { Recursive: true, EnableUserData: false, Fields: FIELDS, IsMissing: false, SortBy: "SortName", SortOrder: "Ascending" } as const;
+// No Limit and no SortBy (a cut-off would be a name-ordered slice); no extra Fields, no images, no user data
+const common = { Recursive: true, EnableUserData: false, EnableImages: false, Fields: "", IsMissing: false } as const;
 
 async function fetchItems(def: ChannelDef): Promise<ChanItem[]> {
   const genres = def.genres?.length ? def.genres.join("|") : undefined;
   if (def.type === "Movie") {
-    const r = await getItems({ ...common, IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def), Limit: LIMIT });
-    return r.Items.map(slim);
+    const r = await getItems({ ...common, IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def) });
+    return sample(playable(r.Items.map(slim), def), CAP, def.id);
   }
-  // Genres sit on the series, not its episodes: find the series, then their episodes in one query
-  const s = await getItems({ ...common, IncludeItemTypes: "Series", Genres: genres, Limit: SERIES_LIMIT });
-  if (!s.Items.length) return [];
-  const r = await getItems({ ...common, IncludeItemTypes: "Episode", AncestorIds: s.Items.map((x) => x.Id).join(","), SortBy: "SeriesSortName,ParentIndexNumber,IndexNumber", Limit: LIMIT });
-  return r.Items.map(slim);
+  // Genres sit on the series, and this server ignores AncestorIds: find the matching series, take the episodes (they carry
+  // their SeriesId) and keep those of that set, a few per series
+  const s = await getItems({ ...common, IncludeItemTypes: "Series", Genres: genres });
+  const ids = new Set(s.Items.map((x) => x.Id));
+  if (!ids.size) return [];
+  const r = await getItems({ ...common, IncludeItemTypes: "Episode" });
+  const mine = playable(r.Items.map(slim), def).filter((e) => e.SeriesId && ids.has(e.SeriesId));
+  return sampleByGroup(mine, (e) => e.SeriesId, PER_SERIES, EPISODE_CAP, def.id);
 }
 
 /** The channel's candidate items (cached ~6 h per person). Rejects when Jellyfin can't be reached. */

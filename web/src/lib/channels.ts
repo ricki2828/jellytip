@@ -1,13 +1,11 @@
 // Personal scheduled channels (N7). Pure; tested in web/test/channels.test.ts.
 // A channel is a seeded-shuffle lineup of the signed-in person's own library items, laid back to back from the start of
-// the current week (UTC, Monday 00:00). "What's on now" is therefore a function of the wall clock alone: the same item
-// at the same offset whenever, and on whichever device, someone tunes in. The lineup loops when the week outlasts it, and
-// starts again from a fresh shuffle at the week boundary.
+// a fixed epoch. "What's on now" is a function of the wall clock alone: the same item at the same offset whenever, and
+// on whichever device, someone tunes in. Each full pass over the pool is reshuffled.
 
 export const TICKS_PER_SECOND = 10_000_000;
-export const WEEK_MS = 7 * 24 * 3600 * 1000;
-/** 1970-01-05 00:00 UTC, the first Monday after the Unix epoch. */
-const MONDAY_EPOCH_MS = 4 * 24 * 3600 * 1000;
+/** Fixed origin of every channel's timeline (2026-01-05 00:00 UTC). */
+export const EPOCH_MS = Date.UTC(2026, 0, 5);
 /** A channel needs at least this many playable items to exist. */
 export const MIN_ITEMS = 3;
 /** Don't tune in to something with less than this left; start the next item instead. */
@@ -43,6 +41,7 @@ export interface ChanItem {
   SeriesName?: string;
   ParentIndexNumber?: number;
   IndexNumber?: number;
+  SeriesId?: string;
   ProductionYear?: number;
   RunTimeTicks?: number;
 }
@@ -54,13 +53,7 @@ export interface Slot {
   endMs: number;
 }
 
-// ---------- week + seed ----------
-
-/** Start of the UTC week (Monday 00:00) holding `nowMs`. */
-export const weekStart = (nowMs: number): number => MONDAY_EPOCH_MS + Math.floor((nowMs - MONDAY_EPOCH_MS) / WEEK_MS) * WEEK_MS;
-
-/** Whole weeks since the first Monday: the "week number" in the seed. */
-export const weekNumber = (nowMs: number): number => Math.floor((nowMs - MONDAY_EPOCH_MS) / WEEK_MS);
+// ---------- seed ----------
 
 /** FNV-1a, 32 bit. */
 export function hashString(s: string): number {
@@ -84,9 +77,9 @@ export function rng(seed: number): () => number {
   };
 }
 
-export const seedFor = (channelId: string, nowMs: number): number => hashString(`${channelId}|w${weekNumber(nowMs)}`);
+export const seedFor = (channelId: string, cycle: number): number => hashString(`${channelId}|c${cycle}`);
 
-// ---------- lineup ----------
+// ---------- pool ----------
 
 const seconds = (it: ChanItem): number => (typeof it.RunTimeTicks === "number" && isFinite(it.RunTimeTicks) ? Math.floor(it.RunTimeTicks / TICKS_PER_SECOND) : 0);
 
@@ -108,10 +101,33 @@ export function playable(items: ChanItem[], def?: Pick<ChannelDef, "maxMinutes">
 /** A channel exists when its query yields enough playable items. */
 export const channelViable = (items: ChanItem[], def?: Pick<ChannelDef, "maxMinutes">): boolean => playable(items, def).length >= MIN_ITEMS;
 
-/** Deterministic lineup: items sorted by id (so server order can't matter), then a seeded Fisher-Yates shuffle. */
-export function lineup(items: ChanItem[], seed: number, def?: Pick<ChannelDef, "maxMinutes">): ChanItem[] {
-  const a = playable(items, def).sort((x, y) => (x.Id < y.Id ? -1 : x.Id > y.Id ? 1 : 0));
-  const r = rng(seed);
+/** Keep at most `cap` items by smallest hash of id + salt: the same items every time, unbiased by server order. */
+export function sample<T extends { Id: string }>(items: T[], cap: number, salt = "pool"): T[] {
+  if (items.length <= cap) return items;
+  return items
+    .map((x) => [hashString(`${salt}|${x.Id}`), x] as const)
+    .sort((p, q) => p[0] - q[0] || (p[1].Id < q[1].Id ? -1 : 1))
+    .slice(0, cap)
+    .map((p) => p[1]);
+}
+
+/** Like sample, but at most `perGroup` per group (e.g. per series), then `cap` overall. Items with no group key are dropped. */
+export function sampleByGroup<T extends { Id: string }>(items: T[], group: (x: T) => string | undefined, perGroup: number, cap: number, salt = "pool"): T[] {
+  const by = new Map<string, T[]>();
+  for (const x of items) {
+    const g = group(x);
+    if (g) by.set(g, [...(by.get(g) ?? []), x]);
+  }
+  return sample([...by.values()].flatMap((l) => sample(l, perGroup, salt)), cap, salt);
+}
+
+/** The channel's playable pool in a canonical order (by id), so the schedule never depends on server order. */
+export const poolOf = (items: ChanItem[], def?: Pick<ChannelDef, "maxMinutes">): ChanItem[] => playable(items, def).sort((x, y) => (x.Id < y.Id ? -1 : x.Id > y.Id ? 1 : 0));
+
+/** One pass of the channel: the pool in a seeded shuffle. Same pool + same cycle → same order. */
+export function lineup(pool: ChanItem[], channelId: string, cycle: number): ChanItem[] {
+  const a = [...pool];
+  const r = rng(seedFor(channelId, cycle));
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
@@ -121,31 +137,43 @@ export function lineup(items: ChanItem[], seed: number, def?: Pick<ChannelDef, "
 
 export const cycleSeconds = (list: ChanItem[]): number => list.reduce((n, it) => n + seconds(it), 0);
 
+// ---------- schedule ----------
+
 /**
- * What is on at `nowMs` and what follows: `count` slots starting with the current one (so count 4 = now + next 3).
- * The week's schedule starts at weekStart(now) with list[0] and loops. Slot times are absolute. Empty list → [].
- * `offsetS` is how far into the current item the clock is.
+ * What is on at `nowMs` and what follows: `count` slots starting with the current one (count 4 = now + next 3).
+ * Time runs from a fixed epoch. A pass over the whole pool takes the same time however it is shuffled, so pass number
+ * floor((now - EPOCH) / total) is known from the clock alone; each pass is reshuffled (seed = channel + pass number).
+ * An item playing across a pass boundary is never cut: the next pass simply starts when it ends. Slots after the
+ * boundary come from the next pass's lineup. `pool` must come from poolOf. Empty pool → nothing.
  */
-export function schedule(list: ChanItem[], nowMs: number, count = 4): { slots: Slot[]; offsetS: number; progress: number } {
-  const total = cycleSeconds(list);
-  if (!list.length || total <= 0) return { slots: [], offsetS: 0, progress: 0 };
-  const elapsed = Math.max(0, Math.floor((nowMs - weekStart(nowMs)) / 1000));
-  let pos = elapsed % total;
+export function schedule(pool: ChanItem[], channelId: string, nowMs: number, count = 4): { slots: Slot[]; offsetS: number; progress: number } {
+  const total = cycleSeconds(pool);
+  if (!pool.length || total <= 0) return { slots: [], offsetS: 0, progress: 0 };
+  const totalMs = total * 1000;
+  const sinceMs = Math.max(0, nowMs - EPOCH_MS);
+  let cycle = Math.floor(sinceMs / totalMs);
+  let posMs = sinceMs - cycle * totalMs;
+  let list = lineup(pool, channelId, cycle);
   let i = 0;
-  while (pos >= seconds(list[i])) {
-    pos -= seconds(list[i]);
+  while (posMs >= seconds(list[i]) * 1000) {
+    posMs -= seconds(list[i]) * 1000;
     i++;
   }
-  const startMs = nowMs - ((pos * 1000) + ((nowMs - weekStart(nowMs)) % 1000));
   const slots: Slot[] = [];
-  let t = startMs;
+  let t = nowMs - posMs;
   for (let k = 0; k < count; k++) {
-    const it = list[(i + k) % list.length];
+    if (i >= list.length) {
+      cycle++;
+      list = lineup(pool, channelId, cycle);
+      i = 0;
+    }
+    const it = list[i++];
     const end = t + seconds(it) * 1000;
     slots.push({ item: it, startMs: t, endMs: end });
     t = end;
   }
-  return { slots, offsetS: pos, progress: pos / seconds(list[i]) };
+  const offsetS = Math.floor(posMs / 1000);
+  return { slots, offsetS, progress: posMs / (seconds(slots[0].item) * 1000) };
 }
 
 /** Where "Tune in" goes: the current item at its offset, or the next item from 0 when the current one is nearly over. */
@@ -157,8 +185,11 @@ export function tuneTarget(slots: Slot[], offsetS: number): { id: string; startS
   return { id: cur.item.Id, startS: Math.floor(offsetS), thenId: slots[1]?.item.Id ?? null };
 }
 
-/** "/play/<id>?start=<s>&then=<id>" for a tune target. */
-export const tunePath = (t: { id: string; startS: number; thenId: string | null }): string => `/play/${t.id}?start=${t.startS}${t.thenId ? `&then=${t.thenId}` : ""}`;
+/** "/play/<id>?start=<s>&then=<id>&ch=<channel>" for a tune target. */
+export const tunePath = (t: { id: string; startS: number; thenId: string | null }, channelId: string): string => `/play/${t.id}?start=${t.startS}${t.thenId ? `&then=${t.thenId}` : ""}&ch=${encodeURIComponent(channelId)}`;
+
+/** A channel id from a URL, or null if it is not a built-in one. */
+export const channelById = (id: string | null | undefined): ChannelDef | null => CHANNELS.find((c) => c.id === id) ?? null;
 
 // ---------- labels ----------
 

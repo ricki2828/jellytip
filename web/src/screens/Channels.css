@@ -100,10 +100,3 @@
 .ch-toggle {
   justify-self: start;
 }
-/* Home: sits beside the "Pick for tonight" button, drawn above the first row like it */
-.channels-open {
-  position: absolute;
-  top: 0;
-  left: calc(var(--pad) + 176px);
-  transform: translateY(-110%);
-}

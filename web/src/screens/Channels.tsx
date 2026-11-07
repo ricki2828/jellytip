@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { uid } from "../api/jellyfin";
 import { channelItems } from "../api/channels";
-import { CHANNELS, channelViable, itemLabel, lineup, parseHidden, schedule, seedFor, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
+import { CHANNELS, channelViable, itemLabel, parseHidden, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
 import "./Channels.css";
 
@@ -20,8 +20,8 @@ const readHidden = () => {
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean }) {
-  const list = useMemo(() => lineup(items, seedFor(def.id, now), def), [items, def, Math.floor(now / 3_600_000)]); // eslint-disable-line react-hooks/exhaustive-deps
-  const { slots, offsetS, progress } = schedule(list, now, 4);
+  const pool = useMemo(() => poolOf(items, def), [items, def]);
+  const { slots, offsetS, progress } = schedule(pool, def.id, now, 4);
   const target = tuneTarget(slots, offsetS);
   if (!slots.length || !target) return null;
   const cur = itemLabel(slots[0].item);
@@ -51,7 +51,7 @@ function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: Cha
         ))}
       </ul>
       <div className="ch-actions">
-        <button className="btn primary small" data-nav onClick={() => go(tunePath(target))}>
+        <button className="btn primary small" data-nav onClick={() => go(tunePath(target, def.id))}>
           Tune in
         </button>
         <button className="btn small" data-nav onClick={onHide} aria-label={`${hidden ? "Show" : "Hide"} ${def.name}`}>
@@ -115,7 +115,7 @@ export function Channels() {
   return (
     <div className="channels">
       <h1 className="page-title">Channels</h1>
-      <p className="ask-sub">Always-on channels made from your own library. What's on is the same whenever you tune in, and the lineup refreshes every Monday.</p>
+      <p className="ask-sub">Always-on channels made from your own library. What's on is the same whenever you tune in, and the order is reshuffled after each full run through a channel.</p>
       {errored > 0 && !pending && (
         <p className="ask-sub">
           Couldn't load {errored === CHANNELS.length ? "your library" : "some channels"}.{" "}

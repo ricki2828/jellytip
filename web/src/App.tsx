@@ -83,7 +83,7 @@ export function App() {
     );
   }
   if (route.name === "play")
-    return <Player key={route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} />;
+    return <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} />;
 
   return (
     <>
