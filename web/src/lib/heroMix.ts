@@ -39,6 +39,7 @@ export function rowKicker(r: Pick<RowLike, "family" | "title">): string | null {
   if (t.includes("just added") || r.family === "fresh") return "Just added";
   if (t.startsWith("trending")) return "Trending";
   if (r.family === "ratings" || r.family === "awards") return "Highly rated";
+  if (r.family === "perso" && t.startsWith("because you watched")) return r.title; // the rotating seed rows (server perso.py)
   return null;
 }
 

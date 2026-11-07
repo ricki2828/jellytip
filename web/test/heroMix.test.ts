@@ -7,6 +7,8 @@ const it = (Id: string, extra: Record<string, unknown> = {}) => ({ Id, Name: Id,
 test("row kickers", () => {
   assert.equal(rowKicker({ family: "x", title: "New Releases" }), "New release");
   assert.equal(rowKicker({ family: "fresh", title: "Fresh stuff" }), "Just added");
+  assert.equal(rowKicker({ family: "perso", title: "Because you watched Heat" }), "Because you watched Heat");
+  assert.equal(rowKicker({ family: "perso", title: "Hidden gems for you" }), null);
   assert.equal(rowKicker({ family: "personal", title: "Unwatched gems" }), null);
 });
 
