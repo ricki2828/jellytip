@@ -1,5 +1,6 @@
 // IPTV films / series in the normal pages (pure; tested in web/test/iptvVod.test.ts). Contract: ~/ai/plans/jellytip-iptv.md
 // "IPTV movies / series" and "Rows + franchises". Anything with source "iptv" gets the corner dot + "via IPTV".
+import { parseLastFail, type LastFail } from "./streamFail.ts";
 import { parseTech } from "./techBadges.ts";
 
 export interface VodProgress {
@@ -9,6 +10,8 @@ export interface VodProgress {
 }
 
 export interface VodItem {
+  /** Newest failed play of this copy (additive; absent = no known problem). */
+  lastFail?: LastFail | null;
   id: string;
   source: "iptv";
   kind: "movie" | "series";
@@ -43,6 +46,7 @@ export interface VodEpisode {
   overview?: string | null;
   still?: string | null;
   progress?: VodProgress | null;
+  lastFail?: LastFail | null;
 }
 
 export interface VodDetail extends VodItem {
@@ -56,7 +60,7 @@ export interface VodDetail extends VodItem {
   /** Trailer address: a web link, or a companion-relative video path. */
   trailer?: string | null;
   director?: string | null;
-  copies?: { id: string; providerTitle?: string; quality?: string[] }[];
+  copies?: { id: string; providerTitle?: string; quality?: string[]; lastFail?: LastFail | null }[];
   seasons?: { season: number; episodes: VodEpisode[] }[];
 }
 
@@ -151,6 +155,7 @@ export function parseVodDetail(raw: unknown): VodDetail | null {
               overview: str(e.overview),
               still: str(e.still),
               progress: progress(e.progress),
+              lastFail: parseLastFail(e.lastFail),
             })),
         }))
         .filter((s) => s.episodes.length > 0)
@@ -173,6 +178,12 @@ export function parseVodDetail(raw: unknown): VodDetail | null {
     trailer: str(r.trailer),
     director: str(r.director),
     seasons,
+    lastFail: parseLastFail(r.lastFail),
+    copies: Array.isArray(r.copies)
+      ? (r.copies as Record<string, unknown>[])
+          .filter((c) => c && typeof c.id === "string" && VOD_ID_RE.test(c.id))
+          .map((c) => ({ id: c.id as string, providerTitle: str(c.providerTitle) ?? undefined, quality: strs(c.quality), lastFail: parseLastFail(c.lastFail) }))
+      : undefined,
   };
 }
 

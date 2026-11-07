@@ -2,6 +2,7 @@
 // Followed teams' games from the upcoming-sport feed and the person's recordings, each with its ways to watch, and a
 // title sanitiser so no score or result leaks through EPG strings. Scores are shown only after a reveal (or when the
 // person's "Show scores (spoilers)" setting is on).
+import { parseLastFail, type LastFail } from "./streamFail.ts";
 import { targetPath, liveExtrasQuery, type LiveExtras } from "./iptvPlay.ts";
 import type { Fixture } from "./matchInfo.ts";
 import type { Rec } from "./recs.ts";
@@ -266,6 +267,8 @@ export interface FxChannel {
   stop: number | null;
   startOver: boolean;
   autoRecord: boolean | null;
+  /** Newest failed play of this channel (additive; absent = no known problem). */
+  lastFail?: LastFail | null;
 }
 
 export interface FxItem {
@@ -333,6 +336,7 @@ function fxChannel(raw: unknown): FxChannel | null {
     stop: n(c.stop),
     startOver: c.startOver === true,
     autoRecord: typeof c.autoRecord === "boolean" ? c.autoRecord : null,
+    lastFail: parseLastFail(c.lastFail),
   };
 }
 

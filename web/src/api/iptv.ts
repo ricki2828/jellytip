@@ -1,6 +1,7 @@
 // IPTV (companion /v1/iptv/*; contract: ~/ai/plans/jellytip-iptv.md). Needs the person's own Jellyfin token; providers
 // are private to their owner. Credentials go up once and never come back (the server shows the host only).
 import { getSession } from "./jellyfin";
+import { outcomeBody, type Outcome } from "../lib/streamFail";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { isNative, nativeGetJson, nativePostJson } from "../lib/native";
@@ -285,6 +286,8 @@ export const addRecording = (channel: string, programme: number) =>
 /** `series`: the pid:s:sid id when `item` is an episode (so Next Up can find the show). */
 export const saveProgress = (item: string, position: number, duration: number, series?: string, played?: boolean) =>
   iptvPost<{ ok: boolean }>("v1/iptv/progress", { item, position, duration, ...(series ? { series } : {}), ...(played ? { played: true } : {}) });
+/** A play outcome for the companion's failed-stream memory (best effort: never throws, never blocks playback). */
+export const reportOutcome = (o: Outcome) => { void iptvPost<unknown>("v1/iptv/play/outcome", outcomeBody(o)); };
 /** Absolute address of a stream link (links are relative to the companion base). */
 export const streamUrl = (rel: string) => `${COMPANION_BASE}/${rel.replace(/^\//, "")}`;
 
