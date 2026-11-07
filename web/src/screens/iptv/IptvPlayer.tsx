@@ -148,6 +148,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const isLive = !!target.channel && target.start == null;
   const [meta, setMeta] = useState<RecMeta | null>(null);
   const [controls, setControls] = useState(true);
+  const controlsRef = useRef(true);
   const [tracksOpen, setTracksOpen] = useState(false);
   const [delayOpen, setDelayOpen] = useState(false);
   const delayOpenRef = useRef(false);
@@ -671,13 +672,27 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     return () => window.clearTimeout(t);
   }, [state.kind, answer]);
 
+  const blurHidden = () => {
+    const ae = document.activeElement as HTMLElement | null;
+    if (ae && ae.closest(".player-top, .player-bottom, .iptv-tracks-button, .player-track-trigger")) ae.blur();
+  };
+  const blurHiddenRef = useRef(blurHidden);
+  blurHiddenRef.current = blurHidden;
   const poke = useCallback(() => {
     setControls(true);
+    controlsRef.current = true;
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    if (!tracksOpenRef.current) hideTimer.current = window.setTimeout(() => setControls(false), 3500);
+    if (!tracksOpenRef.current && !delayOpenRef.current) hideTimer.current = window.setTimeout(() => {
+      controlsRef.current = false;
+      setControls(false);
+      // A focused (now invisible) control must not keep eating keys: hand the arrows back to the companion scheme
+      blurHiddenRef.current();
+    }, 3500);
   }, []);
   // The menu closing (any route: pick, Escape, replay, teardown) restarts the auto-hide timer
   useEffect(() => { if (!tracksOpen) poke(); }, [tracksOpen, poke]);
+  // The delay popover closing restarts the timer too (it holds the controls while open)
+  useEffect(() => { if (delayOpen) { if (hideTimer.current) window.clearTimeout(hideTimer.current); setControls(true); controlsRef.current = true; } else poke(); }, [delayOpen, poke]);
   useEffect(() => {
     poke();
     return () => {
@@ -779,6 +794,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const [nowS, setNowS] = useState(() => Date.now() / 1000);
   const [cardOn, setCardOn] = useState(true);
   const [others, setOthers] = useState(false);
+  // Sheets (other channels) hold the controls like the track menu does
+  useEffect(() => { if (others) { if (hideTimer.current) window.clearTimeout(hideTimer.current); setControls(true); controlsRef.current = true; } else poke(); }, [others, poke]);
   const started = useRef(false);
   useEffect(() => {
     if (!startsAt) return;
@@ -1009,14 +1026,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const tapTimer = useRef<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const onVideoPointerUp = (e: React.PointerEvent<HTMLVideoElement>) => {
-    if (e.pointerType === "mouse" || isLive) return;
+    if (e.pointerType === "mouse") return;
     touchClick.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
     const side = e.clientX - rect.left < rect.width / 2 ? -1 : 1;
     const now = Date.now();
     const prev = lastTap.current;
     lastTap.current = { at: now, side };
-    if (prev && now - prev.at < 300 && prev.side === side) {
+    if (!isLive && prev && now - prev.at < 300 && prev.side === side) {
       if (tapTimer.current) window.clearTimeout(tapTimer.current);
       tapTimer.current = null;
       seekBy(10 * side);
@@ -1025,9 +1042,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       return;
     }
     if (tapTimer.current) window.clearTimeout(tapTimer.current);
+    // Judged at tap time: the compat mousemove a tap fires (onMouseMove → poke) lands before the timer
+    const wasShown = controlsRef.current;
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
-      if (controls && !videoRef.current?.paused) setControls(false);
+      if (wasShown && !videoRef.current?.paused) { if (hideTimer.current) window.clearTimeout(hideTimer.current); controlsRef.current = false; setControls(false); blurHiddenRef.current(); }
       else poke();
     }, 300);
   };
@@ -1042,7 +1061,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       {
         const ae = document.activeElement as HTMLElement | null;
         const btn = ae?.tagName === "BUTTON";
-        const inUse = tracksOpen || delayOpenRef.current || (btn && Date.now() - navAt.current < 4000);
+        const inUse = tracksOpen || delayOpenRef.current || (btn && controlsRef.current && Date.now() - navAt.current < 4000);
         const act = panelKeyAction({ key: e.key, panelOpen: keyState.current.open, controlsInUse: inUse, available: keyState.current.avail, alternates: othersRef.current.n });
         if (act) {
           e.preventDefault();
@@ -1066,9 +1085,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           return;
         }
         // OK on the picture with the controls idle brings them up: focus moves to the Live button, then arrows navigate as usual
-        if (keyState.current.avail && !inUse && e.key === "Enter" && !btn) {
-          const first = document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ?? document.querySelector<HTMLElement>(".player-top [data-nav]");
-          if (first) { e.preventDefault(); e.stopPropagation(); first.focus(); navAt.current = Date.now(); return; }
+        if (isLive && !inUse && e.key === "Enter" && !btn) {
+          // Never the Back arrow: a second OK would leave the player
+          const first =
+            document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ??
+            document.querySelector<HTMLElement>('.player-top button[aria-label$="ullscreen"]') ??
+            document.querySelector<HTMLElement>(".iptv-tracks-button button[aria-haspopup]") ??
+            Array.from(document.querySelectorAll<HTMLElement>(".player-top [data-nav]")).find((el) => el !== document.querySelector(".player-top")?.firstElementChild && !el.closest(".player-top > :first-child"));
+          if (first) { e.preventDefault(); e.stopPropagation(); poke(); first.focus(); navAt.current = Date.now(); return; }
         }
       }
       if ((e.key === "Escape" || e.key === "Backspace") && fsRef.current.exitIfFullscreen()) { e.preventDefault(); e.stopPropagation(); return; }
@@ -1090,8 +1114,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         e.preventDefault();
         return;
       }
-      if (isLive) return;
       poke();
+      if (isLive) return;
       let handled = true;
       switch (e.key) {
         case " ":
@@ -1148,11 +1172,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   return (
     <div
       ref={boxRef}
-      style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" || tracksOpen || delayOpen ? " show" : ""}`}
-      onMouseMove={isLive ? undefined : poke}
-      onClick={() => {
+      style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${controls || others || paused || state.kind !== "playing" || tracksOpen || delayOpen ? " show" : ""}`}
+      onMouseMove={poke}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest(".cp-panel, .live-drawer, .cp-bug, .delay-chip")) return;
         if (touchClick.current) touchClick.current = false;
-        else if (!isLive) poke();
+        else poke();
       }}
     >
       <div className={`cp-stage ${panelMode}${drawer ? " open" : ""}`}>
