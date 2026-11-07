@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, fromStartTarget, rejoinLive, type ChanItem } from "../src/lib/channels.ts";
+import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, iptvEpisodeItems, mixEpisodes, isIptvEpisodeId, BLOCK_MAX, BLOCK_MIN, itemLabel, mixItems, lineup, rng, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, fromStartTarget, rejoinLive, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
 const it = (id: string, min: number | undefined, o: Partial<ChanItem> = {}): ChanItem => ({ Id: id, Name: `Item ${id}`, Type: "Movie", RunTimeTicks: min == null ? undefined : min * MIN, ...o });
@@ -179,7 +179,7 @@ test("yearsParam expands a range and refuses nonsense", () => {
 
 test("built-in channel ids are unique", () => {
   assert.equal(new Set(CHANNELS.map((c) => c.id)).size, CHANNELS.length);
-  assert.ok(CHANNELS.length >= 5 && CHANNELS.length <= 6);
+  assert.ok(CHANNELS.length >= 5 && CHANNELS.length <= 9);
 });
 
 // ---------- IPTV films in channels ----------
@@ -242,8 +242,8 @@ test("tunePath: a library item never chains with an IPTV id as then= (the player
   assert.equal(tunePath({ id: "a".repeat(32), startS: 5, thenId: "p:m:1" }, "c"), `/play/${"a".repeat(32)}?start=5&ch=c`);
 });
 
-test("iptv channels: every Movie channel declares TMDB genres, episode channels do not", () => {
-  for (const c of CHANNELS) assert.equal(!!c.tmdbGenres?.length, c.type === "Movie", c.id);
+test("iptv channels: every channel declares TMDB genres (films and episodes both draw from IPTV)", () => {
+  for (const c of CHANNELS) assert.ok(c.tmdbGenres?.length, c.id);
 });
 
 test("chainTarget: never the item that just ended (file shorter than its runtime), otherwise the tune target", () => {
@@ -316,4 +316,129 @@ test("Item on its last seconds: rejoin from an earlier item goes to the next slo
   const r = rejoinLive(slots, offsetS, slots[0].item.Id)!;
   assert.equal(r.kind, "go");
   if (r.kind === "go") assert.equal(r.target.id, slots[1].item.Id);
+});
+
+// ---------- IPTV episodes in channels ----------
+
+const E = (series: number, n: number, o: Record<string, unknown> = {}) => ({
+  kind: "episode", id: `p:e:${series}x${n}`, seriesId: `p:s:${series}`, tmdbId: 5000 + series, seriesTitle: `Show ${series}`, title: `Ep ${n}`, season: 1, episode: n, year: 2001, runtime: 22 * 60,
+  backdrop: "https://image.tmdb.org/t/p/w780/e.jpg", ...o,
+});
+const epPool = (series: number, n: number) => Array.from({ length: n }, (_, i) => E(series, i + 1));
+
+test("iptvEpisodeItems: maps episodes, drops bad ids, specials, odd runtimes, dupes and langUnknown", () => {
+  const r = iptvEpisodeItems({
+    items: [E(1, 1), E(1, 1), E(1, 2, { runtime: 30 }), E(1, 3, { season: 0 }), E(1, 4, { id: "p:m:4" }), E(1, 5, { seriesId: "p:m:1" }), E(1, 6, { seriesTitle: "" }), E(1, 7, { langUnknown: true }), E(1, 8, { runtime: 400 * 60 }), E(1, 9, { title: "" }), null, "x"],
+    pending: 2,
+  });
+  assert.deepEqual(r.items.map((x) => x.Id), ["p:e:1x1", "p:e:1x9"]);
+  assert.equal(r.pending, 2);
+  const e = r.items[0];
+  assert.equal(e.Type, "Episode");
+  assert.equal(e.SeriesId, "p:s:1");
+  assert.equal(e.SeriesName, "Show 1");
+  assert.equal(e.SeriesTmdb, "5001");
+  assert.equal(e.RunTimeTicks, 22 * 60 * TICKS_PER_SECOND);
+  assert.equal(r.items[1].Name, "Episode 9");
+  assert.equal(playable([e]).length, 1);
+  assert.equal(isIptvId(e.Id), true);
+  assert.equal(isIptvEpisodeId("a".repeat(32)), false);
+});
+
+test("mixEpisodes: a library series wins over an IPTV series with the same TMDB id", () => {
+  const lib: ChanItem[] = [{ Id: "l1".padEnd(32, "0"), Name: "x", Type: "Episode", SeriesId: "s".repeat(32), SeriesTmdb: "5001", ParentIndexNumber: 1, IndexNumber: 1, RunTimeTicks: 22 * MIN }];
+  const iptv = iptvEpisodeItems({ items: [...epPool(1, 5), ...epPool(2, 5), ...epPool(3, 4).map((e) => ({ ...e, tmdbId: 5002 }))] }).items;
+  const mixed = mixEpisodes(lib, iptv);
+  const series = new Set(mixed.filter((x) => isIptvId(x.Id)).map((x) => x.SeriesId));
+  assert.deepEqual([...series], ["p:s:2"]); // 1 = in the library; 3 = same TMDB as 2, collapses to the first id
+  assert.equal(mixed.filter((x) => x.SeriesId === "p:s:2").length, 5);
+  assert.equal(mixed.length, 6);
+});
+
+test("mixEpisodes: cap keeps whole series, in a stable order independent of input order", () => {
+  const iptv = iptvEpisodeItems({ items: Array.from({ length: 30 }, (_, s) => epPool(s + 1, 10)).flat() }).items;
+  const a = mixEpisodes([], iptv, 55);
+  const b = mixEpisodes([], [...iptv].reverse(), 55);
+  assert.deepEqual(a.map((x) => x.Id), b.map((x) => x.Id));
+  assert.ok(a.length <= 55 && a.length >= 50);
+  const per = new Map<string, number>();
+  for (const x of a) per.set(x.SeriesId!, (per.get(x.SeriesId!) ?? 0) + 1);
+  assert.ok([...per.values()].every((n) => n === 10));
+});
+
+test("lineup: episodes of a series play in order in blocks of 2-4; it is a permutation and deterministic", () => {
+  const pool = poolOf(iptvEpisodeItems({ items: [...epPool(1, 13), ...epPool(2, 9), ...epPool(3, 1), ...epPool(4, 6)] }).items);
+  const l1 = lineup(pool, "sc", 7);
+  assert.deepEqual(l1.map((x) => x.Id), lineup(pool, "sc", 7).map((x) => x.Id));
+  assert.deepEqual(l1.map((x) => x.Id).sort(), pool.map((x) => x.Id).sort());
+  assert.notDeepEqual(l1.map((x) => x.Id), lineup(pool, "sc", 8).map((x) => x.Id));
+  // reading the list: consecutive same-series runs; every run is ascending, no run longer than BLOCK_MAX+1 unless blocks of one show happen to touch
+  const runs: ChanItem[][] = [];
+  for (const x of l1) (runs.at(-1)?.[0].SeriesId === x.SeriesId ? runs.at(-1)! : runs[runs.push([])-1]).push(x);
+  for (const r of runs) assert.deepEqual(r.map((x) => x.IndexNumber), [...r.map((x) => x.IndexNumber)].sort((p, q) => p! - q!));
+  // each series is cut into blocks of BLOCK_MIN..BLOCK_MAX+1 (a stranded single joins the previous block), except a series of one
+  const sizes = new Map<string, number[]>();
+  const seen: ChanItem[] = [];
+  for (const x of l1) seen.push(x);
+  assert.equal(BLOCK_MIN, 2);
+  assert.equal(BLOCK_MAX, 4);
+  for (const sid of ["p:s:1", "p:s:2", "p:s:4"]) {
+    const eps = l1.filter((x) => x.SeriesId === sid).map((x) => x.IndexNumber!);
+    // the series' episodes, grouped by gaps in the list order, are consecutive index runs
+    let cur: number[] = [];
+    const groups: number[][] = [];
+    for (const x of l1) {
+      if (x.SeriesId !== sid) { if (cur.length) groups.push(cur); cur = []; continue; }
+      cur.push(x.IndexNumber!);
+    }
+    if (cur.length) groups.push(cur);
+    for (const g of groups) assert.ok(g.every((n, i) => i === 0 || n === g[i - 1] + 1), `${sid} ${g}`);
+    assert.equal(eps.length, sid === "p:s:1" ? 13 : sid === "p:s:2" ? 9 : 6);
+    sizes.set(sid, groups.map((g) => g.length));
+  }
+  // block sizes (merged adjacent blocks of one show can add up, so only the lower bound is exact)
+  for (const g of [...sizes.values()].flat()) assert.ok(g >= BLOCK_MIN);
+});
+
+test("lineup: a films-only pool shuffles exactly as before (no block logic)", () => {
+  const films = Array.from({ length: 12 }, (_, i) => it(`f${String(i).padStart(2, "0")}`, 90));
+  const r = rng(seedFor("c", 3));
+  const a = [...films];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  assert.deepEqual(lineup(films, "c", 3).map((x) => x.Id), a.map((x) => x.Id));
+});
+
+test("an IPTV episode slot tunes through the IPTV player with series + episode ids at the clock offset", () => {
+  const pool = poolOf(iptvEpisodeItems({ items: [...epPool(1, 6), ...epPool(2, 6)] }).items);
+  const now = EP + 3 * 3600_000 + 7 * 60_000 + 3000;
+  const sch = schedule(pool, "sc", now, 4);
+  const t = tuneTarget(sch.slots, sch.offsetS)!;
+  assert.ok(isIptvEpisodeId(t.id));
+  assert.match(t.title, /^Show \d · S1 E\d · Ep \d$/);
+  assert.equal(t.seriesId, sch.slots.find((s) => s.item.Id === t.id)!.item.SeriesId);
+  const path = tunePath({ id: "p:e:1x2", seriesId: "p:s:1", startS: 437, thenId: null, title: "Show 1 · S1 E2 · A & B" }, "sc");
+  assert.equal(path, "/iptv/play?series=p%3As%3A1&episode=p%3Ae%3A1x2&t=Show%201%20%C2%B7%20S1%20E2%20%C2%B7%20A%20%26%20B&resume=437&ch=sc");
+  assert.ok(tunePath({ id: "p:e:1x2", seriesId: "p:s:1", startS: 0, thenId: null, title: "T" }, "sc", true).endsWith("&ch=sc&off=1"));
+  assert.ok(!tunePath({ id: "p:e:1x2", seriesId: "p:s:1", startS: 0, thenId: null, title: "T" }, "sc").includes("resume"));
+  const fs = fromStartTarget(sch.slots)!;
+  assert.equal(fs.startS, 0);
+  assert.ok(fs.seriesId);
+  // the chain never re-tunes the episode that just ended
+  const c = chainTarget(sch.slots, sch.offsetS, t.id)!;
+  assert.notEqual(c.id, t.id);
+});
+
+test("episode channels: mixed library + IPTV pool is viable and hides under 3 schedulable items", () => {
+  const def = CHANNELS.find((c) => c.id === "sitcom-classics")!;
+  assert.equal(def.type, "Episode");
+  assert.ok(CHANNELS.some((c) => c.id === "light-bites"));
+  const two = iptvEpisodeItems({ items: [E(1, 1), E(1, 2)] }).items;
+  assert.equal(channelViable(mixEpisodes([], two), def), false);
+  const three = iptvEpisodeItems({ items: [E(1, 1), E(1, 2), E(1, 3)] }).items;
+  assert.equal(channelViable(mixEpisodes([], three), def), true);
+  // 22 min fits Classics (20-35) but not a 10 min bite channel floor of 15? it does; a 12 min episode is out of both
+  assert.equal(channelViable(iptvEpisodeItems({ items: [E(1, 1, { runtime: 12 * 60 }), E(1, 2, { runtime: 12 * 60 }), E(1, 3, { runtime: 12 * 60 })] }).items, def), false);
 });

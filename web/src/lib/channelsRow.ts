@@ -1,5 +1,5 @@
 // Home "My Channels" row: which channels show and what each card says (pure; tested in web/test/channelsRow.test.ts).
-import { CHANNELS, channelViable, isIptvId, itemLabel, poolOf, schedule, tuneTarget, type ChanItem, type ChannelDef } from "./channels.ts";
+import { CHANNELS, channelViable, isIptvId, itemLabel, poolOf, schedule, tuneTarget, type ChanItem, type ChannelDef, type Target } from "./channels.ts";
 
 export interface CardModel {
   def: ChannelDef;
@@ -12,7 +12,7 @@ export interface CardModel {
   artId: string | null;
   artUrl: string | null;
   /** Where Tune in goes (lib/channels.tunePath input). */
-  target: { id: string; startS: number; thenId: string | null; title: string };
+  target: Target;
 }
 
 /** Channels with enough playable items and not hidden, in the built-in order. */
