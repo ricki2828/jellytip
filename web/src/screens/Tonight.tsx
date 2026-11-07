@@ -18,7 +18,7 @@ const undash = (s: string) => s.replace(/-/g, "");
 const ROWS = 5;
 const PER_ROW = 8;
 
-interface Raw {
+export interface Raw {
   resume: Item[];
   next: Item[];
   ic: ContinueEntry[];
@@ -28,7 +28,7 @@ interface Raw {
 }
 
 /** Highly rated unwatched films; the kids rating and mood genres go to the server through askParse's own mapping. */
-const ratedFor = (ids: ConstraintId[]): Promise<Item[]> =>
+export const ratedFor = (ids: ConstraintId[]): Promise<Item[]> =>
   getItems({
     ...buildQuery(chipsFor(ids), { limit: 60 }),
     IncludeItemTypes: "Movie",
@@ -41,7 +41,7 @@ const ratedFor = (ids: ConstraintId[]): Promise<Item[]> =>
 
 // Nothing here is cached across visits: what was just watched or stopped must not come back. (The companion layer caches
 // the static row definitions itself.)
-async function load(): Promise<Raw> {
+export async function load(): Promise<Raw> {
   const [resume, next, ic, inx, rows, mf] = await Promise.all([
     resumeItems(),
     nextUp(),
@@ -72,7 +72,7 @@ async function load(): Promise<Raw> {
   return { resume, next, ic, inx, recs, iptv };
 }
 
-const toPool = (r: Raw, rated: Item[]): Pool => {
+export const toPool = (r: Raw, rated: Item[]): Pool => {
   const dismissed = readDismissed(localStorage, uid());
   const hidden = new Set(Object.keys(dismissed));
   const entries = buildContinue(r.resume, r.next, r.ic, r.inx, { dismissed });
@@ -153,6 +153,11 @@ export function Tonight() {
   return (
     <div className="tonight">
       <h1 className="page-title">Pick for tonight</h1>
+      <div className="tonight-more">
+        <button className="btn" data-nav onClick={() => go("/movienight")}>
+          Movie night with others
+        </button>
+      </div>
       <div className="chips" aria-label="Narrow it down">
         {CONSTRAINTS.map((c) => (
           <button key={c.id} className={`chip${on.includes(c.id) ? " on" : ""}`} data-nav aria-pressed={on.includes(c.id)} onClick={() => toggle(c.id)}>
