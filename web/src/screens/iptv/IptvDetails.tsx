@@ -7,6 +7,7 @@ import { Backdrop } from "../../components/Backdrop";
 import { PreviewVideo } from "../../components/PreviewVideo";
 import { iptvPlayable } from "../../lib/trailerPreview";
 import { useTrailerPreview } from "../../lib/useTrailerPreview";
+import { emitSignal, useDetailDwell, useTrailerWatch } from "../../api/signals";
 import { IptvDot, safeArt } from "../../components/IptvTile";
 import { tmdbSized } from "../../components/FranchiseRow";
 import { useIsPhone } from "../../lib/device";
@@ -37,6 +38,10 @@ export function IptvDetails({ id }: { id: string }) {
   const [favBusy, setFavBusy] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+  // Taste signals: dwell, a trailer opened on purpose (5 s+), My list
+  const sigTarget = d ? { kind: d.kind, iptvId: d.id, ...(d.tmdbId ? { tmdbId: d.tmdbId } : {}) } : null;
+  useDetailDwell(sigTarget);
+  const onTrailerTime = useTrailerWatch(!!trailerUrl, sigTarget);
 
   useEffect(() => {
     let alive = true;
@@ -169,7 +174,9 @@ export function IptvDetails({ id }: { id: string }) {
                   setFavBusy(false);
                   if (a.status === 404) return setFav(null);
                   if (a.status === 200 || a.status === 201 || a.status === 204) {
-                    setFav(typeof a.data?.favourite === "boolean" ? a.data.favourite : !fav);
+                    const now = typeof a.data?.favourite === "boolean" ? a.data.favourite : !fav;
+                    setFav(now);
+                    if (now) emitSignal({ type: "mylist", at: Date.now(), kind: d.kind, iptvId: d.id, ...(d.tmdbId ? { tmdbId: d.tmdbId } : {}) });
                     dropPersonalCaches(); // Home's My list rows change
                   }
                 }}
@@ -242,7 +249,7 @@ export function IptvDetails({ id }: { id: string }) {
       )}
       {trailerUrl && (
         <div className="trailer-modal" onClick={() => setTrailerUrl(null)}>
-          <video src={trailerUrl} autoPlay controls onEnded={() => setTrailerUrl(null)} onError={() => setTrailerUrl(null)} onClick={(e) => e.stopPropagation()} />
+          <video src={trailerUrl} autoPlay controls onTimeUpdate={onTrailerTime} onEnded={() => setTrailerUrl(null)} onError={() => setTrailerUrl(null)} onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>

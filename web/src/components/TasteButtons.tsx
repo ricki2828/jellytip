@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Item } from "../api/jellyfin";
 import { personalOn, setNotInterested, setThumb, usePrefs, useSignal } from "../api/me";
 import { go } from "../lib/router";
+import { emitSignal } from "../api/signals";
+import { libraryTarget } from "../lib/signals";
 
 const Thumb = ({ down }: { down?: boolean }) => (
   <svg viewBox="0 0 24 24" aria-hidden className={`thumb-icon${down ? " down" : ""}`}>
@@ -27,7 +29,13 @@ export function TasteButtons({ item, compact = false }: { item: Item; compact?: 
     setBusy(false);
     flashNote(e ?? ok);
   };
-  const thumb = (v: 1 | -1) => run(() => setThumb(item.Id, sig.thumb === v ? 0 : v), sig.thumb === v ? "Rating cleared" : v === 1 ? "More like this" : "Fewer like this");
+  const thumb = (v: 1 | -1) =>
+    run(async () => {
+      const e = await setThumb(item.Id, sig.thumb === v ? 0 : v);
+      const tg = libraryTarget(item);
+      if (!e && tg && sig.thumb !== v) emitSignal({ ...tg, type: v === 1 ? "thumbUp" : "thumbDown", at: Date.now() });
+      return e;
+    }, sig.thumb === v ? "Rating cleared" : v === 1 ? "More like this" : "Fewer like this");
   return (
     <>
       <button className={`btn${compact ? " small" : ""}${sig.thumb === 1 ? " on" : ""}`} data-nav disabled={busy} aria-pressed={sig.thumb === 1} aria-label="Thumbs up" title="Thumbs up" onClick={() => thumb(1)}>
