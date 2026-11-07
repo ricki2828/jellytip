@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bestChannel, fxScoreText, fxTitle, groupFixtures, isFavourite, legacyForced, parseFixtureList, waysForFixture } from "../src/lib/gameCentre.ts";
+import { bestChannel, fxScoreText, fxTitle, groupFixtures, isFavourite, legacyForced, localDay, parseFixtureList, parseMore, todayMore, waysForFixture } from "../src/lib/gameCentre.ts";
 import type { Rec } from "../src/lib/recs.ts";
 
 const NOW = new Date(2026, 10, 7, 20, 0).getTime() / 1000;
@@ -154,4 +154,13 @@ test("parser: team logos carried from home/away objects", () => {
   const [a] = parse(fx("l", { home: { name: "Warriors", logo: "https://a.espncdn.com/x.png" }, away: "Magic" }));
   assert.equal(a.homeLogo, "https://a.espncdn.com/x.png");
   assert.equal(a.awayLogo, null);
+});
+
+test("daily-cap hint: parsed, today only, hidden once a league is shown in full", () => {
+  const day = localDay(NOW);
+  const more = parseMore({ more: [{ league: "NBA", leagueKey: "nba", day, hidden: 5 }, { league: "NBA", leagueKey: "nba", day: "2000-01-01", hidden: 3 }, { league: "X", day, hidden: 0 }, { nope: 1 }] });
+  assert.equal(more.length, 2);
+  assert.deepEqual(todayMore(more, NOW, new Set()), [{ league: "NBA", key: "nba", hidden: 5 }]);
+  assert.deepEqual(todayMore(more, NOW, new Set(["nba"])), []);
+  assert.deepEqual(parseMore(null), []);
 });
