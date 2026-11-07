@@ -1,6 +1,7 @@
 // Upcoming sport (GET v1/iptv/sport/upcoming; contract: ~/ai/plans/jellytip-live-sport.md "Upcoming sport"). Events in
 // the server's order (favourite teams, favourite leagues, the rest; by start within a tier). Pure; tested in
 // web/test/upcoming.test.ts.
+import { parseFailFor, type LastFail } from "./streamFail.ts";
 import { parseFixture, type Fixture } from "./matchInfo.ts";
 import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
 import { parseArt, parseQuality, type Kind, type Quality, type SportArt } from "./sport.ts";
@@ -11,6 +12,7 @@ export interface UpChannel {
   num: number | null;
   logo: string | null;
   quality: Quality | null;
+  lastFail?: LastFail | null;
 }
 
 export interface UpEvent {
@@ -44,7 +46,7 @@ function channel(raw: unknown): UpChannel | null {
   const c = obj(raw);
   const id = str(c?.id);
   if (!c || !id) return null;
-  return { id, name: str(c.name) ?? "Channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality) };
+  return { id, name: str(c.name) ?? "Channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality), lastFail: parseFailFor(id, c.lastFail) };
 }
 
 /** Answer → events; unusable items (no title, time or channel) are dropped. */

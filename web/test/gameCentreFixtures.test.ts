@@ -165,3 +165,24 @@ test("daily-cap hint: parsed, today only, hidden once a league is shown in full"
   assert.deepEqual(todayMore(more, NOW, new Set(["nba"])), []);
   assert.deepEqual(parseMore(null), []);
 });
+
+// ---- failed-stream memory (7-Nov): a channel that failed in the last 24 h gives way to one that did not ----
+import { pickChannel } from "../src/lib/gameCentre.ts";
+import { clearLocalFails, rememberLocalFail } from "../src/lib/streamFail.ts";
+test("pickChannel: skips a channel that failed lately, names it, leaves a clean list alone", () => {
+  clearLocalFails();
+  const NOWS = 1_800_000_000;
+  const f = parse(fx("sf", { channels: [{ id: "1:10", name: "Alpha HD", confidence: 0.95, lastFail: { at: NOWS - 3600, reason: "stall", count7d: 1 } }, { id: "1:11", name: "Beta", confidence: 0.9 }], best: "1:10" }))[0];
+  const p = pickChannel(f, NOWS);
+  assert.equal(p.channel?.id, "1:11");
+  assert.equal(p.skipped, "Alpha HD");
+  assert.equal(waysForFixture({ ...f, status: "in" }, null, NOWS).skipped, "Alpha HD");
+  const clean = parse(fx("sf2", { channels: [{ id: "1:10", name: "Alpha", confidence: 0.95 }, { id: "1:11", name: "Beta", confidence: 0.9 }], best: "1:10" }))[0];
+  assert.deepEqual([pickChannel(clean, NOWS).channel?.id, pickChannel(clean, NOWS).skipped], ["1:10", null]);
+  rememberLocalFail("1:10", "user_report", NOWS - 10); // this device's own report counts at once
+  assert.equal(pickChannel(clean, NOWS).channel?.id, "1:11");
+  clearLocalFails();
+  const all = parse(fx("sf3", { channels: [{ id: "1:10", name: "Alpha", confidence: 0.95, lastFail: { at: NOWS - 60, reason: "stall", count7d: 1 } }, { id: "1:11", name: "Beta", confidence: 0.9, lastFail: { at: NOWS - 120, reason: "refused", count7d: 1 } }], best: "1:10" }))[0];
+  assert.equal(pickChannel(all, NOWS).channel?.id, "1:11"); // all failed lately: the one that failed longest ago
+  assert.equal(pickChannel(all, NOWS).skipped, "Alpha");
+});
