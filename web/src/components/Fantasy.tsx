@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { fantasyFirstEvents, fantasyGame, fantasySeen, subscribeFantasyRefresh, useFantasy } from "../api/fantasy";
 import { matchDetailCached } from "../api/matchInfo";
 import { usePrefs } from "../api/me";
-import { chipText, enqueue, eventParts, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
+import { parseAlertMode, pickAlert, SHOW_MS, sharedGate, type Candidate } from "../lib/alertPolicy";
+import { chipText, eventParts, isNfl, shortLeague, type FantasyLive, type Starter } from "../lib/fantasy";
 import type { Fixture } from "../lib/matchInfo";
 import { BroadcastToast, type ToastData } from "./BroadcastToast";
 import "../screens/iptv/iptv.css";
@@ -24,12 +25,13 @@ export function useFixture(matchId: string | null | undefined): Fixture | null {
 }
 
 /** "🏈 CCP 87.4 – 79.2": my matchups while an NFL game plays. */
-export function FantasyChip({ matchId, active }: { matchId: string | null | undefined; active: boolean }) {
+export function FantasyChip({ matchId, active, reveal, replay = false }: { matchId: string | null | undefined; active: boolean; reveal?: (atSec?: number) => boolean; replay?: boolean }) {
   const fixture = useFixture(active ? matchId : null);
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const live = useFantasy(active && nfl);
   const text = live ? chipText(live) : null;
-  if (!text) return null;
+  // Scores are a spoiler: hidden in replay, and until the spoiler delay allows live information at all
+  if (!text || replay || (reveal && !reveal())) return null;
   return (
     <span className="fantasy-chip" title="Your fantasy matchups">
       {text}
@@ -37,33 +39,47 @@ export function FantasyChip({ matchId, active }: { matchId: string | null | unde
   );
 }
 
-/** Scoring events (a starter up by 4+) as a top-right toast, like the flip one; off with fantasy.alerts. */
-export function FantasyAlerts({ matchId, active }: { matchId: string | null | undefined; active: boolean }) {
+/**
+ * Fantasy swings as a lower-third (key mode: a starter up or down 5+; sport.alerts "all": whatever the server sends past
+ * fantasy.alertMin), through the same gate as the moment alerts: shown after `reveal(event time)`, at most one per 30 s across
+ * both, 4 s each, nothing in replay or in a blowout. Off with fantasy.alerts or sport.alerts "off".
+ */
+export function FantasyAlerts({ matchId, active, reveal, replay = false, blowout = false }: { matchId: string | null | undefined; active: boolean; reveal?: (atSec?: number) => boolean; replay?: boolean; blowout?: boolean }) {
   const fixture = useFixture(active ? matchId : null);
   const nfl = !!fixture && isNfl(fixture.leagueKey);
   const { prefs } = usePrefs({ defer: true });
-  const on = active && nfl && !!prefs?.fantasy.alerts;
+  const mode = parseAlertMode(prefs?.sport.alerts);
+  const on = active && !replay && nfl && !!prefs?.fantasy.alerts && mode !== "off";
+  const live = useRef({ reveal, mode, blowout });
+  live.current = { reveal, mode, blowout };
   const [shown, setShown] = useState<{ t: ToastData; key: number } | null>(null);
-  const queue = useRef<ToastData[]>([]);
+  const queue = useRef<Candidate<ToastData>[]>([]);
   const busy = useRef(false);
   const timer = useRef<number | undefined>(undefined);
   const keyN = useRef(0);
 
-  // One toast at a time, 6 s each; up to 3 wait (the oldest are dropped)
-  const next = () => {
-    const n = queue.current.shift();
-    if (!n) {
-      busy.current = false;
-      return setShown(null);
-    }
-    busy.current = true;
-    setShown({ t: n, key: ++keyN.current });
-    timer.current = window.setTimeout(next, 6000);
+  // The gate ticks once a second: the best revealed swing goes up for 4 s when the shared 30 s gap allows
+  const push = (c: Candidate<ToastData>) => {
+    queue.current = [...queue.current, c];
   };
-  const push = (n: ToastData) => {
-    queue.current = enqueue(queue.current, n);
-    if (!busy.current) next();
-  };
+  useEffect(() => {
+    if (!on) return;
+    const tick = window.setInterval(() => {
+      const now = Date.now() / 1000;
+      const r = pickAlert(queue.current, sharedGate, now, { reveal: (at) => (live.current.reveal ? live.current.reveal(at) : true), mode: live.current.mode, blowout: live.current.blowout });
+      queue.current = r.pending;
+      if (!r.show) return;
+      sharedGate.lastShownAt = now;
+      busy.current = true;
+      setShown({ t: r.show.payload, key: ++keyN.current });
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => {
+        busy.current = false;
+        setShown(null);
+      }, SHOW_MS);
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [on]);
 
   useEffect(() => {
     if (!on) return;
@@ -80,7 +96,7 @@ export function FantasyAlerts({ matchId, active }: { matchId: string | null | un
         // A remounted alert consumer must never replay that baseline as a toast.
         if (first) continue;
         const p = eventParts(e, d);
-        push({ color: e.side === "opp" ? "#D9473D" : "#22C55E", kicker: p.kicker, text: p.text, sub: p.sub, icon: "fantasy" });
+        push({ id: k, kind: "fantasy", at: e.at, swing: Math.abs(e.delta), payload: { color: e.side === "opp" ? "#D9473D" : "#22C55E", kicker: p.kicker, text: p.text, sub: p.sub, icon: "fantasy" } });
       }
     });
     const resetForSession = () => {
