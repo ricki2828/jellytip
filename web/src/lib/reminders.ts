@@ -8,7 +8,13 @@ export const SOON_S = 15 * 60;
 export interface Reminder {
   id: number | string;
   event: UpEvent;
+  /** Fixture id when set from Game Centre. */
+  fid: string | null;
 }
+
+/** A reminder set before any stream is linked carries a channel with an empty id ("No stream yet"). */
+export const NO_STREAM = "No stream yet";
+export const hasStream = (e: Pick<UpEvent, "channels">): boolean => !!e.channels[0]?.id;
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 
@@ -21,8 +27,12 @@ export function parseReminders(raw: unknown): Reminder[] {
     const o = obj(x);
     const id = o?.id;
     if (!o || (typeof id !== "string" && typeof id !== "number")) continue;
-    const ev = parseUpcoming({ items: [o] })[0];
-    if (ev) out.push({ id, event: { ...ev, reminderId: id } });
+    const noChan = !obj(o.channel) || typeof obj(o.channel)!.id !== "string" || !obj(o.channel)!.id;
+    // Fixture reminders may have no channel yet: keep them, with an empty-id placeholder channel
+    const ev = parseUpcoming({ items: [noChan && typeof o.fid === "string" && o.fid ? { ...o, channel: { id: "_", name: NO_STREAM } } : o] })[0];
+    if (!ev) continue;
+    const event = noChan ? { ...ev, channels: [{ ...ev.channels[0], id: "" }] } : ev;
+    out.push({ id, fid: typeof o.fid === "string" && o.fid ? o.fid : null, event: { ...event, reminderId: id } });
   }
   return out.sort((a, b) => a.event.start - b.event.start);
 }

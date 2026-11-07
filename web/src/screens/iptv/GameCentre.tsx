@@ -7,6 +7,7 @@ import { refreshFixtures, useFixtures } from "../../api/fixtures";
 import { matchDetail } from "../../api/matchInfo";
 import { usePrefs } from "../../api/me";
 import { refreshRecs, useRecs } from "../../api/recStore";
+import { addFixtureReminder, addReminder, refreshReminders, removeReminder, useReminders } from "../../api/reminderStore";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
@@ -58,7 +59,48 @@ const cardProps = (act: (() => void) | null) => ({
   onKeyDown: act ? (e: React.KeyboardEvent) => { if (e.target === e.currentTarget && e.key === "Enter") { e.preventDefault(); act(); } } : undefined,
 });
 
-function GameCard({ g, now, pref, shown, scoreLine, gate, onPress }: { g: Game; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void }) {
+/** "Remind me" / "Reminder set ✓ (tap to remove)": a plain toggle, ignored while a request is in flight (double-press guard). */
+function RemindButton({ set, busy, title, onToggle }: { set: boolean; busy: boolean; title: string; onToggle: () => void }) {
+  return (
+    <button className={`btn small gc-remind${set ? " on" : ""}`} data-nav aria-pressed={set} aria-disabled={busy || undefined} aria-label={set ? `Remove reminder for ${title}` : `Remind me about ${title}`} onClick={busy ? undefined : onToggle}>
+      {busy ? "Saving…" : set ? "Reminder set ✓ (tap to remove)" : "Remind me"}
+    </button>
+  );
+}
+
+/** Reminder toggling shared by both screens; `run` does the add, the id (when set) is removed. Errors show on the card. */
+function useRemind() {
+  const { items } = useReminders();
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  const [msgs, setMsgs] = useState<Record<string, string>>({});
+  const inflight = useRef(new Set<string>());
+  useEffect(() => void refreshReminders(), []);
+  const toggle = useCallback(async (k: string, id: string | number | null, add: () => Promise<string | null>) => {
+    if (inflight.current.has(k)) return;
+    inflight.current.add(k);
+    setBusy((b) => new Set(b).add(k));
+    const err = id != null ? await removeReminder(id) : await add();
+    inflight.current.delete(k);
+    setBusy((b) => {
+      const n = new Set(b);
+      n.delete(k);
+      return n;
+    });
+    setMsgs((m) => {
+      const n = { ...m };
+      if (err) n[k] = err;
+      else delete n[k];
+      return n;
+    });
+    if (!err) {
+      void refreshFixtures(true);
+      void refreshUpcoming(true);
+    }
+  }, []);
+  return { items, busy, msgs, toggle };
+}
+
+function GameCard({ g, now, pref, shown, scoreLine, gate, onPress, remId, remBusy, remMsg, onRemind }: { g: Game; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
   const w = waysFor(g, now);
   const armed = gateArmed(gate, Date.now());
   const fx = g.fixture && g.fixture.kind === "match" ? g.fixture : null;
@@ -87,7 +129,13 @@ function GameCard({ g, now, pref, shown, scoreLine, gate, onPress }: { g: Game; 
             {shown ? "Score shown" : armed ? "Press again to reveal" : "Reveal score"}
           </button>
         )}
+        {w.phase === "upcoming" && (g.event || mid) && <RemindButton set={remId != null} busy={remBusy} title={g.title} onToggle={onRemind} />}
       </div>
+      {remMsg && (
+        <p className="gc-note" role="status">
+          {remMsg}
+        </p>
+      )}
     </li>
   );
 }
@@ -101,6 +149,7 @@ function LegacyGameCentre() {
   const [scores, setScores] = useState<Record<string, string | null>>({});
   const [gates, setGates] = useState<Record<string, Gate>>({});
   const pref = spoilersOn(prefs);
+  const rem = useRemind();
 
   useEffect(() => {
     const prev = document.title;
@@ -156,7 +205,23 @@ function LegacyGameCentre() {
           <h2 className="row-title">{s.label}</h2>
           <ul className="gc-list">
             {s.games.map((g) => (
-              <GameCard key={g.key} g={g} now={now} pref={pref} shown={scoreVisible(pref, revealed, g.key)} scoreLine={pref ? scoreText(g.fixture) : scores[g.key]} gate={gates[g.key] ?? gateStart} onPress={() => press(g)} />
+              <GameCard
+                key={g.key}
+                g={g}
+                now={now}
+                pref={pref}
+                shown={scoreVisible(pref, revealed, g.key)}
+                scoreLine={pref ? scoreText(g.fixture) : scores[g.key]}
+                gate={gates[g.key] ?? gateStart}
+                onPress={() => press(g)}
+                remId={g.event ? rem.items?.find((r) => r.event.key === g.event!.key)?.id ?? g.event.reminderId ?? null : rem.items?.find((r) => r.event.key === g.fixture?.id)?.id ?? null}
+                remBusy={rem.busy.has(g.key)}
+                remMsg={rem.msgs[g.key]}
+                onRemind={() => {
+                  const id = g.event ? rem.items?.find((r) => r.event.key === g.event!.key)?.id ?? g.event.reminderId ?? null : null;
+                  void rem.toggle(g.key, id, () => (g.event && g.event.channels[0]?.id ? addReminder(g.event) : addFixtureReminder({ matchId: g.fixture?.id })));
+                }}
+              />
             ))}
           </ul>
         </section>
@@ -167,7 +232,7 @@ function LegacyGameCentre() {
 
 // ---------- fixture-first ----------
 
-function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean }) {
+function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded, remId, remBusy, remMsg, onRemind }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
   const w = waysForFixture(f, rec, now);
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
@@ -201,10 +266,11 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
             {shown ? "Score shown" : armed ? "Press again to reveal" : "Reveal score"}
           </button>
         )}
+        {w.phase === "upcoming" && <RemindButton set={remId != null} busy={remBusy} title={title} onToggle={onRemind} />}
       </div>
-      {msg && (
+      {(msg || remMsg) && (
         <p className="gc-note" role="status">
-          {msg}
+          {remMsg ?? msg}
         </p>
       )}
     </li>
@@ -222,6 +288,8 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   const [done, setDone] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const pref = spoilersOn(prefs);
+  const rem = useRemind();
+  const remIdOf = (f: FxItem) => (rem.items ? rem.items.find((r) => r.fid === f.fid || (f.reminderId != null && String(r.id) === String(f.reminderId)))?.id ?? null : f.reminderId);
   const lapse = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -306,6 +374,10 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
                 msg={msgs[f.fid]}
                 busy={busy.has(f.fid)}
                 recorded={done.has(f.fid)}
+                remId={remIdOf(f)}
+                remBusy={rem.busy.has(f.fid)}
+                remMsg={rem.msgs[f.fid]}
+                onRemind={() => void rem.toggle(f.fid, remIdOf(f), () => addFixtureReminder({ fid: f.fid, matchId: f.matchId }))}
               />
             ))}
           </ul>

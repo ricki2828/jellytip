@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useReminders } from "../api/reminderStore";
 import { livePath } from "../lib/iptvPlay";
 import { go } from "../lib/router";
-import { countdown, dueNudges, nudgeText, stateOf, type Nudge } from "../lib/reminders";
+import { NO_STREAM, countdown, dueNudges, hasStream, nudgeText, stateOf, type Nudge } from "../lib/reminders";
 import { UpcomingSheet, watchExtras } from "./Upcoming";
 import { SportBadges } from "./SportBadges";
 import { artClass, SportArt } from "./SportArt";
@@ -34,14 +34,15 @@ export function RemindersRow() {
       <div className="row-scroll">
         {list.map(({ event: e }) => {
           const chip = countdown(e, now);
-          const watchable = stateOf(e, now) !== "upcoming";
+          const noStream = !hasStream(e);
+          const watchable = !noStream && stateOf(e, now) !== "upcoming";
           const best = e.channels[0];
           return (
             <button
               key={e.key}
               className={`up-tile${chip.tone === "rec" ? " live" : ""}${artClass(e.art)}`}
               data-nav
-              onClick={() => (watchable ? go(watchPath(e)) : setOpen(e))}
+              onClick={() => (watchable ? go(watchPath(e)) : noStream ? go("/games") : setOpen(e))}
               aria-label={`${e.title}, ${chip.text}`}
               title={e.title}
             >
@@ -50,7 +51,7 @@ export function RemindersRow() {
                 <span className={`rec-chip ${chip.tone}`}>{chip.text}</span>
               </span>
               <span className="rec-title">{e.title}</span>
-              <span className="rec-sub">{[e.league, best?.name].filter(Boolean).join(" · ")}</span>
+              <span className="rec-sub">{[e.league, noStream ? NO_STREAM : best?.name].filter(Boolean).join(" · ")}</span>
               <SportBadges quality={best?.quality} size="sm" />
             </button>
           );
@@ -88,10 +89,10 @@ export function ReminderNudge() {
         data-nav
         onClick={() => {
           setNudge(null);
-          go(watchPath(nudge.event));
+          go(hasStream(nudge.event) ? watchPath(nudge.event) : "/games");
         }}
       >
-        Watch
+        {hasStream(nudge.event) ? "Watch" : "Game Centre"}
       </button>
       <button className="btn small" data-nav onClick={() => setNudge(null)} aria-label="Dismiss">
         ✕

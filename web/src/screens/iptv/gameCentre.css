@@ -20,3 +20,6 @@
 .gc-v { align-self: center; opacity: 0.45; font-size: 0.85em; font-weight: 600; }
 .gc-crest { width: 44px; height: 44px; object-fit: contain; flex: none; }
 .gc-crest.blank { display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: var(--dim, #aaa); font-size: 13px; font-weight: 800; }
+
+.gc-remind.on { border-color: var(--accent, currentColor); }
+.gc-remind[aria-disabled="true"] { opacity: 0.6; }
