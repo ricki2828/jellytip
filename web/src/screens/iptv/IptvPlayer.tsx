@@ -25,7 +25,7 @@ import { openMatchInfo } from "../../components/MatchInfo";
 import { matchDetailCached } from "../../api/matchInfo";
 import { refreshRecs } from "../../api/recStore";
 import { matchupTitle } from "../../lib/matchInfo";
-import { nextChannelPath } from "../../api/channels";
+import { nextChannelPath, rejoinPlan } from "../../api/channels";
 import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
@@ -77,7 +77,7 @@ const WORKER_FLAG = /[?&]worker=1(&|$)/.test(location.search + location.hash);
  * reported (nothing lands in the watch history) and, when it ends, the player moves to what is on next. Nothing else about
  * playback, the connection lease or recovery differs.
  */
-export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
+export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   // Dev/test counter: root renders (plan budget <= 1/s while live). Not a React state; costs one add.
   if (import.meta.env.DEV) (window as unknown as { __jtRenders?: number }).__jtRenders = ((window as unknown as { __jtRenders?: number }).__jtRenders ?? 0) + 1;
   return nativeIptvPlayer ? <NativeIptvPlayer {...props} /> : <WebIptvPlayer {...props} />;
@@ -99,7 +99,7 @@ const VOD_STALL_MS = 15_000;
 /** Still no movement this long after a stall is shown: reconnect on our own. */
 const RECONNECT_AFTER_MS = 6_000;
 
-function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
+function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedule = false }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -851,10 +851,41 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
   // is the same film again, ended after seconds of a long one, or after too many hops lately: then back to the channels.
   const chained = useRef(false);
   const mountedAt = useRef(Date.now());
+  // Off the clock (started from 0): `playedFrom` is where the "played enough" check counts from
+  const [off, setOff] = useState(offSchedule);
+  const playedFrom = useRef(resume);
+  // "From start" on the engine already open: a seek to 0, no new connection. A film that cannot seek (no seekable range) is left alone.
+  const fromStart = () => {
+    const v = videoRef.current;
+    if (!v || !channelId || !(length > 0)) return;
+    const sk = v.seekable;
+    if (!sk.length) return flashNote("This film can't be restarted here.");
+    v.currentTime = sk.start(0);
+    mountedAt.current = Date.now();
+    playedFrom.current = 0;
+    chained.current = false;
+    setOff(true);
+    if (v.paused) void v.play().catch(() => undefined);
+  };
+  const rejoinClock = () => {
+    if (!channelId || !target.vod) return;
+    void rejoinPlan(channelId, target.vod).then((r) => {
+      if (!r || !alive.current) return;
+      if (r.kind === "seek") {
+        seekTo_(r.s);
+        mountedAt.current = Date.now();
+        playedFrom.current = r.s;
+        setOff(false);
+      } else {
+        teardown(); // the existing teardown-then-open route: this player closes before the next one mounts
+        go(r.path, true);
+      }
+    });
+  };
   const nextOnChannel = () => {
     if (!channelId || chained.current) return;
     chained.current = true;
-    void nextChannelPath(channelId, target.vod, (Date.now() - mountedAt.current) / 1000, resume).then((path) => {
+    void nextChannelPath(channelId, target.vod, (Date.now() - mountedAt.current) / 1000, playedFrom.current).then((path) => {
       if (!alive.current) return;
       if (path) {
         teardown();
@@ -1142,6 +1173,15 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
               +30s
             </button>
             <TimeBarClock videoRef={videoRef} fmt={fmt} length={length} seekable={seekable} growing={growing} />
+            {channelId && seekable && (
+              <>
+                <span className="spacer" />
+                {off && <span className="player-method">Off schedule</span>}
+                <button className="btn ghost" data-nav onClick={off ? rejoinClock : fromStart}>
+                  {off ? "Back to live" : "From start"}
+                </button>
+              </>
+            )}
             {growing && (
               <>
                 <span className="spacer" />
@@ -1180,7 +1220,7 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
-function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
+function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);

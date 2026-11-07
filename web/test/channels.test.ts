@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, type ChanItem } from "../src/lib/channels.ts";
+import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, fromStartTarget, rejoinLive, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
 const it = (id: string, min: number | undefined, o: Partial<ChanItem> = {}): ChanItem => ({ Id: id, Name: `Item ${id}`, Type: "Movie", RunTimeTicks: min == null ? undefined : min * MIN, ...o });
@@ -274,4 +274,46 @@ test("playedEnough: a few seconds of a long film is a stub; a genuine short tail
   assert.equal(playedEnough(60, 6000), true);
   assert.equal(playedEnough(30, 35), true);
   assert.equal(playedEnough(2, 0), true);
+});
+
+test("From start: current item from 0, off the clock, then-id is the next slot", () => {
+  const pool = poolOf([it("a", 30), it("b", 30), it("c", 30), it("d", 30)]);
+  const { slots, offsetS } = schedule(pool, "x", EP + 100 * 60_000 + 7 * 60_000, 4);
+  const t = fromStartTarget(slots)!;
+  assert.equal(t.id, slots[0].item.Id);
+  assert.equal(t.startS, 0);
+  assert.equal(t.thenId, slots[1].item.Id);
+  assert.ok(offsetS > 0);
+  const p = tunePath(t, "x", true);
+  assert.match(p, /start=0/);
+  assert.match(p, /&off=1$/);
+  assert.doesNotMatch(tunePath(t, "x"), /off=1/);
+  assert.equal(fromStartTarget([]), null);
+});
+
+test("From start on an IPTV film: no resume, off flag kept", () => {
+  const p = tunePath({ id: "p:m:1", startS: 0, thenId: null, title: "Film" }, "x", true);
+  assert.doesNotMatch(p, /resume=/);
+  assert.match(p, /&ch=x&off=1$/);
+});
+
+test("Back to live: seek to the clock offset when the item is still on, else open what is on now", () => {
+  const pool = poolOf([it("a", 30), it("b", 30), it("c", 30), it("d", 30)]);
+  const { slots, offsetS } = schedule(pool, "x", EP + 45 * 60_000, 4);
+  const cur = slots[0].item.Id;
+  const same = rejoinLive(slots, offsetS, cur)!;
+  assert.equal(same.kind, "seek");
+  if (same.kind === "seek") assert.equal(same.s, offsetS);
+  const other = rejoinLive(slots, offsetS, "zzz")!;
+  assert.equal(other.kind, "go");
+  if (other.kind === "go") assert.equal(other.target.id, cur);
+  assert.equal(rejoinLive([], 0, cur), null);
+});
+
+test("Item on its last seconds: rejoin from an earlier item goes to the next slot (tune target rule)", () => {
+  const pool = poolOf([it("a", 30), it("b", 30), it("c", 30), it("d", 30)]);
+  const { slots, offsetS } = schedule(pool, "x", EP + 30 * 60_000 - 5_000, 4);
+  const r = rejoinLive(slots, offsetS, slots[0].item.Id)!;
+  assert.equal(r.kind, "go");
+  if (r.kind === "go") assert.equal(r.target.id, slots[1].item.Id);
 });
