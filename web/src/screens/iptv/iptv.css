@@ -3147,3 +3147,12 @@
   pointer-events: none;
   z-index: 5;
 }
+.chip.danger {
+  background: rgba(226, 38, 77, 0.16);
+  color: #ff8aa1;
+}
+.chip.danger:focus,
+.chip.danger:hover {
+  background: var(--jelly);
+  color: #fff;
+}

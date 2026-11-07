@@ -38,6 +38,7 @@ import { runtimeText } from "../api/jellyfin";
 import { detailBadges, hasVideoTech, techOf } from "../lib/techBadges";
 import { companionCall } from "../api/companionCall";
 import { usePrefs } from "../api/me";
+import { DeleteFromServer } from "../components/DeleteFromServer";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
@@ -401,6 +402,9 @@ export function Details({ id }: { id: string }) {
             )}
             {getSession()?.isAdmin && ["Movie", "Series", "Season", "Episode"].includes(item.Type) && <button className="btn" data-nav onClick={() => go(`/manage?item=${item.Id}`)}>Manage</button>}
             {item.Type !== "Episode" && <TasteButtons item={item} />}
+            {["Movie", "Series", "Episode"].includes(item.Type) && (
+              <DeleteFromServer id={item.Id} afterDelete={item.Type === "Episode" ? () => go(`/item/${item.SeriesId}`, true) : undefined} />
+            )}
           </div>
           {phone && <DetailsQuote item={item} phone />}
         </div>
@@ -441,6 +445,18 @@ export function Details({ id }: { id: string }) {
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
               {canSeasons && season && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
               {canSeasons && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
+              {season && (
+                <DeleteFromServer
+                  id={season}
+                  className="chip danger"
+                  label="Delete this season from server"
+                  afterDelete={() => {
+                    const left = seasonList.filter((x) => x.Id !== season);
+                    setSeasonList(left);
+                    setSeason(left[0]?.Id ?? null);
+                  }}
+                />
+              )}
             </div>
             {canSeasons && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
             {phone ? (

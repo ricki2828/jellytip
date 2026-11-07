@@ -7,6 +7,7 @@ import { filmCount, PersonTile } from "./PersonTile";
 import { PosterCard } from "./PosterCard";
 import { signalOf } from "../api/me";
 import { inOrder } from "../lib/rows";
+import { DELETED_EVENT, isDeleted } from "../lib/libDelete";
 
 const POSTER_W = 150;
 const PHONE_POSTER_W = 112;
@@ -85,9 +86,13 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
   useEffect(() => {
     const on = () => bump((n) => n + 1);
     window.addEventListener("jellytip-signals", on);
-    return () => window.removeEventListener("jellytip-signals", on);
+    window.addEventListener(DELETED_EVENT, on); // deleted from the server: gone from every row at once
+    return () => {
+      window.removeEventListener("jellytip-signals", on);
+      window.removeEventListener(DELETED_EVENT, on);
+    };
   }, []);
-  const loaded = lazy && lazy.filter((it) => !signalOf(it.Id).notInterested);
+  const loaded = lazy && lazy.filter((it) => !signalOf(it.Id).notInterested && !isDeleted(it.Id) && !isDeleted(it.SeriesId ?? ""));
   const phone = useIsPhone();
   const poster = layout === "poster";
   const posterW = phone ? PHONE_POSTER_W : POSTER_W;
