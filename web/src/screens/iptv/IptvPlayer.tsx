@@ -42,6 +42,8 @@ import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { switchExtras } from "../../lib/companion";
 import { hlsConfig, SPEC } from "../../lib/liveBuffer";
+import { useFullscreen } from "../../lib/useFullscreen";
+import { isFullscreenKey } from "../../lib/fullscreenPlan";
 import { useLiveBuffer } from "./useLiveBuffer";
 import { initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
@@ -937,6 +939,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     v.currentTime = sk.length ? Math.max(0, sk.end(sk.length - 1) - 1) : Math.max(0, length - 3);
     void v.play().catch(() => undefined);
   };
+  const boxRef = useRef<HTMLDivElement>(null);
+  const fs = useFullscreen(boxRef, videoRef);
+  const fsRef = useRef(fs);
+  fsRef.current = fs;
   const exit = () => {
     teardown();
     back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv");
@@ -1057,6 +1063,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           if (first) { e.preventDefault(); e.stopPropagation(); first.focus(); navAt.current = Date.now(); return; }
         }
       }
+      if ((e.key === "Escape" || e.key === "Backspace") && fsRef.current.exitIfFullscreen()) { e.preventDefault(); e.stopPropagation(); return; }
+      if (isFullscreenKey(e, /^(TEXTAREA|SELECT)$/.test((e.target as HTMLElement | null)?.tagName ?? "") || ((e.target as HTMLElement | null)?.tagName === "INPUT" && (e.target as HTMLInputElement).type !== "range") || !!(e.target as HTMLElement | null)?.isContentEditable)) {
+        e.preventDefault();
+        e.stopPropagation();
+        fsRef.current.toggle();
+        return;
+      }
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
         e.stopPropagation();
@@ -1126,6 +1139,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
 
   return (
     <div
+      ref={boxRef}
       style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" || tracksOpen ? " show" : ""}`}
       onMouseMove={isLive ? undefined : poke}
       onClick={() => {
@@ -1140,6 +1154,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         className="player-video"
         playsInline
         onClick={() => !isLive && !touchClick.current && togglePlay()}
+        onDoubleClick={() => { if (window.matchMedia("(pointer: fine)").matches) fs.toggle(); }}
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
         onEnded={() => { watch.end(true); if (kickoffRun.current) backToLive(); else nextOnChannel(); }}
@@ -1223,6 +1238,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
             From kick-off
           </button>
         )}
+        <button className="btn small" data-nav aria-pressed={fs.active} aria-label={fs.active ? "Exit fullscreen" : "Fullscreen"} onClick={fs.toggle}>
+          {fs.active ? "Exit fullscreen" : "Fullscreen"}
+        </button>
         <span className="player-method">via IPTV</span>
       </div>
       {state.kind === "playing" && !copy && <TrackMenu
