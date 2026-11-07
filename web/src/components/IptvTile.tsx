@@ -60,7 +60,7 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus, onOpen }: { i
   const pct = p && !p.played && p.duration ? Math.min(100, (p.position / p.duration) * 100) : 0;
   return (
     <button
-      className={`card iptv-card${width === 0 ? " fluid" : ""}${tileBadges(tech).length ? ` has-tech${tileBadges(tech).length > 1 ? " has-tech-2" : ""}` : ""}`}
+      className={`card iptv-tile-card${width === 0 ? " fluid" : ""}${tileBadges(tech).length ? ` has-tech${tileBadges(tech).length > 1 ? " has-tech-2" : ""}` : ""}`}
       data-nav
       data-autofocus={autoFocus || undefined}
       style={width === 0 ? undefined : { width, height: Math.round((width * 9) / 16) }}

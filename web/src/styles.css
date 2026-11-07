@@ -2025,7 +2025,7 @@ button.overview.open {
 .iptv-tile-wrap > .poster {
   width: 100%;
 }
-.iptv-card .card-watched {
+.iptv-tile-card .card-watched {
   right: 22px;
 }
 .iptv-via {
