@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import "./TrackMenu.css";
 import { audioSelectable, initialFocus, menuKeyAction, nextFocus, rowTarget, tabTarget, type TrackOption } from "../lib/trackMenu.ts";
 import { MODES, modeLabel, type Mode, type Profile } from "../lib/liveBuffer.ts";
+import { nudgeLabel } from "../lib/subSync.ts";
 import { SUB_BACKGROUNDS, SUB_SIZES, offsetLabel, stepOffset, SUB_OFFSET_MAX, SUB_OFFSET_MIN, type SubtitlePrefs } from "../lib/subtitlePrefs.ts";
 
 export type TrackMenuProps = {
@@ -34,6 +35,17 @@ export type TrackMenuProps = {
   liveBuffer?: { mode: Mode; effective: Profile; onPick: (m: Mode) => void };
   /** "Find subtitles…": omit when the playing item can't be searched (IPTV) or the account may not manage subtitles */
   findSubtitles?: () => void;
+  /** "Auto-match timing" + the earlier/later nudge for the SELECTED subtitle; omit for IPTV and offline files */
+  timing?: {
+    /** false = the selected track can't be matched (picture subtitles): button hidden, nudge stays */
+    canMatch: boolean;
+    status: "idle" | "matching" | "failed";
+    /** progress text while matching, the failure message after */
+    text?: string;
+    onMatch: () => void;
+    nudge: number;
+    onNudge: (dir: 1 | -1) => void;
+  };
 };
 
 const BTN = "btn small";
@@ -182,6 +194,21 @@ export function TrackMenu(p: TrackMenuProps) {
                   </button>
                 )}
               </div>
+              {p.timing && !p.subtitlesOff && (
+                <div role="group" aria-label="Subtitle timing" className="track-timing">
+                  <span className="menu-head" aria-hidden="true">Timing<span className="track-timing-val"> · {nudgeLabel(p.timing.nudge)}</span></span>
+                  {p.timing.canMatch && (
+                    <button type="button" role="menuitem" data-track-item data-nav className={BTN} aria-disabled={p.timing.status === "matching"} onClick={() => p.timing!.status !== "matching" && p.timing!.onMatch()}>
+                      {p.timing.status === "matching" ? (p.timing.text ?? "Matching…") : "Auto-match timing"}
+                    </button>
+                  )}
+                  {p.timing.status === "failed" && p.timing.text && <p role="status" className="track-timing-note">{p.timing.text}</p>}
+                  <div className="track-appearance-row">
+                    <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => p.timing!.onNudge(-1)} aria-label="Show subtitles 0.5 seconds earlier">−0.5 s</button>
+                    <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => p.timing!.onNudge(1)} aria-label="Show subtitles 0.5 seconds later">+0.5 s</button>
+                  </div>
+                </div>
+              )}
               {subtitles.length > 0 && (
                 <div role="group" aria-label="Subtitle appearance" className="track-appearance-group">
                   {appearance("Size", "z", SUB_SIZES, p.prefs.size, (v) => p.onPrefs({ size: v as SubtitlePrefs["size"] }))}
