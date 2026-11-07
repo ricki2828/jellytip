@@ -11,7 +11,7 @@ import { FlipAlerts } from "../../components/FlipAlerts";
 import { LiveDrawer } from "../../components/LiveDrawer";
 import { usePrefs } from "../../api/me";
 import { MatchInfoButton } from "../../components/MatchInfo";
-import { Scrubber } from "../../components/Scrubber";
+import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { TrackMenu } from "../../components/TrackMenu";
 import { useSubtitlePrefs } from "../../lib/useSubtitlePrefs";
@@ -69,12 +69,17 @@ function progressKey(t: PlayTarget): string | null {
   return null;
 }
 
+/** `?worker=1` (query or hash query): mpegts demux in a worker plus SourceBuffer cleanup. Default off until A/B'd on the TV. */
+const WORKER_FLAG = /[?&]worker=1(&|$)/.test(location.search + location.hash);
+
 /**
  * @param channelId a personal scheduled channel (#/channels) is playing this film: it follows the clock, so no progress is
  * reported (nothing lands in the watch history) and, when it ends, the player moves to what is on next. Nothing else about
  * playback, the connection lease or recovery differs.
  */
 export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
+  // Dev/test counter: root renders (plan budget <= 1/s while live). Not a React state; costs one add.
+  if (import.meta.env.DEV) (window as unknown as { __jtRenders?: number }).__jtRenders = ((window as unknown as { __jtRenders?: number }).__jtRenders ?? 0) + 1;
   return nativeIptvPlayer ? <NativeIptvPlayer {...props} /> : <WebIptvPlayer {...props} />;
 }
 
@@ -116,7 +121,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
   const [state, setState] = useState<State>({ kind: "loading" });
   const [answer, setAnswer] = useState<PlayAnswer | null>(null);
   const [paused, setPaused] = useState(false);
-  const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const isLive = !!target.channel && target.start == null;
   const [meta, setMeta] = useState<RecMeta | null>(null);
@@ -203,7 +207,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
     replayRef.current = r.replay;
     if (r.show != null) selectSubtitle(r.show);
     v.currentTime = r.seekTo;
-    setTime(r.seekTo);
     setTracksOpen(false);
     poke();
   };
@@ -413,8 +416,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
         }
         const p = mpegts.createPlayer(
           { type: "mpegts", isLive: a.kind === "live" || a.kind === "cu" || !!a.growing, url },
-          // No worker (CSP-friendly); chase the live edge so a zap never drifts minutes behind
-          { enableWorker: false, lazyLoad: false, liveBufferLatencyChasing: a.kind === "live", liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5 },
+          // Worker + buffer cleanup only behind ?worker=1 (default off); chase the live edge so a zap never drifts minutes behind
+          { enableWorker: WORKER_FLAG, ...(WORKER_FLAG ? { autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 } : {}), lazyLoad: false, liveBufferLatencyChasing: a.kind === "live", liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5 },
         );
         claimEngine(tsRef, destroyTs, p);
         p.on(mpegts.Events.LOADING_COMPLETE, () => (loadDone.current = true));
@@ -672,8 +675,16 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
     };
     document.addEventListener("visibilitychange", onVisible);
     if (v?.requestVideoFrameCallback) {
-      const frame = () => {
+      let lastMedia = -1;
+      const frame = (_now?: number, meta?: { mediaTime?: number }) => {
         if (!active) return;
+        // Bookkeeping at most every ~250 ms of media time (the first frame always passes)
+        const mt = meta?.mediaTime;
+        if (mt != null && lastMedia >= 0 && Math.abs(mt - lastMedia) < 0.25 && Date.now() - lastMove.current < 1000) {
+          frameId = v.requestVideoFrameCallback(frame);
+          return;
+        }
+        if (mt != null) lastMedia = mt;
         lastMove.current = Date.now();
         stallReported.current = false;
         markMoving();
@@ -763,6 +774,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
     };
   }, [preNow]);
   const [drawer, setDrawer] = useState(false);
+  const closeDrawer = useCallback(() => setDrawer(false), []);
   const sportPrefs = usePrefs({ defer: true }).prefs?.sport;
   const spoilers = !!sportPrefs?.spoilers;
   const live_ok = shouldShowLiveExtras(extras);
@@ -782,11 +794,28 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
   };
 
   const kickoff = isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop ? extras.kickoff : null;
+  // The clock no longer re-renders this tree: a growing recording's length (it is derived from now) and the
+  // "From kick-off" button's expiry each get one timed render instead
+  const [, bump] = useState(0);
+  const kickoffStop = isLive ? extras?.kickoff?.stop : undefined;
+  useEffect(() => {
+    if (kickoffStop == null) return;
+    const ms = kickoffStop * 1000 - Date.now();
+    if (ms <= 0) return;
+    const t = window.setTimeout(() => bump((n) => n + 1), ms + 50);
+    return () => window.clearTimeout(t);
+  }, [kickoffStop]);
 
   const growing = !!answer?.growing || meta?.state === "recording";
   growRef.current = growing;
   const length = isLive ? 0 : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
   lenRef.current = length;
+  const growingVod = growing && !isLive;
+  useEffect(() => {
+    if (!growingVod) return;
+    const t = window.setInterval(() => bump((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [growingVod]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -801,7 +830,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
     const sk = v.seekable;
     const cap = growing && sk.length ? Math.min(length || Infinity, sk.end(sk.length - 1) + 1) : length;
     v.currentTime = clampSeek(to, cap, growing);
-    setTime(v.currentTime);
   };
   const seekBy = (d: number) => {
     const v = videoRef.current;
@@ -968,7 +996,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
             finishBuffer();
           }
           lastTime.current = e.currentTarget.currentTime;
-          setTime(e.currentTarget.currentTime);
           const r = replayRef.current;
           if (r && replayDone(r, e.currentTarget.currentTime)) { replayRef.current = null; selectSubtitle(r.restore); }
         }}
@@ -1043,7 +1070,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
         } : undefined}
         prefs={subPrefs}
         onPrefs={setSubPrefs}
-        replay={playerEngine !== "mpegts" && subtitleChoices.length ? { disabled: replayTarget(time, seekableStart()) == null, run: replayCaptions } : undefined}
+        replay={playerEngine !== "mpegts" && subtitleChoices.length ? { disabled: () => replayTarget(videoRef.current?.currentTime ?? 0, seekableStart()) == null, run: replayCaptions } : undefined}
         barClassName="iptv-tracks-button"
         menuClassName="iptv-track-menu"
         onActivity={poke}
@@ -1051,7 +1078,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} />}
       {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} />}
-      {live_ok && drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive && !extras?.replay} spoilers={spoilers} onClose={() => setDrawer(false)} />}
+      {live_ok && drawer && extras?.matchId && <LiveDrawer matchId={extras.matchId} liveNow={isLive && !extras?.replay} spoilers={spoilers} onClose={closeDrawer} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
@@ -1096,7 +1123,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
-            <Scrubber time={time} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
+            <TimeBarScrubber videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
           )}
           <div className="player-row iptv-controls">
             <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">
@@ -1114,10 +1141,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
             <button className="btn ghost" data-nav onClick={() => seekBy(30)} aria-label="Forward 30 seconds">
               +30s
             </button>
-            <span className="clock">
-              {fmt(time)}
-              {seekable ? ` / ${fmt(length)}${growing ? "+" : ""}` : ""}
-            </span>
+            <TimeBarClock videoRef={videoRef} fmt={fmt} length={length} seekable={seekable} growing={growing} />
             {growing && (
               <>
                 <span className="spacer" />
