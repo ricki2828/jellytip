@@ -4,6 +4,7 @@
 // memoised and keyed so a poll re-renders only what changed; motion is transform and opacity only.
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { LiveSource } from "./Companion/useLiveFeed";
+import { holdSecs } from "../lib/companion";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
 import { agoText, applyReveal, liveTabs, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
 import { blowoutLine, closerGame, deciderRows, favouriteSide, gameStateOf, recapPlays, resultLine, type CloserGame, type GameState, type Row } from "../lib/gameState";
@@ -632,6 +633,15 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
   const ext = useSyncExternalStore(source?.subscribe ?? NOOP_SUB, source?.get ?? NOOP_GET);
+  // Until the first answer is released the drawer says how long: "Live info in N s", counting down
+  const waiting = !!source && ext.state === "ok" && !ext.shown && !!ext.raw;
+  const [, setHoldTick] = useState(0);
+  useEffect(() => {
+    if (!waiting) return;
+    const t = window.setInterval(() => setHoldTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [waiting]);
+  const hold = waiting ? holdSecs(ext.raw!.updatedAt, revealFn, Date.now() / 1000) : null;
   useEffect(() => {
     if (!source) return;
     setNow(Date.now() / 1000);
@@ -730,7 +740,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
               ))}
             </div>
             {tab !== "fantasy" && revealFn(undefined) && <FantasyYourPlayers live={fantasy} fixture={fixture} />}
-            {state === "loading" && <p className="iptv-hint">Loading…</p>}
+            {state === "loading" && (waiting && hold != null ? <p className="iptv-hint" role="status">Live info in {hold} s — held back to match your picture</p> : <p className="iptv-hint">Loading…</p>)}
             {state === "missing" && <p className="iptv-hint">Live stats aren't available for this match.</p>}
             {state === "error" && <p className="iptv-hint">Couldn't load live stats. Trying again…</p>}
             {d && (

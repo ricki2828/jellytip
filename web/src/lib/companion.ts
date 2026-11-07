@@ -184,3 +184,21 @@ export function switchExtras(
     nospoil: extras.nospoil,
   };
 }
+
+/**
+ * Whole seconds until the answer stamped `updatedAt` is released by the spoiler delay (0 = already), found by bisecting the reveal
+ * function (true for event times up to now - delay - lag). Null when nothing is released at all (replay) or there is no time.
+ */
+export function holdSecs(updatedAt: number | null, reveal: (atSec?: number) => boolean, nowSec: number): number | null {
+  if (updatedAt == null || !isFinite(updatedAt)) return null;
+  if (reveal(updatedAt)) return 0;
+  let lo = nowSec - 1200; // released for sure, unless replay
+  if (!reveal(lo)) return null;
+  let hi = nowSec + 10;
+  for (let i = 0; i < 14; i++) {
+    const mid = (lo + hi) / 2;
+    if (reveal(mid)) lo = mid;
+    else hi = mid;
+  }
+  return Math.max(1, Math.round(updatedAt - lo)); // the bisection lands within 0.1 s
+}

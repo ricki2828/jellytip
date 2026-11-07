@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, newestRevealedIndex, switchExtras, tickClock, clockRunning, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
+import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, holdSecs, newestRevealedIndex, switchExtras, tickClock, clockRunning, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
 
 const base = { nowMs: 1_000_000, replay: false, panelOpen: false, userClosedAtMs: null, kind: "live" as const, freshMoment: false };
 
@@ -146,4 +146,14 @@ test("switchExtras: replay, nospoil and match carry over; the channel left joins
   assert.equal(x.nospoil, true);
   assert.equal(x.matchId, "m1");
   assert.deepEqual(x.alternates, [{ id: "p:2", name: "B" }, { id: "p:0", name: "Now" }]);
+});
+
+test("holdSecs: seconds until the delay releases an answer; 0 when released, null in replay or without a time", () => {
+  const now = 10_000;
+  const reveal = (delay: number) => (at?: number) => at == null || now >= at + delay; // lag 0
+  assert.equal(holdSecs(now - 5, reveal(30), now), 25);
+  assert.equal(holdSecs(now - 40, reveal(30), now), 0);
+  assert.equal(holdSecs(now, reveal(30), now), 30);
+  assert.equal(holdSecs(now, () => false, now), null);
+  assert.equal(holdSecs(null, reveal(30), now), null);
 });
