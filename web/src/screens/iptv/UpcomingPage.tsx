@@ -4,14 +4,15 @@ import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { BackArrow } from "../../components/BackArrow";
 import { UpcomingSheet, UpTile } from "../../components/Upcoming";
 import { go } from "../../lib/router";
-import { groupByDay, type UpEvent } from "../../lib/upcoming";
+import { groupByDay, starredFirst, type UpEvent } from "../../lib/upcoming";
 import "./iptv.css";
 
 export function UpcomingPage() {
   const ev = useUpcoming(false);
   const [open, setOpen] = useState<UpEvent | null>(null);
   useEffect(() => void refreshUpcoming(true), []);
-  const days = ev ? groupByDay(ev) : [];
+  // Starred first within each day (live before upcoming, then by start)
+  const days = ev ? groupByDay(ev).map((d) => ({ ...d, events: starredFirst(d.events, Date.now() / 1000) })) : [];
   return (
     <div className="iptv-page up-page">
       <div className="page-head">

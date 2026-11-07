@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupByDay, isLive, parseUpcoming, timeChip } from "../src/lib/upcoming.ts";
+import { groupByDay, isLive, parseUpcoming, starredFirst, timeChip } from "../src/lib/upcoming.ts";
 
 const ch = (id: string, extra: object = {}) => ({ id, name: id, ...extra });
 const ev = (key: string, start: number, extra: object = {}) => ({ key, title: `T ${key}`, start, stop: start + 7200, channel: ch("1:1", { quality: { bucket: "fhd50" } }), ...extra });
@@ -34,4 +34,13 @@ test("chips and days, in local time", () => {
   assert.deepEqual(g.map((d) => d.label), ["Today", "Tomorrow"]);
   // inside a day the server's order is kept (favourites first); finished events are gone
   assert.deepEqual(g[0].events.map((e) => e.key), ["fav", "early"]);
+});
+
+test("starredFirst: starred live, starred upcoming, other live, other upcoming; stable by start", () => {
+  const now = 1000;
+  const l = [
+    { key: "a", start: 1200 }, { key: "b", start: 900, favourite: true }, { key: "c", start: 1100, favourite: true },
+    { key: "d", start: 800 }, { key: "e", start: 1050, favourite: true },
+  ];
+  assert.deepEqual(starredFirst(l, now).map((x) => x.key), ["b", "e", "c", "d", "a"]);
 });
