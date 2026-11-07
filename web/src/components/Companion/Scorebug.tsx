@@ -2,7 +2,7 @@
 // moment changes, hides after 8 s unless pinned (the pill is a button: select it to pin or unpin). Lives inside the video wrap, so it
 // moves with the picture when the panel squeezes it. Re-renders itself at 1 Hz only while visible; nothing above it re-renders.
 import { memo, useEffect, useState } from "react";
-import { scorebugText, scorebugVisible, tickClock } from "../../lib/companion";
+import { SCOREBUG_HIDE_MS, scorebugText, scorebugVisible, tickClock } from "../../lib/companion";
 import type { FeedView } from "./useLiveFeed";
 import "./Companion.css";
 
@@ -24,14 +24,16 @@ export const Scorebug = memo(function Scorebug({ view, panelOpen }: { view: Feed
   // 1 Hz, and only while the pill is on screen or about to be
   useEffect(() => {
     setNow(Date.now());
-    if (!text || panelOpen || (!pinned && view.changedAtMs == null && !view.clockRunning)) return;
+    // only while the pill is (or is about to be) on screen
+    if (!text || panelOpen || !(pinned || (view.changedAtMs != null && Date.now() - view.changedAtMs < SCOREBUG_HIDE_MS))) return;
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [view.changedAtMs, view.clockRunning, pinned, panelOpen, !!text]);
+  }, [view.changedAtMs, pinned, panelOpen, !!text]);
   if (!text || !visible) return null;
   const toggle = () => {
     const n = !pinned;
     setPinned(n);
+    if (!n) (document.activeElement as HTMLElement | null)?.blur(); // it may vanish now: do not leave focus on a removed button
     try {
       localStorage.setItem(PIN_KEY, n ? "1" : "0");
     } catch {
@@ -39,7 +41,7 @@ export const Scorebug = memo(function Scorebug({ view, panelOpen }: { view: Feed
     }
   };
   return (
-    <button type="button" className={`cp-bug${pinned ? " pinned" : ""}`} data-nav aria-pressed={pinned} title={pinned ? "Unpin the score" : "Keep the score on screen"} onClick={toggle}>
+    <button type="button" className={`cp-bug${pinned ? " pinned" : ""}`} data-nav={pinned || undefined} tabIndex={pinned ? undefined : -1} aria-pressed={pinned} title={pinned ? "Unpin the score" : "Keep the score on screen"} onClick={toggle}>
       <b>{text.teams[0]}</b>
       <span className="cp-bug-score">
         {text.score[0]} – {text.score[1]}

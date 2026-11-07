@@ -75,6 +75,8 @@ export interface PanelKeyIn {
   controlsInUse: boolean;
   /** Only a live match with a panel available. */
   available: boolean;
+  /** Other channels for this match: Down is ours only when there are some. */
+  alternates: number;
 }
 
 /**
@@ -89,7 +91,7 @@ export function panelKeyAction(i: PanelKeyIn): PanelKeyAction | null {
     case "ArrowUp":
       return "toggle-panel";
     case "ArrowDown":
-      return i.panelOpen ? null : "channels";
+      return i.panelOpen || i.alternates < 1 ? null : "channels";
     case "ArrowLeft":
       return i.panelOpen ? "tab-prev" : null;
     case "ArrowRight":

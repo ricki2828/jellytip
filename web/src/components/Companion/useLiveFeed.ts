@@ -57,6 +57,7 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
     };
     return { source, set };
   }, []);
+  const flashedFor = useRef<string | null>(null);
   const revealRef = useRef(o.reveal);
   revealRef.current = o.reveal;
   const allowed = enabled && !!matchId && mayShow(liveNow, spoilers);
@@ -139,7 +140,11 @@ export function useLiveFeed(o: { matchId: string | null | undefined; enabled: bo
         // the first batch only sets the baseline: moments already on it are not "new"
         if (baseline) {
           baseline = false;
-          changedAt = changedAt ?? Date.now(); // show the pill once when the player opens on a live game
+          // show the pill once when the player opens on a live game (a feed reset on the same match does not flash it again)
+          if (flashedFor.current !== matchId) {
+            flashedFor.current = matchId;
+            changedAt = changedAt ?? Date.now();
+          }
           derive();
         }
       }

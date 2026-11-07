@@ -44,11 +44,12 @@ test("drop watch: over 2% of enough frames", () => {
   assert.equal(dropsTooHigh(NaN, 5), false);
 });
 test("keys: hidden controls", () => {
-  const k = (key: string, panelOpen = false, controlsInUse = false, available = true) => panelKeyAction({ key, panelOpen, controlsInUse, available });
+  const k = (key: string, panelOpen = false, controlsInUse = false, available = true, alternates = 2) => panelKeyAction({ key, panelOpen, controlsInUse, available, alternates });
   assert.equal(k("ArrowUp"), "toggle-panel");
   assert.equal(k("ArrowUp", true), "toggle-panel");
   assert.equal(k("ArrowDown"), "channels");
   assert.equal(k("ArrowDown", true), null);
+  assert.equal(k("ArrowDown", false, false, true, 0), null); // no alternates: not ours, focus is left alone
   assert.equal(k("ArrowLeft"), null);
   assert.equal(k("ArrowLeft", true), "tab-prev");
   assert.equal(k("ArrowRight", true), "tab-next");
@@ -58,7 +59,7 @@ test("keys: hidden controls", () => {
   assert.equal(k("Enter"), null);
 });
 test("keys: controls in use keep focus navigation, but Back still closes the panel; unavailable is never ours", () => {
-  const k = (key: string, panelOpen: boolean, controlsInUse: boolean, available = true) => panelKeyAction({ key, panelOpen, controlsInUse, available });
+  const k = (key: string, panelOpen: boolean, controlsInUse: boolean, available = true) => panelKeyAction({ key, panelOpen, controlsInUse, available, alternates: 2 });
   assert.equal(k("ArrowUp", false, true), null);
   assert.equal(k("ArrowRight", true, true), null);
   assert.equal(k("Escape", true, true), "close-panel");

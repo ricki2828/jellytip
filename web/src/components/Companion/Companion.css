@@ -160,3 +160,7 @@
 .cp-others {
   z-index: 8;
 }
+.cp-replay {
+  position: absolute;
+  inset: 0;
+}

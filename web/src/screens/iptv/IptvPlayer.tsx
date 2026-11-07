@@ -1000,7 +1000,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         const ae = document.activeElement as HTMLElement | null;
         const btn = ae?.tagName === "BUTTON";
         const inUse = tracksOpen || (btn && Date.now() - navAt.current < 4000);
-        const act = panelKeyAction({ key: e.key, panelOpen: keyState.current.open, controlsInUse: inUse, available: keyState.current.avail });
+        const act = panelKeyAction({ key: e.key, panelOpen: keyState.current.open, controlsInUse: inUse, available: keyState.current.avail, alternates: othersRef.current.n });
         if (act) {
           e.preventDefault();
           e.stopPropagation();

@@ -120,11 +120,14 @@ export function FlipAlerts({ matchId, active, drawerOpen, reveal, replay = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, live]);
 
+  // Odds are spoilers: flips toast only with Show scores (spoilers) on
+  const spoilersRef = useRef(false);
+  spoilersRef.current = !!prefs?.sport.spoilers;
   const blowoutGiven = useRef(blowout != null);
   blowoutGiven.current = blowout != null;
   /** One /live answer: a flip, the blowout state and any new moments become candidates. */
   const ingest = (d: LiveStats) => {
-    if (d.market?.flip && !d.market.thin) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
+    if (spoilersRef.current && d.market?.flip && !d.market.thin) show(d.market.flip.to, d.market.flip.prob, d.market.flip.at);
     const late = isLateGame(d.layout, d.period, d.clock);
     if (!blowoutGiven.current) blowRef.current = isBlowout(d.layout, d.score?.home, d.score?.away, late);
     const latest = d.moments.reduce((m, x) => Math.max(m, x.at), 0);

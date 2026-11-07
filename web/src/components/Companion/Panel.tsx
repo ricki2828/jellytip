@@ -4,6 +4,7 @@
 // (getVideoPlaybackQuality, first 30 s after an open) switches a device to the overlay for good.
 import { useEffect, useRef, useState } from "react";
 import { LiveDrawer } from "../LiveDrawer";
+import { SheetClose } from "../BackArrow";
 import type { LiveSource } from "./useLiveFeed";
 import { DROP_KEY, DROP_WINDOW_MS, dropsTooHigh, type PanelMode } from "../../lib/companion";
 import "./Companion.css";
@@ -14,9 +15,13 @@ export function useDropWatch(video: HTMLVideoElement | null, squeezed: boolean, 
   cb.current = onBad;
   useEffect(() => {
     if (!video || !squeezed || typeof video.getVideoPlaybackQuality !== "function") return;
-    const q0 = video.getVideoPlaybackQuality();
+    let q0 = video.getVideoPlaybackQuality();
     const t0 = Date.now();
+    // A hidden tab drops frames by design: those never count, so the baseline is re-taken when it hides and when it comes back
+    const rebase = () => { q0 = video.getVideoPlaybackQuality(); };
+    document.addEventListener("visibilitychange", rebase);
     const timer = window.setInterval(() => {
+      if (document.hidden) return;
       const q = video.getVideoPlaybackQuality();
       const total = q.totalVideoFrames - q0.totalVideoFrames;
       const dropped = q.droppedVideoFrames - q0.droppedVideoFrames;
@@ -30,7 +35,10 @@ export function useDropWatch(video: HTMLVideoElement | null, squeezed: boolean, 
         cb.current();
       } else if (Date.now() - t0 >= DROP_WINDOW_MS) window.clearInterval(timer);
     }, 2000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", rebase);
+    };
   }, [video, squeezed]);
 }
 
@@ -63,7 +71,14 @@ export function Panel(props: {
   if (!mounted) return null;
   return (
     <div className={`cp-panel ${mode}${open ? " on" : ""}`} style={{ "--cp-top": `${barH}px` } as React.CSSProperties} aria-hidden={!open} onPointerDown={onTouch} onFocusCapture={onTouch}>
+      {!props.liveNow ? (
+        <aside className="live-drawer bc cp-replay" role="dialog" aria-label="Live stats">
+          <SheetClose onClose={props.onClose} />
+          <p className="iptv-hint">Replay · live updates off</p>
+        </aside>
+      ) : (
       <LiveDrawer embedded matchId={props.matchId} liveNow={props.liveNow} spoilers={props.spoilers} reveal={props.reveal} source={props.source} onClose={props.onClose} />
+      )}
     </div>
   );
 }
