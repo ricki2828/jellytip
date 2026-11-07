@@ -54,6 +54,20 @@ export interface Market {
   flip: Flip | null;
 }
 
+/** Rugby league scoring / sin-bin entry (server `timeline`). `at` is epoch seconds: the reveal clock gates it. `score` only with spoilers on. */
+export interface TimelineEntry {
+  id: string;
+  kind: string;
+  team: "home" | "away" | null;
+  text: string;
+  clock: string | null;
+  at: number | null;
+  score: { home: number; away: number } | null;
+}
+
+/** Points a timeline kind is worth (a sin bin is not a score). */
+export const TIMELINE_POINTS: Record<string, number> = { try: 4, conversion: 2, penalty_goal: 2, field_goal: 1 };
+
 export interface LiveStats {
   status: string | null;
   clock: string | null;
@@ -65,6 +79,10 @@ export interface LiveStats {
   /** Sport layout key ("basketball", "nfl", "football", "rugby", "cricket") and its sport-specific `situation`. */
   layout: string | null;
   situation: Record<string, unknown> | null;
+  /** Cricket scorecard (innings, batters, bowler, partnership, target/lead, recent overs). Null when the server sent none. */
+  scorecard: Record<string, unknown> | null;
+  /** Rugby league scoring / sin-bin entries, oldest first. Empty when the server sent none. */
+  timeline: TimelineEntry[];
   /** Multi (RedZone): every live game of the league, red-zone games first. */
   games: Game[];
   /** Big events since the last poll: score change, red card, wicket, TD, lead change, clutch time. */
@@ -185,6 +203,16 @@ export function parseLive(raw: unknown): LiveStats | null {
     }),
     layout: str(r.layout)?.toLowerCase() ?? null,
     situation: obj(r.situation),
+    scorecard: obj(r.scorecard),
+    timeline: arr(r.timeline).flatMap((x): TimelineEntry[] => {
+      const o = obj(x);
+      const id = str(o?.id);
+      const text = str(o?.text) ?? str(o?.label);
+      const sc = obj(o?.score);
+      return o && id && text
+        ? [{ id, kind: str(o.kind) ?? "", team: side(o.team), text, clock: str(o.clock), at: parseStartsAt(o.at), score: sc && num(sc.home) != null && num(sc.away) != null ? { home: num(sc.home)!, away: num(sc.away)! } : null }]
+        : [];
+    }),
     moments: arr(r.moments).flatMap((x) => {
       const o = obj(x);
       const at = parseStartsAt(o?.wallclock) ?? parseStartsAt(o?.at);
@@ -343,6 +371,46 @@ const sideOf = (v: unknown): "home" | "away" | null => (v === "home" || v === "a
 
 /** The sport-specific part of the panel from `layout` + `situation` (pinned shape: plan "/live schema, PINNED 31-Oct"): tolerant of missing
  * keys; any other {home, away} key (fouls, possession, territory, cards…) becomes a split bar; nothing for an unknown layout. */
+/** Cricket scorecard -> panel blocks: innings totals, at the crease, bowling, partnership / target / lead, recent overs. [] when there is none. */
+export function scorecardBlocks(sc: Record<string, unknown> | null, names: { home: string; away: string }): Block[] {
+  if (!sc) return [];
+  const out: Block[] = [];
+  const t = (v: unknown) => (typeof v === "string" && v ? v : typeof v === "number" && isFinite(v) ? String(v) : null);
+  const list = (v: unknown) => (Array.isArray(v) ? (v as Record<string, unknown>[]).filter((x) => x && typeof x === "object") : []);
+  const inns = list(sc.innings);
+  if (inns.length)
+    out.push({
+      kind: "grid",
+      label: "Innings",
+      head: ["R", "W", "Ov"],
+      rows: inns.map((i) => ({ name: `${t(i.name) ?? (i.team === "away" ? names.away : names.home)}${i.current === true ? " *" : ""}`, cells: [t(i.runs) ?? "–", t(i.wickets) ?? "–", t(i.overs) ?? "–"] })),
+    });
+  const bats = list(sc.batters);
+  if (bats.length)
+    out.push({
+      kind: "kv",
+      title: "At the crease",
+      rows: bats.flatMap((b) => (t(b.name) ? [[`${t(b.name)}${b.onStrike === true ? " *" : ""}`, `${t(b.runs) ?? "0"} (${t(b.balls) ?? "0"})${t(b.fours) || t(b.sixes) ? ` · ${t(b.fours) ?? 0}x4 ${t(b.sixes) ?? 0}x6` : ""}`] as [string, string]] : [])),
+    });
+  const kv: [string, string][] = [];
+  const bw = sc.bowler && typeof sc.bowler === "object" ? (sc.bowler as Record<string, unknown>) : null;
+  if (bw && t(bw.name)) kv.push(["Bowling", [t(bw.name), t(bw.figures), t(bw.overs) ? `(${t(bw.overs)} ov)` : null, t(bw.econ) ? `econ ${t(bw.econ)}` : null].filter(Boolean).join(" ")]);
+  const ps = sc.partnership && typeof sc.partnership === "object" ? (sc.partnership as Record<string, unknown>) : null;
+  if (ps && t(ps.runs) != null) kv.push(["Partnership", `${t(ps.runs)} (${t(ps.balls) ?? 0})`]);
+  if (t(sc.target)) kv.push(["Target", t(sc.target)!]);
+  if (t(sc.equation)) kv.push(["Need", t(sc.equation)!.replace(/^need\s+/i, "")]);
+  const lead = typeof sc.lead === "number" ? sc.lead : null;
+  if (lead) kv.push([lead > 0 ? "Lead" : "Trail", String(Math.abs(lead))]);
+  if (t(sc.rr)) kv.push(["Run rate", t(sc.rr)!]);
+  if (t(sc.rrr)) kv.push(["Required", t(sc.rrr)!]);
+  if (kv.length) out.push({ kind: "kv", title: null, rows: kv });
+  for (const o of list(sc.overs).slice(-3).reverse()) {
+    const balls = Array.isArray(o.balls) ? (o.balls as unknown[]).map(t).filter((x): x is string => !!x) : [];
+    if (balls.length) out.push({ kind: "chips", label: `Over ${t(o.over) ?? ""} · ${t(o.runs) ?? 0} run${o.runs === 1 ? "" : "s"}${o.live === true ? " · live" : ""}`, items: balls });
+  }
+  return out;
+}
+
 export function situationBlocks(layout: string | null, s: Record<string, unknown> | null, names: { home: string; away: string }): Block[] {
   if (!layout || !s) return [];
   const out: Block[] = [];
@@ -504,11 +572,18 @@ export function applyReveal(d: LiveStats, reveal: Reveal): LiveStats {
   const snap = reveal(d.updatedAt ?? undefined);
   const plays = snap && reveal(undefined);
   const moments = d.moments.filter((m) => reveal(m.at));
+  // Timeline entries are asked one by one with their own time; one without a time follows the snapshot
+  const timeline = reveal(undefined) ? d.timeline.filter((t) => (t.at != null ? reveal(t.at) : snap)) : [];
+  const overs = d.scorecard && Array.isArray(d.scorecard.overs) ? (d.scorecard.overs as Record<string, unknown>[]) : null;
+  const overOk = (o: Record<string, unknown>) => (typeof o.at === "number" ? reveal(o.at) : true);
+  const scorecard = !snap ? null : overs && !overs.every(overOk) ? { ...d.scorecard, overs: overs.filter(overOk) } : d.scorecard;
   const comments = d.chat ? d.chat.comments.filter((c) => reveal(c.at ?? undefined)) : null;
-  if (snap && plays && moments.length === d.moments.length && (!d.chat || comments!.length === d.chat.comments.length)) return d;
+  if (snap && plays && scorecard === d.scorecard && timeline.length === d.timeline.length && moments.length === d.moments.length && (!d.chat || comments!.length === d.chat.comments.length)) return d;
   return {
     ...d,
     ...(snap ? {} : { hidden: true, status: null, score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
+    scorecard,
+    timeline,
     plays: plays ? d.plays : [],
     moments,
     chat: d.chat && comments ? { ...d.chat, comments } : d.chat,
