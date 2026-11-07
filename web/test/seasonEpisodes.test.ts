@@ -5,6 +5,9 @@ import {
   airsLabel,
   episodeStatus,
   mergeEpisodes,
+  mergeSeasons,
+  iptvSeasonRows,
+  mergeSeasonBlocks,
   ownedVod,
   pickIptvSeries,
   presentEpisodes,
@@ -227,4 +230,56 @@ test("pick series: same TMDB id, series kind, owned provider; otherwise null", (
   assert.equal(pickIptvSeries(items, "10", [4]), null);
   assert.equal(pickIptvSeries(items, undefined, [3]), null);
   assert.equal(pickIptvSeries(items, "abc", [3]), null);
+});
+
+const season = (n: number): Item => ({ Id: `s${n}`, Name: `Season ${n}`, IndexNumber: n, Type: "Season" }) as Item;
+const vodEps = (n: number): VodEpisode[] =>
+  Array.from({ length: 8 }, (_, i) => ({ id: `p:e:${n}${i + 1}`, episodeId: `${n}${i + 1}`, episode: i + 1, title: `T${i + 1}` }));
+
+test("mergeSeasons: library {1,3} + IPTV {1,2,3} gives 1, 2 (IPTV), 3", () => {
+  const out = mergeSeasons([season(1), season(3)], [
+    { season: 1, episodes: vodEps(1) },
+    { season: 2, episodes: vodEps(2) },
+    { season: 3, episodes: vodEps(3) },
+  ]);
+  assert.deepEqual(out.map((s) => s.number), [1, 2, 3]);
+  assert.deepEqual(out.map((s) => !!s.iptvOnly), [false, true, false]);
+  assert.equal(out[1]!.name, "Season 2 · via IPTV");
+  assert.equal(out[1]!.key, "iptv-season:2");
+});
+
+test("mergeSeasons: no IPTV, empty/special IPTV seasons add nothing; specials stay first", () => {
+  const sp = { ...season(0), Name: "Specials" };
+  assert.equal(mergeSeasons([season(1)], null).length, 1);
+  assert.equal(mergeSeasons([season(1)], [{ season: 0, episodes: vodEps(0) }, { season: 2, episodes: [] }]).length, 1);
+  assert.deepEqual(mergeSeasons([season(1), sp], []).map((s) => s.number), [0, 1]);
+});
+
+test("iptvSeasonRows: sorted, playable via IPTV, language flag", () => {
+  const rows = iptvSeasonRows([...vodEps(2)].reverse(), true);
+  assert.deepEqual(rows.map((r) => r.index), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(reasonLabel(rows[0]!, now), "Available via IPTV");
+  assert.equal(rows[0]!.iptv!.id, "p:e:21");
+  assert.equal(rows[0]!.langUnknown, true);
+});
+
+test("pickIptvSeries: prefers confirmed English over langUnknown, never a foreign dub", () => {
+  const mk = (id: string, title: string, extra: Partial<VodItem> = {}): VodItem =>
+    ({ id, source: "iptv", kind: "series", tmdbId: 5, title, quality: [], tech: [], ...extra }) as VodItem;
+  const unk = mk("1:s:1", "Show (2023)", { langUnknown: true });
+  const en = mk("1:s:2", "Show (2023)_eng");
+  const de = mk("1:s:3", "Show (2023)_ger");
+  assert.equal(pickIptvSeries([de, unk, en], 5, [1])!.id, "1:s:2");
+  assert.equal(pickIptvSeries([de, unk], 5, [1])!.id, "1:s:1");
+  assert.equal(pickIptvSeries([de], 5, [1]), null);
+});
+
+test("mergeSeasonBlocks: duplicate season numbers merge, deduped by episode number", () => {
+  const out = mergeSeasonBlocks([
+    { season: 2, episodes: vodEps(2).slice(0, 5) },
+    { season: 2, episodes: vodEps(2).slice(3) },
+  ]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0]!.episodes.map((e) => e.episode), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(mergeSeasons([season(1)], [{ season: 2, episodes: vodEps(2).slice(0, 2) }, { season: 2, episodes: vodEps(2) }]).filter((s) => s.iptvOnly).length, 1);
 });
