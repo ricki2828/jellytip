@@ -1,0 +1,133 @@
+// Companion panel + scorebug policy (pure; tested in web/test/companion.test.ts). Plan: ~/ai/plans/jellytip-sport-companion.md section 3.
+// Spike decision (~/ai/state/jellytip-m2spike-20261107.md): squeeze-back with ONE layout change per open/close; opaque overlay over
+// 28% of the frame when the phone is in portrait or the measured drop rate after an open is over 2%.
+import type { GameStateKind } from "./gameState.ts";
+
+export const MOMENT_OPEN_MS = 6_000;
+export const USER_CLOSE_QUIET_MS = 120_000;
+export const SCOREBUG_HIDE_MS = 8_000;
+export const DROP_LIMIT = 0.02;
+export const DROP_WINDOW_MS = 30_000;
+/** Too few frames to judge a rate from. */
+export const DROP_MIN_FRAMES = 60;
+
+export type PanelMode = "squeeze" | "overlay";
+export type OpenReason = "user" | "break" | "moment";
+
+export interface AutoOpenIn {
+  nowMs: number;
+  replay: boolean;
+  panelOpen: boolean;
+  /** When the viewer last closed the panel themselves (ms), null if never. */
+  userClosedAtMs: number | null;
+  kind: GameStateKind | null;
+  /** A revealed key moment that arrived since the last check (already past the delay). */
+  freshMoment: boolean;
+}
+
+/** Should the panel open by itself right now, and why. Never in replay, never straight after the viewer closed it, never in a blowout for a moment. */
+export function autoOpenDecision(i: AutoOpenIn): OpenReason | null {
+  if (i.replay || i.panelOpen) return null;
+  if (i.userClosedAtMs != null && i.nowMs - i.userClosedAtMs < USER_CLOSE_QUIET_MS) return null;
+  if (i.kind === "break") return "break";
+  if (i.freshMoment && i.kind !== "blowout" && i.kind !== "final" && i.kind !== "pre") return "moment";
+  return null;
+}
+
+export interface AutoCloseIn {
+  nowMs: number;
+  openedBy: OpenReason;
+  openedAtMs: number;
+  kind: GameStateKind | null;
+  /** The viewer interacted with the panel (focus inside, tab change): then it stays until they close it. */
+  touched: boolean;
+  replay: boolean;
+}
+
+/** Tuck an automatically opened panel away: a moment after 6 s, a break when play resumes. User-opened or touched panels never auto-close. */
+export function autoCloseDecision(i: AutoCloseIn): boolean {
+  if (i.openedBy === "user" || i.touched) return false;
+  if (i.replay) return true;
+  if (i.openedBy === "moment") return i.nowMs - i.openedAtMs >= MOMENT_OPEN_MS;
+  return i.kind !== "break";
+}
+
+export const DROP_KEY = "jellytip.companionPanelMode";
+
+/** Which presentation to use: the phone in portrait is always the overlay (bottom sheet); otherwise what this device remembers; else squeeze. */
+export function panelModeFor(phonePortrait: boolean, remembered: string | null): PanelMode {
+  if (phonePortrait) return "overlay";
+  return remembered === "overlay" ? "overlay" : "squeeze";
+}
+
+/** True when playback dropped too many frames while the panel was squeezing the picture (counters are the deltas since the open). */
+export function dropsTooHigh(totalFrames: number, droppedFrames: number): boolean {
+  if (!(totalFrames >= DROP_MIN_FRAMES) || !(droppedFrames >= 0)) return false;
+  return droppedFrames / totalFrames > DROP_LIMIT;
+}
+
+export type PanelKeyAction = "toggle-panel" | "channels" | "tab-prev" | "tab-next" | "close-panel";
+
+export interface PanelKeyIn {
+  key: string;
+  panelOpen: boolean;
+  /** A control has focus (or a menu is open): focus navigation keeps the arrow keys, as today. */
+  controlsInUse: boolean;
+  /** Only a live match with a panel available. */
+  available: boolean;
+}
+
+/**
+ * Hidden controls: Up = panel toggle, Down = channels, Left/Right = panel tabs (only while the panel is open), Back closes the panel
+ * first. With controls in use the arrows are focus navigation. Back always closes an open panel, controls or not. Null = not ours.
+ */
+export function panelKeyAction(i: PanelKeyIn): PanelKeyAction | null {
+  if (!i.available) return null;
+  if ((i.key === "Escape" || i.key === "Backspace" || i.key === "GoBack") && i.panelOpen) return "close-panel";
+  if (i.controlsInUse) return null;
+  switch (i.key) {
+    case "ArrowUp":
+      return "toggle-panel";
+    case "ArrowDown":
+      return i.panelOpen ? null : "channels";
+    case "ArrowLeft":
+      return i.panelOpen ? "tab-prev" : null;
+    case "ArrowRight":
+      return i.panelOpen ? "tab-next" : null;
+    default:
+      return null;
+  }
+}
+
+/** Index of the neighbouring tab, wrapping nowhere (the ends stay put). */
+export const stepTab = (cur: number, count: number, dir: 1 | -1): number => (count <= 0 ? 0 : Math.max(0, Math.min(count - 1, cur + dir)));
+
+export interface BugIn {
+  score: { home: number; away: number } | null;
+  clock: string | null;
+  period: string | null;
+  home: string;
+  away: string;
+}
+
+/** "NZL 21 – 18 AUS · 2nd half 62:10"; null when nothing may be shown (no revealed score). */
+export function scorebugText(i: BugIn): { teams: [string, string]; score: [number, number]; when: string } | null {
+  if (!i.score) return null;
+  const when = [i.period, i.clock].filter((x): x is string => !!x).join(" ");
+  return { teams: [i.home, i.away], score: [i.score.home, i.score.away], when };
+}
+
+export interface BugShowIn {
+  nowMs: number;
+  /** When the revealed score / period / a moment last changed. */
+  changedAtMs: number | null;
+  pinned: boolean;
+  panelOpen: boolean;
+}
+
+/** The pill shows for 8 s after a change, always when pinned, and never while the panel (which has the score strip) is open. */
+export function scorebugVisible(i: BugShowIn): boolean {
+  if (i.panelOpen) return false;
+  if (i.pinned) return true;
+  return i.changedAtMs != null && i.nowMs - i.changedAtMs < SCOREBUG_HIDE_MS;
+}

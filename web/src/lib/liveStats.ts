@@ -185,7 +185,7 @@ export function parseLive(raw: unknown): LiveStats | null {
     situation: obj(r.situation),
     moments: arr(r.moments).flatMap((x) => {
       const o = obj(x);
-      const at = parseStartsAt(o?.at);
+      const at = parseStartsAt(o?.wallclock) ?? parseStartsAt(o?.at);
       const label = str(o?.label) ?? str(o?.kind);
       return o && at != null && label ? [{ at, kind: str(o.kind) ?? label, team: side(o.team), label } as Moment] : [];
     }),

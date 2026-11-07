@@ -560,7 +560,7 @@ const FinalCard = memo(function FinalCard({ result, moments, plays }: { result: 
   );
 });
 
-export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, reveal, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; reveal?: Reveal; onClose: () => void }) {
+export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, reveal, embedded = false, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; reveal?: Reveal; /** Hosted by the player's companion panel: no slide-in, no scrim, and Back is the player's to handle. */ embedded?: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("stats");
   const [raw, setRaw] = useState<LiveStats | null>(null);
   // Everything shown goes through `reveal` (the broadcast delay, T2.3): a new function identity means its answers may have changed
@@ -583,11 +583,12 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   // Slides out for 200 ms before it goes
   const [leaving, setLeaving] = useState(false);
   const close = () => {
+    if (embedded) return onClose();
     if (leaving) return;
     setLeaving(true);
     window.setTimeout(onClose, OUT_MS);
   };
-  useEscapeClose(close);
+  useEscapeClose(close, !embedded);
   const multi = fixture?.kind === "multi";
   // Odds and win probability spoil blowouts: they exist only with spoilers on
   let tabs = tabsFor(liveTabs(!!d?.chat, showFantasy), spoilers) as [Tab, string][];
@@ -698,7 +699,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   const teamColor = (t: "home" | "away" | null) => (t === "away" ? ac : t === "home" ? hc : "rgba(255,255,255,0.5)");
 
   return (
-    <div className={`ld-wrap${floating ? " floating" : ""}${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
+    <div className={`ld-wrap${embedded ? " embedded" : floating ? " floating" : ""}${leaving ? " out" : ""}`} onClick={(e) => e.stopPropagation()}>
       <aside className="live-drawer bc" data-state={kind ?? undefined} role="dialog" aria-label="Live stats" style={{ background: washBackground(colors) }}>
         <SheetClose onClose={close} />
         {!allowed ? (
