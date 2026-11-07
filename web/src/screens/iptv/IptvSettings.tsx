@@ -27,6 +27,7 @@ import {
 import { getSession } from "../../api/jellyfin";
 import { normaliseServer, normaliseWebUrl, parseProviderLink } from "../../lib/providerLink";
 import { lastUpdated, retryText } from "../../lib/channelPrune";
+import { MODES, SPEC, loadDefaultMode, modeLabel, saveDefaultMode, type Mode } from "../../lib/liveBuffer";
 import { ChannelPrune } from "./ChannelPrune";
 import { Recordings } from "./Recordings";
 import "./iptv.css";
@@ -682,6 +683,25 @@ function ProviderCard({ p, onChange, onRemoved }: { p: Provider; onChange: (p: P
 
 // ---------- page ----------
 
+/** Default live buffer for this device (the player menu can override it per viewing). */
+function LiveBufferDefault() {
+  const [mode, setMode] = useState<Mode>(() => loadDefaultMode(typeof localStorage === "undefined" ? null : localStorage));
+  const pick = (m: Mode) => { setMode(m); saveDefaultMode(typeof localStorage === "undefined" ? null : localStorage, m); };
+  return (
+    <section className="iptv-card" aria-label="Live buffer">
+      <h2>Live buffer</h2>
+      <p className="iptv-hint">How far behind live to sit so a network hiccup doesn't freeze the picture. Auto starts at Normal, steps up when a channel stalls and remembers it per channel. HLS channels sit a number of segments behind instead, so the delay can be longer. Takes effect on the next channel you open.</p>
+      <div className="buttons" role="radiogroup" aria-label="Live buffer default">
+        {MODES.map((m) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} data-nav className={`btn small${mode === m ? " on" : ""}`} onClick={() => pick(m)}>
+            {m === "auto" ? "Auto" : `${modeLabel(m, "normal")} (~${SPEC[m].behindSec} s TS)`}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function IptvSettings() {
   const [list, setList] = useState<Provider[] | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -730,6 +750,7 @@ export function IptvSettings() {
       <h1 className="page-title">Live TV / IPTV</h1>
       {blocked && <p className="iptv-err iptv-pad">{blocked}</p>}
       {!blocked && list === null && <p className="iptv-hint iptv-pad">Loading…</p>}
+      {!blocked && <LiveBufferDefault />}
       {list && list.length === 0 && !adding && (
         <div className="iptv-empty iptv-pad">
           <p>Add your own IPTV provider to watch live channels and bring its films and series in. It stays private to you unless you share it.</p>
