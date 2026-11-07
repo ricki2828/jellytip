@@ -100,7 +100,7 @@ export function Nav({ current }: { current: string }) {
   const root = isRootRoute(current);
   // Tapping the current room again must not push a duplicate history entry: scroll to top instead
   const again = (k: string) => (e: React.MouseEvent) => {
-    if (active === k) {
+    if (current === k) {
       e.preventDefault();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }

@@ -32,3 +32,121 @@
 .chip.removable {
   white-space: nowrap;
 }
+
+/* sort row + active chips live in the sticky bar of the Browse page */
+.lib-filters .chips.lib-sorts,
+.lib-filters .chips.lib-active {
+  padding: 0 var(--pad);
+}
+.chip.dir-toggle {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--vanilla);
+  white-space: nowrap;
+}
+.chip.filters-btn {
+  font-weight: 600;
+}
+
+/* filter sheet: bottom sheet on phones, centred panel on desktop */
+.filter-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.filter-sheet {
+  width: min(760px, 94vw);
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: #171717;
+  overflow: hidden;
+}
+.filter-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.filter-sheet-head strong {
+  flex: 1;
+  font-size: 17px;
+}
+.filter-sheet-head .btn.done {
+  padding: 8px 18px;
+}
+.filter-sheet .lib-filter-panel {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 18px 18px;
+  overscroll-behavior: contain;
+}
+.lib-filter-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ref-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ref-input {
+  width: 100%;
+  max-width: 340px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--vanilla);
+  font-size: 14px;
+}
+.ref-input:focus {
+  box-shadow: 0 0 0 2px var(--vanilla);
+}
+.ref-note {
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .filter-scrim {
+    place-items: end stretch;
+  }
+  .filter-sheet {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .lib-filter-group {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lib-filter-label {
+    flex: none;
+    padding-top: 0;
+  }
+  .lib-filters .chips.lib-sorts,
+  .lib-filters .chips.lib-active {
+    padding: 0 var(--pad);
+  }
+  .lib-filters .chips.lib-sorts,
+  .lib-filters .chips.lib-active {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .lib-filters .chips.lib-sorts::-webkit-scrollbar,
+  .lib-filters .chips.lib-active::-webkit-scrollbar {
+    display: none;
+  }
+}

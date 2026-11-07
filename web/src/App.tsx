@@ -14,6 +14,8 @@ import { Login } from "./screens/Login";
 import { FantasyPage } from "./screens/FantasyPage";
 import { Home } from "./screens/Home";
 import { Library } from "./screens/Library";
+import { Browse } from "./screens/Browse";
+import { myListRow } from "./lib/myList";
 import { Details } from "./screens/Details";
 import { Player } from "./screens/Player";
 import { Collections } from "./screens/Collections";
@@ -108,6 +110,10 @@ export function App() {
         {route.name === "home" && <Home />}
         {route.name === "movies" && <Library key="movie" kind="movie" />}
         {route.name === "shows" && <Library key="tv" kind="tv" />}
+        {route.name === "moviesall" && <Browse key="movie" kind="movie" query={route.query} />}
+        {route.name === "showsall" && <Browse key="tv" kind="tv" query={route.query} />}
+        {route.name === "mylistmovies" && <CollectionRow key="my-movies" id="my-movies" load={() => myListRow("movie")} missingText="Nothing in your list yet. Add films with + My list." />}
+        {route.name === "mylistshows" && <CollectionRow key="my-shows" id="my-shows" load={() => myListRow("tv")} missingText="Nothing in your list yet. Add shows with + My list." />}
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "ask" && <Ask key={session.userId} />}
         {route.name === "tonight" && <Tonight key={session.userId} />}
