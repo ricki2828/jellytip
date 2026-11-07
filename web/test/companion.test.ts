@@ -83,6 +83,7 @@ test("scorebug: text only with a revealed score; visibility rules", () => {
   assert.equal(scorebugVisible({ ...v, pinned: true, panelOpen: true }), false);
   assert.equal(scorebugVisible({ ...v, changedAtMs: null }), false);
 });
+import { gameStateOf } from "../src/lib/gameState.ts";
 import { applyReveal, parseLive } from "../src/lib/liveStats.ts";
 import { noteEvent } from "../src/lib/delayMath.ts";
 test("parseLive: a moment's wallclock wins over the first-observed time", () => {
@@ -156,4 +157,12 @@ test("holdSecs: seconds until the delay releases an answer; 0 when released, nul
   assert.equal(holdSecs(now, reveal(30), now), 30);
   assert.equal(holdSecs(now, () => false, now), null);
   assert.equal(holdSecs(null, reveal(30), now), null);
+});
+
+test("a hidden snapshot is marked and never falls back to the match's own status (no 'Full time' while hidden)", () => {
+  const d = parseLive({ status: "in", score: { home: 1, away: 0 }, updatedAt: 500 })!;
+  const h = applyReveal(d, (at) => at == null || at < 400);
+  assert.equal(h.hidden, true);
+  assert.equal(gameStateOf(h, { leagueKey: "nba", status: "post" }, false).kind, "pre");
+  assert.equal(gameStateOf({ ...d, status: null }, { leagueKey: "nba", status: "post" }, false).kind, "final"); // a genuinely missing status still uses the match's
 });

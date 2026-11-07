@@ -174,14 +174,29 @@ function StarterRow({ s }: { s: Starter }) {
 }
 
 /** The drawer's Fantasy tab: each league's matchup score, then my and my opponents' players in the game being watched. */
-export function FantasyTab({ live, fixtureId, multi = false }: { live: FantasyLive; fixtureId: string; multi?: boolean }) {
+export function FantasyTab({ live, fixtureId, multi = false, reveal }: { live: FantasyLive; fixtureId: string; multi?: boolean; reveal?: (atSec?: number) => boolean }) {
   const [game, setGame] = useState<{ id: string; league: string; starters: Starter[] }[] | null>(null);
   useEffect(() => {
     let alive = true;
     // A whip-around (RedZone) has no single game: every live player of yours across games is shown, no per-game route
-    if (!multi) void fantasyGame(fixtureId).then((g) => alive && setGame(g));
+    // The per-game answer is live data too: with a spoiler delay it is held until `reveal(time it arrived)` passes (the delayed
+    // `live` fills in meanwhile), so it can never run ahead of the picture
+    let timer: number | undefined;
+    if (!multi)
+      void fantasyGame(fixtureId).then((g) => {
+        if (!alive) return;
+        if (!reveal) return setGame(g);
+        const at = Date.now() / 1000;
+        const release = () => {
+          if (!alive) return;
+          if (reveal(at)) setGame(g);
+          else timer = window.setTimeout(release, 1000);
+        };
+        release();
+      });
     return () => {
       alive = false;
+      window.clearTimeout(timer);
     };
   }, [fixtureId, live.updatedAt, multi]);
   return (

@@ -825,7 +825,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
                       )}
                     </>
                   )}
-                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} multi={multi} />}
+                  {tab === "fantasy" && showFantasy && fixture && <FantasyTab live={fantasy!} fixtureId={fixture.id} multi={multi} reveal={revealFn} />}
                   {tab === "chat" && d.chat && d.chat.comments.length > 0 && (
                     <>
                       <ul className="ld-chat">

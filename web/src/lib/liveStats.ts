@@ -74,6 +74,8 @@ export interface LiveStats {
   chat: { source: string; thread: string | null; comments: { author: string; text: string; score: number | null; at: number | null }[] } | null;
   updatedAt: number | null;
   pending: boolean;
+  /** Set by applyReveal when the snapshot is not released yet: every snapshot field is masked (so nothing may fall back to the match's own status). */
+  hidden?: boolean;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -506,7 +508,7 @@ export function applyReveal(d: LiveStats, reveal: Reveal): LiveStats {
   if (snap && plays && moments.length === d.moments.length && (!d.chat || comments!.length === d.chat.comments.length)) return d;
   return {
     ...d,
-    ...(snap ? {} : { status: null, score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
+    ...(snap ? {} : { hidden: true, status: null, score: null, clock: null, period: null, stats: [], leaders: [], situation: null, games: [], winProb: null, market: null }),
     plays: plays ? d.plays : [],
     moments,
     chat: d.chat && comments ? { ...d.chat, comments } : d.chat,

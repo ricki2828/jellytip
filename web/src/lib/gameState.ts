@@ -211,7 +211,7 @@ const objOf = (v: unknown): Record<string, unknown> | null => (v && typeof v ===
 /** State for a /live answer. `allowWinProb` is false unless spoilers are on (the drawer never lets odds drive anything otherwise). */
 export function gameStateOf(d: LiveStats, fixture: Pick<Fixture, "leagueKey" | "status"> | null, allowWinProb: boolean): GameState {
   const sport = sportOf(d.layout, fixture?.leagueKey);
-  return classify({ sport, status: d.status ?? fixture?.status ?? null, score: d.score, clock: d.clock, period: d.period, winProb: allowWinProb ? d.winProb : null, situation: d.situation, leagueKey: fixture?.leagueKey });
+  return classify({ sport, status: d.status ?? (d.hidden ? null : fixture?.status ?? null), score: d.score, clock: d.clock, period: d.period, winProb: allowWinProb ? d.winProb : null, situation: d.situation, leagueKey: fixture?.leagueKey });
 }
 
 // ---------- personalisation ----------

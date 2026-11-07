@@ -39,7 +39,7 @@ import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { switchExtras } from "../../lib/companion";
-import { alternatesAfterSwitch, initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
+import { initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import { hlsChoices, nativeChoices, nativeSubtitlesOff, makePick, matchPick, pickIptvTracks, type SubtitlePick, type TrackChoice, type TrackPick } from "../../lib/iptvTracks";
 import { getAlwaysSubs } from "../../lib/trackMemory";
@@ -1240,12 +1240,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           </div>
           {others && (
             <div className="buttons">
-              {extras!.alternates!.map((a, i) => (
+              {extras!.alternates!.map((a) => (
                 <button
                   key={a.id}
                   className="btn small"
                   data-nav
-                  onClick={() => go(livePath(a.id, a.name, { alternates: [...extras!.alternates!.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey, nospoil: extras!.nospoil }), true)}
+                  onClick={() => go(livePath(a.id, a.name, switchExtras(extras!, a.id, { id: target.channel!, name: title })), true)}
                 >
                   {a.name}
                 </button>
@@ -1274,7 +1274,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           <span>{copy}</span>
           <button className="btn primary small" data-nav data-autofocus onClick={retryNow}>Retry now</button>
           {rec.phase === "stalled" && <button className="btn small" data-nav onClick={() => { quietUntil.current = Date.now() + QUIET_MS; }}>Keep waiting</button>}
-          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, { eventKey: extras?.eventKey, matchId: extras?.matchId, replay: extras?.replay, nospoil: extras?.nospoil, alternates: alternatesAfterSwitch(extras?.alternates ?? [], { id: target.channel!, name: title }, a.id) }), true)}>Switch to {a.name}</button>)}
+          {(rec.phase === "failed" || rec.phase === "denied" || rec.phase === "stalled") && (extras?.alternates ?? []).map((a) => <button key={a.id} className="btn small" data-nav onClick={() => go(livePath(a.id, a.name, switchExtras(extras ?? {}, a.id, { id: target.channel!, name: title })), true)}>Switch to {a.name}</button>)}
           <button className="btn small" data-nav onClick={() => dispatchRef.current({ t: "cancel" })}>Back</button>
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
@@ -1480,7 +1480,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
         const pick = extras?.alternates?.find((x) => x.id === switchTo.current);
         switchTo.current = null;
         if (pick) {
-          go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey, nospoil: extras?.nospoil }), true);
+          go(livePath(pick.id, pick.name, switchExtras(extras ?? {}, pick.id, { id: target.channel, name: title })), true);
           return;
         }
       }
