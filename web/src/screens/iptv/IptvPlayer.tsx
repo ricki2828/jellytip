@@ -521,9 +521,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
       const i = matchPick(audioChoices, p.audio);
       if (i != null && !audioChoices.find((t) => t.index === i)?.active) selectAudio(i);
     }
-    if (r.subtitle && p.subtitle && audioChoices.length) {
-      // gated on the new engine's audio list so the pre-attach empty state never consumes the re-apply
-      if (p.subtitle.off) { r.subtitle = false; if (!subtitleOff) selectSubtitle(-1); }
+    if (r.subtitle && p.subtitle) {
+      // gated on the new engine's lists (audio-less streams only report subtitles) so the pre-attach empty state never consumes the re-apply
+      if (p.subtitle.off) { if (!audioChoices.length && !subtitleChoices.length) return; r.subtitle = false; if (!subtitleOff) selectSubtitle(-1); }
       else if (subtitleChoices.length) {
         r.subtitle = false;
         const i = matchPick(subtitleChoices, p.subtitle);
