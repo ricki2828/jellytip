@@ -88,3 +88,37 @@
 .coll-card img.portrait {
   object-position: 50% 20%;
 }
+.coll-seg {
+  display: inline-flex;
+  margin: 8px 0 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.coll-seg-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 22px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.coll-seg-btn.on {
+  background: var(--vanilla);
+  color: #111;
+}
+.coll-seg-btn:focus-visible {
+  outline: 3px solid var(--vanilla);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .coll-seg {
+    display: flex;
+  }
+  .coll-seg-btn {
+    flex: 1;
+    padding: 9px 8px;
+  }
+}

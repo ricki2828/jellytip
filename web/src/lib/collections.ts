@@ -72,3 +72,39 @@ export function cardLine(c: Pick<CollectionCard, "total" | "libCount" | "iptvCou
   const base = `${n} title${n === 1 ? "" : "s"}`;
   return c.iptvCount > 0 ? `${base} · ${c.iptvCount} on IPTV` : c.libCount > 0 && c.libCount < n ? `${base} · ${c.libCount} in the library` : base;
 }
+
+export type CollTab = "all" | "movie" | "tv";
+export const COLL_TABS: readonly CollTab[] = ["movie", "tv", "all"];
+const TAB_KEY = "jellytip-coll-tab";
+
+/** Does a card belong on a tab? The hub card carries one mediaType (server default "movie"); unknown (null) shows on both. */
+export function inTab(c: Pick<CollectionCard, "mediaType">, tab: CollTab): boolean {
+  return tab === "all" || c.mediaType === null || c.mediaType === tab;
+}
+
+/** Sections narrowed to a tab: cards filtered, counts recomputed, empty sections dropped. "all" returns the input. */
+export function filterHub(sections: CollectionSection[], tab: CollTab): CollectionSection[] {
+  if (tab === "all") return sections;
+  const out: CollectionSection[] = [];
+  for (const s of sections) {
+    const items = s.items.filter((c) => inTab(c, tab));
+    if (items.length) out.push({ ...s, items, count: items.length });
+  }
+  return out;
+}
+
+export function loadTab(): CollTab {
+  try {
+    const v = localStorage.getItem(TAB_KEY);
+    return v === "movie" || v === "tv" || v === "all" ? v : "movie";
+  } catch {
+    return "movie";
+  }
+}
+export function saveTab(t: CollTab) {
+  try {
+    localStorage.setItem(TAB_KEY, t);
+  } catch {
+    /* private mode */
+  }
+}

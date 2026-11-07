@@ -1,11 +1,11 @@
 // Collections hub (#/collections): section chips across the top, a grid of landscape cards under them. A card opens the
 // collection (#/collections/<id>). Contract: ~/ai/plans/jellytip-search-10x.md "C. Collections hub".
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { imageUrl } from "../api/jellyfin";
 import { hubNow, hubUnavailable, loadHub, onHubChange } from "../api/collections";
 import { logoSrc } from "../api/iptv";
 import { go } from "../lib/router";
-import { cardLine, type CollectionCard } from "../lib/collections";
+import { cardLine, filterHub, loadTab, saveTab, type CollectionCard, type CollTab } from "../lib/collections";
 import { safeArt } from "../components/IptvTile";
 import "./Collections.css";
 
@@ -57,15 +57,31 @@ export function Collections() {
     void loadHub();
     return onHubChange(() => tick((n) => n + 1));
   }, []);
-  const sections = hubNow();
+  const [tab, setTabState] = useState<CollTab>(loadTab);
+  const setTab = (t: CollTab) => {
+    saveTab(t);
+    setTabState(t);
+    setKey(null);
+  };
+  const hub = hubNow();
+  const sections = useMemo(() => (hub ? filterHub(hub, tab) : null), [hub, tab]);
   const current = sections?.find((s) => s.key === key) ?? sections?.[0];
-  const { shown, end } = useProgressive(current?.items.length ?? 0, current?.key ?? "");
+  const { shown, end } = useProgressive(current?.items.length ?? 0, `${tab}:${current?.key ?? ""}`);
   return (
     <div className="collections">
       <h1 className="page-title">Collections</h1>
       <button className="chip" data-nav onClick={() => go("/journeys")}>Start a journey</button>
       {!sections && !hubUnavailable() && <p className="empty">Loading…</p>}
-      {(hubUnavailable() || (sections && sections.length === 0)) && <p className="empty">Nothing here yet.</p>}
+      {hub && hub.length > 0 && (
+        <div className="coll-seg" role="tablist" aria-label="Type">
+          {([["movie", "Movies"], ["tv", "TV Shows"], ["all", "All"]] as const).map(([t, label]) => (
+            <button key={t} role="tab" aria-selected={tab === t} className={`coll-seg-btn${tab === t ? " on" : ""}`} data-nav onClick={() => setTab(t)}>{label}</button>
+          ))}
+        </div>
+      )}
+      {hubUnavailable() && <p className="empty">Nothing here yet.</p>}
+      {hub && hub.length > 0 && sections && sections.length === 0 && <p className="empty">{tab === "tv" ? "No TV collections yet." : "No movie collections yet."}</p>}
+      {hub && hub.length === 0 && <p className="empty">Nothing here yet.</p>}
       {sections && sections.length > 0 && (
         <>
           <div className="chips coll-chips" role="tablist" aria-label="Sections">
