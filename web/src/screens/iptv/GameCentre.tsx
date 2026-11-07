@@ -13,7 +13,7 @@ import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
 import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
-import { go } from "../../lib/router";
+import { go, useRoute } from "../../lib/router";
 import "./iptv.css";
 import "./gameCentre.css";
 
@@ -240,7 +240,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const act = w.ways[0] ? () => go(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
   const best = bestChannel(f);
   return (
-    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} {...cardProps(act)}>
+    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
@@ -277,7 +277,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   );
 }
 
-function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boolean }) {
+function FixtureGameCentre({ items, degraded, focusFid }: { items: FxItem[]; degraded: boolean; focusFid: string | null }) {
   const { prefs } = usePrefs({ defer: true });
   const recs = useRecs(false);
   const [now, setNow] = useState(() => Date.now() / 1000);
@@ -314,6 +314,20 @@ function FixtureGameCentre({ items, degraded }: { items: FxItem[]; degraded: boo
   }, []);
 
   const groups = useMemo(() => groupFixtures(items, prefs?.sport.teamRefs ?? []), [items, prefs]);
+
+  // #/games?fid=… (a reminder's link): scroll to that card, focus it and flash it once; again only for a different fid
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusFid || focused.current === focusFid) return;
+    const el = [...document.querySelectorAll<HTMLElement>("li.gc-card[data-fid]")].find((x) => x.dataset.fid === focusFid);
+    if (!el) return;
+    focused.current = focusFid;
+    el.scrollIntoView({ block: "center" });
+    el.focus({ preventScroll: true });
+    el.classList.add("gc-flash");
+    const t = window.setTimeout(() => el.classList.remove("gc-flash"), 2500);
+    return () => window.clearTimeout(t);
+  }, [focusFid, groups]);
 
   const press = useCallback(
     (f: FxItem) => {
@@ -397,6 +411,7 @@ export function GameCentre() {
     }
   });
   const { data, unavailable } = useFixtures(!legacy);
+  const focusFid = useRoute().query.get("fid");
   useEffect(() => {
     if (legacy) return;
     const prev = document.title;
@@ -412,7 +427,7 @@ export function GameCentre() {
       <div className="page-head">
         <h1 className="page-title">Game Centre</h1>
       </div>
-      {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} />}
+      {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} focusFid={focusFid} />}
     </div>
   );
 }
