@@ -55,6 +55,11 @@ export function parseHash(hash: string): Route {
       if (!/^(f:\d{1,9}|d:([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})|l:[a-z0-9][a-z0-9_-]{0,120})$/i.test(id)) return { name: "journeys", params: {}, query };
       return { name: "journey", params: { id }, query };
     }
+    case "movies":
+    case "shows":
+      // #/movies = the Movies page; #/movies/all?… = the full filterable grid (same for shows)
+      if (seg[1] === "all") return { name: seg[0] === "movies" ? "moviesall" : "showsall", params: {}, query };
+      return { name: seg[0], params: {}, query };
     case "iptv":
       // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
       return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };
@@ -70,8 +75,6 @@ export function parseHash(hash: string): Route {
     case "inbox":
     case "discover":
     case "manage":
-    case "movies":
-    case "shows":
     case "search":
     case "ask":
     case "tonight":

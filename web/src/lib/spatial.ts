@@ -7,7 +7,9 @@ type Dir = "left" | "right" | "up" | "down";
 const KEYS: Record<string, Dir> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
 
 function candidates(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")).filter((el) => {
+  // An open sheet ([data-modal]) owns the arrow keys: nothing behind it can be reached
+  const scope = document.querySelector("[data-modal]") ?? document;
+  return Array.from(scope.querySelectorAll<HTMLElement>("[data-nav]")).filter((el) => {
     if ((el as HTMLButtonElement).disabled) return false;
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
