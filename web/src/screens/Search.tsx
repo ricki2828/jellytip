@@ -120,7 +120,7 @@ function TopHit({ e, item, intent, onGetIt }: { e: SearchEntry; item: Item | und
     e.year,
     e.kind === "series" ? seasonHint(e) : null,
     e.kind === "person" ? [e.role, e.filmCount ? filmCount(e.filmCount) : null].filter(Boolean).join(" · ") || null : null,
-    e.kind === "collection" && e.total ? (e.inLibrary != null ? `${e.inLibrary} of ${e.total} in the library` : `${e.total} films`) : null,
+    e.kind === "collection" && e.total ? (e.inLibrary != null ? `${e.inLibrary} of ${e.total} in the library` : `${e.total} ${e.hubId ? "titles" : "films"}`) : null,
     e.rating ? `★ ${e.rating.toFixed(1)}` : null,
     ...e.quality.slice(0, 1),
     ...e.tech.slice(0, 2),
@@ -264,7 +264,7 @@ function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchRes
           {colls.map((c) => (
             <button key={c.key} className="search-link" data-key={c.key} data-nav onClick={() => go(collPath(c))}>
               <strong>{c.title}</strong>
-              {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
+              {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} ${c.hubId ? "titles" : "films"}`}</span> : null}
             </button>
           ))}
         </div>
@@ -351,7 +351,7 @@ function Groups({ r, untitled, posterW, setGetIt }: { r: SearchResult; untitled:
             {colls.map((c) => (
               <button key={c.hubId ?? c.tmdbCollectionId} className="search-link" data-nav onClick={() => go(collPath(c))}>
                 <strong>{c.name}</strong>
-                {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
+                {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} ${c.hubId ? "titles" : "films"}`}</span> : null}
               </button>
             ))}
           </div>

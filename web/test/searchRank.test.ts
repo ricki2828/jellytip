@@ -142,3 +142,13 @@ test("NxM applies only when the rest matches a library show", () => {
   const none = rank("4x4", [e("m", "Some Film")]);
   assert.equal(none.intent.season, null);
 });
+
+test("a TV hub collection is never the Top match, even when it is the only exact title", () => {
+  const hub = e("h", "Nordic Noir", { kind: "collection", hubId: "world:tv-nordic" });
+  const g = groupEntries([hub, e("s", "Nordic Noir Show", { kind: "series" })], parseIntent("nordic noir"), false);
+  assert.equal(g.top?.key, "s");
+  assert.deepEqual(g.collections.map((x) => x.key), ["h"]);
+  const only = groupEntries([hub], parseIntent("nordic noir"), false);
+  assert.equal(only.top, null);
+  assert.equal(only.collections.length, 1);
+});
