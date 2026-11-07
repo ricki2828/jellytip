@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, type ChanItem } from "../src/lib/channels.ts";
+import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, itemLabel, mixItems, lineup, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
 const it = (id: string, min: number | undefined, o: Partial<ChanItem> = {}): ChanItem => ({ Id: id, Name: `Item ${id}`, Type: "Movie", RunTimeTicks: min == null ? undefined : min * MIN, ...o });
@@ -244,4 +244,34 @@ test("tunePath: a library item never chains with an IPTV id as then= (the player
 
 test("iptv channels: every Movie channel declares TMDB genres, episode channels do not", () => {
   for (const c of CHANNELS) assert.equal(!!c.tmdbGenres?.length, c.type === "Movie", c.id);
+});
+
+test("chainTarget: never the item that just ended (file shorter than its runtime), otherwise the tune target", () => {
+  const now = EP + T + 12 * 60000;
+  const s = schedule(POOL, "ch", now, 4);
+  const cur = s.slots[0].item.Id;
+  assert.equal(chainTarget(s.slots, s.offsetS, "other")!.id, tuneTarget(s.slots, s.offsetS)!.id);
+  const t = chainTarget(s.slots, s.offsetS, cur)!;
+  assert.equal(t.id, s.slots[1].item.Id);
+  assert.equal(t.startS, 0);
+  assert.equal(chainTarget([], 0, "x"), null);
+  assert.equal(chainTarget(s.slots.slice(0, 1), s.offsetS, cur), null);
+});
+
+test("chainBudget: the 4th hop inside two minutes is refused; old hops age out", () => {
+  let st: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const r = chainBudget(st, 1000 + i);
+    assert.equal(r.ok, true);
+    st = r.stamps;
+  }
+  assert.equal(chainBudget(st, 5000).ok, false);
+  assert.equal(chainBudget(st, 1000 + 121_000).ok, true);
+});
+
+test("playedEnough: a few seconds of a long film is a stub; a genuine short tail is fine", () => {
+  assert.equal(playedEnough(8, 6000), false);
+  assert.equal(playedEnough(60, 6000), true);
+  assert.equal(playedEnough(30, 35), true);
+  assert.equal(playedEnough(2, 0), true);
 });

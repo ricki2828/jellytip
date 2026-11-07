@@ -498,8 +498,6 @@ export function Home() {
         {/* People with an IPTV provider: live sport right now, only when there are at least two */}
         <OnNowStrip title="Live sport on now" sportOnly min={2} checkProvider />
         <UpcomingRow />
-        {/* Personal scheduled channels: wide cards with what's on now; hidden until a channel is viable */}
-        <ChannelsRow />
         {rowsFailed && (
           <RowsError
             onRetry={() => {
@@ -524,6 +522,8 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        {/* Personal scheduled channels, after the main rows: it appears late (after startup), so it must not push them or steal their focus */}
+        <ChannelsRow />
         {/* In flow at the end of Home (was absolutely positioned over the hero and overlapped its buttons) */}
         <div className="home-open">
           <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>

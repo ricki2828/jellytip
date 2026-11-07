@@ -23,8 +23,8 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
 import { remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
-import { channelById, poolOf, schedule, tunePath, tuneTarget, type ChanItem } from "../lib/channels.ts";
-import { channelItems } from "../api/channels";
+import { chainTarget, channelById, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels.ts";
+import { channelItems, takeChainHop } from "../api/channels";
 
 const PROGRESS_MS = 10_000;
 const HIDE_MS = 3000;
@@ -451,8 +451,12 @@ export function Player({ id, startParam, thenId, chId }: { id: string; startPara
       // Whatever the clock says is on now: the next scheduled item at its scheduled offset, never a saved resume position
       const pool = poolRef.current;
       const sch = pool ? schedule(pool, channel.id, Date.now(), 3) : null;
-      const t = sch ? tuneTarget(sch.slots, sch.offsetS) : next ? { id: next.Id, startS: 0, thenId: null } : null;
-      if (!t) return;
+      const t = sch ? chainTarget(sch.slots, sch.offsetS, id) : next ? { id: next.Id, startS: 0, thenId: null, title: next.Name } : null;
+      if (!t || !takeChainHop()) {
+        // nothing to show, or too many hops lately (a file shorter than its runtime would loop): back to the channels
+        exit();
+        return;
+      }
       stop();
       go(tunePath(t, channel.id), true);
       return;
@@ -460,7 +464,7 @@ export function Player({ id, startParam, thenId, chId }: { id: string; startPara
     if (!next) return;
     stop();
     go(`/play/${next.Id}`, true);
-  }, [next, stop, channel]);
+  }, [next, stop, channel, id, exit]);
 
   const togglePlay = () => {
     const v = videoRef.current;

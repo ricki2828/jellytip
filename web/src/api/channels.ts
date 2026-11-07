@@ -3,7 +3,7 @@
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { channelById, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, schedule, tunePath, tuneTarget, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { chainBudget, chainTarget, channelById, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
 import { iptvGet } from "./iptv";
 
 const TTL_MS = 6 * 3600 * 1000;
@@ -135,13 +135,40 @@ export function writeHiddenChannels(ids: string[]) {
   }
 }
 
-/** Where a channel's player goes when its item ends: what the clock says is on now (null: unknown channel or nothing to show). */
-export async function nextChannelPath(channelId: string): Promise<string | null> {
+const chainKey = () => `jellytip.channels.chain.${uid()}`;
+/** Spend one automatic hop; false when too many happened lately (the caller stops and says so). */
+export function takeChainHop(): boolean {
+  let stamps: number[] = [];
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(chainKey()) ?? "[]");
+    if (Array.isArray(v)) stamps = v.filter((x): x is number => typeof x === "number");
+  } catch {
+    // none
+  }
+  const r = chainBudget(stamps, Date.now());
+  try {
+    sessionStorage.setItem(chainKey(), JSON.stringify(r.stamps));
+  } catch {
+    // memory only: no budget this time
+  }
+  return r.ok;
+}
+
+/**
+ * Where a channel's player goes when item `currentId` ends: what the clock says is on now, never the item that just ended,
+ * and never when it ended after a few seconds of what should have been a long film, or when too many hops happened lately
+ * (null: the caller leaves the player). `resumeS` is where this play started.
+ */
+export async function nextChannelPath(channelId: string, currentId?: string, playedS?: number, resumeS = 0): Promise<string | null> {
   const def = channelById(channelId);
   if (!def) return null;
   try {
-    const sch = schedule(poolOf(await channelItems(def), def), def.id, Date.now(), 3);
-    const t = tuneTarget(sch.slots, sch.offsetS);
+    const pool = poolOf(await channelItems(def), def);
+    const cur = currentId ? pool.find((i) => i.Id === currentId) : undefined;
+    if (cur?.RunTimeTicks && playedS != null && !playedEnough(playedS, cur.RunTimeTicks / TICKS_PER_SECOND - resumeS)) return null;
+    if (!takeChainHop()) return null;
+    const sch = schedule(pool, def.id, Date.now(), 4);
+    const t = chainTarget(sch.slots, sch.offsetS, currentId);
     return t ? tunePath(t, def.id) : null;
   } catch {
     return null;

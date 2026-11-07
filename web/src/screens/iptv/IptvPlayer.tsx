@@ -819,18 +819,20 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { targe
     back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv");
   };
   exitRef.current = exit;
-  // A channel's film ended: whatever the clock says is on now (at its scheduled offset), through the same player route
+  // A channel's film ended: whatever the clock says is on now (at its scheduled offset), through the same player route. Not when it
+  // is the same film again, ended after seconds of a long one, or after too many hops lately: then back to the channels.
   const chained = useRef(false);
+  const mountedAt = useRef(Date.now());
   const nextOnChannel = () => {
     if (!channelId || chained.current) return;
     chained.current = true;
-    void nextChannelPath(channelId).then((path) => {
+    void nextChannelPath(channelId, target.vod, (Date.now() - mountedAt.current) / 1000, resume).then((path) => {
       if (!alive.current) return;
       if (path) {
         teardown();
         go(path, true);
       } else {
-        chained.current = false;
+        flashNote("This channel can't carry on right now.");
         exit();
       }
     });
@@ -1159,6 +1161,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
   const alive = useRef(true);
   const renewed = useRef(false);
   const switchTo = useRef<string | null>(null);
+  const openedAt = useRef(Date.now());
   // The user's alert settings go to the native player, which shows its own toasts and notifications
   const userPrefs = usePrefs({ defer: true }).prefs;
   const sportPrefsRef = useRef<{ fantasyAlerts?: boolean; flipAlerts?: boolean; panelStyle?: "docked" | "floating" }>({});
@@ -1237,6 +1240,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
+      openedAt.current = Date.now();
       try {
         r = await NativePlayer.open({
           url: link.url,
@@ -1289,7 +1293,13 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
       }
       if (r.reason === "ended" && channelId) {
         // The film finished: on to what the clock says is next on the channel
-        void nextChannelPath(channelId).then((path) => (path ? go(path, true) : exit()));
+        void nextChannelPath(channelId, target.vod, (Date.now() - openedAt.current) / 1000, resume).then((path) => {
+          if (path) go(path, true);
+          else {
+            flashNote("This channel can't carry on right now.");
+            exit();
+          }
+        });
         return;
       }
       if (r.reason !== "error") {
@@ -1324,7 +1334,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
     },
     // start is declared below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLive, key, title, exit, channelId],
+    [isLive, key, title, exit, channelId, target.vod, resume],
   );
 
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */

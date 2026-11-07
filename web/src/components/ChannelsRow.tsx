@@ -26,7 +26,7 @@ const Card = memo(function Card({ id, items, now }: { id: string; items: ChanIte
     <button
       className="chrow-card"
       data-nav
-      onClick={() => go(tunePath(m.target, def.id))}
+      onClick={() => go(tunePath(cardModel(def, items, Date.now())?.target ?? m.target, def.id))} // the clock, not the card's last tick
       aria-label={`${def.name}. Now: ${m.nowTitle}, ${pct}% through.${m.next ? ` Next: ${m.next.title} at ${clock(m.next.atMs)}.` : ""} Tune in`}
     >
       {art && bad !== art && <img className="chrow-art" src={art} alt="" loading="lazy" decoding="async" onError={() => setBad(art)} />}

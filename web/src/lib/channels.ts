@@ -250,6 +250,32 @@ export function tuneTarget(slots: Slot[], offsetS: number): { id: string; startS
 }
 
 /**
+ * Where a player goes when `currentId` has ended: the tune target, except that an item which has just ended is never tuned to
+ * again (a file shorter than its listed runtime would restart on the clock and loop): the following slot, from 0.
+ */
+export function chainTarget(slots: Slot[], offsetS: number, currentId?: string): { id: string; startS: number; thenId: string | null; title: string } | null {
+  const t = tuneTarget(slots, offsetS);
+  if (!t || !currentId || t.id !== currentId) return t;
+  const nxt = slots.findIndex((s) => s.item.Id !== currentId);
+  if (nxt < 0) return null;
+  return { id: slots[nxt].item.Id, startS: 0, thenId: slots[nxt + 1]?.item.Id ?? null, title: itemLabel(slots[nxt].item).title };
+}
+
+/** Chaining budget: more than CHAIN_MAX automatic hops inside CHAIN_WINDOW_MS means something is looping (stub files, bad runtimes). */
+export const CHAIN_MAX = 3;
+export const CHAIN_WINDOW_MS = 120_000;
+export function chainBudget(stamps: number[], nowMs: number): { ok: boolean; stamps: number[] } {
+  const recent = stamps.filter((t) => nowMs - t < CHAIN_WINDOW_MS && t <= nowMs);
+  return recent.length >= CHAIN_MAX ? { ok: false, stamps: recent } : { ok: true, stamps: [...recent, nowMs] };
+}
+
+/**
+ * A film that ended after only a few seconds when much more was expected is a stub or a short file: chaining on would just
+ * burn provider connections. OK when it played a minute, or most of what was left.
+ */
+export const playedEnough = (playedS: number, expectedLeftS: number): boolean => playedS >= Math.min(60, Math.max(0, expectedLeftS) * 0.8);
+
+/**
  * Where a tune target plays. A library item: "/play/<id>?start=<s>&then=<id>&ch=<channel>". An IPTV film: the IPTV player at the
  * same offset ("/iptv/play?vod=<id>&resume=<s>&t=<title>&ch=<channel>"); either way the player moves on by the clock at the end.
  */
