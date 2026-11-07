@@ -100,6 +100,7 @@ const VOD_STALL_MS = 15_000;
 const RECONNECT_AFTER_MS = 6_000;
 
 function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedule = false }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+  const curId = target.vod ?? target.episode; // the channel item playing: a film, or an IPTV episode
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -868,8 +869,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     if (v.paused) void v.play().catch(() => undefined);
   };
   const rejoinClock = () => {
-    if (!channelId || !target.vod) return;
-    void rejoinPlan(channelId, target.vod).then((r) => {
+    if (!channelId || !curId) return;
+    void rejoinPlan(channelId, curId).then((r) => {
       if (!r || !alive.current) return;
       if (r.kind === "seek") {
         seekTo_(r.s);
@@ -885,7 +886,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const nextOnChannel = () => {
     if (!channelId || chained.current) return;
     chained.current = true;
-    void nextChannelPath(channelId, target.vod, (Date.now() - mountedAt.current) / 1000, playedFrom.current).then((path) => {
+    void nextChannelPath(channelId, curId, (Date.now() - mountedAt.current) / 1000, playedFrom.current).then((path) => {
       if (!alive.current) return;
       if (path) {
         teardown();
@@ -1221,6 +1222,7 @@ function nativeFailureText(r: NativePlayerResult): string {
  * /v1/debug/report like the web player's.
  */
 function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
+  const curId = target.vod ?? target.episode;
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);
@@ -1357,7 +1359,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
       }
       if (r.reason === "ended" && channelId) {
         // The film finished: on to what the clock says is next on the channel
-        void nextChannelPath(channelId, target.vod, (Date.now() - openedAt.current) / 1000, resume).then((path) => {
+        void nextChannelPath(channelId, curId, (Date.now() - openedAt.current) / 1000, resume).then((path) => {
           if (path) go(path, true);
           else {
             flashNote("This channel can't carry on right now.");
@@ -1398,7 +1400,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
     },
     // start is declared below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLive, key, title, exit, channelId, target.vod, resume],
+    [isLive, key, title, exit, channelId, curId, resume],
   );
 
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */

@@ -3,7 +3,7 @@
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { chainBudget, chainTarget, channelById, rejoinLive, iptvPoolItems, mixItems, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { chainBudget, chainTarget, channelById, rejoinLive, iptvPoolItems, iptvEpisodeItems, mixItems, mixEpisodes, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, withinYearTo, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
 import { iptvGet } from "./iptv";
 
 const TTL_MS = 6 * 3600 * 1000;
@@ -22,9 +22,9 @@ interface Entry {
 }
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<ChanItem[]>>();
-const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v3.${u}.${def.id}`;
+const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v5.${u}.${def.id}`;
 
-const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks, Tmdb: i.Tmdb, Art: i.Art });
+const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, SeriesTmdb: i.SeriesTmdb, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks, Tmdb: i.Tmdb, Art: i.Art });
 
 function read(key: string): ChanItem[] | null {
   const now = Date.now();
@@ -55,17 +55,25 @@ function write(key: string, items: ChanItem[], ttl?: number) {
 // No Limit and no SortBy (a cut-off would be a name-ordered slice); no extra Fields, no images, no user data
 const common = { Recursive: true, EnableUserData: false, EnableImages: false, Fields: "", IsMissing: false } as const;
 
-// IPTV films for a Movie channel: ONE catalogue call (metadata only: the server never opens a stream or calls /play to answer it).
+// IPTV films (Movie channel) or episodes (Episode channel): ONE catalogue call (metadata only: the server never opens a stream or calls /play to answer it).
 // A server without the route, or a person without IPTV, just means no IPTV films. Playing one is the normal IPTV player's job.
 const noIptv = new Set<string>();
-async function iptvFilms(def: ChannelDef, u: string): Promise<{ items: ChanItem[]; pending: number }> {
-  if (def.type !== "Movie" || !def.tmdbGenres?.length || noIptv.has(u)) return { items: [], pending: 0 };
+async function iptvPool(def: ChannelDef, u: string): Promise<{ items: ChanItem[]; pending: number }> {
+  if (!def.tmdbGenres?.length || noIptv.has(u)) return { items: [], pending: 0 };
+  const episodes = def.type === "Episode";
   const q = new URLSearchParams({ genres: def.tmdbGenres.join(","), limit: "200" });
-  if (def.yearFrom != null) q.set("yearFrom", String(def.yearFrom));
-  if (def.yearTo != null) q.set("yearTo", String(def.yearTo));
+  if (episodes) {
+    q.set("kind", "episode");
+    if (def.minMinutes) q.set("runtimeMin", String(def.minMinutes));
+    if (def.maxMinutes) q.set("runtimeMax", String(Math.min(100, def.maxMinutes)));
+  } else {
+    if (def.yearFrom != null) q.set("yearFrom", String(def.yearFrom));
+    if (def.yearTo != null) q.set("yearTo", String(def.yearTo));
+  }
   try {
     const a = await iptvGet<unknown>(`v1/iptv/channel-pool?${q}`, 20_000);
     if (a.status === 404 || a.status === 501 || a.status === 401 || a.status === 403) noIptv.add(u);
+    if (a.status === 200 && episodes) { const r = iptvEpisodeItems(a.data); return { items: withinYearTo(r.items, def), pending: r.pending }; }
     return a.status === 200 ? iptvPoolItems(a.data) : { items: [], pending: 0 };
   } catch {
     return { items: [], pending: 0 };
@@ -82,18 +90,21 @@ async function fetchItems(def: ChannelDef, u: string): Promise<Fetched> {
   const genres = def.genres?.length ? def.genres.join("|") : undefined;
   if (def.type === "Movie") {
     // ProviderIds carries the TMDB id: the same film on IPTV is left out in favour of the library copy
-    const [r, v] = await Promise.all([getItems({ ...common, Fields: "ProviderIds", IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def) }), iptvFilms(def, u)]);
+    const [r, v] = await Promise.all([getItems({ ...common, Fields: "ProviderIds", IncludeItemTypes: "Movie", Genres: genres, Years: yearsParam(def) }), iptvPool(def, u)]);
     const lib = sample(playable(r.Items.map((i) => slim({ ...i, Tmdb: i.ProviderIds?.Tmdb } as ChanItem)), def), CAP, def.id);
     return { items: mixItems(lib, v.items), pending: v.pending };
   }
   // Genres sit on the series, and this server ignores AncestorIds: find the matching series, take the episodes (they carry
-  // their SeriesId) and keep those of that set, a few per series
-  const s = await getItems({ ...common, IncludeItemTypes: "Series", Genres: genres });
-  const ids = new Set(s.Items.map((x) => x.Id));
-  if (!ids.size) return { items: [], pending: 0 };
-  const r = await getItems({ ...common, IncludeItemTypes: "Episode" });
-  const mine = playable(r.Items.map(slim), def).filter((e) => e.SeriesId && ids.has(e.SeriesId));
-  return { items: sampleByGroup(mine, (e) => e.SeriesId, PER_SERIES, EPISODE_CAP, def.id), pending: 0 };
+  // their SeriesId) and keep those of that set, a few per series. ProviderIds on the series lets an IPTV copy of the same show defer to it.
+  const [s, v] = await Promise.all([getItems({ ...common, Fields: "ProviderIds", IncludeItemTypes: "Series", Genres: genres }), iptvPool(def, u)]);
+  const tmdb = new Map(withinYearTo(s.Items, def).map((x) => [x.Id, x.ProviderIds?.Tmdb] as const));
+  let lib: ChanItem[] = [];
+  if (tmdb.size) {
+    const r = await getItems({ ...common, IncludeItemTypes: "Episode" });
+    const mine = playable(r.Items.map(slim), def).filter((e) => e.SeriesId && tmdb.has(e.SeriesId));
+    lib = sampleByGroup(mine, (e) => e.SeriesId, PER_SERIES, EPISODE_CAP, def.id).map((e) => ({ ...e, SeriesTmdb: tmdb.get(e.SeriesId!) }));
+  }
+  return { items: mixEpisodes(lib, v.items), pending: v.pending };
 }
 
 /** The channel's candidate items (cached ~6 h per person). Rejects when Jellyfin can't be reached. */
