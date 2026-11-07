@@ -2,7 +2,7 @@
 // moment changes, hides after 8 s unless pinned (the pill is a button: select it to pin or unpin). Lives inside the video wrap, so it
 // moves with the picture when the panel squeezes it. Re-renders itself at 1 Hz only while visible; nothing above it re-renders.
 import { memo, useEffect, useState } from "react";
-import { scorebugText, scorebugVisible } from "../../lib/companion";
+import { scorebugText, scorebugVisible, tickClock } from "../../lib/companion";
 import type { FeedView } from "./useLiveFeed";
 import "./Companion.css";
 
@@ -18,15 +18,16 @@ const readPin = () => {
 export const Scorebug = memo(function Scorebug({ view, panelOpen }: { view: FeedView; panelOpen: boolean }) {
   const [pinned, setPinned] = useState(readPin);
   const [now, setNow] = useState(() => Date.now());
-  const text = scorebugText(view);
+  const clock = tickClock(view.clock, view.sport, view.clockRunning, view.shownAtMs != null ? (now - view.shownAtMs) / 1000 : 0);
+  const text = scorebugText({ ...view, clock });
   const visible = !!text && scorebugVisible({ nowMs: now, changedAtMs: view.changedAtMs, pinned, panelOpen });
   // 1 Hz, and only while the pill is on screen or about to be
   useEffect(() => {
     setNow(Date.now());
-    if (!text || panelOpen || (!pinned && view.changedAtMs == null)) return;
+    if (!text || panelOpen || (!pinned && view.changedAtMs == null && !view.clockRunning)) return;
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [view.changedAtMs, pinned, panelOpen, !!text]);
+  }, [view.changedAtMs, view.clockRunning, pinned, panelOpen, !!text]);
   if (!text || !visible) return null;
   const toggle = () => {
     const n = !pinned;

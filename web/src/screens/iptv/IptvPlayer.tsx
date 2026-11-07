@@ -789,7 +789,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const revealClock = useRevealClock({ video: videoEl, channelKey: isLive ? target.channel ?? null : null, isLive, replay: !!extras?.replay });
   const panelAvail = live_ok && !!extras?.matchId;
   const liveNow = isLive && !extras?.replay;
-  const feed = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal });
+  const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal });
   const blowout = feed.kind === "blowout";
   const openedBy = useRef<{ by: OpenReason; at: number; touched: boolean }>({ by: "user", at: 0, touched: false });
   const userClosedAt = useRef<number | null>(null);
@@ -836,10 +836,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     document.addEventListener("focusin", t);
     return () => document.removeEventListener("focusin", t);
   }, []);
-  const toChannelsRef = useRef<() => void>(() => undefined);
-  toChannelsRef.current = () => {
-    teardown();
-    back("/channels");
+  // Down with the controls idle: this match's "Other channels" (the same sheet and switch route as the pre-game card); nothing without alternates
+  const nAlt = extras?.alternates?.length ?? 0;
+  const othersRef = useRef({ open: false, n: 0 });
+  othersRef.current = { open: others, n: nAlt };
+  const switchAlt = (i: number) => {
+    const alts = extras!.alternates!;
+    go(livePath(alts[i].id, alts[i].name, { alternates: [...alts.filter((_, j) => j !== i), { id: target.channel!, name: title }], startsAt, eventKey: extras!.eventKey, matchId: extras!.matchId, nospoil: extras!.nospoil }), true);
   };
   const flipAlerts = sportPrefs ? sportPrefs.flipAlerts : false;
   const { items: remItems, available: remAvailable } = useReminders();
@@ -991,6 +994,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if ((e.key === "Escape" || e.key === "Backspace") && tracksOpen) { e.preventDefault(); e.stopPropagation(); setTracksOpen(false); return; }
+      if ((e.key === "Escape" || e.key === "Backspace") && othersRef.current.open && !keyState.current.open) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); setOthers(false); return; }
       // Companion keys (T2.1): Back closes the panel first; with the controls idle Up = panel, Down = channels, Left/Right = panel tabs
       {
         const ae = document.activeElement as HTMLElement | null;
@@ -1004,7 +1008,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           if (btn) ae!.blur();
           if (act === "close-panel") closePanel(true);
           else if (act === "toggle-panel") (keyState.current.open ? closePanel(true) : openPanel("user"));
-          else if (act === "channels") toChannelsRef.current();
+          else if (act === "channels") {
+            if (othersRef.current.n > 0) {
+              if (othersRef.current.open) document.querySelector<HTMLElement>(".cp-others [data-nav]")?.focus();
+              else setOthers(true);
+            }
+          }
           else {
             const tabs = Array.from(document.querySelectorAll<HTMLElement>(".cp-panel .bc-tab"));
             const at = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
@@ -1137,7 +1146,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       {panelAvail && liveNow && !revealClock.replay && <Scorebug view={feed} panelOpen={drawer} />}
       </div>
       {panelAvail && extras?.matchId && (
-        <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} onClose={closeDrawer} onTouch={touchPanel} />
+        <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} source={liveNow ? feedSource : undefined} onClose={closeDrawer} onTouch={touchPanel} />
       )}
       </div>
       {state.kind === "loading" && <div className="spinner" role="status" aria-label={retrying ? "Retrying stream" : "Connecting to stream"} />}
@@ -1238,6 +1247,21 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
               ))}
             </div>
           )}
+        </div>
+      )}
+      {others && !(preNow && startsAt && cardOn) && nAlt > 0 && (
+        <div className="pregame-card cp-others" role="group" aria-label="Other channels">
+          <span>Other channels</span>
+          <div className="buttons">
+            {extras!.alternates!.map((a, i) => (
+              <button key={a.id} className="btn small" data-nav onClick={() => switchAlt(i)}>
+                {a.name}
+              </button>
+            ))}
+            <button className="btn small ghost" data-nav onClick={() => setOthers(false)}>
+              Close
+            </button>
+          </div>
         </div>
       )}
       {copy && state.kind === "playing" && (

@@ -64,10 +64,12 @@
 }
 /* A squeezed panel sits under the player's top bar (the Live button toggles it), so its content starts below that bar */
 .cp-panel.squeeze .live-drawer {
-  padding-top: calc(var(--safe-t, 0px) + 64px);
+  padding-top: calc(var(--cp-top, 72px) + 44px);
 }
-.cp-panel.squeeze .sheet-x {
-  display: none;
+/* the close button sits in the band between the top bar and the tabs (data-nav, so keys / mouse / touch all reach it) */
+.cp-panel.squeeze .live-drawer .sheet-x {
+  top: calc(var(--cp-top, 72px) + 4px);
+  right: 10px;
 }
 /* Phone portrait: bottom sheet */
 @media (max-width: 700px) and (orientation: portrait) {
@@ -154,4 +156,7 @@
 .player-top .delay-chip {
   flex: none;
   white-space: nowrap;
+}
+.cp-others {
+  z-index: 8;
 }

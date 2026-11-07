@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
+import { autoCloseDecision, autoOpenDecision, dropsTooHigh, panelKeyAction, panelModeFor, scorebugText, scorebugVisible, stepTab, tickClock, clockRunning, MOMENT_OPEN_MS, USER_CLOSE_QUIET_MS } from "../src/lib/companion.ts";
 
 const base = { nowMs: 1_000_000, replay: false, panelOpen: false, userClosedAtMs: null, kind: "live" as const, freshMoment: false };
 
@@ -85,4 +85,29 @@ import { parseLive } from "../src/lib/liveStats.ts";
 test("parseLive: a moment's wallclock wins over the first-observed time", () => {
   const d = parseLive({ moments: [{ at: 2000, wallclock: 1990, kind: "goal", label: "Goal", team: "home" }, { at: 2100, kind: "card", label: "Red" }] });
   assert.deepEqual(d?.moments.map((m) => m.at), [1990, 2100]);
+});
+
+test("tickClock: NFL/NBA count down, NRL/rugby/football count up, cap and floor, others untouched", () => {
+  assert.equal(tickClock("12:05", "nfl", true, 5.9), "12:00");
+  assert.equal(tickClock("0:03", "nba", true, 9), "0:00");
+  assert.equal(tickClock("9:05", "nba", true, 6), "8:59");
+  assert.equal(tickClock("62:10", "nrl", true, 3), "62:13");
+  assert.equal(tickClock("59:58", "football", true, 4), "60:02");
+  assert.equal(tickClock("12:05", "nfl", true, 400), "11:45"); // run-on capped at 20 s
+  assert.equal(tickClock("12:05", "nfl", false, 5), "12:05"); // stopped
+  assert.equal(tickClock("12:05", "nfl", true, 0.4), "12:05");
+  assert.equal(tickClock("63'", "football", true, 10), "63'");
+  assert.equal(tickClock("12:05", "cricket", true, 10), "12:05");
+  assert.equal(tickClock("12:05", null, true, 10), "12:05");
+  assert.equal(tickClock(null, "nfl", true, 10), null);
+});
+test("clockRunning: stopped at breaks, final, pre, or an unchanged clock 10+ s apart", () => {
+  const cur = { clock: "5:00", period: "Q2", atMs: 100_000 };
+  assert.equal(clockRunning("live", null, cur), true);
+  assert.equal(clockRunning("break", null, cur), false);
+  assert.equal(clockRunning("final", null, cur), false);
+  assert.equal(clockRunning("pre", null, cur), false);
+  assert.equal(clockRunning("live", { clock: "5:00", period: "Q2", atMs: 85_000 }, cur), false);
+  assert.equal(clockRunning("live", { clock: "5:15", period: "Q2", atMs: 85_000 }, cur), true);
+  assert.equal(clockRunning("live", { clock: "5:00", period: "Q2", atMs: 95_000 }, cur), true);
 });

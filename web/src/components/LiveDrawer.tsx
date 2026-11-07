@@ -2,7 +2,8 @@
 // performance"): a scoreboard strip in the team colours, pill tabs (Stats · Plays · Odds · Chat · Fantasy), split-bar stats, leader
 // cards, a plays timeline, the odds bar with a sparkline and a per-sport "situation". Polls every 15 s while open only; rows are
 // memoised and keyed so a poll re-renders only what changed; motion is transform and opacity only.
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { LiveSource } from "./Companion/useLiveFeed";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
 import { agoText, applyReveal, liveTabs, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
 import { blowoutLine, closerGame, deciderRows, favouriteSide, gameStateOf, recapPlays, resultLine, type CloserGame, type GameState, type Row } from "../lib/gameState";
@@ -29,6 +30,8 @@ import "./LiveDrawerState.css";
 
 type Tab = "stats" | "plays" | "odds" | "chat" | "fantasy";
 const REFRESH_MS = 15_000;
+const NOOP_SUB = () => () => undefined;
+const NOOP_GET = () => ({ raw: null, fixture: null, state: "loading" as const });
 const OUT_MS = 200;
 const FLASH_MS = 3200;
 
@@ -560,7 +563,7 @@ const FinalCard = memo(function FinalCard({ result, moments, plays }: { result: 
   );
 });
 
-export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, reveal, embedded = false, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; reveal?: Reveal; /** Hosted by the player's companion panel: no slide-in, no scrim, and Back is the player's to handle. */ embedded?: boolean; onClose: () => void }) {
+export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers, reveal, embedded = false, source, onClose }: { matchId: string; liveNow: boolean; spoilers: boolean; reveal?: Reveal; /** Hosted by the player's companion panel: no slide-in, no scrim, and Back is the player's to handle. */ embedded?: boolean; /** The player's own feed (one /live poll): the drawer shows what it has instead of polling. Without it the drawer polls itself. */ source?: LiveSource; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("stats");
   const [raw, setRaw] = useState<LiveStats | null>(null);
   // Everything shown goes through `reveal` (the broadcast delay, T2.3): a new function identity means its answers may have changed
@@ -628,8 +631,16 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
   }, [d?.moments]);
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
+  const ext = useSyncExternalStore(source?.subscribe ?? NOOP_SUB, source?.get ?? NOOP_GET);
   useEffect(() => {
-    if (!allowed) return;
+    if (!source) return;
+    setNow(Date.now() / 1000);
+    if (ext.fixture) setFixture(ext.fixture);
+    if (ext.raw) setRaw(ext.raw);
+    setState(ext.state);
+  }, [source, ext]);
+  useEffect(() => {
+    if (!allowed || source) return;
     let alive = true;
     let timer: number | undefined;
     const load = async () => {
@@ -670,7 +681,7 @@ export const LiveDrawer = memo(function LiveDrawer({ matchId, liveNow, spoilers,
       document.removeEventListener("visibilitychange", onVisible);
       window.clearTimeout(timer);
     };
-  }, [matchId, allowed, spoilers]);
+  }, [matchId, allowed, spoilers, source]);
 
   const home = fixture?.home.name ?? "Home";
   const away = fixture?.away.name ?? "Away";

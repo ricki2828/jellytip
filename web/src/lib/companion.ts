@@ -1,7 +1,7 @@
 // Companion panel + scorebug policy (pure; tested in web/test/companion.test.ts). Plan: ~/ai/plans/jellytip-sport-companion.md section 3.
 // Spike decision (~/ai/state/jellytip-m2spike-20261107.md): squeeze-back with ONE layout change per open/close; opaque overlay over
 // 28% of the frame when the phone is in portrait or the measured drop rate after an open is over 2%.
-import type { GameStateKind } from "./gameState.ts";
+import type { GameStateKind, Sport } from "./gameState.ts";
 
 export const MOMENT_OPEN_MS = 6_000;
 export const USER_CLOSE_QUIET_MS = 120_000;
@@ -130,4 +130,32 @@ export function scorebugVisible(i: BugShowIn): boolean {
   if (i.panelOpen) return false;
   if (i.pinned) return true;
   return i.changedAtMs != null && i.nowMs - i.changedAtMs < SCOREBUG_HIDE_MS;
+}
+
+/** The longest a clock is run on past its snapshot: a poll is 15 s, so a late one never lets the pill drift far. */
+export const MAX_RUN_ON_SEC = 20;
+
+/**
+ * A running "mm:ss" clock moved on by `elapsedSec` since it was revealed: NFL / NBA count down (stops at 0:00), NRL / rugby / football
+ * count up. Minute clocks ("63'"), cricket, tennis, anything stopped (break, timeout, final) or unknown stay as the payload says.
+ */
+export function tickClock(clock: string | null, sport: Sport | null, running: boolean, elapsedSec: number): string | null {
+  if (!clock || !running || !sport || !(elapsedSec >= 1)) return clock;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(clock.trim());
+  if (!m) return clock;
+  const down = sport === "nfl" || sport === "nba";
+  const up = sport === "nrl" || sport === "rugby" || sport === "football";
+  if (!down && !up) return clock;
+  const e = Math.min(Math.floor(elapsedSec), MAX_RUN_ON_SEC);
+  const total = Number(m[1]) * 60 + Number(m[2]);
+  const t = down ? Math.max(0, total - e) : total + e;
+  const mins = Math.floor(t / 60);
+  return `${m[1].length === 2 ? String(mins).padStart(2, "0") : mins}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** The clock is stopped when play is paused (break, final, pre) or the last two snapshots, 10+ s apart, showed the same clock and period. */
+export function clockRunning(kind: GameStateKind | null, prev: { clock: string | null; period: string | null; atMs: number } | null, cur: { clock: string | null; period: string | null; atMs: number }): boolean {
+  if (kind === "break" || kind === "final" || kind === "pre") return false;
+  if (prev && cur.atMs - prev.atMs >= 10_000 && prev.clock === cur.clock && prev.period === cur.period) return false;
+  return true;
 }

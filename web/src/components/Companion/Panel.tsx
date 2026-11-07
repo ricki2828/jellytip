@@ -4,6 +4,7 @@
 // (getVideoPlaybackQuality, first 30 s after an open) switches a device to the overlay for good.
 import { useEffect, useRef, useState } from "react";
 import { LiveDrawer } from "../LiveDrawer";
+import type { LiveSource } from "./useLiveFeed";
 import { DROP_KEY, DROP_WINDOW_MS, dropsTooHigh, type PanelMode } from "../../lib/companion";
 import "./Companion.css";
 
@@ -40,6 +41,7 @@ export function Panel(props: {
   liveNow: boolean;
   spoilers: boolean;
   reveal: (atSec?: number) => boolean;
+  source?: LiveSource;
   onClose: () => void;
   onTouch: () => void;
 }) {
@@ -51,10 +53,17 @@ export function Panel(props: {
     const t = window.setTimeout(() => setMounted(false), 170);
     return () => window.clearTimeout(t);
   }, [open]);
+  // The squeezed panel starts below the player's top bar, whatever height that has (it overlays the panel's top edge)
+  const [barH, setBarH] = useState(72);
+  useEffect(() => {
+    if (!mounted) return;
+    const bar = document.querySelector<HTMLElement>(".player-top");
+    if (bar) setBarH(Math.ceil(bar.getBoundingClientRect().height));
+  }, [mounted, mode]);
   if (!mounted) return null;
   return (
-    <div className={`cp-panel ${mode}${open ? " on" : ""}`} aria-hidden={!open} onPointerDown={onTouch} onFocusCapture={onTouch}>
-      <LiveDrawer embedded matchId={props.matchId} liveNow={props.liveNow} spoilers={props.spoilers} reveal={props.reveal} onClose={props.onClose} />
+    <div className={`cp-panel ${mode}${open ? " on" : ""}`} style={{ "--cp-top": `${barH}px` } as React.CSSProperties} aria-hidden={!open} onPointerDown={onTouch} onFocusCapture={onTouch}>
+      <LiveDrawer embedded matchId={props.matchId} liveNow={props.liveNow} spoilers={props.spoilers} reveal={props.reveal} source={props.source} onClose={props.onClose} />
     </div>
   );
 }
