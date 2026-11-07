@@ -1085,7 +1085,12 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         }
         // OK on the picture with the controls idle brings them up: focus moves to the Live button, then arrows navigate as usual
         if (isLive && !inUse && e.key === "Enter" && !btn) {
-          const first = document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ?? document.querySelector<HTMLElement>(".player-top [data-nav]");
+          // Never the Back arrow: a second OK would leave the player
+          const first =
+            document.querySelector<HTMLElement>(".player-top [data-live-toggle]") ??
+            document.querySelector<HTMLElement>('.player-top button[aria-label$="ullscreen"]') ??
+            document.querySelector<HTMLElement>(".iptv-tracks-button button[aria-haspopup]") ??
+            Array.from(document.querySelectorAll<HTMLElement>(".player-top [data-nav]")).find((el) => el !== document.querySelector(".player-top")?.firstElementChild && !el.closest(".player-top > :first-child"));
           if (first) { e.preventDefault(); e.stopPropagation(); poke(); first.focus(); navAt.current = Date.now(); return; }
         }
       }
