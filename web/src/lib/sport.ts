@@ -2,6 +2,7 @@
 // §2-§4). Everything is optional: a server without them gives no badges and the old behaviour. Pure; tested in
 // web/test/sport.test.ts. The server decides the order; nothing here sorts.
 
+import { parseFailFor, type LastFail } from "./streamFail.ts";
 import { parseFixture, type Fixture } from "./matchInfo.ts";
 import { parsePhase, parseStartsAt, type Phase } from "./preGame.ts";
 
@@ -34,7 +35,7 @@ export interface SportInfo {
   /** Other channels showing the same event, best first. */
   alternates: string[];
   /** The same, with names and stream quality (newer servers); empty when only ids came. */
-  alternateChannels: { id: string; name: string; num: number | null; logo: string | null; quality: Quality | null }[];
+  alternateChannels: { id: string; name: string; num: number | null; logo: string | null; quality: Quality | null; lastFail?: LastFail | null }[];
   eventKey: string | null;
   /** The programme can be played from its start (catch-up): /play with start=. */
   startOver: boolean;
@@ -95,7 +96,7 @@ export function parseSport(raw: unknown, programme?: unknown): SportInfo {
     alternateChannels: (Array.isArray(ev?.alternateChannels) ? (ev!.alternateChannels as unknown[]) : []).flatMap((x) => {
       const c = obj(x);
       const id = str(c?.id);
-      return c && id ? [{ id, name: str(c.name) ?? "Another channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality) }] : [];
+      return c && id ? [{ id, name: str(c.name) ?? "Another channel", num: num(c.num), logo: str(c.logo), quality: parseQuality(c.quality), lastFail: parseFailFor(id, c.lastFail) }] : [];
     }),
     alternates: Array.isArray(ev?.alternates) ? (ev!.alternates as unknown[]).filter((x): x is string => typeof x === "string") : [],
     eventKey: str(ev?.key),

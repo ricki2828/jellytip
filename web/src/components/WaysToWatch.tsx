@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { downloadsAvailable, getDownload, subscribe } from "../lib/downloads";
 import type { Way } from "../lib/availability";
 import { AvailBadge } from "./AvailBadge";
+import { FailNote } from "./FailNote";
 import "./WaysToWatch.css";
 
 /** True while a finished offline copy of `itemId` is on this device (phone app only; false elsewhere). */
@@ -42,6 +43,7 @@ export function WaysToWatch({ ways, onAct }: { ways: readonly Way[]; onAct: (w: 
                   <span className="way-meta">{[...w.quality, w.language].filter(Boolean).join("  ·  ")}</span>
                 )}
                 {w.detail && <span className="way-meta dim">{w.detail}</span>}
+                {w.iptvId && <FailNote id={w.iptvId} className="way-meta fail-note" />}
               </div>
               {label && (
                 <button className={`btn${i === 0 ? " primary" : ""}`} data-nav onClick={() => onAct(w)} aria-label={`${label}: ${w.title}`}>
