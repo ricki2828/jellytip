@@ -18,6 +18,7 @@ const LABEL: Record<Vote, string> = { yes: "Yes", maybe: "Maybe", no: "No" };
 function useSession(code: string | null, onGone: (msg: string) => void) {
   const [session, setSession] = useState<Session | null>(null);
   const [offline, setOffline] = useState(false);
+  const [denied, setDenied] = useState(false);
   const goneRef = useRef(onGone);
   goneRef.current = onGone;
   const refresh = useRef<() => void>(() => undefined);
@@ -25,57 +26,70 @@ function useSession(code: string | null, onGone: (msg: string) => void) {
   useEffect(() => {
     setSession((prev) => (prev && prev.code === code ? prev : null));
     setOffline(false);
+    setDenied(false);
     if (!code) return;
     let alive = true;
+    // Every refresh starts a new generation: the old loop's pending timer and in-flight request are dropped, so only one loop runs.
+    let gen = 0;
     let timer: number | undefined;
     let ctl: AbortController | null = null;
-    const tick = async () => {
-      if (!alive) return;
+    const tick = async (mine: number) => {
+      if (!alive || mine !== gen) return;
       if (document.visibilityState === "hidden") {
-        timer = window.setTimeout(tick, POLL_MS);
+        timer = window.setTimeout(() => void tick(mine), POLL_MS);
         return;
       }
       ctl = new AbortController();
       const r = await getNight(code, ctl.signal);
-      if (!alive) return;
+      if (!alive || mine !== gen) return;
       if (r.ok) {
         setSession(r.session);
         setOffline(false);
       } else if (r.status === 404) {
         return goneRef.current("That movie night has ended or expired.");
+      } else if (r.status === 401 || r.status === 403) {
+        setDenied(true); // signed out: stop asking, the code is kept for when they sign back in
+        return;
       } else setOffline(true);
-      timer = window.setTimeout(tick, POLL_MS);
+      timer = window.setTimeout(() => void tick(mine), POLL_MS);
     };
-    refresh.current = () => {
+    const start = () => {
+      gen += 1;
       window.clearTimeout(timer);
-      void tick();
+      ctl?.abort();
+      void tick(gen);
     };
-    void tick();
+    refresh.current = start;
+    start();
     return () => {
       alive = false;
+      gen += 1;
       window.clearTimeout(timer);
       ctl?.abort();
     };
   }, [code]);
-  return { session, setSession, offline, refresh: () => refresh.current() };
+  return { session, setSession, offline, denied, refresh: () => refresh.current() };
 }
 
 /** Titles and posters for the film ids (a film this person can't see simply has no entry). */
 function useFilms(ids: string[]) {
   const [films, setFilms] = useState<Map<string, Item>>(new Map());
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const key = ids.join(",");
   useEffect(() => {
     if (!ids.length) return;
     let alive = true;
+    setFailed(false);
     getItems({ Ids: ids.join(","), Fields: "Genres,PrimaryImageAspectRatio" }).then(
       (r) => alive && setFilms(new Map(r.Items.map((i) => [undash(i.Id), i]))),
-      () => undefined,
+      () => alive && setFailed(true),
     );
     return () => {
       alive = false;
     };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  return films;
+  }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { films, failed, retry: () => setAttempt((n) => n + 1) };
 }
 
 export function MovieNight({ joinParam }: { joinParam: string | null }) {
@@ -86,7 +100,7 @@ export function MovieNight({ joinParam }: { joinParam: string | null }) {
     else localStorage.removeItem(keyFor());
     setCode(c);
   };
-  const { session, setSession, offline, refresh } = useSession(code, (msg) => {
+  const { session, setSession, offline, denied, refresh } = useSession(code, (msg) => {
     remember(null);
     setNotice(msg);
   });
@@ -106,8 +120,9 @@ export function MovieNight({ joinParam }: { joinParam: string | null }) {
       <h1 className="page-title">Movie night</h1>
       {!code && !picking && <Start initialJoin={joinParam ?? ""} notice={notice} onPick={() => setPicking(true)} onJoined={enter} />}
       {!code && picking && <Pick onCancel={() => setPicking(false)} onCreated={enter} />}
-      {code && !session && <p className="ask-sub">{offline ? "Can't reach the server. Trying again…" : "Opening…"}</p>}
-      {code && session && <Night session={session} offline={offline} onChange={(s) => (setSession(s), refresh())} onLeave={() => remember(null)} />}
+      {code && denied && <p className="ask-sub" role="alert">You're signed out. Sign in again to get back to your movie night.</p>}
+      {code && !denied && !session && <p className="ask-sub">{offline ? "Can't reach the server. Trying again…" : "Opening…"}</p>}
+      {code && session && <Night session={session} offline={offline && !denied} onChange={(s) => (setSession(s), refresh())} onLeave={() => remember(null)} />}
     </div>
   );
 }
@@ -251,7 +266,7 @@ function Art({ item }: { item: Item | undefined }) {
 // ---------- the night ----------
 
 function Night({ session, offline, onChange, onLeave }: { session: Session; offline: boolean; onChange: (s: Session) => void; onLeave: () => void }) {
-  const films = useFilms(session.items);
+  const { films, failed: titlesFailed, retry: retryTitles } = useFilms(session.items);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const rows = useMemo(() => tally(session.items, session.counts), [session.items, session.counts]);
@@ -261,6 +276,7 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
   const link = shareLink(location.href, session.code);
   const mins = minutesLeft(session, Math.floor(Date.now() / 1000));
   const total = session.items.length;
+  const filmName = (id: string) => films.get(id)?.Name ?? (titlesFailed ? "Title not loaded" : films.size ? "A film you can't see" : "Loading…");
 
   const vote = useCallback(
     async (item: string, v: Vote) => {
@@ -306,6 +322,14 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
       </section>
 
       {offline && <p className="ask-sub" role="status">Can't reach the server. Showing the last update.</p>}
+      {titlesFailed && (
+        <p className="ask-sub" role="status">
+          Couldn't load the film titles.{" "}
+          <button className="btn small" data-nav onClick={retryTitles}>
+            Try again
+          </button>
+        </p>
+      )}
 
       <section className="mnight-people" aria-label="Who's in">
         {session.members.map((m, i) => (
@@ -323,7 +347,7 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
               <div className="mnight-winner-row">
                 <Art item={films.get(top.id)} />
                 <div className="mnight-winner-text">
-                  <h2>{films.get(top.id)?.Name ?? "A film you can't see"}</h2>
+                  <h2>{filmName(top.id)}</h2>
                   <p className="tonight-sub">{top.counts.yes} yes · {top.counts.maybe} maybe · {top.counts.no} no</p>
                   {films.get(top.id) && (
                     <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${top.id}`)}>
@@ -354,10 +378,10 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
             <li key={r.id} className={`mnight-film${lead ? " lead" : ""}`}>
               <Art item={f} />
               <div className="mnight-film-body">
-                <strong>{f?.Name ?? "A film you can't see"}</strong>
+                <strong>{filmName(r.id)}</strong>
                 <span className="tonight-sub">{[f?.ProductionYear, `${r.counts.yes} yes · ${r.counts.maybe} maybe · ${r.counts.no} no`].filter(Boolean).join(" · ")}</span>
                 {session.status === "open" ? (
-                  <div className="mnight-votes" role="group" aria-label={`Your vote for ${f?.Name ?? "this film"}`}>
+                  <div className="mnight-votes" role="group" aria-label={`Your vote for ${filmName(r.id)}`}>
                     {(["yes", "maybe", "no"] as Vote[]).map((v) => (
                       <button key={v} className={`chip${mine === v ? " on" : ""}`} data-nav data-autofocus={idx === 0 && !done ? true : undefined} aria-pressed={mine === v} onClick={() => vote(r.id, v)}>
                         {LABEL[v]}
@@ -381,7 +405,7 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
           </button>
         )}
         <button className="btn ghost" data-nav onClick={onLeave}>
-          {done ? "Done" : "Leave this screen"}
+          {done ? "Done" : session.host && session.status === "open" ? "Leave (the night stays open until you close it)" : "Leave (you can rejoin with the code)"}
         </button>
       </div>
     </div>
