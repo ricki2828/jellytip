@@ -5,7 +5,8 @@ import { imageUrl } from "../api/jellyfin";
 import { hubNow, hubUnavailable, loadHub, onHubChange } from "../api/collections";
 import { logoSrc } from "../api/iptv";
 import { go } from "../lib/router";
-import { cardLine, filterHub, loadTab, saveTab, type CollectionCard, type CollTab } from "../lib/collections";
+import { cardLine, filterHub, type CollectionCard } from "../lib/collections";
+import { CollTabs, useCollTab } from "../components/CollTabs";
 import { safeArt } from "../components/IptvTile";
 import "./Collections.css";
 
@@ -57,10 +58,9 @@ export function Collections() {
     void loadHub();
     return onHubChange(() => tick((n) => n + 1));
   }, []);
-  const [tab, setTabState] = useState<CollTab>(loadTab);
-  const setTab = (t: CollTab) => {
-    saveTab(t);
-    setTabState(t);
+  const [tab, setTabRaw] = useCollTab();
+  const setTab = (t: Parameters<typeof setTabRaw>[0]) => {
+    setTabRaw(t);
     setKey(null);
   };
   const hub = hubNow();
@@ -73,11 +73,7 @@ export function Collections() {
       <button className="chip" data-nav onClick={() => go("/journeys")}>Start a journey</button>
       {!sections && !hubUnavailable() && <p className="empty">Loading…</p>}
       {hub && hub.length > 0 && (
-        <div className="coll-seg" role="tablist" aria-label="Type">
-          {([["movie", "Movies"], ["tv", "TV Shows"], ["all", "All"]] as const).map(([t, label]) => (
-            <button key={t} role="tab" aria-selected={tab === t} className={`coll-seg-btn${tab === t ? " on" : ""}`} data-nav onClick={() => setTab(t)}>{label}</button>
-          ))}
-        </div>
+        <CollTabs tab={tab} onChange={setTab} />
       )}
       {hubUnavailable() && <p className="empty">Nothing here yet.</p>}
       {hub && hub.length > 0 && sections && sections.length === 0 && <p className="empty">{tab === "tv" ? "No TV collections yet." : "No movie collections yet."}</p>}

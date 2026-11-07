@@ -43,7 +43,11 @@ export interface PersonHit {
   filmCount?: number | null;
 }
 export interface CollectionHit {
-  tmdbCollectionId: number;
+  tmdbCollectionId: number | null;
+  /** TV collections are Collections-hub rows, not TMDB ones: they open at /collections/<hubId>. */
+  hubId?: string;
+  /** TMDB collections are film franchises, so absent means "movie". */
+  mediaType?: "movie" | "tv";
   name: string;
   inLibrary?: number;
   total?: number;
@@ -182,7 +186,10 @@ export interface SearchEntry {
   quality: string[];
   tech: string[];
   requested?: string | null;
+  hubId?: string;
   personId?: string;
+  /** Collection entries: "tv" when the server says so; otherwise a film collection. */
+  collMediaType?: "movie" | "tv";
   role?: string;
   imageTag?: string | null;
   filmCount?: number | null;
@@ -275,7 +282,8 @@ export function parseEntry(raw: unknown): SearchEntry | null {
   }
   if (kind === "collection") {
     const id = num(x.tmdbCollectionId);
-    return id != null ? { ...base, key: `c:${id}`, tmdbCollectionId: id, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined, poster: str(x.poster) } : null;
+    const hubId = str(x.hubId) ?? undefined;
+    return id != null || hubId ? { ...base, key: hubId ? `h:${hubId}` : `c:${id}`, tmdbCollectionId: id ?? undefined, hubId, collMediaType: x.mediaType === "tv" ? "tv" : undefined, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined, poster: str(x.poster) } : null;
   }
   if (source === "library") {
     const id = str(x.id);
@@ -357,6 +365,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
     }),
     collections: items(g, "collections", (x) => {
       const id = num(x.tmdbCollectionId);
+      const hubId = str(x.hubId) ?? undefined;
       const name = str(x.name);
       // Live server (29-Oct) sends `inLibrary` as the parts list instead of a count: count the ones with an item
       const parts = Array.isArray(x.inLibrary) ? (x.inLibrary as unknown[]).map(obj) : null;
@@ -364,7 +373,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
       const owned = parts ? parts.filter((pt) => str(pt?.itemId)).length : null;
       const inLibrary = parts ? owned || undefined : num(x.inLibrary) ?? undefined;
       const total = num(x.total) ?? (parts ? parts.length : undefined);
-      return id && name ? { tmdbCollectionId: id, name, inLibrary, total } : null;
+      return (id || hubId) && name ? { tmdbCollectionId: id ?? null, hubId, name, mediaType: x.mediaType === "tv" ? "tv" as const : undefined, inLibrary, total } : null;
     }),
     lists: items(g, "lists", (x) => {
       const slug = str(x.slug);

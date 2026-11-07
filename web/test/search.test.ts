@@ -157,3 +157,12 @@ test("late IPTV answer merges into the ranked list without moving other rows", (
   assert.equal(d.discover.length, 1);
   assert.deepEqual(d.pending, ["iptv"]);
 });
+
+test("parse: TV collection hits carry hubId + mediaType, film ones stay TMDB", () => {
+  const s = parseSearch({
+    q: "crime",
+    groups: [{ type: "collections", items: [{ hubId: "tv-format:crime", name: "Crime Dramas", mediaType: "tv", total: 6 }, { tmdbCollectionId: 5, name: "Heist" }] }],
+  });
+  assert.equal(s?.collections.length, 2);
+  assert.deepEqual([s?.collections[0].hubId, s?.collections[0].mediaType, s?.collections[1].mediaType], ["tv-format:crime", "tv", undefined]);
+});

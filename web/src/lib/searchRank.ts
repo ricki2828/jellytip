@@ -77,10 +77,11 @@ export function groupEntries(list: SearchEntry[], given: SearchIntent, hasLive: 
   const personHit = intent.person ? ranked.find((e) => e.kind === "person" && matchTier(e.title, intent.person!.name) < 2) : undefined;
   const wantPerson = !!personHit;
   let top: SearchEntry | null = null;
+  const cands = ranked.filter((e) => !e.hubId); // a TV hub (collection row) is never the Top match
   if (wantPerson) top = personHit!;
-  else if (intent.play) top = ranked.find(playable) ?? ranked[0] ?? null;
-  else if (intent.season != null) top = ranked.find((e) => e.kind === "series" && e.source !== "discover") ?? ranked[0] ?? null;
-  else top = ranked[0] ?? null;
+  else if (intent.play) top = cands.find(playable) ?? cands[0] ?? null;
+  else if (intent.season != null) top = ranked.find((e) => e.kind === "series" && e.source !== "discover") ?? cands[0] ?? null;
+  else top = cands[0] ?? null;
   const rest = ranked.filter((e) => e !== top);
   const g: Grouped = {
     top,

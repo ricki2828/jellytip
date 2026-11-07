@@ -2526,3 +2526,15 @@ button.overview.open {
   align-items: center;
   gap: 10px;
 }
+.grid-section > .coll-seg {
+  margin-left: var(--pad);
+  margin-right: var(--pad);
+}
+@media (max-width: 700px) {
+  .grid-section > .coll-seg {
+    display: flex;
+  }
+}
+.search-ask {
+  margin-left: var(--pad);
+}
