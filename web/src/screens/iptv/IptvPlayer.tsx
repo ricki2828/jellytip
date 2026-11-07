@@ -39,6 +39,8 @@ import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
 import { switchExtras } from "../../lib/companion";
+import { hlsConfig, SPEC } from "../../lib/liveBuffer";
+import { useLiveBuffer } from "./useLiveBuffer";
 import { initialRecovery, isRetryable, permanentReason, recoveryCopy, shouldSurfaceLiveStall, step as recoveryStep, HIDDEN_STOP_MS, QUIET_MS, STABLE_MS, VOD_IDLE_MS, beginExclusive, claimEngine, type RecoveryEvent } from "../../lib/streamRecovery";
 import { back, go } from "../../lib/router";
 import { hlsChoices, nativeChoices, nativeSubtitlesOff, makePick, matchPick, pickIptvTracks, type SubtitlePick, type TrackChoice, type TrackPick } from "../../lib/iptvTracks";
@@ -158,6 +160,16 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const quietUntil = useRef(0);
   /** Last buffering / seek / network activity on the element (VOD stalls are not escalated while it is still loading). */
   const lastNet = useRef(0);
+  // Live buffer (profiles + Auto): runtime-only; see useLiveBuffer.ts
+  const liveBuf = useLiveBuffer({
+    videoRef, hlsRef, engineRef, linkRef,
+    active: isLive && !extras?.replay && state.kind === "playing",
+    kindIsLive: () => answerRef.current?.kind === "live",
+    channelKey: isLive ? target.channel ?? null : null,
+    touch: () => { lastMove.current = Date.now(); stallReported.current = false; },
+  });
+  const liveBufRef = useRef(liveBuf);
+  liveBufRef.current = liveBuf;
   const playingSince = useRef<number | null>(null);
   const recRef = useRef(initialRecovery(!!target.channel && target.start == null));
   const [rec, setRec] = useState(recRef.current);
@@ -424,7 +436,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         const p = mpegts.createPlayer(
           { type: "mpegts", isLive: a.kind === "live" || a.kind === "cu" || !!a.growing, url },
           // Worker + buffer cleanup only behind ?worker=1 (default off); chase the live edge so a zap never drifts minutes behind
-          { enableWorker: WORKER_FLAG, ...(WORKER_FLAG ? { autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 } : {}), lazyLoad: false, liveBufferLatencyChasing: a.kind === "live", liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5 },
+          { enableWorker: WORKER_FLAG, ...(WORKER_FLAG ? { autoCleanupSourceBuffer: true, autoCleanupMaxBackwardDuration: 30, autoCleanupMinBackwardDuration: 15 } : {}), lazyLoad: false, liveBufferLatencyChasing: false, ...(a.kind === "live" && SPEC[liveBufRef.current.profileRef.current].stashInitialSize ? { stashInitialSize: SPEC[liveBufRef.current.profileRef.current].stashInitialSize } : {}) },
         );
         claimEngine(tsRef, destroyTs, p);
         p.on(mpegts.Events.LOADING_COMPLETE, () => (loadDone.current = true));
@@ -441,7 +453,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
       const H = engine === "hls" ? (await loadHls()).default : null;
       if (!alive.current || linkRef.current !== url) return;
       if (H && H.isSupported()) {
-        const h = new H({ liveDurationInfinity: true, maxBufferLength: 30, backBufferLength: 30 });
+        const h = new H({ liveDurationInfinity: true, maxBufferLength: 30, backBufferLength: 30, ...(a.kind === "live" ? hlsConfig(liveBufRef.current.profileRef.current) : {}) });
         claimEngine(hlsRef, (old) => old.destroy(), h);
         h.on(H.Events.ERROR, (_e, data) => {
           if (data.fatal && hlsRef.current === h)
@@ -1119,7 +1131,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
         onEnded={() => (kickoffRun.current ? backToLive() : nextOnChannel())}
-        onPause={() => setPaused(true)}
+        onPause={() => { if (!liveBuf.holdingRef.current) setPaused(true); }}
         onTimeUpdate={(e) => {
           if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
             stallReported.current = false;
@@ -1140,7 +1152,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
         onLoadedMetadata={(e) => { applyResume(e.currentTarget); refreshTracks(); }}
         onCanPlay={(e) => applyResume(e.currentTarget)}
-        onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
+        onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; liveBuf.noteRebuffer(); debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
         onPlaying={finishBuffer}
         onProgress={() => { lastNet.current = Date.now(); }}
         onSeeking={() => { lastNet.current = Date.now(); }}
@@ -1215,12 +1227,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         } : undefined}
         prefs={subPrefs}
         onPrefs={setSubPrefs}
+        liveBuffer={isLive && !extras?.replay ? { mode: liveBuf.mode, effective: liveBuf.effective, onPick: liveBuf.setMode } : undefined}
         replay={playerEngine !== "mpegts" && subtitleChoices.length ? { disabled: () => replayTarget(videoRef.current?.currentTime ?? 0, seekableStart()) == null, run: replayCaptions } : undefined}
         barClassName="iptv-tracks-button"
         menuClassName="iptv-track-menu"
         onActivity={poke}
       />}
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
+      {liveBuf.toast && <div className="iptv-buffer-toast" role="status" aria-live="polite">{liveBuf.toast}</div>}
       {live_ok && <FantasyAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
       {live_ok && <FlipAlerts matchId={extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (

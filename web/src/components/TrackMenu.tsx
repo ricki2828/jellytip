@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import "./TrackMenu.css";
 import { audioSelectable, initialFocus, menuKeyAction, nextFocus, rowTarget, tabTarget, type TrackOption } from "../lib/trackMenu.ts";
+import { MODES, modeLabel, type Mode, type Profile } from "../lib/liveBuffer.ts";
 import { SUB_BACKGROUNDS, SUB_SIZES, offsetLabel, stepOffset, SUB_OFFSET_MAX, SUB_OFFSET_MIN, type SubtitlePrefs } from "../lib/subtitlePrefs.ts";
 
 export type TrackMenuProps = {
@@ -29,6 +30,8 @@ export type TrackMenuProps = {
   triggerClassName?: string;
   onActivity?: () => void;
   extra?: ReactNode;
+  /** Live TV only: "Live buffer" row (Auto / Low / Normal / High / Max); shown whether or not the engine exposes tracks */
+  liveBuffer?: { mode: Mode; effective: Profile; onPick: (m: Mode) => void };
   /** "Find subtitles…": omit when the playing item can't be searched (IPTV) or the account may not manage subtitles */
   findSubtitles?: () => void;
 };
@@ -194,6 +197,11 @@ export function TrackMenu(p: TrackMenuProps) {
               )}
               {p.extra}
             </>
+          )}
+          {p.liveBuffer && (
+            <div role="group" aria-label="Live buffer" className="track-appearance-group">
+              {appearance("Live buffer", "lb", MODES, p.liveBuffer.mode, (v) => p.liveBuffer!.onPick(v as Mode), (v) => modeLabel(v as Mode, p.liveBuffer!.effective))}
+            </div>
           )}
         </div>
       )}
