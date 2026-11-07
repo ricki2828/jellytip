@@ -473,6 +473,8 @@ export interface ClosetPicks extends SpecialBase {
   videoUrl: string;
   posterUrl?: string | null;
   durationSec?: number;
+  /** Server says this caller may "Get it" (admin); false/absent hides it. */
+  canRequest?: boolean;
   picks: ClosetPick[];
 }
 /** Letterboxd "Four Favorites": same shape as the closet, a guest naming four films in a clip. */

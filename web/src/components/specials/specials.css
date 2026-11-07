@@ -453,8 +453,7 @@
   padding-right: 14px;
 }
 .four-fav .closet-picks-list {
-  flex-wrap: nowrap;
-  gap: 12px;
+  gap: 12px; /* wraps to 2x2 when the column is narrower than four posters; phones scroll (rule above) */
 }
 @media (max-width: 900px) {
   .four-fav .closet {

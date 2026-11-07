@@ -2,7 +2,7 @@
 // contract in ~/ai/plans/jellytip-specials.md). Each special renders as one block between the normal rows; unknown
 // layouts render nothing. Item data comes from one Jellyfin call per special; nothing per tile hits the companion.
 import { useEffect, useRef, useState } from "react";
-import { getItems, getSession, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
+import { getItems, localTrailers, runtimeText, type Item } from "../../api/jellyfin";
 import {
   backdropInfo,
   companionMediaUrl,
@@ -515,8 +515,9 @@ function ClipPicksBlock({ s, kicker, fallback, wide }: { s: ClosetPicks | FourFa
   const [getIt, setGetIt] = useState<ClosetPick | null>(null);
   const blocked = useVideoBlocked(s.id);
   const { soundOn, mute } = useSoundBack(s.id, sound, () => setSound(false));
-  const admin = !!getSession()?.isAdmin;
-  const wantPlay = inView || focused;
+  const admin = !!s.canRequest; // the server decides who may "Get it" (admin-only; re-checked per request)
+  const [forced, setForced] = useState(false); // a seek chip was pressed: play even if the block is not mostly in view
+  const wantPlay = inView || focused || forced;
 
   // Focus (re)claims, so the block being used wins over another one that is merely on screen
   useEffect(() => {
@@ -538,6 +539,10 @@ function ClipPicksBlock({ s, kicker, fallback, wide }: { s: ClosetPicks | FourFa
     if (wantPlay && !blocked) v.play().catch(() => undefined);
     else v.pause();
   }, [wantPlay, blocked, sound]);
+
+  useEffect(() => {
+    if (!inView && !focused) setForced(false); // scrolled away after a seek: normal rules again
+  }, [inView, focused]);
 
   if (!items) return null;
   const byId = new Map(items.map((i) => [i.Id, i]));
@@ -617,10 +622,13 @@ function ClipPicksBlock({ s, kicker, fallback, wide }: { s: ClosetPicks | FourFa
                     className="clip-seek"
                     data-nav
                     aria-label={`Watch ${s.guest} pick ${p.title}`}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
                     onClick={() => {
                       const v = video.current;
                       if (!v) return;
                       claimVideo(s.id);
+                      setForced(true);
                       v.currentTime = p.atSec!;
                       v.play().catch(() => undefined);
                     }}
