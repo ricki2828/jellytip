@@ -53,11 +53,8 @@
 }
 /* Last in the DOM so initial focus lands on Continue Watching / the first row, drawn just above the first row */
 .home-open {
-  position: absolute;
-  top: 0;
-  left: var(--pad);
-  transform: translateY(-110%);
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin: 8px var(--pad) 40px;
 }

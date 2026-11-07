@@ -524,14 +524,15 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        {/* In flow at the end of Home (was absolutely positioned over the hero and overlapped its buttons) */}
         <div className="home-open">
           <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
+          {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
+            <button className="btn" data-nav onClick={() => setEditing(true)}>
+              Edit Home
+            </button>
+          )}
         </div>
-        {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
-          <button className="btn home-edit-open" data-nav onClick={() => setEditing(true)}>
-            Edit Home
-          </button>
-        )}
       </div>
       {editing && rows && (
         <HomeEdit
