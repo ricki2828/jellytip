@@ -183,6 +183,6 @@ test("pickChannel: skips a channel that failed lately, names it, leaves a clean 
   assert.equal(pickChannel(clean, NOWS).channel?.id, "1:11");
   clearLocalFails();
   const all = parse(fx("sf3", { channels: [{ id: "1:10", name: "Alpha", confidence: 0.95, lastFail: { at: NOWS - 60, reason: "stall", count7d: 1 } }, { id: "1:11", name: "Beta", confidence: 0.9, lastFail: { at: NOWS - 120, reason: "refused", count7d: 1 } }], best: "1:10" }))[0];
-  assert.equal(pickChannel(all, NOWS).channel?.id, "1:10");
-  assert.equal(pickChannel(all, NOWS).skipped, null);
+  assert.equal(pickChannel(all, NOWS).channel?.id, "1:11"); // all failed lately: the one that failed longest ago
+  assert.equal(pickChannel(all, NOWS).skipped, "Alpha");
 });

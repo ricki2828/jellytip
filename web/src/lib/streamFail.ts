@@ -5,8 +5,9 @@
 //
 // Contract: POST v1/iptv/play/outcome {id, kind: live|vod|episode|catchup, ok, reason?, posSec?}; ~/ai/state/jellytip-fixtures-contract.md.
 
-export type FailReason = "open_failed" | "unreachable" | "refused" | "stall" | "recovery_gave_up" | "user_report";
-export const FAIL_REASONS: readonly FailReason[] = ["open_failed", "unreachable", "refused", "stall", "recovery_gave_up", "user_report"];
+/** `decode`: this device could not decode a stream that connected fine. Logged by the companion, never counted against the stream for anyone. */
+export type FailReason = "open_failed" | "unreachable" | "refused" | "stall" | "recovery_gave_up" | "user_report" | "decode";
+export const FAIL_REASONS: readonly FailReason[] = ["open_failed", "unreachable", "refused", "stall", "recovery_gave_up", "user_report", "decode"];
 export interface LastFail {
   /** Epoch seconds of the newest failure. */
   at: number;
@@ -83,6 +84,22 @@ export function failNote(lf: LastFail | null | undefined, nowS: number): string 
   return `Failed ${d} day${d === 1 ? "" : "s"} ago`;
 }
 
+/** The denied reasons that are the stream's fault (404 gone, 401/403 refused by the provider). auth / nocatchup / link / rate are ours or the archive's, never the channel's. */
+export function deniedFailReason(r: string | null | undefined): FailReason | null {
+  return r === "missing" ? "open_failed" : r === "denied" ? "refused" : null;
+}
+
+/** Fail reason for a media element error on a link that connected (HTTP 2xx): decode / unsupported = this device only. */
+export const isDecodeFault = (status: number, mediaErrorCode: number | null | undefined): boolean => status >= 200 && status < 300 && (mediaErrorCode === 3 || mediaErrorCode === 4);
+
+export interface StallInput { now: number; lastMove: number; attemptStart: number; paused: boolean; hidden: boolean; offline: boolean; seeking: boolean; lastSeek: number }
+/** No picture for 15 s inside the first minute of an attempt, and not because the tab was hidden, the network was down, or the person seeked. */
+export function countsAsStall(i: StallInput): boolean {
+  if (i.paused || i.hidden || i.offline || i.seeking) return false;
+  if (i.now - i.lastSeek < 5_000) return false;
+  return i.now - i.lastMove >= 15_000 && i.now - i.attemptStart < 60_000;
+}
+
 export interface Pickable { id: string; name: string; lastFail?: LastFail | null }
 export interface Pick<T extends Pickable> { chosen: T; /** Name of the first choice that was passed over because it failed earlier (null = nothing skipped). */ skipped: string | null }
 
@@ -94,7 +111,11 @@ export function pickPlayable<T extends Pickable>(first: T, rest: readonly T[], n
   const bad = (c: T) => failedLately(failOf(c.id, c.lastFail), nowS);
   if (!bad(first)) return { chosen: first, skipped: null };
   const alt = rest.find((c) => c.id !== first.id && !bad(c));
-  return alt ? { chosen: alt, skipped: first.name } : { chosen: first, skipped: null };
+  if (alt) return { chosen: alt, skipped: first.name };
+  // Everything failed lately: the one that failed longest ago has the best chance
+  const at = (c: T) => failOf(c.id, c.lastFail)?.at ?? 0;
+  const oldest = [first, ...rest.filter((c) => c.id !== first.id)].reduce((a, c) => (at(c) < at(a) ? c : a));
+  return { chosen: oldest, skipped: oldest.id === first.id ? null : first.name };
 }
 export const skippedNote = (name: string) => `Skipped ${name}: failed earlier`;
 
@@ -111,10 +132,10 @@ export function outcomeBody(o: Outcome): Record<string, unknown> {
   return { id: o.id, kind: o.kind, ok: o.ok, ...(o.ok ? {} : { reason: o.reason ?? "open_failed" }), ...(o.posSec != null ? { posSec: Math.max(0, Math.floor(o.posSec)) } : {}) };
 }
 
-/** Target of the player -> the id + kind the companion wants; null for recordings (not a provider stream). */
+/** Target of the player -> the id + kind the companion wants; null for recordings and catch-up (never recorded). */
 export function outcomeTarget(t: { channel?: string; start?: number; vod?: string; episode?: string; recording?: string }): { id: string; kind: OutcomeKind } | null {
   if (t.recording) return null;
-  if (t.channel) return { id: t.channel, kind: t.start != null ? "catchup" : "live" };
+  if (t.channel) return t.start != null ? null : { id: t.channel, kind: "live" }; // catch-up faults never ding the live channel
   if (t.vod) return { id: t.vod, kind: "vod" };
   if (t.episode) return { id: t.episode, kind: "episode" };
   return null;
@@ -131,8 +152,13 @@ export class OutcomeSession {
     this.nowS = nowS;
   }
   /** -> true when a report went out. */
+  private id: string | null = null;
+  private track(target: { id: string }) {
+    if (this.id !== target.id) { this.id = target.id; this.failed = false; this.okSent = false; } // a new stream: a new session
+  }
   fail(target: { id: string; kind: OutcomeKind } | null, reason: FailReason, posSec?: number): boolean {
     if (!target) return false;
+    this.track(target);
     if (this.failed && reason !== "user_report") return false;
     this.failed = true;
     this.okSent = false;
@@ -142,7 +168,9 @@ export class OutcomeSession {
   }
   /** Call with seconds of continuous playback; reports once at >= 60 s and clears the local ding. */
   played(target: { id: string; kind: OutcomeKind } | null, playedSec: number): boolean {
-    if (!target || this.okSent || playedSec < GOOD_PLAY_S) return false;
+    if (!target) return false;
+    this.track(target);
+    if (this.okSent || playedSec < GOOD_PLAY_S) return false;
     this.okSent = true;
     this.failed = false;
     forgetLocalFail(target.id);

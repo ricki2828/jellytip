@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { clearLocalFails, failedLately, failNote, failOf, nextAfterFailure, OutcomeSession, outcomeBody, outcomeTarget, parseLastFail, pickPlayable, rememberLocalFail, skippedNote, type Outcome } from "../src/lib/streamFail.ts";
+import { countsAsStall, deniedFailReason, isDecodeFault, clearLocalFails, failedLately, failNote, failOf, nextAfterFailure, OutcomeSession, outcomeBody, outcomeTarget, parseLastFail, pickPlayable, rememberLocalFail, skippedNote, type Outcome } from "../src/lib/streamFail.ts";
 
 const NOW = 1_800_000_000;
 const lf = (ago: number, count7d = 1, reason = "stall") => ({ at: NOW - ago, reason: reason as never, count7d });
@@ -45,8 +45,9 @@ test("pickPlayable: nothing skipped when the first works, or when every choice f
   assert.deepEqual(pickPlayable(ok, [{ id: "1:b", name: "B" }], NOW), { chosen: ok, skipped: null });
   const a = { id: "1:a", name: "Alpha", lastFail: lf(3600) };
   const b = { id: "1:b", name: "Beta", lastFail: lf(7200) };
-  assert.equal(pickPlayable(a, [b], NOW).chosen.id, "1:a");
-  assert.equal(pickPlayable(a, [b], NOW).skipped, null);
+  assert.equal(pickPlayable(a, [b], NOW).chosen.id, "1:b"); // everything failed lately: the one that failed longest ago
+  assert.equal(pickPlayable(a, [b], NOW).skipped, "Alpha");
+  assert.equal(pickPlayable(b, [a], NOW).skipped, null);
   const old = { id: "1:a", name: "Alpha", lastFail: lf(30 * 3600) };
   assert.equal(pickPlayable(old, [{ id: "1:b", name: "B" }], NOW).chosen.id, "1:a");
 });
@@ -74,7 +75,7 @@ test("outcomeBody / outcomeTarget", () => {
   assert.deepEqual(outcomeBody({ id: "a:1", kind: "live", ok: false, reason: "stall", posSec: 20.7 }), { id: "a:1", kind: "live", ok: false, reason: "stall", posSec: 20 });
   assert.deepEqual(outcomeBody({ id: "a:1", kind: "live", ok: true, posSec: 61 }), { id: "a:1", kind: "live", ok: true, posSec: 61 });
   assert.deepEqual(outcomeTarget({ channel: "a:1" }), { id: "a:1", kind: "live" });
-  assert.deepEqual(outcomeTarget({ channel: "a:1", start: 5 }), { id: "a:1", kind: "catchup" });
+  assert.equal(outcomeTarget({ channel: "a:1", start: 5 }), null); // catch-up is never recorded
   assert.deepEqual(outcomeTarget({ vod: "a:m:1" }), { id: "a:m:1", kind: "vod" });
   assert.deepEqual(outcomeTarget({ episode: "a:e:1" }), { id: "a:e:1", kind: "episode" });
   assert.equal(outcomeTarget({ recording: "r" }), null);
@@ -96,6 +97,34 @@ test("OutcomeSession: one failure per session (user_report always), success only
   assert.equal(failOf("a:1"), null);
   assert.deepEqual(sent[2], { id: "a:1", kind: "live", ok: true, posSec: 61 });
   assert.equal(s.fail(null, "stall"), false);
+  // a new stream is a new session: its failure and success are reported again
+  const t2 = { id: "a:2", kind: "live" as const };
+  assert.equal(s.fail(t2, "open_failed"), true);
+  assert.equal(s.played(t2, 70), true);
+});
+
+test("deniedFailReason: only 404 and a provider refusal ding; auth / nocatchup / link / rate never", () => {
+  assert.equal(deniedFailReason("missing"), "open_failed");
+  assert.equal(deniedFailReason("denied"), "refused");
+  for (const r of ["auth", "nocatchup", "link", "rate", null, undefined]) assert.equal(deniedFailReason(r as never), null);
+});
+test("countsAsStall: not while hidden, offline, seeking, paused or just after a seek; only inside the first minute", () => {
+  const base = { now: 100_000, lastMove: 80_000, attemptStart: 70_000, paused: false, hidden: false, offline: false, seeking: false, lastSeek: 0 };
+  assert.equal(countsAsStall(base), true);
+  assert.equal(countsAsStall({ ...base, hidden: true }), false);
+  assert.equal(countsAsStall({ ...base, offline: true }), false);
+  assert.equal(countsAsStall({ ...base, seeking: true }), false);
+  assert.equal(countsAsStall({ ...base, paused: true }), false);
+  assert.equal(countsAsStall({ ...base, lastSeek: 97_000 }), false);
+  assert.equal(countsAsStall({ ...base, lastSeek: 90_000 }), true);
+  assert.equal(countsAsStall({ ...base, lastMove: 90_000 }), false); // only 10 s without a picture
+  assert.equal(countsAsStall({ ...base, attemptStart: 30_000 }), false); // 70 s in: past the first minute
+});
+test("isDecodeFault: a connected stream the device cannot decode is the device's problem", () => {
+  assert.equal(isDecodeFault(200, 3), true);
+  assert.equal(isDecodeFault(200, 4), true);
+  assert.equal(isDecodeFault(200, 2), false);
+  assert.equal(isDecodeFault(404, 4), false);
 });
 
 import { alternateEpisode, findEpisodeCopy } from "../src/lib/streamCopies.ts";
@@ -108,10 +137,13 @@ test("findEpisodeCopy / alternateEpisode: same season+episode on the first copy 
   const detail = async (id: string) => { calls.push(id); return id === "c:s:2" ? { seasons } : { seasons: [{ season: 1, episodes: [{ id: "x:e:1", episode: 1 }] }] }; };
   const bad = (id: string) => id === "d:s:3" || id === "x:e:1";
   const copies = [{ id: "a:s:1", name: "Current" }, { id: "d:s:3", name: "Dinged" }, { id: "e:s:4", name: "No ep 2" }, { id: "c:s:2", name: "Good" }];
-  const r = await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", copies, detail, bad);
+  const r = await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", copies, detail, bad, 2);
   assert.equal(r?.copy.name, "Good");
   assert.equal(r?.episode.id, "b:e:10");
   assert.deepEqual(calls, ["e:s:4", "c:s:2"]); // never fetched the current copy or the dinged one
+  calls.length = 0;
+  assert.equal(await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", copies, detail, bad), null); // default: one cold lookup at most
+  assert.deepEqual(calls, ["e:s:4"]);
   assert.equal(await alternateEpisode({ season: 1, episode: 2 }, "a:s:1", [{ id: "d:s:3", name: "Dinged" }], detail, bad), null);
 });
 

@@ -16,7 +16,7 @@ export interface CopyDetail { seasons?: readonly { season: number; episodes: rea
 
 /**
  * The same episode (season + episode number) on another copy of the series that has not failed lately, trying copies in order.
- * `fetchDetail` loads a copy's details (one API call each, never a stream). null when no other copy has it.
+ * `fetchDetail` loads a copy's details (one API call each, never a stream; at most `maxFetch`, default 1). null when none has it.
  */
 export async function alternateEpisode(
   here: EpLoc,
@@ -24,9 +24,12 @@ export async function alternateEpisode(
   copies: readonly CopyRef[],
   fetchDetail: (id: string) => Promise<CopyDetail | null | undefined>,
   failed: (id: string, lf?: LastFail | null) => boolean,
+  maxFetch = 1,
 ): Promise<{ copy: CopyRef; episode: CopyEpisode } | null> {
+  let fetched = 0;
   for (const c of copies) {
     if (c.id === currentSeries || failed(c.id, c.lastFail)) continue;
+    if (fetched++ >= maxFetch) break; // each copy's details can be a cold provider call: at most `maxFetch` of them
     const ep = findEpisodeCopy(here, (await fetchDetail(c.id))?.seasons);
     if (ep && !failed(ep.id, ep.lastFail)) return { copy: c, episode: ep };
   }

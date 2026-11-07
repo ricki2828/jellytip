@@ -5,7 +5,7 @@
 import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
 import { useOutcome } from "./useOutcome";
-import { failedLately, failOf, nextAfterFailure } from "../../lib/streamFail";
+import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
 import { alternateEpisode } from "../../lib/streamCopies";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { isPre, preGameCard } from "../../lib/preGame";
@@ -183,6 +183,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const lenRef = useRef(0);
   const watch = usePlayWatch(signalMeta(target, channelId), () => lenRef.current, curId ?? "");
   const outcome = useOutcome(target);
+  const lastSeek = useRef(0);
   const growRef = useRef(false);
   // Live stall: no picture moving for 10 s offers the same event on another channel
   const lastMove = useRef(Date.now());
@@ -303,7 +304,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       debugEvent("iptv-player", "recovery", { event: e.t, from: prev.phase, to: next.phase, attempt: next.attempt, max: next.max, conn: next.conn, format: next.format }, "info");
     if (prev.switched && prev.phase !== "playing" && next.phase === "playing") flashNote("Switched to a backup stream");
     // Recovery ran out of attempts / the provider said no for good: remembered, so this stream is dinged next time
-    if (next.phase !== prev.phase && (next.phase === "failed" || next.phase === "denied")) outcome.fail(next.phase === "denied" ? "refused" : "recovery_gave_up", videoRef.current?.currentTime);
+    if (next.phase !== prev.phase && next.phase === "failed") outcome.fail("recovery_gave_up", videoRef.current?.currentTime);
+    else if (next.phase !== prev.phase && next.phase === "denied") { const why = deniedFailReason(next.reason); if (why) outcome.fail(why, videoRef.current?.currentTime); } // auth / nocatchup / link / rate never ding
     for (const f of effects) {
       if (f.do === "cancelTimers") window.clearTimeout(openTimer.current);
       else if (f.do === "release") {
@@ -374,7 +376,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       const v = videoRef.current;
       const engine = engineRef.current;
       // A real stream fault (not an expired link, not "all connections busy"): no picture for 15 s = stall, else it never opened / dropped
-      if (what !== "renew" && what !== "full") outcome.fail(detail.startsWith("no picture") ? "stall" : firstFrame.current ? "unreachable" : "open_failed", v?.currentTime);
       debugEvent("iptv-player", "stream failed", {
         player: engine,
         format: fmtRef.current,
@@ -399,6 +400,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         void start();
         return;
       }
+      // A real stream fault, after the HLS fallback had its go (not an expired link, not "all connections busy"). A device that cannot decode a
+      // stream that connected is its own fault, not the stream's.
+      if (what !== "renew" && what !== "full") outcome.fail(isDecodeFault(status, v?.error?.code) ? "decode" : detail.startsWith("no picture") ? "stall" : firstFrame.current ? "unreachable" : "open_failed", v?.currentTime);
       if (what === "renew" && !renewed.current) {
         renewed.current = true;
         if (!isLive && videoRef.current && videoRef.current.currentTime > 5) seekTo.current = videoRef.current.currentTime;
@@ -773,7 +777,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       else if (playingSince.current == null) playingSince.current = now;
       else if (r.unstable && now - playingSince.current >= STABLE_MS) dispatchRef.current({ t: "stable" });
       // Remembered for next time: no picture for 15 s inside the first minute is a stall; a minute of continuous playing is a good play
-      if (v && !v.paused && now - lastMove.current >= 15_000 && now - attemptStarted.current < 60_000) outcome.fail("stall", v.currentTime);
+      if (v && countsAsStall({ now, lastMove: lastMove.current, attemptStart: attemptStarted.current, paused: v.paused, hidden: document.hidden, offline: r.offline || !navigator.onLine, seeking: v.seeking, lastSeek: lastSeek.current })) outcome.fail("stall", v.currentTime);
       if (playingSince.current != null && now - playingSince.current >= 60_000) outcome.played((now - playingSince.current) / 1000);
       if (v && !v.seeking && !v.ended && shouldSurfaceLiveStall(now, lastMove.current, thresh, v.paused, document.hidden, quietUntil.current)) {
         const canHls = isLive && fmtRef.current === "ts";
@@ -1265,8 +1269,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; liveBuf.noteRebuffer(); debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
         onPlaying={finishBuffer}
         onProgress={() => { lastNet.current = Date.now(); }}
-        onSeeking={() => { lastNet.current = Date.now(); }}
-        onSeeked={() => { watch.seeked(); lastNet.current = Date.now(); }}
+        onSeeking={() => { lastNet.current = lastSeek.current = Date.now(); }}
+        onSeeked={() => { watch.seeked(); lastNet.current = lastSeek.current = Date.now(); }}
         onLoadedData={() => { lastNet.current = Date.now(); }}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
@@ -1659,7 +1663,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         verdict: what,
       });
       void sendDebugReport();
-      if (what !== "renew" && what !== "full") outcome.fail(r.httpStatus === 401 || r.httpStatus === 403 || r.httpStatus === 404 ? "refused" : !r.httpStatus ? "open_failed" : "unreachable", r.positionMs / 1000);
+      if (what !== "renew" && what !== "full") {
+        const perm = permanentReason(r.httpStatus ?? 0, r.iptvError); // auth / link / rate / no-catch-up are never the stream's fault
+        const why = /DECOD|FORMAT_UNSUPPORTED|AUDIO_TRACK/.test(r.errorCode ?? "") ? "decode" : perm ? deniedFailReason(perm) : !r.httpStatus ? "open_failed" : "unreachable";
+        if (why) outcome.fail(why, r.positionMs / 1000);
+      }
       if (what === "renew" && !renewed.current) {
         renewed.current = true;
         // eslint-disable-next-line @typescript-eslint/no-use-before-define
