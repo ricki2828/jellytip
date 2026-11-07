@@ -75,21 +75,27 @@ function useSession(code: string | null, onGone: (msg: string) => void) {
 function useFilms(ids: string[]) {
   const [films, setFilms] = useState<Map<string, Item>>(new Map());
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const key = ids.join(",");
   useEffect(() => {
     if (!ids.length) return;
     let alive = true;
     setFailed(false);
+    setLoaded(false);
     getItems({ Ids: ids.join(","), Fields: "Genres,PrimaryImageAspectRatio" }).then(
-      (r) => alive && setFilms(new Map(r.Items.map((i) => [undash(i.Id), i]))),
+      (r) => {
+        if (!alive) return;
+        setFilms(new Map(r.Items.map((i) => [undash(i.Id), i])));
+        setLoaded(true);
+      },
       () => alive && setFailed(true),
     );
     return () => {
       alive = false;
     };
   }, [key, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { films, failed, retry: () => setAttempt((n) => n + 1) };
+  return { films, failed, loaded, retry: () => setAttempt((n) => n + 1) };
 }
 
 export function MovieNight({ joinParam }: { joinParam: string | null }) {
@@ -266,7 +272,7 @@ function Art({ item }: { item: Item | undefined }) {
 // ---------- the night ----------
 
 function Night({ session, offline, onChange, onLeave }: { session: Session; offline: boolean; onChange: (s: Session) => void; onLeave: () => void }) {
-  const { films, failed: titlesFailed, retry: retryTitles } = useFilms(session.items);
+  const { films, failed: titlesFailed, loaded: titlesLoaded, retry: retryTitles } = useFilms(session.items);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const rows = useMemo(() => tally(session.items, session.counts), [session.items, session.counts]);
@@ -276,7 +282,7 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
   const link = shareLink(location.href, session.code);
   const mins = minutesLeft(session, Math.floor(Date.now() / 1000));
   const total = session.items.length;
-  const filmName = (id: string) => films.get(id)?.Name ?? (titlesFailed ? "Title not loaded" : films.size ? "A film you can't see" : "Loading…");
+  const filmName = (id: string) => films.get(id)?.Name ?? (titlesFailed ? "Title not loaded" : titlesLoaded ? "A film you can't see" : "Loading…");
 
   const vote = useCallback(
     async (item: string, v: Vote) => {
