@@ -50,3 +50,17 @@ test("lookups find a reminder by fid / match id everywhere the toggle state is s
   for (const p of ["components/Upcoming.tsx", "screens/iptv/GameCentre.tsx", "screens/iptv/IptvPlayer.tsx"]) assert.match(src(p), /findReminder\(/, p);
   assert.doesNotMatch(src("screens/iptv/GameCentre.tsx"), /r\.event\.key === g\./);
 });
+
+import { sameGame } from "../src/lib/reminders.ts";
+test("switching off finds every row of the same game", () => {
+  const rs = parseReminders({
+    items: [
+      { id: "a", key: "fx:f1@100", fid: "f1", matchId: "m1", title: "A at B", start: 100, stop: 200, channel: { id: "p:1", name: "C" } },
+      { id: "t", key: "fx:f1@100", fid: "f1", matchId: "m1", title: "A at B", start: 100, stop: 200, channel: { id: "p:1", name: "C" } },
+      { id: "x", key: "p:9@100", matchId: "m1", title: "A at B", start: 100, stop: 200, channel: { id: "p:9", name: "D" } },
+      { id: "o", key: "other", title: "Z", start: 500, stop: 600, channel: { id: "p:3", name: "E" } },
+    ],
+  });
+  assert.deepEqual(sameGame(rs, rs.find((r) => r.id === "a")!).map((r) => r.id).sort(), ["a", "t", "x"]);
+  assert.deepEqual(sameGame(rs, rs.find((r) => r.id === "o")!).map((r) => r.id), ["o"]);
+});

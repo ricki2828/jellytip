@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { iptvGet, iptvPost } from "./iptv";
 import { afterStartup } from "../lib/startup";
-import { hasStream, parseReminders, type Reminder } from "../lib/reminders";
+import { hasStream, parseReminders, sameGame, type Reminder } from "../lib/reminders";
 import { isNative, NativeReminders } from "../lib/native";
 import type { UpEvent } from "../lib/upcoming";
 
@@ -98,11 +98,17 @@ async function addFx(o: { fid?: string | null; matchId?: string | null }): Promi
   return { ok: true, msg: await afterAdd() };
 }
 
+/** Switch a reminder off: every row for the same game goes (key, fixture id or match id), so no twin keeps notifying. */
 export async function removeReminder(id: string | number): Promise<string | null> {
-  const a = await iptvPost<{ ok?: boolean }>(`v1/iptv/reminders/${id}/delete`);
-  if (a.status !== 200 && a.status !== 204 && a.status !== 404) return a.data?.error ?? `Server said ${a.status}`;
+  const me = state?.find((r) => String(r.id) === String(id));
+  const ids = new Set<string | number>([id, ...(me ? sameGame(state, me).map((r) => r.id) : [])]);
+  let err: string | null = null;
+  for (const x of ids) {
+    const a = await iptvPost<{ ok?: boolean }>(`v1/iptv/reminders/${x}/delete`);
+    if (a.status !== 200 && a.status !== 204 && a.status !== 404) err = a.data?.error ?? `Server said ${a.status}`;
+  }
   await refreshReminders(true);
-  return null;
+  return err;
 }
 
 /** items: null until known or when the server has no route; available: false once it answered 404. */

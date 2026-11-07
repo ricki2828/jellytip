@@ -15,6 +15,13 @@ export interface Reminder {
 }
 
 /** The person's reminder for an event, by whichever id the caller has: the event key, the fixture id, or the match-info id. */
+export function findReminders(items: Reminder[] | null | undefined, o: { key?: string | null; fid?: string | null; matchId?: string | null }): Reminder[] {
+  return (items ?? []).filter((r) => (!!o.key && r.event.key === o.key) || (!!o.fid && r.fid === o.fid) || (!!o.matchId && r.matchId === o.matchId));
+}
+
+/** Every row that is the same game as `r` (same key, fixture id or match id): switching a reminder off must remove all of them. */
+export const sameGame = (items: Reminder[] | null | undefined, r: Reminder): Reminder[] => findReminders(items, { key: r.event.key, fid: r.fid, matchId: r.matchId });
+
 export function findReminder(items: Reminder[] | null | undefined, o: { key?: string | null; fid?: string | null; matchId?: string | null }): Reminder | null {
   return items?.find((r) => (!!o.key && r.event.key === o.key) || (!!o.fid && r.fid === o.fid) || (!!o.matchId && r.matchId === o.matchId)) ?? null;
 }
