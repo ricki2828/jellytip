@@ -49,7 +49,7 @@ export const clearRecent = () => call("POST", "v1/search/recent", { clear: true 
 
 /** A ranked result was opened (fire and forget; never blocks navigation). `pos` is 1-based, the top hit being 1. */
 export function recordClick(q: string, e: SearchEntry, pos: number) {
-  const id = e.kind === "person" ? e.personId : e.kind === "collection" ? e.tmdbCollectionId : e.source === "library" ? e.id : e.source === "iptv" ? e.iptvId : e.tmdbId;
+  const id = e.kind === "person" ? e.personId : e.kind === "collection" ? e.hubId ?? e.tmdbCollectionId : e.source === "library" ? e.id : e.source === "iptv" ? e.iptvId : e.tmdbId;
   if (!q.trim() || id == null || pos < 1) return;
   void call("POST", "v1/search/click", { q: q.trim(), kind: e.kind, id, pos, source: e.source, ...(e.tmdbId != null ? { tmdbId: e.tmdbId } : {}) }).catch(() => undefined);
 }

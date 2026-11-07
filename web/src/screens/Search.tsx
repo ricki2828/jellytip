@@ -25,6 +25,8 @@ import { CollTabs, useCollTab } from "../components/CollTabs";
 import { hitInTab } from "../lib/collections";
 import { GetItSheet, stateText } from "../components/GetItSheet";
 
+/** TMDB collections have their own page; TV ones are Collections-hub rows. */
+const collPath = (c: { hubId?: string; tmdbCollectionId?: number | null }) => (c.hubId ? `/collections/${encodeURIComponent(c.hubId)}` : `/collection/${c.tmdbCollectionId}`);
 const DEBOUNCE_MS = 150;
 
 // Library items fetched for results, per signed-in user (a different user starts empty)
@@ -93,7 +95,7 @@ const toDiscover = (e: SearchEntry): DiscoverHit => ({ tmdbId: e.tmdbId!, mediaT
 
 const openPath = (e: SearchEntry): string | null => {
   if (e.kind === "person") return `/person/${e.personId}?name=${encodeURIComponent(e.title)}`;
-  if (e.kind === "collection") return `/collection/${e.tmdbCollectionId}`;
+  if (e.kind === "collection") return collPath(e);
   if (e.source === "library") return `/item/${e.id}`;
   if (e.source === "iptv") return vodPath(e.iptvId!);
   return null;
@@ -260,7 +262,7 @@ function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchRes
         {colls.length === 0 && <p className="empty">No {collTab === "tv" ? "TV" : "movie"} collections for this search.</p>}
         <div className="search-links">
           {colls.map((c) => (
-            <button key={c.key} className="search-link" data-key={c.key} data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
+            <button key={c.key} className="search-link" data-key={c.key} data-nav onClick={() => go(collPath(c))}>
               <strong>{c.title}</strong>
               {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
             </button>
@@ -347,7 +349,7 @@ function Groups({ r, untitled, posterW, setGetIt }: { r: SearchResult; untitled:
           {colls.length === 0 && <p className="empty">No {collTab === "tv" ? "TV" : "movie"} collections for this search.</p>}
           <div className="search-links">
             {colls.map((c) => (
-              <button key={c.tmdbCollectionId} className="search-link" data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
+              <button key={c.hubId ?? c.tmdbCollectionId} className="search-link" data-nav onClick={() => go(collPath(c))}>
                 <strong>{c.name}</strong>
                 {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
               </button>

@@ -2535,3 +2535,6 @@ button.overview.open {
     display: flex;
   }
 }
+.search-ask {
+  margin-left: var(--pad);
+}
