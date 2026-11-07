@@ -154,6 +154,8 @@ export interface JellytipRemindersPlugin {
   /** Save the companion base + Jellyfin token (empty token = signed out), keep the 15-min job running and sync now. */
   configure(o: { apiBase: string; token: string; enabled?: boolean }): Promise<void>;
   sync(): Promise<void>;
+  /** Android 13+: asks for the notification permission once; denied = asked before and still off. */
+  ensureNotifications(): Promise<{ granted: boolean; denied: boolean }>;
   /** The tapped notification's link ("#/iptv/play?channel=…"), once. */
   takeDeepLink(): Promise<{ deepLink: string | null }>;
 }
