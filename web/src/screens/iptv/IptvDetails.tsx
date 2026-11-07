@@ -96,10 +96,12 @@ export function IptvDetails({ id }: { id: string }) {
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
   // Play skips a copy that failed in the last 24 h for one that did not (and says so); picking a copy by hand never does
+  // a copy opened by hand from "Ways to watch" (the remembered pick) is never skipped
+  const manual = recallPick(pickKey(d)) === d.id;
   const playEp = async (s: number, e: VodEpisode, from = resumeAt(e.progress)) => {
     const title = `${d.title} · S${s} E${e.episode}`;
     const nowS = Date.now() / 1000;
-    if (failedLately(failOf(e.id, e.lastFail), nowS)) {
+    if (!manual && failedLately(failOf(e.id, e.lastFail), nowS)) {
       const alt = await alternateEpisode({ season: s, episode: e.episode }, d.id, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })),
         async (id) => (await vodItem(id)).data, (id, lf) => failedLately(failOf(id, lf), nowS));
       if (alt) { flashNote(skippedNote(d.providerName ?? d.title)); return go(playPath({ series: alt.copy.id, episode: alt.episode.id }, title, from)); }
@@ -108,6 +110,7 @@ export function IptvDetails({ id }: { id: string }) {
   };
   const playFilm = (from: number) => {
     const first = { id: d.id, name: d.providerName ?? d.title, lastFail: d.lastFail };
+    if (manual) return go(playPath({ vod: d.id }, d.title, from));
     const p = pickPlayable(first, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })), Date.now() / 1000);
     if (p.skipped) flashNote(skippedNote(p.skipped));
     go(playPath({ vod: p.chosen.id }, d.title, from));
