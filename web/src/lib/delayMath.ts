@@ -77,3 +77,20 @@ export function parseChannelKey(key: string): { pid: string; sid: string } {
   const i = key.indexOf(":");
   return i < 0 ? { pid: "_", sid: key } : { pid: key.slice(0, i), sid: key.slice(i + 1) };
 }
+
+/** Steppers in the Adjust popover: current delay plus a signed step, kept in range. */
+export const stepDelay = (cur: number, by: number): number => clampDelay(cur + by);
+
+/** Saves a channel's delay: the browser copy first, then the server (a server without the route keeps the browser copy). One path for calibrate and the popover. */
+export function persistChannelDelay(
+  channelKey: string | null,
+  sec: number,
+  io: { writeLocal: (k: string, s: number) => void; put: (pid: string, sid: string, s: number) => unknown },
+): number {
+  const d = clampDelay(sec);
+  if (!channelKey) return d;
+  io.writeLocal(channelKey, d);
+  const { pid, sid } = parseChannelKey(channelKey);
+  void io.put(pid, sid, d);
+  return d;
+}

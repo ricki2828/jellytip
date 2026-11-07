@@ -9,6 +9,7 @@ import { isPre, preGameCard } from "../../lib/preGame";
 import { FantasyAlerts, FantasyChip } from "../../components/Fantasy";
 import { FlipAlerts } from "../../components/FlipAlerts";
 import { DelayChip } from "../../components/DelayChip";
+import { PlayerNote } from "../../components/PlayerNote";
 import { Scorebug } from "../../components/Companion/Scorebug";
 import { Panel, useDropWatch, usePhonePortrait } from "../../components/Companion/Panel";
 import { useLiveFeed } from "../../components/Companion/useLiveFeed";
@@ -147,6 +148,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const [meta, setMeta] = useState<RecMeta | null>(null);
   const [controls, setControls] = useState(true);
   const [tracksOpen, setTracksOpen] = useState(false);
+  const [delayOpen, setDelayOpen] = useState(false);
+  const delayOpenRef = useRef(false);
+  delayOpenRef.current = delayOpen;
   const { prefs: subPrefs, setPrefs: setSubPrefs, vars: subVars } = useSubtitlePrefs();
   const replayRef = useRef<Replay | null>(null);
   const tracksOpenRef = useRef(false);
@@ -1028,6 +1032,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.key === "Escape" || e.key === "Backspace") && delayOpenRef.current) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); setDelayOpen(false); document.querySelector<HTMLElement>(".delay-chip button")?.focus(); return; }
       if ((e.key === "Escape" || e.key === "Backspace") && tracksOpen) { e.preventDefault(); e.stopPropagation(); setTracksOpen(false); return; }
       if ((e.key === "Escape" || e.key === "Backspace") && othersRef.current.open && !keyState.current.open) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); setOthers(false); return; }
       // Companion keys (T2.1): Back closes the panel first; with the controls idle Up = panel, Down = channels, Left/Right = panel tabs
@@ -1140,7 +1145,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   return (
     <div
       ref={boxRef}
-      style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" || tracksOpen ? " show" : ""}`}
+      style={subVars as CSSProperties} data-sub-bg={subPrefs.background} className={`player iptv-player${isLive || controls || paused || state.kind !== "playing" || tracksOpen || delayOpen ? " show" : ""}`}
       onMouseMove={isLive ? undefined : poke}
       onClick={() => {
         if (touchClick.current) touchClick.current = false;
@@ -1221,13 +1226,14 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
           </div>
         </div>
       )}
+      <PlayerNote />
       <div className="player-top">
         <BackArrow onClick={exit} />
         <span className="player-title">{title}</span>
         {isLive && state.kind === "playing" && (extras?.replay ? <span className="iptv-live-pill replay">Replay</span> : <span className="iptv-live-pill">Live</span>)}
         {live_ok && isLive && <MatchInfoButton id={extras?.matchId} />}
         {live_ok && <FantasyChip matchId={extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} />}
-        {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} onAdjust={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
+        {live_ok && isLive && extras?.matchId && state.kind === "playing" && <DelayChip delaySec={revealClock.delaySec} replay={revealClock.replay} open={delayOpen} onOpenChange={setDelayOpen} onSet={(n) => flashNote(`Delay set to ${revealClock.setDelay(n)} s`)} canCalibrate={revealClock.canCalibrate()} onCalibrate={() => flashNote(calibrateMessage(revealClock.calibrate()))} />}
         {live_ok && extras?.matchId && state.kind === "playing" && (
           <button className="btn small" data-nav data-live-toggle aria-expanded={drawer} onClick={() => (drawer ? closePanel(true) : openPanel("user"))}>
             Live

@@ -103,3 +103,21 @@ test("calibrate feedback: set, nothing to anchor on, replay", () => {
   assert.match(calibrateMessage({ kind: "none" }), /^Nothing to line up yet/);
   assert.match(calibrateMessage({ kind: "replay" }), /replay/);
 });
+
+import { persistChannelDelay, stepDelay, MAX_DELAY_SEC } from "../src/lib/delayMath.ts";
+
+test("stepDelay clamps to 0..max", () => {
+  assert.equal(stepDelay(30, 5), 35);
+  assert.equal(stepDelay(3, -10), 0);
+  assert.equal(stepDelay(MAX_DELAY_SEC - 2, 10), MAX_DELAY_SEC);
+});
+
+test("persistChannelDelay clamps, writes local, then puts per channel", () => {
+  const calls: unknown[][] = [];
+  const io = { writeLocal: (k: string, s: number) => calls.push(["local", k, s]), put: (p: string, s: string, d: number) => calls.push(["put", p, s, d]) };
+  assert.equal(persistChannelDelay("prov:123", 999, io), MAX_DELAY_SEC);
+  assert.deepEqual(calls, [["local", "prov:123", MAX_DELAY_SEC], ["put", "prov", "123", MAX_DELAY_SEC]]);
+  calls.length = 0;
+  assert.equal(persistChannelDelay(null, 40, io), 40);
+  assert.deepEqual(calls, []);
+});

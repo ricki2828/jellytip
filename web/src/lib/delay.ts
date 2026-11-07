@@ -2,7 +2,7 @@
 // live information (LiveDrawer, FlipAlerts, FantasyAlerts, FantasyChip). Maths and policy live in delayMath.ts (pure, tested).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChannelDelay, putChannelDelay, usePrefs } from "../api/me";
-import { type CalibrateResult, calibratedDelay, clampDelay, noteEvent, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
+import { type CalibrateResult, calibratedDelay, clampDelay, noteEvent, persistChannelDelay, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
 
 export * from "./delayMath.ts";
 
@@ -15,6 +15,10 @@ export interface RevealClock {
   replay: boolean;
   /** "That just happened": sets the delay so the latest event this clock was asked about is revealed right now. */
   calibrate: () => CalibrateResult;
+  /** Sets this channel's delay directly (clamped, saved like calibrate). Returns the value applied. */
+  setDelay: (sec: number) => number;
+  /** Whether a key moment was seen recently enough for "That just happened" to work. */
+  canCalibrate: () => boolean;
 }
 
 export interface RevealOpts {
@@ -106,18 +110,23 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
     ref.current.latest = noteEvent(ref.current.latest, atSec, Date.now() / 1000);
   }, []);
 
+  const setDelay = useCallback((sec: number): number => {
+    const d = persistChannelDelay(channelKey, sec, { writeLocal, put: putChannelDelay });
+    setChannelDelay(d);
+    return d;
+  }, [channelKey]);
+
+  const canCalibrate = useCallback(() => !inReplay() && calibratedDelay(ref.current.latest, Date.now() / 1000, lag()) != null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []);
+
   const calibrate = useCallback((): CalibrateResult => {
     if (inReplay()) return { kind: "replay" };
     const d = calibratedDelay(ref.current.latest, Date.now() / 1000, lag());
     if (d == null) return { kind: "none" };
-    setChannelDelay(d);
-    if (!channelKey) return { kind: "set", sec: d };
-    writeLocal(channelKey, d);
-    const { pid, sid } = parseChannelKey(channelKey);
-    void putChannelDelay(pid, sid, d); // a server without the route keeps the browser copy
-    return { kind: "set", sec: d };
+    return { kind: "set", sec: setDelay(d) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelKey]);
+  }, [setDelay]);
 
-  return { reveal, noteMoment, delaySec, replay, calibrate };
+  return { reveal, noteMoment, delaySec, replay, calibrate, setDelay, canCalibrate };
 }
