@@ -35,6 +35,7 @@
     <string name="jellytip_delete_second" translatable="false">%1$s will be gone from the server and can\'t be brought back. Delete it for good?</string>
     <string name="jellytip_delete_cant_undo" translatable="false">This can\'t be undone</string>
     <string name="jellytip_delete_not_allowed" translatable="false">You can\'t delete this from the server.</string>
+    <string name="jellytip_delete_info_failed" translatable="false">Couldn\'t check this with the Jellytip server, so delete is off. Try again later.</string>
     <string name="jellytip_delete_continue" translatable="false">Delete…</string>
     <string name="jellytip_delete_forever" translatable="false">Delete for good</string>
     <string name="jellytip_change_still">Change still</string>

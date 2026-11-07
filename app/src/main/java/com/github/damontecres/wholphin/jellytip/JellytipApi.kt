@@ -605,6 +605,8 @@ class JellytipApi
         suspend fun deleteInfo(itemId: UUID): JellytipDeleteInfo? {
             deleteInfoCache[itemId]?.let { (at, v) -> if (System.currentTimeMillis() - at < DELETE_INFO_TTL_MS) return v }
             val (code, body) = userCall("v1/library/items/$itemId/delete-info") ?: return null
+            // 404 = old server without the route: allow the legacy delete path, no size/what-goes info
+            if (code == 404) return JellytipDeleteInfo(true, null, null, null, null, "legacy", null)
             if (code != 200) return null
             val info = runCatching { JellytipDeleteInfo.parse(body) }.getOrNull() ?: return null
             deleteInfoCache[itemId] = System.currentTimeMillis() to info
@@ -615,7 +617,7 @@ class JellytipApi
         suspend fun deleteLibraryItem(itemId: UUID): JellytipDeleteResult {
             val (code, body) = userCall("v1/library/items/$itemId/delete", "{}", timeoutMs = 60_000L)
                 ?: return JellytipDeleteResult(false, "Couldn't reach the Jellytip server, try again")
-            if (code == 404) return JellytipDeleteResult(false, null, unsupported = true)
+            if (code == 404 || code == 422) return JellytipDeleteResult(false, null, unsupported = true)
             val obj = runCatching { JSONObject(body) }.getOrNull()
             return when {
                 code == 403 -> JellytipDeleteResult(false, "You are not allowed to delete this.")

@@ -124,6 +124,8 @@ data class JellytipDeleteResult(
     val unsupported: Boolean = false,
 )
 
+private val INFO_KINDS = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.SEASON, BaseItemKind.EPISODE)
+
 private const val CONFIRM_GRACE_MS = 600L
 
 /**
@@ -144,11 +146,16 @@ fun JellytipDeleteConfirm(
     val audience by produceState<String?>(null, item?.id) {
         value = item?.let { JellytipApi.shared?.getAudience(it)?.summary() }
     }
-    // Companion delete-info: what goes, size, and whether this person may delete it at all
+    // Companion delete-info: what goes, size, and whether this person may delete it at all.
+    // Library kinds must load it successfully before Delete is enabled; other kinds (recordings etc.) skip it.
+    val needsInfo = item != null && item.type in INFO_KINDS
+    var infoFailed by remember(item?.id) { mutableStateOf(false) }
     val info by produceState<JellytipDeleteInfo?>(null, item?.id) {
-        value = item?.let { JellytipApi.shared?.deleteInfo(it.id) }
+        value = item?.takeIf { needsInfo }?.let { JellytipApi.shared?.deleteInfo(it.id) }
+        if (needsInfo && value == null) infoFailed = true
     }
-    val blocked = info?.canDelete == false
+    val blocked = info?.canDelete == false || infoFailed
+    val ready = !needsInfo || info?.canDelete == true
     BasicDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -179,6 +186,14 @@ fun JellytipDeleteConfirm(
                     text = stringResource(R.string.jellytip_delete_second, itemLabel),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (infoFailed) {
+                Text(
+                    text = stringResource(R.string.jellytip_delete_info_failed),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Red.copy(alpha = 0.9f),
                     textAlign = TextAlign.Center,
                 )
             }
@@ -218,7 +233,7 @@ fun JellytipDeleteConfirm(
                 ) {
                     Text(text = stringResource(R.string.cancel))
                 }
-                if (!blocked) key(step) {
+                if (ready) key(step) {
                 Button(
                     onClick = {
                         // A fast double OK (or a repeat) must not walk straight through both steps
