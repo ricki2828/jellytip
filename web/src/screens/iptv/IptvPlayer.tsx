@@ -15,6 +15,8 @@ import { useLiveFeed } from "../../components/Companion/useLiveFeed";
 import { calibrateMessage, useRevealClock } from "../../lib/delay";
 import { autoCloseDecision, autoOpenDecision, DROP_KEY, panelKeyAction, panelModeFor, stepTab, type OpenReason } from "../../lib/companion";
 import { usePrefs } from "../../api/me";
+import { usePlayWatch } from "../../api/signals";
+import type { WatchMeta } from "../../lib/signals";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -64,6 +66,14 @@ async function probe(url: string): Promise<{ status: number; code: string | null
   } catch {
     return { status: 0, code: null };
   }
+}
+
+/** Taste signal target: an IPTV film or episode (the show, not the episode). Live, recordings and sport send nothing. */
+function signalMeta(t: PlayTarget, channelId?: string | null): WatchMeta | null {
+  if (t.recording || (t.channel && t.start == null)) return null;
+  if (t.vod) return { kind: "movie", iptvId: t.vod, isFilm: true, channel: !!channelId };
+  if (t.episode && t.series) return { kind: "series", iptvId: t.series, isFilm: false, channel: !!channelId };
+  return null;
 }
 
 const isLiveTarget = (t: PlayTarget) => !!t.channel && t.start == null;
@@ -152,6 +162,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
   const langPrefs = usePrefs({ defer: true }).prefs?.playback;
   const hideTimer = useRef<number | null>(null);
   const lenRef = useRef(0);
+  const watch = usePlayWatch(signalMeta(target, channelId), () => lenRef.current, curId ?? "");
   const growRef = useRef(false);
   // Live stall: no picture moving for 10 s offers the same event on another channel
   const lastMove = useRef(Date.now());
@@ -1118,9 +1129,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onClick={() => !isLive && !touchClick.current && togglePlay()}
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
-        onEnded={() => (kickoffRun.current ? backToLive() : nextOnChannel())}
+        onEnded={() => { watch.end(true); if (kickoffRun.current) backToLive(); else nextOnChannel(); }}
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => {
+          watch.tick(e.currentTarget.currentTime);
           if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
             stallReported.current = false;
             if (!isLive || !e.currentTarget.requestVideoFrameCallback) {
@@ -1144,7 +1156,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras, channelId, offSchedu
         onPlaying={finishBuffer}
         onProgress={() => { lastNet.current = Date.now(); }}
         onSeeking={() => { lastNet.current = Date.now(); }}
-        onSeeked={() => { lastNet.current = Date.now(); }}
+        onSeeked={() => { watch.seeked(); lastNet.current = Date.now(); }}
         onLoadedData={() => { lastNet.current = Date.now(); }}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
@@ -1350,6 +1362,8 @@ function nativeFailureText(r: NativePlayerResult): string {
  */
 function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   const curId = target.vod ?? target.episode;
+  const nativeLen = useRef(0);
+  const watch = usePlayWatch(signalMeta(target, channelId), () => nativeLen.current, curId ?? "");
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);
@@ -1373,6 +1387,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
       debugEvent("iptv-player", "native attach", { player: "exoplayer", mime: a.mime ?? null, kind: a.kind, direct: link.direct, live }, "info");
       const subs = [
         await NativePlayer.addListener("progress", (e) => {
+          if (e.durationMs > 0) nativeLen.current = e.durationMs / 1000;
+          watch.tick(e.positionMs / 1000, 40); // the app reports every 30 s
           if (key && !channelId && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000), target.episode ? target.series : undefined);
         }),
         await NativePlayer.addListener("playerError", (e) => {
@@ -1484,6 +1500,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { ta
           return;
         }
       }
+      if (r.reason === "ended") watch.end(true);
       if (r.reason === "ended" && channelId) {
         // The film finished: on to what the clock says is next on the channel
         void nextChannelPath(channelId, curId, (Date.now() - openedAt.current) / 1000, resume).then((path) => {

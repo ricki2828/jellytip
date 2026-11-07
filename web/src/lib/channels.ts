@@ -28,6 +28,8 @@ export interface ChannelDef {
   minMinutes?: number;
   /** TMDB genre ids: a channel also draws films (Movie) or episodes (Episode, TV genre ids) from the person's IPTV catalogue. */
   tmdbGenres?: number[];
+  /** A channel built from the person's taste profile out of the other channels' pools (no query of its own). */
+  personal?: "foryou" | "genre" | "shows";
 }
 
 export const CHANNELS: ChannelDef[] = [
@@ -58,6 +60,10 @@ export interface ChanItem {
   SeriesTmdb?: string;
   /** IPTV items only: https TMDB backdrop for the Home card. */
   Art?: string;
+  /** Genres (a series' for its episodes; an IPTV item gets its channel's), kept for the personal channels. */
+  G?: string[];
+  /** How well this fits the person's taste, 0..1 (0.5 = no opinion); absent without a taste profile. */
+  Aff?: number;
 }
 
 export interface Slot {
@@ -83,6 +89,10 @@ export const IPTV_CAP = 100;
 
 const TMDB_ART = /^https:\/\/image\.tmdb\.org\//;
 
+/** The channel pool's per-item `affinity` (0..1) when the server sends one. */
+const serverAff = (o: Record<string, unknown>): { Aff?: number } =>
+  typeof o.affinity === "number" && isFinite(o.affinity) ? { Aff: Math.max(0, Math.min(1, o.affinity)) } : {};
+
 /** GET /v1/iptv/channel-pool → ChanItems. Films only; needs a valid id, a title, a trustworthy runtime; langUnknown is out. */
 export function iptvPoolItems(raw: unknown): { items: ChanItem[]; pending: number } {
   const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -107,6 +117,7 @@ export function iptvPoolItems(raw: unknown): { items: ChanItem[]; pending: numbe
       RunTimeTicks: secs * TICKS_PER_SECOND,
       Tmdb: typeof o.tmdbId === "number" ? String(o.tmdbId) : undefined,
       Art: art,
+      ...serverAff(o),
     });
   }
   return { items, pending: typeof r.pending === "number" && r.pending > 0 ? Math.floor(r.pending) : 0 };
@@ -163,6 +174,7 @@ export function iptvEpisodeItems(raw: unknown): { items: ChanItem[]; pending: nu
       RunTimeTicks: secs * TICKS_PER_SECOND,
       SeriesTmdb: typeof o.tmdbId === "number" ? String(o.tmdbId) : undefined,
       Art: art,
+      ...serverAff(o),
     });
   }
   return { items, pending: typeof r.pending === "number" && r.pending > 0 ? Math.floor(r.pending) : 0 };
@@ -172,7 +184,7 @@ export function iptvEpisodeItems(raw: unknown): { items: ChanItem[]; pending: nu
 export const withinYearTo = <T extends { ProductionYear?: number }>(items: T[], def: Pick<ChannelDef, "yearTo">): T[] =>
   def.yearTo == null ? items : items.filter((i) => typeof i.ProductionYear === "number" && i.ProductionYear <= def.yearTo!);
 
-const byEpisode = (a: ChanItem, b: ChanItem): number =>
+export const byEpisodeOrder = (a: ChanItem, b: ChanItem): number =>
   (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) || (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0) || (a.Id < b.Id ? -1 : a.Id > b.Id ? 1 : 0);
 
 /**
@@ -188,6 +200,7 @@ export function mixEpisodes(library: ChanItem[], iptv: ChanItem[], cap = IPTV_EP
     bySeries.set(e.SeriesId, [...(bySeries.get(e.SeriesId) ?? []), e]);
   }
   const claimed = new Set<string>();
+  const weightedOrder = iptv.some((e) => e.Aff != null);
   const groups = [...bySeries.entries()]
     .sort((p, q) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0))
     .filter(([, eps]) => {
@@ -197,7 +210,7 @@ export function mixEpisodes(library: ChanItem[], iptv: ChanItem[], cap = IPTV_EP
       claimed.add(t);
       return true;
     })
-    .map(([sid, eps]) => [hashString(`${salt}|${sid}`), sid, eps.sort(byEpisode)] as const)
+    .map(([sid, eps]) => [weightedOrder ? wkey(hashString(`${salt}|${sid}`), affinityWeight(meanAff(eps))) : hashString(`${salt}|${sid}`), sid, eps.sort(byEpisodeOrder)] as const)
     .sort((p, q) => p[0] - q[0] || (p[1] < q[1] ? -1 : 1));
   const out: ChanItem[] = [];
   for (const [, , eps] of groups) {
@@ -205,6 +218,12 @@ export function mixEpisodes(library: ChanItem[], iptv: ChanItem[], cap = IPTV_EP
     out.push(...eps);
   }
   return [...library, ...out];
+}
+
+/** Mean affinity of some items; undefined when none carries one. */
+export function meanAff(items: { Aff?: number }[]): number | undefined {
+  const a = items.map((x) => x.Aff).filter((x): x is number => typeof x === "number");
+  return a.length ? a.reduce((p, q) => p + q, 0) / a.length : undefined;
 }
 
 // ---------- seed ----------
@@ -256,18 +275,28 @@ export function playable(items: ChanItem[], def?: Pick<ChannelDef, "maxMinutes" 
 /** A channel exists when its query yields enough playable items. */
 export const channelViable = (items: ChanItem[], def?: Pick<ChannelDef, "maxMinutes" | "minMinutes">): boolean => playable(items, def).length >= MIN_ITEMS;
 
-/** Keep at most `cap` items by smallest hash of id + salt: the same items every time, unbiased by server order. */
-export function sample<T extends { Id: string }>(items: T[], cap: number, salt = "pool"): T[] {
+/** Affinity 0..1 → how many times as likely an item is to be kept or come early. Neutral (0.5 or unknown) = 1, 0.75 = 2, 1 = 4. */
+export const affinityWeight = (a: number | undefined): number => (a == null || !isFinite(a) ? 1 : Math.pow(4, Math.max(0, Math.min(1, a)) * 2 - 1));
+
+/** Deterministic weighted key (smaller = sooner): -ln(u) / weight, u from a hash. Weight 1 for all = a plain hash order. */
+const wkey = (h: number, w: number): number => -Math.log((h + 1) / 4294967297) / w;
+
+/**
+ * Keep at most `cap` items by smallest hash of id + salt: the same items every time, unbiased by server order.
+ * When items carry an affinity, a higher one makes an item likelier to stay (still a pure function of ids and affinities).
+ */
+export function sample<T extends { Id: string; Aff?: number }>(items: T[], cap: number, salt = "pool"): T[] {
   if (items.length <= cap) return items;
+  const weighted = items.some((x) => x.Aff != null);
   return items
-    .map((x) => [hashString(`${salt}|${x.Id}`), x] as const)
+    .map((x) => [weighted ? wkey(hashString(`${salt}|${x.Id}`), affinityWeight(x.Aff)) : hashString(`${salt}|${x.Id}`), x] as const)
     .sort((p, q) => p[0] - q[0] || (p[1].Id < q[1].Id ? -1 : 1))
     .slice(0, cap)
     .map((p) => p[1]);
 }
 
 /** Like sample, but at most `perGroup` per group (e.g. per series), then `cap` overall. Items with no group key are dropped. */
-export function sampleByGroup<T extends { Id: string }>(items: T[], group: (x: T) => string | undefined, perGroup: number, cap: number, salt = "pool"): T[] {
+export function sampleByGroup<T extends { Id: string; Aff?: number }>(items: T[], group: (x: T) => string | undefined, perGroup: number, cap: number, salt = "pool"): T[] {
   const by = new Map<string, T[]>();
   for (const x of items) {
     const g = group(x);
@@ -300,7 +329,7 @@ export function lineup(pool: ChanItem[], channelId: string, cycle: number): Chan
       else by.set(x.SeriesId, [...(by.get(x.SeriesId) ?? []), x]);
     }
     for (const sid of [...by.keys()].sort()) {
-      const eps = by.get(sid)!.sort(byEpisode);
+      const eps = by.get(sid)!.sort(byEpisodeOrder);
       let i = 0;
       while (i < eps.length) {
         let n = BLOCK_MIN + Math.floor(r() * (BLOCK_MAX - BLOCK_MIN + 1));
@@ -312,9 +341,15 @@ export function lineup(pool: ChanItem[], channelId: string, cycle: number): Chan
     }
     // blocks were assembled in a canonical order (films in pool order, then series by id), so the shuffle depends only on the pool
   } else blocks = pool.map((x) => [x]);
-  for (let i = blocks.length - 1; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1));
-    [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+  if (pool.some((x) => x.Aff != null)) {
+    // Taste-weighted pass: the same blocks, but what fits the person's taste tends to come earlier (a pure function of the pool and the cycle)
+    const keyed = blocks.map((b) => [-Math.log(1 - r()) / affinityWeight(meanAff(b)), b] as const);
+    blocks = keyed.sort((p, q) => p[0] - q[0]).map((k) => k[1]);
+  } else {
+    for (let i = blocks.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+    }
   }
   // two blocks of one show back to back would read as a jumble (5,6 then 1,2,3): pull a later block of another show forward
   const sid = (b: ChanItem[]) => b[0].SeriesId;
@@ -456,8 +491,15 @@ export function rejoinLive(slots: Slot[], offsetS: number, currentId: string): {
   return t.id === currentId ? { kind: "seek", s: t.startS } : { kind: "go", target: t };
 }
 
-/** A channel id from a URL, or null if it is not a built-in one. */
-export const channelById = (id: string | null | undefined): ChannelDef | null => CHANNELS.find((c) => c.id === id) ?? null;
+/** The person's personal channels (built from their taste profile), kept so a player can look one up by id. */
+let personalDefs: ChannelDef[] = [];
+export const setPersonalDefs = (defs: ChannelDef[]): void => {
+  personalDefs = defs.filter((d) => !!d.personal && !CHANNELS.some((c) => c.id === d.id));
+};
+export const getPersonalDefs = (): ChannelDef[] => personalDefs;
+
+/** A channel id from a URL, or null if it is not a built-in or a known personal one. */
+export const channelById = (id: string | null | undefined): ChannelDef | null => CHANNELS.find((c) => c.id === id) ?? personalDefs.find((c) => c.id === id) ?? null;
 
 // ---------- labels ----------
 

@@ -11,6 +11,8 @@ import { fetchSubtitles, negotiate, reportProgress, reportStart, reportStopped, 
 import { activeCues, parseVtt, type Cue } from "../lib/vtt";
 import { back, go } from "../lib/router";
 import { prefsSoon, usePrefs } from "../api/me";
+import { usePlayWatch } from "../api/signals";
+import { libraryTarget } from "../lib/signals";
 import { chooseStart, getAlwaysSubs, loadStore, memoryKey, recordChoice, saveStore } from "../lib/trackMemory";
 import { TrackMenu } from "../components/TrackMenu.tsx";
 import { useSubtitlePrefs } from "../lib/useSubtitlePrefs.ts";
@@ -144,6 +146,10 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     if (startedRef.current) reportStopped(report());
     else stopEncoding(p); // never started: no session to stop, but the server may already be transcoding
   }, [report, channel]);
+
+  // Taste signal: real playing time of this title (a personal channel's pick counts as a weaker 'play'; sent when the title ends or the screen leaves)
+  const sigTarget = item && item.Id === id ? libraryTarget(item) : null;
+  const watch = usePlayWatch(sigTarget ? { ...sigTarget, isFilm: item?.Type === "Movie", channel: !!channel } : null, () => (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND, id);
 
   /** Close out the current plan before switching to another (fallback, audio change); the new one reports its own start. */
   const abandonPlan = useCallback(() => {
@@ -806,12 +812,14 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         }}
         onWaiting={() => setBuffering(true)}
         onSeeked={() => {
+          watch.seeked();
           seekTarget.current = null;
           if (startedRef.current) progress();
         }}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
           setTime(t);
+          watch.tick(t);
           const r = replayRef.current;
           if (r && replayDone(r, t)) {
             replayRef.current = null;
@@ -820,6 +828,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         }}
         onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : (item?.RunTimeTicks ?? 0) / TICKS_PER_SECOND)}
         onEnded={() => {
+          watch.end(true);
           stop();
           if (next || channel) playNext();
           else exit();

@@ -1,7 +1,10 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, writeHiddenChannels } from "../api/channels";
+import { channelItems, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
+import { useTasteProfile } from "../api/tasteProfile";
+import { orderByAffinity } from "../lib/channelsRow";
+import { personalDefs, personalItems } from "../lib/personalChannels";
 import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
 import "./Channels.css";
@@ -101,10 +104,31 @@ export function Channels() {
     writeHiddenChannels(next);
   };
 
-  const viable = CHANNELS.filter((c) => {
-    const l = loads[c.id];
-    return l.state === "ok" && channelViable(l.items, c);
-  });
+  // Personal channels come from the taste profile, cut from the loaded pools; the list is ordered by how well what is on now
+  // fits the person's taste, once per load (not per clock tick) so cards stay put
+  const profile = useTasteProfile();
+  const baseItems = useMemo(() => {
+    const m: Record<string, ChanItem[] | undefined> = {};
+    for (const c of CHANNELS) {
+      const l = loads[c.id];
+      if (l.state === "ok") m[c.id] = l.items;
+    }
+    return m;
+  }, [loads]);
+  const personal = useMemo(() => personalDefs(profile ?? null, baseItems), [profile, baseItems]);
+  useEffect(() => {
+    if (profile) rememberPersonal(personal);
+  }, [profile, personal]);
+  const itemsOf = useMemo(() => {
+    const m = { ...baseItems };
+    for (const d of personal) m[d.id] = personalItems(d, baseItems, d.genres?.[0]);
+    return m;
+  }, [baseItems, personal]);
+  const defs = useMemo(() => [...personal, ...CHANNELS], [personal]);
+  const viable = useMemo(
+    () => orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now()),
+    [defs, itemsOf],
+  );
   const pending = CHANNELS.some((c) => loads[c.id].state === "loading");
   const errored = CHANNELS.filter((c) => loads[c.id].state === "error").length;
   const visible = viable.filter((c) => !hidden.includes(c.id));
@@ -127,8 +151,8 @@ export function Channels() {
       {!pending && errored === 0 && viable.length === 0 && <p className="ask-sub" role="status">Not enough in your library yet to make a channel (each needs at least 3 titles).</p>}
       <ul className="ch-list">
         {shown.map((c) => {
-          const l = loads[c.id];
-          return l.state === "ok" ? <Card key={c.id} def={c} items={l.items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} /> : null;
+          const items = itemsOf[c.id];
+          return items ? <Card key={c.id} def={c} items={items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} /> : null;
         })}
       </ul>
       {hiddenViable.length > 0 && (

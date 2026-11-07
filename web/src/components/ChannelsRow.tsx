@@ -2,10 +2,13 @@
 // Click / Enter tunes in. Lazy: nothing is asked before the page's own rows have started (afterStartup), the row stays
 // out of the way until a channel is viable, and the now/next text only ticks while the row is on screen and the tab visible.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels } from "../api/channels";
+import { channelItems, readHiddenChannels, rememberPersonal } from "../api/channels";
 import { imageUrl } from "../api/jellyfin";
-import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels";
-import { cardModel, visibleChannels } from "../lib/channelsRow";
+import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
+import { cardModel, orderByAffinity, visibleChannels } from "../lib/channelsRow";
+import { personalDefs, personalItems } from "../lib/personalChannels";
+import { tasteProfileSoon } from "../api/tasteProfile";
+import type { TasteProfile } from "../lib/tasteProfile";
 import { afterStartup } from "../lib/startup";
 import { go } from "../lib/router";
 import "./FranchiseRow.css";
@@ -15,8 +18,7 @@ const TICK_MS = 45_000;
 const CONCURRENCY = 2;
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-const Card = memo(function Card({ id, items, now }: { id: string; items: ChanItem[]; now: number }) {
-  const def = CHANNELS.find((c) => c.id === id)!;
+const Card = memo(function Card({ def, items, now }: { def: ChannelDef; items: ChanItem[]; now: number }) {
   const m = useMemo(() => cardModel(def, items, now), [def, items, now]);
   const [bad, setBad] = useState<string | null>(null);
   if (!m) return null;
@@ -59,6 +61,7 @@ const Card = memo(function Card({ id, items, now }: { id: string; items: ChanIte
 export function ChannelsRow() {
   const [loads, setLoads] = useState<Record<string, ChanItem[] | undefined>>({});
   const [hidden, setHidden] = useState<string[]>(readHiddenChannels);
+  const [profile, setProfile] = useState<TasteProfile | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [inView, setInView] = useState(false);
   const el = useRef<HTMLElement>(null);
@@ -73,6 +76,7 @@ export function ChannelsRow() {
       if (!alive || mine !== gen) return;
       const hid = readHiddenChannels();
       setHidden(hid);
+      void tasteProfileSoon().then((a) => alive && mine === gen && setProfile(a.profile));
       const queue = CHANNELS.filter((c) => !hid.includes(c.id));
       const worker = async () => {
         for (let def = queue.shift(); def && alive && mine === gen; def = queue.shift()) {
@@ -89,6 +93,7 @@ export function ChannelsRow() {
     // Another person: drop the last one's channels and load this person's
     const onSession = () => {
       setLoads({});
+      setProfile(null);
       void run();
     };
     window.addEventListener("jellytip-session", onSession);
@@ -98,7 +103,18 @@ export function ChannelsRow() {
     };
   }, []);
 
-  const shown = useMemo(() => visibleChannels(loads, hidden), [loads, hidden]);
+  // Personal channels are cut from the loaded pools (no requests of their own); the whole row is ordered by how well what is on
+  // now fits the person's taste, once per load rather than on every tick so cards don't jump under a focused remote
+  const personal = useMemo(() => personalDefs(profile, loads), [profile, loads]);
+  useEffect(() => {
+    if (profile) rememberPersonal(personal);
+  }, [profile, personal]);
+  const allLoads = useMemo(() => {
+    const m: Record<string, ChanItem[] | undefined> = { ...loads };
+    for (const d of personal) m[d.id] = personalItems(d, loads, d.genres?.[0]);
+    return m;
+  }, [loads, personal]);
+  const shown = useMemo(() => orderByAffinity(visibleChannels(allLoads, hidden, [...personal, ...CHANNELS]), allLoads, Date.now()), [allLoads, hidden, personal]);
   const present = shown.length > 0;
 
   // On screen? (no observer API: assume yes)
@@ -140,7 +156,7 @@ export function ChannelsRow() {
       </h2>
       <div className="row-scroll">
         {shown.map((c) => (
-          <Card key={c.id} id={c.id} items={loads[c.id]!} now={now} />
+          <Card key={c.id} def={c} items={allLoads[c.id]!} now={now} />
         ))}
       </div>
     </section>

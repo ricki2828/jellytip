@@ -17,6 +17,8 @@ import {
 } from "../api/jellyfin";
 import { backdropInfo, episodeArtFor, extras, peekBackdropInfo, type Extras } from "../api/companion";
 import { trailerStreamUrl } from "../api/playback";
+import { emitSignal, useDetailDwell, useTrailerWatch } from "../api/signals";
+import { libraryTarget } from "../lib/signals";
 import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
 import { focusFirst } from "../lib/spatial";
@@ -250,6 +252,10 @@ export function Details({ id }: { id: string }) {
 
   // Muted trailer in the backdrop after a rest, as on the TV; off while the full trailer modal is open
   const preview = useTrailerPreview(item && !showTrailer ? jfTarget(item) : null, { trigger: "passive" });
+  // Taste signals: dwell on this page, a trailer opened on purpose (5 s+), My List
+  const sigTarget = item ? libraryTarget(item) : null;
+  useDetailDwell(sigTarget);
+  const onTrailerTime = useTrailerWatch(showTrailer, sigTarget);
 
   if (error) return <div className="empty">Couldn't load this title. {error}</div>;
   if (!item) return <div className="details loading" />;
@@ -284,6 +290,8 @@ export function Details({ id }: { id: string }) {
   const toggleFav = async () => {
     try {
       await setFavorite(item.Id, !ud?.IsFavorite);
+      const tg = libraryTarget(item);
+      if (tg && !ud?.IsFavorite) emitSignal({ ...tg, type: "mylist", at: Date.now() });
       setItem({ ...item, UserData: { ...ud, IsFavorite: !ud?.IsFavorite } });
     } catch {
       flash("Couldn't update favourite. Try again.");
@@ -504,6 +512,7 @@ export function Details({ id }: { id: string }) {
             autoPlay
             controls
             onEnded={() => setShowTrailer(false)}
+            onTimeUpdate={onTrailerTime}
             onError={() => {
               setShowTrailer(false);
               flash("The trailer won't play in this browser.");
