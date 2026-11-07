@@ -39,12 +39,18 @@ export function targetPath(t: PlayTarget): string {
  * /play query for a target; live TV goes as TS unless the browser can only do HLS. [native]: the phone's ExoPlayer
  * (`client=native`), which may get a direct-from-provider link.
  */
-export function playQuery(t: PlayTarget, device: string, format: "ts" | "m3u8" = "ts", native = false): string {
+export function playQuery(t: PlayTarget, device: string, format: "ts" | "m3u8" = "ts", native = false, vodStart = 0): string {
   const q = new URLSearchParams();
   for (const k of KEYS) if (t[k] != null) q.set(k, String(t[k]));
   if (t.channel && t.start == null) q.set("format", format);
   // Live and catch-up on the web: the server re-encodes audio to AAC (browsers can't play AC-3 through MSE)
   if (t.channel && !native) q.set("compat", "web");
+  // Films and episodes: the server remuxes only titles whose audio a browser can't decode (AC-3/DTS…). Such a stream can't take a
+  // byte range, so a resume or seek is `start=<sec>` and the stream begins there.
+  if ((t.vod || t.episode) && !native) {
+    q.set("compat", "web");
+    if (vodStart > 0) q.set("start", String(Math.floor(vodStart)));
+  }
   q.set("device", device);
   if (native) q.set("client", "native");
   return `v1/iptv/play?${q}`;

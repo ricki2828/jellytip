@@ -37,6 +37,7 @@ import { nextChannelPath, rejoinPlan } from "../../api/channels";
 import { RecordingDelete } from "../../components/RecordingDelete";
 import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
+import { planSeek, progressFor, rangesOf, remuxOffset, toTimeline } from "../../lib/vodRemux";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
 import { StreamBusy } from "../../components/StreamBusy";
@@ -150,6 +151,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const [answer, setAnswer] = useState<PlayAnswer | null>(null);
   const [paused, setPaused] = useState(false);
   const [duration, setDuration] = useState(0);
+  // Compat remux (AC-3/DTS film/episode → fMP4+AAC): the element's clock starts at `remuxOff`; its length is the provider's
+  const [remux, setRemux] = useState<{ off: number; len: number } | null>(null);
+  const remuxRef = useRef<{ off: number; len: number } | null>(null);
+  remuxRef.current = remux;
   const isLive = !!target.channel && target.start == null;
   const [meta, setMeta] = useState<RecMeta | null>(null);
   const [controls, setControls] = useState(true);
@@ -349,10 +354,11 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const report = useCallback(() => {
     const key = progressKey(target);
     const v = videoRef.current;
-    const dur = isFinite(v?.duration ?? NaN) && (v?.duration ?? 0) > 0 ? v!.duration : lenRef.current;
+    const rm = remuxRef.current;
+    const { pos, dur } = progressFor(v?.currentTime ?? 0, rm?.off ?? 0, v?.duration ?? NaN, lenRef.current, !!rm);
     // An in-progress recording has no final length yet: don't save a half-length as if it were the whole
-    if (!key || !v || !(dur > 0) || v.currentTime < 5 || growRef.current || channelId) return; // a channel never writes watch history
-    void saveProgress(key, Math.floor(v.currentTime), Math.floor(dur), target.episode ? target.series : undefined);
+    if (!key || !v || !(dur > 0) || pos < 5 || growRef.current || channelId) return; // a channel never writes watch history
+    void saveProgress(key, Math.floor(pos), Math.floor(dur), target.episode ? target.series : undefined);
   }, [target, channelId]);
 
   // A stream link failed: work out why, then renew once, show who holds the connection, or give up
@@ -392,7 +398,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       }
       if (what === "renew" && !renewed.current) {
         renewed.current = true;
-        if (!isLive && videoRef.current && videoRef.current.currentTime > 5) seekTo.current = videoRef.current.currentTime;
+        if (!isLive && videoRef.current && toTimeline(videoRef.current.currentTime, remuxRef.current?.off ?? 0) > 5) seekTo.current = toTimeline(videoRef.current.currentTime, remuxRef.current?.off ?? 0);
         teardown();
         void start();
         return;
@@ -516,9 +522,15 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     } catch {
       return loadFailed();
     }
-    const a = await play(playQuery(target, iptvDevice(), fmtRef.current));
+    const a = await play(playQuery(target, iptvDevice(), fmtRef.current, false, target.vod || target.episode ? seekTo.current : 0));
     if (!alive.current || g !== gen.current) return false;
     if (a.status === 200 && a.data?.url) {
+      // A remuxed title began at startAt (the resume point or the seek that reloaded it): nothing left to seek to
+      const off = remuxOffset(a.data);
+      const rm = a.data.remux ? { off, len: Math.max(0, Math.floor(a.data.duration ?? 0)) } : null;
+      remuxRef.current = rm;
+      setRemux(rm);
+      if (rm) seekTo.current = 0;
       if (!recovering) {
         recRef.current = { ...initialRecovery(isLive, fmtRef.current), offline: recRef.current.offline };
         setRec(recRef.current);
@@ -933,7 +945,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
 
   const growing = !!answer?.growing || meta?.state === "recording";
   growRef.current = growing;
-  const length = isLive ? 0 : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
+  const length = isLive ? 0 : remux ? remux.len : recordingLength(target.recording ? meta : null, Date.now() / 1000, duration);
   lenRef.current = length;
   const growingVod = growing && !isLive;
   useEffect(() => {
@@ -953,13 +965,26 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     const v = videoRef.current;
     if (!v) return;
     // In-progress: only what is recorded so far (the buffer's end when the player knows it)
+    const rm = remuxRef.current;
+    if (rm) {
+      // No byte ranges on a remux: inside what's buffered it's a plain move, else reload the stream from there
+      const plan = planSeek(to, rm.off, rangesOf(v.buffered), rm.len);
+      if (plan.kind === "local") { v.currentTime = plan.t; return; }
+      seekTo.current = plan.start;
+      const next = { ...rm, off: plan.start };
+      remuxRef.current = next; // the clock shows the target straight away
+      setRemux(next);
+      teardown();
+      void startRef.current();
+      return;
+    }
     const sk = v.seekable;
     const cap = growing && sk.length ? Math.min(length || Infinity, sk.end(sk.length - 1) + 1) : length;
     v.currentTime = clampSeek(to, cap, growing);
   };
   const seekBy = (d: number) => {
     const v = videoRef.current;
-    if (v) seekTo_(v.currentTime + d);
+    if (v) seekTo_(toTimeline(v.currentTime, remuxRef.current?.off ?? 0) + d);
   };
   const jumpLive = () => {
     const v = videoRef.current;
@@ -1198,7 +1223,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         onEnded={() => { watch.end(true); if (kickoffRun.current) backToLive(); else nextOnChannel(); }}
         onPause={() => { if (!liveBuf.handlePause()) setPaused(true); }}
         onTimeUpdate={(e) => {
-          watch.tick(e.currentTarget.currentTime);
+          watch.tick(toTimeline(e.currentTarget.currentTime, remuxRef.current?.off ?? 0));
           if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
             stallReported.current = false;
             if (!isLive || !e.currentTarget.requestVideoFrameCallback) {
@@ -1215,7 +1240,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
           const r = replayRef.current;
           if (r && replayDone(r, e.currentTarget.currentTime)) { replayRef.current = null; selectSubtitle(r.restore); }
         }}
-        onDurationChange={(e) => setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
+        onDurationChange={(e) => { if (!remuxRef.current) setDuration(isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0); }}
         onLoadedMetadata={(e) => { applyResume(e.currentTarget); refreshTracks(); }}
         onCanPlay={(e) => applyResume(e.currentTarget)}
         onWaiting={() => { if (firstFrame.current && rebufferStarted.current == null) { rebufferStarted.current = Date.now(); rebufferCount.current++; liveBuf.noteRebuffer(); debugEvent("iptv-player", "rebuffer started", { count: rebufferCount.current, player: engineRef.current, format: fmtRef.current }, "info"); } }}
@@ -1368,7 +1393,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
-            <TimeBarScrubber videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
+            <TimeBarScrubber offset={remux?.off ?? 0} videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
           )}
           <div className="player-row iptv-controls">
             <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">
@@ -1386,7 +1411,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
             <button className="btn ghost" data-nav onClick={() => seekBy(30)} aria-label="Forward 30 seconds">
               +30s
             </button>
-            <TimeBarClock videoRef={videoRef} fmt={fmt} length={length} seekable={seekable} growing={growing} />
+            <TimeBarClock offset={remux?.off ?? 0} videoRef={videoRef} fmt={fmt} length={length} seekable={seekable} growing={growing} />
             {channelId && seekable && (
               <>
                 <span className="spacer" />
