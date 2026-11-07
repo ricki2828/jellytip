@@ -2564,3 +2564,85 @@ button.overview.open {
 .search-ask {
   margin-left: var(--pad);
 }
+
+/* Movies / Shows: "Browse all" entry points, and the sticky bar of the all-titles page */
+.lib-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lib-title-row .page-title {
+  margin-right: 0;
+}
+.btn.browse-all {
+  background: var(--vanilla);
+  color: var(--night);
+  padding: 8px 18px;
+  font-size: 14px;
+}
+.btn.browse-all:hover,
+.btn.browse-all:focus {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--jelly, #e2264d);
+}
+.browse-all-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: calc(100% - 2 * var(--pad));
+  max-width: 720px;
+  margin: 0 var(--pad);
+  padding: 18px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--vanilla);
+  text-align: left;
+  cursor: pointer;
+}
+.browse-all-card:hover,
+.browse-all-card:focus {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 2px var(--vanilla);
+}
+.browse-all-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.browse-all-sub {
+  font-size: 13px;
+  color: var(--dim);
+}
+.browse-bar {
+  position: sticky;
+  top: 56px;
+  z-index: 15;
+  padding: 8px 0 10px;
+  background: rgba(10, 10, 10, 0.96);
+}
+.browse-note {
+  margin: 0 var(--pad) 6px;
+  font-size: 12.5px;
+}
+@media (max-width: 720px) {
+  .browse-bar {
+    top: calc(48px + env(safe-area-inset-top, 0px));
+  }
+  .lib-title-row {
+    gap: 10px;
+  }
+}
+.btn.browse-all.my-list-btn {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--vanilla);
+}
+.btn.browse-all.my-list-btn:focus,
+.btn.browse-all.my-list-btn:hover {
+  background: var(--vanilla);
+  color: var(--night);
+}
+.my-list-hint {
+  margin: 0 var(--pad) 14px;
+  font-size: 13px;
+}

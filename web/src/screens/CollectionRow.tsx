@@ -14,7 +14,8 @@ import { IptvPoster } from "../components/IptvTile";
 import { GetItSheet, type GetItPick } from "../components/GetItSheet";
 import "./Collections.css";
 
-export function CollectionRow({ id }: { id: string }) {
+/** `load` replaces the collection fetch (My list pages build their row from the Home rows); `missingText` is shown when it gives nothing. */
+export function CollectionRow({ id, load, missingText = "This collection isn't available." }: { id: string; load?: () => Promise<ServerRow | null>; missingText?: string }) {
   const [row, setRow] = useState<ServerRow | null | undefined>(undefined);
   const [items, setItems] = useState<Map<string, Item> | null>(null);
   const [getIt, setGetIt] = useState<GetItPick | null>(null);
@@ -23,7 +24,7 @@ export function CollectionRow({ id }: { id: string }) {
     let alive = true;
     setRow(undefined);
     setItems(null);
-    void collectionRow(id).then((r) => {
+    void (load ? load() : collectionRow(id)).then((r) => {
       if (!alive) return;
       setRow(r);
       if (!r || !r.itemIds.length) return setItems(new Map());
@@ -34,9 +35,9 @@ export function CollectionRow({ id }: { id: string }) {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (row === undefined) return <div className="collections"><p className="empty">Loading…</p></div>;
-  if (row === null) return <div className="collections"><p className="empty">This collection isn't available.</p></div>;
+  if (row === null) return <div className="collections"><p className="empty">{missingText}</p></div>;
   const ranked = Object.keys(row.ranks).length > 0;
   const libIds = row.itemIds.filter((x) => items?.has(x.replace(/-/g, "").toLowerCase()));
   const entries = items ? trendEntries(row, libIds, 1000) : [];

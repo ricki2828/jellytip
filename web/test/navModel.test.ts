@@ -29,6 +29,8 @@ test("tab hrefs point at routes that map back to the same tab", () => {
 
 test("other routes", () => {
   assert.equal(navActive("ask"), "search");
+  assert.equal(navActive("moviesall"), "movies");
+  assert.equal(navActive("showsall"), "shows");
   assert.equal(navActive("journey"), "collections");
   assert.equal(navActive("manage"), "you");
   assert.equal(navActive("iptv"), "you");
