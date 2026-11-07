@@ -2,7 +2,7 @@
 // live information (LiveDrawer, FlipAlerts, FantasyAlerts, FantasyChip). Maths and policy live in delayMath.ts (pure, tested).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChannelDelay, putChannelDelay, usePrefs } from "../api/me";
-import { type CalibrateResult, calibratedDelay, clampDelay, noteEvent, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
+import { type CalibrateResult, calibratedDelay, clampDelay, noteEvent, persistChannelDelay, makeTrailingPut, DEFAULT_DELAY_SEC, isRevealed, lagSec, liveEdge, parseChannelKey, replayState } from "./delayMath.ts";
 
 export * from "./delayMath.ts";
 
@@ -15,6 +15,10 @@ export interface RevealClock {
   replay: boolean;
   /** "That just happened": sets the delay so the latest event this clock was asked about is revealed right now. */
   calibrate: () => CalibrateResult;
+  /** Sets this channel's delay directly (clamped, saved like calibrate). Returns the value applied. */
+  setDelay: (sec: number) => number;
+  /** Whether a key moment was seen recently enough for "That just happened" to work. */
+  canCalibrate: () => boolean;
 }
 
 export interface RevealOpts {
@@ -44,6 +48,15 @@ const writeLocal = (k: string, sec: number) => {
   }
 };
 
+// One saver per channel, so a zap inside the debounce window doesn't drop the previous channel's save
+const savers = new Map<string, ReturnType<typeof makeTrailingPut>>();
+const trailingPut = (pid: string, sid: string, s: number) => {
+  const k = `${pid}:${sid}`;
+  let f = savers.get(k);
+  if (!f) savers.set(k, (f = makeTrailingPut(putChannelDelay)));
+  f(pid, sid, s);
+};
+
 export function useRevealClock(opts: RevealOpts): RevealClock {
   const { video, channelKey, isLive } = opts;
   const { prefs } = usePrefs({ defer: true });
@@ -53,6 +66,7 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
   const [replay, setReplay] = useState(false);
 
   // Everything the callbacks read lives in refs, so `reveal` keeps one identity and always sees the live playhead.
+  const touchedRef = useRef(false); // a manual change beats the late server answer
   const ref = useRef({ video, delaySec, forced: !isLive || !!opts.replay, replay: false, latest: null as number | null });
   ref.current.video = video;
   ref.current.delaySec = delaySec;
@@ -62,11 +76,12 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
   useEffect(() => {
     setChannelDelay(channelKey ? readLocal(channelKey) : null);
     ref.current.latest = null;
+    touchedRef.current = false;
     if (!channelKey) return;
     let alive = true;
     const { pid, sid } = parseChannelKey(channelKey);
     void getChannelDelay(pid, sid).then((s) => {
-      if (alive && s != null) {
+      if (alive && s != null && !touchedRef.current) {
         setChannelDelay(clampDelay(s));
         writeLocal(channelKey, clampDelay(s));
       }
@@ -106,18 +121,24 @@ export function useRevealClock(opts: RevealOpts): RevealClock {
     ref.current.latest = noteEvent(ref.current.latest, atSec, Date.now() / 1000);
   }, []);
 
+  const setDelay = useCallback((sec: number): number => {
+    touchedRef.current = true;
+    const d = persistChannelDelay(channelKey, sec, { writeLocal, put: trailingPut });
+    setChannelDelay(d);
+    return d;
+  }, [channelKey]);
+
+  const canCalibrate = useCallback(() => !inReplay() && calibratedDelay(ref.current.latest, Date.now() / 1000, lag()) != null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []);
+
   const calibrate = useCallback((): CalibrateResult => {
     if (inReplay()) return { kind: "replay" };
     const d = calibratedDelay(ref.current.latest, Date.now() / 1000, lag());
     if (d == null) return { kind: "none" };
-    setChannelDelay(d);
-    if (!channelKey) return { kind: "set", sec: d };
-    writeLocal(channelKey, d);
-    const { pid, sid } = parseChannelKey(channelKey);
-    void putChannelDelay(pid, sid, d); // a server without the route keeps the browser copy
-    return { kind: "set", sec: d };
+    return { kind: "set", sec: setDelay(d) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelKey]);
+  }, [setDelay]);
 
-  return { reveal, noteMoment, delaySec, replay, calibrate };
+  return { reveal, noteMoment, delaySec, replay, calibrate, setDelay, canCalibrate };
 }

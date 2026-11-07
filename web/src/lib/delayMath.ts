@@ -54,7 +54,8 @@ export function isRevealed(eventSec: number | undefined, nowSec: number, delaySe
 export function calibratedDelay(latestEventSec: number | null, nowSec: number, lag: number): number | null {
   if (latestEventSec == null || !isFinite(latestEventSec)) return null;
   const d = nowSec - latestEventSec - lag;
-  return d < -5 ? null : clampDelay(d);
+  // Past the cap the tap is not about a recent event (the latest key moment is stale), so there is nothing honest to line up
+  return d < -5 || d > MAX_DELAY_SEC ? null : clampDelay(d);
 }
 
 /** The latest key-moment time seen so far (epoch s), ignoring times from the future: the only anchor "that just happened" may use. */
@@ -76,4 +77,45 @@ export function calibrateMessage(r: CalibrateResult): string {
 export function parseChannelKey(key: string): { pid: string; sid: string } {
   const i = key.indexOf(":");
   return i < 0 ? { pid: "_", sid: key } : { pid: key.slice(0, i), sid: key.slice(i + 1) };
+}
+
+/** Steppers in the Adjust popover: current delay plus a signed step, kept in range. */
+export const stepDelay = (cur: number, by: number): number => clampDelay(cur + by);
+
+/** Saves a channel's delay: the browser copy first, then the server (a server without the route keeps the browser copy). One path for calibrate and the popover. */
+export function persistChannelDelay(
+  channelKey: string | null,
+  sec: number,
+  io: { writeLocal: (k: string, s: number) => void; put: (pid: string, sid: string, s: number) => unknown },
+): number {
+  const d = clampDelay(sec);
+  if (!channelKey) return d;
+  io.writeLocal(channelKey, d);
+  const { pid, sid } = parseChannelKey(channelKey);
+  void io.put(pid, sid, d);
+  return d;
+}
+
+/**
+ * Debounced, ordered server save: bursts of stepper taps send one trailing PUT with the last value, PUTs go one at a time in
+ * order, and a value superseded before it was sent is dropped. The caller writes the browser copy at once.
+ */
+export function makeTrailingPut(
+  put: (pid: string, sid: string, s: number) => Promise<unknown> | unknown,
+  o: { ms?: number; schedule?: (f: () => void, ms: number) => unknown; cancel?: (h: unknown) => void } = {},
+): (pid: string, sid: string, s: number) => void {
+  const ms = o.ms ?? 600;
+  const schedule = o.schedule ?? ((f, m) => setTimeout(f, m));
+  const cancel = o.cancel ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+  let seq = 0;
+  let timer: unknown = null;
+  let chain: Promise<unknown> = Promise.resolve();
+  return (pid, sid, s) => {
+    const mine = ++seq;
+    if (timer != null) cancel(timer);
+    timer = schedule(() => {
+      timer = null;
+      chain = chain.then(() => (mine === seq ? put(pid, sid, s) : undefined)).catch(() => undefined);
+    }, ms);
+  };
 }

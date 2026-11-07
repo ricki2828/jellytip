@@ -67,12 +67,13 @@ test("calibration: 'that just happened' reveals the latest event now", () => {
   assert.equal(calibratedDelay(1000, 1042, 10), 32);
 });
 
-test("calibration: no anchor, an event from the future, and clamping", () => {
+test("calibration: no anchor, an event from the future, and staleness", () => {
   assert.equal(calibratedDelay(null, 1000, 0), null);
   assert.equal(calibratedDelay(1100, 1000, 0), null); // a tap 100 s before the event: clocks disagree, don't trust
   assert.equal(calibratedDelay(1000, 1002, 0), 2);
   assert.equal(calibratedDelay(1000, 1003, 6), 0); // within the tolerance, floored at 0
-  assert.equal(calibratedDelay(0, 99999, 0), 300);
+  assert.equal(calibratedDelay(0, 99999, 0), null); // a key moment older than the max delay is stale, not an anchor
+  assert.equal(calibratedDelay(1000, 1300, 0), 300);
 });
 
 test("delay clamps to 0-300 and falls back", () => {
@@ -102,4 +103,59 @@ test("calibrate feedback: set, nothing to anchor on, replay", () => {
   assert.equal(calibrateMessage({ kind: "set", sec: 42 }), "Delay set to 42 s");
   assert.match(calibrateMessage({ kind: "none" }), /^Nothing to line up yet/);
   assert.match(calibrateMessage({ kind: "replay" }), /replay/);
+});
+
+import { persistChannelDelay, stepDelay, MAX_DELAY_SEC } from "../src/lib/delayMath.ts";
+
+test("stepDelay clamps to 0..max", () => {
+  assert.equal(stepDelay(30, 5), 35);
+  assert.equal(stepDelay(3, -10), 0);
+  assert.equal(stepDelay(MAX_DELAY_SEC - 2, 10), MAX_DELAY_SEC);
+});
+
+test("persistChannelDelay clamps, writes local, then puts per channel", () => {
+  const calls: unknown[][] = [];
+  const io = { writeLocal: (k: string, s: number) => calls.push(["local", k, s]), put: (p: string, s: string, d: number) => calls.push(["put", p, s, d]) };
+  assert.equal(persistChannelDelay("prov:123", 999, io), MAX_DELAY_SEC);
+  assert.deepEqual(calls, [["local", "prov:123", MAX_DELAY_SEC], ["put", "prov", "123", MAX_DELAY_SEC]]);
+  calls.length = 0;
+  assert.equal(persistChannelDelay(null, 40, io), 40);
+  assert.deepEqual(calls, []);
+});
+
+import { makeTrailingPut } from "../src/lib/delayMath.ts";
+
+test("makeTrailingPut: a burst sends one PUT with the last value, in order", async () => {
+  const sent: number[] = [];
+  const timers: Array<() => void> = [];
+  const put = makeTrailingPut((_p, _s, d) => { sent.push(d); }, { schedule: (f) => { timers.push(f); return timers.length - 1; }, cancel: (h) => { timers[h as number] = () => {}; } });
+  put("p", "s", 35); put("p", "s", 40); put("p", "s", 45);
+  assert.deepEqual(sent, []);
+  timers.forEach((f) => f());
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(sent, [45]);
+  put("p", "s", 20);
+  timers[timers.length - 1]();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(sent, [45, 20]);
+});
+
+test("makeTrailingPut: a slow earlier PUT cannot land after a later one", async () => {
+  const order: string[] = [];
+  let release!: () => void;
+  const timers: Array<() => void> = [];
+  const put = makeTrailingPut((_p, _s, d) => { order.push(`start${d}`); return d === 10 ? new Promise<void>((r) => { release = r; }).then(() => { order.push("end10"); }) : (order.push(`end${d}`), undefined); }, { schedule: (f) => { timers.push(f); return 0; }, cancel: () => {} });
+  put("p", "s", 10); timers.pop()!();
+  await new Promise((r) => setTimeout(r, 0));
+  put("p", "s", 20); timers.pop()!();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(order, ["start10"]);
+  release();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(order, ["start10", "end10", "start20", "end20"]);
+});
+
+test("calibratedDelay: a stale key moment (older than the max delay) is not an anchor", () => {
+  assert.equal(calibratedDelay(1000, 1000 + MAX_DELAY_SEC + 50, 0), null);
+  assert.equal(calibratedDelay(1000, 1000 + 40, 0), 40);
 });
