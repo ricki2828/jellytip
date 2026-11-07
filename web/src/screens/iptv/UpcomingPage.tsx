@@ -1,7 +1,6 @@
 // #/upcoming: sport coming up in the next days, grouped by day, favourites first inside each day.
 import { useEffect, useState } from "react";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
-import { BackArrow } from "../../components/BackArrow";
 import { UpcomingSheet, UpTile } from "../../components/Upcoming";
 import { go } from "../../lib/router";
 import { groupByDay, starredFirst, type UpEvent } from "../../lib/upcoming";
@@ -16,7 +15,6 @@ export function UpcomingPage() {
   return (
     <div className="iptv-page up-page">
       <div className="page-head">
-        <BackArrow />
         <h1 className="page-title">Upcoming sport</h1>
         <button className="btn small" data-nav onClick={() => go("/games")}>Game Centre</button>
       </div>
