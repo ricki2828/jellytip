@@ -12,6 +12,7 @@ import { HomeEdit, type Placement } from "../components/HomeEdit";
 import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
 import { RecordingsRow } from "../components/RecordingsRow";
+import { ChannelsRow } from "../components/ChannelsRow";
 import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
 import type { ContinueEntry } from "../lib/continue";
@@ -521,10 +522,11 @@ export function Home() {
           </div>
         )}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
+        {/* Personal scheduled channels, after the main rows: it appears late (after startup), so it must not push them or steal their focus */}
+        <ChannelsRow />
         {/* In flow at the end of Home (was absolutely positioned over the hero and overlapped its buttons) */}
         <div className="home-open">
           <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
-          <button className="btn" data-nav onClick={() => go("/channels")}>My Channels</button>
           {rows && rows.length > 0 && (personal ? !!prefs : personal === false) && (
             <button className="btn" data-nav onClick={() => setEditing(true)}>
               Edit Home

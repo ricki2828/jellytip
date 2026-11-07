@@ -82,7 +82,7 @@ export function App() {
     }
     return (
       <Suspense fallback={null}>
-        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} />
+        <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} />
       </Suspense>
     );
   }

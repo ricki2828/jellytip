@@ -3,6 +3,8 @@
 // a fixed epoch. "What's on now" is a function of the wall clock alone: the same item at the same offset whenever, and
 // on whichever device, someone tunes in. Each full pass over the pool is reshuffled.
 
+import { VOD_ID_RE } from "./iptvVod.ts";
+
 export const TICKS_PER_SECOND = 10_000_000;
 /** Fixed origin of every channel's timeline (2026-01-05 00:00 UTC). */
 export const EPOCH_MS = Date.UTC(2026, 0, 5);
@@ -22,15 +24,17 @@ export interface ChannelDef {
   yearTo?: number;
   /** Longest single item allowed, in minutes (a "sitcom" channel does not want a double-length special). */
   maxMinutes?: number;
+  /** TMDB genre ids: a Movie channel also draws films from the person's IPTV catalogue (episode channels stay on the library). */
+  tmdbGenres?: number[];
 }
 
 export const CHANNELS: ChannelDef[] = [
-  { id: "90s-action", name: "90s Action", blurb: "Action films from 1990 to 1999", type: "Movie", genres: ["Action"], yearFrom: 1990, yearTo: 1999 },
+  { id: "90s-action", name: "90s Action", blurb: "Action films from 1990 to 1999", type: "Movie", genres: ["Action"], yearFrom: 1990, yearTo: 1999, tmdbGenres: [28] },
   { id: "sunday-sitcoms", name: "Sunday Sitcoms", blurb: "Half-hour comedy episodes", type: "Episode", genres: ["Comedy"], maxMinutes: 40 },
-  { id: "comedy", name: "Comedy", blurb: "Comedy films", type: "Movie", genres: ["Comedy"] },
-  { id: "sci-fi-nights", name: "Sci-Fi Nights", blurb: "Science fiction films", type: "Movie", genres: ["Science Fiction"] },
-  { id: "documentaries", name: "Documentaries", blurb: "Documentary films", type: "Movie", genres: ["Documentary"] },
-  { id: "family-night", name: "Family Night", blurb: "Family and animated films", type: "Movie", genres: ["Family", "Animation"] },
+  { id: "comedy", name: "Comedy", blurb: "Comedy films", type: "Movie", genres: ["Comedy"], tmdbGenres: [35] },
+  { id: "sci-fi-nights", name: "Sci-Fi Nights", blurb: "Science fiction films", type: "Movie", genres: ["Science Fiction"], tmdbGenres: [878] },
+  { id: "documentaries", name: "Documentaries", blurb: "Documentary films", type: "Movie", genres: ["Documentary"], tmdbGenres: [99] },
+  { id: "family-night", name: "Family Night", blurb: "Family and animated films", type: "Movie", genres: ["Family", "Animation"], tmdbGenres: [10751, 16] },
 ];
 
 /** The slice of an Item a channel keeps (small enough for sessionStorage). */
@@ -44,6 +48,10 @@ export interface ChanItem {
   SeriesId?: string;
   ProductionYear?: number;
   RunTimeTicks?: number;
+  /** TMDB id (films): the same title in the library and on IPTV is kept once, the library copy. */
+  Tmdb?: string;
+  /** IPTV items only: https TMDB backdrop for the Home card. */
+  Art?: string;
 }
 
 export interface Slot {
@@ -51,6 +59,62 @@ export interface Slot {
   /** Absolute times, ms since the Unix epoch. */
   startMs: number;
   endMs: number;
+}
+
+// ---------- IPTV films ----------
+
+/** An IPTV VOD id (pid:m:sid / pid:s:sid): never a Jellyfin id (32 hex). */
+export const isIptvId = (id: string): boolean => VOD_ID_RE.test(id);
+
+/** Runtime window (seconds) an IPTV film must sit in to be scheduled: anything else is a stub or a pack, not a runtime. */
+export const IPTV_MIN_S = 40 * 60;
+export const IPTV_MAX_S = 300 * 60;
+/** Most IPTV films one channel keeps. */
+export const IPTV_CAP = 100;
+
+const TMDB_ART = /^https:\/\/image\.tmdb\.org\//;
+
+/** GET /v1/iptv/channel-pool → ChanItems. Films only; needs a valid id, a title, a trustworthy runtime; langUnknown is out. */
+export function iptvPoolItems(raw: unknown): { items: ChanItem[]; pending: number } {
+  const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const list = Array.isArray(r.items) ? r.items : [];
+  const seen = new Set<string>();
+  const items: ChanItem[] = [];
+  for (const x of list) {
+    const o = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+    if (!o) continue;
+    const id = typeof o.id === "string" ? o.id : "";
+    const title = typeof o.title === "string" ? o.title : "";
+    const secs = typeof o.runtime === "number" && isFinite(o.runtime) ? Math.floor(o.runtime) : 0;
+    if (!isIptvId(id) || !id.includes(":m:") || !title || seen.has(id) || o.langUnknown === true) continue;
+    if (secs < IPTV_MIN_S || secs > IPTV_MAX_S) continue;
+    seen.add(id);
+    const art = typeof o.backdrop === "string" && TMDB_ART.test(o.backdrop) ? o.backdrop : typeof o.poster === "string" && TMDB_ART.test(o.poster) ? o.poster : undefined;
+    items.push({
+      Id: id,
+      Name: title,
+      Type: "Movie",
+      ProductionYear: typeof o.year === "number" ? o.year : undefined,
+      RunTimeTicks: secs * TICKS_PER_SECOND,
+      Tmdb: typeof o.tmdbId === "number" ? String(o.tmdbId) : undefined,
+      Art: art,
+    });
+  }
+  return { items, pending: typeof r.pending === "number" && r.pending > 0 ? Math.floor(r.pending) : 0 };
+}
+
+/** Library items plus IPTV films. The library copy wins when both have the TMDB title; IPTV films are capped by a stable hash sample. */
+export function mixItems(library: ChanItem[], iptv: ChanItem[], cap = IPTV_CAP, salt = "iptv"): ChanItem[] {
+  const have = new Set(library.map((i) => i.Tmdb).filter((t): t is string => !!t));
+  const seen = new Set<string>();
+  const extra = iptv.filter((i) => {
+    if (i.Tmdb) {
+      if (have.has(i.Tmdb) || seen.has(i.Tmdb)) return false;
+      seen.add(i.Tmdb);
+    }
+    return true;
+  });
+  return [...library, ...sample(extra, cap, salt)];
 }
 
 // ---------- seed ----------
@@ -177,16 +241,49 @@ export function schedule(pool: ChanItem[], channelId: string, nowMs: number, cou
 }
 
 /** Where "Tune in" goes: the current item at its offset, or the next item from 0 when the current one is nearly over. */
-export function tuneTarget(slots: Slot[], offsetS: number): { id: string; startS: number; thenId: string | null } | null {
+export function tuneTarget(slots: Slot[], offsetS: number): { id: string; startS: number; thenId: string | null; title: string } | null {
   if (!slots.length) return null;
   const cur = slots[0];
   const left = (cur.endMs - cur.startMs) / 1000 - offsetS;
-  if (left < TUNE_MIN_LEFT_S && slots.length > 1) return { id: slots[1].item.Id, startS: 0, thenId: slots[2]?.item.Id ?? null };
-  return { id: cur.item.Id, startS: Math.floor(offsetS), thenId: slots[1]?.item.Id ?? null };
+  if (left < TUNE_MIN_LEFT_S && slots.length > 1) return { id: slots[1].item.Id, startS: 0, thenId: slots[2]?.item.Id ?? null, title: itemLabel(slots[1].item).title };
+  return { id: cur.item.Id, startS: Math.floor(offsetS), thenId: slots[1]?.item.Id ?? null, title: itemLabel(cur.item).title };
 }
 
-/** "/play/<id>?start=<s>&then=<id>&ch=<channel>" for a tune target. */
-export const tunePath = (t: { id: string; startS: number; thenId: string | null }, channelId: string): string => `/play/${t.id}?start=${t.startS}${t.thenId ? `&then=${t.thenId}` : ""}&ch=${encodeURIComponent(channelId)}`;
+/**
+ * Where a player goes when `currentId` has ended: the tune target, except that an item which has just ended is never tuned to
+ * again (a file shorter than its listed runtime would restart on the clock and loop): the following slot, from 0.
+ */
+export function chainTarget(slots: Slot[], offsetS: number, currentId?: string): { id: string; startS: number; thenId: string | null; title: string } | null {
+  const t = tuneTarget(slots, offsetS);
+  if (!t || !currentId || t.id !== currentId) return t;
+  const nxt = slots.findIndex((s) => s.item.Id !== currentId);
+  if (nxt < 0) return null;
+  return { id: slots[nxt].item.Id, startS: 0, thenId: slots[nxt + 1]?.item.Id ?? null, title: itemLabel(slots[nxt].item).title };
+}
+
+/** Chaining budget: more than CHAIN_MAX automatic hops inside CHAIN_WINDOW_MS means something is looping (stub files, bad runtimes). */
+export const CHAIN_MAX = 3;
+export const CHAIN_WINDOW_MS = 120_000;
+export function chainBudget(stamps: number[], nowMs: number): { ok: boolean; stamps: number[] } {
+  const recent = stamps.filter((t) => nowMs - t < CHAIN_WINDOW_MS && t <= nowMs);
+  return recent.length >= CHAIN_MAX ? { ok: false, stamps: recent } : { ok: true, stamps: [...recent, nowMs] };
+}
+
+/**
+ * A film that ended after only a few seconds when much more was expected is a stub or a short file: chaining on would just
+ * burn provider connections. OK when it played a minute, or most of what was left.
+ */
+export const playedEnough = (playedS: number, expectedLeftS: number): boolean => playedS >= Math.min(60, Math.max(0, expectedLeftS) * 0.8);
+
+/**
+ * Where a tune target plays. A library item: "/play/<id>?start=<s>&then=<id>&ch=<channel>". An IPTV film: the IPTV player at the
+ * same offset ("/iptv/play?vod=<id>&resume=<s>&t=<title>&ch=<channel>"); either way the player moves on by the clock at the end.
+ */
+export function tunePath(t: { id: string; startS: number; thenId: string | null; title?: string }, channelId: string): string {
+  const ch = encodeURIComponent(channelId);
+  if (isIptvId(t.id)) return `/iptv/play?vod=${encodeURIComponent(t.id)}&t=${encodeURIComponent(t.title ?? "")}${t.startS > 0 ? `&resume=${t.startS}` : ""}&ch=${ch}`;
+  return `/play/${t.id}?start=${t.startS}${t.thenId && !isIptvId(t.thenId) ? `&then=${t.thenId}` : ""}&ch=${ch}`;
+}
 
 /** A channel id from a URL, or null if it is not a built-in one. */
 export const channelById = (id: string | null | undefined): ChannelDef | null => CHANNELS.find((c) => c.id === id) ?? null;

@@ -25,6 +25,7 @@ import { openMatchInfo } from "../../components/MatchInfo";
 import { matchDetailCached } from "../../api/matchInfo";
 import { refreshRecs } from "../../api/recStore";
 import { matchupTitle } from "../../lib/matchInfo";
+import { nextChannelPath } from "../../api/channels";
 import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
@@ -71,7 +72,12 @@ function progressKey(t: PlayTarget): string | null {
 /** `?worker=1` (query or hash query): mpegts demux in a worker plus SourceBuffer cleanup. Default off until A/B'd on the TV. */
 const WORKER_FLAG = /[?&]worker=1(&|$)/.test(location.search + location.hash);
 
-export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
+/**
+ * @param channelId a personal scheduled channel (#/channels) is playing this film: it follows the clock, so no progress is
+ * reported (nothing lands in the watch history) and, when it ends, the player moves to what is on next. Nothing else about
+ * playback, the connection lease or recovery differs.
+ */
+export function IptvPlayer(props: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
   // Dev/test counter: root renders (plan budget <= 1/s while live). Not a React state; costs one add.
   if (import.meta.env.DEV) (window as unknown as { __jtRenders?: number }).__jtRenders = ((window as unknown as { __jtRenders?: number }).__jtRenders ?? 0) + 1;
   return nativeIptvPlayer ? <NativeIptvPlayer {...props} /> : <WebIptvPlayer {...props} />;
@@ -93,7 +99,7 @@ const VOD_STALL_MS = 15_000;
 /** Still no movement this long after a stall is shown: reconnect on our own. */
 const RECONNECT_AFTER_MS = 6_000;
 
-function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
+function WebIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tsRef = useRef<Mpegts.Player | null>(null);
@@ -302,9 +308,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
     const v = videoRef.current;
     const dur = isFinite(v?.duration ?? NaN) && (v?.duration ?? 0) > 0 ? v!.duration : lenRef.current;
     // An in-progress recording has no final length yet: don't save a half-length as if it were the whole
-    if (!key || !v || !(dur > 0) || v.currentTime < 5 || growRef.current) return;
+    if (!key || !v || !(dur > 0) || v.currentTime < 5 || growRef.current || channelId) return; // a channel never writes watch history
     void saveProgress(key, Math.floor(v.currentTime), Math.floor(dur), target.episode ? target.series : undefined);
-  }, [target]);
+  }, [target, channelId]);
 
   // A stream link failed: work out why, then renew once, show who holds the connection, or give up
   const onLinkError = useCallback(
@@ -838,9 +844,27 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
   };
   const exit = () => {
     teardown();
-    back(target.recording ? "/recordings" : "/livetv");
+    back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv");
   };
   exitRef.current = exit;
+  // A channel's film ended: whatever the clock says is on now (at its scheduled offset), through the same player route. Not when it
+  // is the same film again, ended after seconds of a long one, or after too many hops lately: then back to the channels.
+  const chained = useRef(false);
+  const mountedAt = useRef(Date.now());
+  const nextOnChannel = () => {
+    if (!channelId || chained.current) return;
+    chained.current = true;
+    void nextChannelPath(channelId, target.vod, (Date.now() - mountedAt.current) / 1000, resume).then((path) => {
+      if (!alive.current) return;
+      if (path) {
+        teardown();
+        go(path, true);
+      } else {
+        flashNote("This channel can't carry on right now.");
+        exit();
+      }
+    });
+  };
   const touchClick = useRef(false);
   const lastTap = useRef<{ at: number; side: number } | null>(null);
   const tapTimer = useRef<number | null>(null);
@@ -956,7 +980,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarg
         onClick={() => !isLive && !touchClick.current && togglePlay()}
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
-        onEnded={() => kickoffRun.current && backToLive()}
+        onEnded={() => (kickoffRun.current ? backToLive() : nextOnChannel())}
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => {
           if (Math.abs(e.currentTarget.currentTime - lastTime.current) > 0.05) {
@@ -1156,11 +1180,12 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
-function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras }) {
+function NativeIptvPlayer({ target, title, resume = 0, extras, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const alive = useRef(true);
   const renewed = useRef(false);
   const switchTo = useRef<string | null>(null);
+  const openedAt = useRef(Date.now());
   // The user's alert settings go to the native player, which shows its own toasts and notifications
   const userPrefs = usePrefs({ defer: true }).prefs;
   const sportPrefsRef = useRef<{ fantasyAlerts?: boolean; flipAlerts?: boolean; panelStyle?: "docked" | "floating" }>({});
@@ -1169,7 +1194,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
 
-  const exit = useCallback(() => back(target.recording ? "/recordings" : "/livetv"), [target.recording]);
+  const exit = useCallback(() => back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv"), [target.recording, channelId]);
 
   // One native session: open the player, save progress while it plays, then act on how it closed
   const session = useCallback(
@@ -1179,7 +1204,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       debugEvent("iptv-player", "native attach", { player: "exoplayer", mime: a.mime ?? null, kind: a.kind, direct: link.direct, live }, "info");
       const subs = [
         await NativePlayer.addListener("progress", (e) => {
-          if (key && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000), target.episode ? target.series : undefined);
+          if (key && !channelId && e.durationMs > 0 && e.positionMs > 5000) void saveProgress(key, Math.floor(e.positionMs / 1000), Math.floor(e.durationMs / 1000), target.episode ? target.series : undefined);
         }),
         await NativePlayer.addListener("playerError", (e) => {
           debugEvent("iptv-player", "native player error", { player: "exoplayer", kind: a.kind, direct: link.direct, errorCode: e.errorCode ?? null });
@@ -1239,6 +1264,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
         await NativePlayer.addListener("failover", (e) => debugEvent("iptv-player", "native failover", { from: e.from, to: e.to, why: e.why }, "info")),
       ];
       let r: NativePlayerResult;
+      openedAt.current = Date.now();
       try {
         r = await NativePlayer.open({
           url: link.url,
@@ -1276,7 +1302,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
       } finally {
         subs.forEach((s) => void s.remove());
       }
-      if (key && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000), target.episode ? target.series : undefined);
+      if (key && !channelId && r.durationMs > 0 && r.positionMs > 5000) void saveProgress(key, Math.floor(r.positionMs / 1000), Math.floor(r.durationMs / 1000), target.episode ? target.series : undefined);
       // Another open() took over this player (a new match, the mini player): that session carries on, so this one ends quietly
       if (r.reason === "replaced") return;
       if (!alive.current) return;
@@ -1288,6 +1314,17 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
           go(livePath(pick.id, pick.name, { alternates: [...(extras?.alternates ?? []).filter((x) => x.id !== pick.id), { id: target.channel, name: title }], startsAt: extras?.startsAt, eventKey: extras?.eventKey, nospoil: extras?.nospoil }), true);
           return;
         }
+      }
+      if (r.reason === "ended" && channelId) {
+        // The film finished: on to what the clock says is next on the channel
+        void nextChannelPath(channelId, target.vod, (Date.now() - openedAt.current) / 1000, resume).then((path) => {
+          if (path) go(path, true);
+          else {
+            flashNote("This channel can't carry on right now.");
+            exit();
+          }
+        });
+        return;
       }
       if (r.reason !== "error") {
         exit();
@@ -1321,7 +1358,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras }: { target: PlayT
     },
     // start is declared below and stable for the target
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLive, key, title, exit],
+    [isLive, key, title, exit, channelId, target.vod, resume],
   );
 
   /** `retry`: the second go after stopping a recording; keeps the pop-up up and turns a second refusal into the error. */
