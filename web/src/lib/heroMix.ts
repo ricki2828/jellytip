@@ -39,6 +39,7 @@ export function rowKicker(r: Pick<RowLike, "family" | "title">): string | null {
   if (t.includes("just added") || r.family === "fresh") return "Just added";
   if (t.startsWith("trending")) return "Trending";
   if (r.family === "ratings" || r.family === "awards") return "Highly rated";
+  if (r.family === "perso" && t.startsWith("because you watched")) return r.title; // the rotating seed rows (server perso.py)
   return null;
 }
 
@@ -46,9 +47,16 @@ export function rowKicker(r: Pick<RowLike, "family" | "title">): string | null {
 export function heroSources(rows: RowLike[], specials: SpecialLike[]): HeroSource[] {
   const out: HeroSource[] = [];
   const add = (kicker: string, ids: string[]) => ids.length && out.push({ kicker, ids: ids.slice(0, PER_SOURCE * 2) });
+  let byw = 0; // at most 2 "Because you watched" sources, with a short kicker (the seed title is in the row itself)
   for (const r of rows) {
-    const k = rowKicker(r);
-    if (k && !r.iptvItems.length) add(k, r.itemIds);
+    let k = rowKicker(r);
+    if (!k || r.iptvItems.length) continue;
+    if (r.family === "perso" && k.toLowerCase().startsWith("because you watched")) {
+      if (byw >= 2) continue;
+      byw++;
+      k = "For you";
+    }
+    add(k, r.itemIds);
   }
   for (const s of specials) {
     if (s.layout === "tonights_pick") add("Tonight's pick", [(s as { itemId: string | null }).itemId ?? ""].filter(Boolean));
