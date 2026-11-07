@@ -22,3 +22,16 @@ test("F key ignores typing and modifiers", () => {
   assert.equal(isFullscreenKey({ key: "f", ctrlKey: true }, false), false);
   assert.equal(isFullscreenKey({ key: "g" }, false), false);
 });
+
+import { exitAlreadyConsumed, keepFullscreenOnUnmount } from "../src/lib/fullscreenPlan.ts";
+
+test("a channel hop keeps fullscreen only while the host survives", () => {
+  assert.equal(keepFullscreenOnUnmount(true), true);
+  assert.equal(keepFullscreenOnUnmount(false), false);
+  assert.equal(keepFullscreenOnUnmount(undefined), false);
+});
+test("Escape right after a browser-side fullscreen exit is consumed", () => {
+  assert.equal(exitAlreadyConsumed(1100, 1000), true);
+  assert.equal(exitAlreadyConsumed(1400, 1000), false);
+  assert.equal(exitAlreadyConsumed(1000, -Infinity), false);
+});
