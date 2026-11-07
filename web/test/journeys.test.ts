@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildEntries, buildJourney, createJourneyCache, directorQuery, type BuildDeps, type BuildResult, directorDef, franchiseDef, journeyId, journeyTitle, listDef, nextUp, orderByRelease, parseJourneyId, progress, summaries,
+  isNotFoundStatus, buildEntries, buildJourney, createJourneyCache, directorQuery, type BuildDeps, type BuildResult, directorDef, franchiseDef, journeyId, journeyTitle, listDef, nextUp, orderByRelease, parseJourneyId, progress, summaries,
   DIRECTOR_CAP, LIST_CAP, type JourneyDef,
 } from "../src/lib/journeys.ts";
 import { parseHash } from "../src/lib/routeParse.ts";
@@ -191,4 +191,12 @@ test("a failed fetch is 'error', an empty result is 'none' or 'short'", async ()
 
 test("orderByRelease is stable", () => {
   assert.deepEqual(orderByRelease([{ year: 2, k: "a" }, { year: 1, k: "b" }, { year: 2, k: "c" }]).map((x) => x.k), ["b", "a", "c"]);
+});
+
+test("only an explicit 404 reads as not-found; no status or a 5xx is a load failure", () => {
+  assert.equal(isNotFoundStatus(404), true);
+  assert.equal(isNotFoundStatus(undefined), false);
+  assert.equal(isNotFoundStatus(500), false);
+  assert.equal(isNotFoundStatus(503), false);
+  assert.equal(isNotFoundStatus(200), false);
 });

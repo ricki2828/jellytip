@@ -9,6 +9,7 @@ import { parseCollection, parseRows, type Collection, type ServerRow } from "../
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
 import { parseGenres, parseTitles, type DiscoverSection, type DiscoverTitle, type Genre, type MediaType } from "../lib/discover";
+import { isNotFoundStatus } from "../lib/journeys";
 export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
@@ -76,6 +77,7 @@ async function getJson<T>(path: string, job: Job = { priority: PRIORITY_HIGH, ca
   const token = getSession()?.token;
   if (!token) return null;
   return throttled(job, async () => {
+    lastStatus.delete(path); // no status after this means the request itself failed (offline, timeout)
     const headers = { Authorization: `MediaBrowser Token="${token}"` };
     if (isNative) {
       try {
@@ -137,6 +139,8 @@ function cached<T>(fetcher: (key: string, job: Job) => Promise<T | null | typeof
       failedAt.clear();
     },
     peek: (key: string): T | undefined => values.get(key),
+    /** Drop the remembered failure for one key so the next get asks the server again. */
+    forget: (key: string) => void failedAt.delete(key),
     get(key: string, opts: RequestOptions = {}): Promise<T | null> {
       if (values.has(key)) return Promise.resolve(values.get(key)!);
       const f = failedAt.get(key);
@@ -608,6 +612,17 @@ const collections = cached<CollectionPage>(async (id, job) => {
 
 /** Franchise page data; null when the server has no such collection (404: fewer than 2 parts in the library). */
 export const collectionPage = (tmdbId: number) => collections.get(String(tmdbId), { priority: "high" });
+
+/** Like collectionPage, but a load failure (network, timeout, 5xx) throws instead of reading as "no such collection"; the
+ *  remembered failure is dropped so a retry really asks the server again. Resolves null only for a real not-found. */
+export async function collectionPageOrThrow(tmdbId: number): Promise<CollectionPage | null> {
+  const page = await collectionPage(tmdbId);
+  if (page) return page;
+  const status = lastStatus.get(`/v1/collections/${tmdbId}`);
+  if (isNotFoundStatus(status)) return null;
+  collections.forget(String(tmdbId));
+  throw new Error(`collection ${tmdbId} failed to load${status ? ` (${status})` : ""}`);
+}
 
 // ---------- discover (admin; the server answers 403 to anyone else). Contract: "Discover + seasons" in
 // ~/ai/plans/jellytip-specials.md; shapes parsed in lib/discover.ts ----------
