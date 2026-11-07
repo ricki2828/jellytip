@@ -92,8 +92,9 @@ test("linked fixture: solid vs may-carry wording, best channel, alternates, sugg
   const w = waysForFixture(f, null, NOW);
   assert.equal(w.ways[0].label, "Live on ESPN");
   assert.match(w.ways[0].path, /channel=2%3A2|channel=2:2/);
-  assert.match(w.ways[0].path, /nospoil=1/);
-  assert.doesNotMatch(w.ways[0].path, /[&?](mi|ek)=/);
+  // live: no nospoil (the companion's reveal clock holds info to the picture) and the match id, so the Companion works
+  assert.doesNotMatch(w.ways[0].path, /nospoil=1/);
+  assert.match(w.ways[0].path, /[&?]mi=/);
   assert.equal(w.canRecord, true);
   const dormant = parse(fx("b", { status: "in", channels: [ch("3:3", "NRL TV", 0.95, { dormant: true })] }))[0];
   assert.match(waysForFixture(dormant, null, NOW).ways[0].label, /^May be live on/);
