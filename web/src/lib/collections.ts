@@ -108,3 +108,8 @@ export function saveTab(t: CollTab) {
     /* private mode */
   }
 }
+
+/** Search collection hits: absent mediaType means a TMDB film collection. */
+export function hitInTab(h: { mediaType?: "movie" | "tv"; collMediaType?: "movie" | "tv" }, tab: CollTab): boolean {
+  return tab === "all" || (h.mediaType ?? h.collMediaType ?? "movie") === tab;
+}

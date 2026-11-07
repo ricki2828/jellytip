@@ -21,6 +21,8 @@ import { imageUrl } from "../api/jellyfin";
 import { targetPath } from "../lib/iptvPlay";
 import { vodPath } from "../lib/iptvVod";
 import { itemsByIds } from "../components/ServerRow";
+import { CollTabs, useCollTab } from "../components/CollTabs";
+import { hitInTab } from "../lib/collections";
 import { GetItSheet, stateText } from "../components/GetItSheet";
 
 const DEBOUNCE_MS = 150;
@@ -171,6 +173,8 @@ function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchRes
   const g = useMemo(() => groupEntries(list, given, hasLive || r.sportQuery), [list, given, hasLive, r.sportQuery]);
   const intent = g.intent;
   const top = g.top;
+  const [collTab, setCollTab] = useCollTab();
+  const colls = g.collections.filter((c) => hitInTab({ collMediaType: c.collMediaType }, collTab));
   const libIds = list.filter((e) => e.source === "library" && (e.kind === "film" || e.kind === "series")).map((e) => e.id!);
   const idKey = libIds.join(",");
   // Per-user session cache by id: tiles stay mounted when the id list changes or a late group merges in
@@ -252,8 +256,10 @@ function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchRes
     collections: g.collections.length > 0 && (
       <section className="grid-section">
         <h2 className="row-title">Collections</h2>
+        <CollTabs tab={collTab} onChange={setCollTab} />
+        {colls.length === 0 && <p className="empty">No {collTab === "tv" ? "TV" : "movie"} collections for this search.</p>}
         <div className="search-links">
-          {g.collections.map((c) => (
+          {colls.map((c) => (
             <button key={c.key} className="search-link" data-key={c.key} data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
               <strong>{c.title}</strong>
               {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}
@@ -315,6 +321,8 @@ function Ranked({ r, intent: given, untitled, posterW, onGetIt }: { r: SearchRes
 /** The old grouped layout (a server without `results`). */
 function Groups({ r, untitled, posterW, setGetIt }: { r: SearchResult; untitled: Set<string>; posterW: number; setGetIt: (d: DiscoverHit) => void }) {
   const liveRow = r.live && r.live.length > 0 ? <LiveRow hits={r.live} /> : null;
+  const [collTab, setCollTab] = useCollTab();
+  const colls = r.collections.filter((c) => hitInTab(c, collTab));
   return (
     <>
       {r.sportQuery && liveRow}
@@ -335,8 +343,10 @@ function Groups({ r, untitled, posterW, setGetIt }: { r: SearchResult; untitled:
       {r.collections.length > 0 && (
         <section className="grid-section">
           <h2 className="row-title">Collections</h2>
+          <CollTabs tab={collTab} onChange={setCollTab} />
+          {colls.length === 0 && <p className="empty">No {collTab === "tv" ? "TV" : "movie"} collections for this search.</p>}
           <div className="search-links">
-            {r.collections.map((c) => (
+            {colls.map((c) => (
               <button key={c.tmdbCollectionId} className="search-link" data-nav onClick={() => go(`/collection/${c.tmdbCollectionId}`)}>
                 <strong>{c.name}</strong>
                 {c.total ? <span>{c.inLibrary != null ? `${c.inLibrary} of ${c.total} in the library` : `${c.total} films`}</span> : null}

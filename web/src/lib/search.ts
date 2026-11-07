@@ -44,6 +44,8 @@ export interface PersonHit {
 }
 export interface CollectionHit {
   tmdbCollectionId: number;
+  /** TMDB collections are film franchises, so absent means "movie". */
+  mediaType?: "movie" | "tv";
   name: string;
   inLibrary?: number;
   total?: number;
@@ -183,6 +185,8 @@ export interface SearchEntry {
   tech: string[];
   requested?: string | null;
   personId?: string;
+  /** Collection entries: "tv" when the server says so; otherwise a film collection. */
+  collMediaType?: "movie" | "tv";
   role?: string;
   imageTag?: string | null;
   filmCount?: number | null;
@@ -275,7 +279,7 @@ export function parseEntry(raw: unknown): SearchEntry | null {
   }
   if (kind === "collection") {
     const id = num(x.tmdbCollectionId);
-    return id != null ? { ...base, key: `c:${id}`, tmdbCollectionId: id, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined, poster: str(x.poster) } : null;
+    return id != null ? { ...base, key: `c:${id}`, tmdbCollectionId: id, collMediaType: x.mediaType === "tv" ? "tv" : undefined, inLibrary: num(x.inLibrary) ?? undefined, total: num(x.total) ?? undefined, poster: str(x.poster) } : null;
   }
   if (source === "library") {
     const id = str(x.id);
@@ -364,7 +368,7 @@ export function parseSearch(raw: unknown): SearchResult | null {
       const owned = parts ? parts.filter((pt) => str(pt?.itemId)).length : null;
       const inLibrary = parts ? owned || undefined : num(x.inLibrary) ?? undefined;
       const total = num(x.total) ?? (parts ? parts.length : undefined);
-      return id && name ? { tmdbCollectionId: id, name, inLibrary, total } : null;
+      return id && name ? { tmdbCollectionId: id, name, mediaType: x.mediaType === "tv" ? "tv" as const : undefined, inLibrary, total } : null;
     }),
     lists: items(g, "lists", (x) => {
       const slug = str(x.slug);
