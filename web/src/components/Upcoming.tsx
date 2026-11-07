@@ -1,7 +1,7 @@
 // Upcoming sport: a tile, the overlay it opens (matchup, time, channels best first with quality, Record, Watch when
 // live) and the Home row. The page (screens/iptv/UpcomingPage) reuses the tile and overlay.
 import { useEffect, useState } from "react";
-import { addRecording, errorText, logoSrc } from "../api/iptv";
+import { addRecording, errorText, logoSrc, recordings } from "../api/iptv";
 import { refreshRecs } from "../api/recStore";
 import { addReminder, refreshReminders, removeReminder, useReminders } from "../api/reminderStore";
 import { useUpcoming, refreshUpcoming } from "../api/upcomingStore";
@@ -79,6 +79,19 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
   const [busyRem, setBusyRem] = useState(false);
   const remId = rems?.find((r) => r.event.key === e.key)?.id ?? e.reminderId ?? null;
   useEffect(() => void refreshReminders(), []);
+  // Why there is no Record button: the server turns recording off (e.g. seedbox nearly full); say so instead of hiding it
+  const [recOff, setRecOff] = useState<string | null>(null);
+  useEffect(() => {
+    if (e.recordable || e.recordingId != null || e.stop <= Date.now() / 1000) return;
+    let alive = true;
+    recordings().then(
+      (r) => alive && r.status === 200 && r.data && !r.data.space.canRecord && setRecOff(r.data.space.reason || "storage is nearly full"),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [e.recordable, e.recordingId, e.stop]);
   const toggleRemind = async () => {
     setBusyRem(true);
     const err = remId != null ? await removeReminder(remId) : await addReminder(e);
@@ -112,6 +125,7 @@ export function UpcomingSheet({ e, onClose }: { e: UpEvent; onClose: () => void 
           ))}
         </ul>
         {msg && <p className="iptv-hint">{msg}</p>}
+        {!msg && recOff && <p className="iptv-hint">Recording is paused: {recOff}.</p>}
         <div className="buttons">
           {live && (
             <button className="btn primary" data-nav data-autofocus onClick={() => go(livePath(best.id, best.name, watchExtras(e, best.id)))}>
