@@ -232,7 +232,7 @@ test("not interested: choices, add/remove, prefs shape", () => {
   assert.deepEqual(muteChoices({ league: null, sportName: null }, m), []);
   assert.deepEqual(withMuted(m, "leagues", "NRLW", true).leagues, ["NBL", "NRLW"]);
   assert.deepEqual(withMuted(m, "leagues", "nbl", false).leagues, []);
-  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], teamRefs: [], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true, panelStyle: "docked" });
+  assert.deepEqual(parsePrefs({ sport: { teams: ["A"], muted: { sports: ["golf"], leagues: 5 } } }).sport, { teams: ["A"], teamRefs: [], leagues: [], sports: [], muted: { sports: ["golf"], leagues: [], tags: [] }, setup: false, spoilers: false, flipAlerts: true, panelStyle: "docked", delaySec: 30, alerts: "key" });
   assert.deepEqual(parsePrefs({}).sport.muted, { sports: [], leagues: [], tags: [] });
 });
 

@@ -1,0 +1,4 @@
+.delay-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(20, 20, 24, 0.92); color: #e8e8ec; font: 600 12px/1.2 inherit; letter-spacing: 0.02em; }
+.delay-chip.replay { color: #f3c969; }
+.delay-chip button { all: unset; cursor: pointer; color: #7cc4ff; text-decoration: underline; text-underline-offset: 2px; }
+.delay-chip button:focus-visible { outline: 2px solid #7cc4ff; outline-offset: 2px; }
