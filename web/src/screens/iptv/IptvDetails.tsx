@@ -21,6 +21,7 @@ import { vodPath } from "../../lib/iptvVod";
 import { flashNote } from "../../components/TasteButtons";
 import { failedLately, failOf, pickPlayable, skippedNote } from "../../lib/streamFail";
 import { alternateEpisode } from "../../lib/streamCopies";
+import { pickKey, recallPick, rememberedTarget, rememberPick } from "../../lib/copyPick";
 import "./iptv.css";
 
 const mins = (s?: number | null) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`) : null);
@@ -55,6 +56,9 @@ export function IptvDetails({ id }: { id: string }) {
     vodItem(id).then((a) => {
       if (!alive) return;
       if (a.status === 200 && a.data) {
+        // The copy this person picked for the title last time opens first (replace: Back does not bounce between the two pages)
+        const to = rememberedTarget(recallPick(pickKey(a.data)), a.data.id, a.data.copies, Date.now() / 1000);
+        if (to) return go(vodPath(to), true);
         setD(a.data);
         setFav(a.data.favourite ?? null);
         // Open on the season of the first unfinished episode
@@ -92,10 +96,12 @@ export function IptvDetails({ id }: { id: string }) {
   const resume = resumeAt(d.progress);
   const facts = [d.year, mins(d.runtime), d.genre, d.rating ? `★ ${d.rating.toFixed(1)}` : null].filter(Boolean).join("  ·  ");
   // Play skips a copy that failed in the last 24 h for one that did not (and says so); picking a copy by hand never does
+  // a copy opened by hand from "Ways to watch" (the remembered pick) is never skipped
+  const manual = recallPick(pickKey(d)) === d.id;
   const playEp = async (s: number, e: VodEpisode, from = resumeAt(e.progress)) => {
     const title = `${d.title} · S${s} E${e.episode}`;
     const nowS = Date.now() / 1000;
-    if (failedLately(failOf(e.id, e.lastFail), nowS)) {
+    if (!manual && failedLately(failOf(e.id, e.lastFail), nowS)) {
       const alt = await alternateEpisode({ season: s, episode: e.episode }, d.id, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })),
         async (id) => (await vodItem(id)).data, (id, lf) => failedLately(failOf(id, lf), nowS));
       if (alt) { flashNote(skippedNote(d.providerName ?? d.title)); return go(playPath({ series: alt.copy.id, episode: alt.episode.id }, title, from)); }
@@ -104,17 +110,21 @@ export function IptvDetails({ id }: { id: string }) {
   };
   const playFilm = (from: number) => {
     const first = { id: d.id, name: d.providerName ?? d.title, lastFail: d.lastFail };
+    if (manual) return go(playPath({ vod: d.id }, d.title, from));
     const p = pickPlayable(first, (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail })), Date.now() / 1000);
     if (p.skipped) flashNote(skippedNote(p.skipped));
     go(playPath({ vod: p.chosen.id }, d.title, from));
   };
-  // Every copy the companion returned for this title (own + shared providers); this page's own id first
-  const copies: IptvCopy[] = [
-    { id: d.id, providerName: d.providerName, quality: d.quality, tech: d.tech },
-    ...(d.copies ?? []).filter((c) => c.id !== d.id).map((c) => ({ id: c.id, providerName: c.providerTitle, quality: c.quality })),
-  ];
-  const ways = availabilityOf(null, { iptv: copies, iptvChecked: true });
-
+  // Every copy the companion returned (own + shared providers, switched-on or not), already ranked; this page's own copy is among them.
+  // Older servers: this page's copy first, then their short list.
+  const ranked = (d.copies ?? []).some((c) => c.lang != null);
+  const copies: IptvCopy[] = ranked
+    ? d.copies!.map((c) => ({ id: c.id, providerName: c.providerName ?? c.providerTitle, quality: c.quality, res: c.res, language: c.langLabel, opted: c.opted }))
+    : [
+        { id: d.id, providerName: d.providerName, quality: d.quality, tech: d.tech },
+        ...(d.copies ?? []).filter((c) => c.id !== d.id).map((c) => ({ id: c.id, providerName: c.providerTitle, quality: c.quality })),
+      ];
+  const ways = availabilityOf(null, { iptv: copies, iptvChecked: true, iptvRanked: ranked });
   return (
     <div className="details iptv-details">
       <div className="details-hero">
@@ -209,8 +219,10 @@ export function IptvDetails({ id }: { id: string }) {
       <div className="details-below">
         <WaysToWatch
           ways={ways}
+          currentIptvId={d.id}
           onAct={(w) => {
             if (!w.iptvId) return;
+            rememberPick(pickKey(d), w.iptvId);
             if (w.iptvId !== d.id) go(vodPath(w.iptvId));
             else if (d.kind === "series") nextEp && playEp(nextEp.s, nextEp.e);
             else playFilm(resume);

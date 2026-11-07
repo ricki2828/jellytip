@@ -7,3 +7,6 @@
 .avail-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 0.7em; font-weight: 600; background: rgba(255, 255, 255, 0.14); vertical-align: middle; }
 .avail-iptv { background: rgba(120, 170, 255, 0.28); }
 .avail-request { background: rgba(255, 190, 90, 0.28); }
+.way-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.way-chip { padding: 1px 8px; border-radius: 999px; font-size: 0.78em; background: rgba(255, 255, 255, 0.12); }
+.way-chip-on { background: rgba(120, 170, 255, 0.35); font-weight: 600; }
