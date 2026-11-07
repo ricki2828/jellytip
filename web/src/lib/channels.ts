@@ -33,7 +33,7 @@ export interface ChannelDef {
 export const CHANNELS: ChannelDef[] = [
   { id: "90s-action", name: "90s Action", blurb: "Action films from 1990 to 1999", type: "Movie", genres: ["Action"], yearFrom: 1990, yearTo: 1999, tmdbGenres: [28] },
   { id: "sunday-sitcoms", name: "Sunday Sitcoms", blurb: "Half-hour comedy episodes", type: "Episode", genres: ["Comedy"], maxMinutes: 40, tmdbGenres: [35] },
-  { id: "sitcom-classics", name: "Sitcom Classics", blurb: "Comedy episodes, a few of a show back to back", type: "Episode", genres: ["Comedy"], minMinutes: 20, maxMinutes: 35, tmdbGenres: [35] },
+  { id: "sitcom-classics", name: "Sitcom Classics", blurb: "Comedy from 2005 and earlier, a few episodes of a show back to back", type: "Episode", genres: ["Comedy"], yearTo: 2005, minMinutes: 20, maxMinutes: 35, tmdbGenres: [35] },
   { id: "light-bites", name: "Light Bites", blurb: "Easy reality, talk and lifestyle episodes", type: "Episode", genres: ["Reality", "Talk Show", "Talk"], minMinutes: 15, maxMinutes: 35, tmdbGenres: [10764, 10767] },
   { id: "comedy", name: "Comedy", blurb: "Comedy films", type: "Movie", genres: ["Comedy"], tmdbGenres: [35] },
   { id: "sci-fi-nights", name: "Sci-Fi Nights", blurb: "Science fiction films", type: "Movie", genres: ["Science Fiction"], tmdbGenres: [878] },
@@ -167,6 +167,10 @@ export function iptvEpisodeItems(raw: unknown): { items: ChanItem[]; pending: nu
   }
   return { items, pending: typeof r.pending === "number" && r.pending > 0 ? Math.floor(r.pending) : 0 };
 }
+
+/** Episode channels with a yearTo: only shows from that year or earlier (library: the series' ProductionYear; IPTV: the item's year). Unknown year → out. */
+export const withinYearTo = <T extends { ProductionYear?: number }>(items: T[], def: Pick<ChannelDef, "yearTo">): T[] =>
+  def.yearTo == null ? items : items.filter((i) => typeof i.ProductionYear === "number" && i.ProductionYear <= def.yearTo!);
 
 const byEpisode = (a: ChanItem, b: ChanItem): number =>
   (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) || (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0) || (a.Id < b.Id ? -1 : a.Id > b.Id ? 1 : 0);

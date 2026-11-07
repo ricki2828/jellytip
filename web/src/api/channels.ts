@@ -3,7 +3,7 @@
 // sessionStorage for a while, per person, so reopening the screen asks Jellyfin nothing. The queries run as the signed-in
 // user, so their parental rating limits and library access apply without any code here.
 import { getItems, uid } from "./jellyfin";
-import { chainBudget, chainTarget, channelById, rejoinLive, iptvPoolItems, iptvEpisodeItems, mixItems, mixEpisodes, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
+import { chainBudget, chainTarget, channelById, rejoinLive, iptvPoolItems, iptvEpisodeItems, mixItems, mixEpisodes, parseHidden, playable, poolOf, sample, sampleByGroup, playedEnough, schedule, TICKS_PER_SECOND, tunePath, withinYearTo, yearsParam, type ChanItem, type ChannelDef } from "../lib/channels";
 import { iptvGet } from "./iptv";
 
 const TTL_MS = 6 * 3600 * 1000;
@@ -22,7 +22,7 @@ interface Entry {
 }
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<ChanItem[]>>();
-const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v4.${u}.${def.id}`;
+const keyFor = (u: string, def: ChannelDef) => `jellytip.channel.v5.${u}.${def.id}`;
 
 const slim = (i: ChanItem): ChanItem => ({ Id: i.Id, Name: i.Name, Type: i.Type, SeriesName: i.SeriesName, SeriesId: i.SeriesId, SeriesTmdb: i.SeriesTmdb, ParentIndexNumber: i.ParentIndexNumber, IndexNumber: i.IndexNumber, ProductionYear: i.ProductionYear, RunTimeTicks: i.RunTimeTicks, Tmdb: i.Tmdb, Art: i.Art });
 
@@ -73,7 +73,8 @@ async function iptvPool(def: ChannelDef, u: string): Promise<{ items: ChanItem[]
   try {
     const a = await iptvGet<unknown>(`v1/iptv/channel-pool?${q}`, 20_000);
     if (a.status === 404 || a.status === 501 || a.status === 401 || a.status === 403) noIptv.add(u);
-    return a.status === 200 ? (episodes ? iptvEpisodeItems(a.data) : iptvPoolItems(a.data)) : { items: [], pending: 0 };
+    if (a.status === 200 && episodes) { const r = iptvEpisodeItems(a.data); return { items: withinYearTo(r.items, def), pending: r.pending }; }
+    return a.status === 200 ? iptvPoolItems(a.data) : { items: [], pending: 0 };
   } catch {
     return { items: [], pending: 0 };
   }
@@ -96,7 +97,7 @@ async function fetchItems(def: ChannelDef, u: string): Promise<Fetched> {
   // Genres sit on the series, and this server ignores AncestorIds: find the matching series, take the episodes (they carry
   // their SeriesId) and keep those of that set, a few per series. ProviderIds on the series lets an IPTV copy of the same show defer to it.
   const [s, v] = await Promise.all([getItems({ ...common, Fields: "ProviderIds", IncludeItemTypes: "Series", Genres: genres }), iptvPool(def, u)]);
-  const tmdb = new Map(s.Items.map((x) => [x.Id, x.ProviderIds?.Tmdb] as const));
+  const tmdb = new Map(withinYearTo(s.Items, def).map((x) => [x.Id, x.ProviderIds?.Tmdb] as const));
   let lib: ChanItem[] = [];
   if (tmdb.size) {
     const r = await getItems({ ...common, IncludeItemTypes: "Episode" });

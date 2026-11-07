@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, iptvEpisodeItems, mixEpisodes, isIptvEpisodeId, BLOCK_MAX, BLOCK_MIN, itemLabel, mixItems, lineup, rng, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, fromStartTarget, rejoinLive, type ChanItem } from "../src/lib/channels.ts";
+import { CHANNELS, EPOCH_MS, MIN_ITEMS, TICKS_PER_SECOND, channelById, channelViable, cycleSeconds, chainBudget, chainTarget, hashString, IPTV_CAP, isIptvId, iptvPoolItems, iptvEpisodeItems, mixEpisodes, withinYearTo, isIptvEpisodeId, BLOCK_MAX, BLOCK_MIN, itemLabel, mixItems, lineup, rng, parseHidden, playedEnough, playable, poolOf, sample, sampleByGroup, schedule, seedFor, toggleHidden, tunePath, tuneTarget, yearsParam, fromStartTarget, rejoinLive, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
 const it = (id: string, min: number | undefined, o: Partial<ChanItem> = {}): ChanItem => ({ Id: id, Name: `Item ${id}`, Type: "Movie", RunTimeTicks: min == null ? undefined : min * MIN, ...o });
@@ -441,4 +441,13 @@ test("episode channels: mixed library + IPTV pool is viable and hides under 3 sc
   assert.equal(channelViable(mixEpisodes([], three), def), true);
   // 22 min fits Classics (20-35) but not a 10 min bite channel floor of 15? it does; a 12 min episode is out of both
   assert.equal(channelViable(iptvEpisodeItems({ items: [E(1, 1, { runtime: 12 * 60 }), E(1, 2, { runtime: 12 * 60 }), E(1, 3, { runtime: 12 * 60 })] }).items, def), false);
+});
+
+test("Sitcom Classics: Comedy shows from 2005 or earlier; unknown year is out; Sunday Sitcoms has no year cap", () => {
+  const def = CHANNELS.find((c) => c.id === "sitcom-classics")!;
+  assert.equal(def.yearTo, 2005);
+  assert.equal(CHANNELS.find((c) => c.id === "sunday-sitcoms")!.yearTo, undefined);
+  const eps = iptvEpisodeItems({ items: [E(1, 1, { year: 1998 }), E(2, 1, { year: 2005 }), E(3, 1, { year: 2006 }), E(4, 1, { year: undefined })] }).items;
+  assert.deepEqual(withinYearTo(eps, def).map((x) => x.SeriesId), ["p:s:1", "p:s:2"]);
+  assert.equal(withinYearTo(eps, {}).length, 4);
 });
