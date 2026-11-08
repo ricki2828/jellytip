@@ -19,7 +19,9 @@ import { SimilarRow } from "../../components/SimilarRow";
 import { WaysToWatch } from "../../components/WaysToWatch";
 import { availabilityOf, type IptvCopy } from "../../lib/availability";
 import { vodPath } from "../../lib/iptvVod";
-import { flashNote } from "../../components/TasteButtons";
+import { flashNote, IptvTasteButtons } from "../../components/TasteButtons";
+import { logoClass } from "../../lib/logoStyle";
+import { seedTaste, setIptvPlayed, type IptvTasteSubject } from "../../api/iptvTaste";
 import { failedLately, failOf, pickPlayable, skippedNote } from "../../lib/streamFail";
 import { alternateEpisode } from "../../lib/streamCopies";
 import { pickKey, recallPick, rememberedTarget, rememberPick } from "../../lib/copyPick";
@@ -27,6 +29,7 @@ import "./iptv.css";
 
 const mins = (s?: number | null) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`) : null);
 /** Seconds to resume from (none when finished or barely started). */
+const epPlayed = (e: VodEpisode) => e.played ?? e.progress?.played ?? false;
 const resumeAt = (p?: VodProgress | null) => (p && !p.played && p.position > 30 ? Math.floor(p.position) : 0);
 
 function playPath(t: PlayTarget, title: string, resume = 0) {
@@ -42,6 +45,8 @@ export function IptvDetails({ id }: { id: string }) {
   const [fav, setFav] = useState<boolean | null>(null);
   const [favBusy, setFavBusy] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
+  const [watchedBusy, setWatchedBusy] = useState(false);
   const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
   // Taste signals: dwell, a trailer opened on purpose (5 s+), My list
   const sigTarget = d ? { kind: d.kind, iptvId: d.id, ...(d.tmdbId ? { tmdbId: d.tmdbId } : {}) } : null;
@@ -54,6 +59,7 @@ export function IptvDetails({ id }: { id: string }) {
     setErr(null);
     setLogoFailed(false);
     setTrailerUrl(null);
+    setOverviewOpen(false);
     vodItem(id).then((a) => {
       if (!alive) return;
       if (a.status === 200 && a.data) {
@@ -62,8 +68,9 @@ export function IptvDetails({ id }: { id: string }) {
         if (to) return go(vodPath(to), true);
         setD(a.data);
         setFav(a.data.favourite ?? null);
+        seedTaste({ id: a.data.id, kind: a.data.kind, tmdbId: a.data.tmdbId }, a.data.thumb, a.data.notInterested);
         // Open on the season of the first unfinished episode
-        const s = a.data.seasons?.find((x) => x.episodes.some((e) => !e.progress?.played)) ?? a.data.seasons?.[0];
+        const s = a.data.seasons?.find((x) => x.episodes.some((e) => !epPlayed(e))) ?? a.data.seasons?.[0];
         setSeason(s?.season ?? null);
       } else setErr(a.status === 404 ? "This title is no longer on your IPTV provider." : errorText(a));
     });
@@ -88,9 +95,36 @@ export function IptvDetails({ id }: { id: string }) {
 
   const eps = d.seasons?.find((s) => s.season === season)?.episodes ?? [];
   const nextEp: { s: number; e: VodEpisode } | null = (() => {
-    for (const s of d.seasons ?? []) for (const e of s.episodes) if (!e.progress?.played) return { s: s.season, e };
+    for (const s of d.seasons ?? []) for (const e of s.episodes) if (!epPlayed(e)) return { s: s.season, e };
     return null;
   })();
+  const taste: IptvTasteSubject = { id: d.id, kind: d.kind, tmdbId: d.tmdbId };
+  // Specials (season 0) don't count towards a show being watched (the server ignores them too)
+  const regular = (d.seasons ?? []).filter((s) => s.season > 0);
+  const allEps = regular.flatMap((s) => s.episodes);
+  // Film: its own flag. Series: every known episode (and at least one)
+  const watched = d.kind === "series" ? allEps.length > 0 && allEps.every(epPlayed) : !!(d.played || d.progress?.played);
+  const markEp = (e: VodEpisode, played: boolean): VodEpisode => ({ ...e, played, progress: played ? { position: 0, duration: e.progress?.duration ?? 1, played: true } : null });
+  const toggleWatched = async () => {
+    setWatchedBusy(true);
+    const e = await setIptvPlayed(d.id, !watched);
+    setWatchedBusy(false);
+    if (e) return flashNote(e);
+    const now = !watched;
+    setD({
+      ...d,
+      played: now,
+      progress: now ? d.progress : null,
+      seasons: d.seasons?.map((s) => (s.season > 0 ? { ...s, episodes: s.episodes.map((x) => markEp(x, now)) } : s)),
+    });
+    flashNote(now ? "Marked watched" : "Marked not watched");
+  };
+  const toggleEp = async (e: VodEpisode) => {
+    const now = !epPlayed(e);
+    const err = await setIptvPlayed(e.id, now, d.id);
+    if (err) return flashNote(err);
+    setD({ ...d, seasons: d.seasons?.map((s) => ({ ...s, episodes: s.episodes.map((x) => (x.id === e.id ? markEp(x, now) : x)) })) });
+  };
   const logo = safeArt(d.logo, 480);
   const trailer = trailerTarget(d.trailer);
   const formats = detailBadges(vodTech(d));
@@ -136,7 +170,7 @@ export function IptvDetails({ id }: { id: string }) {
         <div className="details-text">
           {logo && !logoFailed ? (
             <img
-              className="title-logo big"
+              className={`title-logo big ${logoClass(d.id, "white")}`}
               src={logo}
               alt={d.title}
               onError={() => setLogoFailed(true)}
@@ -165,7 +199,11 @@ export function IptvDetails({ id }: { id: string }) {
             <IptvDot />
             via IPTV{d.providerName ? ` · ${d.providerName}` : ""}
           </div>
-          {d.overview && <p className="overview">{d.overview}</p>}
+          {d.overview && (
+            <button className={`overview${overviewOpen ? " open" : ""}`} data-nav onClick={() => setOverviewOpen((o) => !o)}>
+              {d.overview}
+            </button>
+          )}
           {d.director && <div className="line dim">Directed by {d.director}</div>}
           {d.cast && <div className="line dim">{d.cast.split(",").slice(0, 4).join(", ")}</div>}
           <div className="buttons">
@@ -214,6 +252,10 @@ export function IptvDetails({ id }: { id: string }) {
                 {fav ? "✓ In my list" : "+ My list"}
               </button>
             )}
+            <button className="btn" data-nav disabled={watchedBusy} aria-pressed={watched} onClick={toggleWatched}>
+              {watched ? "Watched ✓" : "Mark watched"}
+            </button>
+            <IptvTasteButtons subject={taste} />
           </div>
         </div>
       </div>
@@ -241,19 +283,28 @@ export function IptvDetails({ id }: { id: string }) {
               ))}
             </div>
             <div className="ep-list iptv-eps">
-              {eps.map((e) => (
-                <div key={e.id} className="ep-row">
-                  <button className="ep-text" data-nav onClick={() => playEp(season!, e)}>
-                    <span className="ep-name">
-                      {e.episode}. {e.title ?? `Episode ${e.episode}`}
-                    </span>
-                    <span className="ep-meta">
-                      {[mins(e.runtime), e.progress?.played ? "Watched" : resumeAt(e.progress) ? `${mins(resumeAt(e.progress))} in` : null].filter(Boolean).join("  ·  ")}
-                    </span>
-                    {e.overview && <span className="ep-overview">{e.overview}</span>}
-                  </button>
-                </div>
-              ))}
+              {eps.map((e) => {
+                const still = tmdbSized(safeArt(e.still ?? d.backdrop ?? d.poster, 480), "w780");
+                const done = epPlayed(e);
+                return (
+                  <div key={e.id} className={`ep-row${done ? " done" : ""}`}>
+                    <button className="ep-still" data-nav tabIndex={-1} aria-hidden onClick={() => playEp(season!, e)}>
+                      {still && <img src={still} alt="" loading="lazy" decoding="async" />}
+                      <span className="ep-no">{e.episode}</span>
+                    </button>
+                    <button className="ep-text" data-nav onClick={() => playEp(season!, e)}>
+                      <span className="ep-name">
+                        {e.episode}. {e.title ?? `Episode ${e.episode}`}
+                      </span>
+                      <span className="ep-meta">{[mins(e.runtime), done ? "Watched" : resumeAt(e.progress) ? `${mins(resumeAt(e.progress))} in` : null].filter(Boolean).join("  ·  ")}</span>
+                      {e.overview && <span className="ep-overview">{e.overview}</span>}
+                    </button>
+                    <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? "Mark not watched" : "Mark watched"} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
+                      ✓
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>

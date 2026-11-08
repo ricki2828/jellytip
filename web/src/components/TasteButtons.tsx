@@ -6,8 +6,10 @@ import { personalOn, setNotInterested, setThumb, usePrefs, useSignal } from "../
 import { go } from "../lib/router";
 import { emitSignal } from "../api/signals";
 import { libraryTarget } from "../lib/signals";
+import { seedTaste, setIptvNotInterested, setIptvPlayed, setIptvThumb, useIptvSignal, type IptvTasteSubject } from "../api/iptvTaste";
+import { vodPath } from "../lib/iptvVod";
 
-const Thumb = ({ down }: { down?: boolean }) => (
+export const Thumb = ({ down }: { down?: boolean }) => (
   <svg viewBox="0 0 24 24" aria-hidden className={`thumb-icon${down ? " down" : ""}`}>
     <path d="M7 10v10H4V10zM7 10l4-7c1.4 0 2.3 1.2 2 2.5L12.3 9H18a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 16.8 20H7" />
   </svg>
@@ -16,6 +18,37 @@ const Thumb = ({ down }: { down?: boolean }) => (
 /** Brief confirmation shared by details and the tile menu. */
 export function flashNote(text: string) {
   window.dispatchEvent(new CustomEvent("jellytip-note", { detail: text }));
+}
+
+/** Same three buttons for an IPTV film / series (thumbs keyed by TMDB id when known). */
+export function IptvTasteButtons({ subject, compact = false }: { subject: IptvTasteSubject; compact?: boolean }) {
+  const { available } = usePrefs();
+  const sig = useIptvSignal(subject);
+  const [busy, setBusy] = useState(false);
+  if (!available) return null;
+  const run = async (fn: () => Promise<string | null>, ok: string) => {
+    setBusy(true);
+    const e = await fn();
+    setBusy(false);
+    flashNote(e ?? ok);
+  };
+  const size = compact ? " small" : "";
+  return (
+    <>
+      <button className={`btn${size}${sig.thumb === 1 ? " on" : ""}`} data-nav disabled={busy} aria-pressed={sig.thumb === 1} aria-label="Thumbs up" title="Thumbs up"
+        onClick={() => run(() => setIptvThumb(subject, sig.thumb === 1 ? 0 : 1), sig.thumb === 1 ? "Rating cleared" : "More like this")}>
+        <Thumb />
+      </button>
+      <button className={`btn${size}${sig.thumb === -1 ? " on" : ""}`} data-nav disabled={busy} aria-pressed={sig.thumb === -1} aria-label="Thumbs down" title="Thumbs down"
+        onClick={() => run(() => setIptvThumb(subject, sig.thumb === -1 ? 0 : -1), sig.thumb === -1 ? "Rating cleared" : "Fewer like this")}>
+        <Thumb down />
+      </button>
+      <button className={`btn${size}`} data-nav disabled={busy} aria-pressed={!!sig.notInterested}
+        onClick={() => run(() => setIptvNotInterested(subject, !sig.notInterested), sig.notInterested ? "Back in your rows" : "Hidden from your rows and picks")}>
+        {sig.notInterested ? "Interested again" : "Not interested"}
+      </button>
+    </>
+  );
 }
 
 export function TasteButtons({ item, compact = false }: { item: Item; compact?: boolean }) {
@@ -59,15 +92,44 @@ export function TasteButtons({ item, compact = false }: { item: Item; compact?: 
 
 // ---------- tile menu ----------
 
+/** An IPTV tile in the menu: the subject plus what the menu shows (title, watched state when the tile knows it). */
+export interface IptvMenuSubject extends IptvTasteSubject {
+  title: string;
+  played?: boolean;
+  /** What the tile's payload said (rows carry them); undefined = not said. */
+  thumb?: 1 | -1 | 0 | null;
+  notInterested?: boolean;
+}
+
 interface MenuAt {
-  item: Item;
+  item?: Item;
+  iptv?: IptvMenuSubject;
   x: number;
   y: number;
 }
 
 /** Open the tile menu for an item at a screen point (right-click, long-press, or the menu key on a focused tile). */
-export function openTileMenu(item: Item, x: number, y: number) {
-  window.dispatchEvent(new CustomEvent<MenuAt>("jellytip-tile-menu", { detail: { item, x, y } }));
+export function openTileMenu(item: Item | IptvMenuSubject, x: number, y: number) {
+  if (!("Id" in item)) seedTaste(item, item.thumb, item.notInterested);
+  const detail: MenuAt = "Id" in item ? { item, x, y } : { iptv: item, x, y };
+  window.dispatchEvent(new CustomEvent<MenuAt>("jellytip-tile-menu", { detail }));
+}
+
+function IptvWatchedButton({ subject }: { subject: IptvMenuSubject }) {
+  const [played, setPlayed] = useState(!!subject.played);
+  return (
+    <button
+      className="btn small"
+      data-nav
+      onClick={async () => {
+        const e = await setIptvPlayed(subject.id, !played);
+        if (!e) setPlayed(!played);
+        flashNote(e ?? (played ? "Marked not watched" : "Marked watched"));
+      }}
+    >
+      {played ? "Mark not watched" : "Mark watched"}
+    </button>
+  );
 }
 
 /** Mounted once (App): the menu itself plus the short confirmation note. */
@@ -123,16 +185,22 @@ export function TileMenuHost() {
             ref={box}
             className="tile-menu"
             role="menu"
-            aria-label={at.item.Name}
+            aria-label={at.item?.Name ?? at.iptv?.title}
             style={{ left: Math.max(8, Math.min(at.x, window.innerWidth - W - 8)), top: Math.max(8, Math.min(at.y, window.innerHeight - 220)), width: W }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="tile-menu-title">{at.item.Name}</p>
+            <p className="tile-menu-title">{at.item?.Name ?? at.iptv?.title}</p>
             <div className="tile-menu-buttons" onClick={() => window.setTimeout(() => setAt(null), 150)}>
-              <button className="btn small" data-nav onClick={() => go(`/item/${at.item.Id}`)}>
+              <button className="btn small" data-nav onClick={() => go(at.item ? `/item/${at.item.Id}` : vodPath(at.iptv!.id))}>
                 Open
               </button>
-              <TasteButtons item={at.item} compact />
+              {at.item && <TasteButtons item={at.item} compact />}
+              {at.iptv && (
+                <>
+                  <IptvWatchedButton subject={at.iptv} />
+                  <IptvTasteButtons subject={at.iptv} compact />
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -152,7 +220,7 @@ const LONG_PRESS_MS = 550;
  * For a tile: right-click, long-press (touch) or the menu key opens the tile menu when personalisation is on.
  * `swallowClick()` tells the tile's click handler a long-press just happened (so it doesn't also open the title).
  */
-export function useTileMenu(item: Item | undefined) {
+export function useTileMenu(item: Item | undefined, iptv?: IptvMenuSubject) {
   const timer = useRef<number | undefined>(undefined);
   const start = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
@@ -165,19 +233,20 @@ export function useTileMenu(item: Item | undefined) {
     fired.current = false;
     return f;
   };
-  if (!item || !personalOn()) return { swallowClick, props: {} };
+  const target = item ?? iptv;
+  if (!target || !personalOn()) return { swallowClick, props: {} };
   return {
     swallowClick,
     props: {
       onContextMenu: (e: React.MouseEvent) => {
         e.preventDefault();
-        openTileMenu(item, e.clientX, e.clientY);
+        openTileMenu(target, e.clientX, e.clientY);
       },
       onKeyDown: (e: React.KeyboardEvent) => {
         if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
           e.preventDefault();
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          openTileMenu(item, r.left + 12, r.bottom - 12);
+          openTileMenu(target, r.left + 12, r.bottom - 12);
         }
       },
       onPointerDown: (e: React.PointerEvent) => {
@@ -188,7 +257,7 @@ export function useTileMenu(item: Item | undefined) {
         timer.current = window.setTimeout(() => {
           fired.current = true;
           start.current = null;
-          openTileMenu(item, clientX, clientY);
+          openTileMenu(target, clientX, clientY);
         }, LONG_PRESS_MS);
       },
       onPointerMove: (e: React.PointerEvent) => {
