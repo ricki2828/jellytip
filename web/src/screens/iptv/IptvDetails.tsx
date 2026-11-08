@@ -15,6 +15,7 @@ import { targetPath, type PlayTarget } from "../../lib/iptvPlay";
 import { vodTech, type VodDetail, type VodEpisode, type VodProgress } from "../../lib/iptvVod";
 import { go } from "../../lib/router";
 import { detailBadges } from "../../lib/techBadges";
+import { SimilarRow } from "../../components/SimilarRow";
 import { WaysToWatch } from "../../components/WaysToWatch";
 import { availabilityOf, type IptvCopy } from "../../lib/availability";
 import { vodPath } from "../../lib/iptvVod";
@@ -278,6 +279,7 @@ export function IptvDetails({ id }: { id: string }) {
           </section>
         </div>
       )}
+      <SimilarRow key={`sim-${d.id}`} wrapClass="details-below" query={{ kind: d.kind, tmdb: d.tmdbId, iptvId: d.id }} />
       {trailerUrl && (
         <div className="trailer-modal" onClick={() => setTrailerUrl(null)}>
           <video src={trailerUrl} autoPlay controls onTimeUpdate={onTrailerTime} onEnded={() => setTrailerUrl(null)} onError={() => setTrailerUrl(null)} onClick={(e) => e.stopPropagation()} />
