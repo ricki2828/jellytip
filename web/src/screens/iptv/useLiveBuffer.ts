@@ -42,6 +42,8 @@ export function useLiveBuffer(o: LiveBufferOpts) {
   const hold = useRef<Hold | null>(null);
   const holdingRef = useRef(false);
   const pendingStall = useRef(false);
+  /** The user just picked a buffer mode: build the new profile's cushion now instead of waiting for the next stall (mpegts). */
+  const pendingPick = useRef(false);
   /** our own v.pause() has been issued and its `pause` event is still to come */
   const expectPause = useRef(false);
   const startDoneFor = useRef<string | null>(null);
@@ -60,6 +62,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     holdingRef.current = false;
     expectPause.current = false;
     pendingStall.current = false;
+    pendingPick.current = false;
   }
 
   const profile = (): Profile => effectiveProfile(modeRef.current, auto.current);
@@ -79,7 +82,14 @@ export function useLiveBuffer(o: LiveBufferOpts) {
     debugEvent("iptv-player", "live buffer hold end", { why, phase: h.phase, heldMs: Date.now() - h.at, profile: profile(), player: optsRef.current.engineRef.current }, "info");
   }, []);
 
-  const setMode = useCallback((m: Mode) => { setModeState(m); debugEvent("iptv-player", "live buffer mode", { mode: m }, "info"); }, []);
+  const setMode = useCallback((m: Mode) => {
+    setModeState(m);
+    modeRef.current = m;
+    pendingPick.current = true;
+    lastToast.current = Date.now();
+    setToast(m === "auto" ? "Live buffer: Auto" : `Live buffer: ${m[0].toUpperCase()}${m.slice(1)}`);
+    debugEvent("iptv-player", "live buffer mode", { mode: m }, "info");
+  }, []);
 
   /** The <video> `pause` event. True = it was our own hold pause (swallow it). A pause during a hold is the user's: the hold is cancelled, never auto-resumed. */
   const handlePause = useCallback((): boolean => {
@@ -160,7 +170,7 @@ export function useLiveBuffer(o: LiveBufferOpts) {
         appliedHls.current = { hls: h, p, key };
         return;
       }
-      if (engine !== "mpegts" || !kindIsLive()) return;
+      if (engine !== "mpegts" || !kindIsLive()) { pendingPick.current = false; return; }
 
       const b = v.buffered;
       const end = b.length ? b.end(b.length - 1) : 0;
@@ -181,12 +191,14 @@ export function useLiveBuffer(o: LiveBufferOpts) {
       if (v.paused || v.seeking || !b.length) return;
       const lk = linkRef.current;
       let phase: "start" | "stall" | null = null;
-      if (pendingStall.current) phase = "stall";
+      const picked = pendingPick.current;
+      pendingPick.current = false;
+      if (pendingStall.current || picked) phase = "stall";
       else if (lk && startDoneFor.current !== lk && v.currentTime > 0) phase = "start";
       if (phase) {
         pendingStall.current = false;
         if (phase === "start") startDoneFor.current = lk;
-        const target = holdAllowed(lastBadHold.current, now) ? holdTarget(p, phase, runway) : 0;
+        const target = picked || holdAllowed(lastBadHold.current, now) ? holdTarget(p, phase, runway) : 0;
         if (target > 0) {
           hold.current = { phase, target, at: now, lastEnd: end, lastGrowth: now };
           holdingRef.current = true;
