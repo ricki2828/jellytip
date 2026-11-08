@@ -3,7 +3,7 @@ import { imageUrl, type Item } from "../api/jellyfin";
 import type { Way } from "../lib/availability";
 import { AvailBadge } from "./AvailBadge";
 import { TechBadges } from "./TechBadges";
-import { useTileMenu } from "./TasteButtons";
+import { useTileMenu, type IptvMenuSubject } from "./TasteButtons";
 import { techOf, tileBadges } from "../lib/techBadges";
 import "./PosterCard.css";
 
@@ -15,7 +15,7 @@ const POSTER_IMG_H = 450;
  * dark tile until the picture loads (never blank), stays when there is no picture, and is drawn over art known to have
  * no title in it (`untitled`).
  */
-export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip, avail, tech: techProp, watched }: {
+export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, faded, lit, src, label, name: nameProp, untitled, tag: chip, avail, tech: techProp, watched, iptvMenu }: {
   item?: Item;
   width?: number;
   onOpen?: () => void;
@@ -38,6 +38,8 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   tech?: readonly string[];
   /** Watched tick for tiles without a Jellyfin item (IPTV). */
   watched?: boolean;
+  /** An IPTV title: gives the tile the same long-press / right-click menu. */
+  iptvMenu?: IptvMenuSubject;
 }) {
   const tag = item?.ImageTags?.Primary;
   // One size for every poster tile (rows, grids, phone): the seedbox resizes on first request and caches per size
@@ -47,7 +49,7 @@ export function PosterCard({ item, width = 150, onOpen, onFocus, autoFocus, fade
   const name = nameProp ?? item?.Name ?? label ?? "";
   const hasImg = !!url && !failed;
   const overlay = hasImg && loaded && untitled;
-  const menu = useTileMenu(item);
+  const menu = useTileMenu(item, iptvMenu);
   const tech = techProp ?? (item && item.Type !== "Episode" ? techOf(item.Id) : []);
   const techShown = tileBadges(tech).length > 0;
   const cls = `poster${faded ? " faded" : ""}${lit ? " lit" : ""}${techShown ? " has-tech" : ""}`;

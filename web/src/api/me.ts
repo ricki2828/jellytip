@@ -119,6 +119,12 @@ const keepSignals = () => {
   localStorage.setItem(SIGNALS_KEY, JSON.stringify(signals));
   window.dispatchEvent(new Event("jellytip-signals"));
 };
+/** Remember a signal under a non-library key (IPTV titles: see api/iptvTaste.ts) so the buttons show it at once. */
+export function rememberSignal(key: string, s: Signal) {
+  if (s.thumb || s.notInterested) signals[key] = { thumb: s.thumb, notInterested: s.notInterested };
+  else delete signals[key];
+  keepSignals();
+}
 export const signalOf = (itemId: string): Signal => signals[itemId] ?? {};
 
 /** The person's reactions from the server (they follow the person); this device's cache stays as the fallback. */

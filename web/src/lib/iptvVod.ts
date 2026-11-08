@@ -35,9 +35,15 @@ export interface VodItem {
   played?: boolean;
   /** On the person's My list; null/absent when the server doesn't say (no toggle then). */
   favourite?: boolean | null;
+  /** This person's thumb on the title (1 up, -1 down); absent when none or the server doesn't say. */
+  thumb?: 1 | -1 | 0 | null;
+  /** Hidden from rows and picks ("Not interested"). */
+  notInterested?: boolean;
 }
 
 export interface VodEpisode {
+  /** Watched (the server's `played`, or progress.played). */
+  played?: boolean;
   id: string;
   episodeId: string;
   episode: number;
@@ -134,6 +140,9 @@ export function parseVodItem(raw: unknown): VodItem | null {
     progress: progress(r.progress),
     played: r.played === true || (progress(r.progress)?.played ?? false),
     favourite: typeof r.favourite === "boolean" ? r.favourite : null,
+    // absent = the server doesn't say (keep whatever reactions loaded); 0 = says none
+    ...(r.thumb === 1 || r.thumb === -1 || r.thumb === 0 ? { thumb: r.thumb } : {}),
+    ...(typeof r.notInterested === "boolean" ? { notInterested: r.notInterested } : {}),
   };
 }
 
@@ -172,6 +181,7 @@ export function parseVodDetail(raw: unknown): VodDetail | null {
               overview: str(e.overview),
               still: str(e.still),
               progress: progress(e.progress),
+              played: e.played === true || (progress(e.progress)?.played ?? false),
               lastFail: parseFailFor(e.id as string, e.lastFail),
             })),
         }))
@@ -240,3 +250,6 @@ export function parseCredits(raw: unknown): { iptvItems: VodItem[]; pending: boo
   const iptv = r.iptv && typeof r.iptv === "object" ? (r.iptv as Record<string, unknown>) : {};
   return { iptvItems: parseVodItems(iptv.iptvItems), pending: r.pending === true };
 }
+
+/** Key the server stores (and /v1/me/reactions returns) for an IPTV title, so reactions load straight into the buttons: the TMDB id when known (one rating across copies and the library), else the IPTV id. */
+export const tasteKey = (t: { id: string; kind: "movie" | "series"; tmdbId?: number | null }) => (t.tmdbId ? (t.kind === "series" ? `tmdb:tv:${t.tmdbId}` : `tmdb:${t.tmdbId}`) : `iptv:${t.id}`);

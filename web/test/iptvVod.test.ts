@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { iptvPart, parseVodDetail, parseVodItems, vodTech } from "../src/lib/iptvVod.ts";
+import { iptvPart, parseVodDetail, parseVodItems, tasteKey, vodTech } from "../src/lib/iptvVod.ts";
 import { parseRows } from "../src/lib/rows.ts";
 
 const vod = { id: "3:m:991", source: "iptv", kind: "movie", tmdbId: 27205, title: "Inception", year: 2010, quality: ["4k", "hdr"], poster: "https://image.tmdb.org/t/p/w342/x.jpg" };
@@ -97,4 +97,27 @@ test("langUnknown: parsed only when the server says true, absent otherwise", () 
   assert.equal("langUnknown" in b, false);
   assert.equal("langUnknown" in c, false);
   assert.equal(parseVodDetail({ ...vod, langUnknown: true })?.langUnknown, true);
+});
+
+test("taste + watched fields: thumb, notInterested, episode played", () => {
+  const d = parseVodDetail({
+    ...vod,
+    id: "3:s:7",
+    kind: "series",
+    thumb: -1,
+    notInterested: true,
+    seasons: [{ season: 1, episodes: [{ id: "3:e:1", episode: 1, played: true }, { id: "3:e:2", episode: 2, progress: { position: 5, duration: 10, played: true } }, { id: "3:e:3", episode: 3 }] }],
+  })!;
+  assert.equal(d.thumb, -1);
+  assert.equal(d.notInterested, true);
+  assert.deepEqual(d.seasons![0].episodes.map((e) => e.played), [true, true, false]);
+  const plain = parseVodDetail({ ...vod, thumb: 5 })!;
+  assert.equal(plain.thumb, undefined);
+  assert.equal(plain.notInterested, undefined);
+});
+
+test("taste key: TMDB id when known so copies share a rating", () => {
+  assert.equal(tasteKey({ id: "3:m:991", kind: "movie", tmdbId: 27205 }), "tmdb:27205");
+  assert.equal(tasteKey({ id: "3:s:7", kind: "series", tmdbId: 1399 }), "tmdb:tv:1399");
+  assert.equal(tasteKey({ id: "3:m:991", kind: "movie" }), "iptv:3:m:991");
 });

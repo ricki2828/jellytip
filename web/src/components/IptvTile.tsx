@@ -11,9 +11,21 @@ import { go } from "../lib/router";
 import { announceIptvFocus } from "../lib/iptvFocus";
 import { CARD_W, PHONE_CARD_W } from "./Card";
 import { PosterCard } from "./PosterCard";
+import { useTileMenu, type IptvMenuSubject } from "./TasteButtons";
 import { tmdbSized } from "./FranchiseRow";
 
-type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { tech?: string[]; progress?: VodItem["progress"]; played?: boolean };
+type Tile = Pick<VodItem, "id" | "title" | "year" | "quality" | "poster" | "backdrop"> & { kind?: VodItem["kind"]; tmdbId?: number | null; thumb?: VodItem["thumb"]; notInterested?: boolean } & { tech?: string[]; progress?: VodItem["progress"]; played?: boolean };
+
+/** What the tile menu needs (thumbs + watched); the kind falls back to the id's `:s:` / `:m:` marker. */
+const menuSubject = (t: Tile & { played?: boolean; progress?: VodItem["progress"] }): IptvMenuSubject => ({
+  id: t.id,
+  title: t.title,
+  kind: t.kind ?? (t.id.includes(":s:") ? "series" : "movie"),
+  tmdbId: t.tmdbId,
+  played: !!t.played || !!t.progress?.played,
+  thumb: t.thumb,
+  notInterested: t.notInterested,
+});
 
 const label = (t: Tile) => `${t.title}${t.year ? ` (${t.year})` : ""} · via IPTV`;
 
@@ -41,6 +53,7 @@ export function IptvPoster({ item, width, tag, avail, autoFocus }: { item: Tile 
         tech={vodTech(item)}
         autoFocus={autoFocus}
         watched={!!(item as Tile).played || !!(item as Tile).progress?.played}
+        iptvMenu={menuSubject(item as Tile)}
         onFocus={() => announce(item)}
         onOpen={() => go(vodPath(item.id))}
       />
@@ -57,6 +70,7 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus, onOpen }: { i
   const [failed, setFailed] = useState(false);
   const tech = vodTech(item);
   const p = item.progress;
+  const menu = useTileMenu(undefined, menuSubject(item));
   const pct = p && !p.played && p.duration ? Math.min(100, (p.position / p.duration) * 100) : 0;
   return (
     <button
@@ -66,9 +80,10 @@ export function IptvCard({ item, width: widthProp, tag, autoFocus, onOpen }: { i
       style={width === 0 ? undefined : { width, height: Math.round((width * 9) / 16) }}
       title={label(item)}
       aria-label={label(item)}
-      onClick={() => (onOpen ? onOpen() : go(vodPath(item.id)))}
+      onClick={() => !menu.swallowClick() && (onOpen ? onOpen() : go(vodPath(item.id)))}
       onFocus={() => announce(item)}
       onMouseEnter={() => announce(item)}
+      {...menu.props}
     >
       {art && !failed && <img className={`card-img${loaded ? " in" : ""}`} src={art} alt="" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
       <div className="card-fade" />
