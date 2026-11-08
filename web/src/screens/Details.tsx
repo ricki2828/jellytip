@@ -29,6 +29,7 @@ import { useTrailerPreview } from "../lib/useTrailerPreview";
 import { PreviewVideo } from "../components/PreviewVideo";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
+import { SimilarRow } from "../components/SimilarRow";
 import { ScoreLine } from "../components/ScoreLine";
 import { DownloadButton, SeasonDownloadButton } from "../components/DownloadButton";
 import { fileBadges, infoLine, TitleLogo } from "../components/TitleBlock";
@@ -253,7 +254,17 @@ export function Details({ id }: { id: string }) {
     });
   }, [item, online, downloaded, iptvSeries, movieIptv, rows, admin, iptvDone, movieDone, tmdb]);
 
+  // Companion mix of library + IPTV titles; Seasons/Episodes ask for their series. Falls back to Jellyfin's list.
   const loadSimilar = useMemo(() => (item && item.Type !== "Episode" ? () => similar(item.Id) : null), [item]);
+  const similarQuery = useMemo(() => {
+    if (!item) return null;
+    const isSeries = item.Type === "Series" || item.Type === "Season" || item.Type === "Episode";
+    if (!isSeries && item.Type !== "Movie") return null;
+    const own = item.Type === "Series" || item.Type === "Movie";
+    const jfId = own ? item.Id : item.SeriesId;
+    if (!jfId) return null;
+    return { kind: isSeries ? ("series" as const) : ("movie" as const), tmdb: own && tmdb > 0 ? tmdb : null, jfId };
+  }, [item, tmdb]);
 
   // Muted trailer in the backdrop after a rest, as on the TV; off while the full trailer modal is open
   const preview = useTrailerPreview(item && !showTrailer ? jfTarget(item) : null, { trigger: "passive" });
@@ -527,7 +538,11 @@ export function Details({ id }: { id: string }) {
             </div>
           </section>
         )}
-        {loadSimilar && <Row key={`sim-${item.Id}`} title="More like this" load={loadSimilar} />}
+        {similarQuery ? (
+          <SimilarRow key={`sim-${item.Id}`} query={similarQuery} fallback={loadSimilar ?? (item.SeriesId ? () => similar(item.SeriesId!) : undefined)} />
+        ) : (
+          loadSimilar && <Row key={`sim-${item.Id}`} title="More like this" load={loadSimilar} />
+        )}
       </div>
 
       {getIt && tmdb > 0 && <GetItSheet pick={{ title: item.Name, year: item.ProductionYear, tmdbId: tmdb, mediaType: "tv" }} onClose={() => setGetIt(false)} />}
