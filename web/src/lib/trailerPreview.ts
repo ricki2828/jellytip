@@ -37,7 +37,7 @@ export interface PreviewEnv {
 /** `focus`: the person moved to this title (focus / hover / tap); `passive`: it appeared on its own (a details page opening, the rotating mix). */
 export type Trigger = "focus" | "passive";
 
-export type GateReason = "pref" | "rotating" | "reduced-motion" | "save-data" | "hidden" | "touch-passive";
+export type GateReason = "pref" | "rotating" | "reduced-motion" | "save-data" | "hidden";
 
 /** May a preview start now? `autoplayPref` is playback.trailerAutoplay (undefined = prefs not loaded = on, as before). */
 export function previewGate(o: { autoplayPref?: boolean; env: PreviewEnv; trigger: Trigger; rotating?: boolean }): { ok: true } | { ok: false; reason: GateReason } {
@@ -46,8 +46,8 @@ export function previewGate(o: { autoplayPref?: boolean; env: PreviewEnv; trigge
   if (o.env.reducedMotion) return { ok: false, reason: "reduced-motion" };
   if (o.env.saveData) return { ok: false, reason: "save-data" };
   if (o.env.hidden) return { ok: false, reason: "hidden" };
-  // Touch has no hover: a tap is a deliberate focus, but nothing may start by itself (scrolling, a page opening)
-  if (o.env.touch && o.trigger === "passive") return { ok: false, reason: "touch-passive" };
+  // Touch used to block passive starts (details pages) — Ricki wants phone trailers to autoplay like before (9-Nov).
+  // Previews are muted; the trailerAutoplay pref, reduced motion and Save-Data still turn them off.
   return { ok: true };
 }
 
