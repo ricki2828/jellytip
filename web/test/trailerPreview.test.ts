@@ -35,10 +35,10 @@ test("gate: allowed when calm; each blocker blocks with its reason", () => {
   assert.deepEqual(previewGate({ env: { ...calm, hidden: true }, trigger: "focus" }), { ok: false, reason: "hidden" });
 });
 
-test("gate: touch keeps tap-to-focus previews but never starts one by itself", () => {
+test("gate: touch autoplays like desktop (muted); the pref still turns it off", () => {
   const touch = { ...calm, touch: true };
   assert.deepEqual(previewGate({ env: touch, trigger: "focus" }), { ok: true });
-  assert.deepEqual(previewGate({ env: touch, trigger: "passive" }), { ok: false, reason: "touch-passive" });
+  assert.deepEqual(previewGate({ env: touch, trigger: "passive" }), { ok: true });
   assert.deepEqual(previewGate({ autoplayPref: false, env: touch, trigger: "focus" }), { ok: false, reason: "pref" });
 });
 
