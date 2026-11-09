@@ -16,6 +16,7 @@ import { vodTech, type VodDetail, type VodEpisode, type VodProgress } from "../.
 import { go } from "../../lib/router";
 import { detailBadges } from "../../lib/techBadges";
 import { SimilarRow } from "../../components/SimilarRow";
+import { CARD_W } from "../../components/Card";
 import { WaysToWatch } from "../../components/WaysToWatch";
 import { availabilityOf, type IptvCopy } from "../../lib/availability";
 import { vodPath } from "../../lib/iptvVod";
@@ -282,30 +283,61 @@ export function IptvDetails({ id }: { id: string }) {
                 </button>
               ))}
             </div>
-            <div className="ep-list iptv-eps">
-              {eps.map((e) => {
-                const still = tmdbSized(safeArt(e.still ?? d.backdrop ?? d.poster, 480), "w780");
-                const done = epPlayed(e);
-                return (
-                  <div key={e.id} className={`ep-row${done ? " done" : ""}`}>
-                    <button className="ep-still" data-nav tabIndex={-1} aria-hidden onClick={() => playEp(season!, e)}>
-                      {still && <img src={still} alt="" loading="lazy" decoding="async" />}
-                      <span className="ep-no">{e.episode}</span>
-                    </button>
-                    <button className="ep-text" data-nav onClick={() => playEp(season!, e)}>
-                      <span className="ep-name">
-                        {e.episode}. {e.title ?? `Episode ${e.episode}`}
-                      </span>
-                      <span className="ep-meta">{[mins(e.runtime), done ? "Watched" : resumeAt(e.progress) ? `${mins(resumeAt(e.progress))} in` : null].filter(Boolean).join("  ·  ")}</span>
-                      {e.overview && <span className="ep-overview">{e.overview}</span>}
-                    </button>
-                    <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? "Mark not watched" : "Mark watched"} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
-                      ✓
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+            {phone ? (
+              <div className="ep-list iptv-eps">
+                {eps.map((e) => {
+                  const still = tmdbSized(safeArt(e.still ?? d.backdrop ?? d.poster, 480), "w780");
+                  const done = epPlayed(e);
+                  return (
+                    <div key={e.id} className={`ep-row${done ? " done" : ""}`}>
+                      <button className="ep-still" data-nav tabIndex={-1} aria-hidden onClick={() => playEp(season!, e)}>
+                        {still && <img src={still} alt="" loading="lazy" decoding="async" />}
+                        <span className="ep-no">{e.episode}</span>
+                      </button>
+                      <button className="ep-text" data-nav onClick={() => playEp(season!, e)}>
+                        <span className="ep-name">
+                          {e.episode}. {e.title ?? `Episode ${e.episode}`}
+                        </span>
+                        <span className="ep-meta">{[mins(e.runtime), done ? "Watched" : resumeAt(e.progress) ? `${mins(resumeAt(e.progress))} in` : null].filter(Boolean).join("  ·  ")}</span>
+                        {e.overview && <span className="ep-overview">{e.overview}</span>}
+                      </button>
+                      <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? "Mark not watched" : "Mark watched"} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
+                        ✓
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              // Wide screens: the library's sideways strip of 16:9 episode cards, ✓ toggle in the corner
+              <div className="row-scroll iptv-ep-strip">
+                {eps.map((e) => {
+                  const still = tmdbSized(safeArt(e.still ?? d.backdrop ?? d.poster, 480), "w780");
+                  const done = epPlayed(e);
+                  const at = resumeAt(e.progress);
+                  const pct = at && e.progress?.duration ? Math.min(100, (at / e.progress.duration) * 100) : 0;
+                  const name = `${e.episode} · ${e.title ?? `Episode ${e.episode}`}`;
+                  return (
+                    <div key={e.id} className={`iptv-ep-card${done ? " done" : ""}`} style={{ width: CARD_W }}>
+                      <button className="card" data-nav style={{ width: CARD_W, height: Math.round((CARD_W * 9) / 16) }} title={e.overview ?? name} aria-label={`Play ${name}`} onClick={() => playEp(season!, e)}>
+                        {still && <img className="card-img in" src={still} alt="" loading="lazy" decoding="async" />}
+                        <div className="card-fade" />
+                        <span className="card-title">{name}</span>
+                        {pct > 0 && (
+                          <span className="card-progress">
+                            <span style={{ width: `${pct}%` }} />
+                          </span>
+                        )}
+                      </button>
+                      <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? `Mark ${name} not watched` : `Mark ${name} watched`} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
+                        ✓
+                      </button>
+                      <span className="iptv-ep-meta">{[mins(e.runtime), done ? "Watched" : at ? `${mins(at)} in` : null].filter(Boolean).join("  ·  ")}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
       )}
