@@ -3208,7 +3208,6 @@
 
 /* ---- IPTV episodes: wide-screen card strip (matches library Details) ---- */
 .iptv-ep-card {
-  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -3217,31 +3216,34 @@
 .iptv-ep-card.done .card-img {
   opacity: 0.55;
 }
+/* ✓ sits under the card (not on it): the scaled card can't cover it and the D-pad reaches it with Down */
+.iptv-ep-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  min-height: 28px;
+}
 .iptv-ep-card .ep-watch {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+  flex: none;
   width: 28px;
   height: 28px;
   border-radius: 50%;
   border: 1px solid rgba(242, 242, 240, 0.35);
-  background: rgba(10, 10, 10, 0.6);
+  background: none;
   color: rgba(242, 242, 240, 0.6);
   font-size: 13px;
   cursor: pointer;
 }
 .iptv-ep-card .ep-watch:not(.on) {
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity 0.15s;
 }
 .iptv-ep-card:hover .ep-watch,
 .iptv-ep-card:focus-within .ep-watch {
   opacity: 1;
-}
-@media (hover: none) {
-  .iptv-ep-card .ep-watch:not(.on) {
-    opacity: 1;
-  }
 }
 .iptv-ep-card .ep-watch.on {
   background: rgba(242, 242, 240, 0.9);
@@ -3251,9 +3253,4 @@
 .iptv-ep-card .ep-watch:focus-visible {
   outline: 2px solid rgba(242, 242, 240, 0.7);
   outline-offset: 2px;
-}
-.iptv-ep-meta {
-  font-size: 12px;
-  color: var(--dim);
-  min-height: 1em;
 }

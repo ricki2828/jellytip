@@ -120,6 +120,15 @@ export function IptvDetails({ id }: { id: string }) {
     });
     flashNote(now ? "Marked watched" : "Marked not watched");
   };
+  // Episode still 404s: fall back once to the show art, then hide the broken image
+  const showArt = tmdbSized(safeArt(d.backdrop ?? d.poster, 480), "w780");
+  const stillFallback = (ev: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = ev.currentTarget;
+    if (showArt && img.dataset.fb !== "1" && img.src !== showArt) {
+      img.dataset.fb = "1";
+      img.src = showArt;
+    } else img.style.visibility = "hidden";
+  };
   const toggleEp = async (e: VodEpisode) => {
     const now = !epPlayed(e);
     const err = await setIptvPlayed(e.id, now, d.id);
@@ -291,7 +300,7 @@ export function IptvDetails({ id }: { id: string }) {
                   return (
                     <div key={e.id} className={`ep-row${done ? " done" : ""}`}>
                       <button className="ep-still" data-nav tabIndex={-1} aria-hidden onClick={() => playEp(season!, e)}>
-                        {still && <img src={still} alt="" loading="lazy" decoding="async" />}
+                        {still && <img src={still} alt="" loading="lazy" decoding="async" onError={stillFallback} />}
                         <span className="ep-no">{e.episode}</span>
                       </button>
                       <button className="ep-text" data-nav onClick={() => playEp(season!, e)}>
@@ -301,7 +310,7 @@ export function IptvDetails({ id }: { id: string }) {
                         <span className="ep-meta">{[mins(e.runtime), done ? "Watched" : resumeAt(e.progress) ? `${mins(resumeAt(e.progress))} in` : null].filter(Boolean).join("  ·  ")}</span>
                         {e.overview && <span className="ep-overview">{e.overview}</span>}
                       </button>
-                      <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? "Mark not watched" : "Mark watched"} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
+                      <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={`Watched: episode ${e.episode}`} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
                         ✓
                       </button>
                     </div>
@@ -320,7 +329,7 @@ export function IptvDetails({ id }: { id: string }) {
                   return (
                     <div key={e.id} className={`iptv-ep-card${done ? " done" : ""}`} style={{ width: CARD_W }}>
                       <button className="card" data-nav style={{ width: CARD_W, height: Math.round((CARD_W * 9) / 16) }} title={e.overview ?? name} aria-label={`Play ${name}`} onClick={() => playEp(season!, e)}>
-                        {still && <img className="card-img in" src={still} alt="" loading="lazy" decoding="async" />}
+                        {still && <img className="card-img in" src={still} alt="" loading="lazy" decoding="async" onError={stillFallback} />}
                         <div className="card-fade" />
                         <span className="card-title">{name}</span>
                         {pct > 0 && (
@@ -329,10 +338,12 @@ export function IptvDetails({ id }: { id: string }) {
                           </span>
                         )}
                       </button>
-                      <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={done ? `Mark ${name} not watched` : `Mark ${name} watched`} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
-                        ✓
-                      </button>
-                      <span className="iptv-ep-meta">{[mins(e.runtime), done ? "Watched" : at ? `${mins(at)} in` : null].filter(Boolean).join("  ·  ")}</span>
+                      <div className="iptv-ep-meta">
+                        <span>{[mins(e.runtime), done ? "Watched" : at ? `${mins(at)} in` : null].filter(Boolean).join("  ·  ")}</span>
+                        <button className={`ep-watch${done ? " on" : ""}`} data-nav aria-pressed={done} aria-label={`Watched: ${name}`} title={done ? "Watched: tap to clear" : "Mark watched"} onClick={() => toggleEp(e)}>
+                          ✓
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
