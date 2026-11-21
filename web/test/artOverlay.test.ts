@@ -77,8 +77,9 @@ test("the CSS draws the art at the brightness and blur the contrast model assume
   const { readFileSync } = await import("node:fs");
   const hero = readFileSync(new URL("../src/components/LiveMatchHero.css", import.meta.url), "utf8");
   const tile = readFileSync(new URL("../src/screens/iptv/gameCentre.css", import.meta.url), "utf8");
-  assert.match(hero, new RegExp(`\\.lh-art \\{[^}]*filter: brightness\\(${HERO.artBrightness}\\)`));
-  assert.match(tile, new RegExp(`\\.gc-artbg img \\{[^}]*filter: blur\\(${TILE.blurPx}px\\) brightness\\(${TILE.artBrightness}\\)`));
+  const n = (v: number) => String(v).replace(".", "\\.");
+  assert.match(hero, new RegExp(`\\.lh-art \\{[^}]*filter: brightness\\(${n(HERO.artBrightness)}\\)`));
+  assert.match(tile, new RegExp(`\\.gc-artbg img \\{[^}]*filter: blur\\(${TILE.blurPx}px\\) brightness\\(${n(TILE.artBrightness)}\\)`));
   // the pan exists only for motion-on, and only on the hero
   assert.match(hero, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.lh-art \{\s*animation: lh-pan/);
   assert.doesNotMatch(tile, /animation:[^;]*pan/);

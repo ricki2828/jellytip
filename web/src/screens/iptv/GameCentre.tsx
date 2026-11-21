@@ -255,13 +255,13 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const colours = useFixtureColours(f, li);
   const edges = edgeStyle(colours, f);
   // League art behind the card (dimmed, blurred, a light colour wash); the plain card without it or when it fails
-  const art = useArt(f.art, 480);
+  const art = useArt(f.art, 192);
   return (
     <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""}${art.src ? " has-art" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
-      {art.src && <TileArt key={art.src} src={art.src} colours={colours} hasAway={!!f.away} onError={art.failed} />}
+      {art.src && <TileArt key={art.src} src={art.src} colours={colours} hasAway={!!f.away} wash={!w.noStream} onError={art.failed} />}
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
-        <LeagueBadge key={f.badge ?? ""} path={f.badge} className="gc-badge" />
+        {art.src && <LeagueBadge key={f.badge ?? ""} path={f.badge} className="gc-badge" />}
         {f.league && <span className="gc-league">{f.league}</span>}
         {f.stage && <span className="gc-league">{f.stage}</span>}
         {best && <ChannelLogo logo={best.logo} name={best.name} />}

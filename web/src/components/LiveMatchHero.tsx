@@ -146,7 +146,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
     go(path);
   };
   const wash = c.known ? `linear-gradient(90deg, ${blend(c.home, 0.85)} 0%, ${BASE} 46%, ${BASE} 54%, ${blend(c.away, 0.85)} 100%)` : BASE;
-  // With art: the art under a team-colour gradient (lib/artOverlay); the plain wash stays the base while it loads, and the look if it fails
+  // With art: the art under a team-colour gradient (lib/artOverlay) on the dark base; without art or when it fails, the plain wash
   const style = { background: art.src ? BASE : wash } as CSSProperties;
   const n = picks.length;
   return (
@@ -154,7 +154,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
       {art.src && <HeroArt key={art.src} src={art.src} colours={c} onError={art.failed} />}
       <BigCrest logo={f.homeLogo} name={f.homeShort ?? f.home} colour={c.home} />
       <div className="lh-mid">
-        <LeagueBadge key={f.badge ?? ""} path={f.badge} className="lh-badge" />
+        {art.src && <LeagueBadge key={f.badge ?? ""} path={f.badge} className="lh-badge" />}
         {kicker && <span className="lh-kicker">{kicker}</span>}
         <span className={`lh-tag${f.status === "in" ? " live" : ""}`}>{heroTag(f, nowSec)}</span>
         <h2 className="lh-title">

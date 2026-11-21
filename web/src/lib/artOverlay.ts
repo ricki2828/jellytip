@@ -10,8 +10,8 @@ export const TILE = { washAlpha: 0.18, artBrightness: 0.2, blurPx: 6 } as const;
 
 type RGB = [number, number, number];
 const rgbOf = (hex: string): RGB => {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  const v = m ? parseInt(m[1], 16) : 0;
+  const m = /^#([0-9a-f]{6})$/i.exec(hex) ?? /^#([0-9a-f]{6})$/i.exec(BASE)!; // anything but #rrggbb draws as the dark base, never black
+  const v = parseInt(m[1], 16);
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 };
 const rgba = (hex: string, a: number) => `rgba(${rgbOf(hex).join(", ")}, ${a})`;

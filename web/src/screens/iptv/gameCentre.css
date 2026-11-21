@@ -47,10 +47,13 @@
 .gc-card.edged::after { right: 1.5px; background: var(--edge-away); border-radius: 0 7px 7px 0; }
 /* League art behind a tile (lib/artOverlay: TILE): dimmed + blurred, a light team-colour wash; the colour edges stay on top */
 .gc-card.has-art { position: relative; overflow: hidden; isolation: isolate; }
-.gc-artbg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; box-shadow: inherit; }
+.gc-artbg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; background: linear-gradient(160deg, #1a2024, #121212); }
 .gc-artbg img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); filter: blur(6px) brightness(0.2); }
 .gc-wash { position: absolute; inset: 0; }
-/* the card's own ring (live, hover, no-stream, flash) is painted under the art: redraw it above */
-.gc-artbg::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inherit; }
+/* the card's own ring (live, hover, no-stream, flash) is painted under the art: redrawn once above it (a later sibling, same z) */
+.gc-ring { position: absolute; inset: 0; z-index: -1; border-radius: inherit; box-shadow: inherit; pointer-events: none; }
 .gc-card.has-art .gc-league { opacity: 0.85; }
+/* outside the contrast model's text colour: lift the blank crest initials and the 'v' over bright art */
+.gc-card.has-art .gc-crest.blank { color: #d0d3d8; }
+.gc-card.has-art .gc-v { opacity: 0.7; }
 .gc-badge { width: 18px; height: 18px; object-fit: contain; flex: none; }
