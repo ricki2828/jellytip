@@ -29,6 +29,12 @@ class IntentService
             Timber.v("Parsing intent %s", intent)
             Timber.v("Intent extras: %s", intent.extras)
             Timber.v("Intent data: %s", intent.data)
+            // Jellytip (t5n): the system screensaver's "OK to watch" on a favourite's game
+            if (intent.action == com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.ACTION_WATCH) {
+                val ch = intent.getStringExtra(com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.EXTRA_CHANNEL)
+                val match = intent.getStringExtra(com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.EXTRA_MATCH)
+                return if (ch.isNullOrBlank()) IntentResult.NoOp else IntentResult.Target(listOf(Destination.JellytipLiveTvPlayer(ch, match)))
+            }
             val action = intent.action ?: intent.data?.host
             if (
                 intent.getStringParam(INTENT_ITEM_TYPE) == null &&

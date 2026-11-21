@@ -156,6 +156,18 @@ class NavDrawerViewModel
                     navigationManager.navigateToFromDrawer(Destination.JellytipCollections)
                 }
 
+                // ---- t5n wow extras (21-Nov) ----
+                NavDrawerItem.MovieNight -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipMovieNight)
+                }
+
+                NavDrawerItem.MyChannels -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipMyChannels)
+                }
+                // ---- end t5n ----
+
                 is ServerNavDrawerItem -> {
                     setIndex(index)
                     navigationManager.navigateToFromDrawer(item.destination)
@@ -191,6 +203,8 @@ class NavDrawerViewModel
                             is NavDrawerItem.Recordings -> Destination.JellytipRecordings
                             is NavDrawerItem.UpcomingSport -> Destination.JellytipUpcomingSport
                             is NavDrawerItem.Collections -> Destination.JellytipCollections
+                            is NavDrawerItem.MovieNight -> Destination.JellytipMovieNight // t5n
+                            is NavDrawerItem.MyChannels -> Destination.JellytipMyChannels // t5n
                             else -> null
                         }
                     }
@@ -297,6 +311,25 @@ sealed interface NavDrawerItem {
 
         override fun name(context: Context): String = context.getString(R.string.jellytip_upcoming_sport)
     }
+
+    // ---- t5n wow extras (21-Nov) ----
+
+    /** Jellytip: movie night host screen (round 3 item 6). */
+    object MovieNight : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_movie_night"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_movie_night)
+    }
+
+    /** Jellytip: My Channels (round 3 item 10). */
+    object MyChannels : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_my_channels"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_my_channels)
+    }
+    // ---- end t5n ----
 }
 
 /**
@@ -742,6 +775,10 @@ fun NavigationDrawerScope.NavItem(
                 NavDrawerItem.Collections -> {
                     R.string.fa_open_folder
                 }
+
+                NavDrawerItem.MovieNight -> R.string.fa_circle_play // t5n
+
+                NavDrawerItem.MyChannels -> R.string.fa_tv // t5n
 
                 is ServerNavDrawerItem -> {
                     when (library.type) {

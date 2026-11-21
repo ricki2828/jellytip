@@ -1,0 +1,35 @@
+import * as ch from "../web/web/src/lib/channels.ts";
+import * as pc from "../web/web/src/lib/personalChannels.ts";
+import * as tp from "../web/web/src/lib/tasteProfile.ts";
+const T = 10_000_000;
+const film = (i: number, min: number, aff?: number) => ({ Id: i.toString(16).padStart(32, "0"), Name: `F${i}`, Type: "Movie", RunTimeTicks: min * 60 * T, ...(aff != null ? { Aff: aff } : {}) });
+const ep = (s: string, se: number, e: number, min: number, aff?: number) => ({ Id: `${s}e${se}x${e}`.padEnd(32, "0"), Name: `${s} ${se}x${e}`, Type: "Episode", SeriesId: s, SeriesName: s, ParentIndexNumber: se, IndexNumber: e, RunTimeTicks: min * 60 * T, ...(aff != null ? { Aff: aff } : {}) });
+const films = Array.from({ length: 9 }, (_, i) => film(i + 1, 80 + i * 7));
+const filmsAff = Array.from({ length: 9 }, (_, i) => film(i + 1, 80 + i * 7, (i % 4) / 3));
+const eps = [...[1,2,3,4,5,6,7].map((e) => ep("aaa", 1, e, 22)), ...[1,2,3].map((e) => ep("bbb", 2, e, 25)), ...[1,2,3,4,5].map((e) => ep("ccc", 1, e, 30, 0.8)), film(50, 95)];
+const out: any = {};
+out.epoch = ch.EPOCH_MS;
+out.hash = ["", "a", "sitcom-classics|c0", "90s-action|c12345", "Ünïcødé|x"].map((s) => [s, ch.hashString(s)]);
+const r = ch.rng(ch.seedFor("comedy", 7)); out.rng = Array.from({ length: 6 }, () => r());
+out.weight = [undefined, 0, 0.25, 0.5, 0.75, 1].map((a) => ch.affinityWeight(a));
+const pool = (l: any[]) => ch.poolOf(l as any);
+out.lineups = {
+  films0: ch.lineup(pool(films), "comedy", 0).map((x) => x.Id),
+  films3: ch.lineup(pool(films), "comedy", 3).map((x) => x.Id),
+  filmsAff: ch.lineup(pool(filmsAff), "for-you", 2).map((x) => x.Id),
+  eps: ch.lineup(pool(eps), "sitcom-classics", 0).map((x) => x.Id),
+  eps5: ch.lineup(pool(eps), "sitcom-classics", 5).map((x) => x.Id),
+};
+out.sample = ch.sample(filmsAff as any, 4, "comedy").map((x) => x.Id);
+out.sampleNoAff = ch.sample(films as any, 4, "comedy").map((x) => x.Id);
+const nows = [ch.EPOCH_MS - 5000, ch.EPOCH_MS + 123_456_789, 1_763_700_000_000 + 86_400_000 * 300, 1_795_000_123_456];
+out.schedules = nows.map((now) => { const s = ch.schedule(pool(eps), "sitcom-classics", now, 4); return { now, ids: s.slots.map((x) => x.item.Id), starts: s.slots.map((x) => x.startMs), offsetS: s.offsetS, tune: ch.tuneTarget(s.slots, s.offsetS) }; });
+out.schedulesFilms = nows.map((now) => { const s = ch.schedule(pool(filmsAff), "for-you", now, 3); return { now, ids: s.slots.map((x) => x.item.Id), offsetS: s.offsetS }; });
+const prof = tp.parseProfile({ genres: { Comedy: 0.8, "Sci-Fi & Fantasy": 0.4, Horror: -0.6 }, decades: { "1990": 0.5 }, media: { movie: 0.3, series: -0.2 } })!;
+out.aff = [ { genres: ["Comedy"], year: 1994, kind: "movie" }, { genres: ["Horror", "Comedy"], year: 2010, kind: "series" }, { genres: [], kind: "movie" }, { genres: ["Science Fiction"], year: 1999, kind: "series" } ].map((s: any) => tp.affinity(prof, s));
+out.topGenres = tp.topGenres(prof, 5);
+const mk = (id: string, g: string[], aff: number, sid?: string) => ({ Id: id.padEnd(32, "0"), Name: id, Type: sid ? "Episode" : "Movie", SeriesId: sid, ParentIndexNumber: sid ? 1 : undefined, IndexNumber: sid ? parseInt(id.slice(-1)) : undefined, RunTimeTicks: 50 * 60 * T, G: g, Aff: aff });
+const base = { comedy: [mk("c1", ["Comedy"], 0.9), mk("c2", ["Comedy"], 0.6), mk("c3", ["Comedy"], 0.3), mk("c4", ["Comedy"], 0.7)], "sci-fi-nights": [mk("s1", ["Science Fiction"], 0.56), mk("s2", ["Science Fiction"], 0.5)], "sitcom-classics": [mk("e1", ["Comedy"], 0.8, "show1"), mk("e2", ["Comedy"], 0.8, "show1"), mk("e3", ["Comedy"], 0.8, "show1"), mk("f1", ["Comedy"], 0.4, "show2")] } as any;
+out.personalDefs = pc.personalDefs(prof, base).map((d) => [d.id, d.name]);
+out.personal = { foryou: pc.personalItems({ id: "for-you", name: "", blurb: "", type: "Movie", personal: "foryou" }, base).map((x) => x.Id), genre: pc.personalItems({ id: "for-you-genre", name: "", blurb: "", type: "Movie", personal: "genre", genres: ["comedy"] }, base, "comedy").map((x) => x.Id), shows: pc.personalItems({ id: "your-shows", name: "", blurb: "", type: "Episode", personal: "shows" }, base).map((x) => x.Id) };
+console.log(JSON.stringify(out));

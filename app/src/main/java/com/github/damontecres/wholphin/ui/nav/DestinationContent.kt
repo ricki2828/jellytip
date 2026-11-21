@@ -436,6 +436,18 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipGameCentrePage(modifier = modifier)
         }
 
+        // ---- t5n wow extras (21-Nov) ----
+        Destination.JellytipMovieNight -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.movienight.JellytipMovieNightPage(modifier = modifier)
+        }
+
+        Destination.JellytipMyChannels -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.channels.JellytipMyChannelsPage(modifier = modifier)
+        }
+        // ---- end t5n ----
+
         Destination.JellytipRecordings -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(
