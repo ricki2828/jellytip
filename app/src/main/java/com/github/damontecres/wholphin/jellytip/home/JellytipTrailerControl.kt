@@ -156,5 +156,7 @@ object JellytipTrailerControl {
         url = null
         trailerItemId = null
         owner = null
+        // The player's volume only follows changes of [sound]: reset it so the next start with sound is a real change (fades in)
+        sound = false
     }
 }

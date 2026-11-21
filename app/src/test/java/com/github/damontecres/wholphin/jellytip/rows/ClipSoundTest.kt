@@ -34,10 +34,20 @@ class ClipSoundTest {
 
     @Test
     fun autoplayFollowsTheHeroSetting() {
+        // heroSoundChoice is untouched (null) in tests: the setting decides
         JellytipTrailerControl.heroSoundSetting = false
-        assertEquals(JellytipTrailerControl.heroSoundChoice ?: false, JellytipTrailerControl.clipAutoSound())
+        assertFalse(JellytipTrailerControl.clipAutoSound())
         JellytipTrailerControl.heroSoundSetting = true
-        assertEquals(JellytipTrailerControl.heroSoundChoice ?: true, JellytipTrailerControl.clipAutoSound())
+        assertTrue(JellytipTrailerControl.clipAutoSound())
+    }
+
+    @Test
+    fun stopResetsSoundSoTheNextStartFadesIn() {
+        JellytipTrailerControl.startSpecial("ff", "http://x/clip.mp4", sound = true)
+        JellytipTrailerControl.stop()
+        assertFalse(JellytipTrailerControl.sound)
+        JellytipTrailerControl.startSpecial("ff", "http://x/clip.mp4", sound = true)
+        assertTrue(JellytipTrailerControl.sound)
     }
 
     @Test
