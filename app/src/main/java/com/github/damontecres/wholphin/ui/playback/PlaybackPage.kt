@@ -70,6 +70,7 @@ import androidx.media3.ui.compose.state.rememberPlayPauseButtonState
 import androidx.media3.ui.compose.state.rememberPresentationState
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.surfaceColorAtElevation
+import com.github.damontecres.wholphin.jellytip.subtitles.jellytipMatchSubtitleTiming
 import com.github.damontecres.wholphin.jellytip.subtitles.jellytipQuickSubtitles
 import com.github.damontecres.wholphin.mpv.MpvPlayer
 import com.github.damontecres.wholphin.preferences.AssPlaybackMode
@@ -325,6 +326,11 @@ fun PlaybackPageContent(
             PlaybackAction.GetSubtitles -> {
                 controllerViewState.hideControls()
                 viewModel.jellytipQuickSubtitles()
+            }
+
+            PlaybackAction.MatchSubtitleTiming -> {
+                controllerViewState.hideControls()
+                viewModel.jellytipMatchSubtitleTiming()
             }
 
             PlaybackAction.Next -> {

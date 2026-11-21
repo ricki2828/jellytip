@@ -111,6 +111,9 @@ sealed interface PlaybackAction {
 
     data object GetSubtitles : PlaybackAction
 
+    /** Jellytip: line the selected subtitle up with the speech (companion v1/subs/sync). */
+    data object MatchSubtitleTiming : PlaybackAction
+
     data class ToggleCaptions(
         val index: Int,
     ) : PlaybackAction

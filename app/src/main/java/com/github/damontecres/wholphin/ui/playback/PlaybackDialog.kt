@@ -134,6 +134,10 @@ fun PlaybackDialog(
                     onDismissRequest.invoke()
                     onPlaybackActionClick.invoke(PlaybackAction.GetSubtitles)
                 },
+                onSelectAutoMatch = {
+                    onDismissRequest.invoke()
+                    onPlaybackActionClick.invoke(PlaybackAction.MatchSubtitleTiming)
+                },
                 gravity = rightGravity,
                 onSelectTiming =
                     if (enableSubtitleDelay) {
@@ -300,6 +304,8 @@ fun SubtitleChoiceBottomDialog(
     currentChoice: Int? = null,
     onSelectTiming: (() -> Unit)? = null,
     timingText: String = "",
+    /** Jellytip: "Auto-match timing" for the selected subtitle (shown only while one is selected). */
+    onSelectAutoMatch: (() -> Unit)? = null,
 ) {
     val numberBefore = 3
     val initialChoice =
@@ -365,6 +371,21 @@ fun SubtitleChoiceBottomDialog(
                             Text(text = stringResource(R.string.jellytip_get_subtitles_summary))
                         },
                     )
+                    if (onSelectAutoMatch != null && (currentChoice ?: -1) >= 0) {
+                        ListItem(
+                            colors = jtListColors(),
+                            shape = ListItemDefaults.shape(RoundedCornerShape(8.dp)),
+                            selected = false,
+                            onClick = onSelectAutoMatch,
+                            leadingContent = {},
+                            headlineContent = {
+                                Text(text = "Auto-match timing", fontSize = 14.sp)
+                            },
+                            supportingContent = {
+                                Text(text = "Lines these subtitles up with the speech", fontSize = 12.sp)
+                            },
+                        )
+                    }
                     if (onSelectTiming != null) {
                         ListItem(
                             colors = jtListColors(),
