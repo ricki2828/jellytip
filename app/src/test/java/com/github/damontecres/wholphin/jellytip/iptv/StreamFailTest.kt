@@ -1,0 +1,84 @@
+package com.github.damontecres.wholphin.jellytip.iptv
+
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/** Failed-stream memory + Ways to watch (web f12e4580 / 846292d8), TV side. */
+@RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [30])
+class StreamFailTest {
+    private val now = 1_800_000_000L
+
+    @Test
+    fun notes() {
+        assertNull(IptvStreamFail.note(null, now))
+        assertEquals("Failed just now", IptvStreamFail.note(IptvLastFail(now - 30, "stall", 1), now))
+        assertEquals("Failed 5 min ago", IptvStreamFail.note(IptvLastFail(now - 300, "stall", 1), now))
+        assertEquals("Failed 2 h ago", IptvStreamFail.note(IptvLastFail(now - 7200, "stall", 1), now))
+        assertEquals("Failed 1 day ago", IptvStreamFail.note(IptvLastFail(now - 86400, "stall", 1), now))
+        assertEquals("Failed 3× this week", IptvStreamFail.note(IptvLastFail(now - 7200, "stall", 3), now))
+        assertNull(IptvStreamFail.note(IptvLastFail(now - 8 * 86400, "stall", 5), now))
+    }
+
+    @Test
+    fun parseLastFail() {
+        assertNull(IptvStreamFail.parse(JSONObject("""{"at":0}""")))
+        val lf = IptvStreamFail.parse(JSONObject("""{"at":$now,"reason":"weird","count7d":0}"""))!!
+        assertEquals("open_failed", lf.reason)
+        assertEquals(1, lf.count7d)
+    }
+
+    @Test
+    fun outcomeTargets() {
+        assertEquals("p:m:1" to "vod", IptvStreamFail.outcomeTarget(IptvTarget("", "x", vodId = "p:m:1")))
+        assertEquals("p:e:1" to "episode", IptvStreamFail.outcomeTarget(IptvTarget("", "x", seriesId = "p:s:1", episodeId = "p:e:1")))
+        assertEquals("c1" to "live", IptvStreamFail.outcomeTarget(IptvTarget("c1", "x")))
+        assertNull(IptvStreamFail.outcomeTarget(IptvTarget("c1", "x", start = 1L)))
+        assertNull(IptvStreamFail.outcomeTarget(IptvTarget("c1", "x", recordingId = "r")))
+        val body = JSONObject(IptvStreamFail.outcomeBody("c1", "live", false, null, -5))
+        assertEquals("open_failed", body.getString("reason"))
+        assertEquals(0, body.getInt("posSec"))
+        assertFalse(JSONObject(IptvStreamFail.outcomeBody("c1", "live", true, "stall", null)).has("reason"))
+    }
+
+    @Test
+    fun reasons() {
+        assertEquals("open_failed", IptvStreamFail.reasonFor(2004, 404))
+        assertEquals("refused", IptvStreamFail.reasonFor(2004, 403))
+        assertEquals("decode", IptvStreamFail.reasonFor(4003, null))
+        assertEquals("unreachable", IptvStreamFail.reasonFor(2001, null))
+        assertEquals("recovery_gave_up", IptvStreamFail.reasonFor(1000, null, wasPlaying = true))
+        assertNull(IptvStreamFail.reasonForCode("disabled"))
+        assertEquals("refused", IptvStreamFail.reasonForCode("provider_refused"))
+    }
+
+    @Test
+    fun copiesAndRememberedPick() {
+        val a =
+            JSONArray(
+                """[{"id":"p1:m:1","providerName":"PROVIDER","quality":["fhd"],"lang":"en","langLabel":"English","current":true},
+                {"id":"p1:m:2","providerTitle":"PROVIDER","quality":[],"res":"4k","opted":false,"lastFail":{"at":${now - 60},"reason":"stall","count7d":1}},
+                {"id":"bad id"},{"id":"p1:m:1"}]""",
+            )
+        val copies = IptvVodParse.copies(a)
+        assertEquals(listOf("p1:m:1", "p1:m:2"), copies.map { it.id })
+        assertEquals(listOf("1080p"), copies[0].qualityWords)
+        assertEquals(listOf("4K"), copies[1].qualityWords)
+        assertEquals(false, copies[1].opted)
+        // remembered copy that failed lately is not reopened; the current one never redirects
+        assertNull(IptvStreamFail.rememberedTarget("p1:m:2", "p1:m:1", copies, now))
+        assertNull(IptvStreamFail.rememberedTarget("p1:m:1", "p1:m:1", copies, now))
+        assertEquals("p1:m:1", IptvStreamFail.rememberedTarget("p1:m:1", "p1:m:2", copies, now))
+        assertNull(IptvStreamFail.rememberedTarget("p9:m:9", "p1:m:2", copies, now))
+        assertTrue(IptvStreamFail.pickKey("movie", 603, "The Matrix", 1999) == "movie:t603")
+        assertEquals("movie:nthe matrix:1999", IptvStreamFail.pickKey("movie", null, "The  Matrix!", 1999))
+    }
+}

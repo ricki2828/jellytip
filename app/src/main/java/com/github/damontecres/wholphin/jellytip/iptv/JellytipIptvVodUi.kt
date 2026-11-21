@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -219,7 +220,35 @@ fun JellytipIptvDetailsPage(
     modifier: Modifier = Modifier,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
-    val detail by produceState<IptvVodDetail?>(null, id) { value = viewModel.vod.detail(id) }
+    // Ways to watch: the copy shown can change in place (a pick, or the copy picked last time); Back still leaves the page
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var shownId by androidx.compose.runtime.saveable.rememberSaveable(id) { mutableStateOf(id) }
+    var redirected by androidx.compose.runtime.saveable.rememberSaveable(id) { mutableStateOf(false) }
+    val detail by produceState<IptvVodDetail?>(null, shownId) {
+        val got = viewModel.vod.detail(shownId)
+        if (got == null && shownId != id) {
+            // The other copy didn't load: back to the one that was opened
+            shownId = id
+            return@produceState
+        }
+        val it = got?.item
+        if (got != null && it != null && !redirected) {
+            redirected = true
+            val to =
+                IptvStreamFail.rememberedTarget(
+                    IptvStreamFail.recallPick(ctx, IptvStreamFail.pickKey(it.kind, it.tmdbId, it.title, it.year)),
+                    it.id,
+                    got.copies,
+                    System.currentTimeMillis() / 1000,
+                )
+            if (to != null) {
+                JellytipTrace.log("iptv", "details: remembered copy $to instead of ${it.id}")
+                shownId = to
+                return@produceState
+            }
+        }
+        value = got
+    }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(id) {
         kotlinx.coroutines.delay(10_000)
@@ -236,9 +265,27 @@ fun JellytipIptvDetailsPage(
     }
     val d = detail
     val item = d?.item
-    fun playMovie(fromStart: Boolean) {
+    fun playMovie(
+        fromStart: Boolean,
+        manual: Boolean = false,
+    ) {
         val it = item ?: return
         val resume = if (fromStart) 0L else it.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
+        // A copy that failed in the last 24 h is passed over for one that didn't (never for a hand-picked copy)
+        val now = System.currentTimeMillis() / 1000
+        val own = d?.copies?.firstOrNull { c -> c.id == it.id }
+        val alt =
+            if (!manual && IptvStreamFail.failedLately(IptvStreamFail.failOf(it.id, own?.lastFail), now)) {
+                d?.copies?.firstOrNull { c -> c.id != it.id && !IptvStreamFail.failedLately(IptvStreamFail.failOf(c.id, c.lastFail), now) }
+            } else {
+                null
+            }
+        if (alt != null) {
+            android.widget.Toast.makeText(ctx, "Skipped ${it.providerName ?: "this copy"}: failed earlier", android.widget.Toast.LENGTH_SHORT).show()
+            JellytipTrace.log("iptv", "play vod ${alt.id} (skipped failed ${it.id})")
+            viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = alt.id, resumeMs = 0L), "iptv details Play (skip failed)")
+            return
+        }
         JellytipTrace.log("iptv", "play vod ${it.id} resume=$resume")
         viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = it.id, resumeMs = resume), "iptv details Play")
     }
@@ -401,6 +448,17 @@ fun JellytipIptvDetailsPage(
                     MyListButton(item, viewModel)
                 }
             }
+            if (d.copies.size > 1) {
+                WaysToWatchRow(d.copies, current = item.id) { c ->
+                    IptvStreamFail.rememberPick(ctx, IptvStreamFail.pickKey(item.kind, item.tmdbId, item.title, item.year), c.id)
+                    if (c.id != item.id) {
+                        JellytipTrace.log("iptv", "ways to watch: pick ${c.id}")
+                        shownId = c.id
+                    } else if (!item.isSeries) {
+                        playMovie(fromStart = false, manual = true)
+                    }
+                }
+            }
             if (d.people.isNotEmpty()) CastRow(d.people)
             if (!item.isSeries) {
                 Unit // films: the buttons above are all
@@ -467,6 +525,63 @@ fun JellytipIptvDetailsPage(
             similar?.let { row ->
                 Box(Modifier.padding(top = 12.dp).offset(x = (-48).dp)) {
                     com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * "Ways to watch" (web 846292d8): every copy the companion offers, best first, with quality / language chips, the
+ * copy shown marked Selected and a failure note ("Failed 2 h ago"). OK on another copy shows it (and remembers the
+ * pick for next time); OK on the shown copy plays it (films).
+ */
+@Composable
+private fun WaysToWatchRow(
+    copies: List<IptvCopy>,
+    current: String,
+    onPick: (IptvCopy) -> Unit,
+) {
+    val now = remember(copies) { System.currentTimeMillis() / 1000 }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Ways to watch", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+            items(copies, key = { it.id }) { c ->
+                val selected = c.id == current
+                val fail = IptvStreamFail.note(IptvStreamFail.failOf(c.id, c.lastFail), now)
+                Surface(
+                    onClick = { onPick(c) },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+                    colors =
+                        ClickableSurfaceDefaults.colors(
+                            containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f),
+                            focusedContainerColor = Color.White,
+                            contentColor = JellytipPalette.Vanilla,
+                            focusedContentColor = Color.Black,
+                        ),
+                    modifier = Modifier.width(240.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(
+                            text = (c.providerName ?: "IPTV") + if (selected) "  ·  Selected" else "",
+                            fontFamily = JellytipFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val chips = c.qualityWords + listOfNotNull(c.langLabel)
+                        if (chips.isNotEmpty()) {
+                            Text(chips.joinToString("  ·  "), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (c.opted == false) {
+                            Text("Outside your switched-on groups", fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, modifier = Modifier.alpha(0.7f))
+                        }
+                        if (fail != null) {
+                            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
                 }
             }
         }
