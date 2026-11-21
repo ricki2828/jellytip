@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.PlaylistItem
+import com.github.damontecres.wholphin.data.model.TrackIndex
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.onMain
@@ -65,6 +66,10 @@ object SubSync {
     const val POLL_MS = 1500L
     const val GIVE_UP_MS = 11 * 60_000L
     const val CHECK_FAILED = "Couldn't check the match"
+
+    /** One match at a time (a second tap would start a second job and a second switch). */
+    @Volatile
+    var running = false
 
     private fun JSONObject.num(k: String): Double? = if (has(k) && !isNull(k)) optDouble(k).takeIf { it.isFinite() } else null
 
@@ -129,7 +134,14 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
         showToast(context, "Pick a subtitle first, then match its timing", Toast.LENGTH_LONG)
         return
     }
-    val api = JellytipApi.shared ?: return
+    val companion = JellytipApi.shared ?: return
+    if (SubSync.running) {
+        showToast(context, "Already matching these subtitles…", Toast.LENGTH_SHORT)
+        return
+    }
+    SubSync.running = true
+    // The subtitle files there are now: the re-timed one is the track that isn't among them
+    val before = playback.mediaSourceInfo.mediaStreams?.filter { it.type == MediaStreamType.SUBTITLE }?.mapNotNull { it.path }?.toSet().orEmpty()
     viewModelScope.launchIO {
         try {
             val body =
@@ -138,7 +150,7 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                     .put("streamIndex", streamIndex)
                     .apply { playback.mediaSourceInfo.id?.let { put("mediaSourceId", it) } }
                     .toString()
-            val first = api.userCall("v1/subs/sync", body, timeoutMs = 20_000)
+            val first = companion.userCall("v1/subs/sync", body, timeoutMs = 20_000)
             val result =
                 when (val s = SubSync.start(first?.first ?: 0, first?.second)) {
                     is SubSync.Start.Error -> {
@@ -153,7 +165,7 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                         var got: SubSync.Result? = null
                         while (System.currentTimeMillis() - t0 < SubSync.GIVE_UP_MS) {
                             delay(SubSync.POLL_MS)
-                            val r = api.userCall("v1/subs/sync/${s.id}")
+                            val r = companion.userCall("v1/subs/sync/${s.id}")
                             when (val p = SubSync.poll(r?.first ?: 0, r?.second)) {
                                 is SubSync.Poll.Done -> {
                                     got = p.result
@@ -177,6 +189,12 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                 showToast(context, "These subtitles already match the speech", Toast.LENGTH_LONG)
                 return@launchIO
             }
+            // Still the same title? (autoplay / Next may have moved on during a long match: never reload the old one)
+            fun stillHere() = state.value.currentPlayback?.itemId == playback.itemId && currentItem.item.id == playback.itemId
+            if (!stillHere()) {
+                showToast(context, "Subtitles matched: pick the re-timed track next time you play this", Toast.LENGTH_LONG)
+                return@launchIO
+            }
             // The server added the re-timed track: re-read the item until it shows, then switch to it
             var found: Pair<org.jellyfin.sdk.model.api.MediaSourceInfo, Int>? = null
             repeat(6) {
@@ -184,10 +202,15 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                 val base = BaseItem(jellytipUserItem(playback.itemId))
                 val source = base.data.mediaSources?.firstOrNull { it.id?.toUUIDOrNull() == playback.sourceId } ?: base.data.mediaSources?.firstOrNull()
                 val subs = source?.mediaStreams?.filter { it.type == MediaStreamType.SUBTITLE }.orEmpty()
+                // Only a track that wasn't there before; with a file name, it must be that file
+                val fresh = subs.filter { it.path == null || it.path !in before }
                 val stream =
-                    subs.firstOrNull { f -> result.fileName != null && f.path?.endsWith(result.fileName) == true }
-                        ?: subs.firstOrNull { it.index == result.newStreamIndex }
-                if (source != null && stream != null) {
+                    if (result.fileName != null) {
+                        fresh.firstOrNull { f -> f.path?.endsWith(result.fileName) == true }
+                    } else {
+                        fresh.firstOrNull { it.index == result.newStreamIndex }
+                    }
+                if (source != null && stream != null && stillHere()) {
                     currentItem =
                         when (currentItem) {
                             is PlaylistItem.Intro -> PlaylistItem.Intro(base)
@@ -198,18 +221,30 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                     delay(1500)
                 }
             }
+            if (!stillHere()) {
+                showToast(context, "Subtitles matched: pick the re-timed track next time you play this", Toast.LENGTH_LONG)
+                return@launchIO
+            }
             val (source, index) =
                 found ?: run {
                     showToast(context, "Matched, but the new subtitles didn't show up yet. Pick them from the list in a moment.", Toast.LENGTH_LONG)
                     return@launchIO
                 }
+            // A new external subtitle can be numbered before the chosen audio track: shift that choice (as the subtitle download does)
+            var audioIndex = playback.audioIndex
+            if (audioIndex != TrackIndex.UNSPECIFIED && audioIndex >= index) {
+                audioIndex += 1
+                if ((state.value.currentItemPlayback?.audioIndex ?: TrackIndex.UNSPECIFIED) != TrackIndex.UNSPECIFIED) {
+                    saveTrackSelection(audioIndex, MediaStreamType.AUDIO)
+                }
+            }
             saveTrackSelection(index, MediaStreamType.SUBTITLE)
             updateCurrentMedia { it.copy(sourceId = source.id, audioStreams = getAudioStreams(source), subtitleStreams = getSubtitleStreams(source)) }
-            updateCurrentPlayback { it?.copy(item = currentItem.item, mediaSourceInfo = source, subtitleIndex = index) }
+            updateCurrentPlayback { it?.copy(item = currentItem.item, mediaSourceInfo = source, audioIndex = audioIndex, subtitleIndex = index) }
             changeStreams(
                 item = currentItem.item,
                 sourceId = source.id,
-                audioIndex = playback.audioIndex,
+                audioIndex = audioIndex,
                 subtitleIndex = index,
                 positionMs = onMain { player.currentPosition },
                 enableDirectPlay = true,
@@ -224,6 +259,8 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
         } catch (e: Exception) {
             Timber.w(e, "Jellytip subtitle auto-match failed")
             showToast(context, "Couldn't match this one", Toast.LENGTH_LONG)
+        } finally {
+            SubSync.running = false
         }
     }
 }
