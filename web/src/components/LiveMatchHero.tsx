@@ -100,7 +100,8 @@ export function useFixtureColours(f: Pick<FxItem, "matchId" | "homeColor" | "awa
       io.disconnect();
     };
   }, [id, el]);
-  return own ?? c;
+  // a fixture that just lost its own colours shows the remembered match-record ones at once (no neutral flash)
+  return own ?? (id ? colourCache.get(id) : undefined) ?? c;
 }
 
 /** Crest hosts the page's CSP allows (public CDNs); anything else must be a companion-proxied path. */
