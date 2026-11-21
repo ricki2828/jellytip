@@ -39,3 +39,8 @@
 .remind-ctl > .btn { max-width: 100%; white-space: normal; text-align: left; }
 .remind-menu { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.35rem; border-radius: 10px; background: rgba(255, 255, 255, 0.08); max-width: 100%; }
 .remind-menu .btn { text-align: left; white-space: normal; }
+/* Look 2A (TV port): a team-colour edge each side, drawn apart from the card's own box-shadow states */
+.gc-card.edged { position: relative; }
+.gc-card.edged::before, .gc-card.edged::after { content: ""; position: absolute; top: 0; bottom: 0; width: 5px; pointer-events: none; }
+.gc-card.edged::before { left: 0; background: var(--edge-home); border-radius: 8px 0 0 8px; }
+.gc-card.edged::after { right: 0; background: var(--edge-away); border-radius: 0 8px 8px 0; }

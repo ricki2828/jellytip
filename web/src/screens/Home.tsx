@@ -11,7 +11,7 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit, type Placement } from "../components/HomeEdit";
 import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
-import { HomeLiveHero, useHomeLivePicks } from "../components/LiveMatchHero";
+import { HomeTopHero } from "../components/LiveMatchHero";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { ChannelsRow } from "../components/ChannelsRow";
 import { useHubTick } from "../api/collections";
@@ -289,7 +289,6 @@ export function Home() {
 
   // An IPTV tile in focus shows its own hero (and trailer); a Jellyfin tile takes it back
   const [focusedIptv, setFocusedIptv] = useState<IptvHeroTile | null>(null);
-  const livePicks = useHomeLivePicks();
   useEffect(
     () =>
       onIptvFocus((t) => {
@@ -463,7 +462,7 @@ export function Home() {
         </p>
       )}
       {/* TV port (Game Centre 2A): while his game (else the top-ranked one) is live, the live match hero takes the hero's place */}
-      {livePicks.picks.length > 0 ? <HomeLiveHero {...livePicks} /> : <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />}
+      <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
         {entries && entries.length > 0 && (
           <Row

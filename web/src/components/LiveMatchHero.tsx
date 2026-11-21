@@ -2,7 +2,7 @@
 // in the two team colours with big crests, a gold-on-red LIVE tag (never a score or clock), Watch / From kick-off / More and, with more
 // than one of his games live, ‹ › to cycle them. Fixtures carry no colours: they come from the match record (GET v1/sport/match/{id},
 // the in-match palette's source), cached per match and fetched at most 3 at a time; neutral until then or when the server has none.
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { hasLiveTv, logoSrc } from "../api/iptv";
 import { refreshFixtures, useFixtures } from "../api/fixtures";
 import { usePrefs } from "../api/me";
@@ -23,10 +23,18 @@ const colourCache = new Map<string, TeamColors>();
 const misses = new Map<string, number>();
 const MISS_TTL_MS = 10 * 60_000;
 let running = 0;
+let generation = 0;
 const queue: (() => void)[] = [];
-const slot = <T,>(job: () => Promise<T>): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
+/** Runs [job] when one of the 3 slots is free; a job whose card has gone (or from before a session switch) is skipped, not fetched. */
+const slot = <T,>(job: () => Promise<T>, wanted: () => boolean): Promise<T | null> =>
+  new Promise<T | null>((resolve, reject) => {
+    const gen = generation;
     const run = () => {
+      if (gen !== generation || !wanted()) {
+        resolve(null);
+        queue.shift()?.();
+        return;
+      }
       running++;
       job()
         .then(resolve, reject)
@@ -40,6 +48,7 @@ const slot = <T,>(job: () => Promise<T>): Promise<T> =>
   });
 if (typeof window !== "undefined")
   window.addEventListener("jellytip-session", () => {
+    generation++;
     colourCache.clear();
     misses.clear();
   });
@@ -56,9 +65,12 @@ export function useFixtureColours(f: Pick<FxItem, "matchId">, el?: RefObject<HTM
     const miss = misses.get(id);
     if (miss && Date.now() - miss < MISS_TTL_MS) return;
     let alive = true;
+    const gen = generation;
     const load = () =>
-      void slot(() => matchDetailCached(id)).then(
+      void slot(() => matchDetailCached(id), () => alive).then(
         (d) => {
+          if (d === null && !alive) return;
+          if (gen !== generation) return;
           if (d && d !== "missing") {
             const tc = teamColors(d.fixture);
             colourCache.set(id, tc);
@@ -108,14 +120,16 @@ export function BigCrest({ logo, name, colour, small = false }: { logo: string |
 }
 
 /** The 2A hero for [picks] (cycling with ‹ ›). [kicker] labels it ("Your game is on", "Up next"). */
-export function LiveMatchHero({ picks, nowSec, kicker, autoFocus = false }: { picks: FxItem[]; nowSec: number; kicker?: string; autoFocus?: boolean }) {
+/** autoFocus: "always" = take focus on mount; "ifLost" = only when nothing has focus (the hero just replaced what had it). */
+export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = false }: { picks: FxItem[]; nowSec: number; kicker?: string; autoFocus?: "always" | "ifLost"; spoilers?: boolean }) {
   const [index, setIndex] = useState(0);
   const ref = useRef<HTMLElement>(null);
   const f = picks[Math.min(index, picks.length - 1)];
   const c = useFixtureColours(f ?? { matchId: null });
   useEffect(() => {
     // keyboard / remote only: on a touch screen a focus ring on Watch is noise
-    if (autoFocus && window.matchMedia?.("(hover: hover)").matches) ref.current?.querySelector<HTMLElement>("[data-hero-primary]")?.focus({ preventScroll: true });
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if ((autoFocus === "always" || (autoFocus === "ifLost" && lost)) && window.matchMedia?.("(hover: hover)").matches) ref.current?.querySelector<HTMLElement>("[data-hero-primary]")?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   if (!f) return null;
@@ -146,7 +160,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus = false }: { pi
             </>
           )}
         </h2>
-        <p className="lh-line">{heroLine(f)}</p>
+        <p className="lh-line">{heroLine(f, spoilers)}</p>
         <div className="lh-buttons">
           {watch ? (
             <button className="btn primary" data-nav data-hero-primary onClick={() => press(watch.path)}>
@@ -184,10 +198,11 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus = false }: { pi
 }
 
 /** Colour edges for a fixture tile (2A): the home colour on the left edge, the away colour on the right; none until known. */
+/** Drawn by .gc-card.edged::before/::after from these vars, so the card's own box-shadow states (live ring, no-stream, hover, flash) stay. */
 export function useEdgeStyle(f: Pick<FxItem, "matchId" | "away">, el: RefObject<HTMLElement | null>): CSSProperties | undefined {
   const c = useFixtureColours(f, el);
   if (!c.known) return undefined;
-  return { boxShadow: `inset 5px 0 0 ${c.home}${f.away ? `, inset -5px 0 0 ${c.away}` : ""}` };
+  return { "--edge-home": c.home, "--edge-away": f.away ? c.away : "transparent" } as CSSProperties;
 }
 
 /**
@@ -224,13 +239,18 @@ export function useHomeLivePicks(): { picks: FxItem[]; nowSec: number; mine: boo
   }, [live, data, now, refs, muted]);
 }
 
-/** Home's hero while a game is live: it takes the hero's place (no trailer behind it), as on the TV. */
-export function HomeLiveHero({ picks, nowSec, mine }: { picks: FxItem[]; nowSec: number; mine: boolean }) {
-  if (!picks.length) return null;
-  // key: a different set of games starts again at the first one
+/**
+ * Home's top: the live match hero while a game is live (it takes the hero's place, no trailer behind it, as on the TV), else
+ * [fallback] (the normal hero). Its own component, so the fixtures polling re-renders only this, not the whole Home tree.
+ */
+export function HomeTopHero({ fallback }: { fallback: ReactNode }) {
+  const { picks, nowSec, mine } = useHomeLivePicks();
+  const { prefs } = usePrefs({ defer: true });
+  if (!picks.length) return <>{fallback}</>;
+  // key: a different set of games starts again at the first one; focus only if the swap took it away from the old hero
   return (
     <div className="home-live">
-      <LiveMatchHero key={picks.map((f) => f.fid).join("|")} picks={picks} nowSec={nowSec} kicker={mine ? "Your game is on" : "Live now"} />
+      <LiveMatchHero key={picks.map((f) => f.fid).join("|")} picks={picks} nowSec={nowSec} kicker={mine ? "Your game is on" : "Live now"} autoFocus="ifLost" spoilers={!!prefs?.sport.spoilers} />
     </div>
   );
 }

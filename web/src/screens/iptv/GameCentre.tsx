@@ -252,7 +252,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const li = useRef<HTMLLIElement>(null);
   const edges = useEdgeStyle(f, li);
   return (
-    <li ref={li} style={edges} className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
+    <li ref={li} style={edges} className={`gc-card${edges ? " edged" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
@@ -376,6 +376,11 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
     }
   }, []);
 
+  // Watch takes focus once, when Game Centre opens: a later change of games (a kick-off, a re-rank) never pulls focus off a card
+  const heroFocused = useRef(false);
+  useEffect(() => {
+    if (heroPicks.length) heroFocused.current = true;
+  });
   const heroPicks = useMemo(() => gameCentrePicks(items, now, prefs?.sport.teamRefs ?? [], prefs?.sport.muted), [items, now, prefs]);
   const heroMine = heroPicks.some((f) => isFavourite(f, prefs?.sport.teamRefs ?? []));
   return (
@@ -387,7 +392,8 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
           picks={heroPicks}
           nowSec={now}
           kicker={heroPicks[0].status === "in" ? (heroMine ? "Your game is on" : "Live now") : heroMine ? "Your next game" : "Up next"}
-          autoFocus={!focusFid}
+          autoFocus={!focusFid && !heroFocused.current ? "always" : "ifLost"}
+          spoilers={pref}
         />
         </div>
       )}

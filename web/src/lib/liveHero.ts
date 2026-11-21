@@ -51,6 +51,6 @@ export function countdown(kickoff: number, nowSec: number): string {
 /** The tag above the teams: Live (no clock, no period: spoiler-safe), Full time, or the countdown. */
 export const heroTag = (f: Pick<FxItem, "status" | "kickoff">, nowSec: number): string => (f.status === "in" ? "Live" : f.status === "post" ? "Full time" : countdown(f.kickoff, nowSec));
 
-/** "NRL · Round 12 · Score hidden until you watch" (the last part only once it has started). */
-export const heroLine = (f: Pick<FxItem, "league" | "stage" | "status">): string =>
-  [f.league, f.stage, f.status !== "pre" ? "Score hidden until you watch" : null].filter(Boolean).join(" · ");
+/** "NRL · Round 12 · Score hidden until you watch" (the last part only once it has started, and not for people with scores on). */
+export const heroLine = (f: Pick<FxItem, "league" | "stage" | "status">, spoilers = false): string =>
+  [f.league, f.stage, f.status !== "pre" && !spoilers ? "Score hidden until you watch" : null].filter(Boolean).join(" · ");
