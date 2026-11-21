@@ -431,12 +431,27 @@ class JellytipLiveTvViewModel
         /** The channel just hidden, while its Undo shows. */
         private val _hidden = MutableStateFlow<HiddenChannel?>(null)
         val hidden: StateFlow<HiddenChannel?> = _hidden
+
+        /** A channel Undo brought back (its id), for the page to focus once; null = none. */
+        private val _restored = MutableStateFlow<String?>(null)
+        val restored: StateFlow<String?> = _restored
         private var hideBusy = false
+
+        /** Bumped when the guide page goes away: a hide answering later shows no Undo. */
+        private var pageGen = 0
+
+        fun guideGone() {
+            pageGen++
+            _hidden.value = null
+            _restored.value = null
+        }
 
         fun hide(ch: IptvChannel) {
             val t = HideChannelLogic.target(ch, _owned.value) ?: return
             if (hideBusy) return
             hideBusy = true
+            val tab = _state.value.tab
+            val gen = pageGen
             viewModelScope.launch {
                 try {
                     val code = service.hideChannel(t, true)
@@ -445,10 +460,12 @@ class JellytipLiveTvViewModel
                         _state.update { it.copy(message = "Couldn't hide ${ch.name} (${if (code == 0) "no answer" else code}).") }
                         return@launch
                     }
+                    // Left the guide or changed tab meanwhile: hidden on the server; the next load leaves it out. No Undo.
+                    if (gen != pageGen || _state.value.tab != tab) return@launch
                     val idx = all.indexOfFirst { it.id == ch.id }
                     all = all.filter { it.id != ch.id }
                     publish()
-                    _hidden.value = HiddenChannel(ch, if (idx < 0) all.size else idx)
+                    _hidden.value = HiddenChannel(ch, if (idx < 0) all.size else idx, tab)
                 } finally {
                     hideBusy = false
                 }
@@ -459,9 +476,14 @@ class JellytipLiveTvViewModel
             if (_hidden.value == h) _hidden.value = null
         }
 
+        fun consumeRestored(id: String) {
+            if (_restored.value == id) _restored.value = null
+        }
+
         fun undoHide(h: HiddenChannel) {
             dismissHidden(h)
             val t = HideChannelLogic.target(h.ch, _owned.value) ?: return
+            val gen = pageGen
             viewModelScope.launch {
                 val code = service.hideChannel(t, false)
                 JellytipTrace.log("iptv", "unhide channel ${h.ch.id} -> $code")
@@ -469,10 +491,12 @@ class JellytipLiveTvViewModel
                     _state.update { it.copy(message = "Couldn't bring back ${h.ch.name}. Show it again in IPTV settings on the web.") }
                     return@launch
                 }
-                // Only into the tab it came from (a tab change reloads from the server, which shows it again anyway)
+                // Only into the tab it came from, while the guide is open (a later load shows it again anyway)
+                if (gen != pageGen || _state.value.tab != h.tab) return@launch
                 all = HideChannelLogic.restore(all, h)
                 publish()
                 _state.update { it.copy(message = "${h.ch.name} is back in the guide.") }
+                _restored.value = h.ch.id
             }
         }
 
@@ -586,6 +610,13 @@ fun JellytipLiveTvPage(
     var focusTime by remember { mutableStateOf(nowSec()) }
     // Focus key of the row that takes over when a channel is hidden (the next row, else the one above)
     var afterHideKey by remember { mutableStateOf<String?>(null) }
+    val selectedTabReq = remember { FocusRequester() }
+    // After the Undo toast: the neighbouring row, else (the tab's only channel was hidden) the selected tab chip
+    val backToGuide = {
+        val k = afterHideKey
+        if (k != null) pending = k else selectedTabReq.tryRequestFocus()
+        Unit
+    }
     val keyForChannel = { id: String ->
         val w = viewModel.state.value.windowStart
         cellKey(id, IptvRules.progAt(cellsFor(viewModel.epg[id].orEmpty(), w), focusTime)?.start ?: w)
@@ -616,7 +647,10 @@ fun JellytipLiveTvPage(
         playback.attach("guide")
         // The guide preview is muted (like home trailers); full screen has the sound
         playback.setVolume(0f)
-        onDispose { playback.detach("guide") }
+        onDispose {
+            playback.detach("guide")
+            viewModel.guideGone()
+        }
     }
     // No ON_STOP stop here: this is the nav entry's lifecycle, which also stops when the guide's scene is disposed after
     // OK opened full screen, i.e. after the full page asked for the stream (30-Oct P1, stuck on "Tuning"). The app being
@@ -858,7 +892,7 @@ fun JellytipLiveTvPage(
                 modifier = Modifier.fillMaxWidth().focusGroup().onFocusChanged { tabsFocused = it.hasFocus },
             ) {
                 items(tabs, key = { it.id }) { t ->
-                    TabChip(t.name, t.id == state.tab) {
+                    TabChip(t.name, t.id == state.tab, if (t.id == state.tab) Modifier.focusRequester(selectedTabReq) else Modifier) {
                         placed = false
                         viewModel.selectTab(t.id, "tab OK")
                     }
@@ -986,16 +1020,23 @@ fun JellytipLiveTvPage(
             hidden?.let { h ->
                 HiddenUndo(
                     h = h,
+                    // Focus goes to the neighbour now (never to nothing); to the restored row once the server agreed
                     onUndo = {
+                        backToGuide()
                         viewModel.undoHide(h)
-                        pending = keyForChannel(h.ch.id)
                     },
                     onLeave = {
                         viewModel.dismissHidden(h)
-                        pending = afterHideKey
+                        backToGuide()
                     },
-                    onDispose = { viewModel.dismissHidden(h) },
+                    onGone = { viewModel.dismissHidden(h) },
                 )
+            }
+            val restored by viewModel.restored.collectAsState()
+            LaunchedEffect(restored) {
+                val id = restored ?: return@LaunchedEffect
+                viewModel.consumeRestored(id)
+                pending = keyForChannel(id)
             }
         }
     }
@@ -1021,6 +1062,12 @@ fun JellytipLiveTvPage(
         onDismiss = { actions = null },
         onHide = { ch ->
             afterHideKey = HideChannelLogic.neighbour(state.channels.orEmpty().map { it.id }, ch.id)?.let(keyForChannel)
+            // The row goes away: nothing should keep showing it as focused
+            if (focusedChannel?.id == ch.id) {
+                focusedChannel = null
+                focusedProg = null
+                focusedRow = -1
+            }
             viewModel.hide(ch)
         },
     )
@@ -1035,11 +1082,11 @@ private fun HiddenUndo(
     h: HiddenChannel,
     onUndo: () -> Unit,
     onLeave: () -> Unit,
-    onDispose: () -> Unit,
+    onGone: () -> Unit,
 ) {
     val req = remember(h) { FocusRequester() }
     // Leaving the guide while it shows: it doesn't come back later
-    DisposableEffect(h) { onDispose { onDispose() } }
+    DisposableEffect(h) { onDispose { onGone() } }
     LaunchedEffect(h) {
         withFrameNanos { }
         req.tryRequestFocus()
@@ -1076,9 +1123,10 @@ private fun HiddenUndo(
                         .focusRequester(req)
                         .onPreviewKeyEvent { e ->
                             when (e.key) {
-                                // Back: swallowed both ways so it never also leaves the page
+                                // Back: swallowed both ways and acted on at key-up, so the up never reaches the system
+                                // (it would leave the guide or trigger its Back-to-top)
                                 Key.Back -> {
-                                    if (e.type == KeyEventType.KeyDown) onLeave()
+                                    if (e.type == KeyEventType.KeyUp) onLeave()
                                     true
                                 }
                                 Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {

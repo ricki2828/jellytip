@@ -16,6 +16,8 @@ data class HideTarget(
 data class HiddenChannel(
     val ch: IptvChannel,
     val index: Int,
+    /** The guide tab it was hidden from: Undo puts it back only there. */
+    val tab: String?,
 )
 
 object HideChannelLogic {

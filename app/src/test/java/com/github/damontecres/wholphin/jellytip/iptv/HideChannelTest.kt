@@ -26,9 +26,9 @@ class HideChannelTest {
         val a = ch("p1:a")
         val b = ch("p1:b")
         val c = ch("p1:c")
-        assertEquals(listOf(a, b, c), HideChannelLogic.restore(listOf(a, c), HiddenChannel(b, 1)))
-        assertEquals(listOf(a, c, b), HideChannelLogic.restore(listOf(a, c), HiddenChannel(b, 9)))
-        assertEquals(listOf(a, b), HideChannelLogic.restore(listOf(a, b), HiddenChannel(b, 0)))
+        assertEquals(listOf(a, b, c), HideChannelLogic.restore(listOf(a, c), HiddenChannel(b, 1, "t")))
+        assertEquals(listOf(a, c, b), HideChannelLogic.restore(listOf(a, c), HiddenChannel(b, 9, "t")))
+        assertEquals(listOf(a, b), HideChannelLogic.restore(listOf(a, b), HiddenChannel(b, 0, null)))
     }
 
     @Test
