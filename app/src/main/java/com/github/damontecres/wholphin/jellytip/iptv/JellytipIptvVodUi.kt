@@ -280,6 +280,15 @@ fun JellytipIptvDetailsPage(
     }
     val d = detail
     val item = d?.item
+    // Taste signals: details dwell on this IPTV title
+    androidx.compose.runtime.DisposableEffect(item?.id) {
+        val since = System.currentTimeMillis()
+        val t = item?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget(if (it.isSeries) "series" else "movie", it.tmdbId, iptvId = it.id) }
+        onDispose {
+            t?.let { com.github.damontecres.wholphin.jellytip.signals.TasteRules.detailSignal(it, System.currentTimeMillis() - since, System.currentTimeMillis()) }
+                ?.let(com.github.damontecres.wholphin.jellytip.signals.JellytipSignals::emit)
+        }
+    }
     fun playMovie(
         fromStart: Boolean,
         manual: Boolean = false,
@@ -708,6 +717,15 @@ private fun MyListButton(
                 if (busy) return@Button
                 val want = !on
                 IptvMyList.set(item.id, want)
+                if (want) {
+                    com.github.damontecres.wholphin.jellytip.signals.JellytipSignals.emit(
+                        com.github.damontecres.wholphin.jellytip.signals.TasteRules.event(
+                            com.github.damontecres.wholphin.jellytip.signals.TasteTarget(if (item.isSeries) "series" else "movie", item.tmdbId, iptvId = item.id),
+                            "mylist",
+                            System.currentTimeMillis(),
+                        ),
+                    )
+                }
                 busy = true
                 note = null
                 JellytipTrace.log("iptv", "my list ${item.id} on=$want")

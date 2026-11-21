@@ -142,6 +142,20 @@ fun JellytipIptvPlayPage(
 
     // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
     val owner = remember { "item:" + java.util.UUID.randomUUID() }
+    // Taste signals (web 4a830873): this IPTV film / episode's real playing time; closed when the page goes or it ends
+    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
+    DisposableEffect(target) {
+        val t =
+            target.vodId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("movie", iptvId = it) }
+                ?: target.seriesId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("series", iptvId = it) }
+        watch.begin(t?.let { com.github.damontecres.wholphin.jellytip.signals.WatchMeta(it, isFilm = target.vodId != null) }, 0.0)
+        onDispose {
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                .emit(watch.end(false, System.currentTimeMillis()))
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                .flushSoon()
+        }
+    }
     DisposableEffect(target) {
         playback.attach(owner)
         playback.setVolume(1f)
@@ -172,6 +186,14 @@ fun JellytipIptvPlayPage(
                 position = it.currentPosition
                 duration = it.duration.takeIf { d -> d > 0 } ?: 0L
                 playing = it.playWhenReady
+                if (it.isPlaying && playback.state.value.target == target) {
+                    watch.runtime(duration / 1000.0)
+                    watch.tick(it.currentPosition / 1000.0, 1.5)
+                }
+                if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && playback.state.value.target == target) {
+                    com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                        .emit(watch.end(true, System.currentTimeMillis()))
+                }
                 // "Play both" from a double feature: this IPTV film ended, start the other half
                 if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && target.vodId != null) {
                     val next =

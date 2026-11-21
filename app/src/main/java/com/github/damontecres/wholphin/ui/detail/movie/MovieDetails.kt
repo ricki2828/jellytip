@@ -376,6 +376,16 @@ fun MovieDetailsContent(
     // Sections are not composed at all until the user presses Down from the header, so moving along the
     // buttons can never scroll to, reveal or flash them.
     var sectionsActive by remember { mutableStateOf(false) }
+    // Jellytip taste signals: details dwell (8 s or more) when the page goes or moves to another title
+    androidx.compose.runtime.DisposableEffect(movie.id) {
+        val since = System.currentTimeMillis()
+        onDispose {
+            com.github.damontecres.wholphin.jellytip.signals.TasteRules
+                .libraryTarget(movie)
+                ?.let { com.github.damontecres.wholphin.jellytip.signals.TasteRules.detailSignal(it, System.currentTimeMillis() - since, System.currentTimeMillis()) }
+                ?.let(com.github.damontecres.wholphin.jellytip.signals.JellytipSignals::emit)
+        }
+    }
     // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
     val reviews by produceState<JellytipReviews?>(null, movie.id) { value = JellytipApi.shared?.getReviews(movie) }
     val hasReviews = reviews?.reviews?.isNotEmpty() == true

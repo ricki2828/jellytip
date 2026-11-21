@@ -343,6 +343,15 @@ object JellytipMe {
     ) {
         val key = iptvTasteKey(id, kind, tmdbId)
         val before = thumbs[key]
+        if (value != 0) {
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals.emit(
+                com.github.damontecres.wholphin.jellytip.signals.TasteRules.event(
+                    com.github.damontecres.wholphin.jellytip.signals.TasteTarget(if (kind == "series") "series" else "movie", tmdbId, iptvId = id),
+                    if (value > 0) "thumbUp" else "thumbDown",
+                    System.currentTimeMillis(),
+                ),
+            )
+        }
         if (value == 0) thumbs.remove(key) else thumbs[key] = value
         scope.launch {
             val body = JSONObject().put("iptvId", id).put("kind", kind).put("value", value)
