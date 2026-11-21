@@ -213,23 +213,20 @@ object JellytipSportEvents {
         if (off) return
         val who = api.currentUserKey()
         if (who.isEmpty()) return
+        // One critical section: a person switching between the check and the add can't leak an event into the new queue
         synchronized(this) {
             if (who != owner) {
                 queue.clear()
                 owner = who
             }
-        }
-        if (queue.add(e) && timer == null) {
-            synchronized(this) {
-                if (timer != null) return
-                timer =
-                    scope.launch {
-                        while (true) {
-                            delay(FLUSH_MS)
-                            flush()
-                        }
+            if (!queue.add(e) || timer != null) return
+            timer =
+                scope.launch {
+                    while (true) {
+                        delay(FLUSH_MS)
+                        flush()
                     }
-            }
+                }
         }
     }
 

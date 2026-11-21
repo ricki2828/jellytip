@@ -37,6 +37,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onVisibilityChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -209,6 +210,8 @@ fun LiveMatchHero(
     onCycle: ((Int) -> Unit)? = null,
     onFocused: () -> Unit = {},
     motion: Boolean = !com.github.damontecres.wholphin.jellytip.rememberReducedMotion(),
+    /** The sport event log's `shown`: the card at least half on screen for 1 s, again for each game cycled to. */
+    onShown: (() -> Unit)? = null,
 ) {
     val pal = rememberFixturePalette(f)
     // The fixture's photo (FixtureArt); a photo that fails to load falls back to the plain colour wash
@@ -232,6 +235,17 @@ fun LiveMatchHero(
             .background(if (art == null) wash else androidx.compose.ui.graphics.SolidColor(Broadcast.Base)),
     ) {
         if (art != null) FixtureArtHeroBackdrop(art, f.fid, pal.home, pal.away, motion, onFailed = { artFailed = true })
+        // Layout visibility (not composition): a poll's new list or a hero scrolled away doesn't count. Keyed so cycling
+        // to another game starts a fresh 1 s; an empty, unfocusable layer, so the buttons keep their focus.
+        if (onShown != null) {
+            androidx.compose.runtime.key(f.fid, f.listId) {
+                Box(
+                    Modifier.matchParentSize().onVisibilityChanged(minDurationMs = SportEventRules.SHOWN_MIN_MS, minFractionVisible = 0.5f) {
+                        if (it) onShown()
+                    },
+                )
+            }
+        }
         Box(Modifier.align(Alignment.CenterStart).padding(start = 28.dp)) { BigCrest(f.homeLogo, f.homeShort ?: f.home, pal.home, 104.dp, 34.sp) }
         if (f.away.isNotBlank()) {
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 28.dp)) { BigCrest(f.awayLogo, f.awayShort ?: f.away, pal.away, 104.dp, 34.sp) }
@@ -447,11 +461,6 @@ fun HomeLiveHero(
     val best = SportFixtures.pickChannel(f, now).channel
     val fromStart = best?.takeIf { it.startOver && it.start != null && it.stop != null && !it.dormant }
     SportEventsFlushOnLeave()
-    // Home's hero is on screen while composed; cycling to another game = a new `shown`
-    androidx.compose.runtime.LaunchedEffect(f.fid, f.listId) {
-        kotlinx.coroutines.delay(SportEventRules.SHOWN_MIN_MS)
-        JellytipSportEvents.log(SportEventRules.SHOWN, f, SportEventRules.HOME_HERO, pos = index + 1)
-    }
     LiveMatchHero(
         f = f,
         now = now,
@@ -467,5 +476,6 @@ fun HomeLiveHero(
         onCycle = { index = it },
         onFocused = onFocused,
         modifier = modifier,
+        onShown = { JellytipSportEvents.log(SportEventRules.SHOWN, f, SportEventRules.HOME_HERO, pos = index + 1) },
     )
 }

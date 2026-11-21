@@ -255,11 +255,6 @@ fun JellytipGameCentrePage(
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
                     hero?.let { h ->
                         item(key = "hero") {
-                            // The hero is the list's first item: on screen while composed (cycling = a new fixture)
-                            LaunchedEffect(h.fid, h.listId) {
-                                delay(SportEventRules.SHOWN_MIN_MS)
-                                JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1)
-                            }
                             val best = SportFixtures.pickChannel(h, now).channel
                             val fromStart = best?.takeIf { h.status != "pre" && it.startOver && it.start != null && it.stop != null && !it.dormant }
                             LiveMatchHero(
@@ -285,6 +280,7 @@ fun JellytipGameCentrePage(
                                 count = heroPicks.size,
                                 onCycle = { heroIndex = it },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                onShown = { JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1) },
                             )
                         }
                     }
