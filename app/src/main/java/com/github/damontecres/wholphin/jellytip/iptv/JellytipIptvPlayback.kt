@@ -503,7 +503,9 @@ class JellytipIptvPlayback
             private const val OK_TICK_MS = 5_000L
 
             private const val HANDOVER_MS = 400L
-            private const val ORPHAN_MS = 3_000L
+            // Long enough for a cold first compose of the player page on the 32-bit GTV (else a from-kick-off launch
+            // would be stopped and retuned as live)
+            private const val ORPHAN_MS = 6_000L
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000

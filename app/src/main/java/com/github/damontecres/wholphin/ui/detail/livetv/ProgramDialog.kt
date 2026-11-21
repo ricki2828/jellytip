@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.livetv
 
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +63,11 @@ fun ProgramDialog(
         Box(
             modifier =
                 Modifier
-                    .background(
+                    // Jellytip: keys in a dialog window skip the activity; OK on Watch must still count for the nav gate
+                    .onPreviewKeyEvent {
+                        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onKey(it.nativeKeyEvent)
+                        false
+                    }.background(
                         MaterialTheme.colorScheme.surfaceColorAtElevation(5.dp),
                         shape = RoundedCornerShape(16.dp),
                     ).focusRequester(focusRequester),
