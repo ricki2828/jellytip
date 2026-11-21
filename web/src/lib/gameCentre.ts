@@ -298,6 +298,11 @@ export interface FxItem {
   reminderId: string | number | null;
   recordingId: string | number | null;
   matchId: string | null;
+  /** Team colours from the fixture list ('#rrggbb'; null = not sent: the match record is asked instead). */
+  homeColor?: string | null;
+  homeAlt?: string | null;
+  awayColor?: string | null;
+  awayAlt?: string | null;
 }
 
 /** Fallback when the server sends no `maybe`: a link below this confidence is a guess. */
@@ -307,11 +312,14 @@ const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const n = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
 const idOf = (v: unknown) => (typeof v === "string" && v ? v : typeof v === "number" && isFinite(v) ? String(v) : null);
 
-function fxSide(v: unknown): { name: string; id: string | null; logo: string | null; short: string | null } | null {
-  if (typeof v === "string") return s(v) ? { name: s(v)!, id: null, logo: null, short: null } : null;
+const HEX = /^#[0-9a-f]{6}$/i;
+const hex = (v: unknown): string | null => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : null);
+
+function fxSide(v: unknown): { name: string; id: string | null; logo: string | null; short: string | null; color: string | null; altColor: string | null } | null {
+  if (typeof v === "string") return s(v) ? { name: s(v)!, id: null, logo: null, short: null, color: null, altColor: null } : null;
   const x = o(v);
   const name = s(x?.name) ?? s(x?.short);
-  return x && name ? { name, id: idOf(x.teamId), logo: s(x.logo), short: s(x.short) } : null;
+  return x && name ? { name, id: idOf(x.teamId), logo: s(x.logo), short: s(x.short), color: hex(x.color), altColor: hex(x.altColor) } : null;
 }
 
 function fxChannel(raw: unknown): FxChannel | null {
@@ -395,8 +403,8 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
     const kickoff = kickoffOf(e?.kickoff);
     const status = e?.status === "pre" || e?.status === "in" || e?.status === "post" ? e.status : null;
     const title = s(e?.title);
-    const home = fxSide(e?.home) ?? (title ? { name: title, id: null, logo: null, short: null } : null);
-    const away = fxSide(e?.away) ?? (title ? { name: "", id: null, logo: null, short: null } : null);
+    const home = fxSide(e?.home) ?? (title ? { name: title, id: null, logo: null, short: null, color: null, altColor: null } : null);
+    const away = fxSide(e?.away) ?? (title ? { name: "", id: null, logo: null, short: null, color: null, altColor: null } : null);
     if (!e || !fid || kickoff == null || !status || !home || !away || seen.has(fid)) continue;
     seen.add(fid);
     const sc = o(e.score);
@@ -428,6 +436,10 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       reminderId: idOf(e.reminderId),
       recordingId: idOf(e.recordingId),
       matchId: idOf(e.matchId),
+      homeColor: home.color,
+      homeAlt: home.altColor,
+      awayColor: away.color,
+      awayAlt: away.altColor,
     });
   }
   return { items: out, degraded: r?.degraded === true };

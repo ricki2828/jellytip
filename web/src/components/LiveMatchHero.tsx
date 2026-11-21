@@ -8,7 +8,7 @@ import { refreshFixtures, useFixtures } from "../api/fixtures";
 import { usePrefs } from "../api/me";
 import { afterStartup } from "../lib/startup";
 import { matchDetailCached } from "../api/matchInfo";
-import { BASE, blend, onColor, teamColors, type TeamColors } from "../lib/broadcast";
+import { BASE, blend, onColor, pairColors, teamColors, type TeamColors } from "../lib/broadcast";
 import { isFavourite, waysForFixture, type FxItem } from "../lib/gameCentre";
 import { cycle, heroLine, heroTag, homePicks } from "../lib/liveHero";
 import { go } from "../lib/router";
@@ -54,8 +54,10 @@ if (typeof window !== "undefined")
   });
 
 /** The fixture's team colours (neutral until known); [lazy] = only once the element is on screen. */
-export function useFixtureColours(f: Pick<FxItem, "matchId">, el?: RefObject<HTMLElement | null>): TeamColors {
-  const id = f.matchId;
+export function useFixtureColours(f: Pick<FxItem, "matchId" | "homeColor" | "awayColor" | "awayAlt">, el?: RefObject<HTMLElement | null>): TeamColors {
+  // The fixture list carries the colours (server 9415290): no request at all; same clash rule as the match record
+  const own = f.homeColor || f.awayColor ? pairColors(f.homeColor, f.awayColor, f.awayAlt) : null;
+  const id = own ? null : f.matchId;
   const [c, setC] = useState<TeamColors>(() => (id && colourCache.get(id)) || NEUTRAL);
   useEffect(() => {
     if (!id) return setC(NEUTRAL);
@@ -98,7 +100,8 @@ export function useFixtureColours(f: Pick<FxItem, "matchId">, el?: RefObject<HTM
       io.disconnect();
     };
   }, [id, el]);
-  return c;
+  // a fixture that just lost its own colours shows the remembered match-record ones at once (no neutral flash)
+  return own ?? (id ? colourCache.get(id) : undefined) ?? c;
 }
 
 /** Crest hosts the page's CSP allows (public CDNs); anything else must be a companion-proxied path. */
@@ -199,7 +202,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
 
 /** Colour edges for a fixture tile (2A): the home colour on the left edge, the away colour on the right; none until known. */
 /** Drawn by .gc-card.edged::before/::after from these vars, so the card's own box-shadow states (live ring, no-stream, hover, flash) stay. */
-export function useEdgeStyle(f: Pick<FxItem, "matchId" | "away">, el: RefObject<HTMLElement | null>): CSSProperties | undefined {
+export function useEdgeStyle(f: Pick<FxItem, "matchId" | "away" | "homeColor" | "awayColor" | "awayAlt">, el: RefObject<HTMLElement | null>): CSSProperties | undefined {
   const c = useFixtureColours(f, el);
   if (!c.known) return undefined;
   return { "--edge-home": c.home, "--edge-away": f.away ? c.away : "transparent" } as CSSProperties;

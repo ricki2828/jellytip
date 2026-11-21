@@ -475,6 +475,15 @@ img {
 .row {
   margin: 0 0 22px;
 }
+/* For you: why these picks, one quiet line under the row title */
+.row-reason {
+  margin: -4px var(--pad) 8px;
+  font-size: 13px;
+  color: var(--dim, rgba(255, 255, 255, 0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .row-title {
   margin: 0 var(--pad) 8px;
   font-size: 15px;

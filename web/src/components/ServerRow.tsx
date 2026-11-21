@@ -61,11 +61,12 @@ function MissingTile({ m, mediaType, poster }: { m: MissingTitle; mediaType: "mo
 }
 
 /** A source "iptv" row: the person's IPTV titles, already in the manifest (no Jellyfin call). */
-function IptvRow({ title, items, poster, autoFocusFirst }: { title: string; items: VodItem[]; poster: boolean; autoFocusFirst?: boolean }) {
+function IptvRow({ title, items, poster, autoFocusFirst, reason }: { title: string; items: VodItem[]; poster: boolean; autoFocusFirst?: boolean; reason?: string | null }) {
   const phone = useIsPhone();
   return (
     <section className={poster ? "row poster-row" : "row"}>
       <RowTitle title={title} />
+      {reason && <p className="row-reason">{reason}</p>}
       <div className="row-scroll">
         {items.map((it, i) =>
           poster ? (
@@ -119,7 +120,7 @@ window.addEventListener("jellytip-session", () => known.clear());
 export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item) => void; autoFocusFirst?: boolean } = {}) {
   if (r.id.startsWith("trending-top10")) return <TrendingRow key={r.id} row={r} />;
   // IPTV-only rows go straight to the simple row; one with a person tile or not-available titles needs the full row
-  if (r.iptvItems.length && !r.itemIds.length && r.layout !== "franchise" && !r.person && !r.missing.length) return <IptvRow key={r.id} title={r.title} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
+  if (r.iptvItems.length && !r.itemIds.length && r.layout !== "franchise" && !r.person && !r.missing.length) return <IptvRow key={r.id} title={r.title} reason={r.reason} items={r.iptvItems} poster={r.layout === "poster"} autoFocusFirst={opts.autoFocusFirst} />;
   const load = () => itemsByIds(r.itemIds);
   const untitled = r.untitled.length ? new Set(r.untitled) : undefined;
   if (r.layout === "franchise" && r.collection)
@@ -135,6 +136,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
     <Row
       key={r.id}
       title={r.title}
+      reason={r.reason}
       load={load}
       layout={r.layout === "poster" ? "poster" : "standard"}
       untitled={untitled}
