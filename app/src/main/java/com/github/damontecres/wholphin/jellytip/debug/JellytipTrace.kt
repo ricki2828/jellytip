@@ -170,10 +170,23 @@ object JellytipNavGate {
         code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER ||
             code == KeyEvent.KEYCODE_BUTTON_A || code == KeyEvent.KEYCODE_MEDIA_PLAY || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
 
-    /** From MainActivity.dispatchKeyEvent, for every key. */
+    /**
+     * From MainActivity.dispatchKeyEvent, for every key. Keys inside a dialog window never pass through the activity,
+     * so dialogs call it too ([markOk] / their own key hook): 21-Nov, OK on "Watch on …" in the Coming up overlay
+     * didn't count and the player was blocked.
+     */
     fun onKey(event: KeyEvent) {
         if (isOkKey(event.keyCode)) lastOkAt = SystemClock.uptimeMillis()
     }
+
+    /** An explicit select that didn't come through the activity (a dialog item click). */
+    fun markOk() {
+        lastOkAt = SystemClock.uptimeMillis()
+    }
+
+    /** Told when a title navigation is blocked, so it is never silent (MainActivity shows a toast). */
+    @Volatile
+    var onBlocked: ((String) -> Unit)? = null
 
     /** Pure rule (unit tested): may a page of kind [fromBrowse] open [toTitle] [msSinceOk] after the last OK key? */
     fun allowed(

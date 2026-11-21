@@ -680,6 +680,8 @@ fun JellytipLivePanel(
     closer: FxItem? = null,
     /** Spoilers on: win probability may drive the game state and show as a row. */
     allowWinProb: Boolean = false,
+    /** The player's reveal clock (fantasy "in this game" waits for it). */
+    reveal: (Double?) -> Boolean = { true },
 ) {
     val pal = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchPalette(match) }
     val shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape
@@ -723,7 +725,7 @@ fun JellytipLivePanel(
                     val name = tabs.getOrNull(tab)
                     when {
                         spoilerNotice -> Note("Live stats would spoil this recording. Turn on spoilers in Settings to see them.")
-                        name == "Fantasy" && fantasy != null -> FantasyTab(fantasy, match.id)
+                        name == "Fantasy" && fantasy != null -> FantasyTab(fantasy, match.id, reveal)
                         d == null -> Note("Loading live data…")
                         else ->
                             // Tab switches cross-fade (150 ms, alpha only)

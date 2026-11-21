@@ -60,8 +60,15 @@ fun ApplicationContent(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     // Jellytip: the reminder nudge banner takes OK (Watch) and Back while it shows
     val reminderBanner: JellytipReminderBannerViewModel = hiltViewModel()
+    // Jellytip: the kick-off takeover card (favourite teams) takes OK (watch) and Back while it shows
+    val kickoff: com.github.damontecres.wholphin.jellytip.iptv.JellytipKickoffViewModel = hiltViewModel()
+    androidx.compose.runtime.LaunchedEffect(Unit) { kickoff.kickoff.start() }
     Box(
-        modifier = modifier.onPreviewKeyEvent { reminderBanner.reminders.onKey(it.nativeKeyEvent) || com.github.damontecres.wholphin.jellytip.JellytipUndo.onKey(it.nativeKeyEvent) },
+        modifier =
+            modifier.onPreviewKeyEvent {
+                reminderBanner.reminders.onKey(it.nativeKeyEvent) || kickoff.kickoff.onKey(it.nativeKeyEvent) ||
+                    com.github.damontecres.wholphin.jellytip.JellytipUndo.onKey(it.nativeKeyEvent)
+            },
     ) {
         val backdropStyle = preferences.appPreferences.interfacePreferences.backdropStyle
         Backdrop(
@@ -108,6 +115,7 @@ fun ApplicationContent(
             },
         )
         JellytipReminderBanner(reminderBanner.reminders)
+        com.github.damontecres.wholphin.jellytip.iptv.JellytipKickoffCard(kickoff.kickoff)
         com.github.damontecres.wholphin.jellytip.JellytipUndoBar()
     }
 }

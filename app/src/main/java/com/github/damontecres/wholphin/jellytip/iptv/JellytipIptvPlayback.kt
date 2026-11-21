@@ -77,6 +77,8 @@ sealed interface IptvPlayState {
     data class Failed(
         override val target: IptvTarget,
         val message: String,
+        /** Stream recovery gave up (or was refused): OK on the screen retries ([JellytipIptvPlayback.retry]). */
+        val canRetry: Boolean = false,
         /** The failure already went to the failed-stream memory (so a user report would count it twice). */
         val reported: Boolean = false,
     ) : IptvPlayState
@@ -140,6 +142,30 @@ class JellytipIptvPlayback
         private var releaseJob: Job? = null
 
         init {
+            // Offline / online for stream recovery: a Wi-Fi drop waits for the network instead of spending attempts and
+            // reporting a healthy channel as failing
+            runCatching {
+                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) return@runCatching
+                val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+                cm?.registerDefaultNetworkCallback(
+                    object : android.net.ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: android.net.Network) {
+                            scope.launch {
+                                netOffline = false
+                                if (rec.offline) dispatch(StreamRecovery.Event.Online)
+                            }
+                        }
+
+                        override fun onLost(network: android.net.Network) {
+                            scope.launch {
+                                JellytipTrace.player("iptv", "network lost")
+                                netOffline = true
+                                dispatch(StreamRecovery.Event.Offline)
+                            }
+                        }
+                    },
+                )
+            }.onFailure { JellytipTrace.player("iptv", "no network callback: ${it.javaClass.simpleName}") }
             // Stop the stream whenever the app is hidden, even if no Live TV page is composed (a page that never
             // drew, or a stuck screen, must not keep the provider's one connection and the audio going)
             (context.applicationContext as? android.app.Application)?.registerActivityLifecycleCallbacks(
@@ -214,6 +240,18 @@ class JellytipIptvPlayback
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
                         setState(IptvPlayState.Playing(t), "ready")
+                        if (recTarget == t) {
+                            dispatch(StreamRecovery.Event.Recovered)
+                            watchStalls(t)
+                            stableJob?.cancel()
+                            if (rec.unstable) {
+                                stableJob =
+                                    scope.launch {
+                                        delay(StreamRecovery.STABLE_MS)
+                                        if (_state.value is IptvPlayState.Playing && _state.value.target == t && recTarget == t) dispatch(StreamRecovery.Event.Stable)
+                                    }
+                            }
+                        }
                         // Jellytip failed-stream memory: a minute of playback counts as a good play (clears the ding)
                         okJob?.cancel()
                         okJob =
@@ -247,19 +285,45 @@ class JellytipIptvPlayback
                     val http = generateSequence(error as Throwable?) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
                     val code = http?.headerFields?.entries?.firstOrNull { it.key.equals("X-Iptv-Error", ignoreCase = true) }?.value?.firstOrNull()
                     JellytipTrace.player("iptv", "error ${error.errorCodeName} http=${http?.responseCode} code=$code ${t.channelId}")
-                    when (http?.let { IptvRules.linkFailure(it.responseCode, code) }) {
-                        IptvRules.LinkFailure.RENEW, IptvRules.LinkFailure.FULL -> {
-                            // Re-call /play: a fresh link (renew), or the 409 answer naming who holds the connection
-                            if (!renewed) {
-                                renewed = true
-                                launchOpen(t, "renew after ${http?.responseCode}")
-                                return
-                            }
-                            // Renew / connections in use: our link or the one connection, never the stream's fault
-                            fail(t, IptvRules.failureText(code, "The stream stopped."), null)
+                    // A container ExoPlayer can't parse (Portlandia S01E01, labelled mkv, 21-Nov): ask the server to convert it
+                    // once, at the same position; if it still can't, say so plainly (no retry loop)
+                    if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED && !t.isLive && t.recordingId == null) {
+                        if (!remuxAsked) {
+                            remuxAsked = true
+                            val at = positionMs().takeIf { it > 5_000 } ?: t.resumeMs
+                            JellytipTrace.player("iptv", "container unsupported ${t.channelId}: server remux from ${at / 1000} s")
+                            stopPlayer()
+                            _note.value = "Converting…"
+                            launchOpen(t, "server remux (container unsupported)", remux = true, seekMs = at)
+                        } else {
+                            JellytipTrace.player("iptv", "container unsupported ${t.channelId} even after asking for the remux")
+                            reportFail(t, "decode")
+                            _note.value = null
+                            stopPlayer()
+                            setState(IptvPlayState.Failed(t, "This file's format can't be played on the TV.", reported = true), "container unsupported")
                         }
-
-                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, code, _state.value is IptvPlayState.Playing), fromPlayer = true)
+                        return
+                    }
+                    val link = http?.let { IptvRules.linkFailure(it.responseCode, code) }
+                    when {
+                        (link == IptvRules.LinkFailure.RENEW || link == IptvRules.LinkFailure.FULL) && !renewed -> {
+                            // Re-call /play once: a fresh link (renew), or the 409 answer naming who holds the connection
+                            renewed = true
+                            launchOpen(t, "renew after ${http?.responseCode}", rec.format, recovering = rec.conn == StreamRecovery.Conn.OPENING)
+                        }
+                        link == IptvRules.LinkFailure.FULL -> dispatch(StreamRecovery.Event.Busy)
+                        link == IptvRules.LinkFailure.RENEW -> dispatch(StreamRecovery.Event.Fatal(StreamRecovery.Denied.LINK))
+                        else -> {
+                            val refusal = http?.let { StreamRecovery.permanentReason(it.responseCode, code) }
+                            if (refusal != null) {
+                                dispatch(StreamRecovery.Event.Fatal(refusal))
+                            } else {
+                                // A device decode fault at open is logged (never counted by the server), then retried
+                                val why = IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, code, _state.value is IptvPlayState.Playing)
+                                if (why == "decode") reportFail(t, why)
+                                dispatch(StreamRecovery.Event.Fault(posSec(), canHls(t)))
+                            }
+                        }
                     }
                 }
             }
@@ -323,20 +387,246 @@ class JellytipIptvPlayback
                 return
             }
             renewed = false
+            resetRecovery(target)
             launchOpen(target, reason)
+            guardOrphan(target)
+        }
+
+        // ---------- stream recovery (web lib/streamRecovery.ts; gap rows "Live player" / "IPTV films", 21-Nov) ----------
+
+        /** Calm line for the screen while the stream recovers ("Reconnecting… (2 of 4)"); null = nothing to say. */
+        private val _note = MutableStateFlow<String?>(null)
+        val note: StateFlow<String?> = _note
+        private var rec = StreamRecovery.State(live = true)
+        private var recTarget: IptvTarget? = null
+        private var recTimer: Job? = null
+        private var watchJob: Job? = null
+        private var stableJob: Job? = null
+
+        /** The TV has no network (ConnectivityManager); a new viewing starts in that state. */
+        @Volatile
+        private var netOffline = false
+
+        /** One failure report per viewing (the first), like the web's OutcomeSession. */
+        private var failReported = false
+
+        /** The server remux was asked for this viewing (a container ExoPlayer can't parse). */
+        private var remuxAsked = false
+
+        /** A remuxed stream begins here (ms into the item) and can't seek: [seekTo] reopens it. */
+        private var remuxStartMs = 0L
+        private var remuxDurationMs: Long? = null
+
+        /** The current stream is the server's remux. */
+        var isRemux = false
+            private set
+
+        /** Position in the item (ms), counting a remux's start offset. */
+        fun positionMs(): Long = (if (isRemux) remuxStartMs else 0L) + (player?.currentPosition ?: 0L)
+
+        /**
+         * The recording being played (its times and state), set by the page: a recording's length comes from it when the
+         * file can't say (raw TS has no index; an in-progress one grows), so progress is never saved against half of it.
+         */
+        var recordingMeta: IptvRecording? = null
+
+        /** Item length (ms); a remux's from the server, a recording's from its times, else the player's; 0 = unknown. */
+        fun durationMs(): Long {
+            if (isRemux) remuxDurationMs?.let { return it }
+            val playerMs = player?.duration?.takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET } ?: 0L
+            val t = _state.value.target
+            val meta = recordingMeta?.takeIf { t?.recordingId != null && it.id == t.recordingId }
+            // Still recording: the file's length at open is stale (the old bug saved progress against half of it)
+            if (meta != null) return (RecPlay.lengthSec(meta, System.currentTimeMillis() / 1000, if (meta.state == "recording") 0.0 else playerMs / 1000.0) * 1000).toLong()
+            return playerMs
+        }
+
+        /** Seek a film / episode; a remux reopens from [ms] (the server starts the conversion there). */
+        fun seekTo(ms: Long) {
+            val t = _state.value.target ?: return
+            if (isRemux) {
+                JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
+                _note.value = "Converting…"
+                launchOpen(t, "remux seek", remux = true, seekMs = ms)
+            } else {
+                player?.seekTo(ms)
+            }
+        }
+
+        private fun resetRecovery(target: IptvTarget) {
+            recTimer?.cancel()
+            stableJob?.cancel()
+            rec = StreamRecovery.State(live = target.isLive, offline = netOffline)
+            recTarget = target
+            failReported = false
+            remuxAsked = false
+            isRemux = false
+            remuxStartMs = 0L
+            remuxDurationMs = null
+            _note.value = null
+        }
+
+        private fun reportFail(
+            t: IptvTarget,
+            reason: String?,
+            posSec: Long? = null,
+        ) {
+            if (reason == null || failReported) return
+            // Offline: our network, not the stream's fault (never ding a healthy channel)
+            if (rec.offline) return
+            // A device decode note is logged but doesn't use the one counted report of the viewing
+            if (reason != "decode") failReported = true
+            IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec)
+        }
+
+        private fun posSec(): Long = positionMs() / 1000
+
+        private fun canHls(t: IptvTarget) = t.isLive && rec.format == "ts"
+
+        /** Feed the recovery machine and run its effects (release before open, timers, the screen line). */
+        private fun dispatch(e: StreamRecovery.Event) {
+            val t = recTarget ?: return
+            val before = rec
+            val r = StreamRecovery.step(rec, e)
+            rec = r.state
+            if (before.phase != rec.phase || before.attempt != rec.attempt || before.format != rec.format) {
+                JellytipTrace.player("iptv", "recovery ${t.channelId}: $e -> ${rec.phase} ${rec.attempt}/${rec.max} ${rec.format} conn=${rec.conn}")
+            }
+            var released = false
+            for (fx in r.effects) {
+                when (fx) {
+                    StreamRecovery.Effect.Release -> {
+                        job?.cancel()
+                        okJob?.cancel()
+                        stopPlayer()
+                        released = true
+                    }
+                    StreamRecovery.Effect.CancelTimers -> recTimer?.cancel()
+                    is StreamRecovery.Effect.Open -> {
+                        recTimer?.cancel()
+                        // The target keeps its identity (screens and stale-error checks compare it); the position goes apart
+                        val seek = if (!t.isLive) fx.resumeAt?.times(1000) else null
+                        recTimer =
+                            scope.launch {
+                                delay(fx.delayMs)
+                                if (recTarget != t) return@launch
+                                launchOpen(t, "recovery ${rec.attempt}/${rec.max} ${fx.format}", fx.format, recovering = true, seekMs = seek)
+                            }
+                    }
+                    StreamRecovery.Effect.Exit -> {}
+                }
+            }
+            val copy = StreamRecovery.copy(rec)
+            when (rec.phase) {
+                StreamRecovery.Phase.FAILED, StreamRecovery.Phase.DENIED, StreamRecovery.Phase.BLOCKED -> {
+                    _note.value = null
+                    if (before.phase != rec.phase) {
+                        if (rec.phase == StreamRecovery.Phase.FAILED) reportFail(t, "recovery_gave_up", posSec())
+                        if (rec.phase == StreamRecovery.Phase.DENIED) reportFail(t, StreamRecovery.deniedFailReason(rec.reason))
+                        val msg = if (rec.phase == StreamRecovery.Phase.BLOCKED) "All connections are in use right now." else copy ?: "The stream stopped."
+                        setState(IptvPlayState.Failed(t, msg, canRetry = true, reported = failReported), "recovery ${rec.phase}")
+                    }
+                }
+                StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED -> {
+                    _note.value = copy
+                    if (_state.value !is IptvPlayState.Opening || _state.value.target != t) setState(IptvPlayState.Opening(t), "recovering")
+                }
+                StreamRecovery.Phase.STALLED -> _note.value = copy
+                else -> _note.value = null
+            }
+            if (released) dispatch(StreamRecovery.Event.Released)
+        }
+
+        /** OK on the failed screen: try again now (debounced; never while an open is in flight). */
+        fun retry() {
+            val t = recTarget ?: return
+            if (_state.value.target != t) return
+            failReported = false
+            renewed = false
+            dispatch(StreamRecovery.Event.RetryNow(posSec(), System.currentTimeMillis()))
+        }
+
+        /**
+         * While a stream is meant to play: buffering with no picture moving is a stall (the "buffering" line after 10 s
+         * live), then a fault (reconnect) after 15 s live / 30 s for films and catch-up. The stall is reported to the
+         * server once ("this stream fails" memory; gap row 369e5d81).
+         */
+        private fun watchStalls(t: IptvTarget) {
+            watchJob?.cancel()
+            watchJob =
+                scope.launch {
+                    var since = 0L
+                    var stallSent = false
+                    while (true) {
+                        delay(1_000)
+                        val s = _state.value
+                        if (s.target != t || recTarget != t) return@launch
+                        val p = player ?: continue
+                        val buffering = s is IptvPlayState.Playing && loadedTarget == t && p.playWhenReady && p.playbackState == Player.STATE_BUFFERING
+                        if (!buffering) {
+                            // Came back by itself: clear "Stream is buffering…"
+                            if (rec.phase == StreamRecovery.Phase.STALLED && s is IptvPlayState.Playing) dispatch(StreamRecovery.Event.Recovered)
+                            since = 0L
+                            stallSent = false
+                            continue
+                        }
+                        val now = System.currentTimeMillis()
+                        if (since == 0L) since = now
+                        val held = now - since
+                        if (t.isLive && held >= StreamRecovery.LIVE_STALL_MS && !stallSent) {
+                            stallSent = true
+                            dispatch(StreamRecovery.Event.Stall(posSec()))
+                        }
+                        val faultAt = if (t.isLive) StreamRecovery.LIVE_FAULT_MS else StreamRecovery.VOD_IDLE_MS
+                        if (held >= faultAt) {
+                            JellytipTrace.player("iptv", "stall ${t.channelId}: no picture for ${held / 1000} s, reconnecting")
+                            reportFail(t, "stall", posSec())
+                            since = 0L
+                            stallSent = false
+                            dispatch(StreamRecovery.Event.Fault(posSec(), canHls(t)))
+                        }
+                    }
+                }
+        }
+
+        private var orphanJob: Job? = null
+
+        /**
+         * Safety net (21-Nov bug: sound, no picture after a launch from Home): a stream that no screen claims within
+         * [ORPHAN_MS] (no guide, full screen or film page attached) is stopped, never left playing out of sight.
+         */
+        private fun guardOrphan(target: IptvTarget) {
+            orphanJob?.cancel()
+            orphanJob =
+                scope.launch {
+                    delay(ORPHAN_MS)
+                    val s = _state.value
+                    if (owners.isEmpty() && s.target == target && s !is IptvPlayState.Idle) {
+                        JellytipTrace.player("iptv", "orphan stream ${target.channelId}: no screen showing it, stopping")
+                        stop("no screen showing it")
+                    }
+                }
         }
 
         private fun launchOpen(
             target: IptvTarget,
             reason: String,
+            format: String = "ts",
+            /** A recovery attempt: success / 409 / failure answer the recovery machine instead of ending here. */
+            recovering: Boolean = false,
+            /** Ask for the server remux (films / episodes); also kept for every reopen once asked. */
+            remux: Boolean = remuxAsked,
+            /** Where to start (ms) instead of [IptvTarget.resumeMs]; the target itself is never copied (its identity matters). */
+            seekMs: Long? = null,
         ) {
+            val startMs = seekMs ?: target.resumeMs
             job?.cancel()
             okJob?.cancel()
             setState(IptvPlayState.Opening(target), reason)
-            JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} ($reason)")
+            JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} format=$format ($reason)")
             job =
                 scope.launch {
-                    when (val r = service.playItem(target)) {
+                    when (val r = service.playItem(target, format, remux = remux && !target.isLive, startSec = startMs / 1000)) {
                         is IptvPlayResult.Ok -> {
                             val profile = LiveBuffer.profileFor(context, target)
                             // Direct answers carry the provider's own absolute link (credentials inside: not traced)
@@ -366,18 +656,38 @@ class JellytipIptvPlayback
                                     }.build()
                             val p = ensurePlayer(profile)
                             loadedTarget = target
-                            if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
+                            isRemux = r.answer.remux
+                            remuxStartMs = if (r.answer.remux) r.answer.startAt * 1000 else 0L
+                            remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null
+                            if (remux && !r.answer.remux) JellytipTrace.player("iptv", "remux asked but the server sent the file as is (${target.channelId})")
+                            // A remux already begins at the asked position
+                            if (startMs > 0 && !r.answer.remux) p.setMediaItem(item, startMs) else p.setMediaItem(item)
                             p.playWhenReady = true
                             p.prepare()
+                            if (recovering && recTarget?.channelId == target.channelId) dispatch(StreamRecovery.Event.Opened)
                         }
 
-                        is IptvPlayResult.Full -> {
+                        is IptvPlayResult.Full ->
+                            if (recovering && recTarget?.channelId == target.channelId) {
+                                dispatch(StreamRecovery.Event.Busy)
+                            } else {
                             stopPlayer()
                             JellytipTrace.player("iptv", "full ${target.channelId}: ${r.message}")
+                            _note.value = null
                             setState(IptvPlayState.Full(target, r.message, r.holders), "409")
+                            }
+                        is IptvPlayResult.Failed -> {
+                            val refusal = StreamRecovery.permanentReason(r.status, r.code)
+                            when {
+                                recTarget?.channelId != target.channelId -> fail(target, r.message, IptvStreamFail.reasonForCode(r.code))
+                                refusal != null -> {
+                                    reportFail(target, IptvStreamFail.reasonForCode(r.code))
+                                    dispatch(StreamRecovery.Event.Fatal(refusal))
+                                }
+                                // Network / server / provider hiccup: retry with backoff (the old screen said "Failed")
+                                else -> dispatch(StreamRecovery.Event.Fault(0, canHls(target)))
+                            }
                         }
-
-                        is IptvPlayResult.Failed -> fail(target, r.message, IptvStreamFail.reasonForCode(r.code))
                     }
                 }
         }
@@ -392,12 +702,13 @@ class JellytipIptvPlayback
             fromPlayer: Boolean = false,
         ) {
             okJob?.cancel()
+            _note.value = null
             // Player errors are only the target's own when the player holds its stream (else: the previous channel's)
             val reported = reason != null && (!fromPlayer || loadedTarget == target)
             if (reported) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
-            setState(IptvPlayState.Failed(target, message, reported), "failed")
+            setState(IptvPlayState.Failed(target, message, reported = reported), "failed")
         }
 
         /** The target whose stream the player holds (set with the media item); errors from any other are stale. */
@@ -441,6 +752,11 @@ class JellytipIptvPlayback
         /** Stop now and free the provider connection (closing the HTTP stream releases the slot). */
         fun stop(reason: String) {
             job?.cancel()
+            recTimer?.cancel()
+            watchJob?.cancel()
+            stableJob?.cancel()
+            recTarget = null
+            _note.value = null
             if (_state.value !is IptvPlayState.Idle) JellytipTrace.player("iptv", "stop ($reason)")
             stopPlayer()
             setState(IptvPlayState.Idle, reason)
@@ -468,10 +784,12 @@ class JellytipIptvPlayback
         /** Save [target]'s resume point (recordings, films, episodes) from where the player is now. */
         fun saveProgress(target: IptvTarget) {
             val item = target.progressItem ?: return
-            val p = player ?: return
-            if (_state.value.target != target) return
-            val pos = p.currentPosition / 1000.0
-            val dur = p.duration.takeIf { it > 0 }?.div(1000.0) ?: return
+            player ?: return
+            // Only from a stream that is really playing: while recovering / failed the player holds nothing (position 0)
+            // and would wipe the resume point
+            if (_state.value !is IptvPlayState.Playing || _state.value.target != target || loadedTarget != target) return
+            val pos = positionMs() / 1000.0
+            val dur = durationMs().takeIf { it > 0 }?.div(1000.0) ?: return
             // Episodes name their series (pid:s:sid) so the server's Next Up works however the episode was opened
             val series = target.seriesId?.takeIf { target.episodeId != null }
             scope.launch { service.saveProgress(item, pos, dur, series) }
@@ -522,6 +840,9 @@ class JellytipIptvPlayback
             private const val OK_TICK_MS = 5_000L
 
             private const val HANDOVER_MS = 400L
+            // Long enough for a cold first compose of the player page on the 32-bit GTV (else a from-kick-off launch
+            // would be stopped and retuned as live)
+            private const val ORPHAN_MS = 6_000L
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000

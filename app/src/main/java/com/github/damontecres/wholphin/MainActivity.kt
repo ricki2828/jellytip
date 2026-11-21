@@ -181,6 +181,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         instance = this
         com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.init(applicationContext)
+        val appContext = applicationContext
+        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onBlocked = { what ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(appContext, "Didn't open that: press OK on it again", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("nav", "blocked launch shown to the viewer: $what")
+        }
         lifecycleScope.launch {
             // A crash last time: send its trace once the app (and the companion client) is up
             kotlinx.coroutines.delay(20_000)
@@ -349,6 +356,15 @@ class MainActivity : AppCompatActivity() {
         if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
         if (screensaverService.state.value.run { show || showDim }) {
+            // Jellytip (t5n): OK on the ambient scoreboard opens the game it shows
+            val ok = event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
+            val okDown = event.action == KeyEvent.ACTION_DOWN && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
+            if (okDown && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.onOk != null) return true
+            if (ok && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.ok()) {
+                screensaverService.stop(false)
+                screensaverService.pulse()
+                return true
+            }
             screensaverService.stop(false)
             screensaverService.pulse()
             return true

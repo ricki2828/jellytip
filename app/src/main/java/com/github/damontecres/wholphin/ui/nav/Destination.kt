@@ -222,6 +222,18 @@ sealed class Destination(
     @Serializable
     data object JellytipUpcomingSport : Destination(false)
 
+    // ---- t5n wow extras (21-Nov): Movie night host screen + My Channels (sidebar) ----
+
+    /** Jellytip: movie night, the TV hosts (code + live tally), phones vote in the web app. */
+    @Serializable
+    data object JellytipMovieNight : Destination(false)
+
+    /** Jellytip: My Channels, personal always-on channels (web #/channels). */
+    @Serializable
+    data object JellytipMyChannels : Destination(false)
+
+    // ---- end t5n ----
+
     /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
     @Serializable
     data class JellytipLiveTvPlayer(

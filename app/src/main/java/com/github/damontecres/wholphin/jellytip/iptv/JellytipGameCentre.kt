@@ -463,8 +463,18 @@ fun launchFixture(
     from: String,
     /** From the player itself: swap the page instead of stacking a second player. */
     replaceTop: Boolean = false,
+    /** Carry the match id even before kick-off (kick-off takeover: the companion is ready when the game starts). */
+    forceMatch: Boolean = false,
 ) {
     com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+    val matchId = if (fromStart) null else if (forceMatch) f.companionId else SportFixtures.liveMatchId(f, ch)
+    val dest = Destination.JellytipLiveTvPlayer(ch.id, matchId)
+    // The page first: a blocked navigation must not leave a stream playing with no screen (sound, no picture)
+    if (replaceTop) {
+        navigationManager.replaceTop(dest)
+    } else if (!navigationManager.navigateToChecked(dest, "$from ${f.title}")) {
+        return
+    }
     val order = SportFixtures.pickChannel(f, nowSec()).order
     val main = ch.toIptvChannel()
     playback.lineup = listOf(main)
@@ -477,9 +487,6 @@ fun launchFixture(
         } else {
             IptvTarget(ch.id, ch.name)
         }
-    val matchId = if (fromStart) null else SportFixtures.liveMatchId(f, ch)
     playback.play(target, "$from ${if (fromStart) "from start" else "live"} ${f.fid}")
     JellytipTrace.log("iptv", "$from watch ${f.fid} on ${ch.id} fromStart=$fromStart match=$matchId")
-    val dest = Destination.JellytipLiveTvPlayer(ch.id, matchId)
-    if (replaceTop) navigationManager.replaceTop(dest) else navigationManager.navigateTo(dest, "$from ${f.title}")
 }

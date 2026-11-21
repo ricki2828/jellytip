@@ -305,6 +305,8 @@ fun DialogPopupContent(
                             selected = item.selected,
                             enabled = !waiting && item.enabled,
                             onClick = {
+                                // Jellytip: an item picked in a dialog is an explicit OK (dialog keys skip the activity)
+                                com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.markOk()
                                 if (dismissOnClick || item.dismissOnClick) {
                                     onDismissRequest.invoke()
                                 }

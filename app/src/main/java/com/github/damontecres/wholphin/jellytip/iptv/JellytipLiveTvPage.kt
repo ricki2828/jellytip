@@ -610,6 +610,8 @@ fun JellytipLiveTvPage(
         ch: IptvChannel,
         target: IptvTarget = IptvTarget(ch.id, ch.name),
     ) {
+        // The page first: a blocked navigation starts nothing
+        if (!viewModel.navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(ch.id), "guide OK on ${ch.name}")) return
         val chans = state.channels.orEmpty()
         playback.lineup = chans
         // Same-event alternates the server named (plan §4); ones outside this tab get a minimal channel to tune
@@ -620,7 +622,6 @@ fun JellytipLiveTvPage(
                 c.id to ids.map { id -> IptvParse.resolveAlternate(id, c, byId) }
             }
         playback.play(target, if (target.start != null) "guide OK (catch-up)" else "guide OK")
-        viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide OK on ${ch.name}")
     }
 
     /** OK on a programme: on now = watch live; over = catch-up where the channel keeps it; later = what to do with it. */
@@ -774,8 +775,9 @@ fun JellytipLiveTvPage(
                 items = onNowList,
                 now = now,
                 onOpen = { o, ch ->
-                    playback.openOnNow(o, onNowList, ch, "guide on-now OK")
-                    viewModel.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "guide on-now OK ${ch.name}")
+                    if (viewModel.navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(ch.id), "guide on-now OK ${ch.name}")) {
+                        playback.openOnNow(o, onNowList, ch, "guide on-now OK")
+                    }
                 },
                 modifier = Modifier.onFocusChanged { onNowFocused = it.hasFocus },
             )

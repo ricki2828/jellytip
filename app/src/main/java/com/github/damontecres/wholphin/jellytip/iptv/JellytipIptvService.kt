@@ -178,18 +178,26 @@ class JellytipIptvService
             channelId: String,
             start: Long? = null,
             stop: Long? = null,
+            /** Live only: "ts" (default) or "m3u8" (stream recovery's backup format). */
+            format: String = "ts",
         ): IptvPlayResult {
             val q =
                 buildString {
                     append("v1/iptv/play?channel=").append(enc(channelId))
-                    if (start != null && stop != null) append("&start=$start&stop=$stop") else append("&format=ts")
+                    if (start != null && stop != null) append("&start=$start&stop=$stop") else append("&format=").append(if (format == "m3u8") "m3u8" else "ts")
                     append("&device=").append(enc(deviceId)).append("&client=native")
                 }
             return play(q)
         }
 
         /** `/play` for a recording, an IPTV film, or an episode of an IPTV series. */
-        suspend fun playItem(target: IptvTarget): IptvPlayResult {
+        suspend fun playItem(
+            target: IptvTarget,
+            format: String = "ts",
+            /** Films / episodes: ask for the server's remux (fMP4 + AAC from [startSec]); for containers ExoPlayer can't parse. */
+            remux: Boolean = false,
+            startSec: Long = 0,
+        ): IptvPlayResult {
             val q =
                 buildString {
                     append("v1/iptv/play?")
@@ -197,9 +205,13 @@ class JellytipIptvService
                         target.recordingId != null -> append("recording=").append(enc(target.recordingId))
                         target.episodeId != null -> append("series=").append(enc(target.seriesId.orEmpty())).append("&episode=").append(enc(target.episodeId))
                         target.vodId != null -> append("vod=").append(enc(target.vodId))
-                        else -> return playChannel(target.channelId, target.start, target.stop)
+                        else -> return playChannel(target.channelId, target.start, target.stop, format)
                     }
                     append("&device=").append(enc(deviceId)).append("&client=native")
+                    if (remux && target.recordingId == null) {
+                        append("&compat=web&remux=1")
+                        if (startSec > 0) append("&start=").append(startSec)
+                    }
                 }
             return play(q)
         }

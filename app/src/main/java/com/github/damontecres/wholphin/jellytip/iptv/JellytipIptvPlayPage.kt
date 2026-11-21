@@ -91,22 +91,44 @@ fun JellytipIptvPlayPage(
             val s = pendingSeek ?: break
             if (SeekRamp.commitDue(s, System.currentTimeMillis(), seekHeld)) {
                 val to = (s.target * 1000).toLong()
-                playback.player?.seekTo(to)
+                playback.seekTo(to)
                 watch.seeked()
                 position = to
                 pendingSeek = null
             }
         }
     }
+    // A recording's own times (length when the file can't say; still recording = jump to live), refreshed each minute
+    // while it records (gap row fb816e09 6f62ba3e)
+    var recMeta by remember { mutableStateOf<IptvRecording?>(null) }
+    var recMenu by remember { mutableStateOf(false) }
+    var recConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(target.recordingId) {
+        val id = target.recordingId ?: return@LaunchedEffect
+        while (true) {
+            val m = viewModel.service.peekRecordings()?.firstOrNull { it.id == id }?.takeIf { it.state != "recording" }
+                ?: viewModel.service.recordings()?.second?.firstOrNull { it.id == id }
+            recMeta = m
+            playback.recordingMeta = m
+            if (m?.state != "recording") return@LaunchedEffect
+            delay(60_000)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { playback.recordingMeta = null } }
+    val inProgress = recMeta?.state == "recording"
+    val context = androidx.compose.ui.platform.LocalContext.current
     // "This stream isn't working": Down opens it (and a failed stream shows it); Back closes it
     val canReport = target.vodId != null || target.episodeId != null
+    // Where it last really played (item position, remux-aware): a report during recovery carries on from here
+    var lastGoodMs by remember(target) { mutableLongStateOf(target.resumeMs) }
     var reportOpen by remember(target) { mutableStateOf(false) }
     var reportBusy by remember(target) { mutableStateOf(false) }
     val reportFocus = remember { FocusRequester() }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(playState is IptvPlayState.Failed) {
-        if (playState is IptvPlayState.Failed && canReport) reportOpen = true
+        // A failure recovery can't retry opens the report at once; with 'OK: try again' it stays one Down away
+        if (playState is IptvPlayState.Failed && canReport && (playState as? IptvPlayState.Failed)?.canRetry != true) reportOpen = true
     }
     LaunchedEffect(reportOpen) {
         if (reportOpen) {
@@ -124,9 +146,10 @@ fun JellytipIptvPlayPage(
         if (!reportBusy) {
             reportBusy = true
             scope.launch {
-                val pos = playback.player?.currentPosition ?: 0L
+                // The last place it really played (a recovering / remuxed stream's player position is 0 or offset)
+                val pos = lastGoodMs
                 // Same film / episode on another copy: carry on from here
-                val resume = if (playState is IptvPlayState.Playing) pos else target.resumeMs
+                val resume = lastGoodMs
                 JellytipTrace.player("iptv", "user: stream isn't working ${target.label}")
                 val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = (playState as? IptvPlayState.Failed)?.reported == true)
                 reportBusy = false
@@ -214,8 +237,10 @@ fun JellytipIptvPlayPage(
         while (true) {
             delay(500)
             playback.player?.let {
-                position = it.currentPosition
-                duration = it.duration.takeIf { d -> d > 0 } ?: 0L
+                // A server remux begins at its start offset: the item's position, not the stream's
+                position = playback.positionMs()
+                if (playState is IptvPlayState.Playing) lastGoodMs = position
+                duration = playback.durationMs()
                 playing = it.playWhenReady
                 if (it.isPlaying && playback.state.value.target == target) {
                     watch.runtime(duration / 1000.0)
@@ -268,6 +293,12 @@ fun JellytipIptvPlayPage(
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // The report button has focus: its keys go to it (Back is the BackHandler above)
                 if (reportOpen) return@onPreviewKeyEvent false
+                // Stream recovery gave up: OK tries again at the same position
+                val failedNow = playState as? IptvPlayState.Failed
+                if (failedNow != null && failedNow.canRetry && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter)) {
+                    if (e.nativeKeyEvent.repeatCount == 0) playback.retry()
+                    return@onPreviewKeyEvent true
+                }
                 val p = playback.player
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
@@ -280,7 +311,8 @@ fun JellytipIptvPlayPage(
                     }
 
                     Key.DirectionLeft, Key.DirectionRight -> {
-                        if (p != null && p.isCurrentMediaItemSeekable) {
+                        // Ramped seek (lane B) on t5j's remux-aware position/seek
+                        if (p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)) {
                             seekHeld = true
                             pendingSeek =
                                 SeekRamp.advance(
@@ -288,8 +320,8 @@ fun JellytipIptvPlayPage(
                                     if (e.key == Key.DirectionLeft) -1 else 1,
                                     System.currentTimeMillis(),
                                     e.nativeKeyEvent.repeatCount > 0,
-                                    p.currentPosition / 1000.0,
-                                    (p.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE / 2) / 1000.0,
+                                    playback.positionMs() / 1000.0,
+                                    (playback.durationMs().takeIf { d -> d > 0 } ?: Long.MAX_VALUE / 2) / 1000.0,
                                 )
                         }
                         controlsTick++
@@ -297,10 +329,10 @@ fun JellytipIptvPlayPage(
                     }
 
                     Key.MediaRewind, Key.MediaFastForward -> {
-                        if (p != null && p.isCurrentMediaItemSeekable) {
+                        if (p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)) {
                             val back = e.key == Key.MediaRewind
-                            val to = (p.currentPosition + if (back) -10_000 else 30_000).coerceAtLeast(0)
-                            p.seekTo(to)
+                            val to = (playback.positionMs() + if (back) -10_000 else 30_000).coerceAtLeast(0)
+                            playback.seekTo(to)
                             watch.seeked()
                             position = to
                         }
@@ -308,14 +340,28 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    Key.DirectionDown -> {
-                        if (canReport) reportOpen = true
+                    // Up: a recording still in progress jumps to the channel live; anything else opens audio & subtitles
+                    Key.DirectionUp -> {
+                        val m = recMeta
+                        if (m != null && inProgress && m.channelId.isNotBlank()) {
+                            JellytipTrace.player("iptv", "recording ${m.id}: jump to live ${m.channelId}")
+                            playback.saveProgress(target)
+                            val ch = IptvChannel(m.channelId, m.channelId.substringBefore(':'), null, m.channel, m.logo, "", null, 0, false)
+                            playback.lineup = listOf(ch)
+                            playback.alternates = emptyMap()
+                            viewModel.navigationManager.replaceTop(Destination.JellytipLiveTvPlayer(ch.id))
+                            playback.play(IptvTarget(ch.id, ch.name), "recording: jump to live")
+                        } else if (playback.player != null && playState is IptvPlayState.Playing) {
+                            // Otherwise: audio & subtitles (t5k, web 51a17247)
+                            trackMenu = true
+                        }
                         controlsTick++
                         true
                     }
 
-                    Key.DirectionUp -> {
-                        if (p != null && playState is IptvPlayState.Playing) trackMenu = true
+                    // A recording: Down opens its menu (Delete recording); a film / episode: "This stream isn't working"
+                    Key.DirectionDown -> {
+                        if (target.recordingId != null) recMenu = true else if (canReport) reportOpen = true
                         controlsTick++
                         true
                     }
@@ -325,11 +371,12 @@ fun JellytipIptvPlayPage(
             }.focusable(),
     ) {
         playback.player?.let { PlayerSurface(player = it, surfaceType = SURFACE_TYPE_SURFACE_VIEW, modifier = Modifier.fillMaxSize()) }
+        val recoveryNote by playback.note.collectAsState()
         val status =
-            when (val s = playState) {
+            recoveryNote ?: when (val s = playState) {
                 is IptvPlayState.Opening -> "Opening ${target.label}…"
                 is IptvPlayState.Full -> s.message
-                is IptvPlayState.Failed -> s.message
+                is IptvPlayState.Failed -> if (s.canRetry) "${s.message}\nOK: try again" else s.message
                 else -> null
             }
         status?.let {
@@ -408,12 +455,53 @@ fun JellytipIptvPlayPage(
                     Text(if (duration > 0) clockText(duration) else "--:--", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
                 }
                 Text(
-                    text = "OK  play / pause   ·   ◀ ▶ seek (hold to go faster)" + "   ·   ▲ audio & subtitles" + if (canReport) "   ·   ▼ not working?" else "",
+                    text =
+                        "OK  play / pause   ·   ◀ ▶ seek (hold to go faster)" +
+                            (if (inProgress) "   ·   ▲ live" else "   ·   ▲ audio & subtitles") +
+                            (if (target.recordingId != null) "   ·   ▼ delete" else if (canReport) "   ·   ▼ not working?" else ""),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 11.sp,
                 )
             }
         }
+    }
+
+    if (recMenu) {
+        val id = target.recordingId
+        com.github.damontecres.wholphin.ui.components.DialogPopup(
+            showDialog = true,
+            title = if (recConfirm) "Delete this recording for good?" else target.label,
+            dialogItems =
+                listOf(
+                    com.github.damontecres.wholphin.ui.components.DialogItem(if (recConfirm) "Delete for good" else "Delete recording", dismissOnClick = false) {
+                        if (!recConfirm) {
+                            recConfirm = true
+                        } else if (id != null) {
+                            recMenu = false
+                            recConfirm = false
+                            playback.stop("delete recording")
+                            scope.launch {
+                                val ok = viewModel.service.deleteRecording(id)
+                                JellytipTrace.player("iptv", "recording $id deleted ok=$ok")
+                                android.widget.Toast.makeText(context, if (ok) "Recording deleted" else "Couldn't delete it", android.widget.Toast.LENGTH_SHORT).show()
+                                if (ok) {
+                                    viewModel.service.recordings()
+                                    viewModel.navigationManager.goBack()
+                                } else {
+                                    // Not deleted: back to watching it, never a black page
+                                    playback.play(target, "delete failed: resume")
+                                }
+                            }
+                        }
+                    },
+                ),
+            onDismissRequest = {
+                recMenu = false
+                recConfirm = false
+            },
+            // The first pick only arms "Delete for good": the dialog must stay (DialogPopup dismisses before onClick)
+            dismissOnClick = false,
+        )
     }
 }
