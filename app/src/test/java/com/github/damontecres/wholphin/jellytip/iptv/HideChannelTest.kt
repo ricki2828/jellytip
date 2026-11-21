@@ -34,7 +34,7 @@ class HideChannelTest {
     @Test
     fun neighbour() {
         assertEquals("c", HideChannelLogic.neighbour(listOf("a", "b", "c"), "b"))
-        assertEquals("b", HideChannelLogic.neighbour(listOf("a", "b"), "b"))
+        assertEquals("a", HideChannelLogic.neighbour(listOf("a", "b"), "b")) // the last row: the one above
         assertNull(HideChannelLogic.neighbour(listOf("b"), "b"))
         assertNull(HideChannelLogic.neighbour(listOf("a"), "x"))
     }
