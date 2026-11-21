@@ -393,6 +393,30 @@ object SportFixtures {
         chosen: FxChannel?,
     ): String? = if (f.status == "in" && chosen != null) f.companionId else null
 
+    /**
+     * "Record on <channel>" (web waysForFixture canRecord, f4e82c60): a game not finished, not recorded already, not one
+     * the server records by itself, on a channel with a known programme start that isn't a dormant feed. Null = no button.
+     */
+    fun recordOn(
+        f: FxItem,
+        rec: IptvRecording?,
+        nowS: Long,
+    ): FxChannel? {
+        if (f.status == "post" || f.recordingId != null || rec != null) return null
+        val best = pickChannel(f, nowS).channel ?: return null
+        val auto = best.autoRecord ?: f.autoRecord
+        return if (best.start != null && !best.dormant && !auto) best else null
+    }
+
+    /** "Your recording, from the start": the fixture's recording when it is done or still recording and playable. */
+    fun yourRecording(
+        f: FxItem,
+        recs: List<IptvRecording>?,
+    ): IptvRecording? {
+        val id = f.recordingId ?: return null
+        return recs?.firstOrNull { it.id == id && it.playable && (it.state == "done" || it.state == "recording") }
+    }
+
     const val SOON_S = 15 * 60L
 
     /** A channel opened directly: the live (or about-to-start) fixture whose channels include it; guesses come back as maybe. */

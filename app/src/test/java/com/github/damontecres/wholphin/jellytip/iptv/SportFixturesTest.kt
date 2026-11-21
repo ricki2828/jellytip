@@ -118,4 +118,18 @@ class SportFixturesTest {
         assertNull(SportFixtures.resolveChannelMatch(items, "p:9", now)) // starts in an hour
         assertNull(SportFixtures.resolveChannelMatch(items, null, now))
     }
+
+    @Test
+    fun recordAndYourRecording() {
+        val f = SportFixtures.parse(body).items[1].let { it.copy(channels = it.channels.map { c -> c.copy(start = now + 3000) }) }
+        assertEquals("p:8", SportFixtures.recordOn(f, null, now)?.id)
+        assertNull(SportFixtures.recordOn(f.copy(recordingId = "9"), null, now))
+        assertNull(SportFixtures.recordOn(f.copy(status = "post"), null, now))
+        assertNull(SportFixtures.recordOn(f.copy(autoRecord = true), null, now))
+        assertNull(SportFixtures.recordOn(SportFixtures.parse(body).items[1], null, now)) // no programme start known
+        val r = IptvRecording("9", "p:8", "ESPN 2", "Lakers v Suns", null, now, now + 7200, "done", 0, null, false, true, null, null)
+        assertEquals("9", SportFixtures.yourRecording(f.copy(recordingId = "9"), listOf(r))?.id)
+        assertNull(SportFixtures.yourRecording(f.copy(recordingId = "9"), listOf(r.copy(playable = false))))
+        assertNull(SportFixtures.yourRecording(f, listOf(r)))
+    }
 }
