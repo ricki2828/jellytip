@@ -49,7 +49,6 @@ import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.ui.nav.Destination
-import kotlinx.coroutines.launch
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -103,6 +102,8 @@ fun JellytipIptvPlayPage(
     val context = androidx.compose.ui.platform.LocalContext.current
     // "This stream isn't working": Down opens it (and a failed stream shows it); Back closes it
     val canReport = target.vodId != null || target.episodeId != null
+    // Where it last really played (item position, remux-aware): a report during recovery carries on from here
+    var lastGoodMs by remember(target) { mutableLongStateOf(target.resumeMs) }
     var reportOpen by remember(target) { mutableStateOf(false) }
     var reportBusy by remember(target) { mutableStateOf(false) }
     val reportFocus = remember { FocusRequester() }
@@ -128,9 +129,10 @@ fun JellytipIptvPlayPage(
         if (!reportBusy) {
             reportBusy = true
             scope.launch {
-                val pos = playback.player?.currentPosition ?: 0L
+                // The last place it really played (a recovering / remuxed stream's player position is 0 or offset)
+                val pos = lastGoodMs
                 // Same film / episode on another copy: carry on from here
-                val resume = if (playState is IptvPlayState.Playing) pos else target.resumeMs
+                val resume = lastGoodMs
                 JellytipTrace.player("iptv", "user: stream isn't working ${target.label}")
                 val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = (playState as? IptvPlayState.Failed)?.reported == true)
                 reportBusy = false
@@ -192,6 +194,7 @@ fun JellytipIptvPlayPage(
             playback.player?.let {
                 // A server remux begins at its start offset: the item's position, not the stream's
                 position = playback.positionMs()
+                if (playState is IptvPlayState.Playing) lastGoodMs = position
                 duration = playback.durationMs()
                 playing = it.playWhenReady
                 // "Play both" from a double feature: this IPTV film ended, start the other half

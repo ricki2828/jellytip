@@ -784,8 +784,10 @@ class JellytipIptvPlayback
         /** Save [target]'s resume point (recordings, films, episodes) from where the player is now. */
         fun saveProgress(target: IptvTarget) {
             val item = target.progressItem ?: return
-            val p = player ?: return
-            if (_state.value.target != target) return
+            player ?: return
+            // Only from a stream that is really playing: while recovering / failed the player holds nothing (position 0)
+            // and would wipe the resume point
+            if (_state.value !is IptvPlayState.Playing || _state.value.target != target || loadedTarget != target) return
             val pos = positionMs() / 1000.0
             val dur = durationMs().takeIf { it > 0 }?.div(1000.0) ?: return
             // Episodes name their series (pid:s:sid) so the server's Next Up works however the episode was opened
