@@ -686,12 +686,14 @@ fun HomePageContent(
         if (moves) {
             JellytipTrace.layout("deferred live hero: would move focused $key")
         } else {
-            val heroHadFocus = leaving && key == "live-hero"
-            liveHero = liveHeroNow
-            if (heroHadFocus) {
-                withFrameNanos { }
-                anyRowFocus.tryRequestFocus()
+            // Focus off a leaving hero first (the row below is composed while the hero is), then drop it: changing
+            // state first would cancel this effect (focusedKey changes) and leave focus nowhere
+            if (leaving && key == "live-hero") {
+                if (rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus() != true) anyRowFocus.tryRequestFocus()
+                specialFocus = null
+                savedSpecialId = null
             }
+            liveHero = liveHeroNow
             // Never out of the nav rail: only at the top of Home, or before Home's first focus landed
             if (arriving && ((atTop && currentHasFocus) || !firstFocused) && takeFocus) {
                 withFrameNanos { }

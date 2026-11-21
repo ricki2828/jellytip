@@ -253,25 +253,25 @@ fun LiveMatchHero(
                     val last = i == buttons.lastIndex
                     // Keyed by label: cycling to a game with fewer buttons keeps the focused button's node (and focus)
                     androidx.compose.runtime.key(label) {
-                    Button(
-                        onClick = action,
-                        modifier =
-                            Modifier
-                                .onPreviewKeyEvent { e ->
-                                    if (onCycle == null || count < 2 || e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                    when {
-                                        first && e.key == Key.DirectionLeft -> {
-                                            onCycle(LiveHero.cycle(index, count, -1))
-                                            true
+                        Button(
+                            onClick = action,
+                            modifier =
+                                Modifier
+                                    .onPreviewKeyEvent { e ->
+                                        if (onCycle == null || count < 2 || e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                        when {
+                                            first && e.key == Key.DirectionLeft -> {
+                                                onCycle(LiveHero.cycle(index, count, -1))
+                                                true
+                                            }
+                                            last && e.key == Key.DirectionRight -> {
+                                                onCycle(LiveHero.cycle(index, count, 1))
+                                                true
+                                            }
+                                            else -> false
                                         }
-                                        last && e.key == Key.DirectionRight -> {
-                                            onCycle(LiveHero.cycle(index, count, 1))
-                                            true
-                                        }
-                                        else -> false
-                                    }
-                                }.onFocusChangedCompat(onFocused),
-                    ) { Text(label, fontFamily = JellytipFontFamily, fontSize = 16.sp) }
+                                    }.onFocusChangedCompat(onFocused),
+                        ) { Text(label, fontFamily = JellytipFontFamily, fontSize = 16.sp) }
                     }
                 }
             }
