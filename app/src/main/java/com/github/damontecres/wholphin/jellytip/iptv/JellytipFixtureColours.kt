@@ -13,7 +13,8 @@ import kotlin.math.roundToInt
  *    neutral when the alt still clashes.
  */
 object FixtureColours {
-    const val DARK_DE = 12.0
+    /** ΔE from the page base; 20 also keeps a colour visible on the focused tile fill (#1E1E1E): #2A2A2A is out, #0B2A4A in. */
+    const val DARK_DE = 20.0
     const val LIGHT_LUM = 0.8f
     const val CLASH_DE = 20.0
 

@@ -50,6 +50,12 @@ class FixtureColoursTest {
     }
 
     @Test
+    fun charcoalIsTooDarkNavyIsNot() {
+        // Panthers' #2a2a2a nearly vanishes on the focused tile: its alt; Warriors' #0b2a4a reads
+        assertEquals("#e4003b" to "#0b2a4a", FixtureColours.resolve("#2a2a2a", "#e4003b", "#0b2a4a", null))
+    }
+
+    @Test
     fun allUnusableIsNoColourButNoFetch() {
         val f =
             SportFixtures.parse(
