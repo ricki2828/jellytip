@@ -223,10 +223,14 @@ fun rememberJellytipRows(
             // Shown at once (with the cached My list if any); a slow Home answer only adds My list later
             val first = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, viewModel.rows.peek("home")) ?: it
             value = first
-            val home = homeJob?.await()
-            val shown = if (home != null) com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, home) ?: it else first
-            if (shown != first) value = shown
-            viewModel.rows.prefetch(page, shown)
+            if (homeJob == null) {
+                viewModel.rows.prefetch(page, first)
+            } else {
+                val home = homeJob.await()
+                val shown = if (home != null) com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, home) ?: it else first
+                if (shown != first) value = shown
+                viewModel.rows.prefetch(page, shown)
+            }
         }
     }
     return loaded

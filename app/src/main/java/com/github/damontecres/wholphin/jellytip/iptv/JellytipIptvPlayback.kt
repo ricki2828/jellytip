@@ -216,7 +216,9 @@ class JellytipIptvPlayback
                                     if (now !is IptvPlayState.Playing || now.target != t || loadedTarget != t) return@launch
                                     val p = player ?: return@launch
                                     val pos = p.currentPosition
-                                    if (p.isPlaying && pos > lastPos) playedS += OK_TICK_MS / 1000
+                                    // HLS live windows keep the position roughly flat: playing is enough there
+                                    val moved = p.isCurrentMediaItemLive || pos > lastPos
+                                    if (p.isPlaying && moved) playedS += OK_TICK_MS / 1000
                                     lastPos = pos
                                 }
                                 IptvStreamFail.report(t, ok = true, posSec = playedS)
@@ -347,7 +349,6 @@ class JellytipIptvPlayback
         }
 
         private var okJob: kotlinx.coroutines.Job? = null
-        private val OK_TICK_MS = 5_000L
 
         private fun fail(
             target: IptvTarget,
@@ -478,6 +479,9 @@ class JellytipIptvPlayback
         }
 
         companion object {
+            /** Good-play check tick (failed-stream memory). */
+            private const val OK_TICK_MS = 5_000L
+
             private const val HANDOVER_MS = 400L
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
