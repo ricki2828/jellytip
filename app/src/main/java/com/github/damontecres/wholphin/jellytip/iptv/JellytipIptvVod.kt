@@ -73,6 +73,8 @@ data class IptvEpisode(
     val overview: String?,
     val still: String?,
     val progress: IptvProgress?,
+    /** Newest failure while newer than the last good play (failed-stream memory); null = none or an older server. */
+    val lastFail: IptvLastFail? = null,
 )
 
 data class IptvSeason(
@@ -198,6 +200,7 @@ object IptvVodParse {
                                 overview = e.str("overview"),
                                 still = image(base, e.str("still")),
                                 progress = progress(e.optJSONObject("progress")),
+                                lastFail = IptvStreamFail.parse(e.optJSONObject("lastFail")),
                             )
                         },
                     )
