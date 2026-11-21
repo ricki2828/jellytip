@@ -85,15 +85,26 @@ class JellytipJourneysService
         /** The journeys page: null = nothing could be loaded (hub and manifest both failed). */
         suspend fun groups(): JourneyGroups? {
             val hub: List<HubSection>? =
-                runCatching {
+                try {
                     jellytipApi
                         .userCall("v1/collections", timeoutMs = 10_000)
                         ?.takeIf { it.first == 200 }
                         ?.let { HubParse.sections(it.second) }
-                }.getOrNull()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            val manifest =
+                try {
+                    carousels.manifest()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
             val lists =
-                runCatching { carousels.manifest() }
-                    .getOrNull()
+                manifest
                     ?.letterboxd
                     ?.map { l -> JourneyList(l.slug, l.name, l.itemIds.map { Journeys.norm(it.toString()) }) }
             if (hub == null && lists == null) return null
@@ -128,6 +139,7 @@ private fun BaseItemDto.journeyItem() =
         name = name,
         productionYear = productionYear,
         locationType = locationType?.serialName,
+        type = type.serialName,
         played = userData?.played == true,
         positionTicks = userData?.playbackPositionTicks ?: 0,
     )

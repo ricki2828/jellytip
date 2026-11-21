@@ -168,8 +168,8 @@ class JellytipAskViewModel
                             AskResult.Error
                         }
                     // A different person signed in while this was out: never show them another's picks
-                    if (serverRepository.currentUser?.id != user) return@launch
-                    _state.update { it.copy(result = result) }
+                    val stillMine = serverRepository.currentUser?.id == user
+                    _state.update { it.copy(result = if (stillMine) result else AskResult.Idle) }
                 }
         }
 

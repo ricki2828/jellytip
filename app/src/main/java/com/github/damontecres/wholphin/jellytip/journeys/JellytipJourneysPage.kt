@@ -179,7 +179,8 @@ class JellytipJourneysViewModel
 
         fun details(entry: JourneyEntry) {
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
-            navigationManager.navigateTo(Destination.MediaItem(uuid, BaseItemKind.MOVIE), "journey film OK")
+            val kind = BaseItemKind.entries.firstOrNull { it.serialName == entry.type } ?: BaseItemKind.MOVIE
+            navigationManager.navigateTo(Destination.MediaItem(uuid, kind), "journey film OK")
         }
 
         fun person(personId: String) {

@@ -262,7 +262,14 @@ fun JellytipCollectionsHubPage(
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
-        Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
+            // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
+            HubChip("Start a journey  ›", selected = false, onClick = {
+                JellytipTrailerControl.stop()
+                viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
+            })
+        }
         when {
             list == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
             all.isNullOrEmpty() ->
@@ -275,11 +282,6 @@ fun JellytipCollectionsHubPage(
             else -> {
                 // Movies | TV Shows | All: remembered across visits; Up from the section chips reaches it
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 8.dp).focusGroup()) {
-                    // t5n (21-Nov): web 7cc13de9 "Start a journey" chip
-                    HubChip("Start a journey", selected = false, onClick = {
-                        JellytipTrailerControl.stop()
-                        viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
-                    })
                     HubTabs.ORDER.forEach { (key, label) ->
                         HubChip(
                             label,

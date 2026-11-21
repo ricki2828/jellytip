@@ -62,6 +62,8 @@ data class JourneyItem(
     val locationType: String? = null,
     val played: Boolean = false,
     val positionTicks: Long = 0,
+    /** Jellyfin item type ("Movie", ...), so a list entry opens the right page. */
+    val type: String? = null,
 )
 
 data class JourneyEntry(
@@ -73,6 +75,7 @@ data class JourneyEntry(
     val watched: Boolean,
     val inProgress: Boolean,
     val positionTicks: Long = 0,
+    val type: String? = null,
 )
 
 /** A Letterboxd list from the carousels manifest (ids as the library gives them). */
@@ -275,6 +278,7 @@ object Journeys {
                 watched = watched,
                 inProgress = playable && !watched && hit!!.positionTicks > 0,
                 positionTicks = if (playable) hit!!.positionTicks else 0,
+                type = hit?.type,
             )
         }
     }
