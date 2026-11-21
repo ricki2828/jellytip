@@ -293,15 +293,25 @@ class JellytipIptvService
          * `GET v1/iptv/sport/fixtures` for 2 days back to 4 ahead, the device's timezone; [capOff] asks for every game
          * ("Show all"). First = HTTP code (404 = older server: Game Centre falls back to the upcoming list).
          */
-        suspend fun fixtures(capOff: Boolean = false): Pair<Int, FxList?>? {
+        suspend fun fixtures(
+            capOff: Boolean = false,
+            /** Reuse an answer younger than this (the player resolving a directly opened channel); 0 = always fetch. */
+            maxAgeMs: Long = 0,
+        ): Pair<Int, FxList?>? {
+            if (!capOff && maxAgeMs > 0) fixturesCache?.takeIf { System.currentTimeMillis() - it.first < maxAgeMs }?.let { return 200 to it.second }
             val b = base()
             val now = System.currentTimeMillis() / 1000
             val tz = enc(java.util.TimeZone.getDefault().id)
             val path = "v1/iptv/sport/fixtures?from=${now - SportFixtures.PAST_S}&to=${now + SportFixtures.AHEAD_S}&limit=120&tz=$tz" + if (capOff) "&cap=0" else ""
             val (code, body) = api.userCall(path, timeoutMs = 15_000) ?: return null
             if (code != 200) return code to null
-            return code to runCatching { SportFixtures.parse(body) { resolve(b, it) } }.getOrNull()
+            val list = runCatching { SportFixtures.parse(body) { resolve(b, it) } }.getOrNull()
+            if (list != null && !capOff) fixturesCache = System.currentTimeMillis() to list
+            return code to list
         }
+
+        @Volatile
+        private var fixturesCache: Pair<Long, FxList>? = null
 
         /** Remind me for a fixture: `{fid}` first (no channel needed), then `{matchId}` on an older server. New id or null. */
         suspend fun addFixtureReminder(

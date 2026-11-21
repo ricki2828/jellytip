@@ -68,10 +68,32 @@ class LiveSnapshots(
         return if (i < 0) null else snaps[i].d
     }
 
-    /** Newest released full answer, for the panel; falls back to [released]. */
+    /**
+     * For the panel: the newest released full answer, with the score / clock / moments / market of a newer released light
+     * answer laid over it (so it never shows an older score than the scorebug). No full answer yet: the light one.
+     */
     fun releasedFull(reveal: (Double?) -> Boolean): MatchLive? {
-        for (i in snaps.indices.reversed()) if (snaps[i].full && reveal(snaps[i].at.toDouble())) return snaps[i].d
-        return released(reveal)
+        val i = CompanionPolicy.newestRevealedIndex(snaps.map { it.at }, reveal)
+        if (i < 0) return null
+        val newest = snaps[i]
+        var full: Snap? = null
+        for (j in i downTo 0) if (snaps[j].full) {
+            full = snaps[j]
+            break
+        }
+        val f = full ?: return newest.d
+        if (f === newest) return f.d
+        val l = newest.d
+        return f.d.copy(
+            status = l.status ?: f.d.status,
+            clock = l.clock,
+            period = l.period,
+            scoreHome = l.scoreHome,
+            scoreAway = l.scoreAway,
+            market = l.market ?: f.d.market,
+            moments = if (l.hasMoments) l.moments else f.d.moments,
+            updatedAt = l.updatedAt,
+        )
     }
 
     /** The newest answer's stamp, for "Live info in N s". */
@@ -86,6 +108,7 @@ class LiveSnapshots(
 class PlayerLag {
     private var baselineMs: Long? = null
     private var key: Any? = null
+    private var item: Any? = null
 
     fun reset(k: Any?) {
         if (k != key) {
@@ -96,6 +119,13 @@ class PlayerLag {
 
     fun lagSec(p: Player?): Double {
         p ?: return 0.0
+        // A new stream (zap, failover, chip) gets its own baseline, sampled only once it plays
+        val cur = p.currentMediaItem
+        if (cur !== item) {
+            item = cur
+            baselineMs = null
+        }
+        if (p.playbackState != Player.STATE_READY && baselineMs == null) return 0.0
         if (!p.isCurrentMediaItemLive) return 0.0
         val off = p.currentLiveOffset
         if (off == C.TIME_UNSET || off < 0) return 0.0

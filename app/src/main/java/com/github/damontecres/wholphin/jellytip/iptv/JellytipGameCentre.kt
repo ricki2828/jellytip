@@ -230,7 +230,7 @@ fun JellytipGameCentrePage(
                                         FixtureTile(
                                             f,
                                             now,
-                                            reminder = viewModel.reminderOn(f),
+                                            reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
                                             revealed = f.fid in revealed.value,
                                             onClick = { menu = f },
                                             modifier = if (gi == 0 && f === g.items.first()) Modifier.focusRequester(first) else Modifier,
@@ -258,7 +258,7 @@ fun JellytipGameCentrePage(
         FixtureMenu(
             f,
             now,
-            reminder = viewModel.reminderOn(f),
+            reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
             revealed = f.fid in revealed.value,
             onDismiss = { menu = null },
             onWatch = { ch, fromStart ->
