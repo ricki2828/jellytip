@@ -21,12 +21,6 @@ export function useRoute(): Route {
 // ---------- history: depth per entry, scroll + focus restored on Back (rules in lib/navStack.ts) ----------
 
 const nav = createNavStack(history);
-// The app puts the place back itself (restore below): the browser's / WebView's own attempt on popstate would only flash first
-try {
-  history.scrollRestoration = "manual";
-} catch {
-  /* very old WebView: fine */
-}
 nav.init();
 let restoring = false;
 let lastFocus: string | undefined;
@@ -156,11 +150,11 @@ function restore(e: NavEntry) {
       const target = a ? anchorScroll(window.scrollY, a.box.getBoundingClientRect().top, e.anchor!.top) : e.scrollY ?? 0;
       const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       const want = Math.min(target, room); // too short yet: as far as it goes, so a lazy next page loads in
-      if (Math.abs(window.scrollY - want) > 2) {
+      if (Math.abs(window.scrollY - want) >= 1) {
         window.scrollTo(0, want);
         moved = true;
       }
-      placed = room + 2 >= target && Math.abs(window.scrollY - target) <= 2;
+      placed = room + 2 >= target && Math.abs(window.scrollY - target) < 1;
       if (!focused && e.focus && !matchMedia("(hover: none) and (pointer: coarse)").matches) {
         const el = [...document.querySelectorAll<HTMLElement>("[data-nav]")].find((n) => (n.getAttribute("aria-label") ?? n.textContent?.trim().slice(0, 80)) === e.focus);
         if (el) {

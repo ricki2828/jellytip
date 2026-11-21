@@ -48,3 +48,4 @@ test("anchor: a card below the screen is never the anchor (cards are listed befo
   ];
   assert.deepEqual(pickAnchor(boxes, 0, 844), { key: "Row 1", top: 100 });
 });
+
