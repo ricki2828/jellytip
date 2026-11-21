@@ -65,7 +65,7 @@ class JellytipIptvService
 
         private val _user = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
-        /** Whose answers the caches below hold (on now, upcoming, fixtures, recordings, space). */
+        /** Answers for the caches below (on now, upcoming, fixtures, recordings, space) are written only for the person who asked. */
         private val own = UserOwnership { api.currentUserKey() }
 
         /** The signed-in Jellyfin user id (null = nobody yet / signed out); per-person singletons reset when it changes. */
@@ -76,15 +76,14 @@ class JellytipIptvService
             if (id == userKey) return
             userKey = id
             liveCheck = null
-            if (own.mustClear(signedOut = id == null)) {
-                onNowCache = null
-                upcomingCache = null
-                fixturesCache = null
-                recordingsCache = null
-                lastSpace = null
-                hasRecordings.value = false
-            }
-            JellytipFantasy.switched(signedOut = id == null)
+            // Every change (A -> null -> B included): nothing of the previous person survives; callers fetch again
+            onNowCache = null
+            upcomingCache = null
+            fixturesCache = null
+            recordingsCache = null
+            lastSpace = null
+            hasRecordings.value = false
+            JellytipFantasy.switched()
             _user.value = id
             JellytipIptvState.hasIptv.value = id?.let { k -> prefs.takeIf { it.contains("has_$k") }?.getBoolean("has_$k", false) }
         }
@@ -136,9 +135,9 @@ class JellytipIptvService
             val b = base()
             val who = own.start()
             val (code, body) = get("v1/iptv/live/onnow?limit=$limit") ?: return emptyList()
-            if (code != 200) return emptyList<IptvOnNow>().also { if (own.accept(who)) onNowCache = System.currentTimeMillis() to it }
+            if (code != 200) return emptyList<IptvOnNow>().also { if (own.still(who)) onNowCache = System.currentTimeMillis() to it }
             val list = runCatching { IptvParse.onNow(body, System.currentTimeMillis() / 1000) { resolve(b, it) } }.getOrDefault(emptyList())
-            if (own.accept(who)) onNowCache = System.currentTimeMillis() to list
+            if (own.still(who)) onNowCache = System.currentTimeMillis() to list
             return list
         }
 
@@ -251,7 +250,7 @@ class JellytipIptvService
             val (code, body) = get("v1/iptv/sport/upcoming?days=$days&limit=$limit") ?: return null
             if (code != 200) return null
             val list = runCatching { IptvParse.upcoming(body) { resolve(b, it) } }.getOrNull() ?: return null
-            if (own.accept(who)) upcomingCache = System.currentTimeMillis() to list
+            if (own.still(who)) upcomingCache = System.currentTimeMillis() to list
             return list
         }
 
@@ -352,7 +351,7 @@ class JellytipIptvService
             val (code, body) = api.userCall(path, timeoutMs = 15_000) ?: return null
             if (code != 200) return code to null
             val list = runCatching { SportFixtures.parse(body) { resolve(b, it) } }.getOrNull()
-            if (list != null && !capOff && own.accept(who)) fixturesCache = System.currentTimeMillis() to list
+            if (list != null && !capOff && own.still(who)) fixturesCache = System.currentTimeMillis() to list
             return code to list
         }
 
@@ -449,7 +448,7 @@ class JellytipIptvService
             if (code != 200) return null
             val got = runCatching { IptvParse.recordings(body) { resolve(b, it) } }.getOrNull() ?: return null
             // Another person signed in while this was in flight: not theirs, keep nothing
-            if (!own.accept(who)) return null
+            if (!own.still(who)) return null
             recordingsCache = got.second
             got.first?.let { lastSpace = it }
             hasRecordings.value = got.second.any { it.state != "cancelled" && it.state != "failed" }

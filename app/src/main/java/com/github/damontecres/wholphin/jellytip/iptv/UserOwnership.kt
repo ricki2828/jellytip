@@ -3,35 +3,22 @@ package com.github.damontecres.wholphin.jellytip.iptv
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 
 /**
- * Whose answer a per-person cache holds, keyed like [JellytipApi.currentUserKey] (the signed-in token's hash, "" when
- * signed out). The token moves to the new person before the user switch is announced (ServerRepository.changeUser:
- * token, a few calls, then the current user), so a generation bumped at the switch would drop the new person's own
- * answer fetched in that gap. Owning by key instead: an answer is kept only if the person didn't change while it was
- * in flight ([accept]), and a switch clears only what belongs to someone else ([mustClear]).
+ * Per-person answers vs user switches. Keyed like [JellytipApi.currentUserKey] (the signed-in token's hash, "" when
+ * signed out). Rules, for every holder of per-person state:
+ * - every user change (switchUser, including the A -> null -> B hop NavDrawerService makes) clears ALL of it;
+ * - an answer is written only if the token didn't change while it was in flight ([still]); the token moves before the
+ *   switch is announced (ServerRepository.changeUser), so an answer fetched in that gap is the new person's and is kept
+ *   until the switch clears it;
+ * - whatever a screen was using is fetched again right after the switch (no list left empty until the next visit).
  */
 class UserOwnership(
     private val who: () -> String,
 ) {
-    @Volatile
-    var owner: String? = null
-        private set
-
-    /** Call before the request; pass the result to [accept]. */
+    /** Call before the request; pass the result to [still] before writing the answer. */
     fun start(): String = who()
 
-    /** The answer fetched as [startedAs] is still for the person signed in now: keep it (and own it). */
-    fun accept(startedAs: String): Boolean {
-        if (startedAs != who()) return false
-        owner = startedAs
-        return true
-    }
-
-    /** On a user switch: true (and nothing owned any more) when what's held is someone else's, or nobody is signed in. */
-    fun mustClear(signedOut: Boolean): Boolean {
-        val clear = signedOut || (owner != null && owner != who())
-        if (clear) owner = null
-        return clear
-    }
+    /** The person signed in now is the one the answer was fetched for. */
+    fun still(startedAs: String): Boolean = startedAs == who()
 
     companion object {
         /** The app's signed-in person, from the shared companion client. */

@@ -37,8 +37,8 @@ data class TeamSide(
 )
 
 /**
- * The signed-in person's team reminders. An answer fetched for someone else ([UserOwnership.accept]) is dropped, and a
- * user switch ([switched]) clears only a list that isn't the new person's own.
+ * The signed-in person's team reminders ([UserOwnership] rules): [reset] at every user switch, and an answer fetched
+ * for someone else is never written ([loaded] / [missing] with a stale key).
  */
 class TeamReminderState(
     private val own: UserOwnership = UserOwnership.app(),
@@ -50,8 +50,7 @@ class TeamReminderState(
 
     fun start(): String = own.start()
 
-    fun switched(signedOut: Boolean) {
-        if (!own.mustClear(signedOut)) return
+    fun reset() {
         _items.value = null
         _available.value = null
     }
@@ -60,7 +59,7 @@ class TeamReminderState(
         startedAs: String,
         list: List<TeamReminder>,
     ): Boolean {
-        if (!own.accept(startedAs)) return false
+        if (!own.still(startedAs)) return false
         _available.value = true
         _items.value = list
         return true
@@ -68,8 +67,9 @@ class TeamReminderState(
 
     /** 404: this server has no team reminders. */
     fun missing(startedAs: String): Boolean {
-        if (!own.accept(startedAs)) return false
+        if (!own.still(startedAs)) return false
         _available.value = false
+        _items.value = null
         return true
     }
 }
@@ -124,11 +124,20 @@ class JellytipTeamReminders
         init {
             // Another person signed in (or out): never show the previous person's teams; screens reload on open
             scope.launch {
-                service.user.drop(1).collect { u -> state.switched(signedOut = u == null) }
+                service.user.drop(1).collect { u ->
+                    state.reset()
+                    // A screen asked for the list: fetch it again for the new person
+                    if (u != null && wanted) refresh()
+                }
             }
         }
 
+        /** Someone asked for the list (it is fetched again after a user switch). */
+        @Volatile
+        private var wanted = false
+
         fun refresh() {
+            wanted = true
             scope.launch { load() }
         }
 

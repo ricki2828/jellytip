@@ -165,9 +165,9 @@ object JellytipFantasy {
 
     private val own = UserOwnership.app()
 
-    /** A user switch (JellytipIptvService.switchUser): the previous person's matchups and link state go. */
-    fun switched(signedOut: Boolean) {
-        if (!own.mustClear(signedOut)) return
+    /** Every user switch (JellytipIptvService.switchUser): the previous person's matchups and link state go; the pages'
+     * polls load the new person's at once (lastLoad reset). */
+    fun switched() {
         _live.value = null
         linked.value = null
         lastLoad = 0L
@@ -182,7 +182,7 @@ object JellytipFantasy {
             val api = JellytipApi.shared ?: return@launch
             val who = own.start()
             val (code, body) = api.userCall("v1/fantasy/live", timeoutMs = 8_000) ?: return@launch
-            if (!own.accept(who)) return@launch
+            if (!own.still(who)) return@launch
             when (code) {
                 200 -> {
                     linked.value = true

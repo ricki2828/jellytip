@@ -104,7 +104,11 @@ fun JellytipRemindersPage(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         viewModel.load()
-        first.tryRequestFocus()
+        // The button is a lazy item: retry until it is attached
+        repeat(10) {
+            delay(50)
+            if (first.tryRequestFocus()) return@LaunchedEffect
+        }
     }
     // A removed row had focus: back to the top button
     val refocus = {
