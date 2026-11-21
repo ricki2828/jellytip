@@ -14,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -763,8 +762,8 @@ private fun TrailerButton(
 }
 
 /**
- * The Trailer button's playback: full screen with sound and nothing drawn over it (library details hands its trailer to
- * the player). Holds focus so the D-pad can't move to the hidden page; Back, or the end of the trailer, closes it.
+ * The Trailer button's playback: full screen with sound and nothing over it, not even the nav rail (library details hands
+ * its trailer to the player). Its own window, so the D-pad can't reach the page underneath; Back, or the end, closes it.
  */
 @Composable
 private fun IptvFullScreenTrailer(
@@ -772,19 +771,14 @@ private fun IptvFullScreenTrailer(
     httpClient: okhttp3.OkHttpClient,
     onClose: () -> Unit,
 ) {
-    val focus = remember { FocusRequester() }
     val close by androidx.compose.runtime.rememberUpdatedState(onClose)
-    LaunchedEffect(Unit) { focus.tryRequestFocus() }
-    androidx.activity.compose.BackHandler { close() }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .focusRequester(focus)
-            .onPreviewKeyEvent { it.key != Key.Back }
-            .focusable(),
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { close() },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        com.github.damontecres.wholphin.jellytip.TrailerLayer(url = url, sound = true, httpClient = httpClient, onEnded = { close() })
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            com.github.damontecres.wholphin.jellytip.TrailerLayer(url = url, sound = true, httpClient = httpClient, onEnded = { close() })
+        }
     }
 }
 

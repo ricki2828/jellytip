@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,9 +18,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
@@ -205,8 +208,12 @@ fun IptvTrackMenu(
     val start = remember { FocusRequester() }
     // One audio track (nothing to pick): start on Subtitles
     val audioFirst = audio.any { it.pickable }
-    LaunchedEffect(Unit) { start.tryRequestFocus() }
     androidx.compose.ui.window.Dialog(onDismissRequest = dismiss) {
+        // Inside the dialog's own window, once its content is laid out (outside, the requester is not attached yet)
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            start.tryRequestFocus()
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             modifier =
@@ -239,7 +246,8 @@ private fun TrackColumn(
     val first = remember(entries) { IptvTrackColumns.focusIndex(entries) }
     Column(modifier.focusGroup().focusRestorer(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
-        LazyColumn(Modifier.heightIn(max = 360.dp)) {
+        // Opens scrolled to the current pick, so its row is composed when focus is asked for
+        LazyColumn(Modifier.heightIn(max = 360.dp), state = rememberLazyListState(initialFirstVisibleItemIndex = first)) {
             itemsIndexed(entries) { i, e ->
                 ListItem(
                     selected = e.selected,
@@ -250,7 +258,8 @@ private fun TrackColumn(
                     },
                     headlineContent = { Text(e.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { if (e.selected) Text("✓") },
-                    modifier = if (i == first && focus != null) Modifier.focusRequester(focus) else Modifier,
+                    // Notes ("one track", "no subtitles") are not stops for the D-pad
+                    modifier = Modifier.focusProperties { canFocus = e.pickable }.then(if (i == first && focus != null) Modifier.focusRequester(focus) else Modifier),
                 )
             }
         }
