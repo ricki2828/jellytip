@@ -83,6 +83,7 @@ export function refreshFixtures(force = false): Promise<void> {
   return inflight;
 }
 
+const WAIT_VISIBLE = -1;
 /** One pending retry at a time, doubling from 5 s to 5 min while answers keep failing; dropped by a session switch. */
 function scheduleRetry(gen: number) {
   failures++;
@@ -91,10 +92,12 @@ function scheduleRetry(gen: number) {
     retryTimer = undefined;
     if (gen !== generation || subs === 0) return; // nobody listening (no sport screen, logged out): the next mount fetches
     if (document.hidden) {
-      // a hidden tab waits until it is looked at again
+      // a hidden tab waits until it is looked at again; -1 keeps the poll gate shut (and stops more listeners) meanwhile
+      retryTimer = WAIT_VISIBLE;
       const back = () => {
         if (document.hidden) return;
         document.removeEventListener("visibilitychange", back);
+        if (retryTimer === WAIT_VISIBLE) retryTimer = undefined;
         if (gen === generation && subs > 0) void refreshFixtures(true);
       };
       document.addEventListener("visibilitychange", back);
