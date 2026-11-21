@@ -331,7 +331,6 @@ class JellytipIptvPlayback
                             val p = ensurePlayer()
                             loadedTarget = target
                             if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
-                            loadedTarget = target
                             p.playWhenReady = true
                             p.prepare()
                         }
@@ -349,10 +348,6 @@ class JellytipIptvPlayback
 
         private var okJob: kotlinx.coroutines.Job? = null
         private val OK_TICK_MS = 5_000L
-
-        /** The target whose stream the player holds now; during a zap the old stream plays on while the state already names the new one. */
-        @Volatile
-        private var loadedTarget: IptvTarget? = null
 
         private fun fail(
             target: IptvTarget,
