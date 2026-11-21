@@ -183,6 +183,10 @@ sealed class Destination(
     /** Jellytip: Pick for tonight (three picks with reasons; web 7056c179). */
     @Serializable
     data object JellytipTonight : Destination(false)
+
+    /** Jellytip: availability inbox (new episodes, requests that arrived; web de17f4d4). */
+    @Serializable
+    data object JellytipInbox : Destination(false)
     // ---- Jellytip lane B (tvparity-library) destinations: end ----
 
     /** Jellytip personalisation: hub (settings that follow the person), taste, Home edit. */

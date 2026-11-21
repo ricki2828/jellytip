@@ -436,6 +436,11 @@ fun DestinationContent(
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.tonight.JellytipTonightPage(modifier = modifier)
         }
+
+        Destination.JellytipInbox -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxPage(modifier = modifier)
+        }
         // ---- Jellytip lane B (tvparity-library): end ----
 
         Destination.JellytipUpcomingSport -> {

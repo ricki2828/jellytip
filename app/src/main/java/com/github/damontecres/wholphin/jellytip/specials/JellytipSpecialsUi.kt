@@ -474,6 +474,10 @@ private fun TonightsPickRow(
                     JellytipTrailerControl.stop()
                     actions.navigate(Destination.JellytipTonight)
                 },
+                onLongClick = {
+                    JellytipTrailerControl.stop()
+                    actions.navigate(Destination.JellytipTonight)
+                },
                 modifier = mod,
             ) {
                 Caption("More picks for tonight ›", alpha = 0.95f, px = JellytipHomeTokens.TEXT_PX, maxLines = 3, modifier = Modifier.align(Alignment.Center).padding(12.dp))

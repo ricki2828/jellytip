@@ -219,6 +219,11 @@ class JellytipDiscoverService
         ): RequestOutcome {
             val outcome = send(title, dryRun = false, seasons = seasons)
             if (outcome.status == "added" || outcome.status == "exists") refreshStatuses(listOf(title))
+            // Inbox: its arrival (library or IPTV) becomes news
+            if (outcome.status == "added") {
+                com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService.shared
+                    ?.recordRequest(title.tmdbId, title.mediaType, title.title)
+            }
             return outcome
         }
 
