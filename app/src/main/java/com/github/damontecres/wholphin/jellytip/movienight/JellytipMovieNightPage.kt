@@ -577,7 +577,7 @@ private fun NightScreen(
 
 /** Join card (mock-up 06), beside the header so it never covers the posters: the code and, when the web link is known, a QR. */
 @Composable
-private fun JoinCard(
+internal fun JoinCard(
     code: String,
     hint: String,
     url: String?,
@@ -620,7 +620,7 @@ private fun QrCode(
 
 /** A poster you vote on with OK; the badge in the corner is your vote (none yet = no badge). */
 @Composable
-private fun VotePoster(
+internal fun VotePoster(
     f: MnFilm?,
     w: androidx.compose.ui.unit.Dp,
     mine: MnVote?,
@@ -809,9 +809,11 @@ private fun Button(
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (primary) Color(0xFFEDEDED) else Color(0xFF242424),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = if (primary) Color(0xFF111111) else JellytipPalette.Vanilla,
-                focusedContentColor = Color(0xFF111111),
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         border =
             ClickableSurfaceDefaults.border(

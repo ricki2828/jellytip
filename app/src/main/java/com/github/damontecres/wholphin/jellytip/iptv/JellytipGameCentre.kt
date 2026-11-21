@@ -44,7 +44,6 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -246,7 +245,7 @@ fun JellytipGameCentrePage(
         }
         when {
             state.base == null && state.failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
-            state.base == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            state.base == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2)
             groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             else ->
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
@@ -484,7 +483,7 @@ private fun FixtureMenu(
             if (isEmpty()) add(DialogItem(if (f.status == "post") "No replay available" else "No stream found yet", dismissOnClick = true) {})
         }
     val title = f.title + (pick.skipped?.let { "  ·  skipped $it (failed earlier)" } ?: "")
-    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
 }
 
 /**

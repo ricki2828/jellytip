@@ -1,6 +1,8 @@
 [versions]
 # t5n (21-Nov): QR encoder for the movie night join code (core only; R8 keeps just the QR writer in release)
 zxing = "3.5.3"
+# t5n (21-Nov): Roborazzi screenshots of the Jellytip pages in the Robolectric unit tests (CI artifact; test-only)
+roborazzi = "1.79.0"
 aboutLibraries = "15.2.0"
 acra = "5.13.1"
 agp = "9.2.1"
@@ -60,6 +62,8 @@ minSdk = "23"
 
 [libraries]
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
 wholphin-extensions-mpv = { module = "com.github.damontecres.wholphin.mpv:wholphin-mpv", version.ref = "wholphin-extensions" }
 wholphin-extensions-ffmpeg = { module = "com.github.damontecres.wholphin.media3:decoder-ffmpeg", version.ref = "wholphin-extensions" }
 wholphin-extensions-av1 = { module = "com.github.damontecres.wholphin.media3:decoder-av1", version.ref = "wholphin-extensions" }

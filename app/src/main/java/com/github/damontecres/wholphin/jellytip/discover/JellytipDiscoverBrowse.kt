@@ -365,9 +365,11 @@ private fun Chip(
         colors =
             androidx.tv.material3.ClickableSurfaceDefaults.colors(
                 containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
     ) {
         Text(

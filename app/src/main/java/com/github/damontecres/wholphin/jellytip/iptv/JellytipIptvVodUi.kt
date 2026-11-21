@@ -618,13 +618,16 @@ fun JellytipIptvDetailsPage(
                         Surface(
                             onClick = { season = i },
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+                            border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                             colors =
                                 ClickableSurfaceDefaults.colors(
                                     containerColor = if (i == season) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                                    focusedContainerColor = Color.White,
+                                    focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                                     contentColor = JellytipPalette.Vanilla,
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                                    pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                                    pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                                 ),
                             modifier = if (i == 0) Modifier.focusRequester(focus) else Modifier,
                         ) {
@@ -669,13 +672,16 @@ private fun WaysToWatchRow(
                 Surface(
                     onClick = { onPick(c) },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
                     colors =
                         ClickableSurfaceDefaults.colors(
                             containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f),
-                            focusedContainerColor = Color.White,
+                            focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                             contentColor = JellytipPalette.Vanilla,
-                            focusedContentColor = Color.Black,
+                            focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                            pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                            pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                         ),
                     modifier = Modifier.width(240.dp),
                 ) {
@@ -927,5 +933,5 @@ private fun IptvTileMenu(
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(if (played) "Mark unwatched" else "Mark watched", dismissOnClick = true) { me.setIptvPlayed(item.id, !played, toast) })
             }
         }
-    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true)
 }

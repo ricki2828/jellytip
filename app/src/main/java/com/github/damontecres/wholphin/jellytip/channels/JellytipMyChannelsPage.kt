@@ -292,9 +292,11 @@ private fun ChannelTile(
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color(0xFF1B1B1B),
-                focusedContainerColor = Color(0xFFF2F2F0),
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color(0xFF111111),
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         border =
             ClickableSurfaceDefaults.border(

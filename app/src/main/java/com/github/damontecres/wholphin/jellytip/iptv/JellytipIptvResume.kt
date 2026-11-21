@@ -275,7 +275,7 @@ fun JellytipResumeRow(
         }
     menuFor?.let { r ->
         val close = { menuFor = null }
-        com.github.damontecres.wholphin.ui.components.DialogPopup(
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
             title = r.label,
             dialogItems =

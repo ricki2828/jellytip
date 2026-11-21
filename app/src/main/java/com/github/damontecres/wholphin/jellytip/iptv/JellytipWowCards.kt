@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import com.github.damontecres.wholphin.jellytip.jellytipEnter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -64,7 +65,7 @@ fun FullTimeCard(
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
-    Column(modifier.width(960.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
+    Column(modifier.jellytipEnter(match.id).width(960.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
         Row(Modifier.height(92.dp)) {
             Slab(match.home?.name ?: "Home", if (pal.known) pal.home else Broadcast.Chip, false, Modifier.weight(1f).fillMaxHeight())
             Box(Modifier.width(280.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -106,7 +107,7 @@ fun CatchUpChoiceCard(
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
-    Column(modifier.width(1200.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
+    Column(modifier.jellytipEnter(match.id).width(1200.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
         Row(Modifier.height(92.dp)) {
             Slab(match.home?.name ?: "Home", if (pal.known) pal.home else Broadcast.Chip, false, Modifier.weight(1f).fillMaxHeight())
             Slab(match.away?.name ?: "Away", if (pal.known) pal.away else Broadcast.Chip, true, Modifier.weight(1f).fillMaxHeight())
@@ -152,7 +153,8 @@ fun CatchUpRecapCard(
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
-    Column(modifier.width(900.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // each recap card rises in on its own
+    Column(modifier.jellytipEnter(index, rise = 10.dp).width(900.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Cond("Catch me up", 20.sp, Broadcast.Gold)
             BodyText("${index + 1} / $total", 16.sp, Broadcast.Secondary, maxLines = 1)

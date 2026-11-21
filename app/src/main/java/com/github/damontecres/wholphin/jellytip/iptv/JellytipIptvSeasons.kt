@@ -236,13 +236,16 @@ fun JellytipIptvSeasonsSection(
                 Surface(
                     onClick = { sel = i },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+                    border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                     colors =
                         ClickableSurfaceDefaults.colors(
                             containerColor = if (s == season) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                            focusedContainerColor = Color.White,
+                            focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                             contentColor = JellytipPalette.Vanilla,
-                            focusedContentColor = Color.Black,
+                            focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                            pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                            pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                         ),
                 ) {
                     Text("Season ${s.season} · via IPTV", fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
@@ -456,13 +459,16 @@ private fun WayTile(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.06f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = Modifier.size(260.dp, 72.dp),
     ) {

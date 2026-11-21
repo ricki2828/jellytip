@@ -279,7 +279,7 @@ fun JellytipCollectionsHubPage(
             })
         }
         when {
-            list == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
+            list == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 220.dp, tileH = 124.dp, rows = 2, perRow = 4, modifier = Modifier.padding(8.dp))
             all.isNullOrEmpty() ->
                 Text(
                     if (failed) "Collections aren't available right now." else "No collections yet.",
@@ -339,7 +339,7 @@ fun JellytipCollectionsHubPage(
 }
 
 @Composable
-private fun HubChip(
+internal fun HubChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -348,13 +348,16 @@ private fun HubChip(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(50)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier,
     ) {
@@ -449,9 +452,10 @@ fun JellytipHubCollectionPage(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
         ItemRowTitle(r?.title?.ifBlank { null } ?: title)
         when {
+            tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 2, perRow = 5, title = false, modifier = Modifier.padding(8.dp))
             tiles == null ->
                 Text(
-                    if (failed) "This collection isn't available right now." else "Loading…",
+                    "This collection isn't available right now.",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                     fontFamily = JellytipFontFamily,
                     modifier = Modifier.padding(8.dp),

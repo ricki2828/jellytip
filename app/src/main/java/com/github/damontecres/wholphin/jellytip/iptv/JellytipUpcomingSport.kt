@@ -48,7 +48,6 @@ import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -230,7 +229,7 @@ internal fun UpcomingOverlays(
 ) {
     overlay?.let { u -> UpcomingOverlay(u, now, onDismiss, viewModel, fromReminders) }
     viewModel.recordResult?.let { (ok, text) ->
-        DialogPopup(
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
             title = text,
             dialogItems =
@@ -371,7 +370,7 @@ private fun UpcomingOverlay(
             u.league,
         ).joinToString("  ·  ")
     // Items dismiss one by one (all but Match info, which swaps this menu for the modal)
-    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
 }
 
 @Composable
@@ -503,7 +502,7 @@ fun JellytipUpcomingSportPage(
     Column(modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Upcoming sport", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         when {
-            list == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            list == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 300.dp, tileH = 120.dp, rows = 2, perRow = 2)
             list.isEmpty() -> Text("Nothing coming up in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             else -> {
                 val zone = ZoneId.systemDefault()

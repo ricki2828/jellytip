@@ -204,9 +204,11 @@ fun liveTileColors(art: IptvArt?) =
     } else {
         ClickableSurfaceDefaults.colors(
             containerColor = Color.White.copy(alpha = 0.07f),
-            focusedContainerColor = Color.White,
+            focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
             contentColor = JellytipPalette.Vanilla,
-            focusedContentColor = Color.Black,
+            focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+            pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+            pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
         )
     }
 
