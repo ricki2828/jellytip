@@ -669,6 +669,7 @@ fun HomePageContent(
     // Jellytip: no library row to land on (only server rows/specials, or the Watchlist with only IPTV favourites in
     // extraRows): focus the first row of any kind once nothing is still loading
     val anyRowFocus = remember { FocusRequester() }
+    val heroFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // Live match hero: a late answer is taken unless it moves the focused row; re-checked on every focus move. On the
     // hero itself (or before anything has focus) it always updates.
     LaunchedEffect(liveHeroNow, focusedKey) {
@@ -689,7 +690,9 @@ fun HomePageContent(
             // Focus off a leaving hero first (the row below is composed while the hero is), then drop it: changing
             // state first would cancel this effect (focusedKey changes) and leave focus nowhere
             if (leaving && key == "live-hero") {
-                if (rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus() != true) anyRowFocus.tryRequestFocus()
+                if (rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus() != true) {
+                    heroFocusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                }
                 specialFocus = null
                 savedSpecialId = null
             }
