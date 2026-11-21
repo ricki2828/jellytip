@@ -368,8 +368,22 @@ class JellytipIptvPlayback
         /** Position in the item (ms), counting a remux's start offset. */
         fun positionMs(): Long = (if (isRemux) remuxStartMs else 0L) + (player?.currentPosition ?: 0L)
 
-        /** Item length (ms); a remux's from the server, else the player's; 0 = unknown. */
-        fun durationMs(): Long = (if (isRemux) remuxDurationMs else null) ?: player?.duration?.takeIf { it > 0 } ?: 0L
+        /**
+         * The recording being played (its times and state), set by the page: a recording's length comes from it when the
+         * file can't say (raw TS has no index; an in-progress one grows), so progress is never saved against half of it.
+         */
+        var recordingMeta: IptvRecording? = null
+
+        /** Item length (ms); a remux's from the server, a recording's from its times, else the player's; 0 = unknown. */
+        fun durationMs(): Long {
+            if (isRemux) remuxDurationMs?.let { return it }
+            val playerMs = player?.duration?.takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET } ?: 0L
+            val t = _state.value.target
+            val meta = recordingMeta?.takeIf { t?.recordingId != null && it.id == t.recordingId }
+            // Still recording: the file's length at open is stale (the old bug saved progress against half of it)
+            if (meta != null) return (RecPlay.lengthSec(meta, System.currentTimeMillis() / 1000, if (meta.state == "recording") 0.0 else playerMs / 1000.0) * 1000).toLong()
+            return playerMs
+        }
 
         /** Seek a film / episode; a remux reopens from [ms] (the server starts the conversion there). */
         fun seekTo(ms: Long) {

@@ -191,6 +191,10 @@ data class IptvRecording(
     val durationSecs: Double?,
     /** Channel logo (absolute, resolved), when the server sends one; null = initials. */
     val logo: String? = null,
+    /** Epoch s the recorder really began / ended, and the padded stop; null = unknown (length falls back to the slot). */
+    val began: Long? = null,
+    val ended: Long? = null,
+    val stopPadded: Long? = null,
 ) {
     val upcoming get() = state == "scheduled" || state == "recording"
 
@@ -705,6 +709,9 @@ object IptvParse {
             positionSecs = prog?.takeUnless { it.isNull("position") }?.optDouble("position"),
             durationSecs = prog?.takeUnless { it.isNull("duration") }?.optDouble("duration"),
             logo = (o.str("logo") ?: o.optJSONObject("channelInfo")?.str("logo"))?.let(resolve),
+            began = o.longOrNull("began"),
+            ended = o.longOrNull("ended"),
+            stopPadded = o.longOrNull("stopPadded"),
         )
     }
 

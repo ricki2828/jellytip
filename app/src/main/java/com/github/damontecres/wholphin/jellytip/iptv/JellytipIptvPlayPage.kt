@@ -48,6 +48,7 @@ import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.ui.nav.Destination
+import kotlinx.coroutines.launch
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -79,7 +80,26 @@ fun JellytipIptvPlayPage(
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
-
+    // A recording's own times (length when the file can't say; still recording = jump to live), refreshed each minute
+    // while it records (gap row fb816e09 6f62ba3e)
+    var recMeta by remember { mutableStateOf<IptvRecording?>(null) }
+    var recMenu by remember { mutableStateOf(false) }
+    var recConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(target.recordingId) {
+        val id = target.recordingId ?: return@LaunchedEffect
+        while (true) {
+            val m = viewModel.service.peekRecordings()?.firstOrNull { it.id == id }?.takeIf { it.state != "recording" }
+                ?: viewModel.service.recordings()?.second?.firstOrNull { it.id == id }
+            recMeta = m
+            playback.recordingMeta = m
+            if (m?.state != "recording") return@LaunchedEffect
+            delay(60_000)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { playback.recordingMeta = null } }
+    val inProgress = recMeta?.state == "recording"
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     DisposableEffect(target) {
         playback.attach("item")
         playback.setVolume(1f)
@@ -173,7 +193,25 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    Key.DirectionUp, Key.DirectionDown -> {
+                    // Recording still in progress: Up jumps to the channel live
+                    Key.DirectionUp -> {
+                        val m = recMeta
+                        if (m != null && inProgress && m.channelId.isNotBlank()) {
+                            JellytipTrace.player("iptv", "recording ${m.id}: jump to live ${m.channelId}")
+                            playback.saveProgress(target)
+                            val ch = IptvChannel(m.channelId, m.channelId.substringBefore(':'), null, m.channel, m.logo, "", null, 0, false)
+                            playback.lineup = listOf(ch)
+                            playback.alternates = emptyMap()
+                            viewModel.navigationManager.replaceTop(Destination.JellytipLiveTvPlayer(ch.id))
+                            playback.play(IptvTarget(ch.id, ch.name), "recording: jump to live")
+                        }
+                        controlsTick++
+                        true
+                    }
+
+                    // A recording: Down opens its menu (Delete recording)
+                    Key.DirectionDown -> {
+                        if (target.recordingId != null) recMenu = true
                         controlsTick++
                         true
                     }
@@ -234,12 +272,47 @@ fun JellytipIptvPlayPage(
                     Text(if (duration > 0) clockText(duration) else "--:--", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
                 }
                 Text(
-                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶",
+                    text =
+                        "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" +
+                            (if (inProgress) "   ·   ▲ live" else "") + (if (target.recordingId != null) "   ·   ▼ delete" else ""),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 11.sp,
                 )
             }
         }
+    }
+
+    if (recMenu) {
+        val id = target.recordingId
+        com.github.damontecres.wholphin.ui.components.DialogPopup(
+            showDialog = true,
+            title = if (recConfirm) "Delete this recording for good?" else target.label,
+            dialogItems =
+                listOf(
+                    com.github.damontecres.wholphin.ui.components.DialogItem(if (recConfirm) "Delete for good" else "Delete recording", dismissOnClick = recConfirm) {
+                        if (!recConfirm) {
+                            recConfirm = true
+                        } else if (id != null) {
+                            recMenu = false
+                            recConfirm = false
+                            playback.stop("delete recording")
+                            scope.launch {
+                                val ok = viewModel.service.deleteRecording(id)
+                                JellytipTrace.player("iptv", "recording $id deleted ok=$ok")
+                                android.widget.Toast.makeText(context, if (ok) "Recording deleted" else "Couldn't delete it", android.widget.Toast.LENGTH_SHORT).show()
+                                if (ok) {
+                                    viewModel.service.recordings()
+                                    viewModel.navigationManager.goBack()
+                                }
+                            }
+                        }
+                    },
+                ),
+            onDismissRequest = {
+                recMenu = false
+                recConfirm = false
+            },
+        )
     }
 }
