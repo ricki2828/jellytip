@@ -5,17 +5,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -45,9 +46,6 @@ import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.requestFocus
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -59,8 +57,9 @@ import java.util.UUID
 
 /*
  * Design-polish screenshots (mock harness, no TV needed): the new pages' building blocks rendered with synthetic data at the
- * TV's 960x540 dp, focused where focus is the point. CI uploads app/build/outputs/roborazzi/ as the "jellytip-shots"
- * artifact. Not golden tests: nothing is compared, they are for eyes (before / after a design change).
+ * TV's 960x540 dp. One shot per test; the element tagged "focus" gets focus through the test framework (focus asked for
+ * from inside the content doesn't take under Robolectric). CI uploads app/build/outputs/roborazzi/ as jellytip-shots-<sha>.
+ * Not golden tests: nothing is compared, they are for eyes (before / after a design change).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -77,6 +76,8 @@ class PolishShotsTest {
     private fun out(name: String) = "build/outputs/roborazzi/$name.png"
 
     private val now = 1_800_000_000L
+
+    private val focus = Modifier.testTag("focus")
 
     private fun ch(id: String) = FxChannel(id, "Fox League", null, null, null, 1.0, false, false, now - 1800, now + 5400, true, null)
 
@@ -105,146 +106,130 @@ class PolishShotsTest {
     @Composable
     private fun Tv(content: @Composable () -> Unit) {
         MaterialTheme(colorScheme = darkColorScheme()) {
-            Box(Modifier.background(JellytipPalette.Night).padding(24.dp)) { content() }
+            Box(Modifier.fillMaxSize().background(JellytipPalette.Night).padding(24.dp)) { content() }
         }
     }
 
-    /** Focus [fr] once the frame is up (focus is what these shots are about). */
-    @Composable
-    private fun FocusOn(fr: FocusRequester) {
-        LaunchedEffect(Unit) {
-            withFrameNanos { }
-            runCatching { fr.requestFocus() }
-        }
-    }
-
-    @Test
-    fun gameCentre() {
-        captureRoboImage(out("gc-hero-and-tile")) {
-            Tv {
-                val fr = remember { FocusRequester() }
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LiveMatchHero(fx("1"), now, onWatch = {}, onFromStart = {}, onMore = {}, modifier = Modifier.width(900.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ColourEdgeFixtureTile(fx("2"), now, reminder = false, revealed = false, onClick = {}, modifier = Modifier.focusRequester(fr))
-                        ColourEdgeFixtureTile(fx("3", status = "pre", favourite = false), now, reminder = true, revealed = false, onClick = {})
-                    }
-                }
-                FocusOn(fr)
-            }
-        }
-    }
-
-    @Test
-    fun cardFullTime() {
-        compose.setContent { Tv { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now, Modifier.width(900.dp)) } }
-        // past the 260 ms enter motion
-        compose.mainClock.advanceTimeBy(600)
-        compose.onRoot().captureRoboImage(out("cards-fulltime"))
-    }
-
-    @Test
-    fun cardCatchUp() {
-        compose.setContent { Tv { CatchUpChoiceCard(match, "You're joining 27 minutes in", canKickOff = true, cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp)) } }
-        compose.mainClock.advanceTimeBy(600)
-        compose.onRoot().captureRoboImage(out("cards-catchup"))
-    }
-
-    @Test
-    fun chipsAndRows() {
-        captureRoboImage(out("focus-chips-rows")) {
-            Tv {
-                val a = remember { FocusRequester() }
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Focused: first of each row", color = Color.Gray)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AskChipButton("Comedy  ✕", on = true, modifier = Modifier.focusRequester(a)) {}
-                        AskChipButton("under 90 min  ✕", on = true) {}
-                        AskChipButton("Put back", on = false) {}
-                        HubChip("Start a journey  ›", selected = false, onClick = {})
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        JourneyCard(JourneySummary("f:1", JourneyKind.FRANCHISE, "Alien in order · 6 films", null, 6)) {}
-                        JourneyCard(JourneySummary("d:1", JourneyKind.DIRECTOR, "Denis Villeneuve", "Director", 0)) {}
-                    }
-                    Column(Modifier.width(700.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilmRow(JourneyEntry(1, "a", "Alien", 1979, playable = true, watched = true, inProgress = false), isNext = false) {}
-                        FilmRow(JourneyEntry(2, "b", "Aliens", 1986, playable = true, watched = false, inProgress = false), isNext = true) {}
-                        FilmRow(JourneyEntry(3, null, "Alien 3", 1992, playable = false, watched = false, inProgress = false), isNext = false) {}
-                    }
-                }
-                FocusOn(a)
-            }
-        }
-    }
-
-    @Test
-    fun movieNight() {
-        captureRoboImage(out("movienight-vote-join")) {
-            Tv {
-                val fr = remember { FocusRequester() }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    val f = MnFilm("a", UUID.randomUUID(), "Heat", 1995, null, null)
-                    VotePoster(f, 140.dp, MnVote.YES, Modifier.focusRequester(fr)) {}
-                    VotePoster(f.copy(name = "Collateral"), 140.dp, null) {}
-                    JoinCard("K7M2QX", "host.example/jellytip  →  Movie night  →  Join", "https://host.example/jellytip/#/movienight?join=K7M2QX")
-                }
-                FocusOn(fr)
-            }
-        }
-    }
-
-    @Test
-    fun dialog() {
-        compose.setContent {
-            Tv { Text("Game Centre", color = Color.White) }
-            DialogPopup(
-                showDialog = true,
-                title = "Penrith Panthers v New Zealand Warriors",
-                dialogItems =
-                    listOf(
-                        DialogItem(headlineContent = { Text("Watch live on Fox League") }, onClick = {}),
-                        DialogItem(headlineContent = { Text("From kick-off") }, onClick = {}),
-                        DialogItem(headlineContent = { Text("Remind me") }, onClick = {}),
-                    ),
-                onDismissRequest = {},
-                waitToLoad = false,
-            )
-        }
+    /** Render [content], focus the "focus"-tagged element (if any), let motion settle, capture the window. */
+    private fun shot(
+        name: String,
+        focused: Boolean = true,
+        screen: Boolean = false,
+        focusText: String? = null,
+        content: @Composable () -> Unit,
+    ) {
+        compose.setContent { Tv(content) }
         compose.waitForIdle()
-        captureScreenRoboImage(out("dialog-hold-ok"))
-    }
-
-    @Test
-    fun skeleton() {
-        captureRoboImage(out("skeleton-gamecentre")) {
-            Tv { com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2) }
-        }
-        captureRoboImage(out("skeleton-list")) {
-            Tv { com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 5) }
-        }
-    }
-
-    @Test
-    fun jellytipDialog() {
-        compose.setContent {
-            Tv { Text("Game Centre", color = Color.White) }
-            com.github.damontecres.wholphin.jellytip.JellytipDialog(
-                showDialog = true,
-                title = "Penrith Panthers v New Zealand Warriors",
-                dialogItems =
-                    listOf(
-                        DialogItem(headlineContent = { Text("Watch live on Fox League") }, onClick = {}),
-                        DialogItem(headlineContent = { Text("From kick-off") }, onClick = {}),
-                        DialogItem(headlineContent = { Text("Remind me") }, onClick = {}),
-                    ),
-                onDismissRequest = {},
-                waitToLoad = false,
-            )
-        }
+        // A shot without its focus is still worth having: say so in the log rather than failing the build
+        runCatching {
+            if (focusText != null) {
+                compose.onNode(hasText(focusText)).requestFocus()
+            } else if (focused) {
+                compose.onNodeWithTag("focus").requestFocus()
+            }
+        }.onFailure { println("shot $name: focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+        compose.mainClock.advanceTimeBy(800)
         compose.waitForIdle()
-        runCatching { compose.onNodeWithText("Watch live on Fox League").requestFocus() }
-        compose.mainClock.advanceTimeBy(600)
-        captureScreenRoboImage(out("dialog-hold-ok-jellytip"))
+        if (screen) captureScreenRoboImage(out(name)) else compose.onRoot().captureRoboImage(out(name))
     }
+
+    @Test
+    fun gcHero() =
+        shot("gc-hero", focused = false) {
+            LiveMatchHero(fx("1"), now, onWatch = {}, onFromStart = {}, onMore = {}, modifier = Modifier.width(900.dp), focusRequester = null)
+        }
+
+    @Test
+    fun gcTiles() =
+        shot("gc-tiles") {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ColourEdgeFixtureTile(fx("2"), now, reminder = false, revealed = false, onClick = {}, modifier = focus)
+                ColourEdgeFixtureTile(fx("3", status = "pre", favourite = false), now, reminder = true, revealed = false, onClick = {})
+            }
+        }
+
+    @Test
+    fun cardFullTime() = shot("cards-fulltime", focused = false) { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now, Modifier.width(900.dp)) }
+
+    @Test
+    fun cardCatchUp() =
+        shot("cards-catchup", focused = false) {
+            CatchUpChoiceCard(match, "You're joining 27 minutes in", canKickOff = true, cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp))
+        }
+
+    @Test
+    fun askChip() =
+        shot("focus-ask-chip") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AskChipButton("Comedy  ✕", on = true, modifier = focus) {}
+                AskChipButton("under 90 min  ✕", on = true) {}
+                AskChipButton("Put back", on = false) {}
+            }
+        }
+
+    @Test
+    fun hubChip() =
+        shot("focus-hub-chip") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HubChip("Start a journey  ›", selected = false, onClick = {}, modifier = focus)
+                HubChip("Movies", selected = true, onClick = {})
+            }
+        }
+
+    @Test
+    fun journeyCard() =
+        shot("focus-journey-card") {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                JourneyCard(JourneySummary("d:1", JourneyKind.DIRECTOR, "Denis Villeneuve", "Director", 0), modifier = focus) {}
+                JourneyCard(JourneySummary("f:1", JourneyKind.FRANCHISE, "Alien in order · 6 films", null, 6)) {}
+            }
+        }
+
+    @Test
+    fun filmRow() =
+        shot("focus-film-row") {
+            Column(Modifier.width(700.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilmRow(JourneyEntry(1, "a", "Alien", 1979, playable = true, watched = true, inProgress = false), isNext = false) {}
+                FilmRow(JourneyEntry(2, "b", "Aliens", 1986, playable = true, watched = false, inProgress = false), isNext = true, modifier = focus) {}
+                FilmRow(JourneyEntry(3, null, "Alien 3", 1992, playable = false, watched = false, inProgress = false), isNext = false) {}
+            }
+        }
+
+    @Test
+    fun movieNight() =
+        shot("movienight-vote-join") {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                val f = MnFilm("a", UUID.randomUUID(), "Heat", 1995, null, null)
+                VotePoster(f, 140.dp, MnVote.YES, focus) {}
+                VotePoster(f.copy(name = "Collateral"), 140.dp, null) {}
+                JoinCard("K7M2QX", "host.example/jellytip  →  Movie night  →  Join", "https://host.example/jellytip/#/movienight?join=K7M2QX")
+            }
+        }
+
+    private val items =
+        listOf(
+            DialogItem(headlineContent = { Text("Watch live on Fox League") }, onClick = {}),
+            DialogItem(headlineContent = { Text("From kick-off") }, onClick = {}),
+            DialogItem(headlineContent = { Text("Remind me") }, onClick = {}),
+        )
+
+    @Test
+    fun dialogStock() =
+        shot("dialog-hold-ok", screen = true, focusText = "Watch live on Fox League") {
+            Text("Game Centre", color = Color.White)
+            DialogPopup(showDialog = true, title = "Penrith Panthers v New Zealand Warriors", dialogItems = items, onDismissRequest = {}, waitToLoad = false)
+        }
+
+    @Test
+    fun dialogJellytip() =
+        shot("dialog-hold-ok-jellytip", screen = true, focusText = "Watch live on Fox League") {
+            Text("Game Centre", color = Color.White)
+            com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = "Penrith Panthers v New Zealand Warriors", dialogItems = items, onDismissRequest = {}, waitToLoad = false)
+        }
+
+    @Test
+    fun skeletonGameCentre() = shot("skeleton-gamecentre", focused = false) { com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2) }
+
+    @Test
+    fun skeletonList() = shot("skeleton-list", focused = false) { com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 5) }
 }
