@@ -190,6 +190,9 @@ fun JellytipHomeHero(
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState(JellytipSettings())
+    // One source for the hero Sound button's label and the next trailer: ui.heroSound or the trailer-sound setting
+    val heroPrefSound = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState().value?.heroSound == true
+    androidx.compose.runtime.SideEffect { JellytipTrailerControl.heroSoundSetting = heroPrefSound || settings.trailerSound }
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     LaunchedEffect(Unit) {
         delay(3000) // home content first; the ~6 MB download is for the next launch
@@ -234,9 +237,7 @@ fun JellytipHomeHero(
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
             // Sound: only the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
-            val sound =
-                JellytipTrailerControl.heroSoundChoice
-                    ?: (com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true || settings.trailerSound)
+            val sound = JellytipTrailerControl.heroSoundChoice ?: JellytipTrailerControl.heroSoundSetting
             JellytipTrailerControl.start(item, url, trailerId, sound = sound)
         }
     }

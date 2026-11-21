@@ -749,15 +749,12 @@ fun HomePageContent(
                         },
                         // Sound for the hero trailer that is playing now; the next tile starts muted again (unless ui.heroSound)
                         // Always offered (Ricki 21-Nov: no easy way to turn the sound on): the playing trailer, else the next ones
-                        soundOn =
-                            JellytipTrailerControl.heroSoundShown(
-                                com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true,
-                            ),
+                        soundOn = JellytipTrailerControl.heroSoundShown(),
                         onSound = { JellytipTrailerControl.toggleHeroSound() },
                         // Focus goes to the Play button itself; invisible buttons never take focus (Ricki 21-Nov: Up
                         // reached the row group, not a button, so the buttons couldn't be used)
                         firstRequester = heroButtonsRequester,
-                        focusable = heroButtonsAlpha > 0f || heroButtonsFocused,
+                        focusable = heroButtonsFocused || focusedEntry <= 0,
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)

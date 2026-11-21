@@ -591,8 +591,9 @@ fun SeriesDetailsContent(
                                 }
                             }
                         if (eps != null) {
+                            // Capped: building the merge reads every entry (loads every page of the season)
                             val tiles =
-                                if (iptvEps.isEmpty()) {
+                                if (iptvEps.isEmpty() || eps.size > 200) {
                                     null
                                 } else {
                                     com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.interleave(
@@ -630,7 +631,14 @@ fun SeriesDetailsContent(
                                     ),
                             )
                             }
-                            val rowState = rememberLazyListState(initialEpisodeIndex)
+                            // The start position and the focus target count IPTV tiles too in a mixed season
+                            val startTile =
+                                if (tiles == null) {
+                                    initialEpisodeIndex
+                                } else {
+                                    tiles.indexOfFirst { it is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib && it.index == initialEpisodeIndex }.takeIf { it >= 0 } ?: 0
+                                }
+                            val rowState = rememberLazyListState(startTile)
                             LazyRow(
                                 state = rowState,
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -638,10 +646,25 @@ fun SeriesDetailsContent(
                                 modifier = Modifier.focusRestorer(episodeRowRequester),
                             ) {
                                 if (tiles != null && iptvCopy != null && seasonNo != null) {
-                                    items(tiles.size) { t ->
+                                    items(
+                                        tiles.size,
+                                        key = { i ->
+                                            when (val x = tiles[i]) {
+                                                is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib -> "l${x.index}"
+                                                is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Iptv -> "i${x.episode.id}"
+                                            }
+                                        },
+                                    ) { t ->
                                         when (val tile = tiles[t]) {
                                             is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Iptv ->
-                                                com.github.damontecres.wholphin.jellytip.iptv.JellytipMixedIptvEpisode(series, iptvCopy, seasonNo, tile.episode)
+                                                com.github.damontecres.wholphin.jellytip.iptv.JellytipMixedIptvEpisode(
+                                                    series,
+                                                    iptvCopy,
+                                                    seasonNo,
+                                                    tile.episode,
+                                                    // The strip's focus target when Next Up isn't a library tile (tile 0)
+                                                    modifier = if (t == startTile && tiles.none { it is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib && it.index == initialEpisodeIndex }) Modifier.focusRequester(episodeRowRequester) else Modifier,
+                                                )
 
                                             is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib ->
                                                 LibraryEpisodeCard(tile.index, eps[tile.index])
