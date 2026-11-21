@@ -189,11 +189,9 @@ fun JellytipAskPage(
     val state by viewModel.state.collectAsState()
     val keyboard = LocalSoftwareKeyboardController.current
     val boxFocus = remember { FocusRequester() }
-    val shuffleFocus = remember { FocusRequester() }
     var typing by remember { mutableStateOf(false) }
-    // Focus to restore after the focused control goes away: chip index (-1 = none), or the Shuffle button
+    // Focus to restore after the focused control goes away: chip index (-1 = none)
     var refocusChip by remember { mutableIntStateOf(-1) }
-    var refocusShuffle by remember { mutableIntStateOf(0) }
     val chips = state.chips
     val chipFocus = remember(chips.size) { List(chips.size + 1) { FocusRequester() } }
     LaunchedEffect(Unit) { boxFocus.tryRequestFocus() }
@@ -210,11 +208,6 @@ fun JellytipAskPage(
                 else -> false
             }
         if (!ok) boxFocus.tryRequestFocus()
-    }
-    LaunchedEffect(refocusShuffle) {
-        if (refocusShuffle == 0) return@LaunchedEffect
-        withFrameNanos { }
-        if (!shuffleFocus.tryRequestFocus()) boxFocus.tryRequestFocus()
     }
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -239,6 +232,8 @@ fun JellytipAskPage(
             VoiceSearchButton(
                 onSpeechResult = { spoken ->
                     JellytipTrace.log("ask", "voice result '$spoken'")
+                    // The mic key works from anywhere: whatever had focus may go with the new reading
+                    refocusChip = 0
                     viewModel.submit(spoken)
                 },
                 voiceInputManager = viewModel.voiceInputManager,
@@ -313,41 +308,38 @@ fun JellytipAskPage(
             }
         }
 
-        when (val r = state.result) {
-            AskResult.Idle -> {}
-            AskResult.Error ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Couldn't reach your library.", color = dim, fontFamily = JellytipFontFamily, fontSize = 14.sp)
-                    AskButton("Try again", primary = false) {
-                        refocusShuffle++
-                        viewModel.retry()
-                    }
+        val r = state.result
+        if (r != AskResult.Idle) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // One button in one slot for Error / Loading / Done ("Try again" or "Shuffle"): the focused node is never
+                // disposed, so focus can't fall to the drawer when a load fails or finishes. It stays enabled while loading.
+                AskButton(if (r == AskResult.Error) "Try again" else "Shuffle", primary = false) {
+                    if (r == AskResult.Error) viewModel.retry() else viewModel.shuffle()
                 }
-            AskResult.Loading, is AskResult.Done -> {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Shuffle stays focusable while loading (a disabled focused button would drop focus to the drawer)
-                    AskButton("Shuffle", primary = false, modifier = Modifier.focusRequester(shuffleFocus)) { viewModel.shuffle() }
-                    Text(
-                        if (r is AskResult.Done) "${if (r.picks.items.isEmpty()) "Nothing fits. " else ""}${r.picks.note}" else "Looking…",
-                        color = dim,
-                        fontFamily = JellytipFontFamily,
-                        fontSize = 13.sp,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                }
-                if (r is AskResult.Done && r.picks.items.isNotEmpty()) {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f).focusGroup().focusRestorer(),
-                    ) {
-                        items(r.picks.items.size, key = { r.picks.items[it].id.toString() }) { i ->
-                            val item = r.picks.items[i]
-                            PosterCard(item, onClick = { viewModel.open(item) }, onLongClick = {}, modifier = Modifier)
-                        }
-                    }
+                Text(
+                    when (r) {
+                        AskResult.Error -> "Couldn't reach your library."
+                        is AskResult.Done -> "${if (r.picks.items.isEmpty()) "Nothing fits. " else ""}${r.picks.note}"
+                        else -> "Looking…"
+                    },
+                    color = dim,
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+        }
+        if (r is AskResult.Done && r.picks.items.isNotEmpty()) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f).focusGroup().focusRestorer(),
+            ) {
+                items(r.picks.items.size, key = { r.picks.items[it].id.toString() }) { i ->
+                    val item = r.picks.items[i]
+                    PosterCard(item, onClick = { viewModel.open(item) }, onLongClick = {}, modifier = Modifier)
                 }
             }
         }

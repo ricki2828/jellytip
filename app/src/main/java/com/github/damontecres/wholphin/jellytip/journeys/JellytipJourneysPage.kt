@@ -85,6 +85,8 @@ data class JourneysState(
     /** One journey: null = loading. */
     val result: JourneyResult? = null,
     val entries: JourneyEntriesState = JourneyEntriesState.Loading,
+    /** A Retry is out: the error UI (and its focused button) stays until the answer arrives. */
+    val retrying: Boolean = false,
 )
 
 @HiltViewModel
@@ -103,10 +105,11 @@ class JellytipJourneysViewModel
 
         fun loadGroups() {
             if (groupsJob?.isActive == true) return
+            _state.update { it.copy(retrying = it.groupsFailed) }
             groupsJob =
                 viewModelScope.launch {
                     val g = service.groups()
-                    _state.update { it.copy(groups = g ?: JourneyGroups(emptyList(), emptyList(), emptyList()), groupsFailed = g == null) }
+                    _state.update { it.copy(groups = g ?: JourneyGroups(emptyList(), emptyList(), emptyList()), groupsFailed = g == null, retrying = false) }
                 }
         }
 
@@ -118,34 +121,49 @@ class JellytipJourneysViewModel
             journeyId = id
             journeyJob?.cancel()
             entriesJob?.cancel()
-            _state.update { it.copy(result = null, entries = JourneyEntriesState.Loading) }
+            // On Retry the error UI stays (its button keeps focus) until the answer arrives
+            _state.update { if (retry) it.copy(retrying = true, entries = JourneyEntriesState.Loading) else it.copy(result = null, entries = JourneyEntriesState.Loading) }
             journeyJob =
                 viewModelScope.launch {
                     val r = service.result(id)
-                    _state.update { it.copy(result = r) }
+                    _state.update { it.copy(result = r, retrying = false) }
                     if (r is JourneyResult.Ok) refreshEntries()
                 }
         }
 
         /** Fresh watched state (on open, and on every resume: the page sits under the player). */
-        fun refreshEntries() {
+        fun refreshEntries(again: Boolean = false) {
             val def = (_state.value.result as? JourneyResult.Ok)?.def ?: return
             entriesJob?.cancel()
             entriesJob =
                 viewModelScope.launch {
-                    // Keep the list on screen while it refreshes (focus stays on its row); only the first load shows Loading
-                    if (_state.value.entries !is JourneyEntriesState.Loaded) _state.update { it.copy(entries = JourneyEntriesState.Loading) }
-                    val e =
-                        try {
-                            JourneyEntriesState.Loaded(service.entries(def))
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Timber.w(e, "Journey progress failed")
-                            if (_state.value.entries is JourneyEntriesState.Loaded) return@launch else JourneyEntriesState.Failed
-                        }
-                    _state.update { it.copy(entries = e) }
+                    // The list (or the Failed line with its focused Retry) stays on screen while this runs
+                    fetchEntries(def)
+                    // Back from the player: its "stopped" report is sent without waiting, so ask once more a little later
+                    if (again) {
+                        kotlinx.coroutines.delay(AGAIN_MS)
+                        fetchEntries(def)
+                    }
                 }
+        }
+
+        private suspend fun fetchEntries(def: JourneyDef) {
+            val e =
+                try {
+                    JourneyEntriesState.Loaded(service.entries(def))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.w(e, "Journey progress failed")
+                    if (_state.value.entries is JourneyEntriesState.Loaded) return else JourneyEntriesState.Failed
+                }
+            _state.update { it.copy(entries = e) }
+        }
+
+        fun back() = navigationManager.goBack()
+
+        private companion object {
+            const val AGAIN_MS = 1_500L
         }
 
         fun open(id: String) {
@@ -191,7 +209,14 @@ fun JellytipJourneysPage(
         Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
         when {
             g == null -> Text("Loading…", color = dim, fontFamily = JellytipFontFamily)
-            g.isEmpty -> Text(if (state.groupsFailed) "Journeys aren't available right now." else "No journeys yet.", color = dim, fontFamily = JellytipFontFamily)
+            g.isEmpty -> {
+                Text(if (state.groupsFailed) "Journeys aren't available right now." else "No journeys yet.", color = dim, fontFamily = JellytipFontFamily)
+                if (state.groupsFailed) {
+                    val retry = remember { FocusRequester() }
+                    Button(if (state.retrying) "Retrying…" else "Retry", Modifier.focusRequester(retry)) { viewModel.loadGroups() }
+                    LaunchedEffect(Unit) { retry.tryRequestFocus() }
+                }
+            }
             else ->
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(first)) {
                     rows.forEachIndexed { i, list ->
@@ -248,7 +273,7 @@ fun JellytipJourneyPage(
     LaunchedEffect(id) { viewModel.loadJourney(id) }
     // Back from the player: the watched ticks and Play next move
     LifecycleResumeEffect(id) {
-        viewModel.refreshEntries()
+        viewModel.refreshEntries(again = true)
         onPauseOrDispose { }
     }
     val focus = remember { FocusRequester() }
@@ -257,7 +282,7 @@ fun JellytipJourneyPage(
             null -> Text("Loading…", color = dim, fontFamily = JellytipFontFamily)
             JourneyResult.Error -> {
                 Text("Couldn't load this journey.", color = dim, fontFamily = JellytipFontFamily)
-                Button("Retry", Modifier.focusRequester(focus)) { viewModel.loadJourney(id, retry = true) }
+                Button(if (state.retrying) "Retrying…" else "Retry", Modifier.focusRequester(focus)) { if (!state.retrying) viewModel.loadJourney(id, retry = true) }
                 LaunchedEffect(Unit) { focus.tryRequestFocus() }
             }
             is JourneyResult.Short -> {
@@ -265,7 +290,12 @@ fun JellytipJourneyPage(
                 Button("See their films", Modifier.focusRequester(focus)) { viewModel.person(r.personId) }
                 LaunchedEffect(Unit) { focus.tryRequestFocus() }
             }
-            JourneyResult.None -> Text("This journey isn't available.", color = dim, fontFamily = JellytipFontFamily)
+            JourneyResult.None -> {
+                Text("This journey isn't available.", color = dim, fontFamily = JellytipFontFamily)
+                // Something focusable, so focus never falls to the drawer
+                Button("Back", Modifier.focusRequester(focus)) { viewModel.back() }
+                LaunchedEffect(Unit) { focus.tryRequestFocus() }
+            }
             is JourneyResult.Ok -> JourneyView(id, r.def, state.entries, viewModel)
         }
     }
@@ -349,8 +379,20 @@ private fun FilmRow(
         }
     }
     if (!e.playable) {
-        // Missing films are shown greyed and are not focusable (D-pad skips them)
-        Box(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))) { content(JellytipPalette.Vanilla.copy(alpha = 0.4f)) }
+        // Missing films: greyed and inert, but focusable so the list can scroll to them (a LazyColumn scrolls by focus)
+        Surface(
+            onClick = {},
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            colors =
+                ClickableSurfaceDefaults.colors(
+                    containerColor = Color.White.copy(alpha = 0.03f),
+                    focusedContainerColor = Color.White.copy(alpha = 0.14f),
+                    contentColor = JellytipPalette.Vanilla.copy(alpha = 0.4f),
+                    focusedContentColor = JellytipPalette.Vanilla.copy(alpha = 0.7f),
+                ),
+            modifier = Modifier.fillMaxWidth(),
+        ) { content(androidx.tv.material3.LocalContentColor.current) }
         return
     }
     Surface(

@@ -203,7 +203,7 @@ object AskParse {
     private fun toMinutes(
         n: Double,
         unit: String,
-    ): Int = (if (unit.startsWith("h")) Math.round(n * 60) else Math.round(n)).toInt()
+    ): Int = (if (unit.startsWith("h")) Math.round(n * 60) else Math.round(n)).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() // absurd numbers never wrap negative
 
     private const val UNIT = "(min(?:ute)?s?|mins?|m|hours?|hrs?|hr|h)"
     private val NEG = Regex("""\b(?:not|no|non[- ]?|without|except|excluding|nothing|anything but|but not)\s+(?:(?:too|very|so|really)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*""")
