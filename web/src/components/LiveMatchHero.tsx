@@ -14,6 +14,7 @@ import { cycle, heroLine, heroTag, homePicks } from "../lib/liveHero";
 import { go } from "../lib/router";
 import { skippedNote } from "../lib/streamFail";
 import { flashNote } from "./TasteButtons";
+import { HeroArt, LeagueBadge, useArt } from "./FixtureArt";
 import "./LiveMatchHero.css";
 
 const NEUTRAL: TeamColors = teamColors(null);
@@ -129,6 +130,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
   const ref = useRef<HTMLElement>(null);
   const f = picks[Math.min(index, picks.length - 1)];
   const c = useFixtureColours(f ?? { matchId: null });
+  const art = useArt(f?.art, 960);
   useEffect(() => {
     // keyboard / remote only: on a touch screen a focus ring on Watch is noise
     const lost = !document.activeElement || document.activeElement === document.body;
@@ -144,12 +146,15 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
     go(path);
   };
   const wash = c.known ? `linear-gradient(90deg, ${blend(c.home, 0.85)} 0%, ${BASE} 46%, ${BASE} 54%, ${blend(c.away, 0.85)} 100%)` : BASE;
-  const style = { background: wash } as CSSProperties;
+  // With art: the art under a team-colour gradient (lib/artOverlay) on the dark base; without art or when it fails, the plain wash
+  const style = { background: art.src ? BASE : wash } as CSSProperties;
   const n = picks.length;
   return (
-    <section className="lh" style={style} ref={ref} aria-label={`${heroTag(f, nowSec)}: ${f.away ? `${f.home} v ${f.away}` : f.home}`}>
+    <section className={`lh${art.src ? " has-art" : ""}`} style={style} ref={ref} aria-label={`${heroTag(f, nowSec)}: ${f.away ? `${f.home} v ${f.away}` : f.home}`}>
+      {art.src && <HeroArt key={art.src} src={art.src} colours={c} onError={art.failed} />}
       <BigCrest logo={f.homeLogo} name={f.homeShort ?? f.home} colour={c.home} />
       <div className="lh-mid">
+        {art.src && <LeagueBadge key={f.badge ?? ""} path={f.badge} className="lh-badge" />}
         {kicker && <span className="lh-kicker">{kicker}</span>}
         <span className={`lh-tag${f.status === "in" ? " live" : ""}`}>{heroTag(f, nowSec)}</span>
         <h2 className="lh-title">
@@ -203,7 +208,11 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
 /** Colour edges for a fixture tile (2A): the home colour on the left edge, the away colour on the right; none until known. */
 /** Drawn by .gc-card.edged::before/::after from these vars, so the card's own box-shadow states (live ring, no-stream, hover, flash) stay. */
 export function useEdgeStyle(f: Pick<FxItem, "matchId" | "away" | "homeColor" | "awayColor" | "awayAlt">, el: RefObject<HTMLElement | null>): CSSProperties | undefined {
-  const c = useFixtureColours(f, el);
+  return edgeStyle(useFixtureColours(f, el), f);
+}
+
+/** The edge vars for known colours (for a card that also needs the colours themselves, e.g. its art wash). */
+export function edgeStyle(c: TeamColors, f: Pick<FxItem, "away">): CSSProperties | undefined {
   if (!c.known) return undefined;
   return { "--edge-home": c.home, "--edge-away": f.away ? c.away : "transparent" } as CSSProperties;
 }
