@@ -452,6 +452,16 @@ fun DestinationContent(
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.ask.JellytipAskPage(modifier = modifier)
         }
+
+        Destination.JellytipJourneys -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneysPage(modifier = modifier)
+        }
+
+        is Destination.JellytipJourney -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneyPage(id = destination.id, modifier = modifier)
+        }
         // ---- end t5n ----
 
         Destination.JellytipRecordings -> {

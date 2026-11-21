@@ -275,6 +275,11 @@ fun JellytipCollectionsHubPage(
             else -> {
                 // Movies | TV Shows | All: remembered across visits; Up from the section chips reaches it
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 8.dp).focusGroup()) {
+                    // t5n (21-Nov): web 7cc13de9 "Start a journey" chip
+                    HubChip("Start a journey", selected = false, onClick = {
+                        JellytipTrailerControl.stop()
+                        viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
+                    })
                     HubTabs.ORDER.forEach { (key, label) ->
                         HubChip(
                             label,

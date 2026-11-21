@@ -393,7 +393,7 @@ private fun AskButton(
             ClickableSurfaceDefaults.colors(
                 containerColor = if (primary) JellytipPalette.Jelly else JellytipPalette.Vanilla.copy(alpha = 0.12f),
                 focusedContainerColor = Color.White,
-                contentColor = if (primary) Color.Black else JellytipPalette.Vanilla,
+                contentColor = if (primary) Color.White else JellytipPalette.Vanilla,
                 focusedContentColor = Color.Black,
             ),
         modifier = modifier,
