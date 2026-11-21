@@ -14,6 +14,8 @@ import { findReminder } from "../lib/reminders";
 import { go, useRoute } from "../lib/router";
 import { KICKOFF_SHOW_MS, kickoffDue, kickoffHeadline, kickoffKey, type KickoffDue } from "../lib/sportWow";
 import { afterStartup } from "../lib/startup";
+import { NativePlayer, nativeIptvPlayer } from "../lib/native";
+import { kickoffNotice } from "../lib/nativePhone";
 import "../screens/iptv/iptv.css";
 
 /** Per person: after an account switch in the same tab, the new person's cards are their own. */
@@ -88,6 +90,9 @@ export function KickoffCard() {
       /* fine: this tab only */
     }
     setCard(due);
+    // Phone app: the native player covers this card, so the player shows it as a note (no Watch button there)
+    if (nativeIptvPlayer && route.name === "iptvplay") void NativePlayer.notice({ text: kickoffNotice(due, Date.now() / 1000) }).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [due]);
   useEffect(() => {
     if (!card) return;

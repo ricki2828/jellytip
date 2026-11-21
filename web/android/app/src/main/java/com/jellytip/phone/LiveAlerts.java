@@ -158,9 +158,10 @@ final class LiveAlerts implements LiveFeed.Listener {
             FantasySnapshot.Result snapshot = FantasySnapshot.get(apiBase, token);
             JSONObject got = snapshot.data;
             final JSONObject result = got;
-            handler.post(() -> {
+            // Fantasy points are spoilers too: held for the same delay as the live feed
+            handler.postDelayed(() -> {
                 if (!released && result != null) onFantasy(result);
-            });
+            }, feed == null ? 0L : feed.delayMs);
         });
     }
 

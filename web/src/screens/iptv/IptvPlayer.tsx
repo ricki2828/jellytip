@@ -50,6 +50,7 @@ import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/r
 import { planSeek, progressFor, rangesOf, remuxOffset, toTimeline } from "../../lib/vodRemux";
 import { engineFor, failureText, fallbackFormat, linkFailure, nativeLink, playbackFailureText, playQuery, livePath, liveExtrasQuery, shouldShowLiveExtras, targetPath, type LiveExtras, type Engine, type PlayTarget } from "../../lib/iptvPlay";
 import { NativePlayer, nativeIptvPlayer, type NativePlayerResult } from "../../lib/native";
+import { fullTimeNotice, nativeRetryDelayMs } from "../../lib/nativePhone";
 import { StreamBusy } from "../../components/StreamBusy";
 import { canStop, parseBlocker, type Blocker } from "../../lib/holders";
 import { debugEvent, sendDebugReport } from "../../lib/debugLog";
@@ -1619,6 +1620,79 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   const infoFor = useRef<string | null>(null);
   const isLive = !!target.channel && target.start == null;
   const key = progressKey(target);
+  // Spoiler delay (sport.delaySec, or this channel's own) for the native live feed; language rules for ExoPlayer's track choice
+  const revealClock = useRevealClock({ video: null, channelKey: isLive ? target.channel ?? null : null, isLive, replay: !!extras?.replay });
+  const delayRef = useRef(revealClock.delaySec);
+  delayRef.current = revealClock.delaySec;
+  const playbackRef = useRef(userPrefs?.playback);
+  playbackRef.current = userPrefs?.playback;
+  /** Fresh-link retries after a 5xx / lost connection (nativeRetryDelayMs), per player screen. */
+  const retries = useRef(0);
+  const retryTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(retryTimer.current), []);
+
+  // ---- Catch me up (web/TV port): joining 10+ min late, the choice and the recap come BEFORE the native player opens (it would cover them)
+  const catchStartsAt = isLive ? extras?.startsAt ?? null : null;
+  const [catchPhase, setCatchPhase] = useState<"deciding" | "choice" | "recap" | "done">(() =>
+    isLive && !extras?.replay && extras?.matchId && catchStartsAt && Date.now() / 1000 - catchStartsAt >= LATE_SEC && !wasOffered(extras.matchId) && shouldShowLiveExtras(extras) ? "deciding" : "done",
+  );
+  const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  const spoilers = !!userPrefs?.sport.spoilers;
+  const { source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: catchPhase === "deciding" || catchPhase === "choice", liveNow: true, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
+  useEffect(() => {
+    if (catchPhase !== "deciding" || !extras?.matchId) return;
+    const id = extras.matchId;
+    let settled = false;
+    const decide = () => {
+      if (settled) return;
+      settled = true;
+      const snap = feedSource.get();
+      const fxStatus = snap.fixture?.status === "post" ? "post" : null;
+      const ask = offer({ live: true, replay: false, status: snap.raw?.status ?? fxStatus, startsAt: catchStartsAt, nowSec: Date.now() / 1000 });
+      if (ask) markOffered(id);
+      setCatchPhase(ask ? "choice" : "done");
+    };
+    const off = feedSource.subscribe(() => {
+      if (feedSource.get().state !== "loading") decide();
+    });
+    if (feedSource.get().state !== "loading") decide();
+    const t = window.setTimeout(decide, DECIDE_WAIT_MS);
+    return () => {
+      off();
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catchPhase, extras?.matchId, catchStartsAt]);
+
+  // ---- Full time (web/TV port): the native player covers the card, so it shows a note (after the spoiler delay) with what's next
+  const ftOn = isLive && !!extras?.matchId && !extras?.replay && !extras?.nospoil && state.kind === "playing";
+  const { data: fxData } = useFixtures(ftOn);
+  useEffect(() => {
+    if (!ftOn) return;
+    const t = window.setInterval(() => void refreshFixtures(), 60_000);
+    return () => window.clearInterval(t);
+  }, [ftOn]);
+  const ft = useRef<{ sawLive: boolean; sent: boolean; timer?: number }>({ sawLive: false, sent: false });
+  useEffect(() => () => window.clearTimeout(ft.current.timer), []);
+  useEffect(() => {
+    const id = extras?.matchId;
+    const f = ftOn && id ? fxData?.items.find((x) => x.matchId === id || x.fid === id) : undefined;
+    if (!f || ft.current.sent) return;
+    // only a game seen live in this session: opening a channel on the post-match show says nothing
+    if (f.status !== "post") {
+      ft.current.sawLive = true;
+      return;
+    }
+    if (!ft.current.sawLive) return;
+    ft.current.sent = true;
+    ft.current.timer = window.setTimeout(() => {
+      const now = Date.now() / 1000;
+      const sp = userPrefs?.sport;
+      const next = nextGame(fixturesNow()?.items ?? fxData?.items ?? [], new Set([f.fid, id!]), now, sp?.teamRefs ?? [], (g) => isMuted(g, sp?.muted));
+      void NativePlayer.notice({ text: fullTimeNotice(f, next, now, !!sp?.spoilers) }).catch(() => undefined);
+    }, delayRef.current * 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fxData, ftOn, extras?.matchId]);
 
   const exit = useCallback(() => back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv"), [target.recording, channelId]);
 
@@ -1710,6 +1784,10 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
           fantasyAlerts: sportPrefsRef.current?.fantasyAlerts,
           flipAlerts: sportPrefsRef.current?.flipAlerts,
           panelStyle: sportPrefsRef.current?.panelStyle,
+          delaySec: live ? delayRef.current : 0,
+          audioLangs: playbackRef.current?.audioLangs ?? [],
+          subtitleLangs: playbackRef.current?.subtitleLangs ?? [],
+          alwaysSubs: getAlwaysSubs(getSession()?.userId ?? ""),
           // Live: the channel, its event's other channels and the programme on now (kick-off); the player asks for links itself
           ...(live && target.channel
             ? {
@@ -1778,6 +1856,18 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         verdict: what,
       });
       void sendDebugReport();
+      // A 5xx or a lost connection: a fresh link after a short wait, as the web player's recovery does (not remembered as a failure yet)
+      const wait = what === "fatal" ? nativeRetryDelayMs(r, retries.current) : null;
+      if (wait != null) {
+        retries.current++;
+        debugEvent("iptv-player", "native retry", { attempt: retries.current, waitMs: wait, status: r.httpStatus ?? 0, errorCode: r.errorCode ?? null }, "info");
+        setState({ kind: "loading" });
+        retryTimer.current = window.setTimeout(() => {
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          if (alive.current) void start(false, live ? 0 : r.positionMs);
+        }, wait);
+        return;
+      }
       if (what !== "renew" && what !== "full") {
         const perm = permanentReason(r.httpStatus ?? 0, r.iptvError); // auth / link / rate / no-catch-up are never the stream's fault
         const why = /DECOD|FORMAT_UNSUPPORTED|AUDIO_TRACK/.test(r.errorCode ?? "") ? "decode" : perm ? deniedFailReason(perm) : !r.httpStatus ? "open_failed" : "unreachable";
@@ -1827,18 +1917,43 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   useEffect(() => {
     alive.current = true;
     renewed.current = false;
-    if (!opened.current) {
-      opened.current = true;
-      void start();
-    }
     return () => {
       alive.current = false;
     };
   }, [start]);
+  // (held while the late-join choice / recap is up: the native player would cover it)
+  useEffect(() => {
+    if (catchPhase !== "done" || opened.current) return;
+    opened.current = true;
+    void start();
+  }, [start, catchPhase]);
 
   return (
     <div className="player show iptv-player">
-      {(state.kind === "loading" || state.kind === "playing") && <div className="spinner" />}
+      {catchPhase === "choice" && catchStartsAt && (
+        <CatchUpChoice
+          fixture={feedSource.get().fixture}
+          joining={joiningLine(catchStartsAt, Date.now() / 1000)}
+          canKickOff={!!extras?.kickoff}
+          onChoose={(c) => {
+            const k = extras?.kickoff;
+            if (c === "kickoff" && k) go(`${targetPath({ channel: target.channel, start: k.start, stop: k.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+            else if (c === "catchup") {
+              const f = feedSource.get();
+              const cs = catchCards_(f.shown, f.raw, revealClock.reveal);
+              if (cs.length) {
+                setCatchCards(cs);
+                setCatchPhase("recap");
+              } else {
+                flashNote("Nothing to catch up on yet");
+                setCatchPhase("done");
+              }
+            } else setCatchPhase("done");
+          }}
+        />
+      )}
+      {catchPhase === "recap" && catchCards.length > 0 && <CatchUpRecap fixture={feedSource.get().fixture} cards={catchCards} onDone={() => setCatchPhase("done")} />}
+      {(state.kind === "loading" || state.kind === "playing") && catchPhase !== "choice" && catchPhase !== "recap" && <div className="spinner" />}
       {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
       {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
         <div className="player-error">

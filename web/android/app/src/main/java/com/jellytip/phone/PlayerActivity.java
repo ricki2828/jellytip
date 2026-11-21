@@ -83,6 +83,10 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_FLIP_ALERTS = "flipAlerts";
     /** sport.panelStyle: docked (default) | floating, for the landscape live drawer. */
     static final String EXTRA_PANEL_STYLE = "panelStyle";
+    static final String EXTRA_DELAY_SEC = "delaySec";
+    static final String EXTRA_AUDIO_LANGS = "audioLangs";
+    static final String EXTRA_SUB_LANGS = "subtitleLangs";
+    static final String EXTRA_ALWAYS_SUBS = "alwaysSubs";
     /** Which open() this player answers (PlayerPlugin resolves that call when it closes). */
     static final String EXTRA_SESSION = "session";
 
@@ -158,6 +162,10 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView infoButton;
     /** sport.flipAlerts: flips and moments also alert (toast / notification) while no live view shows. */
     private boolean flipAlertsOn = true;
+    /** Language rules (see [applyLanguagePrefs]); [langDone]: the foreign-audio check ran or the viewer picked tracks. */
+    private String[] audioLangs = new String[0];
+    private String[] subLangs = new String[0];
+    private boolean langDone;
     /** Match info said 403 / unknown: no ⓘ for this match. */
     private boolean matchHidden;
     /** The opening note (bottom centre in landscape; a banner at the top of the panel in portrait). */
@@ -282,7 +290,7 @@ public class PlayerActivity extends AppCompatActivity {
             topRight.addView(infoButton, gap());
             String apiBase = in.getStringExtra(EXTRA_API_BASE);
             if (live && apiBase != null && !apiBase.isEmpty()) {
-                liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId);
+                liveFeed = new LiveFeed(handler, apiBase, in.getStringExtra(EXTRA_TOKEN), matchId, 1000L * in.getIntExtra(EXTRA_DELAY_SEC, 0));
                 liveDrawer =
                     new LiveStatsDrawer(this, root, liveFeed, apiBase, in.getStringExtra(EXTRA_TOKEN), () -> matchPanel == null ? LiveTeams.NONE : matchPanel.teams(), "floating".equals(in.getStringExtra(EXTRA_PANEL_STYLE)));
                 liveDrawer.onOpenChanged = this::updateFeedSpeed;
@@ -456,6 +464,7 @@ public class PlayerActivity extends AppCompatActivity {
                 .setSeekForwardIncrementMs(SEEK_FORWARD_MS)
                 .build();
         view.setPlayer(player);
+        applyLanguagePrefs(in);
         if (live) {
             view.setShowFastForwardButton(false);
             view.setShowRewindButton(false);
@@ -516,6 +525,7 @@ public class PlayerActivity extends AppCompatActivity {
         off.setOnClickListener(v -> {
             TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
             b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+            langDone = true;
             player.setTrackSelectionParameters(b.build());
             rebuildTracksMenu();
         });
@@ -556,6 +566,7 @@ public class PlayerActivity extends AppCompatActivity {
                     b.clearOverridesOfType(type);
                     b.setTrackTypeDisabled(type, false);
                     b.addOverride(new TrackSelectionOverride(group.getMediaTrackGroup(), index));
+                    langDone = true;
                     player.setTrackSelectionParameters(b.build());
                     rebuildTracksMenu();
                 });
@@ -579,6 +590,7 @@ public class PlayerActivity extends AppCompatActivity {
             @Override
             public void onTracksChanged(@NonNull Tracks tracks) {
                 if (tracksScroll != null && tracksScroll.getVisibility() == View.VISIBLE) rebuildTracksMenu();
+                foreignAudioSubtitles(tracks);
             }
 
             @Override
@@ -710,7 +722,14 @@ public class PlayerActivity extends AppCompatActivity {
                     stalledSince = now;
                 } else if (now - stalledSince >= STALL_MS && !fromKickOff) {
                     stalledSince = now;
-                    failover("stalled 10 s");
+                    // No other channel to move to: reload this one (the live edge), a few times, before waiting it out
+                    if (!failover("stalled 10 s") && reconnects < MAX_RECONNECTS) {
+                        reconnects++;
+                        emitEvent("failover", "{\"from\":\"" + channelId + "\",\"to\":\"" + channelId + "\",\"why\":\"stall reconnect\"}");
+                        player.setMediaItem(item);
+                        player.prepare();
+                        player.setPlayWhenReady(true);
+                    }
                 }
                 handler.postDelayed(this, 1_000);
             }
@@ -1260,6 +1279,50 @@ public class PlayerActivity extends AppCompatActivity {
         if (channelId != null) o.put("channelId", channelId);
         p.emit("matchAction", o);
         android.widget.Toast.makeText(this, "remind".equals(action) ? "Setting a reminder…" : "Recording…", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    /** A note from the web app (kick-off, full time): a toast on screen, a notification in the mini player. */
+    void notice(String text) {
+        if (closing) return;
+        boolean onScreen = !inPip() && getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
+        if (onScreen) android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show();
+        else postAlert(text, null);
+    }
+
+    // ---- Language rules (web lib/iptvTracks.ts pickIptvTracks) ------------------------------------------------
+
+    /** Preferred audio languages first; subtitles in the subtitle languages when "always subtitles" is on. */
+    private void applyLanguagePrefs(Intent in) {
+        String[] a = in.getStringArrayExtra(EXTRA_AUDIO_LANGS);
+        String[] s = in.getStringArrayExtra(EXTRA_SUB_LANGS);
+        audioLangs = a == null ? new String[0] : a;
+        subLangs = s == null || s.length == 0 ? audioLangs : s;
+        TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
+        if (audioLangs.length > 0) b.setPreferredAudioLanguages(audioLangs);
+        if (in.getBooleanExtra(EXTRA_ALWAYS_SUBS, false) && subLangs.length > 0) {
+            b.setPreferredTextLanguages(subLangs);
+            langDone = true;
+        }
+        player.setTrackSelectionParameters(b.build());
+        if (audioLangs.length == 0) langDone = true;
+    }
+
+    /** Once: the audio playing is in a known language he doesn't list, so subtitles in his languages come on. */
+    private void foreignAudioSubtitles(Tracks tracks) {
+        if (langDone || player == null) return;
+        String playing = null;
+        boolean anyAudio = false;
+        for (Tracks.Group g : tracks.getGroups()) {
+            if (g.getType() != C.TRACK_TYPE_AUDIO) continue;
+            anyAudio = true;
+            for (int i = 0; i < g.length; i++) if (g.isTrackSelected(i)) playing = g.getTrackFormat(i).language;
+        }
+        if (!anyAudio) return; // tracks not known yet
+        langDone = true;
+        if (playing == null || playing.isEmpty() || "und".equals(playing)) return;
+        String p = androidx.media3.common.util.Util.normalizeLanguageCode(playing);
+        for (String l : audioLangs) if (p != null && p.equals(androidx.media3.common.util.Util.normalizeLanguageCode(l))) return;
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setPreferredTextLanguages(subLangs).build());
     }
 
     // ---- Alerts: a toast on screen, a heads-up notification in the mini player -------------------------------

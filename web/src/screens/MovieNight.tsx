@@ -7,6 +7,8 @@ import { candidates } from "../lib/tonight";
 import { load, toPool, ratedFor } from "./Tonight";
 import { go } from "../lib/router";
 import { MAX_FILMS, MIN_FILMS, finished, minutesLeft, nextToVote, parseCode, shareLink, shortlist, showCode, tally, winner, type Session, type Vote } from "../lib/movieNight";
+import { isNative, SERVER_ORIGIN } from "../lib/native";
+import { shareBase } from "../lib/nativePhone";
 import "./MovieNight.css";
 
 const POLL_MS = 3000;
@@ -279,7 +281,8 @@ function Night({ session, offline, onChange, onLeave }: { session: Session; offl
   const done = finished(session);
   const top = done ? winner(rows) : null;
   const next = nextToVote(session);
-  const link = shareLink(location.href, session.code);
+  // the phone app's own page is https://localhost/…: share the public web app instead
+  const link = shareLink(shareBase(isNative, SERVER_ORIGIN, location.href), session.code);
   const mins = minutesLeft(session, Math.floor(Date.now() / 1000));
   const total = session.items.length;
   const filmName = (id: string) => films.get(id)?.Name ?? (titlesFailed ? "Title not loaded" : titlesLoaded ? "A film you can't see" : "Loading…");
