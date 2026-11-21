@@ -26,7 +26,8 @@ class TasteSignalsTest {
 
     @Test
     fun watchRules() {
-        assertNull(TasteRules.watchSignal(film, 30.0, 7200.0, false, at))
+        assertNull(TasteRules.watchSignal(film, 5.0, 7200.0, false, at))
+        assertEquals("skip", TasteRules.watchSignal(film, 30.0, 7200.0, false, at)?.type)
         assertEquals("skip", TasteRules.watchSignal(film, 60.0, 7200.0, false, at)?.type)
         assertEquals("play", TasteRules.watchSignal(film, 600.0, 7200.0, false, at)?.type)
         assertEquals("finish", TasteRules.watchSignal(film, 6500.0, 7200.0, false, at)?.type)

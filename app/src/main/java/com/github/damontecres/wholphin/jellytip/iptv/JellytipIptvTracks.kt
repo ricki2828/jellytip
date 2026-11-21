@@ -109,6 +109,10 @@ object IptvTracks {
     @Volatile
     var appliedBy: String? = null
 
+    /** The parameters before the first IPTV page of a chain (copy swaps) changed them. */
+    @Volatile
+    private var original: androidx.media3.common.TrackSelectionParameters? = null
+
     /**
      * On open: the person's preferred audio languages, no picks left over from another title. Subtitles are not turned on
      * by language (an English film with English subtitle prefs would always get them): forced tracks still show, and the
@@ -119,9 +123,11 @@ object IptvTracks {
         audioLangs: List<String>,
         owner: String,
     ): androidx.media3.common.TrackSelectionParameters {
-        val before = player.trackSelectionParameters
+        // Another IPTV page's settings are in force (copy swap): what goes back later is still the original (Live TV's)
+        val before = if (appliedBy != null) original ?: player.trackSelectionParameters else player.trackSelectionParameters
+        original = before
         player.trackSelectionParameters =
-            before
+            player.trackSelectionParameters
                 .buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
