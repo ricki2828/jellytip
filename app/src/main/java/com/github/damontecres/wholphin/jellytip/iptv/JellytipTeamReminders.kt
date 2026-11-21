@@ -103,12 +103,18 @@ class JellytipTeamReminders
         /** Turn it on / off for [side]; [onDone] gets an error text or null. */
         fun toggle(
             side: TeamSide,
+            /** What the viewer saw and chose: true = turn on (always POST), false = turn off; null = decide now. */
+            turnOn: Boolean? = null,
             onDone: (String?) -> Unit = {},
         ) {
-            val teamId = side.teamId ?: return
+            val teamId = side.teamId ?: return onDone(null)
             scope.launch {
-                val api = JellytipApi.shared ?: return@launch
-                val existing = reminderFor(teamId)
+                val api = JellytipApi.shared ?: return@launch onDone("Not signed in to the companion.")
+                val found = reminderFor(teamId)
+                val on = turnOn ?: (found == null)
+                // Turning off something already gone (or never loaded) is done
+                if (!on && found == null) return@launch onDone(null)
+                val existing = if (on) null else found
                 val res =
                     if (existing != null) {
                         api.userCall("v1/iptv/reminders/teams/${java.net.URLEncoder.encode(existing.id, "UTF-8")}/delete", "{}")

@@ -352,9 +352,9 @@ fun JellytipGameCentrePage(
             teamItems = teamItems,
             teamsAvailable = teamsAvailable,
             teamReminderFor = { viewModel.teamReminders.reminderFor(it) != null },
-            onTeam = { side ->
+            onTeam = { side, turnOn ->
                 menu = null
-                viewModel.teamReminders.toggle(side) { err -> err?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
+                viewModel.teamReminders.toggle(side, turnOn) { err -> err?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
             },
             revealed = f.fid in revealed.value,
             onDismiss = { menu = null },
@@ -439,7 +439,7 @@ private fun FixtureMenu(
     teamItems: List<TeamReminder>?,
     teamsAvailable: Boolean?,
     teamReminderFor: (String?) -> Boolean,
-    onTeam: (TeamSide) -> Unit,
+    onTeam: (TeamSide, Boolean) -> Unit,
     revealed: Boolean,
     onDismiss: () -> Unit,
     onWatch: (FxChannel, Boolean) -> Unit,
@@ -466,7 +466,8 @@ private fun FixtureMenu(
             recordOn?.let { ch -> add(DialogItem("Record on ${ch.name}", dismissOnClick = true) { onRecord(ch) }) }
             if (f.status != "post") add(DialogItem(if (reminder) "Reminder on — turn off" else "Remind me", dismissOnClick = true) { onReminder() })
             // Every game of a team (hidden when the server has no team reminders)
-            if (teamsAvailable != false) {
+            // Only once the list is known, so the label and the action agree (turnOn = the opposite of what it showed)
+            if (teamsAvailable != false && teamItems != null) {
                 val sides =
                     TeamReminderLogic.offerSides(
                         listOf(
@@ -477,7 +478,7 @@ private fun FixtureMenu(
                 sides.forEach { side ->
                     val name = TeamReminderLogic.shortTeam(side)
                     val on = teamReminderFor(side.teamId)
-                    add(DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) { onTeam(side) })
+                    add(DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) { onTeam(side, !on) })
                 }
             }
             if (f.score != null && !revealed) add(DialogItem("Reveal score", dismissOnClick = true) { onReveal() })
