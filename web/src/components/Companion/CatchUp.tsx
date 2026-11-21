@@ -2,8 +2,9 @@
 // the live picture. The player decides when to show them (lib/catchUp.ts) and holds the score back meanwhile. Keys: arrows move
 // between the choices, Enter picks, Escape / Backspace = Live. Captured on window so the player's own keys (Up = panel, Escape =
 // leave) never act underneath.
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CARD_MS, CHOICE_TIMEOUT_MS, choices, type CatchCard } from "../../lib/catchUp";
+import { FULLTIME_SHOW_MS } from "../../lib/sportWow";
 import { GOLD, onColor, teamColors } from "../../lib/broadcast";
 import type { Fixture } from "../../lib/matchInfo";
 import "./CatchUp.css";
@@ -11,7 +12,7 @@ import "./CatchUp.css";
 export type CatchChoice = "kickoff" | "catchup" | "live";
 
 /** While open, arrows / Enter / Escape belong to the card. */
-function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => void) {
+export function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => void) {
   const esc = useRef(onEscape);
   esc.current = onEscape;
   useEffect(() => {
@@ -38,17 +39,18 @@ function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => voi
   }, [root]);
 }
 
-function Slabs({ fixture }: { fixture: Fixture | null }) {
+function Slabs({ fixture, middle }: { fixture: Fixture | null; middle?: ReactNode }) {
   const c = teamColors(fixture);
   const home = fixture?.home.name ?? "Home";
   const away = fixture?.away.name ?? "Away";
   const bg = (hex: string, fallback: string) => (c.known ? hex : fallback);
   return (
-    <div className="cu-slabs">
+    <div className={`cu-slabs${middle != null ? " mid" : ""}`}>
       <div className="cu-slab" style={{ background: bg(c.home, "#2a2e35"), color: c.known ? onColor(c.home) : "#fff" }}>
         <span className="full">{home}</span>
         <span className="short">{fixture?.home.short ?? home}</span>
       </div>
+      {middle}
       <div className="cu-slab right" style={{ background: bg(c.away, "#2a2e35"), color: c.known ? onColor(c.away) : "#fff" }}>
         <span className="full">{away}</span>
         <span className="short">{fixture?.away.short ?? away}</span>
@@ -136,6 +138,42 @@ export function CatchUpRecap({ fixture, cards, onDone }: { fixture: Fixture | nu
           <button className="btn small" onClick={() => done.current()}>
             Straight to live
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Full time (TV port, FullTimeCard): the released score between the team slabs, then what's next: the next game (Watch it) or,
+ * with none within the hour, Pick for tonight. Stay keeps this channel; it tucks itself away after 30 s.
+ */
+export function FullTimeCard({ fixture, score, next, nextLine, onNext, onClose }: { fixture: Fixture | null; score: { home: number; away: number } | null; next: string | null; nextLine: string | null; onNext: () => void; onClose: () => void }) {
+  const root = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useCardKeys(root, () => close.current());
+  useEffect(() => {
+    root.current?.querySelector<HTMLButtonElement>("button[data-next]")?.focus({ preventScroll: true });
+    const t = window.setTimeout(() => close.current(), FULLTIME_SHOW_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div className="cu-wrap recap" role="dialog" aria-label="Full time" ref={root}>
+      <div className="cu-card">
+        <Slabs fixture={fixture} middle={<span className="cu-ft-score">{score ? `${score.home} – ${score.away}` : "–"}</span>} />
+        <div className="cu-body">
+          <div className="cu-gold">Full time</div>
+          <div className="cu-choices">
+            <button className="cu-choice" data-next onClick={onNext}>
+              <span className="t">{next ? `Next: ${next}` : "Pick for tonight"}</span>
+              <span className="s">{next ? nextLine : "Three films for tonight from your library"}</span>
+            </button>
+            <button className="cu-choice" onClick={() => close.current()}>
+              <span className="t">Stay</span>
+              <span className="s">Keep watching this channel</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

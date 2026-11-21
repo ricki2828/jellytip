@@ -202,3 +202,22 @@ export function holdSecs(updatedAt: number | null, reveal: (atSec?: number) => b
   }
   return Math.max(1, Math.round(updatedAt - lo)); // the bisection lands within 0.1 s
 }
+
+/** "Open the panel by itself at breaks and big moments" (default on). Per device, like the TV's setting. */
+export const AUTO_OPEN_KEY = "jellytip.panelAutoOpen";
+export function autoOpenEnabled(get: (k: string) => string | null = (k) => {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+}): boolean {
+  return get(AUTO_OPEN_KEY) !== "0";
+}
+export function setAutoOpenEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(AUTO_OPEN_KEY, on ? "1" : "0");
+  } catch {
+    /* private mode: this session only */
+  }
+}

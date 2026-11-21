@@ -6,6 +6,7 @@ import { SportSetup } from "./components/SportSetup";
 import { SportMuteHost } from "./components/SportMute";
 import { RemindersPage } from "./screens/iptv/RemindersPage";
 import { ReminderNudge } from "./components/Reminders";
+import { KickoffCard } from "./components/KickoffCard";
 import { Nav } from "./components/Nav";
 import { LiveTabs } from "./components/LiveTabs";
 import { LiveHome } from "./components/LiveHome";
@@ -103,6 +104,7 @@ export function App() {
       {session && <SportSetup />}
       {session && <MatchInfoHost />}
       {session && <ReminderNudge />}
+      {session && <KickoffCard key={session.userId} />}
       <main>
         {route.name === "live" && <LiveHome />}
         {liveHub && <LiveTabs current={route.name} />}

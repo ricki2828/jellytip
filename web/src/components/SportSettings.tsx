@@ -1,6 +1,7 @@
 // Settings → Live sport: favourite teams and leagues (the server puts what is on now first in every live view),
 // a summary of the stream checks and, for admins, "Check streams now". Shown only to people with Live TV and prefs.
 import { useEffect, useState } from "react";
+import { autoOpenEnabled, setAutoOpenEnabled } from "../lib/companion";
 import { getSession } from "../api/jellyfin";
 import { hasLiveTv, logoSrc, probeNow, qualitySummary, sportSuggest, sportTeams } from "../api/iptv";
 import { follow, isFollowing, removeByName, teamLine, unfollow, type TeamHit, type TeamRef } from "../lib/teams";
@@ -167,6 +168,7 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
           <input type="checkbox" data-nav checked={prefs.sport.flipAlerts} onChange={async (e) => setMsg(await savePrefs({ sport: { flipAlerts: e.target.checked } }))} />
           <span>Polymarket flip alerts (a pop-up when the favourite changes in a live match)</span>
         </label>
+        <AutoOpenToggle />
       </div>
 
       <div className="settings-block settings-pad">
@@ -239,5 +241,24 @@ export function SportSettings({ prefs }: { prefs: Prefs }) {
       )}
       {msg && <p className="settings-err settings-pad">{msg}</p>}
     </>
+  );
+}
+
+/** The live panel opening by itself at breaks and after big moments (TV port: "Open by itself at breaks"). Per device. */
+function AutoOpenToggle() {
+  const [on, setOn] = useState(autoOpenEnabled);
+  return (
+    <label className="iptv-check">
+      <input
+        type="checkbox"
+        data-nav
+        checked={on}
+        onChange={(e) => {
+          setAutoOpenEnabled(e.target.checked);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>Open the live panel by itself at breaks and big moments (this device)</span>
+    </label>
   );
 }
