@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -92,6 +93,40 @@ data class HubSection(
     val title: String,
     val items: List<HubCollection>,
 )
+
+/** Movies | TV Shows | All switch (web f16e2120): a card's mediaType decides; unknown or mixed shows on both. */
+object HubTabs {
+    const val MOVIE = "movie"
+    const val TV = "tv"
+    const val ALL = "all"
+    val ORDER = listOf(MOVIE to "Movies", TV to "TV Shows", ALL to "All")
+    private const val PREFS = "jellytip_hub"
+    private const val KEY = "tab"
+
+    fun inTab(
+        c: HubCollection,
+        tab: String,
+    ): Boolean = tab == ALL || c.mediaType == null || c.mediaType == "mixed" || c.mediaType == tab
+
+    /** Sections narrowed to [tab]; empty sections dropped. */
+    fun filter(
+        sections: List<HubSection>,
+        tab: String,
+    ): List<HubSection> =
+        if (tab == ALL) {
+            sections
+        } else {
+            sections.mapNotNull { s -> s.items.filter { inTab(it, tab) }.takeIf { it.isNotEmpty() }?.let { s.copy(items = it) } }
+        }
+
+    fun load(context: android.content.Context): String =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(KEY, MOVIE).takeIf { it == MOVIE || it == TV || it == ALL } ?: MOVIE
+
+    fun save(
+        context: android.content.Context,
+        tab: String,
+    ) = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString(KEY, tab).apply()
+}
 
 object HubParse {
     private fun JSONObject.str(key: String): String? = if (!has(key) || isNull(key)) null else optString(key).takeIf { it.isNotBlank() && it != "null" }
@@ -206,7 +241,10 @@ fun JellytipCollectionsHubPage(
     }
     var selected by remember { mutableIntStateOf(0) }
     val firstChip = remember { FocusRequester() }
-    val list = sections
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var tab by remember { mutableStateOf(HubTabs.load(context)) }
+    val all = sections
+    val list = remember(all, tab) { all?.let { HubTabs.filter(it, tab) } }
     LaunchedEffect(list?.isNotEmpty() == true) {
         if (list?.isNotEmpty() == true) {
             withFrameNanos { }
@@ -217,7 +255,7 @@ fun JellytipCollectionsHubPage(
         Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
         when {
             list == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
-            list.isEmpty() ->
+            all.isNullOrEmpty() ->
                 Text(
                     if (failed) "Collections aren't available right now." else "No collections yet.",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
@@ -225,6 +263,26 @@ fun JellytipCollectionsHubPage(
                     modifier = Modifier.padding(8.dp),
                 )
             else -> {
+                // Movies | TV Shows | All: remembered across visits; Up from the section chips reaches it
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 8.dp).focusGroup()) {
+                    HubTabs.ORDER.forEach { (key, label) ->
+                        HubChip(
+                            label,
+                            selected = key == tab,
+                            onClick = {
+                                if (key != tab) {
+                                    tab = key
+                                    selected = 0
+                                    HubTabs.save(context, key)
+                                }
+                            },
+                        )
+                    }
+                }
+                if (list.isEmpty()) {
+                    Text("Nothing here in this view.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
+                    return@Column
+                }
                 val sel = selected.coerceIn(0, list.size - 1)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
