@@ -52,9 +52,11 @@ class StreamFailTest {
     @Test
     fun reasons() {
         assertEquals("open_failed", IptvStreamFail.reasonFor(2004, 404))
-        assertEquals("refused", IptvStreamFail.reasonFor(2004, 403))
+        assertNull(IptvStreamFail.reasonFor(2004, 403))
+        assertNull(IptvStreamFail.reasonFor(2004, 502))
         assertEquals("decode", IptvStreamFail.reasonFor(4003, null))
-        assertEquals("unreachable", IptvStreamFail.reasonFor(2001, null))
+        assertNull(IptvStreamFail.reasonFor(2001, null))
+        assertNull(IptvStreamFail.reasonFor(4003, null, wasPlaying = true))
         assertNull(IptvStreamFail.reasonFor(1000, null, wasPlaying = true))
         // connections in use (409) and expired links are never the stream's fault; the companion code wins over HTTP
         assertNull(IptvStreamFail.reasonFor(2004, 409))

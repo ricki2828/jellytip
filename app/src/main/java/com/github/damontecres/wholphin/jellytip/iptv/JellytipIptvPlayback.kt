@@ -208,7 +208,7 @@ class JellytipIptvPlayback
                             scope.launch {
                                 kotlinx.coroutines.delay(IptvStreamFail.GOOD_PLAY_S * 1000)
                                 val now = _state.value
-                                if (now is IptvPlayState.Playing && now.target == t) IptvStreamFail.report(t, ok = true, posSec = IptvStreamFail.GOOD_PLAY_S)
+                                if (now is IptvPlayState.Playing && now.target == t && loadedTarget == t) IptvStreamFail.report(t, ok = true, posSec = IptvStreamFail.GOOD_PLAY_S)
                             }
                     }
                 }
@@ -230,7 +230,7 @@ class JellytipIptvPlayback
                             fail(t, IptvRules.failureText(code, "The stream stopped."), null)
                         }
 
-                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, code, _state.value is IptvPlayState.Playing))
+                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, code, _state.value is IptvPlayState.Playing), fromPlayer = true)
                     }
                 }
             }
@@ -314,6 +314,7 @@ class JellytipIptvPlayback
                                     .build()
                             val p = ensurePlayer()
                             if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
+                            loadedTarget = target
                             p.playWhenReady = true
                             p.prepare()
                         }
@@ -331,20 +332,27 @@ class JellytipIptvPlayback
 
         private var okJob: kotlinx.coroutines.Job? = null
 
+        /** The target whose stream the player holds now; during a zap the old stream plays on while the state already names the new one. */
+        @Volatile
+        private var loadedTarget: IptvTarget? = null
+
         private fun fail(
             target: IptvTarget,
             message: String,
             /** Failed-stream memory reason; null = not the stream's fault (nothing reported). */
             reason: String? = "open_failed",
+            fromPlayer: Boolean = false,
         ) {
             okJob?.cancel()
-            if (reason != null) IptvStreamFail.report(target, ok = false, reason = reason)
+            // Player errors are only the target's own when the player holds its stream (else: the previous channel's)
+            if (reason != null && (!fromPlayer || loadedTarget == target)) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
             setState(IptvPlayState.Failed(target, message), "failed")
         }
 
         private fun stopPlayer() {
+            loadedTarget = null
             player?.run {
                 stop()
                 clearMediaItems()

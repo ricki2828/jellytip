@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.Key
@@ -282,7 +283,9 @@ fun JellytipIptvDetailsPage(
         val own = d?.copies?.firstOrNull { c -> c.id == it.id }
         val alt =
             if (!manual && IptvStreamFail.failedLately(IptvStreamFail.failOf(it.id, own?.lastFail), now)) {
-                d?.copies?.firstOrNull { c -> c.id != it.id && !IptvStreamFail.failedLately(IptvStreamFail.failOf(c.id, c.lastFail), now) }
+                d?.copies
+                    ?.filter { c -> c.id != it.id && !IptvStreamFail.failedLately(IptvStreamFail.failOf(c.id, c.lastFail), now) }
+                    ?.let { ok -> ok.firstOrNull { c -> c.opted != false } ?: ok.firstOrNull() }
             } else {
                 null
             }
@@ -587,6 +590,9 @@ private fun WaysToWatchRow(
 @Composable
 private fun IptvTasteButtons(item: IptvVodItem) {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+    // Same gate as the library thumbs: a server without /v1/me shows none of these
+    val available by me.available.collectAsState()
+    if (!available) return
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val key = remember(item.id) { me.iptvTasteKey(item.id, item.kind, item.tmdbId) }
     val thumb = me.thumbOfKey(key)

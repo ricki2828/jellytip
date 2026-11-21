@@ -380,10 +380,15 @@ fun MovieDetailsContent(
     val reviews by produceState<JellytipReviews?>(null, movie.id) { value = JellytipApi.shared?.getReviews(movie) }
     val hasReviews = reviews?.reviews?.isNotEmpty() == true
     // Jellytip: companion "More like this" (library + IPTV mix); null = Jellyfin's similar list below
-    val jtSimilar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, movie.id) {
+    val jtSimilarLoaded by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, movie.id) {
         value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(movie)?.let {
             com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
         }
+    // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
+    var jtSimilar by remember(movie.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
+    LaunchedEffect(jtSimilarLoaded, sectionsActive) {
+        if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
+    }
     }
     val hasBelow = hasReviews || jtSimilar != null || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }

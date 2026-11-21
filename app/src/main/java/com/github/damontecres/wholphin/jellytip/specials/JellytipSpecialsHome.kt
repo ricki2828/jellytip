@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.specials
 
+import kotlinx.coroutines.async
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -216,8 +217,10 @@ fun rememberJellytipRows(
             if (myListPage) com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, own, viewModel.rows.peek("home")) else own
         }
     val loaded by produceState(initial, page) {
+        // Home's answer (My list) loads beside the page's own, not after it
+        val homeJob = if (myListPage) async { viewModel.rows.load("home") } else null
         viewModel.rows.load(page)?.let {
-            val home = if (myListPage) viewModel.rows.load("home") else null
+            val home = homeJob?.await()
             val shown = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, home) ?: it
             value = shown
             viewModel.rows.prefetch(page, shown)
