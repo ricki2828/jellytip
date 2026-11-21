@@ -950,7 +950,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     if (drawer && openedBy.current.by !== "user") closePanel(false);
     // What's next from a fresh list (the one loaded when the player opened may be hours old); at most ~2.5 s, else what we have
     // not cancelled when a dep changes: the id is already marked shown, so this answer is the only card for this game
-    void Promise.race([refreshFixtures(true), new Promise((r) => window.setTimeout(r, 2500))]).then(() => {
+    // a refresh that fails (bad payload) still shows the card, from the list we have
+    void Promise.race([refreshFixtures(true).catch(() => undefined), new Promise((r) => window.setTimeout(r, 2500))]).then(() => {
       const items = fixturesNow()?.items ?? fxData?.items ?? [];
       setFullTime({ score, next: nextGame(items, new Set([id]), Date.now() / 1000, ftPrefs?.sport.teamRefs ?? [], (f) => isMuted(f, muted)) });
     });

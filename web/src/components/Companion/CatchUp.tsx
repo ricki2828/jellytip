@@ -12,7 +12,9 @@ import "./CatchUp.css";
 export type CatchChoice = "kickoff" | "catchup" | "live";
 
 /** While open, arrows / Enter / Escape belong to the card. */
-export function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => void) {
+/** [scoped]: keys only while focus is on the card (or nowhere), for cards that may sit beside an open panel (full time). The
+ *  catch-up cards are not scoped: while the score is held, no key may reach the player (panel, leave). */
+export function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => void, scoped = false) {
   const esc = useRef(onEscape);
   esc.current = onEscape;
   useEffect(() => {
@@ -21,7 +23,7 @@ export function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: ()
       if (!btns.length) return;
       // keys belong to the card only while focus is on it (or nowhere): an open panel or a menu keeps its own
       const ae = document.activeElement;
-      if (ae && ae !== document.body && !root.current?.contains(ae)) return;
+      if (scoped && ae && ae !== document.body && !root.current?.contains(ae)) return;
       const at = btns.indexOf(document.activeElement as HTMLButtonElement);
       let handled = true;
       // focus lost (a click on the backdrop): arrows come back to the default button (Live / Next), not the first
@@ -155,7 +157,7 @@ export function FullTimeCard({ fixture, score, next, nextLine, onNext, onClose }
   const root = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
-  useCardKeys(root, () => close.current());
+  useCardKeys(root, () => close.current(), true);
   useEffect(() => {
     root.current?.querySelector<HTMLButtonElement>("button[data-next]")?.focus({ preventScroll: true });
     const t = window.setTimeout(() => close.current(), FULLTIME_SHOW_MS);
