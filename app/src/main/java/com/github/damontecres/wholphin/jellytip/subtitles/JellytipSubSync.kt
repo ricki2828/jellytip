@@ -131,12 +131,12 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
     val playback = state.value.currentPlayback ?: return
     val streamIndex = playback.subtitleIndex
     if (streamIndex < 0) {
-        showToast(context, "Pick a subtitle first, then match its timing", Toast.LENGTH_LONG)
+        Toast.makeText(context, "Pick a subtitle first, then match its timing", Toast.LENGTH_LONG).show()
         return
     }
     val companion = JellytipApi.shared ?: return
     if (SubSync.running) {
-        showToast(context, "Already matching these subtitles…", Toast.LENGTH_SHORT)
+        Toast.makeText(context, "Already matching these subtitles…", Toast.LENGTH_SHORT).show()
         return
     }
     SubSync.running = true
@@ -203,7 +203,8 @@ fun PlaybackViewModel.jellytipMatchSubtitleTiming() {
                 val source = base.data.mediaSources?.firstOrNull { it.id?.toUUIDOrNull() == playback.sourceId } ?: base.data.mediaSources?.firstOrNull()
                 val subs = source?.mediaStreams?.filter { it.type == MediaStreamType.SUBTITLE }.orEmpty()
                 // Only a track that wasn't there before; with a file name, it must be that file
-                val fresh = subs.filter { it.path == null || it.path !in before }
+                // The re-timed track is always an external file
+                val fresh = subs.filter { it.path != null && it.path !in before }
                 val stream =
                     if (result.fileName != null) {
                         fresh.firstOrNull { f -> f.path?.endsWith(result.fileName) == true }
