@@ -181,6 +181,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         instance = this
         com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.init(applicationContext)
+        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onBlocked = { what ->
+            runOnUiThread { android.widget.Toast.makeText(this, "Didn't open that: press OK on it again", android.widget.Toast.LENGTH_SHORT).show() }
+            com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("nav", "blocked launch shown to the viewer: $what")
+        }
         lifecycleScope.launch {
             // A crash last time: send its trace once the app (and the companion client) is up
             kotlinx.coroutines.delay(20_000)

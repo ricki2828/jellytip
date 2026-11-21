@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -212,7 +214,11 @@ fun JellytipMatchModal(
         Column(
             modifier =
                 Modifier
-                    .width(720.dp)
+                    // Keys in a dialog window skip the activity: OK here (Watch) must still count for the nav gate
+                    .onPreviewKeyEvent {
+                        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.onKey(it.nativeKeyEvent)
+                        false
+                    }.width(720.dp)
                     .height(450.dp)
                     .graphicsLayer {
                         val p = entry.value

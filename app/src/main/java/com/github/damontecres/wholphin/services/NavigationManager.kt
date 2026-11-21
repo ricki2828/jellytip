@@ -61,6 +61,8 @@ class NavigationManager
             if (!JellytipNavGate.allow(isBrowsePage(from), opensTitle(destination))) {
                 JellytipTrace.nav("BLOCKED", from, destination, reason)
                 Timber.w("Blocked navigation without OK: %s -> %s", from, destination)
+                // Never silent: a launch that didn't go says so
+                JellytipNavGate.onBlocked?.invoke(reason ?: destination.toString())
                 return false
             }
             JellytipTrace.nav("to", from, destination, reason)
