@@ -9,6 +9,7 @@ val DefaultFilterOptions =
     listOf(
         PlayedFilter,
         FavoriteFilter,
+        SubtitlesFilter, // Jellytip: web 54110c6e "Has subtitles"
         GenreFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -21,6 +22,7 @@ val DefaultTvFilterOptions =
     listOf(
         PlayedFilter,
         FavoriteFilter,
+        SubtitlesFilter, // Jellytip: web 54110c6e "Has subtitles"
         GenreFilter,
         StudioFilter,
         CommunityRatingFilter,
@@ -45,6 +47,7 @@ val DefaultForGenresFilterOptions =
     listOf(
         PlayedFilter,
         FavoriteFilter,
+        SubtitlesFilter, // Jellytip
         StudioFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -57,6 +60,7 @@ val DefaultForStudiosFilterOptions =
     listOf(
         PlayedFilter,
         FavoriteFilter,
+        SubtitlesFilter, // Jellytip: web 54110c6e "Has subtitles"
         GenreFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -124,6 +128,20 @@ data object PlayedFilter : ItemFilterBy<Boolean> {
         value: Boolean?,
         filter: GetItemsFilter,
     ): GetItemsFilter = filter.copy(played = value)
+}
+
+/** Jellytip (web 54110c6e): only titles with subtitles (Jellyfin HasSubtitles), or only those without. */
+data object SubtitlesFilter : ItemFilterBy<Boolean> {
+    override val stringRes: Int = R.string.subtitles
+
+    override val supportMultiple: Boolean = false
+
+    override fun get(filter: GetItemsFilter): Boolean? = filter.hasSubtitles
+
+    override fun set(
+        value: Boolean?,
+        filter: GetItemsFilter,
+    ): GetItemsFilter = filter.copy(hasSubtitles = value)
 }
 
 data object FavoriteFilter : ItemFilterBy<Boolean> {

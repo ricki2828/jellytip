@@ -22,6 +22,7 @@ import com.github.damontecres.wholphin.data.filter.GenreFilter
 import com.github.damontecres.wholphin.data.filter.OfficialRatingFilter
 import com.github.damontecres.wholphin.data.filter.PlayedFilter
 import com.github.damontecres.wholphin.data.filter.StudioFilter
+import com.github.damontecres.wholphin.data.filter.SubtitlesFilter
 import com.github.damontecres.wholphin.data.filter.VideoTypeFilter
 import com.github.damontecres.wholphin.data.filter.YearFilter
 import com.github.damontecres.wholphin.services.hilt.IoCoroutineScope
@@ -116,6 +117,7 @@ class FilterOptionCache
 
             FavoriteFilter,
             PlayedFilter,
+            SubtitlesFilter,
             -> {
                 listOf(
                     FilterValueOption("True", null),
