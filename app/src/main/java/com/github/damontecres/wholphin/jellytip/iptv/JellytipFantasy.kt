@@ -215,14 +215,30 @@ fun isMulti(matchId: String?) = matchId?.startsWith("multi:") == true
 fun FantasyTab(
     live: FantasyLive,
     matchId: String?,
+    /** The player's reveal clock: a per-game answer shows only once the delay has released its arrival (web 4e467fec). */
+    reveal: (Double?) -> Boolean = { true },
 ) {
     val multi = isMulti(matchId)
-    // "In this game" from /v1/fantasy/game/{matchId} (60 s), else the live answer's starters for that match
+    val revealNow by androidx.compose.runtime.rememberUpdatedState(reveal)
+    // "In this game" from /v1/fantasy/game/{matchId} (60 s), else the live answer's starters for that match. Each answer
+    // waits for the spoiler delay (stamped when it arrived), so points never run ahead of the picture.
     val game by androidx.compose.runtime.produceState<List<FantasyLeague>?>(null, matchId) {
         val id = matchId?.takeIf { !multi } ?: return@produceState
+        val held = ArrayList<Pair<Double, List<FantasyLeague>>>()
+        var nextFetch = 0L
         while (true) {
-            JellytipFantasy.game(id)?.let { value = it }
-            kotlinx.coroutines.delay(60_000)
+            val nowMs = System.currentTimeMillis()
+            if (nowMs >= nextFetch) {
+                nextFetch = nowMs + 60_000
+                JellytipFantasy.game(id)?.let { held += (nowMs / 1000.0) to it }
+                if (held.size > 10) held.removeAt(0)
+            }
+            val rel = held.lastOrNull { revealNow(it.first) }
+            if (rel != null) {
+                if (value !== rel.second) value = rel.second
+                held.removeAll { it.first < rel.first }
+            }
+            kotlinx.coroutines.delay(1_000)
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

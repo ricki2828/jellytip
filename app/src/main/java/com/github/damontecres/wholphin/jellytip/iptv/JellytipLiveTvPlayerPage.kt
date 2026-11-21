@@ -76,6 +76,7 @@ import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -514,6 +515,16 @@ fun JellytipLiveTvPlayerPage(
         val (ch, sec) = pendingDelaySave ?: return@LaunchedEffect
         delay(600) // stepper bursts send one trailing save
         viewModel.service.putChannelDelay(ch, sec)
+        pendingDelaySave = null
+    }
+    // Leaving within the 0.6 s debounce must not lose the change (web a61f25ec): flush it outside the page's scope
+    val pendingDelayNow by androidx.compose.runtime.rememberUpdatedState(pendingDelaySave)
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingDelayNow?.let { (ch, sec) ->
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { viewModel.service.putChannelDelay(ch, sec) }
+            }
+        }
     }
     fun applyDelay(sec: Int) {
         val d = revealClock.setDelay(sec)
@@ -695,7 +706,8 @@ fun JellytipLiveTvPlayerPage(
                 if (mk != null && at != null && at != liveSeen.flipAt) {
                     liveSeen.flipAt = at
                     // A thin market never fires a flip toast (plan "thin markets")
-                    if (me?.sportFlipAlerts != false && !mk.thin) pendingAlerts += AlertPolicy.Candidate("flip|$at", "flip", stampSec(at) ?: stamp, payload = {
+                    // Odds are spoilers: flip toasts only with "Show scores (spoilers)" on (web df2302bc)
+                    if (me?.sportFlipAlerts != false && me?.sportSpoilers == true && !mk.thin) pendingAlerts += AlertPolicy.Candidate("flip|$at", "flip", stampSec(at) ?: stamp, payload = {
                         val team = if (mk.flipTo == "away") m.away else m.home
                         // Winner markets: flip.to names the outcome; the toast reads "new favourite"
                         val name = if (mk.isWinner) mk.flipTo ?: mk.outcomes.first().name else team?.short ?: team?.name ?: mk.flipTo ?: "New"
@@ -1362,6 +1374,7 @@ fun JellytipLiveTvPlayerPage(
                 fav = favSide,
                 closer = closerGame,
                 allowWinProb = me?.sportSpoilers == true,
+                reveal = { revealClock.reveal(it) },
             )
         }
         if (open) {
