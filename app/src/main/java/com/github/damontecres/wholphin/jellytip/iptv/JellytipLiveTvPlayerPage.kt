@@ -177,12 +177,14 @@ fun JellytipLiveTvPlayerPage(
     val startedAt = remember { nowSec() - 60 }
     val channel = fallback ?: lineup[index]
 
+    // One owner per page: a page swapped in (closer game) must not lose the stream when the old one detaches
+    val playerOwner = remember { "full#" + System.nanoTime() }
     DisposableEffect(Unit) {
-        playback.attach("full")
+        playback.attach(playerOwner)
         playback.setVolume(1f)
         onDispose {
             playback.lastFullScreenChannel = (fallback ?: lineup[index]).id
-            playback.detach("full")
+            playback.detach(playerOwner)
         }
     }
     // App hidden = JellytipIptvPlayback's activity callback stops the stream; no nav-entry ON_STOP stop here (it also
@@ -305,6 +307,7 @@ fun JellytipLiveTvPlayerPage(
     var delayNote by remember { mutableStateOf<String?>(null) }
     var chipsOpen by remember { mutableStateOf(false) }
     var chipCursor by remember { mutableIntStateOf(0) }
+    val delaySheetAt = remember { longArrayOf(0L) }
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
     // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
@@ -424,6 +427,25 @@ fun JellytipLiveTvPlayerPage(
         JellytipTrace.player("iptv", "channel match ${channel.id} -> ${cm.matchId} ${value?.id ?: "(no detail)"}")
     }
     val sourceMatch = launchMatch?.takeIf { index == startIndex } ?: nowNext?.liveMatch ?: resolvedMatch
+    // The viewer's side (team-aware alerts): a followed team id from sport.teamRefs, else a followed team name
+    val mePrefs by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
+    val favSide =
+        remember(sourceMatch?.id, mePrefs?.sportTeams, mePrefs?.sportTeamRefs) {
+            val m = sourceMatch
+            if (m == null || m.isEvent) {
+                null
+            } else {
+                TeamAware.favouriteSide(
+                    m.home?.let { TeamAware.Side(it.name, it.short, it.teamId) },
+                    m.away?.let { TeamAware.Side(it.name, it.short, it.teamId) },
+                    m.leagueKey,
+                    mePrefs?.sportTeams.orEmpty(),
+                    mePrefs?.sportTeamRefs.orEmpty(),
+                )
+            }
+        }
+    val favNow by androidx.compose.runtime.rememberUpdatedState(favSide)
+    LaunchedEffect(sourceMatch?.id, favSide) { if (sourceMatch != null) JellytipTrace.player("iptv", "fav side ${sourceMatch.id} = $favSide") }
     val panelMatch = sourceMatch?.takeIf { current.isLive && !it.replay && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
     val me by com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.collectAsState()
@@ -439,7 +461,11 @@ fun JellytipLiveTvPlayerPage(
     val revealClock = remember { RevealClock(lag = { lagMeter.lagSec(playback.player) }, forcedReplay = { !current.isLive }) }
     var delayShown by remember { mutableIntStateOf(DelayMath.DEFAULT_DELAY_SEC) }
     var replayShown by remember { mutableStateOf(false) }
+    val delayChannel = remember { arrayOf<String?>(null) }
     LaunchedEffect(channel.id, me?.sportDelaySec) {
+        // The pref arriving late must not undo a delay the viewer just set on this channel
+        if (delayChannel[0] == channel.id && revealClock.touched) return@LaunchedEffect
+        delayChannel[0] = channel.id
         revealClock.reset(me?.sportDelaySec ?: DelayMath.DEFAULT_DELAY_SEC)
         delayShown = revealClock.delaySec
         val saved = viewModel.service.channelDelay(channel.id)
@@ -520,7 +546,7 @@ fun JellytipLiveTvPlayerPage(
     // Chat only once a /live answer carries a `chat` block (no Reddit app: none at all)
     var liveHasChat by remember(panelMatch?.id) { mutableStateOf(false) }
     val liveTabs = if (liveHasChat) LIVE_TABS else LIVE_TABS - "Chat"
-    val panelTabs = if (nflMatch != null && fantasy != null) liveTabs + "Fantasy" else liveTabs
+    val panelTabs = if (nflMatch != null && fantasyShown != null) liveTabs + "Fantasy" else liveTabs
     LaunchedEffect(panelTabs.size) { if (panelTab >= panelTabs.size) panelTab = 0 }
     // RedZone (plan "RedZone / whip-around mode"): the Fantasy tab is the default
     val fantasyIndex = panelTabs.indexOf("Fantasy")
@@ -552,7 +578,8 @@ fun JellytipLiveTvPlayerPage(
                 }
             val leagueName = league?.name ?: e.league
             val color = if (opp) TOAST_OPP else TOAST_MINE
-            val fAt = stampSec(e.at) ?: (System.currentTimeMillis() / 1000.0)
+            // The toast's "you lead" line uses totals that arrived now: it waits for whichever is later
+            val fAt = maxOf(stampSec(e.at) ?: 0.0, System.currentTimeMillis() / 1000.0)
             if (!AlertPolicy.isKeyEvent(AlertPolicy.Candidate("f", "fantasy", fAt, swing = kotlin.math.abs(e.delta), payload = Unit), AlertPolicy.parseMode(me?.sportAlerts))) return@forEach
             heldFantasy += fAt to (
                 PlayerToast(
@@ -636,7 +663,7 @@ fun JellytipLiveTvPlayerPage(
                     // The toast may fall back to this answer's score: then it waits for the answer's own time too
                     val moAt = stampSec(mo.at) ?: stamp
                     val gateAt = if (mo.detail == null) maxOf(moAt, stamp) else moAt
-                    pendingAlerts += AlertPolicy.Candidate("mo|${mo.at}|${mo.label}", kind, gateAt, late = late, payload = {
+                    pendingAlerts += AlertPolicy.Candidate("mo|${mo.at}|${mo.label}", kind, gateAt, favourite = TeamAware.isFavouriteMoment(mo.kind, mo.team, favNow), late = late, payload = {
                     if (panelOpen) {
                         liveFlash = LiveFlash((liveFlash?.seq ?: 0) + 1, mo)
                     } else if (me?.sportFlipAlerts != false) {
@@ -676,7 +703,15 @@ fun JellytipLiveTvPlayerPage(
             }
             val reveal: (Double?) -> Boolean = { revealClock.reveal(it) }
             if (liveId != null && !rp) {
-                if (panelIsOpenNow) snaps.releasedFull(reveal)?.let { if (it !== liveData) liveData = it.reuse(liveData) }
+                if (panelIsOpenNow) {
+                    snaps.releasedFull(reveal)?.let { r ->
+                        val tl = GameStateLogic.releasedTimeline(r.timeline, reveal)
+                        val card = GameStateLogic.releasedCard(r.scorecard, reveal)
+                        val gated = if (tl.size == r.timeline.size && card === r.scorecard) r else r.copy(timeline = tl, scorecard = card)
+                        val next = gated.reuse(liveData)
+                        if (next !== liveData) liveData = next
+                    }
+                }
                 val rel = snaps.released(reveal)
                 holdSecs = if (rel == null) snaps.newestAt()?.let { revealClock.holdSecs(it.toDouble()) } else null
                 if (rel != null && rel !== shownSnap) {
@@ -735,6 +770,36 @@ fun JellytipLiveTvPlayerPage(
             delay(1_000)
         }
     }
+    // Blowout (web BlowoutCard): a tighter live game to suggest, looked up while the panel is open on a decided game;
+    // a short OK in the panel switches to it
+    val blowout =
+        remember(liveData, panelMatch?.id, me?.sportSpoilers, replayShown) {
+            val d = liveData
+            val m = panelMatch
+            d != null && m != null && !m.isEvent && !replayShown && GameStateLogic.of(d, m.leagueKey, m.status, me?.sportSpoilers == true).kind == GameKind.BLOWOUT
+        }
+    val closerGame by produceState<FxItem?>(null, blowout, panelIsOpen, panelMatch?.id) {
+        value = null
+        if (!blowout || !panelIsOpen) return@produceState
+        while (true) {
+            val fx = viewModel.service.fixtures(maxAgeMs = 60_000)?.second
+            if (fx != null) {
+                val c = GameStateLogic.closerGame(fx.items, setOfNotNull(panelMatch?.id, matchId), nowSec())
+                if (c?.fid != value?.fid) JellytipTrace.player("iptv", "blowout ${panelMatch?.id}: closer ${c?.fid ?: "none"}")
+                value = c
+            }
+            delay(60_000)
+        }
+    }
+    var pendingCloser by remember { mutableStateOf<FxItem?>(null) }
+    val closerArmed = remember { booleanArrayOf(false) }
+    LaunchedEffect(pendingCloser) {
+        val c = pendingCloser ?: return@LaunchedEffect
+        pendingCloser = null
+        val ch = SportFixtures.pickChannel(c, nowSec()).channel ?: return@LaunchedEffect
+        panelOpen = false
+        launchFixture(viewModel.playback, viewModel.navigationManager, c, ch, fromStart = false, from = "closer game", replaceTop = true)
+    }
     // Perf trace: the player with the panel open is measured on its own (perfByDest "…+panel")
     DisposableEffect(panelIsOpen) {
         com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.subState = if (panelIsOpen) "panel" else null
@@ -761,6 +826,13 @@ fun JellytipLiveTvPlayerPage(
             .background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
+                // Closer game: a short OK press in the panel's Stats tab (released, not held) switches to it
+                if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) && closerArmed[0]) {
+                    closerArmed[0] = false
+                    val c = closerGame
+                    if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats" && c != null) pendingCloser = c
+                    return@onPreviewKeyEvent true
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 if (trackSheetOpen) {
                     when (e.key) {
@@ -780,8 +852,8 @@ fun JellytipLiveTvPlayerPage(
                     when (e.key) {
                         Key.DirectionUp -> delayCursor = Math.floorMod(delayCursor - 1, DELAY_ROWS.size)
                         Key.DirectionDown -> delayCursor = (delayCursor + 1) % DELAY_ROWS.size
-                        Key.DirectionLeft -> if (e.nativeKeyEvent.repeatCount == 0) applyDelay(DelayMath.stepDelay(delayShown, -5))
-                        Key.DirectionRight -> if (e.nativeKeyEvent.repeatCount == 0) applyDelay(DelayMath.stepDelay(delayShown, 5))
+                        Key.DirectionLeft -> if (e.nativeKeyEvent.repeatCount == 0 || System.currentTimeMillis() - delaySheetAt[0] > 400) applyDelay(DelayMath.stepDelay(delayShown, -5))
+                        Key.DirectionRight -> if (e.nativeKeyEvent.repeatCount == 0 || System.currentTimeMillis() - delaySheetAt[0] > 400) applyDelay(DelayMath.stepDelay(delayShown, 5))
                         Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
                             if (e.nativeKeyEvent.repeatCount == 0) {
                                 when (delayCursor) {
@@ -855,11 +927,17 @@ fun JellytipLiveTvPlayerPage(
                             if (e.nativeKeyEvent.repeatCount == 0) {
                                 delayCursor = 0
                                 delaySheetOpen = true
+                                delaySheetAt[0] = System.currentTimeMillis()
                             }
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                            if (e.nativeKeyEvent.repeatCount > 0 && !panelMenu) panelMenu = true
+                            if (e.nativeKeyEvent.repeatCount > 0) {
+                                closerArmed[0] = false
+                                if (!panelMenu) panelMenu = true
+                            } else {
+                                closerArmed[0] = true
+                            }
                             return@onPreviewKeyEvent true
                         }
                         else -> {}
@@ -1013,53 +1091,29 @@ fun JellytipLiveTvPlayerPage(
                 floating = me?.sportPanelStyle == "floating",
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(if (me?.sportPanelStyle == "floating") 0.32f else 0.28f),
                 progress = { panelProgress.value },
+                fav = favSide,
+                closer = closerGame,
+                allowWinProb = me?.sportSpoilers == true,
             )
         }
         if (open) {
-            val chip =
-                when {
-                    replayShown -> "Replay · no live info"
-                    (holdSecs ?: 0) > 0 -> "Live info in ${holdSecs} s"
-                    else -> "Delayed $delayShown s  ·  ▶ Adjust"
-                }
-            Text(
-                chip,
-                color = Color.White,
-                fontFamily = JellytipFontFamily,
-                fontSize = 13.sp,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 16.dp)
-                        .background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+            DelayChipText(
+                replay = { replayShown },
+                hold = { holdSecs },
+                delaySec = { delayShown },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 16.dp),
             )
         }
-        // Scorebug (web Companion/Scorebug): the newest released score, 8 s after a change; never in the panel's place
-        val bug = bugData
-        val bugMatch = panelMatch
-        val nowMs by produceState(System.currentTimeMillis(), bugChangedAt) {
-            value = System.currentTimeMillis()
-            val at = bugChangedAt ?: return@produceState
-            delay((at + CompanionPolicy.SCOREBUG_HIDE_MS - System.currentTimeMillis()).coerceAtLeast(0) + 50)
-            value = System.currentTimeMillis()
-        }
-        if (bug != null && bugMatch != null && !bugMatch.isEvent && !replayShown && !delaySheetOpen &&
-            CompanionPolicy.scorebugVisible(nowMs, bugChangedAt, pinned = false, panelOpen = panelOpen) &&
-            !(bannerVisible && nflMatch != null)
-        ) {
-            ScorebugPill(
-                home = bugMatch.home?.short ?: bugMatch.home?.name ?: "HOME",
-                away = bugMatch.away?.short ?: bugMatch.away?.name ?: "AWAY",
-                scoreHome = bug.scoreHome,
-                scoreAway = bug.scoreAway,
-                clock = bugClock ?: bug.clock,
-                period = bug.period,
-                pal = remember(bugMatch.id) { matchPalette(bugMatch) },
-                holdText = null,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
-            )
-        }
+        // Scorebug (web Companion/Scorebug): the newest released score, 8 s after a change; never in the panel's place.
+        // Its own composable reading lambdas, so the running clock doesn't recompose this page every second.
+        ScorebugSlot(
+            match = panelMatch,
+            bug = { bugData },
+            clock = { bugClock },
+            changedAt = { bugChangedAt },
+            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !(bannerVisible && nflMatch != null) },
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
+        )
         if (chipsOpen) {
             ChannelChips(
                 chipChannels,

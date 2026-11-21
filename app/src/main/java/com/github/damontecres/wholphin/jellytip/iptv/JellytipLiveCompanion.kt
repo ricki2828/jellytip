@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -254,4 +255,67 @@ fun ChannelChips(
         }
         Text("◀ ▶ choose · OK switch · Back closes", color = Broadcast.Secondary, fontFamily = JellytipFontFamily, fontSize = 12.sp)
     }
+}
+
+/**
+ * The "Delayed 30 s · ▶ Adjust" / "Live info in N s" chip above the panel. Reads its state through lambdas so the
+ * per-second countdown recomposes only this chip, not the player page.
+ */
+@Composable
+fun DelayChipText(
+    replay: () -> Boolean,
+    hold: () -> Int?,
+    delaySec: () -> Int,
+    modifier: Modifier = Modifier,
+) {
+    val h = hold() ?: 0
+    val text =
+        when {
+            replay() -> "Replay · no live info"
+            h > 0 -> "Live info in $h s"
+            else -> "Delayed ${delaySec()} s  ·  ▶ Adjust"
+        }
+    Text(
+        text,
+        color = Color.White,
+        fontFamily = JellytipFontFamily,
+        fontSize = 13.sp,
+        modifier = modifier.background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+/**
+ * The scorebug slot: shows the newest released score for 8 s after a change (web Scorebug). State comes in as lambdas
+ * so the running clock and the hide timer recompose only this slot.
+ */
+@Composable
+fun ScorebugSlot(
+    match: IptvMatch?,
+    bug: () -> MatchLive?,
+    clock: () -> String?,
+    changedAt: () -> Long?,
+    /** False while something else owns the corner (panel, delay sheet, replay, the fantasy chip). */
+    allowed: () -> Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val at = changedAt()
+    val nowMs by androidx.compose.runtime.produceState(System.currentTimeMillis(), at) {
+        value = System.currentTimeMillis()
+        at ?: return@produceState
+        kotlinx.coroutines.delay((at + CompanionPolicy.SCOREBUG_HIDE_MS - System.currentTimeMillis()).coerceAtLeast(0) + 50)
+        value = System.currentTimeMillis()
+    }
+    val b = bug()
+    if (match == null || b == null || match.isEvent || !allowed() || !CompanionPolicy.scorebugVisible(nowMs, at, pinned = false, panelOpen = false)) return
+    ScorebugPill(
+        home = match.home?.short ?: match.home?.name ?: "HOME",
+        away = match.away?.short ?: match.away?.name ?: "AWAY",
+        scoreHome = b.scoreHome,
+        scoreAway = b.scoreAway,
+        clock = clock() ?: b.clock,
+        period = b.period,
+        pal = androidx.compose.runtime.remember(match.id) { matchPalette(match) },
+        holdText = null,
+        modifier = modifier,
+    )
 }

@@ -90,6 +90,9 @@ class JellytipGameCentreViewModel
             val items: List<FxItem> get() = base?.let { SportFixtures.merge(it.items, full, expanded) } ?: emptyList()
         }
 
+        /** The tile last opened (or next to "Show all"): focus returns to it when the page comes back. */
+        var lastFid: String? = null
+
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state
 
@@ -151,25 +154,7 @@ class JellytipGameCentreViewModel
             f: FxItem,
             ch: FxChannel,
             fromStart: Boolean,
-        ) {
-            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-            val order = SportFixtures.pickChannel(f, nowSec()).order
-            val main = ch.toIptvChannel()
-            playback.lineup = listOf(main)
-            playback.alternates = mapOf(main.id to (order.filter { it.id != ch.id }.map { it.toIptvChannel() }))
-            val start = ch.start
-            val stop = ch.stop
-            val target =
-                if (fromStart && start != null && stop != null && stop > start) {
-                    IptvTarget(ch.id, f.title, start, stop)
-                } else {
-                    IptvTarget(ch.id, ch.name)
-                }
-            val matchId = if (fromStart) null else SportFixtures.liveMatchId(f, ch)
-            playback.play(target, "game centre ${if (fromStart) "from start" else "live"} ${f.fid}")
-            JellytipTrace.log("iptv", "game centre watch ${f.fid} on ${ch.id} fromStart=$fromStart match=$matchId")
-            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id, matchId), "game centre ${f.title}")
-        }
+        ) = launchFixture(playback, navigationManager, f, ch, fromStart, "game centre")
     }
 
 @Composable
@@ -202,11 +187,15 @@ fun JellytipGameCentrePage(
     var menu by remember { mutableStateOf<FxItem?>(null) }
     val revealed = remember { mutableStateOf(setOf<String>()) }
     val first = remember { FocusRequester() }
-    LaunchedEffect(groups.isNotEmpty()) {
-        if (groups.isNotEmpty()) {
-            withFrameNanos { }
-            first.tryRequestFocus()
-        }
+    val restore = remember { FocusRequester() }
+    // Focus on arrival and after "Show all": the tile last opened (or the one before Show all), else the first tile.
+    // Polls don't move focus.
+    var focusTick by remember { mutableStateOf(0) }
+    LaunchedEffect(groups.isNotEmpty(), focusTick) {
+        if (groups.isEmpty()) return@LaunchedEffect
+        withFrameNanos { }
+        val want = viewModel.lastFid
+        if (want != null && groups.any { g -> g.items.any { it.fid == want } }) restore.tryRequestFocus() else first.tryRequestFocus()
     }
     Column(modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -232,13 +221,28 @@ fun JellytipGameCentrePage(
                                             now,
                                             reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
                                             revealed = f.fid in revealed.value,
-                                            onClick = { menu = f },
-                                            modifier = if (gi == 0 && f === g.items.first()) Modifier.focusRequester(first) else Modifier,
+                                            onClick = {
+                                                viewModel.lastFid = f.fid
+                                                menu = f
+                                            },
+                                            modifier =
+                                                when {
+                                                    f.fid == viewModel.lastFid -> Modifier.focusRequester(restore)
+                                                    gi == 0 && f === g.items.first() -> Modifier.focusRequester(first)
+                                                    else -> Modifier
+                                                },
                                         )
                                     }
                                     // "+N more NBA games today · Show all" ends the Upcoming row (web d47d3b77)
                                     if (g.id == "big" || (g.id == "yours" && groups.none { it.id == "big" })) {
-                                        items(more, key = { "more:${it.key}" }) { m -> MoreTile(m) { viewModel.showAll(m.key) } }
+                                        items(more, key = { "more:${it.key}" }) { m ->
+                                            MoreTile(m) {
+                                                // Show all removes this tile: keep focus in the row on the game before it
+                                                viewModel.lastFid = g.items.lastOrNull()?.fid
+                                                viewModel.showAll(m.key)
+                                                focusTick++
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -431,4 +435,38 @@ private fun FixtureMenu(
         }
     val title = f.title + (pick.skipped?.let { "  ·  skipped $it (failed earlier)" } ?: "")
     DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
+}
+
+/**
+ * Full screen on [ch] for fixture [f] (Game Centre, the companion's "closer game"): the fixture's other channels are the
+ * switcher's chips and failover order; a live launch carries the match id so the companion works without a guide fixture.
+ */
+fun launchFixture(
+    playback: JellytipIptvPlayback,
+    navigationManager: NavigationManager,
+    f: FxItem,
+    ch: FxChannel,
+    fromStart: Boolean,
+    from: String,
+    /** From the player itself: swap the page instead of stacking a second player. */
+    replaceTop: Boolean = false,
+) {
+    com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+    val order = SportFixtures.pickChannel(f, nowSec()).order
+    val main = ch.toIptvChannel()
+    playback.lineup = listOf(main)
+    playback.alternates = mapOf(main.id to (order.filter { it.id != ch.id }.map { it.toIptvChannel() }))
+    val start = ch.start
+    val stop = ch.stop
+    val target =
+        if (fromStart && start != null && stop != null && stop > start) {
+            IptvTarget(ch.id, f.title, start, stop)
+        } else {
+            IptvTarget(ch.id, ch.name)
+        }
+    val matchId = if (fromStart) null else SportFixtures.liveMatchId(f, ch)
+    playback.play(target, "$from ${if (fromStart) "from start" else "live"} ${f.fid}")
+    JellytipTrace.log("iptv", "$from watch ${f.fid} on ${ch.id} fromStart=$fromStart match=$matchId")
+    val dest = Destination.JellytipLiveTvPlayer(ch.id, matchId)
+    if (replaceTop) navigationManager.replaceTop(dest) else navigationManager.navigateTo(dest, "$from ${f.title}")
 }

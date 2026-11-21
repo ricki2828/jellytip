@@ -321,6 +321,12 @@ data class MatchLive(
     val hasMoments: Boolean = false,
     /** RedZone: every live game, red-zone ones first (server order). */
     val games: List<MultiGame> = emptyList(),
+    /** Cricket scorecard (innings, crease, bowling, overs); null = none sent. */
+    val scorecard: CricketCard? = null,
+    /** Rugby league scoring / sin-bin timeline; empty = none sent. */
+    val timeline: List<TimelineEntry> = emptyList(),
+    /** Cricket wickets in hand from the situation. */
+    val wicketsInHand: Int? = null,
 )
 
 /** Unchanged parts keep the previous answer's instances, so their rows skip recomposition (strong skipping). */
@@ -434,6 +440,9 @@ object LiveParse {
             situation = situation(o.optJSONObject("situation")),
             moments = moments,
             hasMoments = o.has("moments"),
+            scorecard = SportParse.scorecard(o.optJSONObject("scorecard")),
+            timeline = SportParse.timeline(o.optJSONArray("timeline")),
+            wicketsInHand = SportParse.wicketsInHand(o.optJSONObject("situation")),
             games =
                 o.optJSONArray("games").objects().mapNotNull { g ->
                     val sc = g.optJSONObject("score")
@@ -665,6 +674,12 @@ fun JellytipLivePanel(
     modifier: Modifier = Modifier,
     /** 0 = off screen to the right, 1 = in place (the player animates it; read in graphicsLayer only). */
     progress: () -> Float = { 1f },
+    /** The viewer's side (home | away), for "your team" wording and highlights; null = none followed. */
+    fav: String? = null,
+    /** A tighter live game to suggest during a blowout (OK switches; the player handles the key). */
+    closer: FxItem? = null,
+    /** Spoilers on: win probability may drive the game state and show as a row. */
+    allowWinProb: Boolean = false,
 ) {
     val pal = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchPalette(match) }
     val shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape
@@ -715,10 +730,10 @@ fun JellytipLivePanel(
                             androidx.compose.animation.Crossfade(targetState = name, animationSpec = tween(150), label = "live-panel-tab") { t ->
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     when (t) {
-                                        "Plays" -> PlaysTab(d.plays, match.id, pal)
+                                        "Plays" -> if (d.timeline.isNotEmpty()) TimelineList(d.timeline, pal, fav) else PlaysTab(d.plays, match.id, pal)
                                         "Odds" -> OddsTab(d.market, match, pal, full = true)
                                         "Chat" -> ChatTab(d)
-                                        else -> StatsTab(d, match, pal)
+                                        else -> StatsTab(d, match, pal, fav, closer, allowWinProb)
                                     }
                                     d.updatedAt?.let { Note("Updated ${ago(nowSec() - it)}") }
                                 }
@@ -919,6 +934,9 @@ private fun StatsTab(
     d: MatchLive,
     m: IptvMatch,
     pal: MatchPalette,
+    fav: String? = null,
+    closer: FxItem? = null,
+    allowWinProb: Boolean = false,
 ) {
     // RedZone: the multi-game scoreboard instead
     if (d.layout == "multi" || d.games.isNotEmpty()) {
@@ -926,7 +944,16 @@ private fun StatsTab(
         d.games.take(9).forEach { g -> key(g.matchId) { GameRow(g) } }
         return
     }
-    d.situation?.let { ContextBlock(d.layout, it, m, d, pal) }
+    // Game state first (web drawer: pre / what decides it / decided + closer game / break recap / full time)
+    val home = m.home?.short ?: m.home?.name ?: "Home"
+    val away = m.away?.short ?: m.away?.name ?: "Away"
+    if (!m.isEvent) {
+        val st = remember(d, m.leagueKey, allowWinProb) { GameStateLogic.of(d, m.leagueKey, m.status, allowWinProb) }
+        GameStateCard(d, st, home, away, fav, allowWinProb, closer)
+    }
+    d.scorecard?.let { ScorecardBlocks(it, home, away) }
+    // The scorecard already has the crease, bowling and rates
+    d.situation?.takeUnless { d.layout == "cricket" && d.scorecard != null }?.let { ContextBlock(d.layout, it, m, d, pal) }
     d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
     if (d.stats.isEmpty() && d.leaders.isEmpty() && d.situation == null && d.winProbHome == null) {
         Note("No stats for this match yet.")
