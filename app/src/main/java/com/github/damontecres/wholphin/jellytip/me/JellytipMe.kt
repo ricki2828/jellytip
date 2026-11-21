@@ -369,6 +369,29 @@ object JellytipMe {
         }
     }
 
+    fun isNotInterestedKey(key: String): Boolean = notInterested[key] == true
+
+    /** "Not interested" on an IPTV title (web 6d8398bd): hidden from rows and picks; same reactions as the library. */
+    fun setIptvNotInterested(
+        id: String,
+        kind: String,
+        tmdbId: Int?,
+        on: Boolean,
+        onDone: (String?) -> Unit = {},
+    ) {
+        val key = iptvTasteKey(id, kind, tmdbId)
+        if (on) notInterested[key] = true else notInterested.remove(key)
+        scope.launch {
+            val body = JSONObject().put("iptvId", id).put("kind", kind)
+            if (tmdbId != null && tmdbId > 0) body.put("tmdbId", tmdbId)
+            val r = api?.userCall("v1/me/not-interested", body.toString(), method = if (on) "POST" else "DELETE")
+            JellytipTrace.log("me", "iptv not-interested $key on=$on -> ${r?.first}")
+            val ok = r != null && r.first in 200..204
+            if (ok) applyReactions(r) else if (on) notInterested.remove(key) else notInterested[key] = true
+            withContext(Dispatchers.Main) { onDone(if (ok) null else if (r == null) "The server can't be reached." else "Server said ${r.first}") }
+        }
+    }
+
     /** Watched / not watched for an IPTV film or whole series (`POST v1/iptv/played`); [onDone] gets an error text or null. */
     fun setIptvPlayed(
         id: String,

@@ -41,6 +41,8 @@ data class IptvVodItem(
     val played: Boolean = false,
     /** atmos | 5.1 | 7.1 | stereo (plan live-sport §1b values); null = unknown. Atmos and surround get a badge. */
     val audio: String? = null,
+    /** The server couldn't confirm this copy's audio is English (best copy, language unknown; web d897d21c). */
+    val langUnknown: Boolean = false,
 ) {
     /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
     val audioLabel: String?
@@ -169,6 +171,7 @@ object IptvVodParse {
             favourite = o.optBoolean("favourite", false),
             played = o.optBoolean("played", false) || o.optJSONObject("progress")?.optBoolean("played", false) == true,
             audio = o.str("audio") ?: o.optJSONObject("quality")?.str("audio"),
+            langUnknown = o.opt("langUnknown") == true,
         )
     }
 
