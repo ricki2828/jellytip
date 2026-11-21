@@ -203,6 +203,14 @@ class JellytipIptvPlayback
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
                         setState(IptvPlayState.Playing(t), "ready")
+                        // Jellytip failed-stream memory: a minute of playback counts as a good play (clears the ding)
+                        okJob?.cancel()
+                        okJob =
+                            scope.launch {
+                                kotlinx.coroutines.delay(IptvStreamFail.GOOD_PLAY_S * 1000)
+                                val now = _state.value
+                                if (now is IptvPlayState.Playing && now.target == t) IptvStreamFail.report(t, ok = true, posSec = IptvStreamFail.GOOD_PLAY_S)
+                            }
                     }
                 }
 
@@ -224,10 +232,10 @@ class JellytipIptvPlayback
                                 launchOpen(t, "renew after ${http?.responseCode}")
                                 return
                             }
-                            fail(t, IptvRules.failureText(code, "The stream stopped."))
+                            fail(t, IptvRules.failureText(code, "The stream stopped."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, _state.value is IptvPlayState.Playing))
                         }
 
-                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."))
+                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, _state.value is IptvPlayState.Playing))
                     }
                 }
             }
@@ -282,6 +290,7 @@ class JellytipIptvPlayback
             reason: String,
         ) {
             job?.cancel()
+            okJob?.cancel()
             setState(IptvPlayState.Opening(target), reason)
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} ($reason)")
             job =
@@ -298,7 +307,7 @@ class JellytipIptvPlayback
                                     .show()
                             }
                             if (url == null) {
-                                fail(target, "The server sent a stream link the app can't use.")
+                                fail(target, "The server sent a stream link the app can't use.", null)
                                 return@launch
                             }
                             val ts = r.answer.mime?.contains("mp2t", true) == true || url.substringBefore('?').endsWith(".ts")
@@ -321,15 +330,21 @@ class JellytipIptvPlayback
                             setState(IptvPlayState.Full(target, r.message, r.holders), "409")
                         }
 
-                        is IptvPlayResult.Failed -> fail(target, r.message)
+                        is IptvPlayResult.Failed -> fail(target, r.message, IptvStreamFail.reasonForCode(r.code))
                     }
                 }
         }
 
+        private var okJob: kotlinx.coroutines.Job? = null
+
         private fun fail(
             target: IptvTarget,
             message: String,
+            /** Failed-stream memory reason; null = not the stream's fault (nothing reported). */
+            reason: String? = "open_failed",
         ) {
+            okJob?.cancel()
+            if (reason != null) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
             setState(IptvPlayState.Failed(target, message), "failed")
@@ -363,7 +378,7 @@ class JellytipIptvPlayback
                     val ok = service.cancelRecording(recordingId)
                     JellytipTrace.player("iptv", "stop recording $recordingId for ${target.channelId} ok=$ok")
                     if (!ok) {
-                        fail(target, "Couldn't stop the recording.")
+                        fail(target, "Couldn't stop the recording.", null)
                         return@launch
                     }
                     delay(SLOT_FREE_WAIT_MS)

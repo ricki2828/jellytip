@@ -94,7 +94,12 @@ data class IptvVodDetail(
     val genres: List<String> = emptyList(),
     /** Trailer: the companion's mp4 (resolved), or a YouTube URL as a fallback; null = none. */
     val trailer: String? = null,
-)
+    /** Every copy of the title the companion offers (own + shared providers), ranked best first; may be empty. */
+    val copies: List<IptvCopy> = emptyList(),
+) {
+    /** The server ranked the copies (newer servers send `lang`); older ones send a short unranked list. */
+    val copiesRanked: Boolean get() = copies.any { it.langLabel != null }
+}
 
 data class IptvCastMember(
     val name: String,
@@ -221,7 +226,31 @@ object IptvVodParse {
             people = people,
             genres = genres,
             trailer = trailer(base, o.str("trailer")),
+            copies = copies(o.optJSONArray("copies")),
         )
+    }
+
+    private val VOD_ID_RE = Regex("^[A-Za-z0-9_-]{1,40}:[ms]:[A-Za-z0-9_.-]{1,64}$")
+
+    /** `copies: [{id, providerName|providerTitle, quality, res, lang, langLabel, opted, current, lastFail}]`. */
+    fun copies(a: JSONArray?): List<IptvCopy> {
+        a ?: return emptyList()
+        val seen = HashSet<String>()
+        return (0 until a.length()).mapNotNull { i ->
+            val c = a.optJSONObject(i) ?: return@mapNotNull null
+            val id = c.str("id")?.takeIf { VOD_ID_RE.matches(it) } ?: return@mapNotNull null
+            if (!seen.add(id)) return@mapNotNull null
+            IptvCopy(
+                id = id,
+                providerName = c.str("providerName") ?: c.str("providerTitle"),
+                quality = c.optJSONArray("quality")?.let { q -> (0 until q.length()).mapNotNull { q.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
+                res = c.str("res"),
+                langLabel = c.str("langLabel"),
+                opted = if (c.has("opted") && !c.isNull("opted")) c.optBoolean("opted") else null,
+                current = c.optBoolean("current", false),
+                lastFail = IptvStreamFail.parse(c.optJSONObject("lastFail")),
+            )
+        }
     }
 }
 
