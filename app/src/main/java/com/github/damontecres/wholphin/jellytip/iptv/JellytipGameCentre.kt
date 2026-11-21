@@ -101,7 +101,7 @@ class JellytipGameCentreViewModel
         suspend fun refresh() {
             val r = service.fixtures()
             // After the fixtures (first paint isn't held up), and again every 4th poll so new recordings show up
-            if (recordings == null || polls++ % 4 == 0) recordings = service.recordings()?.second ?: service.peekRecordings() ?: recordings
+            if (recordings == null || polls++ % 4 == 0) recordings = service.recordings()?.second ?: service.peekRecordings() ?: recordings ?: emptyList()
             val s = _state.value
             when {
                 r == null -> if (s.base == null) _state.value = s.copy(failed = true)
