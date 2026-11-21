@@ -156,6 +156,17 @@ fun JellytipIptvPlayPage(
                 .flushSoon()
         }
     }
+    // Audio & subtitles (Up): the menu, and the person's languages asked for on open (put back when the page goes)
+    var trackMenu by remember(target) { mutableStateOf(false) }
+    val player0 = playback.player
+    DisposableEffect(target, player0) {
+        val p = player0
+        val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value
+        val before = p?.let { IptvTracks.applyPrefs(it, me?.audioLangs.orEmpty(), me?.subtitleLangs.orEmpty()) }
+        val mine = p?.trackSelectionParameters
+        // Put back only what this page set (a newer page, e.g. a copy swap, may already have set its own)
+        onDispose { if (p != null && before != null && p.trackSelectionParameters.preferredAudioLanguages == mine?.preferredAudioLanguages) p.trackSelectionParameters = before }
+    }
     DisposableEffect(target) {
         playback.attach(owner)
         playback.setVolume(1f)
@@ -262,6 +273,7 @@ fun JellytipIptvPlayPage(
                     }
 
                     Key.DirectionUp -> {
+                        if (p != null && playState is IptvPlayState.Playing) trackMenu = true
                         controlsTick++
                         true
                     }
@@ -292,6 +304,13 @@ fun JellytipIptvPlayPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        val tp = playback.player
+        if (trackMenu && tp != null) {
+            IptvTrackMenu(tp) {
+                trackMenu = false
+                focus.tryRequestFocus()
+            }
+        }
         if (reportOpen) {
             androidx.tv.material3.Button(
                 onClick = notWorking,
@@ -340,7 +359,7 @@ fun JellytipIptvPlayPage(
                     Text(if (duration > 0) clockText(duration) else "--:--", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
                 }
                 Text(
-                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" + if (canReport) "   ·   ▼ not working?" else "",
+                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" + "   ·   ▲ audio & subtitles" + if (canReport) "   ·   ▼ not working?" else "",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 11.sp,
