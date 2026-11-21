@@ -15,6 +15,8 @@ import { go } from "../lib/router";
 import { skippedNote } from "../lib/streamFail";
 import { flashNote } from "./TasteButtons";
 import { HeroArt, LeagueBadge, useArt } from "./FixtureArt";
+import { logSportAt, useSportShown, type SportPlace } from "../api/sportEvents";
+import type { SportSurface } from "../lib/sportEvents";
 import "./LiveMatchHero.css";
 
 const NEUTRAL: TeamColors = teamColors(null);
@@ -125,12 +127,16 @@ export function BigCrest({ logo, name, colour, small = false }: { logo: string |
 
 /** The 2A hero for [picks] (cycling with ‹ ›). [kicker] labels it ("Your game is on", "Up next"). */
 /** autoFocus: "always" = take focus on mount; "ifLost" = only when nothing has focus (the hero just replaced what had it). */
-export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = false }: { picks: FxItem[]; nowSec: number; kicker?: string; autoFocus?: "always" | "ifLost"; spoilers?: boolean }) {
+/** surface: where it is for sport events (Home's hero, or Game Centre's top section "hero"). */
+export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = false, surface = "home_hero" }: { picks: FxItem[]; nowSec: number; kicker?: string; autoFocus?: "always" | "ifLost"; spoilers?: boolean; surface?: SportSurface }) {
   const [index, setIndex] = useState(0);
   const ref = useRef<HTMLElement>(null);
   const f = picks[Math.min(index, picks.length - 1)];
   const c = useFixtureColours(f ?? { matchId: null });
   const art = useArt(f?.art, 960);
+  const shownAt = Math.min(index, picks.length - 1);
+  const place: SportPlace | null = f ? { fid: f.fid, surface, section: surface === "gamecentre" ? "hero" : undefined, pos: shownAt + 1, listId: f.listId } : null;
+  useSportShown(ref, place);
   useEffect(() => {
     // keyboard / remote only: on a touch screen a focus ring on Watch is noise
     const lost = !document.activeElement || document.activeElement === document.body;
@@ -142,6 +148,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
   const watch = w.ways.find((x) => x.kind === "live");
   const fromStart = w.ways.find((x) => x.kind === "catchup");
   const press = (path: string) => {
+    if (place) logSportAt("watch", place);
     if (w.skipped) flashNote(skippedNote(w.skipped));
     go(path);
   };
@@ -182,7 +189,10 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
               From kick-off
             </button>
           )}
-          <button className="btn" data-nav {...(!watch && !fromStart ? { "data-hero-primary": true } : {})} onClick={() => go(`/games?fid=${encodeURIComponent(f.fid)}`)}>
+          <button className="btn" data-nav {...(!watch && !fromStart ? { "data-hero-primary": true } : {})} onClick={() => {
+              if (place) logSportAt("opened", place);
+              go(`/games?fid=${encodeURIComponent(f.fid)}`);
+            }}>
             More
           </button>
         </div>

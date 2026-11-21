@@ -16,6 +16,7 @@ import { KICKOFF_SHOW_MS, kickoffDue, kickoffHeadline, kickoffKey, type KickoffD
 import { afterStartup } from "../lib/startup";
 import { NativePlayer, nativeIptvPlayer } from "../lib/native";
 import { kickoffNotice } from "../lib/nativePhone";
+import { logSportAt, useSportShown, type SportPlace } from "../api/sportEvents";
 import "../screens/iptv/iptv.css";
 
 /** Per person: after an account switch in the same tab, the new person's cards are their own. */
@@ -99,11 +100,15 @@ export function KickoffCard() {
     const t = window.setTimeout(() => setCard(null), KICKOFF_SHOW_MS);
     return () => window.clearTimeout(t);
   }, [card]);
+  // Sport events: shown after a second on screen (not while the phone's native player covers it: that gets a note instead)
+  const toast = useRef<HTMLDivElement>(null);
+  const place: SportPlace | null = card ? { fid: card.fixture.fid, surface: "kickoff_card", listId: card.fixture.listId } : null;
+  useSportShown(toast, place && !(nativeIptvPlayer && route.name === "iptvplay") ? place : null);
   if (!card) return null;
   const f = card.fixture;
   const c = pickChannel(f, Date.now() / 1000).channel;
   return (
-    <div className="remind-toast kickoff-toast" role="status">
+    <div className="remind-toast kickoff-toast" role="status" ref={toast}>
       <span>
         <strong className="kickoff-head">{kickoffHeadline(card, Date.now() / 1000)}</strong> {fxTitle(f)}
       </span>
@@ -112,6 +117,7 @@ export function KickoffCard() {
           className="btn small primary"
           data-nav
           onClick={() => {
+            if (place) logSportAt("kickoff_ok", place);
             setCard(null);
             go(livePath(c.id, fxTitle(f), { matchId: f.matchId ?? f.fid, alternates: f.channels.filter((x) => x.id !== c.id).map((x) => ({ id: x.id, name: x.name })) }));
           }}
@@ -119,7 +125,15 @@ export function KickoffCard() {
           Watch
         </button>
       )}
-      <button className="btn small" data-nav onClick={() => setCard(null)} aria-label="Dismiss">
+      <button
+        className="btn small"
+        data-nav
+        onClick={() => {
+          if (place) logSportAt("kickoff_back", place);
+          setCard(null);
+        }}
+        aria-label="Dismiss"
+      >
         ✕
       </button>
     </div>

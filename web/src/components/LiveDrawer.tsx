@@ -8,6 +8,7 @@ import { holdSecs } from "../lib/companion";
 import { liveStats, matchDetailCached } from "../api/matchInfo";
 import { agoText, applyReveal, liveTabs, scorecardBlocks, TIMELINE_POINTS, maskText, mayShow, newMoments, pct, revealAll, situationBlocks, sparkPoints, statShare, tabsFor, volumeText, FLAG_LABEL, type Block, type Game, type LeaderRow, type LiveStats, type Moment, type Reveal, type TowerRow } from "../lib/liveStats";
 import { blowoutLine, closerGame, deciderRows, favouriteSide, gameStateOf, recapPlays, resultLine, type CloserGame, type GameState, type Row } from "../lib/gameState";
+import { logSportAt, useSportShown, type SportPlace } from "../api/sportEvents";
 import { startsText } from "../lib/gameCentre";
 import { playersInGame } from "../lib/fantasyGame";
 import { useFixtures } from "../api/fixtures";
@@ -463,11 +464,23 @@ const DecideCard = memo(function DecideCard({ rows, mine }: { rows: Row[]; mine:
 
 /** Blowout: one line, a way out to a closer game, and the full stats behind a toggle. */
 const BlowoutCard = memo(function BlowoutCard({ line, closer, full, onToggle }: { line: string; closer: CloserGame | null; full: boolean; onToggle: () => void }) {
+  // Sport events: the way out to another game is the player's switcher
+  const btn = useRef<HTMLButtonElement>(null);
+  const place: SportPlace | null = closer ? { fid: closer.item.fid, surface: "player_switcher", listId: closer.item.listId } : null;
+  useSportShown(btn, place);
   return (
     <div className="ld-state blowout">
       <p className="ld-oneline">{line}</p>
       {closer && (
-        <button className="ld-closer" data-nav onClick={() => go(closer.path)}>
+        <button
+          className="ld-closer"
+          data-nav
+          ref={btn}
+          onClick={() => {
+            if (place) logSportAt("watch", place);
+            go(closer.path);
+          }}
+        >
           <span>
             Closer game
             <small>{[closer.title, closer.item.league].filter(Boolean).join(" · ")}</small>

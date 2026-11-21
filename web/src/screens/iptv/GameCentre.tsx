@@ -20,6 +20,7 @@ import { go, useRoute } from "../../lib/router";
 import { FailNote } from "../../components/FailNote";
 import { edgeStyle, LiveMatchHero, useFixtureColours } from "../../components/LiveMatchHero";
 import { LeagueBadge, TileArt, useArt } from "../../components/FixtureArt";
+import { logSportAt, useSportShown, type SportPlace } from "../../api/sportEvents";
 import { gameCentrePicks } from "../../lib/liveHero";
 import { flashNote } from "../../components/TasteButtons";
 import { skippedNote } from "../../lib/streamFail";
@@ -241,13 +242,17 @@ function LegacyGameCentre() {
 const fxSides = (f: FxItem): TeamSide[] =>
   f.away ? [{ teamId: f.homeId, name: f.home, short: f.homeShort, sport: f.sport, league: f.league }, { teamId: f.awayId, name: f.away, short: f.awayShort, sport: f.sport, league: f.league }] : [];
 
-function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRecord, msg, busy, recorded, remId, remBusy, remMsg, onRemind }: { f: FxItem; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
+function FixtureCard({ f, place, rec, now, pref, shown, scoreLine, gate, onPress, onRecord: recordIt, msg, busy, recorded, remId, remBusy, remMsg, onRemind: remindIt }: { f: FxItem; place: SportPlace; rec: Rec | null; now: number; pref: boolean; shown: boolean; scoreLine: string | null | undefined; gate: Gate; onPress: () => void; onRecord: () => void; msg: string | undefined; busy: boolean; recorded: boolean; remId: string | number | null; remBusy: boolean; remMsg: string | undefined; onRemind: () => void }) {
   const w = waysForFixture(f, rec, now);
   const armed = gateArmed(gate, Date.now());
   const title = fxTitle(f);
   const canRec = !!w.recordOn && !recorded && !busy;
-  const press = (path: string) => { if (w.skipped) flashNote(skippedNote(w.skipped)); go(path); }; // a channel that failed earlier is passed over, and we say so
-  const act = w.ways[0] ? () => press(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
+  // Sport events for the ranker (fire-and-forget): every way to watch is 'watch'; only setting a reminder counts, not clearing one
+  const press = (path: string) => { logSportAt("watch", place); if (w.skipped) flashNote(skippedNote(w.skipped)); go(path); }; // a channel that failed earlier is passed over, and we say so
+  const onRecord = () => { logSportAt("record", place); recordIt(); };
+  const onRemind = () => { if (remId == null) logSportAt("remind", place); remindIt(); };
+  const openInfo = () => { logSportAt("opened", place); openMatchInfo(f.matchId!); };
+  const act = w.ways[0] ? () => press(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? openInfo : null;
   const best = bestChannel(f);
   // Look 2A: a team-colour edge each side, once the match record's colours are in (fetched when the card is on screen); not on
   // no-stream cards, whose own left marker says so
@@ -256,6 +261,7 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const edges = edgeStyle(colours, f);
   // League art behind the card (dimmed, blurred, a light colour wash); the plain card without it or when it fails
   const art = useArt(f.art, 192);
+  useSportShown(li, place);
   return (
     <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""}${art.src ? " has-art" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
       {art.src && <TileArt key={art.src} src={art.src} colours={colours} hasAway={!!f.away} wash={!w.noStream} onError={art.failed} />}
@@ -401,6 +407,7 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
           kicker={heroPicks[0].status === "in" ? (heroMine ? "Your game is on" : "Live now") : heroMine ? "Your next game" : "Up next"}
           autoFocus={!focusFid && !heroFocused.current ? "always" : "ifLost"}
           spoilers={pref}
+          surface="gamecentre"
         />
         </div>
       )}
@@ -411,10 +418,11 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
         <section key={g.id} className="row">
           <h2 className="row-title">{g.label}</h2>
           <ul className="gc-list">
-            {g.items.map((f) => (
+            {g.items.map((f, i) => (
               <FixtureCard
                 key={f.fid}
                 f={f}
+                place={{ fid: f.fid, surface: "gamecentre", section: g.id, pos: i + 1, listId: f.listId }}
                 rec={f.recordingId != null ? recs?.find((r) => String(r.id) === String(f.recordingId)) ?? null : null}
                 now={now}
                 pref={pref}
