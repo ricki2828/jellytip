@@ -76,8 +76,10 @@ class JellytipUpcomingSportViewModel
         val playback: JellytipIptvPlayback,
         val navigationManager: NavigationManager,
         val reminders: JellytipReminders,
+        val teamReminders: JellytipTeamReminders,
     ) : ViewModel() {
         init {
+            if (teamReminders.items.value == null) teamReminders.refresh()
             // The recording space ("Can't record: <reason>") is known before the first Record press
             if (service.lastSpace == null) viewModelScope.launch { service.recordings() }
         }
@@ -326,6 +328,14 @@ private fun UpcomingOverlay(
             }
             matchInfoItem(u.matchInfo, dismissOnClick = false) { showMatch = true }?.let { add(it) }
             addAll(muteItems)
+            // "Remind me for every <team> game" per side with a team id (web 8efc5458); hidden on a server without the route
+            if (viewModel.teamReminders.available.value != false) {
+                TeamReminderLogic.offerSides(TeamReminderLogic.matchSides(u.matchInfo, u.sportName)).forEach { side ->
+                    val on = viewModel.teamReminders.reminderFor(side.teamId) != null
+                    val name = TeamReminderLogic.shortTeam(side)
+                    add(DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) { viewModel.teamReminders.toggle(side) })
+                }
+            }
             // Remind me (plan "Remind me"): hidden until the server answers the reminders route (404 = never)
             if (remindersOn == true && u.stop > now) {
                 val rid = viewModel.reminders.reminderIdFor(u, reminderList)

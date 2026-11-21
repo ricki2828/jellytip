@@ -87,6 +87,10 @@ private fun Head(text: String) =
 @Composable
 fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
     val prefs by JellytipMe.prefs.collectAsState()
+    val teamVm: JellytipTeamRemindersViewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()
+    val teamList by teamVm.teams.items.collectAsState()
+    val teamsAvailable by teamVm.teams.available.collectAsState()
+    LaunchedEffect(Unit) { teamVm.teams.refresh() }
     val scope = rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val local = remember { ctx.getSharedPreferences(PREFS_LOCAL, android.content.Context.MODE_PRIVATE) }
@@ -196,6 +200,25 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
             item {
                 val on = SportPrefs.hasTag(s, SportPrefs.TAG_REPLAYS)
                 Row2("Hide replays and highlights", if (on) "On" else "Off") { save("replays") { cur -> SportPrefs.mutedBody(SportPrefs.withTag(cur, SportPrefs.TAG_REPLAYS, !on)) } }
+            }
+            if (teamsAvailable != false) {
+                item { Head("Team reminders (every game)") }
+                val tl = teamList.orEmpty()
+                if (tl.isEmpty()) {
+                    item { Text("None. In Upcoming sport, OK on a game offers 'Remind me for every <team> game'.", color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 13.sp) }
+                }
+                items(tl, key = { "tr:${it.id}" }) { r ->
+                    Row2(r.teamName + (r.league?.let { " · $it" } ?: ""), "OK to stop") {
+                        teamVm.teams.toggle(TeamSide(r.teamId, r.teamName, null, r.sport, r.league)) { err ->
+                            message = err ?: "Stopped reminders for ${r.teamName}"
+                            if (err == null) scope.launch {
+                                listState.scrollToItem(1)
+                                delay(50)
+                                first.tryRequestFocus()
+                            }
+                        }
+                    }
+                }
             }
             item { Head("While you watch") }
             item { Row2("Show scores (spoilers) in match info", if (p.sportSpoilers) "On" else "Off") { sportPatch("spoilers", !p.sportSpoilers) } }
