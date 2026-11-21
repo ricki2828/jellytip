@@ -43,9 +43,12 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.debug.FrameGapCounter
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -122,12 +125,56 @@ private fun IntroVideo(
                 prepare()
             }
         }
+    // Smoothness trace (21-Nov, 'super jerky'): decoder, ExoPlayer's dropped frames, and missed UI vsyncs. The intro
+    // draws through a TextureView, so a missed app frame is a dropped video frame ExoPlayer never counts.
+    val refreshHz = remember { (context.getSystemService(Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager)?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate ?: 0f }
+    val gaps = remember { FrameGapCounter(FrameGapCounter.periodNs(refreshHz)) }
+    val traced = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val traceSummary: (String) -> Unit = { why ->
+        if (traced.compareAndSet(false, true)) {
+            val c = player.videoDecoderCounters?.also { it.ensureUpdated() }
+            JellytipTrace.log(
+                "intro",
+                "frames $why pos=${player.currentPosition}ms display=${refreshHz}Hz " +
+                    (c?.let { "rendered=${it.renderedOutputBufferCount} dropped=${it.droppedBufferCount} maxRun=${it.maxConsecutiveDroppedBufferCount} skipped=${it.skippedOutputBufferCount} toKeyframe=${it.droppedToKeyframeCount}" } ?: "counters=none") +
+                    " " + gaps.summary(),
+            )
+        }
+    }
+    DisposableEffect(player) {
+        val analytics =
+            object : AnalyticsListener {
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    JellytipTrace.log("intro", "decoder $decoderName init=${initializationDurationMs}ms")
+                }
+
+                override fun onDroppedVideoFrames(
+                    eventTime: AnalyticsListener.EventTime,
+                    droppedFrames: Int,
+                    elapsedMs: Long,
+                ) {
+                    JellytipTrace.log("intro", "dropped $droppedFrames frames in ${elapsedMs}ms at pos=${eventTime.currentPlaybackPositionMs}ms")
+                }
+            }
+        player.addAnalyticsListener(analytics)
+        onDispose { player.removeAnalyticsListener(analytics) }
+    }
+    LaunchedEffect(player) {
+        // Only while the video moves: the cold start's own jank before the first frame isn't the intro's
+        while (isActive) withFrameNanos { if (player.isPlaying) gaps.onFrame(it) }
+    }
     DisposableEffect(player) {
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     Log.i(TAG, "player state=$state pos=${player.currentPosition}")
                     if (state == Player.STATE_ENDED) {
+                        traceSummary("ended")
                         scope.launch {
                             delay(HOLD_AFTER_END_MS)
                             finished()
@@ -142,6 +189,7 @@ private fun IntroVideo(
             }
         player.addListener(listener)
         onDispose {
+            traceSummary("skipped") // a key press ended the intro early (no-op after STATE_ENDED); before release nulls the counters
             player.removeListener(listener)
             player.release()
         }
