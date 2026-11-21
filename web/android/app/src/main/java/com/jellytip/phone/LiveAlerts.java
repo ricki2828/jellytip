@@ -37,6 +37,7 @@ final class LiveAlerts implements LiveFeed.Listener {
     private final boolean flips;
     private final Sink sink;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final Object held = new Object();
     private final Set<String> seen = new HashSet<>();
     private boolean primed;
     private boolean released;
@@ -73,6 +74,7 @@ final class LiveAlerts implements LiveFeed.Listener {
     void release() {
         released = true;
         handler.removeCallbacks(fantasyPoll);
+        handler.removeCallbacksAndMessages(held);
         io.shutdownNow();
     }
 
@@ -159,9 +161,9 @@ final class LiveAlerts implements LiveFeed.Listener {
             JSONObject got = snapshot.data;
             final JSONObject result = got;
             // Fantasy points are spoilers too: held for the same delay as the live feed
-            handler.postDelayed(() -> {
+            handler.postAtTime(() -> {
                 if (!released && result != null) onFantasy(result);
-            }, feed == null ? 0L : feed.delayMs);
+            }, held, android.os.SystemClock.uptimeMillis() + (feed == null ? 0L : feed.delayMs));
         });
     }
 

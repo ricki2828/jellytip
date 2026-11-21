@@ -166,6 +166,10 @@ public class PlayerActivity extends AppCompatActivity {
     private String[] audioLangs = new String[0];
     private String[] subLangs = new String[0];
     private boolean langDone;
+    private boolean alwaysSubsOn;
+    /** Same-link reloads after a stall with no other channel, for the whole session (a flapping stream gives up). */
+    private int stallReloads;
+    private static final int MAX_STALL_RELOADS = 10;
     /** Match info said 403 / unknown: no ⓘ for this match. */
     private boolean matchHidden;
     /** The opening note (bottom centre in landscape; a banner at the top of the panel in portrait). */
@@ -723,8 +727,9 @@ public class PlayerActivity extends AppCompatActivity {
                 } else if (now - stalledSince >= STALL_MS && !fromKickOff) {
                     stalledSince = now;
                     // No other channel to move to: reload this one (the live edge), a few times, before waiting it out
-                    if (!failover("stalled 10 s") && reconnects < MAX_RECONNECTS) {
+                    if (!failover("stalled 10 s") && reconnects < MAX_RECONNECTS && stallReloads < MAX_STALL_RELOADS) {
                         reconnects++;
+                        stallReloads++;
                         emitEvent("failover", "{\"from\":\"" + channelId + "\",\"to\":\"" + channelId + "\",\"why\":\"stall reconnect\"}");
                         player.setMediaItem(item);
                         player.prepare();
@@ -779,6 +784,8 @@ public class PlayerActivity extends AppCompatActivity {
         tracks.clearOverridesOfType(C.TRACK_TYPE_TEXT);
         tracks.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false);
         player.setTrackSelectionParameters(tracks.build());
+        // another channel / link: its audio may differ, so the foreign-audio subtitle rule looks again
+        langDone = audioLangs.length == 0 || alwaysSubsOn;
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
         if (type != null) b.setMimeType(type);
@@ -1282,8 +1289,10 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     /** A note from the web app (kick-off, full time): a toast on screen, a notification in the mini player. */
-    void notice(String text) {
+    void notice(String text, boolean spoiler) {
         if (closing) return;
+        // a result (full time) never lands while he watches the game from kick-off or a recording
+        if (spoiler && (fromKickOff || !live)) return;
         boolean onScreen = !inPip() && getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
         if (onScreen) android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show();
         else postAlert(text, null);
@@ -1299,7 +1308,8 @@ public class PlayerActivity extends AppCompatActivity {
         subLangs = s == null || s.length == 0 ? audioLangs : s;
         TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
         if (audioLangs.length > 0) b.setPreferredAudioLanguages(audioLangs);
-        if (in.getBooleanExtra(EXTRA_ALWAYS_SUBS, false) && subLangs.length > 0) {
+        alwaysSubsOn = in.getBooleanExtra(EXTRA_ALWAYS_SUBS, false);
+        if (alwaysSubsOn && subLangs.length > 0) {
             b.setPreferredTextLanguages(subLangs);
             langDone = true;
         }

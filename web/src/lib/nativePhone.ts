@@ -5,6 +5,9 @@ import { fxScoreText, fxTitle, pickChannel, type FxItem } from "./gameCentre.ts"
 import { kickoffHeadline, nextLine, type KickoffDue } from "./sportWow.ts";
 import { permanentReason } from "./streamRecovery.ts";
 
+/** A native session that played this long earns a fresh set of retries (one drop an hour must not use them all up). */
+export const NATIVE_STABLE_MS = 2 * 60_000;
+
 /** Waits before each fresh-link retry of a native stream that failed (then it gives up). */
 export const NATIVE_RETRY_MS = [2_000, 5_000, 10_000] as const;
 

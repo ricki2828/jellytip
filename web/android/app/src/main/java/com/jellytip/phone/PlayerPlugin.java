@@ -184,7 +184,7 @@ public class PlayerPlugin extends Plugin {
     }
 
     /**
-     * {text}: a note over the open player (a toast; a notification in the mini player), for web cards the native
+     * {text, spoiler?}: a note over the open player (spoiler: dropped while it plays from kick-off or a recording) (a toast; a notification in the mini player), for web cards the native
      * activity would hide (kick-off, full time). Resolves {shown: false} when no player is open.
      */
     @PluginMethod
@@ -197,7 +197,8 @@ public class PlayerPlugin extends Plugin {
             call.resolve(r);
             return;
         }
-        a.runOnUiThread(() -> a.notice(text));
+        boolean spoiler = Boolean.TRUE.equals(call.getBoolean("spoiler", false));
+        a.runOnUiThread(() -> a.notice(text, spoiler));
         r.put("shown", true);
         call.resolve(r);
     }
