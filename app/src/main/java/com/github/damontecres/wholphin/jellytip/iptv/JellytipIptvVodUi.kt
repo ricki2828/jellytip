@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -355,9 +356,16 @@ fun JellytipIptvDetailsPage(
             "iptv episode OK",
         )
     }
-    // Trailer from the companion's cache plays in-app behind the text, as on the library details page
+    // Trailer button: the companion's cached mp4 plays full screen over the page (library details plays it in the player);
+    // Back returns to the Trailer button. Only the passive preview below plays behind the text.
     val context = androidx.compose.ui.platform.LocalContext.current
     var trailerPlaying by remember(id) { mutableStateOf(false) }
+    val trailerFocus = remember { FocusRequester() }
+    var trailerWasOpen by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(trailerPlaying) {
+        // Back (or the end) from the full-screen trailer lands on the Trailer button again
+        if (trailerPlaying) trailerWasOpen = true else if (trailerWasOpen) trailerFocus.tryRequestFocus()
+    }
     val trailerUrl = d?.trailer
     val playTrailer: () -> Unit = {
         val url = trailerUrl
@@ -400,17 +408,6 @@ fun JellytipIptvDetailsPage(
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         (item?.backdrop ?: item?.poster)?.let {
             AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        }
-        if (trailerPlaying && trailerUrl != null) {
-            com.github.damontecres.wholphin.jellytip.TrailerLayer(
-                url = trailerUrl,
-                sound = true,
-                httpClient = viewModel.httpClient,
-                onEnded = {
-                    trailerPlaying = false
-                    autoDone = true // just watched it: no passive replay until focus leaves and comes back
-                },
-            )
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = autoTrailer && !trailerPlaying && trailerUrl != null,
@@ -578,7 +575,7 @@ fun JellytipIptvDetailsPage(
                             },
                         ) { Text("Play both") }
                     }
-                    TrailerButton(d.trailer, trailerPlaying, playTrailer)
+                    TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
                     MyListButton(item, viewModel)
                     IptvTasteButtons(item)
                 }
@@ -587,7 +584,7 @@ fun JellytipIptvDetailsPage(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
                 ) {
-                    TrailerButton(d.trailer, trailerPlaying, playTrailer)
+                    TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
                     MyListButton(item, viewModel)
                     IptvTasteButtons(item)
                 }
@@ -646,6 +643,12 @@ fun JellytipIptvDetailsPage(
                 Box(Modifier.padding(top = 12.dp).offset(x = (-48).dp)) {
                     com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row, Modifier.focusRequester(similarFocus))
                 }
+            }
+        }
+        if (trailerPlaying && trailerUrl != null) {
+            IptvFullScreenTrailer(trailerUrl, viewModel.httpClient) {
+                trailerPlaying = false
+                autoDone = true // just watched it: no passive replay until focus leaves and comes back
             }
         }
     }
@@ -747,15 +750,42 @@ private fun IptvTasteButtons(item: IptvVodItem) {
     }
 }
 
-/** Trailer: plays the companion's mp4 in-app behind the page (OK again stops it); a YouTube URL opens YouTube. */
+/** Trailer: plays the companion's mp4 full screen (Back returns); a YouTube URL opens YouTube. */
 @Composable
 private fun TrailerButton(
     url: String?,
     playing: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     url ?: return
-    Button(onClick = onClick) { Text(if (playing) "Stop trailer" else "Trailer") }
+    Button(onClick = onClick, modifier = modifier) { Text(if (playing) "Stop trailer" else "Trailer") }
+}
+
+/**
+ * The Trailer button's playback: full screen with sound and nothing drawn over it (library details hands its trailer to
+ * the player). Holds focus so the D-pad can't move to the hidden page; Back, or the end of the trailer, closes it.
+ */
+@Composable
+private fun IptvFullScreenTrailer(
+    url: String,
+    httpClient: okhttp3.OkHttpClient,
+    onClose: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    val close by androidx.compose.runtime.rememberUpdatedState(onClose)
+    LaunchedEffect(Unit) { focus.tryRequestFocus() }
+    androidx.activity.compose.BackHandler { close() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(focus)
+            .onPreviewKeyEvent { it.key != Key.Back }
+            .focusable(),
+    ) {
+        com.github.damontecres.wholphin.jellytip.TrailerLayer(url = url, sound = true, httpClient = httpClient, onEnded = { close() })
+    }
 }
 
 /** The TMDB cast with photos (initials when there is none), name and character; focusable so the row scrolls. */
