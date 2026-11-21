@@ -147,4 +147,5 @@ class JellytipTeamRemindersViewModel
     @Inject
     constructor(
         val teams: JellytipTeamReminders,
+        val navigationManager: com.github.damontecres.wholphin.services.NavigationManager,
     ) : androidx.lifecycle.ViewModel()
