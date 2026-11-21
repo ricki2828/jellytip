@@ -1153,6 +1153,7 @@
 .page-head {
   display: flex;
   align-items: center;
+  gap: 8px; /* title and buttons (Upcoming, Reminders) never touch */
   padding: 0 var(--pad); /* the title's own --pad margin is zeroed below: keep it in line with the rows and cards */
 }
 .page-head .page-title {
