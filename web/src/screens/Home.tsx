@@ -255,6 +255,7 @@ export function Home() {
         });
       } else if (a === "watched" && actionsFor(e).watched) {
         void optimisticHide({ hide, unhide, notify: flashNote }, e.key, () => markWatched(e), "Couldn't mark it as watched. Try again.", "Marked as watched").then((ok) => {
+          if (ok) continueMemo = null; // even if the refresh below fails, Back must not bring the item back from the memo
           if (ok) void refresh();
         });
       }

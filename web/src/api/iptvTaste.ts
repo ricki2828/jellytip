@@ -62,7 +62,7 @@ export async function setIptvNotInterested(t: IptvTasteSubject, on: boolean): Pr
 export async function setIptvPlayed(id: string, played: boolean, series?: string): Promise<string | null> {
   const a = await iptvPost<unknown>("v1/iptv/played", { id, played, ...(series ? { series } : {}) });
   if (!ok(a.status)) return failText(a.status);
-  dropPersonalCaches(); // rows trim watched titles; Continue watching is fetched fresh
+  dropPersonalCaches(); // rows trim watched titles; it also drops Home's Continue Watching memo
   window.dispatchEvent(new Event("jellytip-signals")); // More like this refetches without it
   return null;
 }

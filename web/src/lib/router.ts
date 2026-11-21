@@ -143,7 +143,8 @@ function restore(e: NavEntry) {
       const r = rows.find((x) => x.key === key);
       if (!r) continue;
       const max = r.el.scrollWidth - r.el.clientWidth;
-      if (max >= left - 1 || (age > ROW_CLAMP_AFTER_MS && max > 0)) {
+      // a row still showing its skeleton cards isn't its real width yet: never clamp to that
+      if (max >= left - 1 || (age > ROW_CLAMP_AFTER_MS && max > 0 && !r.el.querySelector(".card-skeleton"))) {
         r.el.scrollLeft = Math.min(left, max);
         pendingRows.delete(key);
         moved = true;

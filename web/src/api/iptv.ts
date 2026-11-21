@@ -288,9 +288,10 @@ export const play = (query: string) => iptvGet<PlayAnswer & { connection?: Conne
 export const addRecording = (channel: string, programme: number) =>
   iptvPost<{ recording: Recording; warning: string | null }>("v1/iptv/recordings", { channel, programme });
 /** `series`: the pid:s:sid id when `item` is an episode (so Next Up can find the show). */
-export const saveProgress = (item: string, position: number, duration: number, series?: string, played?: boolean) =>
-  (window.dispatchEvent(new Event("jellytip-watched")), // Home's Continue Watching memo is stale now
-  iptvPost<{ ok: boolean }>("v1/iptv/progress", { item, position, duration, ...(series ? { series } : {}), ...(played ? { played: true } : {}) }));
+export function saveProgress(item: string, position: number, duration: number, series?: string, played?: boolean) {
+  window.dispatchEvent(new Event("jellytip-watched")); // Home's Continue Watching memo is stale now
+  return iptvPost<{ ok: boolean }>("v1/iptv/progress", { item, position, duration, ...(series ? { series } : {}), ...(played ? { played: true } : {}) });
+}
 /** A play outcome for the companion's failed-stream memory (best effort: never throws, never blocks playback). */
 export const reportOutcome = (o: Outcome) => { void iptvPost<unknown>("v1/iptv/play/outcome", outcomeBody(o)); };
 /** Absolute address of a stream link (links are relative to the companion base). */
