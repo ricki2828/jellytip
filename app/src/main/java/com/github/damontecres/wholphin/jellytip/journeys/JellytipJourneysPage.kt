@@ -260,7 +260,7 @@ fun JellytipJourneysPage(
 }
 
 @Composable
-private fun JourneyCard(
+internal fun JourneyCard(
     s: JourneySummary,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -394,7 +394,7 @@ private fun JourneyView(
 }
 
 @Composable
-private fun FilmRow(
+internal fun FilmRow(
     e: JourneyEntry,
     isNext: Boolean,
     modifier: Modifier = Modifier,

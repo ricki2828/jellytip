@@ -577,7 +577,7 @@ private fun NightScreen(
 
 /** Join card (mock-up 06), beside the header so it never covers the posters: the code and, when the web link is known, a QR. */
 @Composable
-private fun JoinCard(
+internal fun JoinCard(
     code: String,
     hint: String,
     url: String?,
@@ -620,7 +620,7 @@ private fun QrCode(
 
 /** A poster you vote on with OK; the badge in the corner is your vote (none yet = no badge). */
 @Composable
-private fun VotePoster(
+internal fun VotePoster(
     f: MnFilm?,
     w: androidx.compose.ui.unit.Dp,
     mine: MnVote?,

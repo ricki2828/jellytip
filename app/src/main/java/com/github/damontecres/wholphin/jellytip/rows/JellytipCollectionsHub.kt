@@ -339,7 +339,7 @@ fun JellytipCollectionsHubPage(
 }
 
 @Composable
-private fun HubChip(
+internal fun HubChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,

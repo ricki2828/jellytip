@@ -410,6 +410,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    // t5n (21-Nov): design screenshots (jellytip.shots.*), uploaded by CI as an artifact
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.hilt.android.testing)

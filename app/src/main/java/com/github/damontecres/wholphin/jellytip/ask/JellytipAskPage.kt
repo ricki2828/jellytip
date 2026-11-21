@@ -366,7 +366,7 @@ fun JellytipAskPage(
 }
 
 @Composable
-private fun AskChipButton(
+internal fun AskChipButton(
     label: String,
     on: Boolean,
     modifier: Modifier = Modifier,
@@ -390,7 +390,7 @@ private fun AskChipButton(
 }
 
 @Composable
-private fun AskButton(
+internal fun AskButton(
     label: String,
     primary: Boolean,
     modifier: Modifier = Modifier,
