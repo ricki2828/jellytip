@@ -237,15 +237,24 @@ fun rememberJellytipRows(
 ): JellytipRowsAnswer? {
     // Jellytip: Movies / Shows open with the person's My list (the Home answer's "mylist" row for that kind)
     val myListPage = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.kindOf(page) != null
+    // Home: thin rows dropped, repeats across rows thinned (web d3f68e43); pinned rows untouched
+    val planned: (JellytipRowsAnswer?) -> JellytipRowsAnswer? = { a ->
+        if (page == "home" && a != null) {
+            val pinned = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.pinned.orEmpty().toSet()
+            a.copy(rows = com.github.damontecres.wholphin.jellytip.rows.JellytipHomePlan.plan(a.rows, pinned))
+        } else {
+            a
+        }
+    }
     val initial =
         remember(page) {
-            val own = viewModel.rows.peek(page)
+            val own = planned(viewModel.rows.peek(page))
             if (myListPage) com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, own, viewModel.rows.peek("home")) else own
         }
     val loaded by produceState(initial, page) {
         // Home's answer (My list) loads beside the page's own, not after it
         val homeJob = if (myListPage) async { viewModel.rows.load("home") } else null
-        viewModel.rows.load(page)?.let {
+        viewModel.rows.load(page)?.let(planned)?.let {
             // Shown at once (with the cached My list if any); a slow Home answer only adds My list later
             val first = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, viewModel.rows.peek("home")) ?: it
             value = first
