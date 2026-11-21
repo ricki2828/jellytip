@@ -179,6 +179,12 @@ sealed class Destination(
         val name: String,
     ) : Destination(false)
 
+    // ---- Jellytip lane B (tvparity-library) destinations: start ----
+    /** Jellytip: Pick for tonight (three picks with reasons; web 7056c179). */
+    @Serializable
+    data object JellytipTonight : Destination(false)
+    // ---- Jellytip lane B (tvparity-library) destinations: end ----
+
     /** Jellytip personalisation: hub (settings that follow the person), taste, Home edit. */
     @Serializable
     data object JellytipMe : Destination(false)

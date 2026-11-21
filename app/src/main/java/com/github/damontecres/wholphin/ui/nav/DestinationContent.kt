@@ -431,6 +431,13 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.rows.JellytipHubCollectionPage(destination.id, destination.title, modifier = modifier)
         }
 
+        // ---- Jellytip lane B (tvparity-library): start ----
+        Destination.JellytipTonight -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.tonight.JellytipTonightPage(modifier = modifier)
+        }
+        // ---- Jellytip lane B (tvparity-library): end ----
+
         Destination.JellytipUpcomingSport -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipGameCentrePage(modifier = modifier)

@@ -464,6 +464,21 @@ private fun TonightsPickRow(
         onLongClickItem = { _, it -> actions.open(it) },
         horizontalPadding = SpecialTokens.SPACING,
         modifier = focusModifier,
+        // Jellytip: "More picks for tonight" opens the three-pick screen (web 7056c179)
+        showViewMore = true,
+        viewMoreCardContent = { mod ->
+            SpecialCard(
+                width = SpecialTokens.POSTER_W,
+                height = SpecialTokens.FEATURE_H,
+                onClick = {
+                    JellytipTrailerControl.stop()
+                    actions.navigate(Destination.JellytipTonight)
+                },
+                modifier = mod,
+            ) {
+                Caption("More picks for tonight ›", alpha = 0.95f, px = JellytipHomeTokens.TEXT_PX, maxLines = 3, modifier = Modifier.align(Alignment.Center).padding(12.dp))
+            }
+        },
         cardContent = { _, _, cardModifier, onClick, onLongClick ->
             SpecialCard(
                 width = SpecialTokens.FEATURE_W,
