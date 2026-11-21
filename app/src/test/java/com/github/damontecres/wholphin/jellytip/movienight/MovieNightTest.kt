@@ -116,4 +116,25 @@ class MovieNightTest {
         assertEquals("Only the host can close it", MovieNight.errorText(403, """{"error":"only the host can close it"}"""))
         assertEquals("Can't reach the server.", MovieNight.errorText(0, null))
     }
+
+    @Test
+    fun remoteVoteCycle() {
+        assertEquals(MnVote.YES, MovieNight.nextVote(null))
+        assertEquals(MnVote.MAYBE, MovieNight.nextVote(MnVote.YES))
+        assertEquals(MnVote.NO, MovieNight.nextVote(MnVote.MAYBE))
+        assertEquals(MnVote.YES, MovieNight.nextVote(MnVote.NO))
+    }
+
+    @Test
+    fun optimisticVoteMovesOneCount() {
+        val s = sess().copy(counts = mapOf(id(1) to c(2, 0, 1)))
+        val a = MovieNight.withVote(s, id(1), MnVote.YES)
+        assertEquals(MnVote.YES, a.mine[id(1)])
+        assertEquals(c(3, 0, 1), a.counts[id(1)])
+        val b = MovieNight.withVote(a, id(1), MnVote.NO)
+        assertEquals(c(2, 0, 2), b.counts[id(1)])
+        assertEquals(b, MovieNight.withVote(b, id(1), MnVote.NO))
+        // a film with no counts yet
+        assertEquals(c(0, 1, 0), MovieNight.withVote(s, id(2), MnVote.MAYBE).counts[id(2)])
+    }
 }

@@ -326,6 +326,8 @@ dependencies {
     implementation(libs.coil.gif)
     implementation(libs.coil.svg)
 
+    // t5n (21-Nov): movie night join QR
+    implementation(libs.zxing.core)
     implementation(libs.jellyfin.core)
     implementation(libs.jellyfin.api)
     implementation(libs.jellyfin.api.okhttp)

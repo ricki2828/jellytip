@@ -135,6 +135,8 @@ class JellytipMovieNightViewModel
             val offline: Boolean = false,
             val notice: String? = null,
             val joinHint: String = "",
+            /** The companion address, for the join QR (JoinQr.joinUrl; null link = code only). */
+            val joinBase: String? = null,
             /** The result was shown once: a late joiner must not flip the screen back to voting. */
             val revealed: Boolean = false,
         )
@@ -154,7 +156,10 @@ class JellytipMovieNightViewModel
         }
 
         fun start() {
-            viewModelScope.launch { _state.value = _state.value.copy(joinHint = movieNightJoinHint(jellytipApi.companionBase())) }
+            viewModelScope.launch {
+                val base = jellytipApi.companionBase()
+                _state.value = _state.value.copy(joinHint = movieNightJoinHint(base), joinBase = base)
+            }
             val code = remembered()
             if (code != null) {
                 follow(code)
@@ -280,6 +285,27 @@ class JellytipMovieNightViewModel
                 }
         }
 
+        private var voting: Job? = null
+
+        /** OK on a poster: your own vote (the TV's signed-in person is a member as host), Yes → Maybe → No. Shown at once. */
+        fun vote(id: String) {
+            val s = (_state.value.phase as? Phase.Night)?.session ?: return
+            if (!s.open || id !in s.items) return
+            val v = MovieNight.nextVote(s.mine[id])
+            _state.value = _state.value.copy(phase = Phase.Night(MovieNight.withVote(s, id, v)), error = null)
+            voting?.cancel()
+            voting =
+                viewModelScope.launch {
+                    val body = JSONObject().put("item", id).put("vote", v.wire).toString()
+                    val r = jellytipApi.userCall("v1/me/movienight/${s.code}/vote", body, timeoutMs = 8_000)
+                    when {
+                        r?.first == 200 -> MovieNight.parse(r.second)?.let { n -> _state.value = _state.value.copy(phase = Phase.Night(n)) }
+                        r?.first == 409 -> _state.value = _state.value.copy(error = "Voting has closed.")
+                        else -> _state.value = _state.value.copy(error = "Couldn't save your vote. Press OK to try again.")
+                    }
+                }
+        }
+
         private suspend fun ensureFilms(ids: List<String>) {
             val missing = ids.filter { it !in _state.value.films }
             if (missing.isEmpty()) return
@@ -313,7 +339,7 @@ class JellytipMovieNightViewModel
             saveCode(null)
             viewModelScope.launch {
                 if (s != null && s.host && s.open) jellytipApi.userCall("v1/me/movienight/${s.code}/close", "{}")
-                _state.value = State(films = _state.value.films, joinHint = _state.value.joinHint)
+                _state.value = State(films = _state.value.films, joinHint = _state.value.joinHint, joinBase = _state.value.joinBase)
                 if (then != null) then() else loadShortlist()
             }
         }
@@ -419,9 +445,11 @@ private fun NightScreen(
     vm: JellytipMovieNightViewModel,
 ) {
     val close = remember { FocusRequester() }
+    val firstPoster = remember { FocusRequester() }
+    // Open night: land on the first poster (the host votes too); closed: on the buttons
     LaunchedEffect(s.code) {
         withFrameNanos { }
-        close.tryRequestFocus()
+        if (!(s.open && firstPoster.tryRequestFocus())) close.tryRequestFocus()
     }
     val totalVotes = s.counts.values.sumOf { it.votes }
     val joined = s.members.size
@@ -434,17 +462,22 @@ private fun NightScreen(
                     if (state.offline) {
                         "Can't reach the server. Showing the last update."
                     } else {
-                        "Vote on your phone. $joined ${if (joined == 1) "person has" else "people have"} joined, $totalVotes vote${if (totalVotes == 1) "" else "s"} in."
+                        "Vote here with OK on a poster, or on your phone. $joined ${if (joined == 1) "person has" else "people have"} joined, $totalVotes vote${if (totalVotes == 1) "" else "s"} in."
                     },
             )
-            JoinCard(s.code, state.joinHint)
+            JoinCard(s.code, state.joinHint, state.joinBase?.let { JoinQr.joinUrl(it, s.code) })
           }
             PosterRow(s.items.size) { w ->
-                s.items.forEach { id ->
+                s.items.forEachIndexed { i, id ->
                     val f = state.films[id]
                     val c = s.counts[id] ?: MnCounts()
                     Column {
-                        PosterBox(f, w)
+                        if (s.open) {
+                            // OK = your vote, cycling Yes → Maybe → No; the badge shows it
+                            VotePoster(f, w, s.mine[id], if (i == 0) Modifier.focusRequester(firstPoster) else Modifier) { vm.vote(id) }
+                        } else {
+                            PosterBox(f, w)
+                        }
                         VoteDots(c.yes + c.maybe, maxOf(joined, c.votes))
                         Text(MovieNight.votesLabel(c), color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
                     }
@@ -470,22 +503,88 @@ private fun NightScreen(
     }
 }
 
-/** Join card (mock-up 06), beside the header so it never covers the posters. */
+/** Join card (mock-up 06), beside the header so it never covers the posters: the code and, when the web link is known, a QR. */
 @Composable
 private fun JoinCard(
     code: String,
     hint: String,
+    url: String?,
 ) {
-    Column(
+    Row(
         Modifier
             .padding(top = 24.dp, end = 32.dp)
             .background(Color(0xFFF4DCD0), RoundedCornerShape(10.dp))
-            .padding(horizontal = 18.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Join on your phone with code", color = Color(0xFF141414), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-        Text(MovieNight.showCode(code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = 3.sp)
-        if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(if (url != null) "Scan, or join with code" else "Join on your phone with code", color = Color(0xFF141414), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(MovieNight.showCode(code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = 3.sp)
+            if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
+        }
+        url?.let { QrCode(it, 96.dp) }
+    }
+}
+
+/** A QR of [text] (dark modules on white, quiet zone included), drawn module by module. */
+@Composable
+private fun QrCode(
+    text: String,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val m = remember(text) { runCatching { JoinQr.matrix(text) }.getOrNull() } ?: return
+    androidx.compose.foundation.Canvas(Modifier.size(size).background(Color.White)) {
+        val cell = this.size.width / m.size
+        for (y in m.indices) {
+            val row = m[y]
+            for (x in row.indices) {
+                if (row[x]) drawRect(Color.Black, topLeft = androidx.compose.ui.geometry.Offset(x * cell, y * cell), size = androidx.compose.ui.geometry.Size(cell + 0.5f, cell + 0.5f))
+            }
+        }
+    }
+}
+
+/** A poster you vote on with OK; the badge in the corner is your vote (none yet = no badge). */
+@Composable
+private fun VotePoster(
+    f: MnFilm?,
+    w: androidx.compose.ui.unit.Dp,
+    mine: MnVote?,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1A1A1A), focusedContainerColor = Color(0xFF1A1A1A)),
+        border =
+            ClickableSurfaceDefaults.border(
+                border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp)),
+                focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = RoundedCornerShape(10.dp)),
+            ),
+        modifier = modifier.size(w, w * 1.5f),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            PosterArt(f, false)
+            mine?.let { v ->
+                val (label, bg) =
+                    when (v) {
+                        MnVote.YES -> "✓ Yes" to Color(0xFF2E9E5B)
+                        MnVote.MAYBE -> "~ Maybe" to Color(0xFFFFC72C)
+                        MnVote.NO -> "✕ No" to JellytipPalette.Jelly
+                    }
+                Text(
+                    label,
+                    color = if (v == MnVote.MAYBE) Color(0xFF111111) else Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).background(bg, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
     }
 }
 

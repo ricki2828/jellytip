@@ -66,6 +66,37 @@ object MovieNight {
     const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
     private val ITEM_RE = Regex("^[0-9a-f]{32}$")
 
+    /** OK on a poster cycles your own vote: none → Yes → Maybe → No → Yes. */
+    fun nextVote(cur: MnVote?): MnVote =
+        when (cur) {
+            null, MnVote.NO -> MnVote.YES
+            MnVote.YES -> MnVote.MAYBE
+            MnVote.MAYBE -> MnVote.NO
+        }
+
+    private fun MnCounts.add(
+        v: MnVote?,
+        by: Int,
+    ): MnCounts =
+        when (v) {
+            MnVote.YES -> copy(yes = (yes + by).coerceAtLeast(0))
+            MnVote.MAYBE -> copy(maybe = (maybe + by).coerceAtLeast(0))
+            MnVote.NO -> copy(no = (no + by).coerceAtLeast(0))
+            null -> this
+        }
+
+    /** Optimistic local view of your vote: [MnSession.mine] updated and the counts moved from the old vote to the new one. */
+    fun withVote(
+        s: MnSession,
+        item: String,
+        vote: MnVote,
+    ): MnSession {
+        val old = s.mine[item]
+        if (old == vote) return s
+        val c = s.counts[item] ?: MnCounts()
+        return s.copy(mine = s.mine + (item to vote), counts = s.counts + (item to c.add(old, -1).add(vote, 1)))
+    }
+
     fun scoreOf(c: MnCounts): Int = c.yes * 2 + c.maybe * 1 + c.no * -2
 
     /** Every film with its score, best first. Ties: fewer "no", then more "yes", then the host's order. */
