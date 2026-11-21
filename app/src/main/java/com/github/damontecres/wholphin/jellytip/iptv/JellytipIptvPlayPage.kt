@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -52,6 +53,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val CONTROLS_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
@@ -79,19 +81,82 @@ fun JellytipIptvPlayPage(
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
+    // "This stream isn't working": Down opens it (and a failed stream shows it); Back closes it
+    val canReport = target.vodId != null || target.episodeId != null
+    var reportOpen by remember(target) { mutableStateOf(false) }
+    var reportBusy by remember(target) { mutableStateOf(false) }
+    val reportFocus = remember { FocusRequester() }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(playState is IptvPlayState.Failed) {
+        if (playState is IptvPlayState.Failed && canReport) reportOpen = true
+    }
+    LaunchedEffect(reportOpen) {
+        if (reportOpen) {
+            kotlinx.coroutines.yield()
+            reportFocus.tryRequestFocus()
+        } else {
+            focus.tryRequestFocus()
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = reportOpen) {
+        reportOpen = false
+        controlsTick++
+    }
+    val notWorking: () -> Unit = {
+        if (!reportBusy) {
+            reportBusy = true
+            scope.launch {
+                val pos = playback.player?.currentPosition ?: 0L
+                // Same film / episode on another copy: carry on from here
+                val resume = if (playState is IptvPlayState.Playing) pos else target.resumeMs
+                JellytipTrace.player("iptv", "user: stream isn't working ${target.label}")
+                val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = (playState as? IptvPlayState.Failed)?.reported == true)
+                reportBusy = false
+                android.widget.Toast.makeText(ctx, next.message, android.widget.Toast.LENGTH_LONG).show()
+                // Back pressed while looking: this page is no longer on top, so don't pop whatever is
+                val top = viewModel.navigationManager.backStack.lastOrNull() as? Destination.JellytipIptvPlay
+                val stillHere = top != null && top.vodId == target.vodId && top.episodeId == target.episodeId
+                if (!stillHere) return@launch
+                when (next) {
+                    is IptvStreamReport.Next.Vod -> {
+                        reportOpen = false
+                        viewModel.navigationManager.goBack()
+                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = target.label, vodId = next.id, resumeMs = resume), "stream isn't working: next copy")
+                    }
 
+                    is IptvStreamReport.Next.Episode -> {
+                        reportOpen = false
+                        viewModel.navigationManager.goBack()
+                        viewModel.navigationManager.navigateTo(
+                            Destination.JellytipIptvPlay(title = target.label, seriesId = next.seriesId, episodeId = next.episodeId, resumeMs = resume),
+                            "stream isn't working: same episode, next copy",
+                        )
+                    }
+
+                    is IptvStreamReport.Next.None -> {}
+                }
+            }
+        }
+    }
+
+    // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
+    val owner = remember { "item:" + java.util.UUID.randomUUID() }
     DisposableEffect(target) {
-        playback.attach("item")
+        playback.attach(owner)
         playback.setVolume(1f)
         playback.play(target, "open ${target.label}")
         onDispose {
             playback.saveProgress(target)
-            playback.detach("item")
+            playback.detach(owner)
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        playback.saveProgress(target)
-        playback.stop("app hidden (item)")
+        // Only this page's own stream: a page leaving behind a newer one (copy swap) must not stop it
+        if (playback.state.value.target == target) {
+            playback.saveProgress(target)
+            playback.stop("app hidden (item)")
+        }
     }
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
     LaunchedEffect(controlsTick) {
@@ -144,6 +209,8 @@ fun JellytipIptvPlayPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // The report button has focus: its keys go to it (Back is the BackHandler above)
+                if (reportOpen) return@onPreviewKeyEvent false
                 val p = playback.player
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
@@ -166,7 +233,13 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    Key.DirectionUp, Key.DirectionDown -> {
+                    Key.DirectionDown -> {
+                        if (canReport) reportOpen = true
+                        controlsTick++
+                        true
+                    }
+
+                    Key.DirectionUp -> {
                         controlsTick++
                         true
                     }
@@ -197,6 +270,25 @@ fun JellytipIptvPlayPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        if (reportOpen) {
+            androidx.tv.material3.Button(
+                onClick = notWorking,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 32.dp, end = 48.dp)
+                        .focusRequester(reportFocus)
+                        .focusProperties {
+                            // The only control on screen: arrows must not move focus to the (key-eating) page
+                            up = androidx.compose.ui.focus.FocusRequester.Cancel
+                            down = androidx.compose.ui.focus.FocusRequester.Cancel
+                            left = androidx.compose.ui.focus.FocusRequester.Cancel
+                            right = androidx.compose.ui.focus.FocusRequester.Cancel
+                        },
+            ) {
+                Text(if (reportBusy) "Reporting…" else "This stream isn't working")
+            }
+        }
         if (controlsVisible) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -226,7 +318,7 @@ fun JellytipIptvPlayPage(
                     Text(if (duration > 0) clockText(duration) else "--:--", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
                 }
                 Text(
-                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶",
+                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" + if (canReport) "   ·   ▼ not working?" else "",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 11.sp,

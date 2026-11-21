@@ -45,4 +45,33 @@ class MyListRowsTest {
         val empty = JellytipRowsAnswer(listOf(row("my-films", "mylist", "movie", ids = 0)), emptySet())
         assertSame(movies, JellytipMyListRows.withMyList("movies", movies, empty))
     }
+
+    @Test
+    fun pageIdsRoundTrip() {
+        assertEquals("jt-mylist:movie", JellytipMyListRows.pageId("movie"))
+        assertEquals("jt-mylist:series", JellytipMyListRows.pageId("tv"))
+        assertEquals("series", JellytipMyListRows.pageKind("jt-mylist:series"))
+        assertNull(JellytipMyListRows.pageKind("jt-mylist:other"))
+        assertNull(JellytipMyListRows.pageKind("imdb-top-250"))
+    }
+
+    @Test
+    fun pageRowKeepsOrderAndMixesSources() {
+        val a = UUID.randomUUID()
+        val vod =
+            com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem("p1:m:1", "movie", 1, "X", 2000, emptyList(), null, null, "", null, null, null)
+        val row =
+            JellytipMyListRows.pageRow(
+                "jt-mylist:movie",
+                "movie",
+                listOf(
+                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListEntry.Iptv(vod),
+                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListEntry.Library(a),
+                ),
+            )
+        assertEquals(listOf("p1:m:1", a.toString()), row.order)
+        assertEquals(listOf(a), row.itemIds)
+        assertEquals("mylist", row.family)
+        assertEquals("movie", row.mediaType)
+    }
 }
