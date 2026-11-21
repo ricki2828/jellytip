@@ -1042,6 +1042,14 @@ fun JellytipLiveTvPlayerPage(
                 }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val okKey = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                // Recovery gave up: OK tries again (Up/Down still zap, Back still leaves)
+                (playState as? IptvPlayState.Failed)?.takeIf { it.canRetry && okKey && it.target == current }?.let {
+                    if (e.nativeKeyEvent.repeatCount == 0) {
+                        JellytipTrace.player("iptv", "retry ${current.channelId} (OK)")
+                        playback.retry()
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (catchOpen) {
                     val opts = listOfNotNull(if (canKickOff) 0 else null, 1, 2)
                     val i = opts.indexOf(catchCursor).coerceAtLeast(0)
@@ -1299,11 +1307,13 @@ fun JellytipLiveTvPlayerPage(
                 )
             }
         }
+        // Stream recovery's calm line ("Reconnecting… (2 of 4)", "Stream is buffering…") wins while it has one
+        val recoveryNote by playback.note.collectAsState()
         val status =
-            when (val s = playState) {
+            recoveryNote ?: when (val s = playState) {
                 is IptvPlayState.Opening -> if (s.target.channelId == channel.id) "Tuning ${channel.name}…" else null
                 is IptvPlayState.Full -> s.message
-                is IptvPlayState.Failed -> s.message
+                is IptvPlayState.Failed -> if (s.canRetry) "${s.message}\nOK: try again" else s.message
                 IptvPlayState.Idle -> "Tuning ${channel.name}…"
                 is IptvPlayState.Playing -> null
             }

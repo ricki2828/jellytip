@@ -144,6 +144,12 @@ fun JellytipIptvPlayPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Stream recovery gave up: OK tries again at the same position
+                val failedNow = playState as? IptvPlayState.Failed
+                if (failedNow != null && failedNow.canRetry && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter)) {
+                    if (e.nativeKeyEvent.repeatCount == 0) playback.retry()
+                    return@onPreviewKeyEvent true
+                }
                 val p = playback.player
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
@@ -176,11 +182,12 @@ fun JellytipIptvPlayPage(
             }.focusable(),
     ) {
         playback.player?.let { PlayerSurface(player = it, surfaceType = SURFACE_TYPE_SURFACE_VIEW, modifier = Modifier.fillMaxSize()) }
+        val recoveryNote by playback.note.collectAsState()
         val status =
-            when (val s = playState) {
+            recoveryNote ?: when (val s = playState) {
                 is IptvPlayState.Opening -> "Opening ${target.label}…"
                 is IptvPlayState.Full -> s.message
-                is IptvPlayState.Failed -> s.message
+                is IptvPlayState.Failed -> if (s.canRetry) "${s.message}\nOK: try again" else s.message
                 else -> null
             }
         status?.let {

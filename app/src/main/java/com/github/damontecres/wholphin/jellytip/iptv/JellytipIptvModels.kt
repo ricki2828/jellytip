@@ -325,6 +325,8 @@ sealed interface IptvPlayResult {
     data class Failed(
         val code: String?,
         val message: String,
+        /** HTTP status of the /play answer (0 = unreachable): recovery tells final refusals from retryable faults. */
+        val status: Int = 0,
     ) : IptvPlayResult
 }
 
@@ -740,6 +742,6 @@ object IptvParse {
                 holders,
             )
         }
-        return IptvPlayResult.Failed(errCode, IptvRules.failureText(errCode, text ?: "Server said $code"))
+        return IptvPlayResult.Failed(errCode, IptvRules.failureText(errCode, text ?: "Server said $code"), code)
     }
 }
