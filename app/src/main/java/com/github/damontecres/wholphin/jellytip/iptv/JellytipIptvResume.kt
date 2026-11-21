@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
@@ -87,6 +88,58 @@ data class IptvResume(
             "episode" -> Destination.JellytipIptvPlay(title = label, seriesId = seriesId, episodeId = id, resumeMs = (pos * 1000).toLong())
             else -> Destination.JellytipIptvPlay(title = label, vodId = id, resumeMs = (pos * 1000).toLong())
         }
+}
+
+/**
+ * Continue Watching labels and hiding for IPTV entries (web 3059b998 / 7ca4a22f, lib/continueRow.ts). Pure apart from the
+ * per-person hidden store.
+ */
+object IptvContinueRules {
+    const val DONE_PCT = 95.0
+    const val DONE_LEFT_S = 120.0
+
+    /** "23 min left", "1h 5m left"; under a minute counts as 1 min. */
+    fun leftText(seconds: Double): String {
+        val m = maxOf(1, Math.ceil(seconds / 60.0).toInt())
+        return if (m >= 60) "${m / 60}h" + (if (m % 60 > 0) " ${m % 60}m" else "") + " left" else "$m min left"
+    }
+
+    /** "S2 E5 · 23 min left", "23 min left" (film), "Next: S2 E6", or "In progress" when the length is unknown. */
+    fun rowLabel(r: IptvResume): String {
+        val ep = if (r.kind == "episode" && r.season != null && r.episode != null) "S${r.season} E${r.episode}" else null
+        if (r.pos <= 0 && r.kind == "episode") return ep?.let { "Next: $it" } ?: "Up next"
+        val left = if (r.dur > 0) leftText(maxOf(0.0, r.dur - r.pos)) else "In progress"
+        return listOfNotNull(ep, left).joinToString(" · ")
+    }
+
+    /** Finished: from 95 % watched, or under two minutes left (needs a known length). */
+    fun nearlyDone(
+        pos: Double,
+        dur: Double,
+    ): Boolean = dur > 0 && (pos / dur * 100 >= DONE_PCT || dur - pos < DONE_LEFT_S)
+
+    /** Still hidden: hidden after it was last played (playing it again brings it back). */
+    fun stillHidden(
+        r: IptvResume,
+        hiddenAt: Long?,
+    ): Boolean = hiddenAt != null && r.at <= hiddenAt
+
+    private const val PREFS = "jellytip_continue_hidden"
+
+    private fun prefs(context: android.content.Context) = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    fun hiddenAt(
+        context: android.content.Context,
+        user: String,
+        key: String,
+    ): Long? = prefs(context).getLong("$user|$key", -1L).takeIf { it >= 0 }
+
+    fun hide(
+        context: android.content.Context,
+        user: String,
+        key: String,
+        at: Long,
+    ) = prefs(context).edit().putLong("$user|$key", at).apply()
 }
 
 object IptvResumeParse {
@@ -208,8 +261,52 @@ fun JellytipResumeRow(
     modifier: Modifier,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
+    // Hidden ones (this person, until played again) and finished ones are left out; the tile says what's left / next
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val user = remember { com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.currentUserKey().orEmpty() }
+    var hideTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var menuFor by remember { androidx.compose.runtime.mutableStateOf<IptvResume?>(null) }
+    val shownIptv =
+        remember(iptv, hideTick) {
+            iptv.filter { r ->
+                !(r.pos > 0 && IptvContinueRules.nearlyDone(r.pos, r.dur)) &&
+                    !IptvContinueRules.stillHidden(r, IptvContinueRules.hiddenAt(ctx, user, r.key))
+            }
+        }
+    menuFor?.let { r ->
+        val close = { menuFor = null }
+        com.github.damontecres.wholphin.ui.components.DialogPopup(
+            showDialog = true,
+            title = r.label,
+            dialogItems =
+                listOfNotNull(
+                    (if (r.kind == "episode") r.seriesId else r.id)?.takeIf { r.kind != "recording" }?.let { id ->
+                        com.github.damontecres.wholphin.ui.components.DialogItem(if (r.kind == "episode") "Go to the show" else "Go to the film", dismissOnClick = true) {
+                            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(id, r.seriesTitle ?: r.title), "continue IPTV details")
+                        }
+                    },
+                    com.github.damontecres.wholphin.ui.components.DialogItem("Start from beginning", dismissOnClick = true) {
+                        JellytipTrailerControl.stop()
+                        viewModel.navigationManager.navigateTo(r.copy(pos = 0.0).destination(), "continue IPTV restart")
+                    },
+                    com.github.damontecres.wholphin.ui.components.DialogItem("Mark as watched", dismissOnClick = true) {
+                        com.github.damontecres.wholphin.jellytip.me.JellytipMe.setIptvPlayed(r.id, true) { err ->
+                            if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        IptvContinueRules.hide(ctx, user, r.key, System.currentTimeMillis() / 1000)
+                        hideTick++
+                    }.takeIf { r.kind != "recording" },
+                    com.github.damontecres.wholphin.ui.components.DialogItem("Hide from Continue Watching", dismissOnClick = true) {
+                        IptvContinueRules.hide(ctx, user, r.key, System.currentTimeMillis() / 1000)
+                        hideTick++
+                    },
+                ),
+            onDismissRequest = close,
+            dismissOnClick = true,
+        )
+    }
     val tiles =
-        remember(library, iptv) {
+        remember(library, shownIptv) {
             val lib =
                 library.mapIndexedNotNull { i, item ->
                     item ?: return@mapIndexedNotNull null
@@ -217,7 +314,7 @@ fun JellytipResumeRow(
                     ResumeTile.Lib(item, i, played)
                 }
             // Stable sort: equal (unknown) dates keep the library's own order
-            (lib + iptv.map { ResumeTile.Iptv(it) }).sortedByDescending { it.at }
+            (lib + shownIptv.map { ResumeTile.Iptv(it) }).sortedByDescending { it.at }
         }
     val h = viewOptions.heightDp.dp
     ItemRow(
@@ -235,13 +332,8 @@ fun JellytipResumeRow(
         onLongClickItem = { _, t ->
             when (t) {
                 is ResumeTile.Lib -> onLongClickLibrary(t.index, t.item)
-                is ResumeTile.Iptv -> {
-                    // Long press: the title's IPTV page (series page for an episode)
-                    val id = if (t.r.kind == "episode") t.r.seriesId else t.r.id
-                    if (t.r.kind != "recording" && id != null) {
-                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(id, t.r.seriesTitle ?: t.r.title), "continue IPTV details")
-                    }
-                }
+                // Long press: go to the title, start over, mark watched, hide (web 3059b998)
+                is ResumeTile.Iptv -> menuFor = t.r
             }
         },
         horizontalPadding = viewOptions.spacing.dp,
@@ -260,7 +352,7 @@ fun JellytipResumeRow(
 
                 is ResumeTile.Iptv ->
                     IptvVodTile(
-                        item = t.r.asVodItem(),
+                        item = t.r.asVodItem().let { v -> v.copy(title = "${v.title}\n${IptvContinueRules.rowLabel(t.r)}") },
                         width = h * 16f / 9f,
                         height = h,
                         poster = false,
