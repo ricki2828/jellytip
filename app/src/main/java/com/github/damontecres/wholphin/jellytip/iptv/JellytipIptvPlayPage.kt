@@ -111,7 +111,7 @@ fun JellytipIptvPlayPage(
                 // Same film / episode on another copy: carry on from here
                 val resume = if (playState is IptvPlayState.Playing) pos else target.resumeMs
                 JellytipTrace.player("iptv", "user: stream isn't working ${target.label}")
-                val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = playState is IptvPlayState.Failed)
+                val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = (playState as? IptvPlayState.Failed)?.reported == true)
                 reportBusy = false
                 android.widget.Toast.makeText(ctx, next.message, android.widget.Toast.LENGTH_LONG).show()
                 // Back pressed while looking: this page is no longer on top, so don't pop whatever is

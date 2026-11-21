@@ -77,6 +77,8 @@ sealed interface IptvPlayState {
     data class Failed(
         override val target: IptvTarget,
         val message: String,
+        /** The failure already went to the failed-stream memory (so a user report would count it twice). */
+        val reported: Boolean = false,
     ) : IptvPlayState
 }
 
@@ -391,10 +393,11 @@ class JellytipIptvPlayback
         ) {
             okJob?.cancel()
             // Player errors are only the target's own when the player holds its stream (else: the previous channel's)
-            if (reason != null && (!fromPlayer || loadedTarget == target)) IptvStreamFail.report(target, ok = false, reason = reason)
+            val reported = reason != null && (!fromPlayer || loadedTarget == target)
+            if (reported) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
-            setState(IptvPlayState.Failed(target, message), "failed")
+            setState(IptvPlayState.Failed(target, message, reported), "failed")
         }
 
         /** The target whose stream the player holds (set with the media item); errors from any other are stale. */
