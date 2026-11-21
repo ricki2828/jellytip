@@ -421,6 +421,11 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.iptv.JellytipSportSettingsPage(modifier = modifier)
         }
 
+        Destination.JellytipFantasy -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipFantasyPage(modifier = modifier)
+        }
+
         Destination.JellytipLiveTv -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPage(modifier = modifier)

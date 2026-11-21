@@ -193,6 +193,7 @@ fun JellytipMePage(
                     }
                     Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipHomeEdit, "personalise: edit home") }) { Text("Edit Home") }
                     Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipSportSettings, "personalise: live sport") }) { Text("Live sport") }
+                    Button(onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipFantasy, "personalise: fantasy") }) { Text("Fantasy") }
                 }
             }
                 item { SettingRow("Hide watched (rows update overnight)", if (p.hideWatched) "On" else "Off") { viewModel.patch(JSONObject().put("hideWatched", !p.hideWatched)) } }

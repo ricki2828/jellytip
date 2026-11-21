@@ -167,6 +167,11 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
         }
         val s = p.sport
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+            item {
+                Row2("Fantasy matchups", "OK to open") {
+                    teamVm.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipFantasy, "live sport: fantasy")
+                }
+            }
             item { Head("Your teams and leagues") }
             item { Row2("Add a team…", "OK to search", Modifier.focusRequester(first)) { search = true } }
             items(s.teams, key = { "t:$it" }) { n ->

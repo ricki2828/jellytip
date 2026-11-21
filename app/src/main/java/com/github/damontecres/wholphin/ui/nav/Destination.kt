@@ -193,6 +193,10 @@ sealed class Destination(
     @Serializable
     data object JellytipSportSettings : Destination(false)
 
+    /** Jellytip: fantasy matchups (leagues, line-ups, Watch a player's game). */
+    @Serializable
+    data object JellytipFantasy : Destination(false)
+
     /** Jellytip: the IPTV Live TV guide (sidebar "Live TV"). */
     @Serializable
     data object JellytipLiveTv : Destination(false)
