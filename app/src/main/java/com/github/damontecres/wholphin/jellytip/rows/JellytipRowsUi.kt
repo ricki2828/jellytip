@@ -162,7 +162,16 @@ fun JellytipServerRowView(
     LaunchedEffect(Unit) { JellytipHubIndex.ensureLoaded() }
     val hubIds by JellytipHubIndex.ids.collectAsState()
     val seeAll: (() -> Unit)? =
-        if (row.id in hubIds) {
+        if (row.family == "mylist") {
+            // My list: See all opens the whole list (web "My list" button on Movies / Shows)
+            {
+                JellytipTrailerControl.stop()
+                val listId =
+                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows
+                        .pageId(row.mediaType)
+                viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(listId, "My list"), "my list See all")
+            }
+        } else if (row.id in hubIds) {
             {
                 JellytipTrailerControl.stop()
                 viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(row.id, row.title), "row See all")

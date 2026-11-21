@@ -39,4 +39,39 @@ object JellytipMyListRows {
         val mine = pick(home, kind) ?: return answer
         return answer.copy(rows = listOf(mine.copy(id = "mylist-$page", title = "My list")) + answer.rows)
     }
+
+    const val PAGE_PREFIX = "jt-mylist:"
+
+    /** Hub collection id of the My list page for a row's media type (movie / tv). */
+    fun pageId(mediaType: String): String = PAGE_PREFIX + (if (mediaType == "tv") "series" else "movie")
+
+    /** `movie` / `series` for a My list page id; null for any other collection id. */
+    fun pageKind(id: String): String? = id.removePrefix(PAGE_PREFIX).takeIf { id.startsWith(PAGE_PREFIX) && (it == "movie" || it == "series") }
+
+    /** The whole list as a mixed row (newest first, the server's order). */
+    fun pageRow(
+        id: String,
+        kind: String,
+        entries: List<JellytipMyListEntry>,
+    ): JellytipServerRow {
+        val order =
+            entries.map {
+                when (it) {
+                    is JellytipMyListEntry.Library -> it.id.toString()
+                    is JellytipMyListEntry.Iptv -> it.item.id
+                }
+            }
+        return JellytipServerRow(
+            id = id,
+            source = "jellytip",
+            family = "mylist",
+            title = if (kind == "series") "My list · Shows" else "My list · Films",
+            layout = "poster",
+            mediaType = if (kind == "series") "tv" else "movie",
+            itemIds = entries.filterIsInstance<JellytipMyListEntry.Library>().map { it.id }.distinct(),
+            collection = null,
+            iptvItems = entries.filterIsInstance<JellytipMyListEntry.Iptv>().map { it.item }.distinctBy { it.id },
+            order = order,
+        )
+    }
 }
