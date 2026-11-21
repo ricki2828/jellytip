@@ -56,12 +56,12 @@ import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
@@ -271,10 +271,11 @@ class JellytipMovieNightViewModel
                                         _state.value.copy(
                                             phase = Phase.Night(s),
                                             offline = false,
-                                            error = if (saveFailed) _state.value.error else null,
+                                            // a vote error goes with the first answer asked after it (a fresh one); close()'s errors stay
+                                            error = if (voteError) null else _state.value.error,
                                             revealed = _state.value.revealed || MovieNight.showReveal(s, lastOwnVote, System.currentTimeMillis()),
                                         )
-                                    saveFailed = false
+                                    voteError = false
                                     ensureFilms(s.items)
                                 }
                             }
@@ -310,7 +311,8 @@ class JellytipMovieNightViewModel
         /** What the server last confirmed per film (to undo a vote it didn't save). */
         private val confirmed = java.util.concurrent.ConcurrentHashMap<String, MnVote>()
         private var lastOwnVote = 0L
-        private var saveFailed = false
+        /** The error on screen is a vote's (cleared by the next fresh poll), not close()'s. */
+        private var voteError = false
 
         /** OK on a poster: your own vote (the TV's signed-in person is a member as host), Yes → Maybe → No. Shown at once. */
         fun vote(id: String) {
@@ -340,10 +342,12 @@ class JellytipMovieNightViewModel
                     // A newer press for this film is queued: its own save paints the result
                     val newest = wanted[id] == v
                     if (newest) wanted.remove(id)
+                    // Left this night (Cancel / Done / Leave) while the save was out: nothing to paint
+                    val here = (_state.value.phase as? Phase.Night)?.session?.code == code
                     when {
                         r?.first == 200 -> {
                             confirmed[id] = v
-                            if (newest) {
+                            if (newest && here) {
                                 MovieNight.parse(r.second)?.let { n ->
                                     // keep any other film's vote still on its way
                                     val shown = wanted.entries.fold(n) { acc, (k, w) -> MovieNight.withVote(acc, k, w) }
@@ -351,13 +355,14 @@ class JellytipMovieNightViewModel
                                 }
                             }
                         }
+                        !here -> {}
                         else -> {
                             if (newest) {
                                 // Put back what the server has, so OK starts again from the truth, and say so
                                 val cur = (_state.value.phase as? Phase.Night)?.session
                                 if (cur != null) _state.value = _state.value.copy(phase = Phase.Night(MovieNight.withVote(cur, id, confirmed[id])))
                             }
-                            saveFailed = true
+                            voteError = true
                             _state.value = _state.value.copy(error = if (r?.first == 409) "Voting has closed." else "Couldn't save your vote. Press OK to try again.")
                         }
                     }
@@ -398,6 +403,9 @@ class JellytipMovieNightViewModel
             val s = (_state.value.phase as? Phase.Night)?.session
             poll?.cancel()
             saveCode(null)
+            // a save still out must not lay this night's wish over the next one
+            wanted.clear()
+            confirmed.clear()
             viewModelScope.launch {
                 if (s != null && s.host && s.open) jellytipApi.userCall("v1/me/movienight/${s.code}/close", "{}")
                 _state.value = State(films = _state.value.films, joinHint = _state.value.joinHint, joinBase = _state.value.joinBase)
