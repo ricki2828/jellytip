@@ -20,9 +20,11 @@ function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: () => voi
       if (!btns.length) return;
       const at = btns.indexOf(document.activeElement as HTMLButtonElement);
       let handled = true;
-      if (e.key === "Escape" || e.key === "Backspace") esc.current();
-      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") btns[Math.max(0, at < 0 ? 0 : at - 1)].focus();
-      else if (e.key === "ArrowRight" || e.key === "ArrowDown") btns[Math.min(btns.length - 1, at < 0 ? 0 : at + 1)].focus();
+      // focus lost (a click on the backdrop): arrows come back to the default button (Live / Next), not the first
+      const home = Math.max(0, btns.findIndex((b) => b.dataset.choice === "live" || b.hasAttribute("data-next")));
+      if (e.key === "Escape" || e.key === "Backspace" || e.key === "GoBack" || e.key === "BrowserBack") esc.current();
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") btns[at < 0 ? home : Math.max(0, at - 1)].focus();
+      else if (e.key === "ArrowRight" || e.key === "ArrowDown") btns[at < 0 ? home : Math.min(btns.length - 1, at + 1)].focus();
       else if (e.key === "Enter" || e.key === " ") (at >= 0 ? btns[at] : btns[btns.length - 1]).click();
       else handled = false;
       if (handled) {

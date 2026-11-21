@@ -77,7 +77,7 @@ export function choices(canKickOff: boolean): { id: "kickoff" | "catchup" | "liv
   return canKickOff ? all : all.slice(1);
 }
 
-// Once per match per tab: a reload or a switch back to the same game does not ask again
+// Once per match per page load: switching back to the same game does not ask again (a full reload may ask again, which only holds the score)
 const offered = new Set<string>();
 export const wasOffered = (matchId: string) => offered.has(matchId);
 export const markOffered = (matchId: string) => void offered.add(matchId);
