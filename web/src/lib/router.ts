@@ -1,6 +1,7 @@
 // Tiny hash router: static hosting under /jellytip/ needs no server-side fallback.
 import { useEffect, useState } from "react";
 import { createNavStack, type NavEntry } from "./navStack";
+import { anchorScroll, pickAnchor, rowKeys, rowScrolls } from "./scrollMemory";
 
 import { parseHash, type Route } from "./routeParse";
 export type { Route };
@@ -29,50 +30,118 @@ const ROOTS = new Set(["home", "movies", "shows", "search", "ask", "downloads", 
 /** Root tabs (Home, Movies, Shows, Search, Downloads, admins' Discover, Live TV) have no back arrow; everything else does. */
 export const isRootRoute = (name: string) => ROOTS.has(name);
 
+/** The screen's horizontal rows (each `.row-scroll`) keyed by their row title (lib/scrollMemory.rowKeys). */
+function screenRows(): { key: string; el: HTMLElement; box: HTMLElement }[] {
+  const els = [...document.querySelectorAll<HTMLElement>("main .row-scroll, #root .row-scroll")].filter((e, i, a) => a.indexOf(e) === i && e.offsetParent);
+  const boxes = els.map((e) => (e.closest(".row, section") as HTMLElement | null) ?? e);
+  const keys = rowKeys(boxes.map((b) => b.querySelector(".row-title")?.textContent ?? b.getAttribute("aria-label")));
+  return els.map((el, i) => ({ key: keys[i], el, box: boxes[i] }));
+}
+
+/**
+ * What the anchor can be: fixture cards first (Game Centre: the exact card, wherever its section moves it after a refresh), then
+ * the rows. pickAnchor takes the first one on screen in this order.
+ */
+function anchorCandidates(rows: { key: string; box: HTMLElement }[]): { key: string; box: HTMLElement }[] {
+  const cards = [...document.querySelectorAll<HTMLElement>("[data-fid]")].filter((e) => e.offsetParent).map((e) => ({ key: `fid:${e.dataset.fid}`, box: e }));
+  return [...cards, ...rows];
+}
+
 function saveNow() {
   saveTimer = null;
   if (restoring) return;
   try {
-    nav.save(Math.round(window.scrollY), lastFocus);
+    const rows = screenRows();
+    nav.save(Math.round(window.scrollY), lastFocus, {
+      rows: rowScrolls(rows.map((r) => ({ key: r.key, left: r.el.scrollLeft }))),
+      anchor: pickAnchor(anchorCandidates(rows).map((r) => ({ key: r.key, ...rect(r.box) }))) ?? undefined,
+    });
   } catch {
     // Safari throttles history.replaceState; the next save gets it
   }
 }
+const rect = (el: HTMLElement) => {
+  const b = el.getBoundingClientRect();
+  return { top: b.top, bottom: b.bottom };
+};
 const saveSoon = () => {
   if (saveTimer == null) saveTimer = window.setTimeout(saveNow, 400);
 };
-window.addEventListener("scroll", saveSoon, { passive: true });
+// Capture: a row's own horizontal scroll doesn't bubble, but it does pass through document in the capture phase
+document.addEventListener("scroll", saveSoon, { capture: true, passive: true });
+// Any tap flushes a pending save first, so a link that skips go() (a bare href="#/…") still leaves with the latest place
+document.addEventListener("click", () => saveTimer != null && saveNow(), true);
 document.addEventListener("focusin", (e) => {
   const el = e.target as HTMLElement | null;
   lastFocus = el?.getAttribute?.("data-nav") != null ? el.getAttribute("aria-label") ?? el.textContent?.trim().slice(0, 80) ?? undefined : undefined;
   saveSoon();
 });
 
-/** Back to an entry: wait for the screen to be tall enough (rows load in), then scroll and refocus the same tile. */
+const RESTORE_MS = 5000;
+const SETTLED_TICKS = 5;
+let restoreGen = 0;
+let stopRestore: (() => void) | null = null;
+
+/**
+ * Back to an entry: put each moved row back to its scrollLeft once it is wide enough, and the page so the anchor row sits where
+ * it was (else the raw scrollY once the page is tall enough). Rows fill in late and rows above can change height, so it keeps
+ * correcting until the layout has been still for half a second, up to 5 s, and stops at once when the person scrolls or presses.
+ */
 function restore(e: NavEntry) {
   restoring = true;
-  const y = e.scrollY ?? 0;
-  let tries = 0;
-  const tick = () => {
-    const room = document.documentElement.scrollHeight - window.innerHeight;
-    if (room + 2 < y && tries++ < 40) {
-      window.setTimeout(tick, 100);
-      return;
-    }
-    window.scrollTo(0, y);
-    if (e.focus && !matchMedia("(hover: none) and (pointer: coarse)").matches) {
-      const el = [...document.querySelectorAll<HTMLElement>("[data-nav]")].find(
-        (n) => (n.getAttribute("aria-label") ?? n.textContent?.trim().slice(0, 80)) === e.focus,
-      );
-      el?.focus({ preventScroll: true });
-    }
+  const gen = ++restoreGen;
+  const t0 = Date.now();
+  const rowsLeft = new Map(Object.entries(e.rows ?? {}));
+  let still = 0;
+  let focused = false;
+  const done = () => {
+    for (const ev of STOP) window.removeEventListener(ev, cancel, true);
+    if (gen !== restoreGen) return;
+    restoreGen++;
     restoring = false;
+    stopRestore = null;
+  };
+  const cancel = () => done();
+  const STOP = ["touchstart", "wheel", "keydown", "pointerdown"] as const;
+  for (const ev of STOP) window.addEventListener(ev, cancel, { capture: true, passive: true });
+  stopRestore = done;
+  const tick = () => {
+    if (gen !== restoreGen) return;
+    let moved = false;
+    const rows = screenRows();
+    for (const [key, left] of rowsLeft) {
+      const r = rows.find((x) => x.key === key);
+      if (r && r.el.scrollWidth - r.el.clientWidth >= left - 1) {
+        r.el.scrollLeft = left;
+        rowsLeft.delete(key);
+        moved = true;
+      }
+    }
+    const a = e.anchor ? anchorCandidates(rows).find((x) => x.key === e.anchor!.key) : undefined;
+    const target = a ? anchorScroll(window.scrollY, a.box.getBoundingClientRect().top, e.anchor!.top) : e.scrollY ?? 0;
+    const room = document.documentElement.scrollHeight - window.innerHeight;
+    if (Math.abs(window.scrollY - target) > 2 && room + 2 >= target) {
+      window.scrollTo(0, target);
+      moved = true;
+    }
+    if (!focused && e.focus && !matchMedia("(hover: none) and (pointer: coarse)").matches) {
+      const el = [...document.querySelectorAll<HTMLElement>("[data-nav]")].find((n) => (n.getAttribute("aria-label") ?? n.textContent?.trim().slice(0, 80)) === e.focus);
+      if (el) {
+        el.focus({ preventScroll: true });
+        focused = true;
+      }
+    }
+    const placed = !rowsLeft.size && Math.abs(window.scrollY - target) <= 2;
+    still = placed && !moved ? still + 1 : 0;
+    if (still >= SETTLED_TICKS || Date.now() - t0 > RESTORE_MS) return done();
+    window.setTimeout(tick, 100);
   };
   window.setTimeout(tick, 0);
 }
 
 // Registered before any useRoute listener, so screens render knowing whether this was a Back
 window.addEventListener("hashchange", () => {
+  stopRestore?.(); // a restore still settling belongs to the screen being left
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = null;
   const e = nav.onHashChange();
