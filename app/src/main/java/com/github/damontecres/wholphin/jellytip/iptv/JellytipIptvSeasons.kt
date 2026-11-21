@@ -381,12 +381,14 @@ object LibraryIptvCopies {
         val key = "${api.currentUserKey()}|$kind|$tmdb"
         cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         return try {
+            val pr = api.userCall("v1/iptv/providers")
             val owned =
-                api.userCall("v1/iptv/providers")?.takeIf { it.first == 200 }?.let { (_, b) ->
+                pr?.takeIf { it.first == 200 }?.let { (_, b) ->
                     val a = JSONObject(b).optJSONArray("providers")
                     (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                 }
-            if (owned != null && owned.isEmpty()) noProviders = api.currentUserKey() // no IPTV: stop asking this run
+            // No IPTV (no providers, or the route / person refused): stop asking this run
+            if ((owned != null && owned.isEmpty()) || pr?.first == 403 || pr?.first == 404) noProviders = api.currentUserKey()
             val got =
                 if (owned.isNullOrEmpty()) {
                     emptyList()
