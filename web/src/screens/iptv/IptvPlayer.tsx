@@ -11,8 +11,7 @@ import { fxTitle, pickChannel, type FxItem } from "../../lib/gameCentre";
 import { fixturesNow, refreshFixtures, useFixtures } from "../../api/fixtures";
 import { cards as catchCards_, DECIDE_WAIT_MS, joiningLine, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
-import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
-import { alternateEpisode } from "../../lib/streamCopies";
+import { countsAsStall, deniedFailReason, isDecodeFault } from "../../lib/streamFail";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
 import { findReminder } from "../../lib/reminders";
 import { isPre, preGameCard } from "../../lib/preGame";
@@ -45,7 +44,7 @@ import { refreshRecs } from "../../api/recStore";
 import { matchupTitle } from "../../lib/matchInfo";
 import { nextChannelPath, rejoinPlan } from "../../api/channels";
 import { RecordingDelete } from "../../components/RecordingDelete";
-import { addRecording, play, recordingById, saveProgress, streamUrl, vodItem, type Connection, type PlayAnswer } from "../../api/iptv";
+import { addRecording, play, recordingById, saveProgress, streamUrl, type Connection, type PlayAnswer } from "../../api/iptv";
 import { FailNote } from "../../components/FailNote";
 import { clampSeek, clockText, recordingLength, type RecMeta } from "../../lib/recPlay";
 import { planSeek, progressFor, rangesOf, remuxOffset, toTimeline } from "../../lib/vodRemux";
@@ -824,38 +823,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     debugEvent("iptv-player", "manual retry", { player: engineRef.current, format: fmtRef.current, phase: recRef.current.phase }, "info");
     dispatchRef.current({ t: "retryNow", pos: toTimeline(v?.currentTime ?? 0, remuxRef.current?.off ?? 0), canHls: isLive && fmtRef.current === "ts", now: Date.now() });
   };
-  /** "This stream isn't working": remembered as a person's own report, then the next alternate (channel) or copy (film, episode) is offered. */
-  const notWorking = async () => {
-    const t = outcome.target();
-    if (!t) return;
-    outcome.fail("user_report", videoRef.current?.currentTime);
-    const nowS = Date.now() / 1000;
-    const path = (tg: PlayTarget, name: string, x = "") => `${targetPath(tg)}&t=${encodeURIComponent(name)}${x}`;
-    if (t.kind === "live" || t.kind === "catchup") {
-      const alts = (extras?.alternates ?? []).map((a) => ({ ...a, lastFail: null }));
-      const n = nextAfterFailure(t.id, alts, nowS);
-      if (!n) return flashNote("Reported. No other channel to try.");
-      flashNote(`Reported. Trying ${n.name}`);
-      return go(livePath(n.id, n.name, switchExtras(extras ?? {}, n.id, { id: target.channel!, name: title })), true);
-    }
-    const base = target.vod ?? target.series;
-    const d = base ? (await vodItem(base)).data : null;
-    if (!d) return flashNote("Reported. Couldn't look up another copy.");
-    const copies = (d.copies ?? []).map((c) => ({ id: c.id, name: c.providerTitle ?? "another copy", lastFail: c.lastFail }));
-    if (t.kind === "vod") {
-      const n = nextAfterFailure(t.id, copies, nowS);
-      if (!n) return flashNote("Reported. No other copy of this film.");
-      flashNote(`Reported. Trying ${n.name}`);
-      return go(path({ vod: n.id }, title), true);
-    }
-    const here = d.seasons?.flatMap((s) => s.episodes.map((e) => ({ season: s.season, episode: e.episode, id: e.id }))).find((e) => e.id === t.id);
-    const alt = here ? await alternateEpisode(here, d.id, copies, async (id) => (await vodItem(id)).data, (id, lf) => failedLately(failOf(id, lf), nowS)) : null;
-    if (alt) {
-      flashNote(`Reported. Trying ${alt.copy.name}`);
-      return go(path({ series: alt.copy.id, episode: alt.episode.id }, title), true);
-    }
-    flashNote("Reported. No other copy of this episode.");
-  };
   const reportStall = () => {
     debugEvent("iptv-player", "user reported stall", { player: engineRef.current, format: fmtRef.current, firstFrame: firstFrame.current, rebufferCount: rebufferCount.current }, "info");
     void sendDebugReport();
@@ -1475,7 +1442,6 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
           </button>
         )}
         {target.recording && meta?.state !== "recording" && <RecordingDelete id={String(target.recording)} />}
-        {!target.recording && state.kind === "playing" && <button className="btn small" data-nav data-not-working onClick={() => void notWorking()}>This stream isn’t working</button>}
         <button className="btn small" data-nav aria-pressed={fs.active} aria-label={fs.active ? "Exit fullscreen" : "Fullscreen"} onClick={fs.toggle}>
           {fs.active ? "Exit fullscreen" : "Fullscreen"}
         </button>
