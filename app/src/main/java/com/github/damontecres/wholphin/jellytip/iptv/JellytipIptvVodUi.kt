@@ -230,11 +230,12 @@ fun IptvVodRow(
     modifier: Modifier = Modifier,
     onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+    subtitle: String? = null,
 ) {
     val h = heightDp.dp
     val w = if (poster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
-        ItemRowTitle(title)
+        ItemRowTitle(title, subtitle = subtitle)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),

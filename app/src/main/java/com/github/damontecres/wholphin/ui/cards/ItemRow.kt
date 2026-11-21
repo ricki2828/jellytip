@@ -47,6 +47,8 @@ fun <T> ItemRow(
     horizontalPadding: Dp = 16.dp,
     showViewMore: Boolean = false,
     viewMoreCardContent: @Composable (Modifier) -> Unit = {},
+    /** Jellytip: a line under the title ("Because you like …" on For you). */
+    subtitle: String? = null,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -65,7 +67,7 @@ fun <T> ItemRow(
                 }
             },
     ) {
-        ItemRowTitle(title)
+        ItemRowTitle(title, subtitle = subtitle)
 
         JellytipRowFocusScope { rowFocusModifier ->
             LazyRow(
@@ -145,3 +147,27 @@ fun ItemRowTitle(
     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
     modifier = modifier.padding(start = 8.dp),
 )
+
+/** Jellytip: the row title with an optional quieter line under it (For you's "Because you like …"). */
+@Composable
+fun ItemRowTitle(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
+    if (subtitle.isNullOrBlank()) {
+        ItemRowTitle(title, modifier)
+    } else {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            ItemRowTitle(title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}

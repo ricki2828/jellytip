@@ -190,7 +190,7 @@ fun JellytipServerRowView(
         when {
             row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ItemRowTitle(row.title)
+                    ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(SpecialTokens.POSTER_H + 16.dp))
                 }
             }
@@ -202,7 +202,7 @@ fun JellytipServerRowView(
             // Franchise rows may carry IPTV parts too (`iptvItems` + `order`): before the mixed/IPTV row branches
             row.isFranchise && row.itemIds.isNotEmpty() && loaded == null -> {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ItemRowTitle(row.title)
+                    ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(options.heightDp.dp + 16.dp))
                 }
             }
@@ -220,6 +220,7 @@ fun JellytipServerRowView(
                 // IPTV rows: the titles came with the row (no library ids), tiles carry the IPTV dot + quality
                 com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
                     title = row.title,
+                    subtitle = row.reason,
                     items = row.iptvItems,
                     poster = row.isPoster,
                     heightDp = options.heightDp,
@@ -232,7 +233,7 @@ fun JellytipServerRowView(
             loaded == null -> {
                 // Same height as the loaded row: the title plus a card's height and the row padding
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ItemRowTitle(row.title)
+                    ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(options.heightDp.dp + 16.dp))
                 }
             }
@@ -250,6 +251,7 @@ fun JellytipServerRowView(
             else -> {
                 ItemRow(
                     title = row.title,
+                    subtitle = row.reason,
                     items = loaded,
                     onClickItem = { _, item -> click(item) },
                     onLongClickItem = { _, item -> longClick(item) },
@@ -883,7 +885,7 @@ private fun MixedRow(
     val h = options.heightDp.dp
     val w = if (row.isPoster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = focusModifier) {
-        ItemRowTitle(row.title)
+        ItemRowTitle(row.title, subtitle = row.reason)
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(options.spacing.dp, 8.dp),

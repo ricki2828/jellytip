@@ -63,6 +63,8 @@ data class JellytipServerRow(
     val ranks: Map<String, Int> = emptyMap(),
     /** Trending titles that are nowhere (not in the library, not on IPTV): dimmed "Not available" tiles. */
     val missing: List<Missing> = emptyList(),
+    /** For you only: why these titles ("Because you like Martin Scorsese and 2010s drama"); null when the server sends none. */
+    val reason: String? = null,
 ) {
     data class Missing(
         val tmdbId: Int,
@@ -223,6 +225,7 @@ object JellytipRowsParser {
             source = o.optString("source"),
             family = o.optString("family"),
             title = o.str("title").orEmpty(),
+            reason = o.str("reason"),
             layout = o.optString("layout", "standard"),
             mediaType = o.optString("mediaType", "movie"),
             itemIds = itemIds,
