@@ -34,6 +34,7 @@ import com.github.damontecres.wholphin.ui.theme.WholphinTheme
 import com.github.damontecres.wholphin.ui.util.ProvideLocalClock
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import javax.inject.Inject
@@ -55,6 +56,12 @@ class WholphinDreamService :
     @AuthOkHttpClient
     @Inject
     lateinit var okHttpClient: OkHttpClient
+
+    // Jellytip (t5n): ambient scoreboard while a favourite's game is on
+    @Inject
+    lateinit var jellytipIptv: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvService
+
+    private val ambient = kotlinx.coroutines.flow.MutableStateFlow<com.github.damontecres.wholphin.jellytip.iptv.SportAmbient.Pick?>(null)
 
     private val lifecycleRegistry = LifecycleRegistry(this)
 
@@ -86,6 +93,12 @@ class WholphinDreamService :
         super.onAttachedToWindow()
         Timber.d("onAttachedToWindow")
         val itemFlow = screensaverService.createItemFlow(lifecycleScope)
+        // Jellytip (t5n): keys come to us (OK opens the game on the ambient card; any other key wakes, as before)
+        isInteractive = true
+        lifecycleScope.launchDefault {
+            serverRepository.currentUserFlow.first { it != null }
+            com.github.damontecres.wholphin.jellytip.iptv.pollAmbient(jellytipIptv, ambient)
+        }
         setContentView(
             ComposeView(this).apply {
                 setViewTreeLifecycleOwner(this@WholphinDreamService)
@@ -108,14 +121,20 @@ class WholphinDreamService :
                                 ProvideLocalClock {
                                     val screensaverPrefs = prefs.interfacePreferences.screensaverPreference
                                     val currentItem by itemFlow.collectAsState(null)
+                                    val sport by ambient.collectAsState()
                                     Box(Modifier.fillMaxSize()) {
-                                        AppScreensaverContent(
-                                            currentItem = currentItem,
-                                            showClock = screensaverPrefs.showClock,
-                                            duration = screensaverPrefs.duration.milliseconds,
-                                            animate = screensaverPrefs.animate,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
+                                        val pick = sport
+                                        if (pick != null) {
+                                            com.github.damontecres.wholphin.jellytip.iptv.SportAmbientScreen(pick, screensaverPrefs.showClock, Modifier.fillMaxSize())
+                                        } else {
+                                            AppScreensaverContent(
+                                                currentItem = currentItem,
+                                                showClock = screensaverPrefs.showClock,
+                                                duration = screensaverPrefs.duration.milliseconds,
+                                                animate = screensaverPrefs.animate,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        }
                                         if (screensaverPrefs.dimEnabled) {
                                             val alpha = screensaverPrefs.dimPercent / 100f
                                             Box(
@@ -132,6 +151,30 @@ class WholphinDreamService :
                 }
             },
         )
+    }
+
+    /** Jellytip (t5n): interactive dream. OK on the ambient card opens its game in the app; any other key wakes up. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        val ok = event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == android.view.KeyEvent.KEYCODE_ENTER
+        val pick = ambient.value
+        if (ok && pick != null) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) {
+                val intent =
+                    com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent
+                        .watch(this, pick.f, System.currentTimeMillis() / 1000)
+                if (intent != null) {
+                    try {
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Timber.w(e, "ambient: could not open the app")
+                    }
+                }
+                finish()
+            }
+            return true
+        }
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) finish()
+        return true
     }
 
     override fun onDreamingStarted() {
