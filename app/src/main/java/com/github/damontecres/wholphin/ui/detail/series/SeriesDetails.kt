@@ -434,6 +434,7 @@ fun SeriesDetailsContent(
         value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(series)?.let {
             com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
         }
+    }
     // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
     // Jellytip: seasons only the person's IPTV has; looked up with the page, shown only if known before the rows open
     val jtIptvSeasonsLoaded by produceState<Pair<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSeason>>?>(null, series.id, seasons.size) {
@@ -446,7 +447,6 @@ fun SeriesDetailsContent(
     var jtSimilar by remember(series.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
     LaunchedEffect(jtSimilarLoaded, sectionsActive) {
         if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
-    }
     }
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
