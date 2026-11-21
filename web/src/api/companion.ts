@@ -679,4 +679,5 @@ export async function discoverSearch(q: string, page = 1): Promise<DiscoverPage 
 export function dropPersonalCaches() {
   rowsCache.clear();
   specialsCache.clear();
+  window.dispatchEvent(new Event("jellytip-watched")); // and Home's Continue Watching memo (IPTV mark watched, row edits)
 }

@@ -16,7 +16,7 @@ import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
 import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, isFavourite, legacyForced, todayMore, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type FxMore, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
-import { go, useRoute } from "../../lib/router";
+import { go, isRestoring, useRoute } from "../../lib/router";
 import { FailNote } from "../../components/FailNote";
 import { edgeStyle, LiveMatchHero, useFixtureColours } from "../../components/LiveMatchHero";
 import { LeagueBadge, TileArt, useArt } from "../../components/FixtureArt";
@@ -347,6 +347,7 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
     const el = [...document.querySelectorAll<HTMLElement>("li.gc-card[data-fid]")].find((x) => x.dataset.fid === focusFid);
     if (!el) return;
     focused.current = focusFid;
+    if (isRestoring()) return; // Back to this link: the saved place wins, no jump to the card and no second flash
     el.scrollIntoView({ block: "center" });
     el.focus({ preventScroll: true });
     el.classList.add("gc-flash");

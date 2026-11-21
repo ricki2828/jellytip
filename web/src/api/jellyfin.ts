@@ -318,6 +318,7 @@ export async function search(term: string): Promise<Item[]> {
 
 export async function setPlayed(id: string, played: boolean) {
   await jf(`/Users/${uid()}/PlayedItems/${id}`, { method: played ? "POST" : "DELETE" });
+  window.dispatchEvent(new Event("jellytip-watched")); // Home's Continue Watching memo is stale now
 }
 
 export async function setFavorite(id: string, fav: boolean) {

@@ -12,6 +12,10 @@ export interface NavEntry {
   depth: number;
   scrollY?: number;
   focus?: string;
+  /** Each moved row's scrollLeft, by row key (lib/scrollMemory). */
+  rows?: Record<string, number>;
+  /** The first row on screen and its distance from the top: Back puts it there again even if rows above changed height. */
+  anchor?: { key: string; top: number };
 }
 
 const KEY = "jtNav";
@@ -53,8 +57,11 @@ export function createNavStack(h: HistoryLike) {
     depth: () => depth,
     canGoBack: () => depth > 0,
     /** Remember where the user is on the current entry. */
-    save(scrollY: number, focus?: string) {
-      write({ depth, scrollY, focus });
+    save(scrollY: number, focus?: string, place?: Pick<NavEntry, "rows" | "anchor">) {
+      const e: NavEntry = { depth, scrollY, focus };
+      if (place?.rows) e.rows = place.rows;
+      if (place?.anchor) e.anchor = place.anchor;
+      write(e);
     },
     back: () => h.back(),
   };
