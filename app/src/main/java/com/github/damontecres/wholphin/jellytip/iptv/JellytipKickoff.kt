@@ -53,6 +53,8 @@ import javax.inject.Singleton
  */
 data class KickoffCard(
     val due: KickoffPolicy.Due,
+    /** When it went up (ms): a card set while the app was hidden is dropped, not shown late. */
+    val shownAtMs: Long = System.currentTimeMillis(),
     /** Team colours from the match record (null = neutral). */
     val home: MatchTeam? = null,
     val away: MatchTeam? = null,
@@ -65,7 +67,14 @@ class JellytipKickoff
         private val service: JellytipIptvService,
         private val playback: JellytipIptvPlayback,
         private val navigationManager: NavigationManager,
+        private val reminders: JellytipReminders,
     ) {
+        /** Set by the live player while one of its own cards (catch me up, full time) wants OK: no takeover then. */
+        @Volatile
+        var quiet: Boolean = false
+
+        /** The OK / Back press that started while the card was up (a press begun before it never acts on it). */
+        private var downKey: Int? = null
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private val _card = MutableStateFlow<KickoffCard?>(null)
         val card: StateFlow<KickoffCard?> = _card
@@ -103,40 +112,47 @@ class JellytipKickoff
             items: List<FxItem>,
             now: Long,
         ) {
+            // The reminder banner owns the top of the screen (and OK/Back) while it shows
+            if (quiet || reminders.nudge.value != null) return
             val playing = (playback.state.value as? IptvPlayState.Playing)?.target?.channelId
             val d = KickoffPolicy.due(items, now, nudged, playing) ?: return
             nudged += d.key
             if (d.phase == "live") nudged += "${d.fixture.fid}:soon"
             JellytipTrace.log("iptv", "kick-off takeover ${d.key} ${d.fixture.title}")
-            _card.value = KickoffCard(d)
+            val first = KickoffCard(d)
+            _card.value = first
             // Team colours for the top bar (one match call; the card shows neutral until then)
             val m = runCatching { fetchMatch(d.fixture.companionId)?.second?.match }.getOrNull()
-            if (m != null && _card.value?.due == d) _card.value = KickoffCard(d, m.home, m.away)
+            if (m != null && _card.value?.due == d) _card.value = first.copy(home = m.home, away = m.away)
         }
 
-        fun dismiss(c: KickoffCard?) {
-            if (c == null || _card.value == c) _card.value = null
+        /** Dismiss by announcement key (the card is replaced once team colours arrive). */
+        fun dismiss(key: String) {
+            if (_card.value?.due?.key == key) _card.value = null
         }
 
         /** While the card shows: OK = watch, Back = dismiss (both swallowed, down and up); other keys pass. */
         fun onKey(e: android.view.KeyEvent): Boolean {
             val c = _card.value ?: return false
-            when (e.keyCode) {
-                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                    if (e.action == android.view.KeyEvent.ACTION_UP) {
-                        _card.value = null
-                        watch(c.due.fixture)
-                    }
-                    return true
+            if (quiet) return false
+            val ok = e.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || e.keyCode == android.view.KeyEvent.KEYCODE_ENTER || e.keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+            val back = e.keyCode == android.view.KeyEvent.KEYCODE_BACK
+            if (!ok && !back) return false
+            if (e.action == android.view.KeyEvent.ACTION_DOWN) {
+                // Only a fresh press, begun after the card has been up a moment, belongs to the card
+                if (e.repeatCount == 0 && System.currentTimeMillis() - c.shownAtMs >= KEY_GUARD_MS) downKey = e.keyCode
+                return downKey == e.keyCode
+            }
+            if (e.action == android.view.KeyEvent.ACTION_UP) {
+                if (downKey != e.keyCode) return false
+                downKey = null
+                _card.value = null
+                if (ok) {
+                    watch(c.due.fixture)
+                } else {
+                    JellytipTrace.log("iptv", "kick-off takeover dismissed ${c.due.key}")
                 }
-
-                android.view.KeyEvent.KEYCODE_BACK -> {
-                    if (e.action == android.view.KeyEvent.ACTION_UP) {
-                        JellytipTrace.log("iptv", "kick-off takeover dismissed ${c.due.key}")
-                        _card.value = null
-                    }
-                    return true
-                }
+                return true
             }
             return false
         }
@@ -145,12 +161,19 @@ class JellytipKickoff
             val ch = SportFixtures.pickChannel(f, nowSec()).channel ?: return
             // Already full screen on a live channel: swap that page; anywhere else (film, browse) push the player, so
             // Back returns to the film where it stopped
-            val onPlayer = navigationManager.backStack.lastOrNull() is com.github.damontecres.wholphin.ui.nav.Destination.JellytipLiveTvPlayer
-            launchFixture(playback, navigationManager, f, ch, fromStart = false, from = "kick-off", replaceTop = onPlayer, forceMatch = true)
+            // On a live channel or a film: swap that page. The film's player is released when its page leaves (it
+            // doesn't re-open on Back), so the film's place is kept by Jellyfin's resume point: its page offers Resume.
+            val top = navigationManager.backStack.lastOrNull()
+            val swap =
+                top is com.github.damontecres.wholphin.ui.nav.Destination.JellytipLiveTvPlayer ||
+                    top is com.github.damontecres.wholphin.ui.nav.Destination.Playback ||
+                    top is com.github.damontecres.wholphin.ui.nav.Destination.PlaybackList
+            launchFixture(playback, navigationManager, f, ch, fromStart = false, from = "kick-off", replaceTop = swap, forceMatch = true)
         }
 
         companion object {
             private const val TICK_MS = 20_000L
+            private const val KEY_GUARD_MS = 400L
         }
     }
 
@@ -191,8 +214,9 @@ fun JellytipKickoffCard(
     val c by kickoff.card.collectAsState()
     val card = c ?: return
     LaunchedEffect(card.due.key) {
-        delay(KickoffPolicy.SHOW_MS)
-        kickoff.dismiss(card)
+        // Measured from when it went up: a card set while the app was hidden goes at once
+        delay((card.shownAtMs + KickoffPolicy.SHOW_MS - System.currentTimeMillis()).coerceAtLeast(0))
+        kickoff.dismiss(card.due.key)
     }
     val f = card.due.fixture
     val pal = remember(card.home, card.away) { matchPalette(IptvMatch(f.companionId, f.league, f.leagueKey, card.home, card.away, f.kickoff, null, f.status, false, null)) }

@@ -101,7 +101,8 @@ fun CatchUpChoiceCard(
     joining: String,
     canKickOff: Boolean,
     cursor: Int,
-    secondsLeft: Long,
+    /** Read here only, so the countdown recomposes just this card. */
+    secondsLeft: () -> Long,
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
@@ -136,7 +137,7 @@ fun CatchUpChoiceCard(
                     }
                 }
             }
-            BodyText("Goes to Live in $secondsLeft s", 18.sp, Broadcast.Secondary, maxLines = 1)
+            BodyText("Goes to Live in ${secondsLeft()} s", 18.sp, Broadcast.Secondary, maxLines = 1)
         }
     }
 }

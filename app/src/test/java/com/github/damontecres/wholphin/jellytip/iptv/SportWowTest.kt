@@ -56,22 +56,21 @@ class SportWowTest {
 
     @Test
     fun breakModeOpensAndCloses() {
-        val R = BreakModePolicy.Reason
-        assertEquals(R.BREAK, BreakModePolicy.autoOpen(true, false, false, GameKind.BREAK, "HT", null, null, 0, false))
+        assertEquals(BreakModePolicy.Reason.BREAK, BreakModePolicy.autoOpen(true, false, false, GameKind.BREAK, "HT", null, null, 0, false))
         // closed by hand during this break: stays closed for this break, opens for the next
         assertNull(BreakModePolicy.autoOpen(true, false, false, GameKind.BREAK, "HT", "HT", 0, 1, false))
-        assertEquals(R.BREAK, BreakModePolicy.autoOpen(true, false, false, GameKind.BREAK, "FT2", "HT", 0, 1, false))
+        assertEquals(BreakModePolicy.Reason.BREAK, BreakModePolicy.autoOpen(true, false, false, GameKind.BREAK, "FT2", "HT", 0, 1, false))
         assertNull(BreakModePolicy.autoOpen(false, false, false, GameKind.BREAK, "HT", null, null, 0, false))
         assertNull(BreakModePolicy.autoOpen(true, true, false, GameKind.BREAK, "HT", null, null, 0, false))
-        assertEquals(R.MOMENT, BreakModePolicy.autoOpen(true, false, false, GameKind.LIVE, null, null, null, 0, true))
+        assertEquals(BreakModePolicy.Reason.MOMENT, BreakModePolicy.autoOpen(true, false, false, GameKind.LIVE, null, null, null, 0, true))
         assertNull(BreakModePolicy.autoOpen(true, false, false, GameKind.BLOWOUT, null, null, null, 0, true))
         assertNull(BreakModePolicy.autoOpen(true, false, false, GameKind.TIGHT, null, null, 10_000, 60_000, true))
-        assertFalse(BreakModePolicy.autoClose(R.USER, 0, 99_999, GameKind.LIVE, false, false))
-        assertTrue(BreakModePolicy.autoClose(R.MOMENT, 0, 6_000, GameKind.LIVE, false, false))
-        assertFalse(BreakModePolicy.autoClose(R.MOMENT, 0, 5_000, GameKind.LIVE, false, false))
-        assertFalse(BreakModePolicy.autoClose(R.BREAK, 0, 99_999, GameKind.BREAK, false, false))
-        assertTrue(BreakModePolicy.autoClose(R.BREAK, 0, 1, GameKind.LIVE, false, false))
-        assertFalse(BreakModePolicy.autoClose(R.BREAK, 0, 1, GameKind.LIVE, true, false))
+        assertFalse(BreakModePolicy.autoClose(BreakModePolicy.Reason.USER, 0, 99_999, GameKind.LIVE, false, false))
+        assertTrue(BreakModePolicy.autoClose(BreakModePolicy.Reason.MOMENT, 0, 6_000, GameKind.LIVE, false, false))
+        assertFalse(BreakModePolicy.autoClose(BreakModePolicy.Reason.MOMENT, 0, 5_000, GameKind.LIVE, false, false))
+        assertFalse(BreakModePolicy.autoClose(BreakModePolicy.Reason.BREAK, 0, 99_999, GameKind.BREAK, false, false))
+        assertTrue(BreakModePolicy.autoClose(BreakModePolicy.Reason.BREAK, 0, 1, GameKind.LIVE, false, false))
+        assertFalse(BreakModePolicy.autoClose(BreakModePolicy.Reason.BREAK, 0, 1, GameKind.LIVE, true, false))
     }
 
     @Test
