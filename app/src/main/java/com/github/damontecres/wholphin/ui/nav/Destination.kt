@@ -226,6 +226,22 @@ sealed class Destination(
     @Serializable
     data object JellytipMyChannels : Destination(false)
 
+    // ---- t5n (21-Nov): Ask (plain-language discovery, web #/ask) + Journeys (web #/journeys) ----
+
+    /** Jellytip: Ask, "something funny under 90 minutes" -> chips -> library picks ("Not sure? Ask" on Search). */
+    @Serializable
+    data object JellytipAsk : Destination(false)
+
+    /** Jellytip: Journeys, short ordered film paths (franchise, director, Letterboxd list) ("Start a journey" on Collections). */
+    @Serializable
+    data object JellytipJourneys : Destination(false)
+
+    /** Jellytip: one journey ("f:<tmdbId>", "d:<personId>", "l:<slug>"): films in order, watched ticks, Play next. */
+    @Serializable
+    data class JellytipJourney(
+        val id: String,
+    ) : Destination(false)
+
     // ---- end t5n ----
 
     /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
