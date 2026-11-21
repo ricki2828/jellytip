@@ -98,8 +98,14 @@ object LiveHero {
 
     fun peekColours(f: FxItem): Pair<String?, String?>? = colours[f.companionId]
 
+    private val misses = ConcurrentHashMap<String, Long>()
+    private const val MISS_TTL_MS = 10 * 60_000L
+
     suspend fun colours(f: FxItem): Pair<String?, String?> {
         colours[f.companionId]?.let { return it }
+        // No match record (404 / no IPTV / a recent miss): neutral, no request
+        if (MatchHidden.hides(f.companionId)) return null to null
+        misses[f.companionId]?.let { at -> if (System.currentTimeMillis() - at < MISS_TTL_MS) return null to null }
         val got =
             try {
                 gate.withPermit { fetchMatch(f.companionId)?.second?.match?.let { it.home?.color to it.away?.color } }
@@ -109,7 +115,7 @@ object LiveHero {
                 null
             }
         val v = got ?: (null to null)
-        if (got != null) colours[f.companionId] = v
+        if (got != null) colours[f.companionId] = v else misses[f.companionId] = System.currentTimeMillis()
         return v
     }
 
@@ -245,6 +251,8 @@ fun LiveMatchHero(
                 buttons.forEachIndexed { i, (label, action) ->
                     val first = i == 0
                     val last = i == buttons.lastIndex
+                    // Keyed by label: cycling to a game with fewer buttons keeps the focused button's node (and focus)
+                    androidx.compose.runtime.key(label) {
                     Button(
                         onClick = action,
                         modifier =
@@ -264,6 +272,7 @@ fun LiveMatchHero(
                                     }
                                 }.onFocusChangedCompat(onFocused),
                     ) { Text(label, fontFamily = JellytipFontFamily, fontSize = 16.sp) }
+                    }
                 }
             }
             if (count > 1) {
@@ -365,6 +374,11 @@ fun rememberHomeLiveHero(viewModel: JellytipGameCentreViewModel = androidx.hilt.
     val picks by produceState<List<FxItem>?>(null) {
         while (true) {
             val r = viewModel.service.fixtures(maxAgeMs = 60_000)
+            if (r?.first == 404 || r?.first == 403) {
+                // No fixtures route / no Live TV for this person: no hero, no more polling this visit
+                value = emptyList()
+                return@produceState
+            }
             val muted = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.sportMuted
             val items = r?.second?.items?.filterNot { muted?.mutes(it.league, it.sport) == true }
             // Unreachable / no IPTV: no hero (keep the last answer while it is only a blip)

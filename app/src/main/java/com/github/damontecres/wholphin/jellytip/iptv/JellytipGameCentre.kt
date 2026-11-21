@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,9 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -41,7 +38,6 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -232,8 +228,20 @@ fun JellytipGameCentrePage(
                             LiveMatchHero(
                                 f = h,
                                 now = now,
-                                onWatch = best?.takeIf { h.status == "in" }?.let { ch -> { viewModel.lastFid = null; viewModel.watch(h, ch, false) } },
-                                onFromStart = fromStart?.let { ch -> { viewModel.lastFid = null; viewModel.watch(h, ch, true) } },
+                                onWatch =
+                                    best?.takeIf { h.status == "in" }?.let { ch ->
+                                        {
+                                            viewModel.lastFid = null
+                                            viewModel.watch(h, ch, false)
+                                        }
+                                    },
+                                onFromStart =
+                                    fromStart?.let { ch ->
+                                        {
+                                            viewModel.lastFid = null
+                                            viewModel.watch(h, ch, true)
+                                        }
+                                    },
                                 onMore = { menu = h },
                                 focusRequester = heroFocus,
                                 index = heroIndex,

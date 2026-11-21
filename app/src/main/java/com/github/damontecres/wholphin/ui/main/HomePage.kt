@@ -2,6 +2,7 @@ package com.github.damontecres.wholphin.ui.main
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -522,31 +522,6 @@ fun HomePageContent(
             reminders = remindersNow
         }
     }
-    // Live match hero: a late answer is taken unless it moves the focused row; re-checked on every focus move. On the
-    // hero itself (or before anything has focus) it always updates.
-    LaunchedEffect(liveHeroNow, focusedKey) {
-        if (liveHeroNow == liveHero) return@LaunchedEffect
-        val key = currentFocusedKey
-        val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHeroNow)
-        val onHero = key == "live-hero" && !liveHeroNow.isNullOrEmpty()
-        // Focus on the top row: the hero arrives above it and takes focus (hero always first)
-        val atTop = key != null && entries.indexOfFirst { it.key == key } <= 0
-        val arriving = liveHero.isNullOrEmpty() && !liveHeroNow.isNullOrEmpty()
-        val moves = currentHasFocus && key != null && !onHero && !(atTop && arriving) && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
-        if (moves) {
-            JellytipTrace.layout("deferred live hero: would move focused $key")
-        } else {
-            liveHero = liveHeroNow
-            if (arriving && (atTop || !currentHasFocus) && takeFocus) {
-                withFrameNanos { }
-                withFrameNanos { }
-                listState.scrollToItem(0)
-                specialRequesters.getOrPut("live-hero") { FocusRequester() }.tryRequestFocus()
-                JellytipTrace.focus("home: live hero arrived, focus on it")
-            }
-        }
-    }
     // Re-checked on every focus move too: a fresh answer deferred because it would move the focused row is taken as soon
     // as focus is somewhere it doesn't move (before, it waited for the next fetch, so Home could keep a stale copy all day)
     LaunchedEffect(liveSpecials, liveServerRows, focusedKey) {
@@ -694,6 +669,39 @@ fun HomePageContent(
     // Jellytip: no library row to land on (only server rows/specials, or the Watchlist with only IPTV favourites in
     // extraRows): focus the first row of any kind once nothing is still loading
     val anyRowFocus = remember { FocusRequester() }
+    // Live match hero: a late answer is taken unless it moves the focused row; re-checked on every focus move. On the
+    // hero itself (or before anything has focus) it always updates.
+    LaunchedEffect(liveHeroNow, focusedKey) {
+        if (liveHeroNow == liveHero) return@LaunchedEffect
+        val key = currentFocusedKey
+        val candidate =
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHeroNow)
+        val onHero = key == "live-hero" && !liveHeroNow.isNullOrEmpty()
+        // Focus on the top row: the hero arrives above it and takes focus (hero always first)
+        val atTop = key != null && entries.indexOfFirst { it.key == key } <= 0
+        val arriving = liveHero.isNullOrEmpty() && !liveHeroNow.isNullOrEmpty()
+        // A hero that leaves (game over) always goes: rows keep their place by key; focus on it moves to the first row
+        val leaving = !liveHero.isNullOrEmpty() && liveHeroNow.isNullOrEmpty()
+        val moves = currentHasFocus && key != null && !onHero && !leaving && !(atTop && arriving) && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        if (moves) {
+            JellytipTrace.layout("deferred live hero: would move focused $key")
+        } else {
+            val heroHadFocus = leaving && key == "live-hero"
+            liveHero = liveHeroNow
+            if (heroHadFocus) {
+                withFrameNanos { }
+                anyRowFocus.tryRequestFocus()
+            }
+            // Never out of the nav rail: only at the top of Home, or before Home's first focus landed
+            if (arriving && ((atTop && currentHasFocus) || !firstFocused) && takeFocus) {
+                withFrameNanos { }
+                withFrameNanos { }
+                listState.scrollToItem(0)
+                specialRequesters.getOrPut("live-hero") { FocusRequester() }.tryRequestFocus()
+                JellytipTrace.focus("home: live hero arrived, focus on it")
+            }
+        }
+    }
     if (takeFocus) {
         LaunchedEffect(homeRows, entries.size, extraRows != null) {
             if (firstFocused) return@LaunchedEffect
