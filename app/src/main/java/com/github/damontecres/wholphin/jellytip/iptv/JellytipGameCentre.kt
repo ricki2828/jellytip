@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,9 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -41,7 +38,6 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -191,11 +187,26 @@ fun JellytipGameCentrePage(
     // Focus on arrival and after "Show all": the tile last opened (or the one before Show all), else the first tile.
     // Polls don't move focus.
     var focusTick by remember { mutableStateOf(0) }
-    LaunchedEffect(groups.isNotEmpty(), focusTick) {
-        if (groups.isEmpty()) return@LaunchedEffect
+    // 2A match hero (Decisions brief b_c84a78e16a54): the game that matters most, Watch focused on arrival
+    val heroPicks = remember(items, now) { LiveHero.gameCentrePicks(items, now) }
+    var heroIndex by remember { mutableStateOf(0) }
+    val hero = heroPicks.getOrNull(heroIndex.coerceIn(0, (heroPicks.size - 1).coerceAtLeast(0)))
+    val heroFocus = remember { FocusRequester() }
+    LaunchedEffect(groups.isNotEmpty(), focusTick, hero != null) {
+        if (groups.isEmpty() && hero == null) return@LaunchedEffect
         withFrameNanos { }
         val want = viewModel.lastFid
-        if (want != null && groups.any { g -> g.items.any { it.fid == want } }) restore.tryRequestFocus() else first.tryRequestFocus()
+        when {
+            want != null && groups.any { g -> g.items.any { it.fid == want } } -> restore.tryRequestFocus()
+            hero != null && heroFocus.tryRequestFocus() -> {}
+            else -> first.tryRequestFocus()
+        }
+    }
+    // OK on a live tile starts it on the best channel (2A); anything else opens the menu
+    val open: (FxItem) -> Unit = { f ->
+        viewModel.lastFid = f.fid
+        val best = SportFixtures.pickChannel(f, now).channel
+        if (f.status == "in" && best != null) viewModel.watch(f, best, false) else menu = f
     }
     Column(modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -210,18 +221,49 @@ fun JellytipGameCentrePage(
             groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             else ->
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+                    hero?.let { h ->
+                        item(key = "hero") {
+                            val best = SportFixtures.pickChannel(h, now).channel
+                            val fromStart = best?.takeIf { h.status != "pre" && it.startOver && it.start != null && it.stop != null && !it.dormant }
+                            LiveMatchHero(
+                                f = h,
+                                now = now,
+                                onWatch =
+                                    best?.takeIf { h.status == "in" }?.let { ch ->
+                                        {
+                                            viewModel.lastFid = null
+                                            viewModel.watch(h, ch, false)
+                                        }
+                                    },
+                                onFromStart =
+                                    fromStart?.let { ch ->
+                                        {
+                                            viewModel.lastFid = null
+                                            viewModel.watch(h, ch, true)
+                                        }
+                                    },
+                                onMore = { menu = h },
+                                focusRequester = heroFocus,
+                                index = heroIndex,
+                                count = heroPicks.size,
+                                onCycle = { heroIndex = it },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
                     groups.forEachIndexed { gi, g ->
                         item(key = g.id) {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ItemRowTitle("${g.label} (${g.items.size})")
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
                                     items(g.items, key = { it.fid }) { f ->
-                                        FixtureTile(
+                                        ColourEdgeFixtureTile(
                                             f,
                                             now,
                                             reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
                                             revealed = f.fid in revealed.value,
-                                            onClick = {
+                                            onClick = { open(f) },
+                                            onLongClick = {
                                                 viewModel.lastFid = f.fid
                                                 menu = f
                                             },
@@ -313,76 +355,6 @@ private fun tileColors() =
     )
 
 @Composable
-private fun FixtureTile(
-    f: FxItem,
-    now: Long,
-    reminder: Boolean,
-    revealed: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
-        colors = tileColors(),
-        border = tileBorder(),
-        modifier = modifier.size(340.dp, 112.dp),
-    ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                when (f.status) {
-                    "in" -> KindPill("live")
-                    "pre" -> {}
-                    else -> Text("FT", color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 9.sp)
-                }
-                if (f.favourite) Text("★", color = Color(0xFFFFC72C), fontSize = 12.sp)
-                Text(
-                    listOfNotNull(f.league, f.stage).joinToString(" · "),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (reminder) Text("🔔", fontSize = 10.sp)
-                if (f.recordingId != null) Text("●", color = JellytipPalette.Jelly, fontSize = 10.sp)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Crest(f.homeLogo, f.homeShort ?: f.home)
-                val score = f.score?.takeIf { revealed }
-                Text(
-                    if (f.away.isBlank()) f.home else "${f.homeShort ?: f.home}  ${score?.let { "${it.home} – ${it.away}" } ?: "v"}  ${f.awayShort ?: f.away}",
-                    fontFamily = JellytipFontFamily,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (f.away.isNotBlank()) Crest(f.awayLogo, f.awayShort ?: f.away)
-            }
-            Text(SportFixtures.note(f, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun Crest(
-    logo: String?,
-    name: String,
-) {
-    var failed by remember(logo) { mutableStateOf(false) }
-    Box(Modifier.size(32.dp).background(Color.White.copy(alpha = 0.06f), CircleShape), contentAlignment = Alignment.Center) {
-        if (logo != null && !failed) {
-            AsyncImage(model = logo, contentDescription = null, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(26.dp))
-        } else {
-            Text(initials(name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
 private fun MoreTile(
     m: SportFixtures.MoreRow,
     modifier: Modifier = Modifier,
@@ -394,7 +366,7 @@ private fun MoreTile(
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
         colors = tileColors(),
         border = tileBorder(),
-        modifier = modifier.size(220.dp, 112.dp),
+        modifier = modifier.size(220.dp, 140.dp),
     ) {
         Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center) {
             Text("+${m.hidden} more ${m.league} today", fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 2)
