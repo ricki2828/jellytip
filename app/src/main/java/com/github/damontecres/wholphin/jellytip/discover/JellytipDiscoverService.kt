@@ -173,6 +173,7 @@ class JellytipDiscoverService
     @Inject
     constructor(
         private val api: JellytipApi,
+        private val inbox: com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService,
     ) {
         private val _rows = MutableStateFlow<List<DiscoverRow>>(emptyList())
         val rows: StateFlow<List<DiscoverRow>> = _rows.asStateFlow()
@@ -221,8 +222,7 @@ class JellytipDiscoverService
             if (outcome.status == "added" || outcome.status == "exists") refreshStatuses(listOf(title))
             // Inbox: its arrival (library or IPTV) becomes news
             if (outcome.status == "added") {
-                com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService.shared
-                    ?.recordRequest(title.tmdbId, title.mediaType, title.title)
+                inbox.recordRequest(title.tmdbId, title.mediaType, title.title)
             }
             return outcome
         }

@@ -145,6 +145,8 @@ object Inbox {
                 fresh += Event("iptv:$key", "iptv", o.title, requested = o.requested, link = "iptv:${o.iptvId}", at = now)
             }
         }
+        // Titles this look didn't report (a request recorded while it ran) keep their entry
+        if (obs.titles != null) s.titles.forEach { (k, v) -> titles.putIfAbsent(k, v) }
         val eps = LinkedHashMap(s.eps)
         obs.eps?.forEach { (sid, list) ->
             val prev = s.eps[sid]

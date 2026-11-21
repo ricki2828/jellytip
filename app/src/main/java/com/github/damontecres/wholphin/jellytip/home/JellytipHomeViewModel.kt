@@ -44,6 +44,8 @@ class JellytipHomeViewModel
         /** Server-built rows (rows=1 manifest) and franchise pages. */
         val rows: com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService,
         val navigationManager: NavigationManager,
+        /** Built with Home so the inbox exists from the start (its look runs on Home; "Get it" records into it). */
+        val inbox: com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService,
     ) : ViewModel() {
         val settings: Flow<JellytipSettings> =
             preferences.data

@@ -171,11 +171,16 @@ class JellytipInboxService
             if (reqs.isEmpty()) return emptyMap<String, Inbox.ObservedTitle>() to emptyList()
             val userId = serverRepository.currentUser?.id ?: return null
             val inLib = HashMap<String, String>()
+            // At most 10 library searches a look (least recently checked first); ones already in the library are done
+            val libTodo =
+                reqs
+                    .filter { (s.titles[it.key] ?: 0) < 2 }
+                    .sortedBy { s.checked["lib:${it.key}"] ?: 0L }
+                    .take(MAX_LIBRARY_PER_LOOK)
             try {
                 // The SDK has no provider-id filter: search each request still short of the library by title, match TMDB.
                 // Requests already in the library stay there (one search each until then).
-                for (r in reqs) {
-                    if ((s.titles[r.key] ?: 0) >= 2) continue
+                for (r in libTodo) {
                     api.itemsApi
                         .getItems(
                             GetItemsRequest(
@@ -200,7 +205,7 @@ class JellytipInboxService
                 return null // leave the titles snapshot as it was
             }
             // IPTV for open requests under 60 days old, at most 10 a look (least recently checked first)
-            val open = reqs.filter { it.key !in inLib && now - it.at <= REQUEST_IPTV_AGE_MS }
+            val open = reqs.filter { it.key !in inLib && (s.titles[it.key] ?: 0) < 2 && now - it.at <= REQUEST_IPTV_AGE_MS }
             val pick = oldestFirst(open.map { it.key }, s.checked).take(MAX_IPTV_PER_LOOK).toSet()
             val companion = JellytipApi.shared
             val allowed =
@@ -233,7 +238,7 @@ class JellytipInboxService
                         else -> Inbox.ObservedTitle(0, r.title, requested = true, partial = true) // keeps a known rank
                     }
             }
-            return titles to hits.keys.toList()
+            return titles to (hits.keys + libTodo.map { "lib:${it.key}" }).toList()
         }
 
         companion object {
@@ -244,6 +249,7 @@ class JellytipInboxService
 
             const val MAX_SERIES_PER_LOOK = 40
             const val MAX_IPTV_PER_LOOK = 10
+            const val MAX_LIBRARY_PER_LOOK = 10
             const val PARALLEL = 4
             const val REQUEST_IPTV_AGE_MS = 60L * 24 * 3600_000
         }

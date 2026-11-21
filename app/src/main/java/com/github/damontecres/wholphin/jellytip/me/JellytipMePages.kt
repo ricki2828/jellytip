@@ -202,7 +202,9 @@ fun JellytipMePage(
                 item {
                     // Inbox (web de17f4d4): new episodes of your shows, requests that arrived
                     val inbox = com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService.shared
-                    val store by (inbox?.store ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
+                    // current() loads this person's store, so the count shows before any look
+                    val flow = remember(inbox) { inbox?.also { it.current() }?.store ?: kotlinx.coroutines.flow.MutableStateFlow(null) }
+                    val store by flow.collectAsState()
                     val unread = store?.let { com.github.damontecres.wholphin.jellytip.inbox.Inbox.unread(it, System.currentTimeMillis()) } ?: 0
                     SettingRow("Inbox", if (unread > 0) "$unread new" else "Nothing new") {
                         viewModel.navigationManager.navigateTo(Destination.JellytipInbox, "personalise: inbox")
