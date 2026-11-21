@@ -189,7 +189,7 @@ fun JellytipServerRowView(
     Box(modifier.fillMaxWidth()) {
         when {
             row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
                     ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(SpecialTokens.POSTER_H + 16.dp))
                 }
@@ -201,7 +201,7 @@ fun JellytipServerRowView(
 
             // Franchise rows may carry IPTV parts too (`iptvItems` + `order`): before the mixed/IPTV row branches
             row.isFranchise && row.itemIds.isNotEmpty() && loaded == null -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
                     ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(options.heightDp.dp + 16.dp))
                 }
@@ -232,7 +232,7 @@ fun JellytipServerRowView(
 
             loaded == null -> {
                 // Same height as the loaded row: the title plus a card's height and the row padding
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
                     ItemRowTitle(row.title, subtitle = row.reason)
                     Spacer(Modifier.height(options.heightDp.dp + 16.dp))
                 }
@@ -884,7 +884,7 @@ private fun MixedRow(
     if (tiles.isEmpty()) return
     val h = options.heightDp.dp
     val w = if (row.isPoster) h * 2f / 3f else h * 16f / 9f
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = focusModifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason)), modifier = focusModifier) {
         ItemRowTitle(row.title, subtitle = row.reason)
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),

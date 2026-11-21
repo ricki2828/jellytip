@@ -234,7 +234,7 @@ fun IptvVodRow(
 ) {
     val h = heightDp.dp
     val w = if (poster) h * 2f / 3f else h * 16f / 9f
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(subtitle)), modifier = modifier) {
         ItemRowTitle(title, subtitle = subtitle)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

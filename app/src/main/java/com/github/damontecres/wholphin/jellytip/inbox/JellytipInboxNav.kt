@@ -47,15 +47,17 @@ fun inboxBadge(unread: Int): String? =
 @Composable
 fun NavigationDrawerScope.JellytipInboxNavItem(
     service: JellytipInboxService,
+    /** The signed-in person: the badge only counts their store, so a profile switch never shows the last person's count. */
+    userId: String,
     selected: Boolean,
     drawerOpen: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
-    LaunchedEffect(service) { service.current() } // load the saved store before the first look
+    LaunchedEffect(service, userId) { service.current() } // load this person's saved store before the first look
     val store by service.store.collectAsState()
-    val unread = store?.let { Inbox.unread(it, System.currentTimeMillis()) } ?: 0
+    val unread = store?.takeIf { it.userId == userId }?.let { Inbox.unread(it, System.currentTimeMillis()) } ?: 0
     val badge = inboxBadge(unread)
     val focused by interactionSource.collectIsFocusedAsState()
     val color = navItemColor(selected, focused, drawerOpen)

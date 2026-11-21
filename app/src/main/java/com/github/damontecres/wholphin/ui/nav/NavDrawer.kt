@@ -543,6 +543,7 @@ fun NavDrawer(
                             val interactionSource = remember { MutableInteractionSource() }
                             JellytipInboxNavItem(
                                 service = viewModel.inbox,
+                                userId = user.id.toString(),
                                 selected = selectedIndex == INBOX_INDEX,
                                 drawerOpen = isOpen,
                                 interactionSource = interactionSource,

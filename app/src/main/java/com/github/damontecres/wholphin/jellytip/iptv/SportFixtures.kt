@@ -76,6 +76,11 @@ data class FxItem(
     val reminderId: String?,
     val recordingId: String?,
     val matchId: String?,
+    /** Raw team colours ('#rrggbb'), absent when unknown and for events; see [FixtureColours]. */
+    val homeColor: String? = null,
+    val homeAltColor: String? = null,
+    val awayColor: String? = null,
+    val awayAltColor: String? = null,
 ) {
     val title get() = if (away.isNotBlank()) "$home v $away" else home
 
@@ -137,7 +142,12 @@ object SportFixtures {
         val id: String?,
         val logo: String?,
         val short: String?,
+        val color: String? = null,
+        val altColor: String? = null,
     )
+
+    /** '#rrggbb' (any case) -> lower-case; anything else = null. */
+    internal fun hexColour(v: String?): String? = v?.trim()?.lowercase()?.takeIf { Regex("^#[0-9a-f]{6}$").matches(it) }
 
     private fun side(
         o: JSONObject,
@@ -149,7 +159,7 @@ object SportFixtures {
         if (v is String) return v.trim().takeIf { it.isNotEmpty() }?.let { Side(it, null, null, null) }
         val x = v as? JSONObject ?: return null
         val name = x.s("name") ?: x.s("short") ?: return null
-        return Side(name, x.id("teamId"), x.s("logo")?.let(img), x.s("short"))
+        return Side(name, x.id("teamId"), x.s("logo")?.let(img), x.s("short"), hexColour(x.s("color")), hexColour(x.s("altColor")))
     }
 
     private fun channel(
@@ -229,6 +239,10 @@ object SportFixtures {
                     reminderId = e.id("reminderId"),
                     recordingId = e.id("recordingId"),
                     matchId = e.id("matchId"),
+                    homeColor = home.color,
+                    homeAltColor = home.altColor,
+                    awayColor = away.color,
+                    awayAltColor = away.altColor,
                 )
         }
         val more =
