@@ -302,6 +302,17 @@ class JellytipIptvService
             return runCatching { IptvDirectLogic.parse(body) }.getOrNull()
         }
 
+        /** Hide / show one channel of an own provider (PUT …/groups/{cat}/channels {hide:{sid:bool}}): the http code, 0 = no answer. */
+        suspend fun hideChannel(
+            t: HideTarget,
+            hide: Boolean,
+        ): Int =
+            api.userCall(
+                "v1/iptv/providers/${enc(t.pid)}/groups/${enc(t.cat)}/channels",
+                JSONObject().put("hide", JSONObject().put(t.sid, hide)).toString(),
+                method = "PUT",
+            )?.first ?: 0
+
         /** POST v1/iptv/providers/{pid} {"direct": on}: the http code (0 = no answer). */
         suspend fun setDirect(
             pid: String,
