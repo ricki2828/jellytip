@@ -350,7 +350,8 @@ private fun JourneyView(
             }
     }
     if (entries != null) {
-        val firstPlayable = entries.indexOfFirst { it.playable }
+        // Nothing playable: the first (inert) row still takes focus, so it never falls to the drawer
+        val firstPlayable = entries.indexOfFirst { it.playable }.coerceAtLeast(0)
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp),

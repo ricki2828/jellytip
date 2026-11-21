@@ -265,7 +265,15 @@ fun JellytipCollectionsHubPage(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
-            HubChip("Start a journey  ›", selected = false, onClick = {
+            val journeyChip = remember { FocusRequester() }
+            // Nothing else to focus while loading / failed / empty: land here rather than on the drawer
+            LaunchedEffect(all.isNullOrEmpty()) {
+                if (all.isNullOrEmpty()) {
+                    withFrameNanos { }
+                    journeyChip.tryRequestFocus()
+                }
+            }
+            HubChip("Start a journey  ›", selected = false, modifier = Modifier.focusRequester(journeyChip), onClick = {
                 JellytipTrailerControl.stop()
                 viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
             })
