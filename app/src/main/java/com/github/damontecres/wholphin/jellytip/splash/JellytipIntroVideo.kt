@@ -126,7 +126,7 @@ private fun IntroVideo(
             }
         }
     // Smoothness trace (21-Nov, 'super jerky'): decoder, ExoPlayer's dropped frames, and missed UI vsyncs. The intro
-    // draws through a TextureView, so a missed app frame is a dropped video frame ExoPlayer never counts.
+    // draws through a TextureView, so a missed app frame can drop a video frame ExoPlayer never counts (upper bound).
     val refreshHz = remember { (context.getSystemService(Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager)?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate ?: 0f }
     val gaps = remember { FrameGapCounter(FrameGapCounter.periodNs(refreshHz)) }
     val traced = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
@@ -135,7 +135,7 @@ private fun IntroVideo(
             val c = player.videoDecoderCounters?.also { it.ensureUpdated() }
             JellytipTrace.log(
                 "intro",
-                "frames $why pos=${player.currentPosition}ms display=${refreshHz}Hz " +
+                "frames $why state=${player.playbackState} pos=${player.currentPosition}ms display=${refreshHz}Hz " +
                     (c?.let { "rendered=${it.renderedOutputBufferCount} dropped=${it.droppedBufferCount} maxRun=${it.maxConsecutiveDroppedBufferCount} skipped=${it.skippedOutputBufferCount} toKeyframe=${it.droppedToKeyframeCount}" } ?: "counters=none") +
                     " " + gaps.summary(),
             )
@@ -166,7 +166,7 @@ private fun IntroVideo(
     }
     LaunchedEffect(player) {
         // Only while the video moves: the cold start's own jank before the first frame isn't the intro's
-        while (isActive) withFrameNanos { if (player.isPlaying) gaps.onFrame(it) }
+        while (isActive) withFrameNanos { if (player.isPlaying) gaps.onFrame(it) else gaps.pause() }
     }
     DisposableEffect(player) {
         val listener =
@@ -189,7 +189,7 @@ private fun IntroVideo(
             }
         player.addListener(listener)
         onDispose {
-            traceSummary("skipped") // a key press ended the intro early (no-op after STATE_ENDED); before release nulls the counters
+            traceSummary("disposed") // key skip (state=3) or failure/timeout (1/2); no-op after STATE_ENDED; before release nulls the counters
             player.removeListener(listener)
             player.release()
         }

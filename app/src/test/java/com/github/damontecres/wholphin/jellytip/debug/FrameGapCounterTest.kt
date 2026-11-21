@@ -37,6 +37,18 @@ class FrameGapCounterTest {
     }
 
     @Test
+    fun pauseIsNotCountedAsMissed() {
+        val c = FrameGapCounter(p)
+        c.onFrame(0)
+        c.onFrame(p)
+        c.pause() // rebuffer
+        c.onFrame(90 * p)
+        c.onFrame(91 * p)
+        assertEquals(0L, c.missed)
+        assertEquals(4, c.frames)
+    }
+
+    @Test
     fun periodFallsBackTo60Hz() {
         assertEquals(16_666_667L, FrameGapCounter.periodNs(0f))
         assertEquals(20_000_000L, FrameGapCounter.periodNs(50f))
