@@ -1,16 +1,41 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.tv.material3.ListItem
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
-import com.github.damontecres.wholphin.ui.components.DialogItem
+import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 import java.util.Locale
 
 /*
@@ -138,35 +163,94 @@ object IptvTracks {
     }
 }
 
-/** The menu: audio tracks, then Off and the subtitle tracks; ✓ marks what plays now. */
+/** The menu's two columns (Audio | Subtitles): plain data, so the layout rules are testable. */
+object IptvTrackColumns {
+    data class Entry(
+        val label: String,
+        val selected: Boolean,
+        /** The track to pick; null = subtitles Off (when [off]) or a note that can't be picked. */
+        val option: IptvTracks.Option? = null,
+        val off: Boolean = false,
+    ) {
+        val pickable get() = option != null || off
+    }
+
+    fun audio(audio: List<IptvTracks.Option>): List<Entry> =
+        if (audio.isEmpty()) listOf(Entry("This stream has one track", selected = true)) else audio.map { Entry(it.label, it.selected, it) }
+
+    /** Off first, then the stream's subtitle tracks (a note when it has none). */
+    fun subtitles(subs: List<IptvTracks.Option>): List<Entry> =
+        listOf(Entry("Off", selected = subs.none { it.selected }, off = true)) +
+            if (subs.isEmpty()) listOf(Entry("No subtitles in this stream", selected = false)) else subs.map { Entry(it.label, it.selected, it) }
+
+    /** Where focus starts in a column: the current pick, else the first pickable row. */
+    fun focusIndex(column: List<Entry>): Int = column.indexOfFirst { it.selected && it.pickable }.takeIf { it >= 0 } ?: column.indexOfFirst { it.pickable }.coerceAtLeast(0)
+}
+
+/** The menu: Audio | Subtitles side by side (Left / Right between them), ✓ marks what plays now, Off tops Subtitles. */
 @Composable
 fun IptvTrackMenu(
     player: Player,
     onDismiss: () -> Unit,
 ) {
     val tracks = remember(player) { player.currentTracks }
-    val audio = remember(tracks) { IptvTracks.options(tracks, C.TRACK_TYPE_AUDIO) }
-    val subs = remember(tracks) { IptvTracks.options(tracks, C.TRACK_TYPE_TEXT) }
+    val audio = remember(tracks) { IptvTrackColumns.audio(IptvTracks.options(tracks, C.TRACK_TYPE_AUDIO)) }
+    val subs = remember(tracks) { IptvTrackColumns.subtitles(IptvTracks.options(tracks, C.TRACK_TYPE_TEXT)) }
     var shown by remember { mutableStateOf(true) }
-    val subsOff = subs.none { it.selected }
-    val items =
-        buildList {
-            if (audio.isEmpty()) add(DialogItem("Audio: this stream has one track", dismissOnClick = true) {})
-            audio.forEach { o -> add(DialogItem("Audio: ${o.label}" + if (o.selected) "  ✓" else "", dismissOnClick = true) { IptvTracks.pick(player, o) }) }
-            add(DialogItem("Subtitles: Off" + if (subsOff) "  ✓" else "", dismissOnClick = true) { IptvTracks.subtitlesOff(player) })
-            if (subs.isEmpty()) add(DialogItem("No subtitles in this stream", dismissOnClick = true) {})
-            subs.forEach { o -> add(DialogItem("Subtitles: ${o.label}" + if (o.selected) "  ✓" else "", dismissOnClick = true) { IptvTracks.pick(player, o) }) }
+    if (!shown) return
+    val dismiss = {
+        shown = false
+        onDismiss()
+    }
+    val start = remember { FocusRequester() }
+    LaunchedEffect(Unit) { start.tryRequestFocus() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = dismiss) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            modifier =
+                Modifier
+                    .width(720.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF151515))
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+        ) {
+            TrackColumn("Audio", audio, Modifier.weight(1f), focus = start) { e ->
+                e.option?.let { IptvTracks.pick(player, it) }
+                dismiss()
+            }
+            TrackColumn("Subtitles", subs, Modifier.weight(1f), focus = null) { e ->
+                if (e.off) IptvTracks.subtitlesOff(player) else e.option?.let { IptvTracks.pick(player, it) }
+                dismiss()
+            }
         }
-    if (shown) {
-        com.github.damontecres.wholphin.jellytip.JellytipDialog(
-            showDialog = true,
-            title = "Audio & subtitles",
-            dialogItems = items,
-            onDismissRequest = {
-                shown = false
-                onDismiss()
-            },
-            dismissOnClick = true,
-        )
+    }
+}
+
+@Composable
+private fun TrackColumn(
+    title: String,
+    entries: List<IptvTrackColumns.Entry>,
+    modifier: Modifier,
+    focus: FocusRequester?,
+    onPick: (IptvTrackColumns.Entry) -> Unit,
+) {
+    val first = remember(entries) { IptvTrackColumns.focusIndex(entries) }
+    Column(modifier.focusGroup().focusRestorer(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
+        LazyColumn(Modifier.heightIn(max = 360.dp)) {
+            itemsIndexed(entries) { i, e ->
+                ListItem(
+                    selected = e.selected,
+                    enabled = e.pickable,
+                    onClick = {
+                        JellytipNavGate.markOk()
+                        onPick(e)
+                    },
+                    headlineContent = { Text(e.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = { if (e.selected) Text("✓") },
+                    modifier = if (i == first && focus != null) Modifier.focusRequester(focus) else Modifier,
+                )
+            }
+        }
     }
 }
