@@ -31,7 +31,7 @@ test("parser: contract fields, drops unusable, tolerates ms and ISO kickoff", ()
   assert.equal(a.matchId, "77");
   assert.equal(r.items[1].kickoff, Date.parse("2026-11-08T01:00:00Z") / 1000);
   assert.equal(fxTitle(r.items[2]), "Monaco Grand Prix");
-  assert.deepEqual(parseFixtureList(null), { items: [], degraded: false });
+  assert.deepEqual(parseFixtureList(null), { items: [], degraded: false, listId: null, ranker: null });
   assert.deepEqual(parseFixtureList({ items: "x" }).items, []);
 });
 

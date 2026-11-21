@@ -305,6 +305,8 @@ export interface FxItem {
   homeAlt?: string | null;
   awayColor?: string | null;
   awayAlt?: string | null;
+  /** The fixtures answer this item came from (its `listId`), for sport events; null when the server sends none. */
+  listId?: string | null;
   /** League/sport artwork for the hero and tile backgrounds (a companion art path or a CDN URL); null = the plain look. */
   art?: string | null;
   /** The league's badge, shown small beside its name. */
@@ -398,8 +400,9 @@ export function todayMore(more: FxMore[], now: number, expanded: ReadonlySet<str
 }
 
 /** Answer -> fixture items. Items without an id, sides, kickoff or status are dropped; duplicate ids keep the first. */
-export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boolean } {
+export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boolean; listId: string | null; ranker: string | null } {
   const r = o(raw);
+  const listId = idOf(r?.listId); // sport events: which ranked list a tile came from
   const list = Array.isArray(raw) ? raw : Array.isArray(r?.items) ? (r!.items as unknown[]) : [];
   const out: FxItem[] = [];
   const seen = new Set<string>();
@@ -448,9 +451,10 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       awayColor: away.color,
       awayAlt: away.altColor,
       ...fxArt(e.art, e.badge),
+      listId,
     });
   }
-  return { items: out, degraded: r?.degraded === true };
+  return { items: out, degraded: r?.degraded === true, listId, ranker: s(r?.ranker) };
 }
 
 /**
