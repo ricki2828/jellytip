@@ -1674,27 +1674,20 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
     const t = window.setInterval(() => void refreshFixtures(), 60_000);
     return () => window.clearInterval(t);
   }, [ftOn]);
-  const ft = useRef<{ sawLive: boolean; sent: boolean; timer?: number; fresh: boolean }>({ sawLive: false, sent: false, fresh: false });
-  // a cached list may still say "in" for a game that ended before this screen opened: wait for one asked for now
-  const [ftFresh, setFtFresh] = useState(false);
+  // a cached list may still say "in" for a game that ended before this screen opened: only a list that arrived after it counts
+  // (`base` = the list held at open; a failed refresh leaves it in place, and the fixtures backoff brings the next one)
+  const ft = useRef<{ sawLive: boolean; sent: boolean; timer?: number; base?: unknown; armed: boolean }>({ sawLive: false, sent: false, armed: false });
   useEffect(() => {
-    if (!ftOn || ft.current.fresh) return;
-    let alive = true;
-    void refreshFixtures(true)
-      .catch(() => undefined)
-      .then(() => {
-        if (!alive) return;
-        ft.current.fresh = true;
-        setFtFresh(true);
-      });
-    return () => {
-      alive = false;
-    };
+    if (!ftOn || ft.current.armed) return;
+    ft.current.armed = true;
+    ft.current.base = fixturesNow();
+    void refreshFixtures(true).catch(() => undefined);
   }, [ftOn]);
   useEffect(() => () => window.clearTimeout(ft.current.timer), []);
   useEffect(() => {
     const id = extras?.matchId;
-    const f = ftOn && ftFresh && id ? (fixturesNow() ?? fxData)?.items.find((x) => x.matchId === id || x.fid === id) : undefined;
+    const list = fixturesNow();
+    const f = ftOn && ft.current.armed && id && list && list !== ft.current.base ? list.items.find((x) => x.matchId === id || x.fid === id) : undefined;
     if (!f || ft.current.sent) return;
     // only a game seen live in this session: opening a channel on the post-match show says nothing
     if (f.status !== "post") {
@@ -1710,7 +1703,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       void NativePlayer.notice({ text: fullTimeNotice(f, next, now, !!sp?.spoilers), spoiler: true }).catch(() => undefined);
     }, openDelay() * 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fxData, ftOn, ftFresh, extras?.matchId]);
+  }, [fxData, ftOn, extras?.matchId]);
 
   const exit = useCallback(() => back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv"), [target.recording, channelId]);
 

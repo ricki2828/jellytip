@@ -784,8 +784,9 @@ public class PlayerActivity extends AppCompatActivity {
         tracks.clearOverridesOfType(C.TRACK_TYPE_TEXT);
         tracks.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false);
         player.setTrackSelectionParameters(tracks.build());
-        // another channel / link: its audio may differ, so the foreign-audio subtitle rule looks again
+        // another channel / link: its audio may differ, so the foreign-audio subtitle rule looks again (and its subtitles go)
         langDone = audioLangs.length == 0 || alwaysSubsOn;
+        if (!alwaysSubsOn) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setPreferredTextLanguages().build());
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
         if (type != null) b.setMimeType(type);
