@@ -167,6 +167,8 @@ public class PlayerActivity extends AppCompatActivity {
     private String[] subLangs = new String[0];
     private boolean langDone;
     private boolean alwaysSubsOn;
+    /** ExoPlayer's own subtitle languages before ours (from the phone's caption settings), put back after a channel switch. */
+    private String[] defaultTextLangs = new String[0];
     /** Same-link reloads after a stall with no other channel, for the whole session (a flapping stream gives up). */
     private int stallReloads;
     private static final int MAX_STALL_RELOADS = 10;
@@ -786,7 +788,7 @@ public class PlayerActivity extends AppCompatActivity {
         player.setTrackSelectionParameters(tracks.build());
         // another channel / link: its audio may differ, so the foreign-audio subtitle rule looks again (and its subtitles go)
         langDone = audioLangs.length == 0 || alwaysSubsOn;
-        if (!alwaysSubsOn) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setPreferredTextLanguages().build());
+        if (!alwaysSubsOn) player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setPreferredTextLanguages(defaultTextLangs).build());
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
         String type = mimeFor(url, mime);
         if (type != null) b.setMimeType(type);
@@ -1307,6 +1309,7 @@ public class PlayerActivity extends AppCompatActivity {
         String[] s = in.getStringArrayExtra(EXTRA_SUB_LANGS);
         audioLangs = a == null ? new String[0] : a;
         subLangs = s == null || s.length == 0 ? audioLangs : s;
+        defaultTextLangs = player.getTrackSelectionParameters().preferredTextLanguages.toArray(new String[0]);
         TrackSelectionParameters.Builder b = player.getTrackSelectionParameters().buildUpon();
         if (audioLangs.length > 0) b.setPreferredAudioLanguages(audioLangs);
         alwaysSubsOn = in.getBooleanExtra(EXTRA_ALWAYS_SUBS, false);
