@@ -23,9 +23,9 @@ export interface RowBox {
   bottom: number;
 }
 
-/** The first row still on screen below [viewTop] (the fixed header's bottom): what the person was looking at. */
-export function pickAnchor(rows: RowBox[], viewTop = 0): { key: string; top: number } | null {
-  const r = rows.find((x) => x.bottom > viewTop + 8);
+/** The first row still on screen between [viewTop] and [viewBottom]: what the person was looking at. */
+export function pickAnchor(rows: RowBox[], viewTop = 0, viewBottom = Infinity): { key: string; top: number } | null {
+  const r = rows.find((x) => x.bottom > viewTop + 8 && x.top < viewBottom);
   return r ? { key: r.key, top: Math.round(r.top) } : null;
 }
 

@@ -74,6 +74,14 @@ function HomeHero({ focused, focusedIptv, slides, engaged }: { focused: Item | n
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }
 
+/**
+ * Continue Watching's sources, kept for 10 min so Back to Home doesn't re-ask and re-order the row (Ricki 21-Nov: Back must land
+ * where he was). Dropped on a session change, when playback stops or saves progress ("jellytip-watched"), and by a manual reload.
+ */
+const CONTINUE_TTL_MS = 10 * 60_000;
+let continueMemo: { uid: string; at: number; v: ContinueSrc } | null = null;
+if (typeof window !== "undefined") for (const ev of ["jellytip-session", "jellytip-watched"]) window.addEventListener(ev, () => (continueMemo = null));
+
 interface ContinueSrc {
   resume: Item[];
   next: Item[];
@@ -146,10 +154,14 @@ export function Home() {
       if (!alive || uid() !== me || seq.current !== mine) return; // late: someone else signed in, or a newer fetch landed
       setSrc(v);
     };
-    const libP = Promise.all([resumeItems().catch(() => [] as Item[]), nextUp().catch(() => [] as Item[])]).then(([resume, next]) => {
-      apply({ resume, next, ic: [], inx: [] });
-      return { resume, next };
-    });
+    const memo = reload === 0 && continueMemo && continueMemo.uid === me && Date.now() - continueMemo.at < CONTINUE_TTL_MS ? continueMemo.v : null;
+    if (memo) apply(memo);
+    const libP = memo
+      ? Promise.resolve(null)
+      : Promise.all([resumeItems().catch(() => [] as Item[]), nextUp().catch(() => [] as Item[])]).then(([resume, next]) => {
+          apply({ resume, next, ic: [], inx: [] });
+          return { resume, next };
+        });
     setRowsFailed(false);
     const rowsP = serverRows("home")
       .then((r) => {
@@ -173,9 +185,12 @@ export function Home() {
         setRowsReady(true);
         if (r) rememberRowTitles(r);
       });
-    void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([{ resume, next }]) => {
+    void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([lib]) => {
+      if (!lib) return; // from the memo: the IPTV part is in it
+      const { resume, next } = lib;
       const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
       if (ic.length || inx.length) apply({ resume, next, ic, inx });
+      if (alive && uid() === me && seq.current === mine) continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic, inx } };
     });
     getSpecials("home")
       .then((s) => alive && setSpecials(s))
@@ -218,6 +233,7 @@ export function Home() {
         return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
           if (uid() !== me || seq.current !== mine || !resume || !next) return;
           setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
+          continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic: ic ?? [], inx: inx ?? [] } };
           // Hides for items the server no longer returns, or has since seen played again, are done with
           const present = buildContinue(resume, next, ic ?? [], inx ?? []);
           setHidden((h) => pruneHidden(h, present));

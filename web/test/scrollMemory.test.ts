@@ -40,3 +40,11 @@ test("nav entry keeps rows and anchor through save, and returns them on Back", (
   nav.save(1500, "Heat", { rows: { "Row 4": 448 }, anchor: { key: "Row 4", top: -355 } });
   assert.deepEqual(nav.onHashChange(), { depth: 0, scrollY: 1500, focus: "Heat", rows: { "Row 4": 448 }, anchor: { key: "Row 4", top: -355 } });
 });
+
+test("anchor: a card below the screen is never the anchor (cards are listed before rows)", () => {
+  const boxes = [
+    { key: "fid:g9", top: 2000, bottom: 2200 }, // a card far below
+    { key: "Row 1", top: 100, bottom: 400 },
+  ];
+  assert.deepEqual(pickAnchor(boxes, 0, 844), { key: "Row 1", top: 100 });
+});

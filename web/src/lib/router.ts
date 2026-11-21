@@ -21,6 +21,12 @@ export function useRoute(): Route {
 // ---------- history: depth per entry, scroll + focus restored on Back (rules in lib/navStack.ts) ----------
 
 const nav = createNavStack(history);
+// The app puts the place back itself (restore below): the browser's / WebView's own attempt on popstate would only flash first
+try {
+  history.scrollRestoration = "manual";
+} catch {
+  /* very old WebView: fine */
+}
 nav.init();
 let restoring = false;
 let lastFocus: string | undefined;
@@ -32,7 +38,7 @@ export const isRootRoute = (name: string) => ROOTS.has(name);
 
 /** The screen's horizontal rows (each `.row-scroll`) keyed by their row title (lib/scrollMemory.rowKeys). */
 function screenRows(): { key: string; el: HTMLElement; box: HTMLElement }[] {
-  const els = [...document.querySelectorAll<HTMLElement>("main .row-scroll, #root .row-scroll")].filter((e, i, a) => a.indexOf(e) === i && e.offsetParent);
+  const els = [...document.querySelectorAll<HTMLElement>("#root .row-scroll")].filter((e) => e.offsetParent);
   const boxes = els.map((e) => (e.closest(".row, section") as HTMLElement | null) ?? e);
   const keys = rowKeys(boxes.map((b) => b.querySelector(".row-title")?.textContent ?? b.getAttribute("aria-label")));
   return els.map((el, i) => ({ key: keys[i], el, box: boxes[i] }));
@@ -52,9 +58,12 @@ function saveNow() {
   if (restoring) return;
   try {
     const rows = screenRows();
+    // A row still waiting to be put back (it hasn't loaded yet) keeps its place in the entry instead of being forgotten
+    const moved = rowScrolls(rows.map((r) => ({ key: r.key, left: r.el.scrollLeft })));
+    const all = pendingRows.size ? { ...Object.fromEntries(pendingRows), ...moved } : moved;
     nav.save(Math.round(window.scrollY), lastFocus, {
-      rows: rowScrolls(rows.map((r) => ({ key: r.key, left: r.el.scrollLeft }))),
-      anchor: pickAnchor(anchorCandidates(rows).map((r) => ({ key: r.key, ...rect(r.box) }))) ?? undefined,
+      rows: all,
+      anchor: pickAnchor(anchorCandidates(rows).map((r) => ({ key: r.key, ...rect(r.box) })), 0, window.innerHeight) ?? undefined,
     });
   } catch {
     // Safari throttles history.replaceState; the next save gets it
@@ -82,58 +91,86 @@ const SETTLED_TICKS = 5;
 let restoreGen = 0;
 let stopRestore: (() => void) | null = null;
 
+/** Row offsets from the entry being restored that aren't applied yet (their row hasn't loaded or isn't wide enough). */
+const pendingRows = new Map<string, number>();
+const ROW_CLAMP_AFTER_MS = 1500;
+
 /**
- * Back to an entry: put each moved row back to its scrollLeft once it is wide enough, and the page so the anchor row sits where
- * it was (else the raw scrollY once the page is tall enough). Rows fill in late and rows above can change height, so it keeps
- * correcting until the layout has been still for half a second, up to 5 s, and stops at once when the person scrolls or presses.
+ * Back to an entry. Vertical: scroll so the anchor (row or card) sits where it was, else the raw scrollY; when the page is still
+ * too short, scroll as far as it goes (that also pulls in a lazily loaded next page). It keeps correcting until the layout has been
+ * still for half a second, up to 5 s, and the person's first touch, wheel, key or press ends it. Horizontal: each moved row gets
+ * its scrollLeft once it is wide enough; that goes on after a touch (unless the touch is on that row) and, for a row that never
+ * gets wide enough, ends at its widest after 1.5 s. Offsets not applied by the end stay in the entry (pendingRows).
  */
 function restore(e: NavEntry) {
   restoring = true;
   const gen = ++restoreGen;
   const t0 = Date.now();
-  const rowsLeft = new Map(Object.entries(e.rows ?? {}));
+  pendingRows.clear();
+  for (const [k, v] of Object.entries(e.rows ?? {})) pendingRows.set(k, v);
   let still = 0;
+  let vertical = true;
   let focused = false;
+  const STOP = ["touchstart", "wheel", "keydown", "pointerdown"] as const;
+  const endVertical = () => {
+    vertical = false;
+    restoring = false; // saves resume (and carry pendingRows)
+  };
   const done = () => {
     for (const ev of STOP) window.removeEventListener(ev, cancel, true);
     if (gen !== restoreGen) return;
     restoreGen++;
-    restoring = false;
+    endVertical();
     stopRestore = null;
   };
-  const cancel = () => done();
-  const STOP = ["touchstart", "wheel", "keydown", "pointerdown"] as const;
+  const cancel = (ev: Event) => {
+    // the person took over: stop moving the page; a touch on a row that is still waiting cancels that row too
+    const row = (ev.target as HTMLElement | null)?.closest?.(".row-scroll");
+    if (row) {
+      const hit = screenRows().find((r) => r.el === row);
+      if (hit) pendingRows.delete(hit.key);
+    }
+    endVertical();
+  };
   for (const ev of STOP) window.addEventListener(ev, cancel, { capture: true, passive: true });
   stopRestore = done;
   const tick = () => {
     if (gen !== restoreGen) return;
     let moved = false;
     const rows = screenRows();
-    for (const [key, left] of rowsLeft) {
+    const age = Date.now() - t0;
+    for (const [key, left] of pendingRows) {
       const r = rows.find((x) => x.key === key);
-      if (r && r.el.scrollWidth - r.el.clientWidth >= left - 1) {
-        r.el.scrollLeft = left;
-        rowsLeft.delete(key);
+      if (!r) continue;
+      const max = r.el.scrollWidth - r.el.clientWidth;
+      if (max >= left - 1 || (age > ROW_CLAMP_AFTER_MS && max > 0)) {
+        r.el.scrollLeft = Math.min(left, max);
+        pendingRows.delete(key);
         moved = true;
       }
     }
-    const a = e.anchor ? anchorCandidates(rows).find((x) => x.key === e.anchor!.key) : undefined;
-    const target = a ? anchorScroll(window.scrollY, a.box.getBoundingClientRect().top, e.anchor!.top) : e.scrollY ?? 0;
-    const room = document.documentElement.scrollHeight - window.innerHeight;
-    if (Math.abs(window.scrollY - target) > 2 && room + 2 >= target) {
-      window.scrollTo(0, target);
-      moved = true;
-    }
-    if (!focused && e.focus && !matchMedia("(hover: none) and (pointer: coarse)").matches) {
-      const el = [...document.querySelectorAll<HTMLElement>("[data-nav]")].find((n) => (n.getAttribute("aria-label") ?? n.textContent?.trim().slice(0, 80)) === e.focus);
-      if (el) {
-        el.focus({ preventScroll: true });
-        focused = true;
+    let placed = true;
+    if (vertical) {
+      const a = e.anchor ? anchorCandidates(rows).find((x) => x.key === e.anchor!.key) : undefined;
+      const target = a ? anchorScroll(window.scrollY, a.box.getBoundingClientRect().top, e.anchor!.top) : e.scrollY ?? 0;
+      const room = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const want = Math.min(target, room); // too short yet: as far as it goes, so a lazy next page loads in
+      if (Math.abs(window.scrollY - want) > 2) {
+        window.scrollTo(0, want);
+        moved = true;
+      }
+      placed = room + 2 >= target && Math.abs(window.scrollY - target) <= 2;
+      if (!focused && e.focus && !matchMedia("(hover: none) and (pointer: coarse)").matches) {
+        const el = [...document.querySelectorAll<HTMLElement>("[data-nav]")].find((n) => (n.getAttribute("aria-label") ?? n.textContent?.trim().slice(0, 80)) === e.focus);
+        if (el) {
+          el.focus({ preventScroll: true });
+          focused = true;
+        }
       }
     }
-    const placed = !rowsLeft.size && Math.abs(window.scrollY - target) <= 2;
     still = placed && !moved ? still + 1 : 0;
-    if (still >= SETTLED_TICKS || Date.now() - t0 > RESTORE_MS) return done();
+    if (vertical && still >= SETTLED_TICKS) endVertical();
+    if ((!vertical && !pendingRows.size) || age > RESTORE_MS) return done();
     window.setTimeout(tick, 100);
   };
   window.setTimeout(tick, 0);
@@ -142,6 +179,7 @@ function restore(e: NavEntry) {
 // Registered before any useRoute listener, so screens render knowing whether this was a Back
 window.addEventListener("hashchange", () => {
   stopRestore?.(); // a restore still settling belongs to the screen being left
+  pendingRows.clear();
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = null;
   const e = nav.onHashChange();

@@ -115,6 +115,7 @@ export const reportProgress = (r: Report) =>
 
 /** keepalive so a stop sent while the tab closes still lands. */
 export function reportStopped(r: Report) {
+  window.dispatchEvent(new Event("jellytip-watched")); // Home's Continue Watching memo is stale now
   const p = jf("/Sessions/Playing/Stopped", { method: "POST", json: body(r), keepalive: true }).catch(() => undefined);
   if (r.plan.hls) {
     jf(`/Videos/ActiveEncodings${qs({ DeviceId: deviceId(), PlaySessionId: r.plan.playSessionId })}`, { method: "DELETE", keepalive: true }).catch(
