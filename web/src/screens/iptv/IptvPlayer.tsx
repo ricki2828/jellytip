@@ -4,6 +4,8 @@
 // down at once (the provider may allow a single connection).
 import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
+import { CatchUpChoice, CatchUpRecap } from "../../components/Companion/CatchUp";
+import { cards as catchCards_, DECIDE_WAIT_MS, joiningLine, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
 import { alternateEpisode } from "../../lib/streamCopies";
@@ -911,6 +913,39 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const liveNow = isLive && !extras?.replay;
   const { view: feed, source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: panelAvail && liveNow && state.kind === "playing", liveNow, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
   const blowout = feed.kind === "blowout";
+  // ---- Catch me up (TV port): joining 10+ min late offers From kick-off / Catch me up / Live, with the score held back until one is
+  // picked. "deciding" = waiting for the first live answer (score held); "done" = normal live info.
+  const [catchPhase, setCatchPhase] = useState<"deciding" | "choice" | "recap" | "done">(() =>
+    isLive && !extras?.replay && extras?.matchId && extras.startsAt && Date.now() / 1000 - extras.startsAt >= LATE_SEC && !wasOffered(extras.matchId) && shouldShowLiveExtras(extras) ? "deciding" : "done",
+  );
+  const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  const catchHold = catchPhase !== "done";
+  const catchHoldRef = useRef(catchHold);
+  catchHoldRef.current = catchHold;
+  useEffect(() => {
+    if (catchPhase !== "deciding" || state.kind !== "playing" || !extras?.matchId) return;
+    const id = extras.matchId;
+    let settled = false;
+    const decide = () => {
+      if (settled) return;
+      settled = true;
+      const raw = feedSource.get().raw;
+      const ask = offer({ live: liveNow, replay: revealClock.replay, status: raw?.status ?? null, startsAt: extras.startsAt, nowSec: Date.now() / 1000 });
+      if (ask) markOffered(id);
+      setCatchPhase(ask ? "choice" : "done");
+    };
+    const off = feedSource.subscribe(() => {
+      const st = feedSource.get().state;
+      if (st !== "loading") decide();
+    });
+    if (feedSource.get().state !== "loading") decide();
+    const t = window.setTimeout(decide, DECIDE_WAIT_MS);
+    return () => {
+      off();
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catchPhase, state.kind, extras?.matchId]);
   const openedBy = useRef<{ by: OpenReason; at: number; touched: boolean }>({ by: "user", at: 0, touched: false });
   const userClosedAt = useRef<number | null>(null);
   const openPanel = useCallback((by: OpenReason) => {
@@ -931,6 +966,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const lastMomentN = useRef(0);
   useEffect(() => {
     if (!panelAvail || !liveNow) return;
+    if (catchHoldRef.current) {
+      lastMomentN.current = feed.momentN; // what happened while held is the recap's, not a reason to open now
+      return;
+    }
     const fresh = feed.momentN > lastMomentN.current; // a feed reset drops the count to 0: that is not news
     lastMomentN.current = feed.momentN;
     const by = autoOpenDecision({ nowMs: Date.now(), replay: revealClock.replay, panelOpen: drawer, userClosedAtMs: userClosedAt.current, kind: feed.kind, freshMoment: fresh });
@@ -1301,12 +1340,36 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         onLoadedData={() => { lastNet.current = Date.now(); }}
         onError={(e) => linkRef.current && !tsRef.current && !hlsRef.current && void onLinkError(linkRef.current, `MediaError ${e.currentTarget.error?.code ?? ""} ${e.currentTarget.error?.message ?? ""}`.trim())}
       />
-      {panelAvail && liveNow && !revealClock.replay && <Scorebug view={feed} panelOpen={drawer} />}
+      {panelAvail && liveNow && !revealClock.replay && !catchHold && <Scorebug view={feed} panelOpen={drawer} />}
       </div>
       {panelAvail && extras?.matchId && (
         <Panel open={drawer} mode={panelMode} matchId={extras.matchId} liveNow={liveNow} spoilers={spoilers} reveal={revealClock.reveal} source={liveNow ? feedSource : undefined} onClose={closeDrawer} onTouch={touchPanel} hint={guessedMatch ? "Match detected from the guide" : undefined} />
       )}
       </div>
+      {catchPhase === "choice" && state.kind === "playing" && extras?.startsAt && (
+        <CatchUpChoice
+          fixture={feedSource.get().fixture}
+          joining={joiningLine(extras.startsAt, Date.now() / 1000)}
+          canKickOff={!!kickoff}
+          onChoose={(c) => {
+            if (c === "kickoff" && kickoff) {
+              setCatchPhase("done");
+              go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+            } else if (c === "catchup") {
+              const f = feedSource.get();
+              const cs = catchCards_(f.shown, f.raw, revealClock.reveal);
+              if (cs.length) {
+                setCatchCards(cs);
+                setCatchPhase("recap");
+              } else {
+                flashNote("Nothing to catch up on yet");
+                setCatchPhase("done");
+              }
+            } else setCatchPhase("done");
+          }}
+        />
+      )}
+      {catchPhase === "recap" && catchCards.length > 0 && <CatchUpRecap fixture={feedSource.get().fixture} cards={catchCards} onDone={() => setCatchPhase("done")} />}
       {state.kind === "loading" && <div className="spinner" role="status" aria-label={retrying ? "Retrying stream" : "Connecting to stream"} />}
       {state.kind === "full" && state.blocker && <StreamBusy blocker={state.blocker} onRetry={() => start(true)} onClose={exit} />}
       {(state.kind === "error" || (state.kind === "full" && !state.blocker)) && (
@@ -1383,8 +1446,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       {flash && <div className="seek-flash iptv-flash">{flash}</div>}
       {liveBuf.holding && <div className="iptv-buffer-toast" role="status" aria-live="polite">Buffering…</div>}
       {liveBuf.toast && !liveBuf.holding && <div className="iptv-buffer-toast" role="status" aria-live="polite">{liveBuf.toast}</div>}
-      {live_ok && <FantasyAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing"} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
-      {live_ok && <FlipAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing"} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
+      {live_ok && <FantasyAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && state.kind === "playing" && !catchHold} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} />}
+      {live_ok && <FlipAlerts matchId={guessedMatch ? undefined : extras?.matchId} active={isLive && !extras?.replay && flipAlerts && state.kind === "playing" && !catchHold} drawerOpen={drawer} reveal={revealClock.reveal} replay={revealClock.replay} blowout={blowout} source={liveNow ? feedSource : undefined} />}
       {preNow && startsAt && cardOn && state.kind !== "error" && (
         <div className="pregame-card" role="status">
           <span>{preGameCard(startsAt, nowS)}</span>
