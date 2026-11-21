@@ -235,10 +235,11 @@ fun LiveMatchHero(
             .background(if (art == null) wash else androidx.compose.ui.graphics.SolidColor(Broadcast.Base)),
     ) {
         if (art != null) FixtureArtHeroBackdrop(art, f.fid, pal.home, pal.away, motion, onFailed = { artFailed = true })
-        // Layout visibility (not composition): a poll's new list or a hero scrolled away doesn't count. Keyed so cycling
-        // to another game starts a fresh 1 s; an empty, unfocusable layer, so the buttons keep their focus.
+        // Layout visibility (not composition): a hero scrolled away doesn't count. Keyed on the game only, so cycling to
+        // another game starts a fresh 1 s but a poll's new list id doesn't (a fresh node that is already visible would fire
+        // again); an empty, unfocusable layer, so the buttons keep their focus.
         if (onShown != null) {
-            androidx.compose.runtime.key(f.fid, f.listId) {
+            androidx.compose.runtime.key(f.fid) {
                 Box(
                     Modifier.matchParentSize().onVisibilityChanged(minDurationMs = SportEventRules.SHOWN_MIN_MS, minFractionVisible = 0.5f) {
                         if (it) onShown()
