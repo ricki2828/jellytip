@@ -148,6 +148,8 @@
 /* top10: outlined numerals behind posters */
 .top10 .row-scroll {
   gap: 0;
+  /* room for the numerals' 14 px below the posters (the row clips vertically, see .row-scroll) */
+  padding-bottom: 18px;
 }
 .top10-entry {
   position: relative;
@@ -406,6 +408,7 @@
   .closet-picks-list {
     flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     margin: 0 calc(-1 * var(--pad));
     padding: 4px var(--pad);
