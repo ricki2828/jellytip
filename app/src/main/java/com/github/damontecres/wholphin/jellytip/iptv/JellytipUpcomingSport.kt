@@ -88,6 +88,14 @@ class JellytipUpcomingSportViewModel
         var recordResult by mutableStateOf<Pair<Boolean, String>?>(null)
             private set
 
+        /** A short result line in the overlay's result dialog (team reminders reuse it). */
+        fun showResult(
+            ok: Boolean,
+            text: String,
+        ) {
+            recordResult = ok to text
+        }
+
         fun dismissResult() {
             recordResult = null
         }
@@ -253,6 +261,8 @@ private fun UpcomingOverlay(
 ) {
     val remindersOn by viewModel.reminders.available.collectAsState()
     val reminderList by viewModel.reminders.items.collectAsState()
+    val teamAvailable by viewModel.teamReminders.available.collectAsState()
+    val teamItems by viewModel.teamReminders.items.collectAsState()
     val muteItems = rememberSportMuteItems(u.league, u.sportName)
     var showMatch by remember(u.key) { mutableStateOf(false) }
     val m = u.matchInfo
@@ -329,11 +339,19 @@ private fun UpcomingOverlay(
             matchInfoItem(u.matchInfo, dismissOnClick = false) { showMatch = true }?.let { add(it) }
             addAll(muteItems)
             // "Remind me for every <team> game" per side with a team id (web 8efc5458); hidden on a server without the route
-            if (viewModel.teamReminders.available.value != false) {
+            // Offered only once the list is known, so the label and the action agree
+            val knownTeams = teamItems
+            if (teamAvailable == true && knownTeams != null) {
                 TeamReminderLogic.offerSides(TeamReminderLogic.matchSides(u.matchInfo, u.sportName)).forEach { side ->
-                    val on = viewModel.teamReminders.reminderFor(side.teamId) != null
+                    val on = knownTeams.any { it.teamId == side.teamId }
                     val name = TeamReminderLogic.shortTeam(side)
-                    add(DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) { viewModel.teamReminders.toggle(side) })
+                    add(
+                        DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) {
+                            viewModel.teamReminders.toggle(side, turnOn = !on) { err ->
+                                viewModel.showResult(err == null, err ?: if (on) "Stopped reminders for every $name game" else "Reminding for every $name game")
+                            }
+                        },
+                    )
                 }
             }
             // Remind me (plan "Remind me"): hidden until the server answers the reminders route (404 = never)

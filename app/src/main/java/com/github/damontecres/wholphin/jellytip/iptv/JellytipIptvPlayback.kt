@@ -456,6 +456,8 @@ class JellytipIptvPlayback
                 JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
                 _note.value = "Converting…"
                 pendingRemuxSeekMs = ms
+                // The old conversion must not report READY (and clear the pending seek) while the new one starts
+                stopPlayer()
                 launchOpen(t, "remux seek", remux = true, seekMs = ms)
             } else {
                 player?.seekTo(ms)
@@ -695,7 +697,7 @@ class JellytipIptvPlayback
                                     dispatch(StreamRecovery.Event.Fatal(refusal))
                                 }
                                 // Network / server / provider hiccup: retry with backoff (the old screen said "Failed")
-                                else -> dispatch(StreamRecovery.Event.Fault(0, canHls(target)))
+                                else -> dispatch(StreamRecovery.Event.Fault(posSec(), canHls(target)))
                             }
                         }
                     }

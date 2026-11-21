@@ -154,6 +154,9 @@ object JellytipFantasy {
     /** null = nothing linked, not loaded, or no route. */
     val live: StateFlow<FantasyLive?> = _live
 
+    /** The server answered 200 (an account is linked), even with no matchups this week; null = not known. */
+    val linked = MutableStateFlow<Boolean?>(null)
+
     @Volatile
     private var lastLoad = 0L
 
@@ -169,7 +172,10 @@ object JellytipFantasy {
             val api = JellytipApi.shared ?: return@launch
             val (code, body) = api.userCall("v1/fantasy/live", timeoutMs = 8_000) ?: return@launch
             when (code) {
-                200 -> _live.value = runCatching { FantasyParse.live(body) }.getOrNull()?.takeIf { it.leagues.isNotEmpty() }
+                200 -> {
+                    linked.value = true
+                    _live.value = runCatching { FantasyParse.live(body) }.getOrNull()?.takeIf { it.leagues.isNotEmpty() }
+                }
                 404 -> {
                     missingUntil = System.currentTimeMillis() + RETRY_AFTER_MS
                     _live.value = null
@@ -307,7 +313,9 @@ fun FantasyPill(count: Int) {
 
 /** Fantasy ↔ game (web lib/fantasyGame.ts): a starter's last scoring play and the matchup summary. Pure; FantasyGameTest. */
 object FantasyGameLogic {
-    private fun norm(s: String?) = (s ?: "").lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+    private val NON_ALNUM = Regex("[^a-z0-9]+")
+
+    private fun norm(s: String?) = (s ?: "").lowercase().replace(NON_ALNUM, " ").trim()
 
     /**
      * The starter's newest scoring event: by player id when both carry one, else by full name plus team (when the event

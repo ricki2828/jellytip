@@ -214,7 +214,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
                 }
                 items(tl, key = { "tr:${it.id}" }) { r ->
                     Row2(r.teamName + (r.league?.let { " · $it" } ?: ""), "OK to stop") {
-                        teamVm.teams.toggle(TeamSide(r.teamId, r.teamName, null, r.sport, r.league)) { err ->
+                        teamVm.teams.toggle(TeamSide(r.teamId, r.teamName, null, r.sport, r.league), turnOn = false) { err ->
                             message = err ?: "Stopped reminders for ${r.teamName}"
                             if (err == null) scope.launch {
                                 listState.scrollToItem(1)

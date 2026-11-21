@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,7 +58,7 @@ object FantasyWatch {
         items: List<FxItem>,
     ): FxItem? {
         if (s.gameState != "in" && s.gameState != "pre") return null
-        val live = items.filter { it.status == "in" || it.status == "pre" }
+        val live = items.filter { (it.status == "in" || it.status == "pre") && SportFixtures.pickChannel(it, nowSec()).channel != null }
         s.matchId?.let { id -> live.firstOrNull { it.fid == id || it.matchId == id }?.let { return it } }
         val team = s.nflTeam?.uppercase() ?: return null
         return live.firstOrNull { f ->
@@ -116,6 +117,7 @@ fun JellytipFantasyPage(
     viewModel: JellytipFantasyPageViewModel = hiltViewModel(),
 ) {
     val live by JellytipFantasy.live.collectAsState()
+    val linked by JellytipFantasy.linked.collectAsState()
     var fixtures by remember { mutableStateOf<List<FxItem>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val first = remember { FocusRequester() }
@@ -126,9 +128,9 @@ fun JellytipFantasyPage(
             delay(60_000)
         }
     }
-    val hasLeagues = live?.leagues?.isNotEmpty() == true
-    LaunchedEffect(hasLeagues) {
-        if (hasLeagues) {
+    val firstKey = live?.leagues?.firstNotNullOfOrNull { l -> l.starters.firstOrNull { it.side == "me" }?.let { "${l.id}:me" } ?: l.starters.firstOrNull()?.let { "${l.id}:${it.side}" } }
+    LaunchedEffect(firstKey) {
+        if (firstKey != null) {
             delay(80)
             first.tryRequestFocus()
         }
@@ -138,7 +140,7 @@ fun JellytipFantasyPage(
         val l0 = live
         if (l0 == null || l0.leagues.isEmpty()) {
             Text(
-                if (l0 == null) "Loading… (link your fantasy account on the web: Settings → Fantasy)" else "No fantasy matchups this week.",
+                if (linked == true || l0 != null) "No fantasy matchups this week." else "Loading… (link your fantasy account on the web: Settings → Fantasy)",
                 color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                 fontFamily = JellytipFontFamily,
                 fontSize = 14.sp,
@@ -158,7 +160,8 @@ fun JellytipFantasyPage(
                             fontSize = 16.sp,
                         )
                         FantasyGameLogic.summaryLine(l)?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp) }
-                        val recent = l0.events.filter { it.league == l.id || it.league == l.name }.sortedByDescending { IptvParse.isoSeconds(it.at) ?: 0L }.take(4)
+                        val nameUnique = l0.leagues.count { it.name == l.name } == 1
+                        val recent = l0.events.filter { it.league == l.id || (nameUnique && it.league == l.name) }.sortedByDescending { IptvParse.isoSeconds(it.at) ?: 0L }.take(4)
                         recent.forEach { e ->
                             Text(
                                 "${if (e.side == "opp") "Opponent · " else ""}${if (e.delta >= 0) "+" else ""}${pts(e.delta)} ${e.name}" + (e.reason?.let { " · $it" } ?: ""),
@@ -179,7 +182,7 @@ fun JellytipFantasyPage(
                     if (players.isEmpty()) {
                         item(key = "e:${l.id}:$side") { Text("No starters available yet.", color = JellytipPalette.Vanilla.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 12.sp) }
                     }
-                    items(players, key = { p -> "p:${l.id}:$side:${p.id ?: p.name}" }) { p ->
+                    itemsIndexed(players, key = { i, p -> "p:${l.id}:$side:$i:${p.id ?: p.name}" }) { i, p ->
                         val fx = FantasyWatch.fixtureFor(p, fixtures)
                         val watch: (() -> Unit)? =
                             fx?.let { f ->
@@ -191,7 +194,7 @@ fun JellytipFantasyPage(
                                     }
                                 }
                             }
-                        val isFirst = li == 0 && side == "me" && p === players.firstOrNull()
+                        val isFirst = i == 0 && firstKey == "${l.id}:$side"
                         PlayerRow(p, watch, if (isFirst) Modifier.focusRequester(first) else Modifier)
                     }
                 }
