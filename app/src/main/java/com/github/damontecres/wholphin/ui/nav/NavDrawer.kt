@@ -108,6 +108,8 @@ class NavDrawerViewModel
         val backdropService: BackdropService,
         private val musicService: MusicService,
         val jellytipApi: JellytipApi,
+        /** Jellytip lane B: built here so the rail's unread badge has a store from the first frame. */
+        val inbox: com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService,
     ) : ViewModel() {
         val serviceState = navDrawerService.state
 
@@ -540,6 +542,7 @@ fun NavDrawer(
                         item {
                             val interactionSource = remember { MutableInteractionSource() }
                             JellytipInboxNavItem(
+                                service = viewModel.inbox,
                                 selected = selectedIndex == INBOX_INDEX,
                                 drawerOpen = isOpen,
                                 interactionSource = interactionSource,

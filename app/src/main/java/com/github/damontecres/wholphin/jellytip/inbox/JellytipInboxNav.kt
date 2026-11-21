@@ -46,15 +46,15 @@ fun inboxBadge(unread: Int): String? =
  */
 @Composable
 fun NavigationDrawerScope.JellytipInboxNavItem(
+    service: JellytipInboxService,
     selected: Boolean,
     drawerOpen: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
-    val service = JellytipInboxService.shared
-    LaunchedEffect(service) { service?.current() } // load the saved store before the first look
-    val store = service?.store?.collectAsState()?.value
+    LaunchedEffect(service) { service.current() } // load the saved store before the first look
+    val store by service.store.collectAsState()
     val unread = store?.let { Inbox.unread(it, System.currentTimeMillis()) } ?: 0
     val badge = inboxBadge(unread)
     val focused by interactionSource.collectIsFocusedAsState()

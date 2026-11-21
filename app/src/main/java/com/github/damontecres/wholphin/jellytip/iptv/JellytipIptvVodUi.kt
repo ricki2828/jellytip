@@ -405,7 +405,10 @@ fun JellytipIptvDetailsPage(
                 url = trailerUrl,
                 sound = true,
                 httpClient = viewModel.httpClient,
-                onEnded = { trailerPlaying = false },
+                onEnded = {
+                    trailerPlaying = false
+                    autoDone = true // just watched it: no passive replay until focus leaves and comes back
+                },
             )
         }
         androidx.compose.animation.AnimatedVisibility(
