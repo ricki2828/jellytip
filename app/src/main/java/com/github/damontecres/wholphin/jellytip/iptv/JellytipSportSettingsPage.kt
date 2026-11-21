@@ -94,6 +94,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
     var message by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // First focus once the prefs are there (the list isn't drawn before)
     val loaded = prefs != null
     LaunchedEffect(loaded) {
@@ -132,6 +133,8 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
             }
             if (!ok && message == null) message = "Couldn't save $what"
             if (ok && removes) {
+                // "Add a team…" may be scrolled away (not composed): bring it back first, then focus it
+                listState.scrollToItem(1)
                 delay(50)
                 first.tryRequestFocus()
             }
@@ -159,7 +162,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
             return@Column
         }
         val s = p.sport
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
             item { Head("Your teams and leagues") }
             item { Row2("Add a team…", "OK to search", Modifier.focusRequester(first)) { search = true } }
             items(s.teams, key = { "t:$it" }) { n ->
