@@ -1153,9 +1153,15 @@
 .page-head {
   display: flex;
   align-items: center;
+  padding: 0 var(--pad); /* the title's own --pad margin is zeroed below: keep it in line with the rows and cards */
 }
 .page-head .page-title {
   margin: 0;
+}
+/* Hint lines placed straight on a Live page (or in a row) line up with the row titles and cards, not the window edge */
+.iptv-page > .iptv-hint,
+.iptv-page > .row > .iptv-hint {
+  padding: 0 var(--pad);
 }
 .livetv-sheet {
   position: relative;
