@@ -167,7 +167,9 @@ fun JellytipMePage(
     val message by viewModel.message
     var dialog by remember { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
+    val directVm: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDirectViewModel = hiltViewModel()
     LaunchedEffect(Unit) {
+        directVm.load()
         JellytipMe.loadFollows()
         first.tryRequestFocus()
     }
@@ -223,10 +225,8 @@ fun JellytipMePage(
                 }
                 item {
                     // Direct from provider (gap row 8): own providers only; hidden when there are none
-                    val directVm: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDirectViewModel = hiltViewModel()
                     val direct by directVm.prefs.collectAsState()
                     val directMsg by directVm.message.collectAsState()
-                    LaunchedEffect(Unit) { directVm.load() }
                     val list = direct.orEmpty()
                     if (list.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -237,7 +237,7 @@ fun JellytipMePage(
                                 ) { directVm.toggle(d) }
                             }
                             Text(
-                                directMsg ?: com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.NOTE,
+                                listOfNotNull(directMsg, com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.NOTE).joinToString("\n"),
                                 color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                                 fontFamily = JellytipFontFamily,
                                 fontSize = 12.sp,

@@ -73,17 +73,21 @@ class JellytipIptvDirectViewModel
             if (busy) return
             busy = true
             viewModelScope.launch {
-                val on = !p.direct
-                val code = service.setDirect(p.id, on)
-                JellytipTrace.log("iptv", "direct ${p.id} -> $on: $code")
-                _message.value =
+                try {
+                    val on = !p.direct
+                    val code = service.setDirect(p.id, on)
+                    JellytipTrace.log("iptv", "direct ${p.id} -> $on: $code")
                     if (code == 200) {
-                        if (on) "Direct on for ${p.name}, from the next stream." else "Direct off for ${p.name}, from the next stream."
+                        // Show the change even if the re-read below gets no answer
+                        _prefs.value = _prefs.value?.map { if (it.id == p.id) it.copy(direct = on) else it }
+                        _message.value = if (on) "Direct on for ${p.name}, from the next stream." else "Direct off for ${p.name}, from the next stream."
                     } else {
-                        "Couldn't change Direct (${if (code == 0) "no answer" else code})."
+                        _message.value = "Couldn't change Direct (${if (code == 0) "no answer" else code})."
                     }
-                service.directPrefs()?.let { _prefs.value = it }
-                busy = false
+                    service.directPrefs()?.let { _prefs.value = it }
+                } finally {
+                    busy = false
+                }
             }
         }
     }
