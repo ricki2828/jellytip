@@ -451,7 +451,7 @@ export function GameCentre() {
       return null;
     }
   });
-  const { data, unavailable } = useFixtures(!legacy);
+  const { data, unavailable, failing } = useFixtures(!legacy);
   const focusFid = useRoute().query.get("fid");
   useEffect(() => {
     if (legacy) return;
@@ -468,7 +468,14 @@ export function GameCentre() {
       <div className="page-head">
         <h1 className="page-title">Game Centre</h1>
       </div>
-      {data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} more={data.more} expanded={data.expanded} focusFid={focusFid} />}
+      {data === null && failing ? (
+        <p className="iptv-hint">
+          Couldn't load the games. Trying again…{" "}
+          <button className="btn small" data-nav onClick={() => void refreshFixtures(true)}>
+            Try now
+          </button>
+        </p>
+      ) : data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} more={data.more} expanded={data.expanded} focusFid={focusFid} />}
     </div>
   );
 }

@@ -1,9 +1,10 @@
 // Fixture-first sport list (GET v1/iptv/sport/fixtures; contract in lib/gameCentre.ts). One fetch shared by the screens
-// that use it, kept 30 s. A 404 (server without the route) or a failed first answer marks it unavailable for the session
-// so Game Centre falls back to the legacy upcoming path; "degraded" answers are shown as they are.
+// that use it, kept 30 s. Only a 404 (server without the route) marks it unavailable for the session, so Game Centre falls
+// back to the legacy upcoming path. A network error or any other status is a load failure: retried with backoff (5 s doubling
+// to 5 min), never remembered (fixturesOutcome). "Degraded" answers are shown as they are.
 import { useEffect, useState } from "react";
 import { iptvGet } from "./iptv";
-import { parseFixtureList, parseMore, type FxItem, type FxMore } from "../lib/gameCentre";
+import { fixturesOutcome, fixturesRetryMs, parseFixtureList, parseMore, type FxItem, type FxMore } from "../lib/gameCentre";
 
 const EVENT = "jellytip-fixtures";
 const FRESH_MS = 25_000; // polled every 30 s, so the list is never older than ~30 s
@@ -36,6 +37,9 @@ const merge = () => {
 };
 let state: FixtureState | null = null;
 let unavailable = false;
+/** Failed answers in a row (reset by a good one); while > 0 a retry is scheduled. */
+let failures = 0;
+let retryTimer: number | undefined;
 let at = 0;
 let inflight: Promise<void> | null = null;
 /** Bumped on a session switch: an answer fetched for the old person is dropped. */
@@ -47,14 +51,24 @@ export function refreshFixtures(force = false): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const gen = generation;
   inflight = Promise.all([iptvGet<unknown>(url(now, false)), expanded.size ? iptvGet<unknown>(url(now, true)) : Promise.resolve(null)])
+    .catch(() => [{ status: 0, data: null }, null] as const) // thrown = a network fault: retried like any failure
     .then(([a, b]) => {
       if (gen !== generation) return;
-      if (a.status === 200) {
-        base = { ...parseFixtureList(a.data), more: parseMore(a.data) };
-        if (b && b.status === 200) full = parseFixtureList(b.data).items;
-        merge();
-        at = Date.now();
-      } else if (a.status === 404 || !state) unavailable = true;
+      const outcome = fixturesOutcome(a.status);
+      if (outcome === "ok") {
+        try {
+          base = { ...parseFixtureList(a.data), more: parseMore(a.data) };
+          if (b && b.status === 200) full = parseFixtureList(b.data).items;
+          merge();
+          at = Date.now();
+          failures = 0;
+          window.clearTimeout(retryTimer);
+          retryTimer = undefined;
+        } catch {
+          scheduleRetry(gen); // an unreadable answer is a failure too, not "missing"
+        }
+      } else if (outcome === "missing") unavailable = true;
+      else scheduleRetry(gen); // what we had (if anything) stays on screen meanwhile
       window.dispatchEvent(new Event(EVENT));
     })
     .finally(() => {
@@ -63,8 +77,21 @@ export function refreshFixtures(force = false): Promise<void> {
   return inflight;
 }
 
+/** One pending retry at a time, doubling from 5 s to 5 min while answers keep failing; dropped by a session switch. */
+function scheduleRetry(gen: number) {
+  failures++;
+  if (retryTimer !== undefined) return;
+  retryTimer = window.setTimeout(() => {
+    retryTimer = undefined;
+    if (gen === generation) void refreshFixtures(true);
+  }, fixturesRetryMs(failures));
+}
+
 window.addEventListener("jellytip-session", () => {
   generation++;
+  failures = 0;
+  window.clearTimeout(retryTimer);
+  retryTimer = undefined;
   inflight = null;
   state = null;
   base = null;
@@ -85,8 +112,9 @@ export function showAllLeague(key: string): Promise<void> {
 /** The current list (null before the first answer), for code that has just awaited refreshFixtures. */
 export const fixturesNow = (): FixtureState | null => state;
 
-/** Fixtures: `data` null while loading, `unavailable` when the route is missing or failed (use the legacy path). */
-export function useFixtures(enabled = true): { data: FixtureState | null; unavailable: boolean } {
+/** Fixtures: `data` null while loading; `unavailable` when the route is missing (404: use the legacy path); `failing` while
+ *  the last answers failed and a retry is on its way (data, if any, is the last good list). */
+export function useFixtures(enabled = true): { data: FixtureState | null; unavailable: boolean; failing: boolean } {
   const [, tick] = useState(0);
   useEffect(() => {
     if (!enabled) return;
@@ -96,5 +124,5 @@ export function useFixtures(enabled = true): { data: FixtureState | null; unavai
     return () => window.removeEventListener(EVENT, on);
   }, [enabled]);
   // No usable data at all (degraded and empty): the legacy feed is the better screen
-  return { data: state, unavailable: unavailable || (!!state && state.degraded && state.items.length === 0) };
+  return { data: state, unavailable: unavailable || (!!state && state.degraded && state.items.length === 0), failing: failures > 0 };
 }

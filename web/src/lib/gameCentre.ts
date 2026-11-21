@@ -548,3 +548,18 @@ export function fxScoreText(f: Pick<FxItem, "home" | "away" | "score">): string 
 
 /** The legacy (upcoming-feed) Game Centre stays one release behind localStorage jt.gcLegacy=1; a 404 from the new route also falls back. */
 export const legacyForced = (get: (k: string) => string | null): boolean => get("jt.gcLegacy") === "1";
+
+// ---------- fixtures fetch policy (same rule as Journeys: only a 404 is "not there") ----------
+
+/**
+ * What one fixtures answer means: 200 = ok; 404 = the server has no fixtures route (legacy Game Centre for the session);
+ * anything else (network error = 0, 5xx, 403, 429…) = a load failure: retried with backoff, never remembered as "missing".
+ */
+export function fixturesOutcome(status: number | null | undefined): "ok" | "missing" | "retry" {
+  return status === 200 ? "ok" : status === 404 ? "missing" : "retry";
+}
+
+export const FIXTURES_RETRY_MIN_MS = 5_000;
+export const FIXTURES_RETRY_MAX_MS = 5 * 60_000;
+/** Wait before retry number [failures] (1 = first failure): 5 s, 10 s, 20 s… capped at 5 min. */
+export const fixturesRetryMs = (failures: number): number => Math.min(FIXTURES_RETRY_MAX_MS, FIXTURES_RETRY_MIN_MS * 2 ** Math.max(0, failures - 1));
