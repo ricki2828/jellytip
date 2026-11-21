@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +71,13 @@ class JellytipGameCentreViewModel
         val service: JellytipIptvService,
         val playback: JellytipIptvPlayback,
         val navigationManager: NavigationManager,
+        /** "Remind me for every <team> game" (t5j b1eca15d, gap row 4). */
+        val teamReminders: JellytipTeamReminders,
     ) : ViewModel() {
+        init {
+            if (teamReminders.items.value == null) teamReminders.refresh()
+        }
+
         data class State(
             val base: FxList? = null,
             /** The uncapped answer, fetched once on the first "Show all". */
@@ -322,6 +329,9 @@ fun JellytipGameCentrePage(
                 }
         }
     }
+    val teamItems by viewModel.teamReminders.items.collectAsState()
+    val teamsAvailable by viewModel.teamReminders.available.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     menu?.let { f ->
         val rec = SportFixtures.yourRecording(f, viewModel.recordings)
         FixtureMenu(
@@ -339,6 +349,13 @@ fun JellytipGameCentrePage(
                 viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = f.title, recordingId = r.id), "game centre recording")
             },
             reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
+            teamItems = teamItems,
+            teamsAvailable = teamsAvailable,
+            teamReminderFor = { viewModel.teamReminders.reminderFor(it) != null },
+            onTeam = { side ->
+                menu = null
+                viewModel.teamReminders.toggle(side) { err -> err?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } }
+            },
             revealed = f.fid in revealed.value,
             onDismiss = { menu = null },
             onWatch = { ch, fromStart ->
@@ -418,6 +435,11 @@ private fun FixtureMenu(
     onRecord: (FxChannel) -> Unit,
     onRecording: (IptvRecording) -> Unit,
     reminder: Boolean,
+    /** Read so the menu redraws when team reminders change. */
+    teamItems: List<TeamReminder>?,
+    teamsAvailable: Boolean?,
+    teamReminderFor: (String?) -> Boolean,
+    onTeam: (TeamSide) -> Unit,
     revealed: Boolean,
     onDismiss: () -> Unit,
     onWatch: (FxChannel, Boolean) -> Unit,
@@ -443,6 +465,21 @@ private fun FixtureMenu(
             }
             recordOn?.let { ch -> add(DialogItem("Record on ${ch.name}", dismissOnClick = true) { onRecord(ch) }) }
             if (f.status != "post") add(DialogItem(if (reminder) "Reminder on — turn off" else "Remind me", dismissOnClick = true) { onReminder() })
+            // Every game of a team (hidden when the server has no team reminders)
+            if (teamsAvailable != false) {
+                val sides =
+                    TeamReminderLogic.offerSides(
+                        listOf(
+                            TeamSide(f.homeId, f.home, f.homeShort, f.sport, f.league),
+                            TeamSide(f.awayId, f.away, f.awayShort, f.sport, f.league),
+                        ),
+                    )
+                sides.forEach { side ->
+                    val name = TeamReminderLogic.shortTeam(side)
+                    val on = teamReminderFor(side.teamId)
+                    add(DialogItem(if (on) TeamReminderLogic.remindingText(name) else TeamReminderLogic.remindEveryText(name), dismissOnClick = true) { onTeam(side) })
+                }
+            }
             if (f.score != null && !revealed) add(DialogItem("Reveal score", dismissOnClick = true) { onReveal() })
             if (isEmpty()) add(DialogItem(if (f.status == "post") "No replay available" else "No stream found yet", dismissOnClick = true) {})
         }
