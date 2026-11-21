@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.jellytip.home
 
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,13 +37,23 @@ fun JellytipHeroButtons(
     /** Hero trailer sound (plan "TV hero trailer: unmute"); null hides the toggle. */
     soundOn: Boolean? = null,
     onSound: () -> Unit = {},
+    /** Up from the first row lands on Play through this (on the button itself, not the row). */
+    firstRequester: FocusRequester? = null,
+    /** False while the buttons are faded out: they never take focus then. */
+    focusable: Boolean = true,
 ) {
     val resume = item.resumeMs > 0
+    val canFocus = Modifier.focusProperties { this.canFocus = focusable }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier) {
-        HeroButton(if (!item.type.playable) "▶  Watch" else if (resume) "▶  Resume" else "▶  Play", primary = true, onClick = onPlay)
-        HeroButton("More info", primary = false, onClick = onInfo)
-        // Unmutes the trailer where it is (and keeps sound on for this run); again mutes
-        soundOn?.let { on -> HeroButton(if (on) "\uD83D\uDD0A  Sound on" else "\uD83D\uDD07  Sound", primary = false, onClick = onSound) }
+        HeroButton(
+            if (!item.type.playable) "▶  Watch" else if (resume) "▶  Resume" else "▶  Play",
+            primary = true,
+            onClick = onPlay,
+            modifier = canFocus.let { m -> firstRequester?.let { m.focusRequester(it) } ?: m },
+        )
+        HeroButton("More info", primary = false, onClick = onInfo, modifier = canFocus)
+        // Sound for the trailer playing now, or for the next ones when none is playing; again mutes
+        soundOn?.let { on -> HeroButton(if (on) "\uD83D\uDD0A  Sound on" else "\uD83D\uDD07  Sound off", primary = false, onClick = onSound, modifier = canFocus) }
     }
 }
 
@@ -49,11 +62,13 @@ private fun HeroButton(
     label: String,
     primary: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val cream = Color(0xFFF2F2F0)
     val ink = Color(0xFF0A0A0A)
     Button(
         onClick = onClick,
+        modifier = modifier,
         shape = ButtonDefaults.shape(RoundedCornerShape(4.dp)),
         scale = ButtonDefaults.scale(focusedScale = JellytipFocus.SCALE),
         border = ButtonDefaults.border(focusedBorder = Border(BorderStroke(2.dp, cream), shape = RoundedCornerShape(4.dp))),

@@ -29,10 +29,25 @@ object JellytipTrailerControl {
 
     /** The hero Sound button: sound for the trailer playing now; the next hero trailer starts from the setting again. */
     fun toggleHeroSound() {
-        if (!isHeroPlaying) return
-        sound = !sound
-        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> $sound")
+        if (isHeroPlaying) {
+            sound = !sound
+            heroSoundChoice = sound
+        } else {
+            // No trailer yet: the choice applies to the next hero trailers (this run of the app), flipping what they'd do now
+            heroSoundChoice = !(heroSoundChoice ?: heroSoundSetting)
+        }
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "sound toggle -> playing=$isHeroPlaying sound=$sound choice=$heroSoundChoice")
     }
+
+    /** The hero Sound button's choice for this run (null = not touched: the settings decide). */
+    var heroSoundChoice by mutableStateOf<Boolean?>(null)
+        private set
+
+    /** ui.heroSound or the trailer-sound setting (published by the hero): what a hero trailer does without a choice. */
+    var heroSoundSetting by mutableStateOf(false)
+
+    /** What the Sound button shows: the playing trailer's sound, else the choice / setting the next trailer will use. */
+    fun heroSoundShown(): Boolean = if (isHeroPlaying) sound else heroSoundChoice ?: heroSoundSetting
     /**
      * Who shows the video: null = the hero; otherwise a home "special" (Trailer Break, Closet Picks) that took the one
      * home player over. Only the owner draws a PlayerSurface for it.
@@ -72,6 +87,8 @@ object JellytipTrailerControl {
                 if (!muteOnUp) return false
                 muteOnUp = false
                 sound = false
+                // Back-mute on the hero's trailer also mutes the next ones (the Sound button turns it back on)
+                if (isHeroPlaying && heroSoundChoice == true) heroSoundChoice = false
                 true
             }
 
