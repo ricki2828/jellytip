@@ -915,16 +915,18 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const blowout = feed.kind === "blowout";
   // ---- Catch me up (TV port): joining 10+ min late offers From kick-off / Catch me up / Live, with the score held back until one is
   // picked. "deciding" = waiting for the first live answer (score held); "done" = normal live info.
-  const catchEligible = (x: LiveExtras | undefined): boolean =>
-    !!(isLive && !x?.replay && x?.matchId && x.startsAt && Date.now() / 1000 - x.startsAt >= LATE_SEC && !wasOffered(x.matchId) && shouldShowLiveExtras(x));
-  const [catchPhase, setCatchPhase] = useState<"deciding" | "choice" | "recap" | "done">(() => (catchEligible(extras) ? "deciding" : "done"));
+  // The kick-off: the link's, else the guide-detected fixture's (a channel opened from the guide carries none); catch me up only
+  const catchStartsAt = extras?.startsAt ?? detected?.startsAt ?? null;
+  const catchEligible = (x: LiveExtras | undefined, at: number | null): boolean =>
+    !!(isLive && !x?.replay && x?.matchId && at && Date.now() / 1000 - at >= LATE_SEC && !wasOffered(x.matchId) && shouldShowLiveExtras(x));
+  const [catchPhase, setCatchPhase] = useState<"deciding" | "choice" | "recap" | "done">(() => (catchEligible(extras, catchStartsAt) ? "deciding" : "done"));
   // A match found from the guide arrives after mount (useChannelMatch): it gets the same one offer, once
   const catchSeen = useRef(new Set<string>(extras?.matchId ? [extras.matchId] : []));
   useEffect(() => {
     const id = extras?.matchId;
     if (!id || catchSeen.current.has(id)) return;
     catchSeen.current.add(id);
-    if (catchEligible(extras)) setCatchPhase("deciding");
+    if (catchEligible(extras, catchStartsAt)) setCatchPhase("deciding");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras?.matchId]);
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
@@ -940,7 +942,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       settled = true;
       const snap = feedSource.get();
       // the live answer's status, else the match record's (a finished game whose channel still airs the post-match show)
-      const ask = offer({ live: liveNow, replay: revealClock.replay, status: snap.raw?.status ?? snap.fixture?.status ?? null, startsAt: extras.startsAt, nowSec: Date.now() / 1000 });
+      // a "pre" fixture record may lag (or predate kick-off): only its "post" overrides the start time (TV: pre + started = in)
+      const fxStatus = snap.fixture?.status === "post" ? "post" : null;
+      const ask = offer({ live: liveNow, replay: revealClock.replay, status: snap.raw?.status ?? fxStatus, startsAt: catchStartsAt, nowSec: Date.now() / 1000 });
       if (ask) markOffered(id);
       setCatchPhase(ask ? "choice" : "done");
     };
@@ -955,7 +959,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       window.clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catchPhase, state.kind, extras?.matchId, extras?.startsAt, liveNow, revealClock.replay]);
+  }, [catchPhase, state.kind, extras?.matchId, catchStartsAt, liveNow, revealClock.replay]);
   const openedBy = useRef<{ by: OpenReason; at: number; touched: boolean }>({ by: "user", at: 0, touched: false });
   const userClosedAt = useRef<number | null>(null);
   const openPanel = useCallback((by: OpenReason) => {
@@ -1358,10 +1362,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       )}
       </div>
       {/* not tied to "playing": a format switch or reconnect must not drop the card while the score is still held */}
-      {catchPhase === "choice" && extras?.startsAt && (
+      {catchPhase === "choice" && catchStartsAt && (
         <CatchUpChoice
           fixture={feedSource.get().fixture}
-          joining={joiningLine(extras.startsAt, Date.now() / 1000)}
+          joining={joiningLine(catchStartsAt, Date.now() / 1000)}
           canKickOff={!!kickoff}
           onChoose={(c) => {
             if (c === "kickoff" && kickoff) {
