@@ -333,3 +333,43 @@ export function addedMessage(listed: boolean | null, where: "page" | "player", n
   if (listed === null) return `Downloaded "${name}"; couldn't confirm it's listed yet. ${later} if it doesn't appear.`;
   return `Downloaded "${name}", but the track list hasn't changed. The server may already have had this subtitle; if not, it should appear shortly. ${later}.`;
 }
+
+// ---------- one-press "Get subtitles" (TV port: subtitles/QuickSubtitles.kt JellytipSubtitleRanker) ----------
+
+const releaseTokens = (s: string | null | undefined): Set<string> => {
+  const base = (s ?? "").split(/[\\/]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  return new Set((dot > 0 ? base.slice(0, dot) : base).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+};
+
+/** 0 = unrelated, 1 = loosely similar, 2 = same release (token overlap of the playing file's name and the subtitle's). */
+export function releaseMatch(fileName: string | null | undefined, subtitleName: string | null | undefined): 0 | 1 | 2 {
+  const a = releaseTokens(fileName);
+  const b = releaseTokens(subtitleName);
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const sim = inter / (a.size + b.size - inter);
+  return sim >= 0.6 ? 2 : sim >= 0.3 ? 1 : 0;
+}
+
+/**
+ * The best remote subtitle: hash match, then release-name similarity to the playing file, then most downloads, then rating.
+ * Forced and hearing-impaired tracks only when nothing else exists. Null for an empty list.
+ */
+export function pickBest(list: readonly RemoteSubtitle[], playingFileName?: string | null): RemoteSubtitle | null {
+  const plain = list.filter((r) => !r.forced && !r.hearingImpaired);
+  const unforced = list.filter((r) => !r.forced);
+  const pool = plain.length ? plain : unforced.length ? unforced : list;
+  return (
+    pool
+      .map((r, i) => ({ r, i, m: releaseMatch(playingFileName, r.name) }))
+      .sort((a, b) => Number(b.r.perfectMatch) - Number(a.r.perfectMatch) || b.m - a.m || (b.r.downloads ?? 0) - (a.r.downloads ?? 0) || (b.r.rating ?? 0) - (a.r.rating ?? 0) || a.i - b.i)[0]?.r ?? null
+  );
+}
+
+/** "Picked Movie.2019.1080p (hash match, 1,204 downloads)". */
+export function pickedLabel(r: RemoteSubtitle): string {
+  const extra = [r.perfectMatch ? "hash match" : null, r.downloads != null ? `${r.downloads.toLocaleString("en-GB")} downloads` : null].filter(Boolean);
+  return `Picked ${r.name}${extra.length ? ` (${extra.join(", ")})` : ""}`;
+}

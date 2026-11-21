@@ -35,6 +35,8 @@ export type TrackMenuProps = {
   liveBuffer?: { mode: Mode; effective: Profile; onPick: (m: Mode) => void };
   /** "Find subtitles…": omit when the playing item can't be searched (IPTV) or the account may not manage subtitles */
   findSubtitles?: () => void;
+  /** One-press "Get subtitles" (TV port): search, auto-pick the best match, download; same conditions as findSubtitles */
+  getSubtitles?: () => void;
   /** "Auto-match timing" + the earlier/later nudge for the SELECTED subtitle; omit for IPTV and offline files */
   timing?: {
     /** false = the selected track can't be matched (picture subtitles): button hidden, nudge stays */
@@ -188,6 +190,11 @@ export function TrackMenu(p: TrackMenuProps) {
                 {head("Subtitles", "subs")}
                 {radio({ id: "off", label: "Off", active: p.subtitlesOff }, "s", () => { close(); p.onPickSubtitle(null); })}
                 {subtitles.map((o) => radio(o, "s", () => { close(); p.onPickSubtitle(o.id); }))}
+                {p.getSubtitles && (
+                  <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => { close(); p.getSubtitles!(); }}>
+                    Get subtitles
+                  </button>
+                )}
                 {p.findSubtitles && (
                   <button type="button" role="menuitem" data-track-item data-nav className={BTN} onClick={() => { close(); p.findSubtitles!(); }}>
                     Find subtitles…

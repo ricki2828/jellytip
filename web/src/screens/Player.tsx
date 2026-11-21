@@ -27,7 +27,7 @@ import { localPosition, playableDownload, recordProgress, subtitleText, type Dow
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
-import { remapActive } from "../lib/remoteSubtitles.ts";
+import { addedSubtitle, remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
 import { chainTarget, channelById, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels.ts";
 import { channelItems, rejoinPlan, takeChainHop } from "../api/channels";
@@ -100,7 +100,8 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   const [menu, setMenu] = useState(false);
   const menuRef = useRef(false);
   menuRef.current = menu;
-  const [findSubs, setFindSubs] = useState(false);
+  // "pick" = Find subtitles… (the person picks); "quick" = Get subtitles (the best match is picked and downloaded)
+  const [findSubs, setFindSubs] = useState<false | "pick" | "quick">(false);
   const canFindSubs = useCanManageSubtitles();
   const { prefs } = usePrefs({ defer: true });
   const { prefs: subPrefs, setPrefs: setSubPrefs, vars: subVars } = useSubtitlePrefs();
@@ -763,15 +764,24 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   const subs = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Subtitle");
   const audios = (plan?.source.MediaStreams ?? []).filter((s) => s.Type === "Audio");
   /** A downloaded subtitle is now listed on the item: show it in the menu without renegotiating, and keep the active track selected. */
-  const addedSubtitles = (fresh: Item) => {
+  /** [select]: Get subtitles turns the new track on (the TV's one-press flow); Find subtitles leaves the choice to the person. */
+  const addedSubtitles = (fresh: Item, select = false) => {
     const p = planRef.current;
     const streams = fresh.MediaSources?.find((m) => m.Id === p?.source.Id)?.MediaStreams;
     if (!p || !streams) return;
     const old = p.source.MediaStreams ?? [];
-    setSubIndex((cur) => remapActive(old, streams, cur));
+    // by track identity, not index: an external track can be inserted before older ones and shift their indices
+    const newTrack = select ? addedSubtitle(old, streams) : null;
+    const added = newTrack?.IsTextSubtitleStream ? newTrack : null;
+    if (added) {
+      replayRef.current = null;
+      remember({ subtitle: added.Index });
+      setSubIndex(added.Index);
+    } else setSubIndex((cur) => remapActive(old, streams, cur));
     const np = { ...p, source: { ...p.source, MediaStreams: streams } };
     planRef.current = np;
     setPlan(np);
+    return !!added;
   };
   /** Auto-match timing: server aligns the selected subtitle to the audio and adds a new track; switch to it when it is listed. */
   const runAutoMatch = () => {
@@ -947,7 +957,8 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         barClassName="player-track-trigger"
         menuClassName="sub-menu"
         onActivity={poke}
-        findSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs(true) : undefined}
+        findSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs("pick") : undefined}
+        getSubtitles={canFindSubs && item && !localRef.current ? () => setFindSubs("quick") : undefined}
         timing={item && !localRef.current ? {
           canMatch: textSubs.some((x) => x.Index === subIndex && !isAutoMatched(x)),
           status: match.status,
@@ -970,8 +981,9 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
           sourceId={plan.source.Id}
           subtitleLangs={prefs?.playback.subtitleLangs}
           where="player"
+          quick={findSubs === "quick" ? { fileName: plan.source.Path ?? null } : undefined}
           onClose={() => setFindSubs(false)}
-          onAdded={addedSubtitles}
+          onAdded={(fresh) => addedSubtitles(fresh, findSubs === "quick")}
         />
       )}
 

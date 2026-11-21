@@ -6,7 +6,7 @@ import { currentStreams, downloadSubtitle, refreshAfterDownload, searchSubtitles
 import type { Item } from "../api/jellyfin";
 import { SheetClose, useEscapeClose } from "./BackArrow";
 import { nextFocus, tabTarget } from "../lib/trackMenu.ts";
-import { NONE_FOUND, SEARCH_TIMEOUT_MS, addedMessage, classifyError, defaultSearchLanguage, errorMessage, initialPhase, languageChoices, languageName, reduce, resultFlags, resultMeta, type RemoteSubtitle } from "../lib/remoteSubtitles.ts";
+import { NONE_FOUND, SEARCH_TIMEOUT_MS, addedMessage, pickBest, pickedLabel, classifyError, defaultSearchLanguage, errorMessage, initialPhase, languageChoices, languageName, reduce, resultFlags, resultMeta, type RemoteSubtitle } from "../lib/remoteSubtitles.ts";
 
 export type SubtitleSearchDialogProps = {
   itemId: string;
@@ -16,8 +16,10 @@ export type SubtitleSearchDialogProps = {
   subtitleLangs?: readonly string[];
   where: "page" | "player";
   onClose: () => void;
-  /** a new track is listed: the refreshed item (so the caller can update its streams) */
-  onAdded?: (item: Item) => void;
+  /** a new track is listed: the refreshed item (so the caller can update its streams); true = the caller turned it on */
+  onAdded?: (item: Item) => boolean | void;
+  /** One-press "Get subtitles": the best match (TV ranker) of the first answer is downloaded at once (the list stays visible). */
+  quick?: { fileName: string | null };
 };
 
 /** Back to where the dialog was opened from; if that control is gone (player controls re-rendered), the player's play button or its container. */
@@ -30,7 +32,7 @@ function restoreFocus(opener: HTMLElement | null) {
   }
 }
 
-export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, where, onClose, onAdded }: SubtitleSearchDialogProps) {
+export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, where, onClose, onAdded, quick }: SubtitleSearchDialogProps) {
   const [state, dispatch] = useReducer(reduce, initialPhase);
   const [language, setLanguage] = useState(() => defaultSearchLanguage(subtitleLangs));
   const box = useRef<HTMLDivElement>(null);
@@ -70,12 +72,29 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
       }
       poll.current = new AbortController();
       const r = await refreshAfterDownload(itemId, before, sourceId, poll.current.signal);
-      if (r.listed && r.item) onAdded?.(r.item); // also when the dialog was closed meanwhile but the track did show up
+      if (r.listed && r.item) turnedOn.current = onAdded?.(r.item) === true; // also when the dialog was closed meanwhile but the track did show up
       if (alive.current) dispatch({ type: "added", seq, listed: r.listed });
     } catch (e) {
       if (alive.current) dispatch({ type: "failed", seq, error: classifyError(e) });
     }
   };
+
+  // Get subtitles: the first answer's best match is downloaded straight away. Only the first answer: an empty one, an error or a
+  // cancel uses up the auto-pick too, so a later search (another language) lists results for the person to pick, as usual.
+  const autoPicked = useRef(false);
+  const turnedOn = useRef(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!quick || autoPicked.current || state.phase === "searching" || (state.phase === "idle" && !("note" in state && state.note))) return;
+    autoPicked.current = true;
+    if (state.phase !== "results") return;
+    const best = pickBest(state.results, quick.fileName);
+    if (best) {
+      setPicked(pickedLabel(best));
+      void download(best);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
 
   // Open: search straight away in the default language, like the TV
   useEffect(() => {
@@ -137,8 +156,8 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
 
   let status: string | null = null;
   if (state.phase === "searching") status = `Searching subtitle providers for ${languageName(state.language)}. This can take up to a minute.`;
-  else if (state.phase === "downloading") status = `Downloading "${state.picked.name}"...`;
-  else if (state.phase === "added") status = addedMessage(state.listed, where, state.picked.name);
+  else if (state.phase === "downloading") status = picked ? `${picked}. Downloading...` : `Downloading "${state.picked.name}"...`;
+  else if (state.phase === "added") status = quick && where === "player" && state.listed && turnedOn.current ? `Added "${state.picked.name}" and turned it on.` : addedMessage(state.listed, where, state.picked.name);
   else if (state.phase === "empty") status = NONE_FOUND;
   else if (state.phase === "error") status = errorMessage(state.error, state.action);
   else if (state.phase === "idle" && state.note) status = state.note;
@@ -147,7 +166,7 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
     <div className="subs-back" onClick={onClose}>
       <div ref={box} className="subs-dialog" role="dialog" aria-modal="true" aria-label={`Find subtitles for ${title}`} tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
         <SheetClose onClose={onClose} />
-        <h2>Find subtitles</h2>
+        <h2>{quick ? "Get subtitles" : "Find subtitles"}</h2>
         <p className="subs-title">{title}</p>
         <div role="radiogroup" aria-label="Subtitle language" className="subs-langs">
           {languageChoices(subtitleLangs, language).map((l) => (

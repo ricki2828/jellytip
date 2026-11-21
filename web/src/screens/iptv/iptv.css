@@ -3254,3 +3254,11 @@
   outline: 2px solid rgba(242, 242, 240, 0.7);
   outline-offset: 2px;
 }
+/* Kick-off card (TV port): the reminder toast's look with a gold Broadcast headline */
+.kickoff-toast .kickoff-head {
+  color: #ffc72c;
+  font-family: "Barlow Condensed", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 4px;
+}

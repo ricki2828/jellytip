@@ -6,6 +6,7 @@ import { SportSetup } from "./components/SportSetup";
 import { SportMuteHost } from "./components/SportMute";
 import { RemindersPage } from "./screens/iptv/RemindersPage";
 import { ReminderNudge } from "./components/Reminders";
+import { KickoffCard } from "./components/KickoffCard";
 import { Nav } from "./components/Nav";
 import { LiveTabs } from "./components/LiveTabs";
 import { LiveHome } from "./components/LiveHome";
@@ -85,6 +86,8 @@ export function App() {
     }
     return (
       <div data-fs-host>
+        {/* the kick-off card also over a live channel (not for the channel already playing) */}
+        <KickoffCard key={session.userId} />
         <Suspense fallback={null}>
           <IptvPlayer key={route.query.toString()} target={target} title={route.query.get("t") ?? "Live TV"} resume={Number(route.query.get("resume")) || 0} extras={parseLiveExtras(route.query)} channelId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />
         </Suspense>
@@ -92,7 +95,12 @@ export function App() {
     );
   }
   if (route.name === "play")
-    return <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />;
+    return (
+      <>
+        <KickoffCard key={session.userId} />
+        <Player key={route.query.get("ch") ? `${route.params.id}:${route.query.get("start")}` : route.params.id} id={route.params.id} startParam={route.query.get("start")} thenId={route.query.get("then")} chId={route.query.get("ch")} offSchedule={route.query.get("off") === "1"} />
+      </>
+    );
 
   const liveHub = route.name !== "live" && LIVE_ROUTES.includes(route.name);
   return (
@@ -103,6 +111,7 @@ export function App() {
       {session && <SportSetup />}
       {session && <MatchInfoHost />}
       {session && <ReminderNudge />}
+      {session && <KickoffCard key={session.userId} />}
       <main>
         {route.name === "live" && <LiveHome />}
         {liveHub && <LiveTabs current={route.name} />}

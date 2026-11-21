@@ -4,7 +4,11 @@
 // down at once (the provider may allow a single connection).
 import { BackArrow } from "../../components/BackArrow";
 import { flashNote } from "../../components/TasteButtons";
-import { CatchUpChoice, CatchUpRecap } from "../../components/Companion/CatchUp";
+import { CatchUpChoice, CatchUpRecap, FullTimeCard } from "../../components/Companion/CatchUp";
+import { nextGame, nextLine } from "../../lib/sportWow";
+import { isMuted } from "../../lib/liveHero";
+import { fxTitle, pickChannel, type FxItem } from "../../lib/gameCentre";
+import { fixturesNow, refreshFixtures, useFixtures } from "../../api/fixtures";
 import { cards as catchCards_, DECIDE_WAIT_MS, joiningLine, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
@@ -20,7 +24,7 @@ import { Scorebug } from "../../components/Companion/Scorebug";
 import { Panel, useDropWatch, usePhonePortrait } from "../../components/Companion/Panel";
 import { useLiveFeed } from "../../components/Companion/useLiveFeed";
 import { calibrateMessage, useRevealClock } from "../../lib/delay";
-import { autoCloseDecision, autoOpenDecision, DROP_KEY, panelKeyAction, panelModeFor, stepTab, type OpenReason } from "../../lib/companion";
+import { autoOpenEnabled, autoCloseDecision, autoOpenDecision, DROP_KEY, panelKeyAction, panelModeFor, stepTab, type OpenReason } from "../../lib/companion";
 import { usePrefs } from "../../api/me";
 import { usePlayWatch } from "../../api/signals";
 import type { WatchMeta } from "../../lib/signals";
@@ -930,6 +934,29 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras?.matchId]);
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  // ---- Full time (TV port): when the released state says the game is over, the score and what's next (the next game, else Pick for tonight)
+  const [fullTime, setFullTime] = useState<{ score: { home: number; away: number } | null; next: FxItem | null } | null>(null);
+  const fullTimeRef = useRef(false);
+  fullTimeRef.current = !!fullTime;
+  const ftShown = useRef(new Set<string>());
+  const { data: fxData } = useFixtures(panelAvail && liveNow);
+  const { prefs: ftPrefs } = usePrefs({ defer: true });
+  useEffect(() => {
+    const id = extras?.matchId;
+    if (!id || feed.kind !== "final" || !panelAvail || !liveNow || revealClock.replay || catchHoldRef.current || ftShown.current.has(id)) return;
+    ftShown.current.add(id);
+    const muted = ftPrefs?.sport.muted;
+    const score = feed.score;
+    if (drawer && openedBy.current.by !== "user") closePanel(false);
+    // What's next from a fresh list (the one loaded when the player opened may be hours old); at most ~2.5 s, else what we have
+    // not cancelled when a dep changes: the id is already marked shown, so this answer is the only card for this game
+    // a refresh that fails (bad payload) still shows the card, from the list we have
+    void Promise.race([refreshFixtures(true).catch(() => undefined), new Promise((r) => window.setTimeout(r, 2500))]).then(() => {
+      const items = fixturesNow()?.items ?? fxData?.items ?? [];
+      setFullTime({ score, next: nextGame(items, new Set([id]), Date.now() / 1000, ftPrefs?.sport.teamRefs ?? [], (f) => isMuted(f, muted)) });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed.kind, extras?.matchId, panelAvail, liveNow, revealClock.replay, catchPhase]);
   const catchHold = catchPhase !== "done";
   const catchHoldRef = useRef(catchHold);
   catchHoldRef.current = catchHold;
@@ -981,7 +1008,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   const lastMomentN = useRef(0);
   useEffect(() => {
     if (!panelAvail || !liveNow) return;
-    if (catchHoldRef.current) {
+    if (catchHoldRef.current || fullTimeRef.current || !autoOpenEnabled()) {
       lastMomentN.current = feed.momentN; // what happened while held is the recap's, not a reason to open now
       return;
     }
@@ -1382,6 +1409,22 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
                 setCatchPhase("done");
               }
             } else setCatchPhase("done");
+          }}
+        />
+      )}
+      {fullTime && state.kind === "playing" && (
+        <FullTimeCard
+          fixture={feedSource.get().fixture}
+          score={fullTime.score}
+          next={fullTime.next ? fxTitle(fullTime.next) : null}
+          nextLine={fullTime.next ? nextLine(fullTime.next, Date.now() / 1000) : null}
+          onClose={() => setFullTime(null)}
+          onNext={() => {
+            const g = fullTime.next;
+            setFullTime(null);
+            const c = g ? pickChannel(g, Date.now() / 1000).channel : null;
+            if (g && c) go(livePath(c.id, fxTitle(g), { matchId: g.matchId ?? g.fid, alternates: g.channels.filter((x) => x.id !== c.id).map((x) => ({ id: x.id, name: x.name })) }), true);
+            else go("/tonight");
           }}
         />
       )}
