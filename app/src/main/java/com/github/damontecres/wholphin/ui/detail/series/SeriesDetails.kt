@@ -607,6 +607,13 @@ fun SeriesDetailsContent(
                         }
                     }
                 }
+                // Jellytip: seasons the library lacks but the person's IPTV has (Season N · via IPTV)
+                if (sectionsActive) item(key = "jt-iptv-seasons") {
+                    com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvSeasonsSection(
+                        series = series,
+                        librarySeasons = remember(seasons) { seasons.mapNotNull { it?.indexNumber } },
+                    )
+                }
                 if (people.isNotEmpty()) {
                     if (sectionsActive) item {
                         PersonRow(

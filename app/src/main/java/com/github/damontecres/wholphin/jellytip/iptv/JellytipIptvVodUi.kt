@@ -488,37 +488,7 @@ fun JellytipIptvDetailsPage(
                 val eps = d.seasons.getOrNull(season)?.episodes.orEmpty()
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer()) {
                     items(eps, key = { it.id }) { e ->
-                        Surface(
-                            onClick = { playEpisode(e) },
-                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
-                            colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-                            border =
-                                ClickableSurfaceDefaults.border(
-                                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(6.dp)),
-                                ),
-                            modifier = Modifier.size(208.dp, 117.dp),
-                        ) {
-                            e.still?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-                            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
-                            Text(
-                                text = "${e.episode}. ${e.title}" + (e.runtimeMin?.let { "  ·  ${it}m" } ?: ""),
-                                color = Color.White,
-                                fontFamily = JellytipFontFamily,
-                                fontSize = 12.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-                            )
-                            e.progress?.takeIf { it.resumable && it.durationSecs > 0 }?.let { p ->
-                                Box(
-                                    Modifier
-                                        .align(Alignment.BottomStart)
-                                        .fillMaxWidth((p.positionSecs / p.durationSecs).toFloat().coerceIn(0f, 1f))
-                                        .height(3.dp)
-                                        .background(JellytipPalette.Jelly),
-                                )
-                            }
-                        }
+                        IptvEpisodeCard(e) { playEpisode(e) }
                     }
                 }
             }
