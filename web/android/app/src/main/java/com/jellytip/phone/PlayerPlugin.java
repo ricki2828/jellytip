@@ -116,6 +116,13 @@ public class PlayerPlugin extends Plugin {
         i.putExtra(PlayerActivity.EXTRA_FLIP_ALERTS, !Boolean.FALSE.equals(call.getBoolean("flipAlerts", true)));
         // Live drawer style (sport.panelStyle: docked | floating; default docked)
         i.putExtra(PlayerActivity.EXTRA_PANEL_STYLE, call.getString("panelStyle", "docked"));
+        // Spoiler delay (sport.delaySec or the channel's own): every live answer is held this long before anything shows it
+        Integer delay = call.getInt("delaySec", 0);
+        i.putExtra(PlayerActivity.EXTRA_DELAY_SEC, delay == null ? 0 : Math.max(0, Math.min(300, delay)));
+        // Language rules (the web's pickIptvTracks): preferred audio languages, subtitle languages, always subtitles
+        i.putExtra(PlayerActivity.EXTRA_AUDIO_LANGS, strings(call.getArray("audioLangs", new JSArray())));
+        i.putExtra(PlayerActivity.EXTRA_SUB_LANGS, strings(call.getArray("subtitleLangs", new JSArray())));
+        i.putExtra(PlayerActivity.EXTRA_ALWAYS_SUBS, Boolean.TRUE.equals(call.getBoolean("alwaysSubs", false)));
         if (call.getData().has("altChannels")) {
             JSArray pre = call.getArray("altChannels", new JSArray());
             java.util.List<String> pIds = new java.util.ArrayList<>();
@@ -174,6 +181,35 @@ public class PlayerPlugin extends Plugin {
         }
         a.runOnUiThread(() -> a.onProvidedUrl(id, url, mime, error));
         call.resolve();
+    }
+
+    /**
+     * {text, spoiler?}: a note over the open player (spoiler: dropped while it plays from kick-off or a recording) (a toast; a notification in the mini player), for web cards the native
+     * activity would hide (kick-off, full time). Resolves {shown: false} when no player is open.
+     */
+    @PluginMethod
+    public void notice(PluginCall call) {
+        String text = call.getString("text");
+        PlayerActivity a = PlayerActivity.instance.get();
+        JSObject r = new JSObject();
+        if (text == null || text.isEmpty() || a == null || a.isFinishing()) {
+            r.put("shown", false);
+            call.resolve(r);
+            return;
+        }
+        boolean spoiler = Boolean.TRUE.equals(call.getBoolean("spoiler", false));
+        a.runOnUiThread(() -> a.notice(text, spoiler));
+        r.put("shown", true);
+        call.resolve(r);
+    }
+
+    private static String[] strings(JSArray a) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (int k = 0; k < a.length(); k++) {
+            String s = a.optString(k, "");
+            if (!s.isEmpty()) out.add(s);
+        }
+        return out.toArray(new String[0]);
     }
 
     /** From the player activity: a JS event ("progress", "playerError", "needUrl", "failover"). */

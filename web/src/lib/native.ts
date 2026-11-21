@@ -112,7 +112,15 @@ export interface JellytipPlayerPlugin {
     flipAlerts?: boolean;
     /** sport.panelStyle (plan "In-match visual direction"): the landscape live drawer docked to the edge (default) or floating. */
     panelStyle?: "docked" | "floating";
+    /** Spoiler delay (s): every live answer (strip, drawer, moments, flip and fantasy alerts) is held this long. */
+    delaySec?: number;
+    /** Language rules (lib/iptvTracks.ts): preferred audio languages, subtitle languages, subtitles always on. */
+    audioLangs?: string[];
+    subtitleLangs?: string[];
+    alwaysSubs?: boolean;
   }): Promise<NativePlayerResult>;
+  /** A note over the open player (toast; a notification in the mini player): web cards it would hide. {shown: false} = no player. */
+  notice(o: { text: string; spoiler?: boolean }): Promise<{ shown: boolean }>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
   addListener(event: "progress", cb: (e: { positionMs: number; durationMs: number }) => void): Promise<{ remove: () => Promise<void> }>;

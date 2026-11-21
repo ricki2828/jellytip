@@ -499,7 +499,9 @@ img {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  overflow-y: visible;
+  /* hidden, not visible: with overflow-x auto, "visible" computes to auto, and anything poking out below (the Top 10
+     numerals) made each row a little vertical scroller that ate the page's wheel and touch scrolling */
+  overflow-y: hidden;
   padding: 6px var(--pad) 10px;
   scroll-padding: 0 var(--pad);
   scrollbar-width: none;

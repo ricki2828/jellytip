@@ -27,6 +27,10 @@ final class LiveFeed {
     private final String apiBase;
     private final String token;
     private final String matchId;
+    /** The spoiler delay: each answer shows this long after it arrived (0 = at once). */
+    final long delayMs;
+    /** Token of the held answers (removed on release, so nothing waits on a closed player). */
+    private final Object held = new Object();
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final List<Listener> listeners = new ArrayList<>();
     private boolean fast;
@@ -51,8 +55,9 @@ final class LiveFeed {
             }
         };
 
-    LiveFeed(Handler handler, String apiBase, String token, String matchId) {
+    LiveFeed(Handler handler, String apiBase, String token, String matchId, long delayMs) {
         this.handler = handler;
+        this.delayMs = Math.max(0L, delayMs);
         this.apiBase = apiBase;
         this.token = token;
         this.matchId = matchId;
@@ -81,6 +86,7 @@ final class LiveFeed {
     void release() {
         released = true;
         handler.removeCallbacks(poll);
+        handler.removeCallbacksAndMessages(held);
         io.shutdownNow();
     }
 
@@ -99,7 +105,8 @@ final class LiveFeed {
             }
             final JSONObject result = got;
             final int code = a.code;
-            handler.post(() -> {
+            // Held for the spoiler delay (same delay for every answer, so they still apply in order)
+            handler.postAtTime(() -> {
                 if (released) return;
                 if (verdict == CompanionHttp.NO_IPTV || verdict == CompanionHttp.UNKNOWN) {
                     hidden = true;
@@ -129,7 +136,7 @@ final class LiveFeed {
                     note = "Live stats aren't available right now.";
                 }
                 for (Listener l : listeners) l.onLive();
-            });
+            }, held, android.os.SystemClock.uptimeMillis() + delayMs);
         });
     }
 }

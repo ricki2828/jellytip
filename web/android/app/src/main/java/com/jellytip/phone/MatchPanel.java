@@ -55,6 +55,8 @@ final class MatchPanel implements LiveFeed.Listener {
     private final Host host;
     private final Handler handler;
     private final LiveFeed feed;
+    /** Token of answers held for the spoiler delay (the live feed's), removed on release. */
+    private final Object held = new Object();
     private final String apiBase;
     private final String token;
     private final String matchId;
@@ -202,6 +204,7 @@ final class MatchPanel implements LiveFeed.Listener {
         released = true;
         liveStrip.setActive(false);
         handler.removeCallbacks(fantasyPoll);
+        handler.removeCallbacksAndMessages(held);
         io.shutdownNow();
     }
 
@@ -322,7 +325,7 @@ final class MatchPanel implements LiveFeed.Listener {
                 }
             }
             final JSONObject result = got;
-            handler.post(() -> {
+            handler.postAtTime(() -> {
                 if (released) return;
                 if (verdict == CompanionHttp.NO_IPTV || verdict == CompanionHttp.UNKNOWN) {
                     info = null;
@@ -338,7 +341,7 @@ final class MatchPanel implements LiveFeed.Listener {
                     infoNote = "Match info isn't available right now.";
                 }
                 if ("Info".equals(tab)) render();
-            });
+            }, held, android.os.SystemClock.uptimeMillis() + (feed == null ? 0L : feed.delayMs));
         });
     }
 
@@ -753,7 +756,7 @@ final class MatchPanel implements LiveFeed.Listener {
             final JSONArray result = got;
             final int code = snapshot.code;
             final Object updated = live == null ? null : live.opt("updatedAt");
-            handler.post(() -> {
+            handler.postAtTime(() -> {
                 if (released) return;
                 fantasyRefreshFailed = code != 200 || result == null;
                 fantasyFetchedAt = System.currentTimeMillis();
@@ -773,7 +776,7 @@ final class MatchPanel implements LiveFeed.Listener {
                     fantasyNote = code == 404 ? "Fantasy isn't available on this server yet." : "Fantasy isn't available right now.";
                 }
                 if ("Fantasy".equals(tab)) render();
-            });
+            }, held, android.os.SystemClock.uptimeMillis() + (feed == null ? 0L : feed.delayMs));
         });
     }
 
