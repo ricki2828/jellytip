@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
@@ -418,7 +419,7 @@ fun JellytipIptvDetailsPage(
             }
             if (!item.isSeries) {
                 val p = item.progress?.takeIf { it.resumable }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     Button(onClick = { playMovie(fromStart = false) }, modifier = Modifier.focusRequester(focus)) {
                         Text(if (p != null) "Resume from ${(p.positionSecs / 60).toInt()} min" else "Play")
                     }
@@ -441,11 +442,13 @@ fun JellytipIptvDetailsPage(
                     }
                     TrailerButton(d.trailer, trailerPlaying, playTrailer)
                     MyListButton(item, viewModel)
+                    IptvTasteButtons(item)
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     TrailerButton(d.trailer, trailerPlaying, playTrailer)
                     MyListButton(item, viewModel)
+                    IptvTasteButtons(item)
                 }
             }
             if (d.copies.size > 1) {
@@ -555,6 +558,39 @@ private fun WaysToWatchRow(
                 }
             }
         }
+    }
+}
+
+/** Like / Not for me / Watched on an IPTV title (web 6d8398bd); the same reactions the library thumbs use. */
+@Composable
+private fun IptvTasteButtons(item: IptvVodItem) {
+    val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val key = remember(item.id) { me.iptvTasteKey(item.id, item.kind, item.tmdbId) }
+    val thumb = me.thumbOfKey(key)
+    var played by remember(item.id) { mutableStateOf(item.played || item.progress?.played == true) }
+    var busy by remember(item.id) { mutableStateOf(false) }
+    val toast: (String?) -> Unit = { err -> if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show() }
+    Button(onClick = { me.thumbIptv(item.id, item.kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) }) {
+        Text(if (thumb == 1) "Liked ✓" else "Like")
+    }
+    Button(onClick = { me.thumbIptv(item.id, item.kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) }) {
+        Text(if (thumb == -1) "Not for me ✓" else "Not for me")
+    }
+    Button(
+        onClick = {
+            if (busy) return@Button
+            busy = true
+            val next = !played
+            played = next
+            me.setIptvPlayed(item.id, next) { err ->
+                busy = false
+                if (err != null) played = !next
+                toast(err)
+            }
+        },
+    ) {
+        Text(if (played) "Watched ✓" else "Mark watched")
     }
 }
 
