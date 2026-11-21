@@ -248,11 +248,12 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const press = (path: string) => { if (w.skipped) flashNote(skippedNote(w.skipped)); go(path); }; // a channel that failed earlier is passed over, and we say so
   const act = w.ways[0] ? () => press(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
   const best = bestChannel(f);
-  // Look 2A: a team-colour edge each side, once the match record's colours are in (fetched when the card is on screen)
+  // Look 2A: a team-colour edge each side, once the match record's colours are in (fetched when the card is on screen); not on
+  // no-stream cards, whose own left marker says so
   const li = useRef<HTMLLIElement>(null);
   const edges = useEdgeStyle(f, li);
   return (
-    <li ref={li} style={edges} className={`gc-card${edges ? " edged" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
+    <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
