@@ -46,6 +46,18 @@ object JellytipTrailerControl {
     /** ui.heroSound or the trailer-sound setting (published by the hero): what a hero trailer does without a choice. */
     var heroSoundSetting by mutableStateOf(false)
 
+    /** A special's clip that autoplays on focus (Four favourites, Closet picks) starts as the hero would: Sound button, else ui.heroSound / trailer sound. */
+    fun clipAutoSound(): Boolean = heroSoundChoice ?: heroSoundSetting
+
+    /**
+     * OK on a special's clip (web Specials.tsx: first press = sound, again = mute): the sound it should have now.
+     * Not playing (autoplay off, or ended): start it with sound.
+     */
+    fun clipOkSound(
+        playing: Boolean,
+        sound: Boolean,
+    ): Boolean = if (playing) !sound else true
+
     /** What the Sound button shows: the playing trailer's sound, else the choice / setting the next trailer will use. */
     fun heroSoundShown(): Boolean = if (isHeroPlaying) sound else heroSoundChoice ?: heroSoundSetting
     /**

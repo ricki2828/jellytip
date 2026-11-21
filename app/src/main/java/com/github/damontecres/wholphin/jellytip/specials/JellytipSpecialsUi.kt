@@ -71,6 +71,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipFocus
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.cache.focalAlignment
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTitledImage
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
@@ -951,7 +952,8 @@ private fun ClosetPicksRow(
     var active by remember { mutableStateOf(false) }
     val resolve: suspend () -> String? = { viewModel.specials.companionUrl(special.videoUrl) }
     // The video keeps playing while focus moves along the picks, so they can light up as it reaches them
-    SpecialVideoDriver(owner, active, settings.trailerAutoplay, null, resolve)
+    // Autoplay starts as the hero would (its Sound button, else ui.heroSound / trailer sound); OK toggles sound, as on the web
+    SpecialVideoDriver(owner, active, settings.trailerAutoplay, null, resolve, autoSound = JellytipTrailerControl::clipAutoSound)
     val scope = rememberCoroutineScope()
     val playing = JellytipTrailerControl.isPlayingForOwner(owner)
     val positionSec by produceState(-1, playing) {
@@ -977,14 +979,20 @@ private fun ClosetPicksRow(
         items = entries,
         onClickItem = { _, entry ->
             when (entry) {
-                // No details exist for the video itself: OK starts it (settings decide sound) and does nothing while it plays
-                ClosetEntry.Video ->
-                    if (!JellytipTrailerControl.isPlayingForOwner(owner)) {
+                // No details exist for the video itself: OK = sound on, OK again = mute (web Specials.tsx); not playing = start with sound
+                ClosetEntry.Video -> {
+                    val isPlaying = JellytipTrailerControl.isPlayingForOwner(owner)
+                    val want = JellytipTrailerControl.clipOkSound(isPlaying, JellytipTrailerControl.sound)
+                    if (isPlaying) {
+                        JellytipTrailerControl.sound = want
+                        JellytipTrace.player("special:$owner", "clip sound -> $want")
+                    } else {
                         scope.launch {
                             val url = resolve() ?: return@launch
-                            JellytipTrailerControl.startSpecial(owner, url, sound = settings.trailerSound)
+                            JellytipTrailerControl.startSpecial(owner, url, sound = want)
                         }
                     }
+                }
 
                 is ClosetEntry.Pick -> {
                     val item = entry.item
@@ -1043,7 +1051,15 @@ private fun ClosetPicksRow(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Caption(if (special.picks.size == 1) "1 pick" else "${special.picks.size} picks", alpha = 0.7f)
+                            Caption(
+                                when {
+                                    playing && JellytipTrailerControl.sound -> "Sound on · OK to mute"
+                                    playing -> "OK for sound"
+                                    special.picks.size == 1 -> "1 pick"
+                                    else -> "${special.picks.size} picks"
+                                },
+                                alpha = 0.7f,
+                            )
                         }
                     }
                 }
@@ -1162,8 +1178,10 @@ private fun SpecialVideoDriver(
     autoplay: Boolean,
     itemId: UUID?,
     resolve: suspend () -> String?,
+    autoSound: () -> Boolean = { false },
 ) {
     val currentResolve by rememberUpdatedState(resolve)
+    val currentAutoSound by rememberUpdatedState(autoSound)
     LaunchedEffect(owner, active) {
         if (!active) {
             if (JellytipTrailerControl.focusedSpecial == owner) JellytipTrailerControl.focusedSpecial = null
@@ -1175,7 +1193,7 @@ private fun SpecialVideoDriver(
         delay(SpecialTokens.VIDEO_DELAY_MS)
         val url = currentResolve() ?: return@LaunchedEffect
         // Focus may have moved on while the URL was resolved
-        if (JellytipTrailerControl.focusedSpecial == owner) JellytipTrailerControl.startSpecial(owner, url, sound = false, itemId = itemId)
+        if (JellytipTrailerControl.focusedSpecial == owner) JellytipTrailerControl.startSpecial(owner, url, sound = currentAutoSound(), itemId = itemId)
     }
     DisposableEffect(owner) {
         onDispose {
