@@ -203,6 +203,8 @@ fun IptvTrackMenu(
         onDismiss()
     }
     val start = remember { FocusRequester() }
+    // One audio track (nothing to pick): start on Subtitles
+    val audioFirst = audio.any { it.pickable }
     LaunchedEffect(Unit) { start.tryRequestFocus() }
     androidx.compose.ui.window.Dialog(onDismissRequest = dismiss) {
         Row(
@@ -214,11 +216,11 @@ fun IptvTrackMenu(
                     .background(Color(0xFF151515))
                     .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            TrackColumn("Audio", audio, Modifier.weight(1f), focus = start) { e ->
+            TrackColumn("Audio", audio, Modifier.weight(1f), focus = start.takeIf { audioFirst }) { e ->
                 e.option?.let { IptvTracks.pick(player, it) }
                 dismiss()
             }
-            TrackColumn("Subtitles", subs, Modifier.weight(1f), focus = null) { e ->
+            TrackColumn("Subtitles", subs, Modifier.weight(1f), focus = start.takeUnless { audioFirst }) { e ->
                 if (e.off) IptvTracks.subtitlesOff(player) else e.option?.let { IptvTracks.pick(player, it) }
                 dismiss()
             }
