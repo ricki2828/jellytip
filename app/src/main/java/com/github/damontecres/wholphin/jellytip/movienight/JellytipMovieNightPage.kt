@@ -318,7 +318,7 @@ class JellytipMovieNightViewModel
         fun vote(id: String) {
             val s = (_state.value.phase as? Phase.Night)?.session ?: return
             if (!s.open || id !in s.items) return
-            if (id !in wanted) s.mine[id]?.let { confirmed[id] = it } ?: confirmed.remove(id)
+            if (!wanted.containsKey(id)) s.mine[id]?.let { confirmed[id] = it } ?: confirmed.remove(id)
             val v = MovieNight.nextVote(s.mine[id])
             voteEpoch++
             lastOwnVote = System.currentTimeMillis()
@@ -383,6 +383,7 @@ class JellytipMovieNightViewModel
         fun close() {
             val s = (_state.value.phase as? Phase.Night)?.session ?: return
             if (_state.value.busy) return
+            voteError = false // from here the error on screen is close()'s; the poll must not clear it
             _state.value = _state.value.copy(busy = true, error = null)
             viewModelScope.launch {
                 val r = jellytipApi.userCall("v1/me/movienight/${s.code}/close", "{}")
