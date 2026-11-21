@@ -442,6 +442,16 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
   );
 }
 
+/** "Try now" while fixtures keep failing: busy (and says so) until that attempt is answered. */
+function TryNow() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button className="btn small" data-nav aria-disabled={busy || undefined} onClick={busy ? undefined : () => { setBusy(true); void refreshFixtures(true).finally(() => setBusy(false)); }}>
+      {busy ? "Trying…" : "Try now"}
+    </button>
+  );
+}
+
 /** Fixture-first by default; the legacy upcoming-feed screen when jt.gcLegacy=1 or the server has no /sport/fixtures. */
 export function GameCentre() {
   const legacy = legacyForced((k) => {
@@ -471,9 +481,7 @@ export function GameCentre() {
       {data === null && failing ? (
         <p className="iptv-hint">
           Couldn't load the games. Trying again…{" "}
-          <button className="btn small" data-nav onClick={() => void refreshFixtures(true)}>
-            Try now
-          </button>
+          <TryNow />
         </p>
       ) : data === null ? <p className="iptv-hint">Loading…</p> : <FixtureGameCentre items={data.items} degraded={data.degraded} more={data.more} expanded={data.expanded} focusFid={focusFid} />}
     </div>

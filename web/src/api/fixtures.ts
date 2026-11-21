@@ -40,6 +40,8 @@ let unavailable = false;
 /** Failed answers in a row (reset by a good one); while > 0 a retry is scheduled. */
 let failures = 0;
 let retryTimer: number | undefined;
+/** Mounted useFixtures(enabled) hooks: retries run only while someone is listening (none = the next mount fetches). */
+let subs = 0;
 let at = 0;
 let inflight: Promise<void> | null = null;
 /** Bumped on a session switch: an answer fetched for the old person is dropped. */
@@ -48,10 +50,14 @@ let generation = 0;
 export function refreshFixtures(force = false): Promise<void> {
   if (inflight) return inflight;
   if (unavailable || (!force && state && Date.now() - at < FRESH_MS)) return Promise.resolve();
+  // Failing: the backoff decides when to ask again, not each screen's own poll ("Try now" and the retry pass force)
+  if (!force && retryTimer !== undefined) return Promise.resolve();
   const now = Math.floor(Date.now() / 1000);
   const gen = generation;
-  inflight = Promise.all([iptvGet<unknown>(url(now, false)), expanded.size ? iptvGet<unknown>(url(now, true)) : Promise.resolve(null)])
-    .catch(() => [{ status: 0, data: null }, null] as const) // thrown = a network fault: retried like any failure
+  // thrown = a network fault (status 0): retried like any failure; each request on its own, so a failed "Show all" call
+  // never throws away a good main answer
+  const get = (u: string) => iptvGet<unknown>(u).catch(() => ({ status: 0, data: null as unknown }));
+  inflight = Promise.all([get(url(now, false)), expanded.size ? get(url(now, true)) : Promise.resolve(null)])
     .then(([a, b]) => {
       if (gen !== generation) return;
       const outcome = fixturesOutcome(a.status);
@@ -81,9 +87,20 @@ export function refreshFixtures(force = false): Promise<void> {
 function scheduleRetry(gen: number) {
   failures++;
   if (retryTimer !== undefined) return;
-  retryTimer = window.setTimeout(() => {
+  retryTimer = window.setTimeout(function fire() {
     retryTimer = undefined;
-    if (gen === generation) void refreshFixtures(true);
+    if (gen !== generation || subs === 0) return; // nobody listening (no sport screen, logged out): the next mount fetches
+    if (document.hidden) {
+      // a hidden tab waits until it is looked at again
+      const back = () => {
+        if (document.hidden) return;
+        document.removeEventListener("visibilitychange", back);
+        if (gen === generation && subs > 0) void refreshFixtures(true);
+      };
+      document.addEventListener("visibilitychange", back);
+      return;
+    }
+    void refreshFixtures(true);
   }, fixturesRetryMs(failures));
 }
 
@@ -100,7 +117,7 @@ window.addEventListener("jellytip-session", () => {
   unavailable = false;
   at = 0;
   window.dispatchEvent(new Event(EVENT));
-  void refreshFixtures(true);
+  if (subs > 0) void refreshFixtures(true); // no listener: the first mount fetches for the new person
 });
 
 /** "Show all <league> games": that league comes from a cap-off request from now on (this session). */
@@ -120,8 +137,12 @@ export function useFixtures(enabled = true): { data: FixtureState | null; unavai
     if (!enabled) return;
     const on = () => tick((x) => x + 1);
     window.addEventListener(EVENT, on);
+    subs++;
     void refreshFixtures();
-    return () => window.removeEventListener(EVENT, on);
+    return () => {
+      subs--;
+      window.removeEventListener(EVENT, on);
+    };
   }, [enabled]);
   // No usable data at all (degraded and empty): the legacy feed is the better screen
   return { data: state, unavailable: unavailable || (!!state && state.degraded && state.items.length === 0), failing: failures > 0 };
