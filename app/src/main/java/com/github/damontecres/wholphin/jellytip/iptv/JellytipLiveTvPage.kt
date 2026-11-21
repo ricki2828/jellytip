@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -417,6 +418,87 @@ class JellytipLiveTvViewModel
             }
         }
 
+        /** Providers this person owns (Hide this channel is offered only for those); null = not known yet. */
+        private val _owned = MutableStateFlow<Set<String>?>(null)
+        val owned: StateFlow<Set<String>?> = _owned
+
+        fun loadOwned() {
+            if (_owned.value != null) return
+            viewModelScope.launch { service.directPrefs()?.let { l -> _owned.value = l.map { it.id }.toSet() } }
+        }
+
+        /** The channel just hidden, while its Undo shows. */
+        private val _hidden = MutableStateFlow<HiddenChannel?>(null)
+        val hidden: StateFlow<HiddenChannel?> = _hidden
+
+        /** A channel Undo brought back (its id), for the page to focus once; null = none. */
+        private val _restored = MutableStateFlow<String?>(null)
+        val restored: StateFlow<String?> = _restored
+        private var hideBusy = false
+
+        /** Bumped when the guide page goes away: a hide answering later shows no Undo. */
+        private var pageGen = 0
+
+        fun guideGone() {
+            pageGen++
+            _hidden.value = null
+            _restored.value = null
+        }
+
+        fun hide(ch: IptvChannel) {
+            val t = HideChannelLogic.target(ch, _owned.value) ?: return
+            if (hideBusy) return
+            hideBusy = true
+            val tab = _state.value.tab
+            val gen = pageGen
+            viewModelScope.launch {
+                try {
+                    val code = service.hideChannel(t, true)
+                    JellytipTrace.log("iptv", "hide channel ${ch.id} -> $code")
+                    if (code != 200) {
+                        _state.update { it.copy(message = "Couldn't hide ${ch.name} (${if (code == 0) "no answer" else code}).") }
+                        return@launch
+                    }
+                    // Left the guide or changed tab meanwhile: hidden on the server; the next load leaves it out. No Undo.
+                    if (gen != pageGen || _state.value.tab != tab) return@launch
+                    val idx = all.indexOfFirst { it.id == ch.id }
+                    all = all.filter { it.id != ch.id }
+                    publish()
+                    _hidden.value = HiddenChannel(ch, if (idx < 0) all.size else idx, tab)
+                } finally {
+                    hideBusy = false
+                }
+            }
+        }
+
+        fun dismissHidden(h: HiddenChannel) {
+            if (_hidden.value == h) _hidden.value = null
+        }
+
+        fun consumeRestored(id: String) {
+            if (_restored.value == id) _restored.value = null
+        }
+
+        fun undoHide(h: HiddenChannel) {
+            dismissHidden(h)
+            val t = HideChannelLogic.target(h.ch, _owned.value) ?: return
+            val gen = pageGen
+            viewModelScope.launch {
+                val code = service.hideChannel(t, false)
+                JellytipTrace.log("iptv", "unhide channel ${h.ch.id} -> $code")
+                if (code != 200) {
+                    _state.update { it.copy(message = "Couldn't bring back ${h.ch.name}. Show it again in IPTV settings on the web.") }
+                    return@launch
+                }
+                // Only into the tab it came from, while the guide is open (a later load shows it again anyway)
+                if (gen != pageGen || _state.value.tab != h.tab) return@launch
+                all = HideChannelLogic.restore(all, h)
+                publish()
+                _state.update { it.copy(message = "${h.ch.name} is back in the guide.") }
+                _restored.value = h.ch.id
+            }
+        }
+
         fun toggleFavourite(ch: IptvChannel) {
             viewModelScope.launch {
                 val ok = service.setFavourite(ch.id, !ch.favourite)
@@ -525,6 +607,19 @@ fun JellytipLiveTvPage(
     var backHint by remember { mutableStateOf(false) }
     var gridFocused by remember { mutableStateOf(false) }
     var focusTime by remember { mutableStateOf(nowSec()) }
+    // Focus key of the row that takes over when a channel is hidden (the next row, else the one above)
+    var afterHideKey by remember { mutableStateOf<String?>(null) }
+    val selectedTabReq = remember { FocusRequester() }
+    // After the Undo toast: the neighbouring row, else (the tab's only channel was hidden) the selected tab chip
+    val backToGuide = {
+        val k = afterHideKey
+        if (k != null) pending = k else selectedTabReq.tryRequestFocus()
+        Unit
+    }
+    val keyForChannel = { id: String ->
+        val w = viewModel.state.value.windowStart
+        cellKey(id, IptvRules.progAt(cellsFor(viewModel.epg[id].orEmpty(), w), focusTime)?.start ?: w)
+    }
     var placed by remember { mutableStateOf(false) }
     var tabsFocused by remember { mutableStateOf(false) }
     var onNowFocused by remember { mutableStateOf(false) }
@@ -543,12 +638,18 @@ fun JellytipLiveTvPage(
         }
     }
 
-    LaunchedEffect(Unit) { viewModel.loadGuideRefresh() }
+    LaunchedEffect(Unit) {
+        viewModel.loadGuideRefresh()
+        viewModel.loadOwned()
+    }
     DisposableEffect(Unit) {
         playback.attach("guide")
         // The guide preview is muted (like home trailers); full screen has the sound
         playback.setVolume(0f)
-        onDispose { playback.detach("guide") }
+        onDispose {
+            playback.detach("guide")
+            viewModel.guideGone()
+        }
     }
     // No ON_STOP stop here: this is the nav entry's lifecycle, which also stops when the guide's scene is disposed after
     // OK opened full screen, i.e. after the full page asked for the stream (30-Oct P1, stuck on "Tuning"). The app being
@@ -790,7 +891,7 @@ fun JellytipLiveTvPage(
                 modifier = Modifier.fillMaxWidth().focusGroup().onFocusChanged { tabsFocused = it.hasFocus },
             ) {
                 items(tabs, key = { it.id }) { t ->
-                    TabChip(t.name, t.id == state.tab) {
+                    TabChip(t.name, t.id == state.tab, if (t.id == state.tab) Modifier.focusRequester(selectedTabReq) else Modifier) {
                         placed = false
                         viewModel.selectTab(t.id, "tab OK")
                     }
@@ -913,6 +1014,38 @@ fun JellytipLiveTvPage(
                         }
                 }
             }
+            // Undo for a channel just hidden (over the guide, bottom right)
+            val hidden by viewModel.hidden.collectAsState()
+            hidden?.let { h ->
+                HiddenUndo(
+                    h = h,
+                    // Focus goes to the neighbour now (never to nothing); to the restored row once the server agreed
+                    onUndo = {
+                        backToGuide()
+                        viewModel.undoHide(h)
+                    },
+                    onLeave = {
+                        viewModel.dismissHidden(h)
+                        backToGuide()
+                    },
+                    onGone = { viewModel.dismissHidden(h) },
+                )
+            }
+            // Hidden (the server agreed): the row is gone, nothing should keep showing it as focused
+            LaunchedEffect(hidden) {
+                val h = hidden ?: return@LaunchedEffect
+                if (focusedChannel?.id == h.ch.id) {
+                    focusedChannel = null
+                    focusedProg = null
+                    focusedRow = -1
+                }
+            }
+            val restored by viewModel.restored.collectAsState()
+            LaunchedEffect(restored) {
+                val id = restored ?: return@LaunchedEffect
+                viewModel.consumeRestored(id)
+                pending = keyForChannel(id)
+            }
         }
     }
     // Back below the first row: to the top of the guide (same time column); Back at the top leaves as before
@@ -935,7 +1068,81 @@ fun JellytipLiveTvPage(
         now = now,
         onWatch = { ch, t -> openFullScreen(ch, t) },
         onDismiss = { actions = null },
+        onHide = { ch ->
+            afterHideKey = HideChannelLogic.neighbour(state.channels.orEmpty().map { it.id }, ch.id)?.let(keyForChannel)
+            viewModel.hide(ch)
+        },
     )
+}
+
+/**
+ * "Hidden <name>" with Undo for [HideChannelLogic.UNDO_MS] (the hidden row had focus, so Undo takes it): OK = Undo;
+ * an arrow, Back or the timeout = back to the guide on the neighbouring row.
+ */
+@Composable
+private fun HiddenUndo(
+    h: HiddenChannel,
+    onUndo: () -> Unit,
+    onLeave: () -> Unit,
+    onGone: () -> Unit,
+) {
+    val req = remember(h) { FocusRequester() }
+    // Leaving the guide while it shows: it doesn't come back later
+    DisposableEffect(h) { onDispose { onGone() } }
+    LaunchedEffect(h) {
+        withFrameNanos { }
+        req.tryRequestFocus()
+        delay(HideChannelLogic.UNDO_MS)
+        onLeave()
+    }
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomEnd) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.88f), RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Text(
+                "Hid ${h.ch.name} from the guide (for everyone on this provider)",
+                color = JellytipPalette.Vanilla,
+                fontFamily = JellytipFontFamily,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 520.dp),
+            )
+            Surface(
+                onClick = onUndo,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+                colors =
+                    ClickableSurfaceDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.12f),
+                        focusedContainerColor = Color.White,
+                        contentColor = JellytipPalette.Vanilla,
+                        focusedContentColor = Color.Black,
+                    ),
+                modifier =
+                    Modifier
+                        .focusRequester(req)
+                        .onPreviewKeyEvent { e ->
+                            when (e.key) {
+                                // Back: swallowed both ways and acted on at key-up, so the up never reaches the system
+                                // (it would leave the guide or trigger its Back-to-top)
+                                Key.Back -> {
+                                    if (e.type == KeyEventType.KeyUp) onLeave()
+                                    true
+                                }
+                                Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {
+                                    if (e.type == KeyEventType.KeyDown) onLeave()
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+            ) {
+                Text("Undo", fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -945,8 +1152,10 @@ private fun ProgrammeActions(
     now: Long,
     onWatch: (IptvChannel, IptvTarget) -> Unit,
     onDismiss: () -> Unit,
+    onHide: (IptvChannel) -> Unit,
 ) {
     val (ch, p) = target ?: return
+    val owned by viewModel.owned.collectAsState()
     val items =
         buildList {
             add(DialogItem("Watch ${ch.name} live", dismissOnClick = true) { onWatch(ch, IptvTarget(ch.id, ch.name)) })
@@ -957,6 +1166,10 @@ private fun ProgrammeActions(
                 add(DialogItem("Record “${p.title}”", dismissOnClick = true) { viewModel.record(ch, p) })
             }
             add(DialogItem(if (ch.favourite) "Remove from Favourites" else "Add to Favourites", dismissOnClick = true) { viewModel.toggleFavourite(ch) })
+            // Owner only: hides it in the provider for everyone on it (Undo for 8 s, or Show again on the web)
+            if (HideChannelLogic.target(ch, owned) != null) {
+                add(DialogItem("Hide ${ch.name} from the guide", dismissOnClick = true) { onHide(ch) })
+            }
         }
     val subtitle = if (p.title.isNotEmpty()) "${p.title}  ·  ${hhmm(p.start)}–${hhmm(p.stop)}" else ch.name
     com.github.damontecres.wholphin.jellytip.JellytipDialog(
