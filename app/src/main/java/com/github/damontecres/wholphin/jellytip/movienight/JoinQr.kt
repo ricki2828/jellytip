@@ -17,14 +17,15 @@ object JoinQr {
         code: String,
     ): String? {
         val base = companionBase.trim().trimEnd('/')
-        if (!base.startsWith("http://") && !base.startsWith("https://")) return null
-        if (!base.endsWith("-api")) return null
+        if (!base.startsWith("http://", ignoreCase = true) && !base.startsWith("https://", ignoreCase = true)) return null
+        if (!base.endsWith("-api", ignoreCase = true)) return null
         val c = code.uppercase().filter { it in MovieNight.CODE_ALPHABET }
         if (c.length != code.length || c.isEmpty()) return null
-        return "${base.removeSuffix("-api")}/#/movienight?join=$c"
+        return "${base.dropLast(4)}/#/movienight?join=$c"
     }
 
-    /** QR modules (true = dark), row by row, with a 2-module quiet zone; medium error correction. */
+    /** QR modules (true = dark), row by row, with a 2-module quiet zone; low error correction (fewer, bigger modules: a
+     *  screen is clean, and the code has to read from the sofa). */
     fun matrix(text: String): Array<BooleanArray> {
         val m =
             QRCodeWriter().encode(
@@ -32,7 +33,7 @@ object JoinQr {
                 BarcodeFormat.QR_CODE,
                 0,
                 0,
-                mapOf(EncodeHintType.MARGIN to 2, EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M),
+                mapOf(EncodeHintType.MARGIN to 2, EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L),
             )
         return Array(m.height) { y -> BooleanArray(m.width) { x -> m.get(x, y) } }
     }

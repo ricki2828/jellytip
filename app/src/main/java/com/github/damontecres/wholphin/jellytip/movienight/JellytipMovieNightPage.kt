@@ -56,6 +56,7 @@ import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -257,12 +258,23 @@ class JellytipMovieNightViewModel
             poll =
                 viewModelScope.launch {
                     while (isActive) {
+                        val epoch = voteEpoch
                         val r = jellytipApi.userCall("v1/me/movienight/$code", timeoutMs = 8_000)
                         when {
                             r == null -> _state.value = _state.value.copy(offline = true)
                             r.first == 200 -> {
-                                MovieNight.parse(r.second)?.let { s ->
-                                    _state.value = _state.value.copy(phase = Phase.Night(s), offline = false, revealed = _state.value.revealed || MovieNight.finished(s))
+                                // An answer that may predate one of your votes (pressed, or still being saved) would undo it on
+                                // screen: skip it, the next poll is 3 s away
+                                val fresh = epoch == voteEpoch && sending == 0
+                                MovieNight.parse(r.second)?.takeIf { fresh }?.let { s ->
+                                    _state.value =
+                                        _state.value.copy(
+                                            phase = Phase.Night(s),
+                                            offline = false,
+                                            error = if (saveFailed) _state.value.error else null,
+                                            revealed = _state.value.revealed || MovieNight.showReveal(s, lastOwnVote, System.currentTimeMillis()),
+                                        )
+                                    saveFailed = false
                                     ensureFilms(s.items)
                                 }
                             }
@@ -285,25 +297,74 @@ class JellytipMovieNightViewModel
                 }
         }
 
-        private var voting: Job? = null
+        /** Bumped by every vote press and every finished save: a poll started before it may not repaint your votes. */
+        @Volatile private var voteEpoch = 0
+
+        /** Saves in flight (one at a time, see [sendLock]). */
+        @Volatile private var sending = 0
+        private val sendLock = kotlinx.coroutines.sync.Mutex()
+
+        /** Your latest wish per film, not yet confirmed by the server: only the newest value is sent. */
+        private val wanted = java.util.concurrent.ConcurrentHashMap<String, MnVote>()
+
+        /** What the server last confirmed per film (to undo a vote it didn't save). */
+        private val confirmed = java.util.concurrent.ConcurrentHashMap<String, MnVote>()
+        private var lastOwnVote = 0L
+        private var saveFailed = false
 
         /** OK on a poster: your own vote (the TV's signed-in person is a member as host), Yes → Maybe → No. Shown at once. */
         fun vote(id: String) {
             val s = (_state.value.phase as? Phase.Night)?.session ?: return
             if (!s.open || id !in s.items) return
+            if (id !in wanted) s.mine[id]?.let { confirmed[id] = it } ?: confirmed.remove(id)
             val v = MovieNight.nextVote(s.mine[id])
+            voteEpoch++
+            lastOwnVote = System.currentTimeMillis()
+            wanted[id] = v
             _state.value = _state.value.copy(phase = Phase.Night(MovieNight.withVote(s, id, v)), error = null)
-            voting?.cancel()
-            voting =
-                viewModelScope.launch {
+            viewModelScope.launch { send(s.code, id) }
+        }
+
+        /** One save at a time, in press order; a save sends the newest wish for its film (older presses are dropped). */
+        private suspend fun send(
+            code: String,
+            id: String,
+        ) {
+            sending++
+            try {
+                sendLock.withLock {
+                    val v = wanted[id] ?: return
                     val body = JSONObject().put("item", id).put("vote", v.wire).toString()
-                    val r = jellytipApi.userCall("v1/me/movienight/${s.code}/vote", body, timeoutMs = 8_000)
+                    val r = jellytipApi.userCall("v1/me/movienight/$code/vote", body, timeoutMs = 8_000)
+                    voteEpoch++
+                    // A newer press for this film is queued: its own save paints the result
+                    val newest = wanted[id] == v
+                    if (newest) wanted.remove(id)
                     when {
-                        r?.first == 200 -> MovieNight.parse(r.second)?.let { n -> _state.value = _state.value.copy(phase = Phase.Night(n)) }
-                        r?.first == 409 -> _state.value = _state.value.copy(error = "Voting has closed.")
-                        else -> _state.value = _state.value.copy(error = "Couldn't save your vote. Press OK to try again.")
+                        r?.first == 200 -> {
+                            confirmed[id] = v
+                            if (newest) {
+                                MovieNight.parse(r.second)?.let { n ->
+                                    // keep any other film's vote still on its way
+                                    val shown = wanted.entries.fold(n) { acc, (k, w) -> MovieNight.withVote(acc, k, w) }
+                                    _state.value = _state.value.copy(phase = Phase.Night(shown), revealed = _state.value.revealed || MovieNight.showReveal(n, lastOwnVote, System.currentTimeMillis()))
+                                }
+                            }
+                        }
+                        else -> {
+                            if (newest) {
+                                // Put back what the server has, so OK starts again from the truth, and say so
+                                val cur = (_state.value.phase as? Phase.Night)?.session
+                                if (cur != null) _state.value = _state.value.copy(phase = Phase.Night(MovieNight.withVote(cur, id, confirmed[id])))
+                            }
+                            saveFailed = true
+                            _state.value = _state.value.copy(error = if (r?.first == 409) "Voting has closed." else "Couldn't save your vote. Press OK to try again.")
+                        }
                     }
                 }
+            } finally {
+                sending--
+            }
         }
 
         private suspend fun ensureFilms(ids: List<String>) {
@@ -354,6 +415,8 @@ class JellytipMovieNightViewModel
 
         fun stopPolling() = poll?.cancel()
 
+        fun showReveal(s: MnSession): Boolean = MovieNight.showReveal(s, lastOwnVote, System.currentTimeMillis())
+
         fun resume() {
             ((_state.value.phase as? Phase.Night)?.session?.code ?: remembered())?.let { follow(it) }
         }
@@ -389,7 +452,7 @@ fun JellytipMovieNightPage(
             is JellytipMovieNightViewModel.Phase.Pick -> PickScreen(p, state, viewModel)
             is JellytipMovieNightViewModel.Phase.Night -> {
                 val s = p.session
-                if (state.revealed || MovieNight.finished(s)) RevealScreen(s, state, viewModel) else NightScreen(s, state, viewModel)
+                if (state.revealed || viewModel.showReveal(s)) RevealScreen(s, state, viewModel) else NightScreen(s, state, viewModel)
             }
         }
     }
@@ -523,7 +586,8 @@ private fun JoinCard(
             Text(MovieNight.showCode(code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = 3.sp)
             if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
         }
-        url?.let { QrCode(it, 96.dp) }
+        // ~150 dp: about 3.5 dp a module, readable from a sofa a few metres away on a 55" TV (not verified on a device)
+        url?.let { QrCode(it, 150.dp) }
     }
 }
 

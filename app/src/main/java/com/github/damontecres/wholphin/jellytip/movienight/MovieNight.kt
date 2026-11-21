@@ -85,17 +85,31 @@ object MovieNight {
             null -> this
         }
 
-    /** Optimistic local view of your vote: [MnSession.mine] updated and the counts moved from the old vote to the new one. */
+    /**
+     * Optimistic local view of your vote: [MnSession.mine] updated and the counts moved from the old vote to the new one.
+     * [vote] null takes your vote back off (used to undo a vote the server didn't save).
+     */
     fun withVote(
         s: MnSession,
         item: String,
-        vote: MnVote,
+        vote: MnVote?,
     ): MnSession {
         val old = s.mine[item]
         if (old == vote) return s
         val c = s.counts[item] ?: MnCounts()
-        return s.copy(mine = s.mine + (item to vote), counts = s.counts + (item to c.add(old, -1).add(vote, 1)))
+        val mine = if (vote == null) s.mine - item else s.mine + (item to vote)
+        return s.copy(mine = mine, counts = s.counts + (item to c.add(old, -1).add(vote, 1)))
     }
+
+    /** After your own vote the night doesn't end on "everyone voted" for this long, so the host can still change it with OK. */
+    const val VOTE_GRACE_MS = 5_000L
+
+    /** Show the result: closed, or everyone voted (unless you voted in the last [VOTE_GRACE_MS]). */
+    fun showReveal(
+        s: MnSession,
+        lastOwnVoteMs: Long,
+        nowMs: Long,
+    ): Boolean = !s.open || (allVoted(s) && nowMs - lastOwnVoteMs >= VOTE_GRACE_MS)
 
     fun scoreOf(c: MnCounts): Int = c.yes * 2 + c.maybe * 1 + c.no * -2
 

@@ -243,12 +243,11 @@ fun JellytipJourneysPage(
                                 val rowState = rememberLazyListState(initialFirstVisibleItemIndex = if (back?.first == i) back.second else 0)
                                 LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp), modifier = Modifier.focusGroup().focusRestorer()) {
                                     items(list, key = { it.id }) { s ->
+                                        // both may sit on one card: `first` must stay attached for the column's focusRestorer
                                         val m =
-                                            when {
-                                                s.id == viewModel.lastJourney -> Modifier.focusRequester(restore)
-                                                i == firstRow && s == list.first() -> Modifier.focusRequester(first)
-                                                else -> Modifier
-                                            }
+                                            Modifier
+                                                .then(if (s.id == viewModel.lastJourney && i == back?.first) Modifier.focusRequester(restore) else Modifier)
+                                                .then(if (i == firstRow && s == list.first()) Modifier.focusRequester(first) else Modifier)
                                         JourneyCard(s, modifier = m) { viewModel.open(s.id) }
                                     }
                                 }
