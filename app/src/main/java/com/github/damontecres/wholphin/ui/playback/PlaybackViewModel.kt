@@ -614,9 +614,9 @@ class PlaybackViewModel
                                 prefs = preferences,
                             )
                     }
-                val audioIndex = audioResult?.stream?.index
+                val wholphinAudioIndex = audioResult?.stream?.index
 
-                val subtitleIndex =
+                val wholphinSubtitleIndex =
                     mediaSource?.let {
                         streamChoiceService
                             .chooseSubtitleStream(
@@ -628,6 +628,31 @@ class PlaybackViewModel
                                 prefs = preferences,
                             )?.stream
                             ?.index
+                    }
+                // Jellytip: the person's ordered languages (web 60561c2a) when nothing was chosen for this title / series
+                val jellytipLangs = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value
+                val jellytipNoAudioChoice = (itemPlayback?.audioIndex ?: TrackIndex.UNSPECIFIED) == TrackIndex.UNSPECIFIED && audioStc == null
+                val jellytipNoSubChoice = (itemPlayback?.subtitleIndex ?: TrackIndex.UNSPECIFIED) == TrackIndex.UNSPECIFIED && subtitleStc == null
+                val jellytipStreams = mediaSource?.let { com.github.damontecres.wholphin.jellytip.JellytipTrackPick.streams(it) }.orEmpty()
+                val audioIndex =
+                    if (jellytipLangs != null && jellytipNoAudioChoice && jellytipLangs.audioLangs.isNotEmpty()) {
+                        com.github.damontecres.wholphin.jellytip.JellytipTrackPick
+                            .pickAudio(jellytipStreams, jellytipLangs.audioLangs, wholphinAudioIndex)
+                    } else {
+                        wholphinAudioIndex
+                    }
+                val subtitleIndex =
+                    if (jellytipLangs != null && jellytipNoSubChoice && (jellytipLangs.audioLangs.isNotEmpty() || jellytipLangs.subtitleLangs.isNotEmpty())) {
+                        com.github.damontecres.wholphin.jellytip.JellytipTrackPick
+                            .pickSubtitle(
+                                jellytipStreams,
+                                audioIndex,
+                                jellytipLangs.audioLangs,
+                                jellytipLangs.subtitleLangs,
+                                wholphinSubtitleIndex ?: TrackIndex.DISABLED,
+                            ).takeIf { it != TrackIndex.DISABLED || wholphinSubtitleIndex != null } ?: wholphinSubtitleIndex
+                    } else {
+                        wholphinSubtitleIndex
                     }
                 Timber.d(
                     "Selected mediaSource=%s, audioIndex=%s, subtitleIndex=%s",
