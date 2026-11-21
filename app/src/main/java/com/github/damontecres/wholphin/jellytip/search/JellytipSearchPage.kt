@@ -312,6 +312,8 @@ private fun SearchContent(
                             }
                         },
             )
+            // t5n (21-Nov): web 69fc43f6 "Not sure? Ask" chip beside the box
+            Chip("Not sure? Ask") { viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipAsk, "search -> ask") }
             if (state.searching) {
                 Text("Searching…", color = JellytipPalette.Vanilla.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
             }
