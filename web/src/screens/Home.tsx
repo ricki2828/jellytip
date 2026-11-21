@@ -11,6 +11,7 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit, type Placement } from "../components/HomeEdit";
 import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
+import { HomeTopHero } from "../components/LiveMatchHero";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { ChannelsRow } from "../components/ChannelsRow";
 import { useHubTick } from "../api/collections";
@@ -460,7 +461,8 @@ export function Home() {
           </button>
         </p>
       )}
-      <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />
+      {/* TV port (Game Centre 2A): while his game (else the top-ranked one) is live, the live match hero takes the hero's place */}
+      <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
         {entries && entries.length > 0 && (
           <Row

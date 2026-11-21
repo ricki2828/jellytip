@@ -14,10 +14,12 @@ import { findReminder } from "../../lib/reminders";
 import { refreshUpcoming, useUpcoming } from "../../api/upcomingStore";
 import { openMatchInfo } from "../../components/MatchInfo";
 import { logoSrc } from "../../api/iptv";
-import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, legacyForced, todayMore, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type FxMore, type Game, type Gate } from "../../lib/gameCentre";
+import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, bestChannel, groupFixtures, isFavourite, legacyForced, todayMore, scoreText, scoreVisible, sectionGames, spoilersOn, waysFor, waysForFixture, type FxItem, type FxMore, type Game, type Gate } from "../../lib/gameCentre";
 import type { Rec } from "../../lib/recs";
 import { go, useRoute } from "../../lib/router";
 import { FailNote } from "../../components/FailNote";
+import { LiveMatchHero, useEdgeStyle } from "../../components/LiveMatchHero";
+import { gameCentrePicks } from "../../lib/liveHero";
 import { flashNote } from "../../components/TasteButtons";
 import { skippedNote } from "../../lib/streamFail";
 import "./iptv.css";
@@ -246,8 +248,12 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   const press = (path: string) => { if (w.skipped) flashNote(skippedNote(w.skipped)); go(path); }; // a channel that failed earlier is passed over, and we say so
   const act = w.ways[0] ? () => press(w.ways[0].path) : w.phase === "upcoming" && canRec ? onRecord : f.matchId ? () => openMatchInfo(f.matchId!) : null;
   const best = bestChannel(f);
+  // Look 2A: a team-colour edge each side, once the match record's colours are in (fetched when the card is on screen); not on
+  // no-stream cards, whose own left marker says so
+  const li = useRef<HTMLLIElement>(null);
+  const edges = useEdgeStyle(f, li);
   return (
-    <li className={`gc-card ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
+    <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
         {f.league && <span className="gc-league">{f.league}</span>}
@@ -371,8 +377,27 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
     }
   }, []);
 
+  // Watch takes focus once, when Game Centre opens: a later change of games (a kick-off, a re-rank) never pulls focus off a card
+  const heroFocused = useRef(false);
+  useEffect(() => {
+    if (heroPicks.length) heroFocused.current = true;
+  });
+  const heroPicks = useMemo(() => gameCentrePicks(items, now, prefs?.sport.teamRefs ?? [], prefs?.sport.muted), [items, now, prefs]);
+  const heroMine = heroPicks.some((f) => isFavourite(f, prefs?.sport.teamRefs ?? []));
   return (
     <>
+      {heroPicks.length > 0 && (
+        <div className="gc-hero">
+        <LiveMatchHero
+          key={heroPicks.map((f) => f.fid).join("|")}
+          picks={heroPicks}
+          nowSec={now}
+          kicker={heroPicks[0].status === "in" ? (heroMine ? "Your game is on" : "Live now") : heroMine ? "Your next game" : "Up next"}
+          autoFocus={!focusFid && !heroFocused.current ? "always" : "ifLost"}
+          spoilers={pref}
+        />
+        </div>
+      )}
       <p className="iptv-hint">{pref ? "Scores are on (Settings → Live sport)." : "Spoiler-safe: no scores or results on this screen."}</p>
       {degraded && <p className="iptv-hint">Some sport data is unavailable right now, so this list may be incomplete.</p>}
       {items.length === 0 && <p className="iptv-hint">No games to show right now.</p>}
