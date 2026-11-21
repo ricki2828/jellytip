@@ -37,38 +37,38 @@ data class TeamSide(
 )
 
 /**
- * The signed-in person's team reminders. [reset] (user switch) clears them and bumps [gen], so an answer fetched for the
- * previous person ([loaded] / [missing] with an older generation) is dropped instead of showing their list.
+ * The signed-in person's team reminders. An answer fetched for someone else ([UserOwnership.accept]) is dropped, and a
+ * user switch ([switched]) clears only a list that isn't the new person's own.
  */
-class TeamReminderState {
+class TeamReminderState(
+    private val own: UserOwnership = UserOwnership.app(),
+) {
     private val _items = MutableStateFlow<List<TeamReminder>?>(null)
     val items: StateFlow<List<TeamReminder>?> = _items
     private val _available = MutableStateFlow<Boolean?>(null)
     val available: StateFlow<Boolean?> = _available
 
-    @Volatile
-    var gen = 0
-        private set
+    fun start(): String = own.start()
 
-    fun reset() {
-        gen++
+    fun switched(signedOut: Boolean) {
+        if (!own.mustClear(signedOut)) return
         _items.value = null
         _available.value = null
     }
 
     fun loaded(
-        g: Int,
+        startedAs: String,
         list: List<TeamReminder>,
     ): Boolean {
-        if (g != gen) return false
+        if (!own.accept(startedAs)) return false
         _available.value = true
         _items.value = list
         return true
     }
 
     /** 404: this server has no team reminders. */
-    fun missing(g: Int): Boolean {
-        if (g != gen) return false
+    fun missing(startedAs: String): Boolean {
+        if (!own.accept(startedAs)) return false
         _available.value = false
         return true
     }
@@ -124,10 +124,7 @@ class JellytipTeamReminders
         init {
             // Another person signed in (or out): never show the previous person's teams; screens reload on open
             scope.launch {
-                service.user.drop(1).collect {
-                    JellytipTrace.log("iptv", "team reminders: user switch, list cleared")
-                    state.reset()
-                }
+                service.user.drop(1).collect { u -> state.switched(signedOut = u == null) }
             }
         }
 
@@ -137,7 +134,7 @@ class JellytipTeamReminders
 
         private suspend fun load() {
             val api = JellytipApi.shared ?: return
-            val g = state.gen
+            val g = state.start()
             val (code, body) = api.userCall("v1/iptv/reminders/teams") ?: return
             when (code) {
                 200 -> state.loaded(g, runCatching { TeamReminderLogic.parse(body) }.getOrNull() ?: emptyList())
@@ -157,7 +154,7 @@ class JellytipTeamReminders
             val teamId = side.teamId ?: return onDone(null)
             scope.launch {
                 val api = JellytipApi.shared ?: return@launch onDone("Not signed in to the companion.")
-                val g = state.gen
+                val g = state.start()
                 val found = reminderFor(teamId)
                 val on = turnOn ?: (found == null)
                 // Turning off something already gone (or never loaded) is done

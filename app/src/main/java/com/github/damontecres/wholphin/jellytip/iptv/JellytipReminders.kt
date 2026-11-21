@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -63,6 +64,28 @@ class JellytipReminders
         /** "<id>:soon" / "<id>:live" already nudged (or already past when first seen). */
         private val nudged = HashSet<String>()
 
+        /** Whose reminders these are: another person's are cleared at a user switch, a late answer for them dropped. */
+        private val own = UserOwnership.app()
+
+        init {
+            scope.launch { service.user.drop(1).collect { u -> switched(u == null) } }
+        }
+
+        private fun switched(signedOut: Boolean) {
+            if (!own.mustClear(signedOut)) return
+            JellytipTrace.log("iptv", "reminders: user switch, cleared")
+            val wasRunning = loop?.isActive == true
+            loop?.cancel()
+            loop = null
+            _available.value = null
+            _items.value = null
+            _nudge.value = null
+            nudged.clear()
+            lastFetch = 0L
+            // Home started the poll: keep it going for the new person
+            if (wasRunning && !signedOut) start()
+        }
+
         /** Start loading and polling (Home calls it; idempotent). */
         fun start() {
             if (loop?.isActive == true) return
@@ -90,7 +113,9 @@ class JellytipReminders
         }
 
         suspend fun refresh() {
+            val who = own.start()
             val got = service.reminders() ?: return
+            if (!own.accept(who)) return
             lastFetch = System.currentTimeMillis()
             when (got.first) {
                 200 -> {
@@ -167,13 +192,14 @@ class JellytipReminders
 
         fun add(u: IptvUpcoming) {
             scope.launch {
+                val who = own.start()
                 // Fixture path first when the game is known (web a9b66910): one row per game, whoever sets it
                 val fixtureId = u.fid
                 val matchId = u.matchId ?: u.matchInfo?.id
                 val id =
                     (if (fixtureId != null || matchId != null) service.addFixtureReminder(fixtureId, matchId)?.takeIf { it.isNotBlank() } else null)
                         ?: service.addReminder(u)
-                if (id != null) {
+                if (id != null && own.accept(who)) {
                     _items.value = (_items.value.orEmpty().filter { it.key != u.key } + u.copy(reminderId = id)).sortedBy { it.start }
                     refresh()
                 }
@@ -187,10 +213,11 @@ class JellytipReminders
                 val list = _items.value.orEmpty()
                 val me = list.firstOrNull { it.reminderId == id }
                 val ids = (listOf(id) + (me?.let { m -> list.filter { it.sameGame(m) }.mapNotNull { it.reminderId } } ?: emptyList())).distinct()
+                val who = own.start()
                 var anyOk = false
                 for (x in ids) if (service.deleteReminder(x)) anyOk = true
                 JellytipTrace.log("iptv", "reminder off ${ids.size} row(s) for ${me?.key ?: id}")
-                if (anyOk) {
+                if (anyOk && own.accept(who)) {
                     _items.value = _items.value?.filter { it.reminderId !in ids }
                     refresh()
                 }

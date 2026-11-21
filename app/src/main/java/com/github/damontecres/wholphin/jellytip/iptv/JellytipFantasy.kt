@@ -163,6 +163,16 @@ object JellytipFantasy {
     @Volatile
     private var missingUntil = 0L
 
+    private val own = UserOwnership.app()
+
+    /** A user switch (JellytipIptvService.switchUser): the previous person's matchups and link state go. */
+    fun switched(signedOut: Boolean) {
+        if (!own.mustClear(signedOut)) return
+        _live.value = null
+        linked.value = null
+        lastLoad = 0L
+    }
+
     /** Load when older than [maxAgeMs] (and the route isn't known missing); fire-and-forget. */
     fun refresh(maxAgeMs: Long) {
         val now = System.currentTimeMillis()
@@ -170,7 +180,9 @@ object JellytipFantasy {
         lastLoad = now
         scope.launch {
             val api = JellytipApi.shared ?: return@launch
+            val who = own.start()
             val (code, body) = api.userCall("v1/fantasy/live", timeoutMs = 8_000) ?: return@launch
+            if (!own.accept(who)) return@launch
             when (code) {
                 200 -> {
                     linked.value = true

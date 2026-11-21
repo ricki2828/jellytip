@@ -8,35 +8,49 @@ import org.junit.Test
 
 class TeamReminderStateTest {
     private val a = listOf(TeamReminder("r1", "t1", "Chiefs", "football", "nfl"))
+    private var token = "A"
+    private val s = TeamReminderState(UserOwnership { token })
 
     @Test
-    fun resetClearsTheList() {
-        val s = TeamReminderState()
-        assertTrue(s.loaded(s.gen, a))
+    fun switchClearsThePreviousPersonsList() {
+        assertTrue(s.loaded(s.start(), a))
         assertEquals(a, s.items.value)
-        assertEquals(true, s.available.value)
-        s.reset()
+        token = "B"
+        s.switched(signedOut = false)
         assertNull(s.items.value)
         assertNull(s.available.value)
     }
 
     @Test
-    fun answerForThePreviousUserIsDropped() {
-        val s = TeamReminderState()
-        val g = s.gen // fetch starts for user A
-        s.reset() // user B signs in before it lands
+    fun answerForThePreviousPersonIsDropped() {
+        val g = s.start() // fetch starts as A
+        token = "B" // B signs in before it lands
         assertFalse(s.loaded(g, a))
         assertNull(s.items.value)
         assertFalse(s.missing(g))
         assertNull(s.available.value)
-        assertTrue(s.loaded(s.gen, emptyList()))
+        assertTrue(s.loaded(s.start(), emptyList()))
         assertEquals(emptyList<TeamReminder>(), s.items.value)
     }
 
     @Test
+    fun newPersonsListFetchedBeforeTheSwitchIsKept() {
+        token = "B" // token moved, switch not announced yet
+        assertTrue(s.loaded(s.start(), a))
+        s.switched(signedOut = false)
+        assertEquals(a, s.items.value)
+    }
+
+    @Test
+    fun signOutClears() {
+        assertTrue(s.loaded(s.start(), a))
+        s.switched(signedOut = true)
+        assertNull(s.items.value)
+    }
+
+    @Test
     fun missingHidesTheFeature() {
-        val s = TeamReminderState()
-        assertTrue(s.missing(s.gen))
+        assertTrue(s.missing(s.start()))
         assertEquals(false, s.available.value)
     }
 }
