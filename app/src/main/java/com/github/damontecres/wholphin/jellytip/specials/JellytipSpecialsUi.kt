@@ -468,7 +468,7 @@ private fun TonightsPickRow(
         showViewMore = true,
         viewMoreCardContent = { mod ->
             SpecialCard(
-                width = SpecialTokens.POSTER_W,
+                width = 200.dp,
                 height = SpecialTokens.FEATURE_H,
                 onClick = {
                     JellytipTrailerControl.stop()

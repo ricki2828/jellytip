@@ -15,16 +15,19 @@ object JellytipHomePlan {
 
     fun count(r: JellytipServerRow) = r.itemIds.size + r.iptvItems.size + r.missing.size
 
+    /** Never dropped for being short: a trilogy, a "Starring X" row, a collection, My list. */
+    fun keepsShort(r: JellytipServerRow) = r.isFranchise || r.person != null || r.collection != null || r.family == "mylist"
+
+    /** [pinned] null = the person's prefs aren't known yet: no thin-row drop (a pinned row could go), dedupe only. */
     fun plan(
         rows: List<JellytipServerRow>,
-        pinned: Set<String>,
+        pinned: Set<String>?,
     ): List<JellytipServerRow> {
         val seen = HashMap<String, Int>()
         val out = ArrayList<JellytipServerRow>()
         for (r in rows) {
-            val pin = r.id in pinned
-            // My list and franchise rows (and pins) are never dropped for being short
-            if (!pin && count(r) < MIN_ROW_ITEMS && r.family != "mylist") continue
+            val pin = pinned != null && r.id in pinned
+            if (pinned != null && !pin && count(r) < MIN_ROW_ITEMS && !keepsShort(r)) continue
             val shown =
                 if (!pin && filterable(r)) {
                     val kept = r.itemIds.filter { (seen[key(it)] ?: 0) < DEDUPE_AT }

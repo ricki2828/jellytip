@@ -240,7 +240,7 @@ fun rememberJellytipRows(
     // Home: thin rows dropped, repeats across rows thinned (web d3f68e43); pinned rows untouched
     val planned: (JellytipRowsAnswer?) -> JellytipRowsAnswer? = { a ->
         if (page == "home" && a != null) {
-            val pinned = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.pinned.orEmpty().toSet()
+            val pinned = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.pinned?.toSet()
             a.copy(rows = com.github.damontecres.wholphin.jellytip.rows.JellytipHomePlan.plan(a.rows, pinned))
         } else {
             a

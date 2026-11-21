@@ -27,4 +27,13 @@ class HomePlanTest {
         assertEquals(listOf(ids[4], ids[5], ids[6], ids[7]), out[3].itemIds) // id 0 was in 3 earlier rows
         assertEquals(rows[4].itemIds, out[4].itemIds) // thinning would leave < 4: kept whole
     }
+
+    @Test
+    fun shortFranchisePersonAndUnknownPrefsKept() {
+        val trilogy = row("f", 0, 1, 2).copy(layout = "franchise", collection = JellytipCollection(1, "Trilogy", "", null, null, emptyList(), 0, 3, 3, emptyList()))
+        val person = row("p", 3, 4, 5).copy(person = JellytipServerRow.Person(UUID.randomUUID(), "X", "Actor", null))
+        assertEquals(listOf("f", "p"), JellytipHomePlan.plan(listOf(trilogy, person), emptySet()).map { it.id })
+        // prefs not known yet: nothing dropped for being short
+        assertEquals(listOf("a"), JellytipHomePlan.plan(listOf(row("a", 0, 1)), null).map { it.id })
+    }
 }
