@@ -300,7 +300,7 @@ class JellytipIptvPlayback
                             reportFail(t, "decode")
                             _note.value = null
                             stopPlayer()
-                            setState(IptvPlayState.Failed(t, "This file's format can't be played on the TV."), "container unsupported")
+                            setState(IptvPlayState.Failed(t, "This file's format can't be played on the TV.", reported = true), "container unsupported")
                         }
                         return
                     }
@@ -524,7 +524,7 @@ class JellytipIptvPlayback
                         if (rec.phase == StreamRecovery.Phase.FAILED) reportFail(t, "recovery_gave_up", posSec())
                         if (rec.phase == StreamRecovery.Phase.DENIED) reportFail(t, StreamRecovery.deniedFailReason(rec.reason))
                         val msg = if (rec.phase == StreamRecovery.Phase.BLOCKED) "All connections are in use right now." else copy ?: "The stream stopped."
-                        setState(IptvPlayState.Failed(t, msg, canRetry = true), "recovery ${rec.phase}")
+                        setState(IptvPlayState.Failed(t, msg, canRetry = true, reported = failReported), "recovery ${rec.phase}")
                     }
                 }
                 StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED -> {
@@ -708,7 +708,7 @@ class JellytipIptvPlayback
             if (reported) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
-            setState(IptvPlayState.Failed(target, message, reported), "failed")
+            setState(IptvPlayState.Failed(target, message, reported = reported), "failed")
         }
 
         /** The target whose stream the player holds (set with the media item); errors from any other are stale. */
