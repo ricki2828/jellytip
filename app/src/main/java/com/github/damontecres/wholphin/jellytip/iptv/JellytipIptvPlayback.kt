@@ -200,13 +200,19 @@ class JellytipIptvPlayback
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     val t = _state.value.target ?: return
                     JellytipTrace.player("iptv", "state=$playbackState ${t.channelId}")
-                    if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening) {
+                    // READY from the previous stream while the next one is still being asked for is not the new one playing
+                    if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
                         setState(IptvPlayState.Playing(t), "ready")
                     }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
                     val t = _state.value.target ?: return
+                    // A zap: the old stream's error arrives after the new target was asked for. It is not the new one failing.
+                    if (loadedTarget != t) {
+                        JellytipTrace.player("iptv", "stale error ${error.errorCodeName} from ${loadedTarget?.channelId} ignored (now ${t.channelId})")
+                        return
+                    }
                     val http = generateSequence(error as Throwable?) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
                     val code = http?.headerFields?.entries?.firstOrNull { it.key.equals("X-Iptv-Error", ignoreCase = true) }?.value?.firstOrNull()
                     JellytipTrace.player("iptv", "error ${error.errorCodeName} http=${http?.responseCode} code=$code ${t.channelId}")
@@ -303,6 +309,7 @@ class JellytipIptvPlayback
                                     .apply { if (ts) setMimeType(MimeTypes.VIDEO_MP2T) }
                                     .build()
                             val p = ensurePlayer()
+                            loadedTarget = target
                             if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
                             p.playWhenReady = true
                             p.prepare()
@@ -328,7 +335,12 @@ class JellytipIptvPlayback
             setState(IptvPlayState.Failed(target, message), "failed")
         }
 
+        /** The target whose stream the player holds (set with the media item); errors from any other are stale. */
+        @Volatile
+        private var loadedTarget: IptvTarget? = null
+
         private fun stopPlayer() {
+            loadedTarget = null
             player?.run {
                 stop()
                 clearMediaItems()
