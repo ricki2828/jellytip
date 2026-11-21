@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -63,8 +64,32 @@ class JellytipReminders
         /** "<id>:soon" / "<id>:live" already nudged (or already past when first seen). */
         private val nudged = HashSet<String>()
 
+        /** A late answer fetched for the previous person is dropped ([UserOwnership]). */
+        private val own = UserOwnership.app()
+
+        /** Home asked for the poll ([start]); it is restarted for each new person. */
+        private var wanted = false
+
+        init {
+            scope.launch { service.user.drop(1).collect { u -> switched(u) } }
+        }
+
+        /** Every user change (A -> null -> B included): drop everything of the previous person, poll again for the new one. */
+        private fun switched(user: String?) {
+            JellytipTrace.log("iptv", "reminders: user switch, cleared")
+            loop?.cancel()
+            loop = null
+            _available.value = null
+            _items.value = null
+            _nudge.value = null
+            nudged.clear()
+            lastFetch = 0L
+            if (user != null && wanted) start()
+        }
+
         /** Start loading and polling (Home calls it; idempotent). */
         fun start() {
+            wanted = true
             if (loop?.isActive == true) return
             loop =
                 scope.launch {
@@ -90,7 +115,9 @@ class JellytipReminders
         }
 
         suspend fun refresh() {
+            val who = own.start()
             val got = service.reminders() ?: return
+            if (!own.still(who)) return
             lastFetch = System.currentTimeMillis()
             when (got.first) {
                 200 -> {
@@ -167,33 +194,40 @@ class JellytipReminders
 
         fun add(u: IptvUpcoming) {
             scope.launch {
+                val who = own.start()
                 // Fixture path first when the game is known (web a9b66910): one row per game, whoever sets it
                 val fixtureId = u.fid
                 val matchId = u.matchId ?: u.matchInfo?.id
                 val id =
                     (if (fixtureId != null || matchId != null) service.addFixtureReminder(fixtureId, matchId)?.takeIf { it.isNotBlank() } else null)
                         ?: service.addReminder(u)
-                if (id != null) {
+                if (id != null && own.still(who)) {
                     _items.value = (_items.value.orEmpty().filter { it.key != u.key } + u.copy(reminderId = id)).sortedBy { it.start }
                     refresh()
                 }
             }
         }
 
-        fun remove(id: String) {
+        fun remove(
+            id: String,
+            /** True when at least one row was removed (called on the main thread). */
+            onDone: (Boolean) -> Unit = {},
+        ) {
             scope.launch {
                 // Switching off removes every row of the same game (key, fixture id, match id), so no twin keeps
                 // nudging (web f452ce07)
                 val list = _items.value.orEmpty()
                 val me = list.firstOrNull { it.reminderId == id }
                 val ids = (listOf(id) + (me?.let { m -> list.filter { it.sameGame(m) }.mapNotNull { it.reminderId } } ?: emptyList())).distinct()
+                val who = own.start()
                 var anyOk = false
                 for (x in ids) if (service.deleteReminder(x)) anyOk = true
                 JellytipTrace.log("iptv", "reminder off ${ids.size} row(s) for ${me?.key ?: id}")
-                if (anyOk) {
+                if (anyOk && own.still(who)) {
                     _items.value = _items.value?.filter { it.reminderId !in ids }
                     refresh()
                 }
+                onDone(anyOk)
             }
         }
 

@@ -207,6 +207,10 @@ sealed class Destination(
     @Serializable
     data object JellytipFantasy : Destination(false)
 
+    /** Jellytip: the person's game reminders and team reminders, with Remove / Stop (web #/reminders). */
+    @Serializable
+    data object JellytipRemindersPage : Destination(false)
+
     /** Jellytip: the IPTV Live TV guide (sidebar "Live TV"). */
     @Serializable
     data object JellytipLiveTv : Destination(false)

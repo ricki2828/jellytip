@@ -116,4 +116,38 @@ class MovieNightTest {
         assertEquals("Only the host can close it", MovieNight.errorText(403, """{"error":"only the host can close it"}"""))
         assertEquals("Can't reach the server.", MovieNight.errorText(0, null))
     }
+
+    @Test
+    fun remoteVoteCycle() {
+        assertEquals(MnVote.YES, MovieNight.nextVote(null))
+        assertEquals(MnVote.MAYBE, MovieNight.nextVote(MnVote.YES))
+        assertEquals(MnVote.NO, MovieNight.nextVote(MnVote.MAYBE))
+        assertEquals(MnVote.YES, MovieNight.nextVote(MnVote.NO))
+    }
+
+    @Test
+    fun optimisticVoteMovesOneCount() {
+        val s = sess().copy(counts = mapOf(id(1) to c(2, 0, 1)))
+        val a = MovieNight.withVote(s, id(1), MnVote.YES)
+        assertEquals(MnVote.YES, a.mine[id(1)])
+        assertEquals(c(3, 0, 1), a.counts[id(1)])
+        val b = MovieNight.withVote(a, id(1), MnVote.NO)
+        assertEquals(c(2, 0, 2), b.counts[id(1)])
+        assertEquals(b, MovieNight.withVote(b, id(1), MnVote.NO))
+        // a film with no counts yet
+        assertEquals(c(0, 1, 0), MovieNight.withVote(s, id(2), MnVote.MAYBE).counts[id(2)])
+    }
+
+    @Test
+    fun undoAndRevealGrace() {
+        val s = sess(members = listOf(m(2), m(2))).copy(counts = mapOf(id(1) to c(1, 0, 0)), mine = mapOf(id(1) to MnVote.YES))
+        val undone = MovieNight.withVote(s, id(1), null)
+        assertEquals(null, undone.mine[id(1)])
+        assertEquals(c(0, 0, 0), undone.counts[id(1)])
+        // everyone voted: not right after your own vote, then yes; closed always
+        assertEquals(false, MovieNight.showReveal(s, lastOwnVoteMs = 10_000, nowMs = 12_000))
+        assertEquals(true, MovieNight.showReveal(s, lastOwnVoteMs = 10_000, nowMs = 10_000 + MovieNight.VOTE_GRACE_MS))
+        assertEquals(true, MovieNight.showReveal(s.copy(open = false), lastOwnVoteMs = 10_000, nowMs = 10_001))
+        assertEquals(false, MovieNight.showReveal(sess(members = listOf(m(1), m(2))), 0, 99_999))
+    }
 }

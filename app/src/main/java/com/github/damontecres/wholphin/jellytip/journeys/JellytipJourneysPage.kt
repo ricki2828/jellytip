@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -166,19 +167,28 @@ class JellytipJourneysViewModel
             const val AGAIN_MS = 1_500L
         }
 
+        /** What was opened from this page, so Back lands on it again (the page is rebuilt on return). */
+        var lastJourney: String? = null
+            private set
+        var lastFilm: Int? = null
+            private set
+
         fun open(id: String) {
+            lastJourney = id
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(Destination.JellytipJourney(id), "journeys card OK")
         }
 
         fun play(entry: JourneyEntry) {
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
+            lastFilm = null // back from the player: Play next (which has moved on) takes focus
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(Destination.Playback(uuid, if (entry.inProgress) entry.positionTicks / 10_000 else 0L), "journey play next")
         }
 
         fun details(entry: JourneyEntry) {
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
+            lastFilm = entry.n
             val kind = BaseItemKind.entries.firstOrNull { it.serialName == entry.type } ?: BaseItemKind.MOVIE
             navigationManager.navigateTo(Destination.MediaItem(uuid, kind), "journey film OK")
         }
@@ -198,12 +208,17 @@ fun JellytipJourneysPage(
     LaunchedEffect(Unit) { viewModel.loadGroups() }
     val g = state.groups
     val first = remember { FocusRequester() }
+    val restore = remember { FocusRequester() }
+    val listState = rememberLazyListState()
     val rows = g?.let { listOf(it.franchise, it.director, it.list) }.orEmpty()
     val firstRow = rows.indexOfFirst { it.isNotEmpty() }
+    // Back from a journey: its card (group row scrolled in, card scrolled into its row), else the first card
+    val back = viewModel.lastJourney?.let { id -> rows.indexOfFirst { l -> l.any { it.id == id } }.takeIf { it >= 0 }?.let { gi -> gi to rows[gi].indexOfFirst { it.id == id } } }
     LaunchedEffect(firstRow) {
         if (firstRow >= 0) {
+            if (back != null) listState.scrollToItem(rows.take(back.first).count { it.isNotEmpty() })
             withFrameNanos { }
-            first.tryRequestFocus()
+            if (back == null || !restore.tryRequestFocus()) first.tryRequestFocus()
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp)) {
@@ -219,15 +234,21 @@ fun JellytipJourneysPage(
                 }
             }
             else ->
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(first)) {
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 48.dp), modifier = Modifier.fillMaxSize().focusRestorer(first)) {
                     rows.forEachIndexed { i, list ->
                         if (list.isEmpty()) return@forEachIndexed
                         item(key = "g$i") {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(GROUPS[i], color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 18.sp)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+                                val rowState = rememberLazyListState(initialFirstVisibleItemIndex = if (back?.first == i) back.second else 0)
+                                LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp), modifier = Modifier.focusGroup().focusRestorer()) {
                                     items(list, key = { it.id }) { s ->
-                                        JourneyCard(s, modifier = if (i == firstRow && s == list.first()) Modifier.focusRequester(first) else Modifier) { viewModel.open(s.id) }
+                                        // both may sit on one card: `first` must stay attached for the column's focusRestorer
+                                        val m =
+                                            Modifier
+                                                .then(if (s.id == viewModel.lastJourney && i == back?.first) Modifier.focusRequester(restore) else Modifier)
+                                                .then(if (i == firstRow && s == list.first()) Modifier.focusRequester(first) else Modifier)
+                                        JourneyCard(s, modifier = m) { viewModel.open(s.id) }
                                     }
                                 }
                             }
@@ -315,10 +336,15 @@ private fun JourneyView(
     val playFocus = remember { FocusRequester() }
     val listFocus = remember { FocusRequester() }
     val retryFocus = remember { FocusRequester() }
-    // Land on Play next; with nothing left to play, on the first film; after a failed load, on Retry
+    val filmFocus = remember { FocusRequester() }
+    val filmList = rememberLazyListState()
+    val backTo = entries?.indexOfFirst { it.n == viewModel.lastFilm && it.playable }?.takeIf { it >= 0 }
+    // Back from a film's page: that film; else Play next; with nothing left to play, the first film; after a failed load, Retry
     LaunchedEffect(entries != null, next != null, entriesState is JourneyEntriesState.Failed) {
+        if (backTo != null) filmList.scrollToItem(backTo)
         withFrameNanos { }
         when {
+            backTo != null && filmFocus.tryRequestFocus() -> {}
             next != null -> playFocus.tryRequestFocus()
             entries != null -> listFocus.tryRequestFocus()
             entriesState is JourneyEntriesState.Failed -> retryFocus.tryRequestFocus()
@@ -353,12 +379,15 @@ private fun JourneyView(
         // Nothing playable: the first (inert) row still takes focus, so it never falls to the drawer
         val firstPlayable = entries.indexOfFirst { it.playable }.coerceAtLeast(0)
         LazyColumn(
+            state = filmList,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 48.dp),
             modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer(listFocus),
         ) {
             items(entries, key = { "$id:${it.n}" }) { e ->
-                FilmRow(e, isNext = next?.first?.n == e.n, modifier = if (entries.indexOf(e) == firstPlayable) Modifier.focusRequester(listFocus) else Modifier) { viewModel.details(e) }
+                val ix = entries.indexOf(e)
+                val m = Modifier.then(if (ix == firstPlayable) Modifier.focusRequester(listFocus) else Modifier).then(if (ix == backTo) Modifier.focusRequester(filmFocus) else Modifier)
+                FilmRow(e, isNext = next?.first?.n == e.n, modifier = m) { viewModel.details(e) }
             }
         }
     }
