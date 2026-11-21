@@ -258,7 +258,7 @@ internal fun IptvEpisodeCard(
             Text("✓ Watched", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
         }
         // Failed-stream memory: "Failed 2 h ago" (the server's lastFail or this TV's own report)
-        val fail = remember(e.id, e.lastFail) { IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), System.currentTimeMillis() / 1000) }
+        val fail = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), System.currentTimeMillis() / 1000)
         if (fail != null) {
             Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp)
         }

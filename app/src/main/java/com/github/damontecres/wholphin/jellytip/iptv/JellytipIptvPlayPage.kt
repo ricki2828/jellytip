@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -276,7 +277,14 @@ fun JellytipIptvPlayPage(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 32.dp, end = 48.dp)
-                        .focusRequester(reportFocus),
+                        .focusRequester(reportFocus)
+                        .focusProperties {
+                            // The only control on screen: arrows must not move focus to the (key-eating) page
+                            up = androidx.compose.ui.focus.FocusRequester.Cancel
+                            down = androidx.compose.ui.focus.FocusRequester.Cancel
+                            left = androidx.compose.ui.focus.FocusRequester.Cancel
+                            right = androidx.compose.ui.focus.FocusRequester.Cancel
+                        },
             ) {
                 Text(if (reportBusy) "Reporting…" else "This stream isn't working")
             }
