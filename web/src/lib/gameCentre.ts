@@ -305,6 +305,10 @@ export interface FxItem {
   homeAlt?: string | null;
   awayColor?: string | null;
   awayAlt?: string | null;
+  /** League/sport artwork for the hero and tile backgrounds (a companion art path or a CDN URL); null = the plain look. */
+  art?: string | null;
+  /** The league's badge, shown small beside its name. */
+  badge?: string | null;
 }
 
 /** Fallback when the server sends no `maybe`: a link below this confidence is a guess. */
@@ -443,9 +447,23 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       homeAlt: home.altColor,
       awayColor: away.color,
       awayAlt: away.altColor,
+      ...fxArt(e.art, e.badge),
     });
   }
   return { items: out, degraded: r?.degraded === true };
+}
+
+/**
+ * `art` + `badge` on a fixture (Fable, 21-Nov): plain URLs, or the IPTV listings' shape `art: {league: {fanart, badge}}`.
+ * Only companion paths and https URLs are kept (the page's CSP decides which hosts actually load; a failed image falls back).
+ */
+export function fxArt(art: unknown, badge: unknown): { art: string | null; badge: string | null } {
+  const url = (v: unknown) => {
+    const t = s(v);
+    return t && (/^https:\/\//i.test(t) || !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(t)) ? t : null;
+  };
+  const lg = o(o(art)?.league);
+  return { art: url(art) ?? url(lg?.fanart), badge: url(badge) ?? url(lg?.badge) };
 }
 
 export const fxTitle = (f: Pick<FxItem, "home" | "away">): string => (f.away ? `${f.home} v ${f.away}` : f.home);

@@ -45,3 +45,12 @@
 .gc-card.edged::before, .gc-card.edged::after { content: ""; position: absolute; top: 1.5px; bottom: 1.5px; width: 5px; pointer-events: none; }
 .gc-card.edged::before { left: 1.5px; background: var(--edge-home); border-radius: 7px 0 0 7px; }
 .gc-card.edged::after { right: 1.5px; background: var(--edge-away); border-radius: 0 7px 7px 0; }
+/* League art behind a tile (lib/artOverlay: TILE): dimmed + blurred, a light team-colour wash; the colour edges stay on top */
+.gc-card.has-art { position: relative; overflow: hidden; isolation: isolate; }
+.gc-artbg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; box-shadow: inherit; }
+.gc-artbg img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); filter: blur(6px) brightness(0.2); }
+.gc-wash { position: absolute; inset: 0; }
+/* the card's own ring (live, hover, no-stream, flash) is painted under the art: redraw it above */
+.gc-artbg::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inherit; }
+.gc-card.has-art .gc-league { opacity: 0.85; }
+.gc-badge { width: 18px; height: 18px; object-fit: contain; flex: none; }

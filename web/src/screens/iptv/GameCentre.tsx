@@ -18,7 +18,8 @@ import { buildGames, fxScoreText, fxTitle, gateArmed, gatePress, gateStart, best
 import type { Rec } from "../../lib/recs";
 import { go, useRoute } from "../../lib/router";
 import { FailNote } from "../../components/FailNote";
-import { LiveMatchHero, useEdgeStyle } from "../../components/LiveMatchHero";
+import { edgeStyle, LiveMatchHero, useFixtureColours } from "../../components/LiveMatchHero";
+import { LeagueBadge, TileArt, useArt } from "../../components/FixtureArt";
 import { gameCentrePicks } from "../../lib/liveHero";
 import { flashNote } from "../../components/TasteButtons";
 import { skippedNote } from "../../lib/streamFail";
@@ -251,11 +252,16 @@ function FixtureCard({ f, rec, now, pref, shown, scoreLine, gate, onPress, onRec
   // Look 2A: a team-colour edge each side, once the match record's colours are in (fetched when the card is on screen); not on
   // no-stream cards, whose own left marker says so
   const li = useRef<HTMLLIElement>(null);
-  const edges = useEdgeStyle(f, li);
+  const colours = useFixtureColours(f, li);
+  const edges = edgeStyle(colours, f);
+  // League art behind the card (dimmed, blurred, a light colour wash); the plain card without it or when it fails
+  const art = useArt(f.art, 480);
   return (
-    <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
+    <li ref={li} style={w.noStream ? undefined : edges} className={`gc-card${edges && !w.noStream ? " edged" : ""}${art.src ? " has-art" : ""} ${w.phase}${w.noStream ? " nostream" : ""}${act ? " tap" : ""}`} data-fid={f.fid} {...cardProps(act)}>
+      {art.src && <TileArt key={art.src} src={art.src} colours={colours} hasAway={!!f.away} onError={art.failed} />}
       <div className="gc-top">
         {w.phase === "live" && <span className="rec-chip rec">LIVE</span>}
+        <LeagueBadge key={f.badge ?? ""} path={f.badge} className="gc-badge" />
         {f.league && <span className="gc-league">{f.league}</span>}
         {f.stage && <span className="gc-league">{f.stage}</span>}
         {best && <ChannelLogo logo={best.logo} name={best.name} />}
