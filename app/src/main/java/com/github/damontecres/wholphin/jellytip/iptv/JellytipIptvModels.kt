@@ -165,6 +165,11 @@ data class IptvPlayAnswer(
      * provider's own absolute link with the login inside (never trace it); the one-connection guard can't hold.
      */
     val direct: Boolean = false,
+    /** Server remux (compat=web): fMP4 that begins at [startAt] s, not seekable (seek = reopen with start=). */
+    val remux: Boolean = false,
+    val startAt: Long = 0,
+    /** Whole item length (s) for a remux (the stream itself only knows what's left); null = unknown. */
+    val durationSec: Long? = null,
 )
 
 /** A server-side recording (ffmpeg copy on the seedbox). Times are epoch seconds. */
@@ -296,7 +301,18 @@ data class IptvUpcoming(
     val startsAt: Long? = null,
     /** The fixture (plan "Match info"); null = unknown. */
     val matchInfo: IptvMatch? = null,
+    /** Fixture id (fixture-first reminders); one game's reminder rows share it. */
+    val fid: String? = null,
+    /** Match id the reminder was set for; one game's rows share it too. */
+    val matchId: String? = null,
+    /** A fixture reminder with no channel linked yet ([channel] is a placeholder): shown and nudged, not watchable. */
+    val noStream: Boolean = false,
 ) {
+    /** Same game as [o]: key, fixture id or match id (web reminders.ts sameGame). */
+    fun sameGame(o: IptvUpcoming): Boolean =
+        key == o.key || (fid != null && fid == o.fid) || (matchId != null && (matchId == o.matchId || matchId == o.matchInfo?.id)) ||
+            (matchInfo?.id != null && (matchInfo.id == o.matchId || matchInfo.id == o.matchInfo?.id))
+
     /** The tile title: an identified fixture's matchup in place of a vague listing. */
     val displayTitle get() = matchInfo?.takeIf { it.inferred }?.matchup ?: title
 
@@ -566,14 +582,19 @@ object IptvParse {
             }
         return (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
-            val ch = o.optJSONObject("channel")?.let { channel(it, resolve) } ?: return@mapNotNull null
+            val fid = o.str("fid")
+            // A fixture reminder with no channel yet (web 4b665eec): kept, with a placeholder channel, never dropped
+            val noStream = reminders && o.optJSONObject("channel") == null && fid != null
+            val ch =
+                o.optJSONObject("channel")?.let { channel(it, resolve) }
+                    ?: if (noStream) IptvChannel("_", "_", null, "No stream found yet", null, "", null, 0, false) else return@mapNotNull null
             val start = o.longOrNull("start") ?: return@mapNotNull null
             val stop = o.longOrNull("stop") ?: (start + 2 * 3600)
             val match = o.optJSONObject("match")
             val alts =
                 o.optJSONArray("alternateChannels")?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let { c -> channel(c, resolve) } } }.orEmpty()
             IptvUpcoming(
-                key = o.str("key") ?: "${ch.id}@$start",
+                key = o.str("key") ?: if (noStream) "fid:$fid" else "${ch.id}@$start",
                 title = o.str("title") ?: return@mapNotNull null,
                 league = o.str("league") ?: match?.str("league"),
                 // The older favourite marker {team, league}; the newer fixture `match` (with an id) is not one
@@ -591,6 +612,9 @@ object IptvParse {
                 phase = o.str("phase"),
                 startsAt = isoSeconds(o.str("startsAt")),
                 matchInfo = MatchParse.match(o.optJSONObject("matchInfo"), resolve),
+                fid = fid,
+                matchId = o.str("matchId"),
+                noStream = noStream,
             )
         }
     }
@@ -730,7 +754,17 @@ object IptvParse {
         if (code == 200 && o != null) {
             val url = o.str("url") ?: return IptvPlayResult.Failed("bad_answer", "The server sent no stream link.")
             return IptvPlayResult.Ok(
-                IptvPlayAnswer(url, o.str("mime"), o.str("kind") ?: "live", o.longOrNull("expires"), o.optBoolean("growing", false), o.optBoolean("direct", false)),
+                IptvPlayAnswer(
+                    url,
+                    o.str("mime"),
+                    o.str("kind") ?: "live",
+                    o.longOrNull("expires"),
+                    o.optBoolean("growing", false),
+                    o.optBoolean("direct", false),
+                    remux = o.optBoolean("remux", false),
+                    startAt = o.longOrNull("startAt") ?: 0L,
+                    durationSec = o.longOrNull("duration"),
+                ),
             )
         }
         val errCode = o?.str("code")

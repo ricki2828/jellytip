@@ -250,6 +250,25 @@ class JellytipIptvPlayback
                     val http = generateSequence(error as Throwable?) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
                     val code = http?.headerFields?.entries?.firstOrNull { it.key.equals("X-Iptv-Error", ignoreCase = true) }?.value?.firstOrNull()
                     JellytipTrace.player("iptv", "error ${error.errorCodeName} http=${http?.responseCode} code=$code ${t.channelId}")
+                    // A container ExoPlayer can't parse (Portlandia S01E01, labelled mkv, 21-Nov): ask the server to convert it
+                    // once, at the same position; if it still can't, say so plainly (no retry loop)
+                    if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED && !t.isLive && t.recordingId == null) {
+                        if (!remuxAsked) {
+                            remuxAsked = true
+                            val at = positionMs().takeIf { it > 5_000 } ?: t.resumeMs
+                            JellytipTrace.player("iptv", "container unsupported ${t.channelId}: server remux from ${at / 1000} s")
+                            stopPlayer()
+                            _note.value = "Converting…"
+                            launchOpen(t.copy(resumeMs = at), "server remux (container unsupported)", remux = true)
+                        } else {
+                            JellytipTrace.player("iptv", "container unsupported ${t.channelId} even after asking for the remux")
+                            reportFail(t, "decode")
+                            _note.value = null
+                            stopPlayer()
+                            setState(IptvPlayState.Failed(t, "This file's format can't be played on the TV."), "container unsupported")
+                        }
+                        return
+                    }
                     val link = http?.let { IptvRules.linkFailure(it.responseCode, code) }
                     when {
                         (link == IptvRules.LinkFailure.RENEW || link == IptvRules.LinkFailure.FULL) && !renewed -> {
@@ -335,12 +354,45 @@ class JellytipIptvPlayback
         /** One failure report per viewing (the first), like the web's OutcomeSession. */
         private var failReported = false
 
+        /** The server remux was asked for this viewing (a container ExoPlayer can't parse). */
+        private var remuxAsked = false
+
+        /** A remuxed stream begins here (ms into the item) and can't seek: [seekTo] reopens it. */
+        private var remuxStartMs = 0L
+        private var remuxDurationMs: Long? = null
+
+        /** The current stream is the server's remux. */
+        var isRemux = false
+            private set
+
+        /** Position in the item (ms), counting a remux's start offset. */
+        fun positionMs(): Long = (if (isRemux) remuxStartMs else 0L) + (player?.currentPosition ?: 0L)
+
+        /** Item length (ms); a remux's from the server, else the player's; 0 = unknown. */
+        fun durationMs(): Long = (if (isRemux) remuxDurationMs else null) ?: player?.duration?.takeIf { it > 0 } ?: 0L
+
+        /** Seek a film / episode; a remux reopens from [ms] (the server starts the conversion there). */
+        fun seekTo(ms: Long) {
+            val t = _state.value.target ?: return
+            if (isRemux) {
+                JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
+                _note.value = "Converting…"
+                launchOpen(t.copy(resumeMs = ms), "remux seek", remux = true)
+            } else {
+                player?.seekTo(ms)
+            }
+        }
+
         private fun resetRecovery(target: IptvTarget) {
             recTimer?.cancel()
             stableJob?.cancel()
             rec = StreamRecovery.State(live = target.isLive)
             recTarget = target
             failReported = false
+            remuxAsked = false
+            isRemux = false
+            remuxStartMs = 0L
+            remuxDurationMs = null
             _note.value = null
         }
 
@@ -485,6 +537,8 @@ class JellytipIptvPlayback
             format: String = "ts",
             /** A recovery attempt: success / 409 / failure answer the recovery machine instead of ending here. */
             recovering: Boolean = false,
+            /** Ask for the server remux (films / episodes); also kept for every reopen once asked. */
+            remux: Boolean = remuxAsked,
         ) {
             job?.cancel()
             okJob?.cancel()
@@ -492,7 +546,7 @@ class JellytipIptvPlayback
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} format=$format ($reason)")
             job =
                 scope.launch {
-                    when (val r = service.playItem(target, format)) {
+                    when (val r = service.playItem(target, format, remux = remux && !target.isLive, startSec = target.resumeMs / 1000)) {
                         is IptvPlayResult.Ok -> {
                             // Direct answers carry the provider's own absolute link (credentials inside: not traced)
                             val direct = r.answer.direct && Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(r.answer.url)
@@ -516,7 +570,12 @@ class JellytipIptvPlayback
                                     .build()
                             val p = ensurePlayer()
                             loadedTarget = target
-                            if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
+                            isRemux = r.answer.remux
+                            remuxStartMs = if (r.answer.remux) r.answer.startAt * 1000 else 0L
+                            remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null
+                            if (remux && !r.answer.remux) JellytipTrace.player("iptv", "remux asked but the server sent the file as is (${target.channelId})")
+                            // A remux already begins at the asked position
+                            if (target.resumeMs > 0 && !r.answer.remux) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
                             p.playWhenReady = true
                             p.prepare()
                             if (recovering && recTarget?.channelId == target.channelId) dispatch(StreamRecovery.Event.Opened)
@@ -638,8 +697,8 @@ class JellytipIptvPlayback
             val item = target.progressItem ?: return
             val p = player ?: return
             if (_state.value.target != target) return
-            val pos = p.currentPosition / 1000.0
-            val dur = p.duration.takeIf { it > 0 }?.div(1000.0) ?: return
+            val pos = positionMs() / 1000.0
+            val dur = durationMs().takeIf { it > 0 }?.div(1000.0) ?: return
             // Episodes name their series (pid:s:sid) so the server's Next Up works however the episode was opened
             val series = target.seriesId?.takeIf { target.episodeId != null }
             scope.launch { service.saveProgress(item, pos, dur, series) }

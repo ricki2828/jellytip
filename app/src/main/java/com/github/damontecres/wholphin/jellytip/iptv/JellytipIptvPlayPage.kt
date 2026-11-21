@@ -104,8 +104,9 @@ fun JellytipIptvPlayPage(
         while (true) {
             delay(500)
             playback.player?.let {
-                position = it.currentPosition
-                duration = it.duration.takeIf { d -> d > 0 } ?: 0L
+                // A server remux begins at its start offset: the item's position, not the stream's
+                position = playback.positionMs()
+                duration = playback.durationMs()
                 playing = it.playWhenReady
                 // "Play both" from a double feature: this IPTV film ended, start the other half
                 if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && target.vodId != null) {
@@ -162,10 +163,10 @@ fun JellytipIptvPlayPage(
                     }
 
                     Key.DirectionLeft, Key.DirectionRight, Key.MediaRewind, Key.MediaFastForward -> {
-                        if (p != null && p.isCurrentMediaItemSeekable) {
+                        if (p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)) {
                             val back = e.key == Key.DirectionLeft || e.key == Key.MediaRewind
-                            val to = (p.currentPosition + if (back) -10_000 else 30_000).coerceAtLeast(0)
-                            p.seekTo(to)
+                            val to = (playback.positionMs() + if (back) -10_000 else 30_000).coerceAtLeast(0)
+                            playback.seekTo(to)
                             position = to
                         }
                         controlsTick++

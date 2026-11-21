@@ -22,11 +22,13 @@ data class ReminderNudge(
     val live: Boolean,
 ) {
     fun text(now: Long): String =
-        if (live) {
-            "${item.title} is on now"
-        } else {
-            "${item.title} starts in ${((item.start - now + 59) / 60).coerceAtLeast(1)} min"
-        }
+        (
+            if (live) {
+                "${item.title} is on now"
+            } else {
+                "${item.title} starts in ${((item.start - now + 59) / 60).coerceAtLeast(1)} min"
+            }
+        ) + if (item.noStream) " · no stream found yet" else ""
 }
 
 /**
@@ -161,11 +163,16 @@ class JellytipReminders
         fun reminderIdFor(
             u: IptvUpcoming,
             list: List<IptvUpcoming>?,
-        ): String? = if (list != null) list.firstOrNull { it.key == u.key }?.reminderId else u.reminderId
+        ): String? = if (list != null) list.firstOrNull { it.sameGame(u) }?.reminderId else u.reminderId
 
         fun add(u: IptvUpcoming) {
             scope.launch {
-                val id = service.addReminder(u)
+                // Fixture path first when the game is known (web a9b66910): one row per game, whoever sets it
+                val fixtureId = u.fid
+                val matchId = u.matchId ?: u.matchInfo?.id
+                val id =
+                    (if (fixtureId != null || matchId != null) service.addFixtureReminder(fixtureId, matchId)?.takeIf { it.isNotBlank() } else null)
+                        ?: service.addReminder(u)
                 if (id != null) {
                     _items.value = (_items.value.orEmpty().filter { it.key != u.key } + u.copy(reminderId = id)).sortedBy { it.start }
                     refresh()
@@ -175,8 +182,16 @@ class JellytipReminders
 
         fun remove(id: String) {
             scope.launch {
-                if (service.deleteReminder(id)) {
-                    _items.value = _items.value?.filter { it.reminderId != id }
+                // Switching off removes every row of the same game (key, fixture id, match id), so no twin keeps
+                // nudging (web f452ce07)
+                val list = _items.value.orEmpty()
+                val me = list.firstOrNull { it.reminderId == id }
+                val ids = (listOf(id) + (me?.let { m -> list.filter { it.sameGame(m) }.mapNotNull { it.reminderId } } ?: emptyList())).distinct()
+                var anyOk = false
+                for (x in ids) if (service.deleteReminder(x)) anyOk = true
+                JellytipTrace.log("iptv", "reminder off ${ids.size} row(s) for ${me?.key ?: id}")
+                if (anyOk) {
+                    _items.value = _items.value?.filter { it.reminderId !in ids }
                     refresh()
                 }
             }
@@ -188,6 +203,11 @@ class JellytipReminders
             ch: IptvChannel = u.channel,
         ) {
             JellytipTrailerControl.stop()
+            if (u.noStream) {
+                // No channel linked yet: Game Centre (it shows the fixture, and a channel once one is found)
+                navigationManager.navigateToChecked(Destination.JellytipUpcomingSport, "reminder without a stream ${u.key}")
+                return
+            }
             val all = listOf(u.channel) + u.alternateChannels
             // The page first: a blocked navigation must not leave a stream playing with no screen (sound, no picture)
             if (!navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(ch.id), "reminder watch ${ch.name}")) return

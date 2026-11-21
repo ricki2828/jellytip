@@ -194,6 +194,9 @@ class JellytipIptvService
         suspend fun playItem(
             target: IptvTarget,
             format: String = "ts",
+            /** Films / episodes: ask for the server's remux (fMP4 + AAC from [startSec]); for containers ExoPlayer can't parse. */
+            remux: Boolean = false,
+            startSec: Long = 0,
         ): IptvPlayResult {
             val q =
                 buildString {
@@ -205,6 +208,10 @@ class JellytipIptvService
                         else -> return playChannel(target.channelId, target.start, target.stop, format)
                     }
                     append("&device=").append(enc(deviceId)).append("&client=native")
+                    if (remux && target.recordingId == null) {
+                        append("&compat=web&remux=1")
+                        if (startSec > 0) append("&start=").append(startSec)
+                    }
                 }
             return play(q)
         }
