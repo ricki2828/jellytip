@@ -403,12 +403,18 @@ class JellytipIptvService
         fun peekRecordings(): List<IptvRecording>? = recordingsCache
 
         /** Recordings and the server's space; null = unavailable. */
+        /** The server's recording space from the last recordings answer (can it record now, and why not). */
+        @Volatile
+        var lastSpace: IptvSpace? = null
+            private set
+
         suspend fun recordings(): Pair<IptvSpace?, List<IptvRecording>>? {
             val b = base()
             val (code, body) = get("v1/iptv/recordings") ?: return null
             if (code != 200) return null
             val got = runCatching { IptvParse.recordings(body) { resolve(b, it) } }.getOrNull() ?: return null
             recordingsCache = got.second
+            got.first?.let { lastSpace = it }
             hasRecordings.value = got.second.any { it.state != "cancelled" && it.state != "failed" }
             return got
         }

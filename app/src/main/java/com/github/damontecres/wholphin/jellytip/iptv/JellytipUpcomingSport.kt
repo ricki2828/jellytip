@@ -127,7 +127,7 @@ fun JellytipUpcomingSportRow(
         }
     }
     val muted = rememberSportMuted()
-    val shown = remember(items, muted) { items.filterNot { muted.mutes(it.league, it.sportName) } }
+    val shown = remember(items, muted) { starredFirst(items.filterNot { muted.mutes(it.league, it.sportName) }, nowSec()) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ItemRowTitle("Coming up in sport")
         LazyRow(
@@ -307,7 +307,17 @@ private fun UpcomingOverlay(
             }
             when {
                 u.recordingId != null -> add(DialogItem("Recording scheduled", dismissOnClick = true) {})
-                u.recordable && u.stop > now -> add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
+                u.recordable && u.stop > now -> {
+                    // Recording paused on the server (disk nearly full): say why instead of a button that fails (web 4c127696)
+                    val space = viewModel.service.lastSpace
+                    if (space != null && !space.canRecord) {
+                        add(DialogItem("Can't record: ${space.reason ?: "no space on the server"}", dismissOnClick = true) {})
+                    } else {
+                        add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
+                    }
+                }
+                !u.recordable && u.stop > now && viewModel.service.lastSpace?.canRecord == false ->
+                    add(DialogItem("Can't record: ${viewModel.service.lastSpace?.reason ?: "no space on the server"}", dismissOnClick = true) {})
             }
             matchInfoItem(u.matchInfo, dismissOnClick = false) { showMatch = true }?.let { add(it) }
             addAll(muteItems)
@@ -464,7 +474,10 @@ fun JellytipUpcomingSportPage(
             list.isEmpty() -> Text("Nothing coming up in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             else -> {
                 val zone = ZoneId.systemDefault()
-                val days = remember(list) { list.groupBy { Instant.ofEpochSecond(it.start).atZone(zone).toLocalDate() }.toSortedMap().toList() }
+                val days =
+                    remember(list) {
+                        list.groupBy { Instant.ofEpochSecond(it.start).atZone(zone).toLocalDate() }.toSortedMap().toList().map { (d, evs) -> d to starredFirst(evs, nowSec()) }
+                    }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
                     items(days.size, key = { days[it].first.toString() }) { di ->
                         val (day, events) = days[di]
@@ -489,3 +502,12 @@ fun JellytipUpcomingSportPage(
     }
     UpcomingOverlays(overlay, now, onDismiss = { overlay = null }, viewModel)
 }
+
+/**
+ * Starred (favourite team / league) games first, and live before upcoming inside each group; otherwise the server's
+ * order (web 750f13e5). Stable, so equal games keep their places.
+ */
+internal fun starredFirst(
+    list: List<IptvUpcoming>,
+    now: Long,
+): List<IptvUpcoming> = list.sortedWith(compareByDescending<IptvUpcoming> { it.favourite }.thenByDescending { it.isLive(now) })

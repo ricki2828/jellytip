@@ -54,6 +54,8 @@ data class MePrefs(
     val sportTeams: List<String> = emptyList(),
     /** Followed team catalogue ids (`sport.teams` objects + `sport.teamRefs`): teamId to leagueKey (null = any league). */
     val sportTeamRefs: List<Pair<String, String?>> = emptyList(),
+    /** The whole sport block as the Live sport settings page edits it (teams + refs, leagues, sports, muted). */
+    val sport: com.github.damontecres.wholphin.jellytip.iptv.SportSettings = com.github.damontecres.wholphin.jellytip.iptv.SportSettings(),
     /** `ui.heroSound` (plan "TV hero trailer: unmute"): the Home / Movies / Shows hero trailer plays with sound. Default off. */
     val heroSound: Boolean = false,
 )
@@ -129,6 +131,7 @@ object MeParse {
             sportAlerts = o.optJSONObject("sport")?.optString("alerts")?.takeIf { it == "all" || it == "off" } ?: "key",
             sportTeams = com.github.damontecres.wholphin.jellytip.iptv.TeamAware.teamNames(o.optJSONObject("sport")),
             sportTeamRefs = com.github.damontecres.wholphin.jellytip.iptv.TeamAware.teamRefs(o.optJSONObject("sport")),
+            sport = com.github.damontecres.wholphin.jellytip.iptv.SportPrefs.parse(o.optJSONObject("sport")),
             heroSound = o.optJSONObject("ui")?.optBoolean("heroSound", false) == true,
         )
     }

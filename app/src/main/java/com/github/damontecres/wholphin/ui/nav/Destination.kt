@@ -189,6 +189,10 @@ sealed class Destination(
     @Serializable
     data object JellytipHomeEdit : Destination(false)
 
+    /** Jellytip: Settings → Live sport (teams, leagues, sports, scores, alerts, delay, Not interested). */
+    @Serializable
+    data object JellytipSportSettings : Destination(false)
+
     /** Jellytip: the IPTV Live TV guide (sidebar "Live TV"). */
     @Serializable
     data object JellytipLiveTv : Destination(false)
