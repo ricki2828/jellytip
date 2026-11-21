@@ -96,9 +96,12 @@ class JellytipGameCentreViewModel
         var recordings by androidx.compose.runtime.mutableStateOf<List<IptvRecording>?>(service.peekRecordings())
             private set
 
+        private var polls = 0
+
         suspend fun refresh() {
-            recordings = service.peekRecordings() ?: service.recordings()?.second ?: recordings
             val r = service.fixtures()
+            // After the fixtures (first paint isn't held up), and again every 4th poll so new recordings show up
+            if (recordings == null || polls++ % 4 == 0) recordings = service.recordings()?.second ?: service.peekRecordings() ?: recordings
             val s = _state.value
             when {
                 r == null -> if (s.base == null) _state.value = s.copy(failed = true)
