@@ -59,6 +59,7 @@ import com.github.damontecres.wholphin.data.filter.ItemFilterBy
 import com.github.damontecres.wholphin.data.filter.OfficialRatingFilter
 import com.github.damontecres.wholphin.data.filter.PlayedFilter
 import com.github.damontecres.wholphin.data.filter.StudioFilter
+import com.github.damontecres.wholphin.data.filter.SubtitlesFilter
 import com.github.damontecres.wholphin.data.filter.VideoTypeFilter
 import com.github.damontecres.wholphin.data.filter.YearFilter
 import com.github.damontecres.wholphin.data.model.GetItemsFilter
@@ -234,6 +235,7 @@ fun FilterByButton(
 
                                     FavoriteFilter,
                                     PlayedFilter,
+                                    SubtitlesFilter,
                                     -> {
                                         (currentValue as? Boolean) == value.name.toBoolean()
                                     }
@@ -310,6 +312,7 @@ fun FilterByButton(
 
                                         FavoriteFilter,
                                         PlayedFilter,
+                                        SubtitlesFilter,
                                         -> {
                                             val played = value.name.toBoolean()
                                             filterOption.set(played, current)

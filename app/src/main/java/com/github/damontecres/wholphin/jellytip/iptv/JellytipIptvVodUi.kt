@@ -69,6 +69,8 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
@@ -81,7 +83,27 @@ class JellytipIptvVodViewModel
         val navigationManager: NavigationManager,
         /** The library trailer player's client (the trailer cache is the same). */
         @param:com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient val httpClient: okhttp3.OkHttpClient,
-    ) : ViewModel()
+        preferences: androidx.datastore.core.DataStore<com.github.damontecres.wholphin.preferences.AppPreferences>,
+    ) : ViewModel() {
+        /** Trailer autoplay / sound, the same switches as the library details page. */
+        val trailerSettings: kotlinx.coroutines.flow.Flow<com.github.damontecres.wholphin.jellytip.JellytipSettings> =
+            preferences.data
+                .map {
+                    com.github.damontecres.wholphin.jellytip.JellytipSettings(
+                        trailerAutoplay = !it.jellytipDisableTrailerAutoplay,
+                        trailerSound = it.jellytipTrailerSound,
+                    )
+                }.distinctUntilChanged()
+    }
+
+/**
+ * Quiet trailer preview on IPTV details (web de81df8e): only the companion's cached trailer, never a YouTube link
+ * (that one leaves the app), and only with trailer autoplay on.
+ */
+fun iptvPassiveTrailer(
+    url: String?,
+    autoplay: Boolean,
+): Boolean = autoplay && !url.isNullOrBlank() && !IptvVodParse.isYouTube(url)
 
 /** The IPTV cue: a small jelly dot, with the quality next to it ("● 4K"). */
 @Composable
@@ -208,11 +230,12 @@ fun IptvVodRow(
     modifier: Modifier = Modifier,
     onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+    subtitle: String? = null,
 ) {
     val h = heightDp.dp
     val w = if (poster) h * 2f / 3f else h * 16f / 9f
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
-        ItemRowTitle(title)
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(subtitle)), modifier = modifier) {
+        ItemRowTitle(title, subtitle = subtitle)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
@@ -351,6 +374,29 @@ fun JellytipIptvDetailsPage(
             }
         }
     }
+    // Passive preview (web de81df8e, library details' rule): after a rest on the buttons or season chips, the cached
+    // trailer plays behind the text; once per visit to that zone, never over the Trailer button's own playback
+    val trailerSettings by viewModel.trailerSettings.collectAsState(com.github.damontecres.wholphin.jellytip.JellytipSettings())
+    var resumed by remember { mutableStateOf(true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        resumed = true
+        onPauseOrDispose { resumed = false }
+    }
+    var buttonsFocused by remember { mutableStateOf(false) }
+    var seasonsFocused by remember { mutableStateOf(false) }
+    val restZone = buttonsFocused || seasonsFocused
+    var autoTrailer by remember(id) { mutableStateOf(false) }
+    var autoDone by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(restZone) {
+        if (!restZone) autoDone = false
+    }
+    LaunchedEffect(restZone, resumed, trailerUrl, trailerSettings.trailerAutoplay, autoDone, trailerPlaying) {
+        autoTrailer = false
+        if (restZone && resumed && !trailerPlaying && !autoDone && iptvPassiveTrailer(trailerUrl, trailerSettings.trailerAutoplay)) {
+            kotlinx.coroutines.delay(com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens.TRAILER_DELAY_MS)
+            autoTrailer = true
+        }
+    }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         (item?.backdrop ?: item?.poster)?.let {
             AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -360,8 +406,28 @@ fun JellytipIptvDetailsPage(
                 url = trailerUrl,
                 sound = true,
                 httpClient = viewModel.httpClient,
-                onEnded = { trailerPlaying = false },
+                onEnded = {
+                    trailerPlaying = false
+                    autoDone = true // just watched it: no passive replay until focus leaves and comes back
+                },
             )
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = autoTrailer && !trailerPlaying && trailerUrl != null,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(800)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(800)),
+        ) {
+            if (trailerUrl != null) {
+                com.github.damontecres.wholphin.jellytip.TrailerLayer(
+                    url = trailerUrl,
+                    sound = trailerSettings.trailerSound,
+                    httpClient = viewModel.httpClient,
+                    onEnded = {
+                        autoDone = true
+                        autoTrailer = false
+                    },
+                )
+            }
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.7f to Color.Transparent)))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
@@ -487,7 +553,10 @@ fun JellytipIptvDetailsPage(
             }
             if (!item.isSeries) {
                 val p = item.progress?.takeIf { it.resumable }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
+                ) {
                     Button(onClick = { playMovie(fromStart = false) }, modifier = Modifier.focusRequester(focus)) {
                         Text(if (p != null) "Resume from ${(p.positionSecs / 60).toInt()} min" else "Play")
                     }
@@ -514,7 +583,10 @@ fun JellytipIptvDetailsPage(
                     IptvTasteButtons(item)
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
+                ) {
                     TrailerButton(d.trailer, trailerPlaying, playTrailer)
                     MyListButton(item, viewModel)
                     IptvTasteButtons(item)
@@ -538,7 +610,10 @@ fun JellytipIptvDetailsPage(
                 Text("No episodes are available.", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
             } else {
                 var season by remember(item.id) { mutableIntStateOf(0) }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.onFocusChanged { seasonsFocused = it.hasFocus }.focusGroup().focusRestorer(),
+                ) {
                     items(d.seasons.size) { i ->
                         Surface(
                             onClick = { season = i },

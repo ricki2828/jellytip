@@ -138,7 +138,12 @@ object LiveHero {
 
 @Composable
 fun rememberFixturePalette(f: FxItem): MatchPalette {
-    val c by produceState(LiveHero.peekColours(f), f.companionId) { value = LiveHero.colours(f) }
+    // The fixture's own colours (guarded) when it has any; else the match record's, fetched as before
+    val own = remember(f.homeColor, f.homeAltColor, f.awayColor, f.awayAltColor) { FixtureColours.of(f) }
+    // produceState keeps its value across key changes (hero cycling reuses the slot), so the fixture's own colours are
+    // never routed through it: they apply directly, the fetched ones only when the fixture has none
+    val fetched by produceState(LiveHero.peekColours(f), f.companionId, own == null) { if (own == null) value = LiveHero.colours(f) }
+    val c = own ?: fetched
     return remember(c) { LiveHero.palette(c) }
 }
 

@@ -52,4 +52,13 @@ class InboxTest {
         assertEquals(Inbox.Store("v"), Inbox.fromJson(Inbox.toJson(st), "v"))
         assertEquals(Inbox.Store("u"), Inbox.fromJson("junk", "u"))
     }
+
+    @Test
+    fun navBadge() {
+        assertEquals(null, com.github.damontecres.wholphin.jellytip.inbox.inboxBadge(0))
+        assertEquals(null, com.github.damontecres.wholphin.jellytip.inbox.inboxBadge(-1))
+        assertEquals("3", com.github.damontecres.wholphin.jellytip.inbox.inboxBadge(3))
+        assertEquals("9", com.github.damontecres.wholphin.jellytip.inbox.inboxBadge(9))
+        assertEquals("9+", com.github.damontecres.wholphin.jellytip.inbox.inboxBadge(10))
+    }
 }

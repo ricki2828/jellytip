@@ -49,6 +49,8 @@ data class GetItemsFilter(
     val videoTypes: List<FilterVideoType>? = null,
     val years: List<Int>? = null,
     val decades: List<Int>? = null,
+    /** Jellytip: HasSubtitles (web 54110c6e). */
+    val hasSubtitles: Boolean? = null,
     val override: GetItemsFilterOverride = GetItemsFilterOverride.NONE,
 ) {
     /**
@@ -93,6 +95,7 @@ data class GetItemsFilter(
         studioIds = studios,
         tags = tags,
         officialRatings = officialRatings,
+        hasSubtitles = hasSubtitles,
         years =
             buildSet {
                 years?.letNotEmpty(::addAll)
@@ -172,6 +175,7 @@ data class GetItemsFilter(
             videoTypes = videoTypes ?: filter.videoTypes,
             years = years ?: filter.years,
             decades = decades ?: filter.decades,
+            hasSubtitles = hasSubtitles ?: filter.hasSubtitles,
             override = override,
         )
 }

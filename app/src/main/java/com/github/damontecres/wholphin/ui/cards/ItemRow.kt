@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
@@ -47,6 +48,8 @@ fun <T> ItemRow(
     horizontalPadding: Dp = 16.dp,
     showViewMore: Boolean = false,
     viewMoreCardContent: @Composable (Modifier) -> Unit = {},
+    /** Jellytip: a line under the title ("Because you like …" on For you). */
+    subtitle: String? = null,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -57,7 +60,7 @@ fun <T> ItemRow(
     val currentOnLongClickItem by rememberUpdatedState(onLongClickItem)
 
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(itemRowTitleGap(subtitle)),
         modifier =
             modifier.focusProperties {
                 onEnter = {
@@ -65,7 +68,7 @@ fun <T> ItemRow(
                 }
             },
     ) {
-        ItemRowTitle(title)
+        ItemRowTitle(title, subtitle = subtitle)
 
         JellytipRowFocusScope { rowFocusModifier ->
             LazyRow(
@@ -145,3 +148,34 @@ fun ItemRowTitle(
     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
     modifier = modifier.padding(start = 8.dp),
 )
+
+/**
+ * Jellytip: gap between a row's title block and its cards. With a subtitle the line takes the gap's place, so the block
+ * grows ~8 dp, not ~23: Home keeps a fixed 50 dp above the focused card for the title (HomePage spaceAbovePx), and the
+ * reason line must fit in it without being clipped under the hero.
+ */
+fun itemRowTitleGap(subtitle: String?) = if (subtitle.isNullOrBlank()) 8.dp else 0.dp
+
+/** Jellytip: the row title with an optional quieter line under it (For you's "Because you like …"). */
+@Composable
+fun ItemRowTitle(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
+    if (subtitle.isNullOrBlank()) {
+        ItemRowTitle(title, modifier)
+    } else {
+        Column(modifier) {
+            ItemRowTitle(title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}
