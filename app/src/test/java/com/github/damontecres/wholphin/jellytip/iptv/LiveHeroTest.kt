@@ -7,7 +7,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** 2A match hero picks: Home (his live games, else the top-ranked live one) and Game Centre (then his next game). */
+/** 2A match hero picks: Home (only his teams' / followed leagues' live games) and Game Centre (then the top-ranked live, his next game). */
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [30])
 class LiveHeroTest {
@@ -35,9 +35,19 @@ class LiveHeroTest {
     }
 
     @Test
-    fun homeFallsBackToTheTopRankedLiveGameOnly() {
+    fun homeHasNoFallbackButGameCentreKeepsTheTopRankedLiveGame() {
+        // Ricki 21-Nov: a La Liga game he doesn't follow must not top Home
         val list = items(fx("a", "in", rank = 3), fx("b", "in", rank = 1), fx("x", "in", rank = 0, channel = false))
-        assertEquals(listOf("b"), LiveHero.homePicks(list, now).map { it.fid })
+        assertTrue(LiveHero.homePicks(list, now).isEmpty())
+        assertEquals(listOf("b"), LiveHero.gameCentrePicks(list, now).map { it.fid })
+    }
+
+    @Test
+    fun homeShowsFollowedLeagueGames() {
+        val league = fx("l", "in", rank = 4).dropLast(1) + ""","why":["favourite league"]}"""
+        val list = items(fx("a", "in", rank = 1), league, fx("b", "in", fav = true, rank = 5))
+        assertEquals(listOf("l", "b"), LiveHero.homePicks(list, now).map { it.fid })
+        assertTrue(items(league).single().followedLeague)
     }
 
     @Test

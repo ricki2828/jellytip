@@ -55,28 +55,35 @@ import java.util.concurrent.ConcurrentHashMap
 /*
  * Game Centre look 2A (Decisions brief b_c84a78e16a54, mock 02a-gamecentre-broadcast): a team-colour match hero (Watch /
  * From kick-off / More, Watch focused) and colour-edge fixture tiles; the same hero tops Home while a live game is on
- * (Ricki 21-Nov: his teams first, else the top-ranked one; spoiler-safe; Left / Right cycles his live games).
+ * (Ricki 21-Nov: only his teams' / followed leagues' live games, no fallback; spoiler-safe; Left / Right cycles them).
  * Fixtures carry no colours: they come from the match record (`GET v1/sport/match/{id}`, the in-match palette's source),
  * cached per fixture; neutral slabs until then or when the server has none.
  */
 object LiveHero {
-    /** Live fixtures with somewhere to watch: his teams (ranked), else the single top-ranked live game. */
+    private val liveCmp = compareBy<FxItem> { it.rank ?: Double.MAX_VALUE }.thenByDescending { it.significance }.thenBy { it.kickoff }.thenBy { it.fid }
+
+    private fun watchableLive(
+        items: List<FxItem>,
+        now: Long,
+    ) = items.filter { it.status == "in" && SportFixtures.pickChannel(it, now).channel != null }
+
+    /**
+     * Home's hero: live games of his starred teams or followed leagues (ranked), nothing else (Ricki 21-Nov: no
+     * "top-ranked live game" fallback; with none, Home keeps its normal hero).
+     */
     fun homePicks(
         items: List<FxItem>,
         now: Long,
-    ): List<FxItem> {
-        val live = items.filter { it.status == "in" && SportFixtures.pickChannel(it, now).channel != null }
-        val cmp = compareBy<FxItem> { it.rank ?: Double.MAX_VALUE }.thenByDescending { it.significance }.thenBy { it.kickoff }.thenBy { it.fid }
-        val mine = live.filter { it.favourite }.sortedWith(cmp)
-        return mine.ifEmpty { listOfNotNull(live.sortedWith(cmp).firstOrNull()) }
-    }
+    ): List<FxItem> = watchableLive(items, now).filter { it.favourite || it.followedLeague }.sortedWith(liveCmp)
 
-    /** Game Centre's hero: the Home picks, else his next game within a day, else the top-ranked game starting within a day. */
+    /** Game Centre's hero: the Home picks, else the top-ranked live game, else his next game within a day, else the top-ranked one starting within a day. */
     fun gameCentrePicks(
         items: List<FxItem>,
         now: Long,
     ): List<FxItem> {
         homePicks(items, now).takeIf { it.isNotEmpty() }?.let { return it }
+        // The sport page keeps a fallback: the top-ranked live game
+        watchableLive(items, now).sortedWith(liveCmp).firstOrNull()?.let { return listOf(it) }
         val soon = items.filter { it.status == "pre" && it.kickoff - now in 0..DAY_S }
         val cmp = compareBy<FxItem> { it.rank ?: Double.MAX_VALUE }.thenByDescending { it.significance }.thenBy { it.kickoff }
         val next = soon.filter { it.favourite }.minByOrNull { it.kickoff } ?: soon.sortedWith(cmp).firstOrNull()

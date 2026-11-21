@@ -81,6 +81,8 @@ data class FxItem(
     val homeAltColor: String? = null,
     val awayColor: String? = null,
     val awayAltColor: String? = null,
+    /** In one of his followed leagues (the server's `why` carries "favourite league"). */
+    val followedLeague: Boolean = false,
 ) {
     val title get() = if (away.isNotBlank()) "$home v $away" else home
 
@@ -243,6 +245,7 @@ object SportFixtures {
                     homeAltColor = home.altColor,
                     awayColor = away.color,
                     awayAltColor = away.altColor,
+                    followedLeague = e.optJSONArray("why").let { w -> w != null && (0 until w.length()).any { i -> w.opt(i) == "favourite league" } },
                 )
         }
         val more =
