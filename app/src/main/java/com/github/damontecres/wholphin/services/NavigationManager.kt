@@ -131,6 +131,13 @@ class NavigationManager
         /**
          * Resets the backstack to the specified destination
          */
+        /** Jellytip: swap the top entry (player -> player for the companion's "closer game"; Back still goes to what was under it). */
+        fun replaceTop(destination: Destination) {
+            JellytipTrace.nav("replaceTop", backStack.lastOrNull(), destination)
+            if (backStack.isEmpty()) backStack.add(destination) else backStack[backStack.lastIndex] = destination
+            log()
+        }
+
         fun replace(destination: Destination) {
             JellytipTrace.nav("replace", backStack.lastOrNull(), destination)
             while (backStack.size > 1) {

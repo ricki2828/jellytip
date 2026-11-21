@@ -51,7 +51,8 @@ fun GameStateCard(
 ) {
     when (st.kind) {
         GameKind.TIGHT -> {
-            val rows = GameStateLogic.deciderRows(d, st, home, away, allowWinProb, d.wicketsInHand)
+            // Win probability already has its own bar under the card
+            val rows = GameStateLogic.deciderRows(d, st, home, away, false, d.wicketsInHand)
             if (rows.isEmpty()) return
             SectionHead(if (fav != null) "What decides it · your team" else "What decides it")
             rows.forEach { (l, v) -> key(l) { KvRow(l, v) } }

@@ -177,12 +177,14 @@ fun JellytipLiveTvPlayerPage(
     val startedAt = remember { nowSec() - 60 }
     val channel = fallback ?: lineup[index]
 
+    // One owner per page: a page swapped in (closer game) must not lose the stream when the old one detaches
+    val playerOwner = remember { "full#" + System.nanoTime() }
     DisposableEffect(Unit) {
-        playback.attach("full")
+        playback.attach(playerOwner)
         playback.setVolume(1f)
         onDispose {
             playback.lastFullScreenChannel = (fallback ?: lineup[index]).id
-            playback.detach("full")
+            playback.detach(playerOwner)
         }
     }
     // App hidden = JellytipIptvPlayback's activity callback stops the stream; no nav-entry ON_STOP stop here (it also
@@ -442,6 +444,7 @@ fun JellytipLiveTvPlayerPage(
                 )
             }
         }
+    val favNow by androidx.compose.runtime.rememberUpdatedState(favSide)
     LaunchedEffect(sourceMatch?.id, favSide) { if (sourceMatch != null) JellytipTrace.player("iptv", "fav side ${sourceMatch.id} = $favSide") }
     val panelMatch = sourceMatch?.takeIf { current.isLive && !it.replay && !LivePanelRoute.missing && !MatchHidden.hides(it.id) }
     LaunchedEffect(panelMatch?.id) { if (panelMatch == null) panelOpen = false }
@@ -660,7 +663,7 @@ fun JellytipLiveTvPlayerPage(
                     // The toast may fall back to this answer's score: then it waits for the answer's own time too
                     val moAt = stampSec(mo.at) ?: stamp
                     val gateAt = if (mo.detail == null) maxOf(moAt, stamp) else moAt
-                    pendingAlerts += AlertPolicy.Candidate("mo|${mo.at}|${mo.label}", kind, gateAt, favourite = TeamAware.isFavouriteMoment(mo.kind, mo.team, favSide), late = late, payload = {
+                    pendingAlerts += AlertPolicy.Candidate("mo|${mo.at}|${mo.label}", kind, gateAt, favourite = TeamAware.isFavouriteMoment(mo.kind, mo.team, favNow), late = late, payload = {
                     if (panelOpen) {
                         liveFlash = LiveFlash((liveFlash?.seq ?: 0) + 1, mo)
                     } else if (me?.sportFlipAlerts != false) {
@@ -770,25 +773,32 @@ fun JellytipLiveTvPlayerPage(
     // Blowout (web BlowoutCard): a tighter live game to suggest, looked up while the panel is open on a decided game;
     // a short OK in the panel switches to it
     val blowout =
-        remember(liveData, panelMatch?.id, me?.sportSpoilers) {
+        remember(liveData, panelMatch?.id, me?.sportSpoilers, replayShown) {
             val d = liveData
             val m = panelMatch
-            d != null && m != null && !m.isEvent && GameStateLogic.of(d, m.leagueKey, m.status, me?.sportSpoilers == true).kind == GameKind.BLOWOUT
+            d != null && m != null && !m.isEvent && !replayShown && GameStateLogic.of(d, m.leagueKey, m.status, me?.sportSpoilers == true).kind == GameKind.BLOWOUT
         }
     val closerGame by produceState<FxItem?>(null, blowout, panelIsOpen, panelMatch?.id) {
         value = null
         if (!blowout || !panelIsOpen) return@produceState
-        val fx = viewModel.service.fixtures(maxAgeMs = 60_000)?.second ?: return@produceState
-        value = GameStateLogic.closerGame(fx.items, setOfNotNull(panelMatch?.id, matchId), nowSec())
-        JellytipTrace.player("iptv", "blowout ${panelMatch?.id}: closer ${value?.fid ?: "none"}")
+        while (true) {
+            val fx = viewModel.service.fixtures(maxAgeMs = 60_000)?.second
+            if (fx != null) {
+                val c = GameStateLogic.closerGame(fx.items, setOfNotNull(panelMatch?.id, matchId), nowSec())
+                if (c?.fid != value?.fid) JellytipTrace.player("iptv", "blowout ${panelMatch?.id}: closer ${c?.fid ?: "none"}")
+                value = c
+            }
+            delay(60_000)
+        }
     }
     var pendingCloser by remember { mutableStateOf<FxItem?>(null) }
+    val closerArmed = remember { booleanArrayOf(false) }
     LaunchedEffect(pendingCloser) {
         val c = pendingCloser ?: return@LaunchedEffect
         pendingCloser = null
         val ch = SportFixtures.pickChannel(c, nowSec()).channel ?: return@LaunchedEffect
         panelOpen = false
-        launchFixture(viewModel.playback, viewModel.navigationManager, c, ch, fromStart = false, from = "closer game")
+        launchFixture(viewModel.playback, viewModel.navigationManager, c, ch, fromStart = false, from = "closer game", replaceTop = true)
     }
     // Perf trace: the player with the panel open is measured on its own (perfByDest "…+panel")
     DisposableEffect(panelIsOpen) {
@@ -816,6 +826,13 @@ fun JellytipLiveTvPlayerPage(
             .background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
+                // Closer game: a short OK press in the panel's Stats tab (released, not held) switches to it
+                if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) && closerArmed[0]) {
+                    closerArmed[0] = false
+                    val c = closerGame
+                    if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats" && c != null) pendingCloser = c
+                    return@onPreviewKeyEvent true
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 if (trackSheetOpen) {
                     when (e.key) {
@@ -915,10 +932,11 @@ fun JellytipLiveTvPlayerPage(
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                            if (e.nativeKeyEvent.repeatCount > 0 && !panelMenu) {
-                                panelMenu = true
-                            } else if (e.nativeKeyEvent.repeatCount == 0) {
-                                closerGame?.let { c -> pendingCloser = c }
+                            if (e.nativeKeyEvent.repeatCount > 0) {
+                                closerArmed[0] = false
+                                if (!panelMenu) panelMenu = true
+                            } else {
+                                closerArmed[0] = true
                             }
                             return@onPreviewKeyEvent true
                         }

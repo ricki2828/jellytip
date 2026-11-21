@@ -952,7 +952,8 @@ private fun StatsTab(
         GameStateCard(d, st, home, away, fav, allowWinProb, closer)
     }
     d.scorecard?.let { ScorecardBlocks(it, home, away) }
-    d.situation?.let { ContextBlock(d.layout, it, m, d, pal) }
+    // The scorecard already has the crease, bowling and rates
+    d.situation?.takeUnless { d.layout == "cricket" && d.scorecard != null }?.let { ContextBlock(d.layout, it, m, d, pal) }
     d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
     if (d.stats.isEmpty() && d.leaders.isEmpty() && d.situation == null && d.winProbHome == null) {
         Note("No stats for this match yet.")

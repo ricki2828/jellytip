@@ -448,6 +448,8 @@ fun launchFixture(
     ch: FxChannel,
     fromStart: Boolean,
     from: String,
+    /** From the player itself: swap the page instead of stacking a second player. */
+    replaceTop: Boolean = false,
 ) {
     com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
     val order = SportFixtures.pickChannel(f, nowSec()).order
@@ -465,5 +467,6 @@ fun launchFixture(
     val matchId = if (fromStart) null else SportFixtures.liveMatchId(f, ch)
     playback.play(target, "$from ${if (fromStart) "from start" else "live"} ${f.fid}")
     JellytipTrace.log("iptv", "$from watch ${f.fid} on ${ch.id} fromStart=$fromStart match=$matchId")
-    navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id, matchId), "$from ${f.title}")
+    val dest = Destination.JellytipLiveTvPlayer(ch.id, matchId)
+    if (replaceTop) navigationManager.replaceTop(dest) else navigationManager.navigateTo(dest, "$from ${f.title}")
 }

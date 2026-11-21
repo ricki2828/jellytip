@@ -133,7 +133,7 @@ object SportParse {
 /** Whose side is the viewer's team (alerts, recap "mine", blowout wording). */
 object TeamAware {
     /** Kinds that are a team scoring: a favourite's one alerts in KEY mode and survives a blowout (web FlipAlerts SCORING). */
-    val SCORING = setOf("goal", "try", "touchdown", "field_goal", "score")
+    val SCORING = setOf("goal", "try", "touchdown", "field_goal", "score", "conversion", "penalty_goal")
 
     private fun norm(s: String?) = (s ?: "").lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
 
@@ -390,7 +390,8 @@ object GameStateLogic {
         val sport = sportOf(d.layout, leagueKey)
         return classify(
             sport,
-            d.status ?: fixtureStatus,
+            // A light answer carries no status; a fixture fetched before kick-off still says "pre" once there's a score
+            d.status ?: fixtureStatus?.takeUnless { it == "pre" && (d.scoreHome != null || d.clock != null) },
             d.scoreHome?.toIntOrNull(),
             d.scoreAway?.toIntOrNull(),
             d.clock,
