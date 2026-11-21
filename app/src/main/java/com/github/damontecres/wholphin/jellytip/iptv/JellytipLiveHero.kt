@@ -231,7 +231,7 @@ fun LiveMatchHero(
             .clip(RoundedCornerShape(14.dp))
             .background(if (art == null) wash else androidx.compose.ui.graphics.SolidColor(Broadcast.Base)),
     ) {
-        if (art != null) FixtureArtHeroBackdrop(art, pal.home, pal.away, motion, onFailed = { artFailed = true })
+        if (art != null) FixtureArtHeroBackdrop(art, f.fid, pal.home, pal.away, motion, onFailed = { artFailed = true })
         Box(Modifier.align(Alignment.CenterStart).padding(start = 28.dp)) { BigCrest(f.homeLogo, f.homeShort ?: f.home, pal.home, 104.dp, 34.sp) }
         if (f.away.isNotBlank()) {
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 28.dp)) { BigCrest(f.awayLogo, f.awayShort ?: f.away, pal.away, 104.dp, 34.sp) }

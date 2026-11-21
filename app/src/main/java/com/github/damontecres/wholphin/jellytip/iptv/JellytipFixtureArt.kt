@@ -114,13 +114,15 @@ object FixtureArt {
 @Composable
 fun FixtureArtHeroBackdrop(
     art: String,
+    /** Restarts the pan (league art is shared by every fixture of the league). */
+    panKey: Any,
     home: Color,
     away: Color,
     motion: Boolean,
     onFailed: () -> Unit,
 ) {
-    val pan = remember(art) { Animatable(0f) }
-    LaunchedEffect(art, motion) {
+    val pan = remember(panKey) { Animatable(0f) }
+    LaunchedEffect(panKey, motion) {
         if (motion) pan.animateTo(1f, tween((FixtureArt.PAN_MS * (1f - pan.value)).toInt(), easing = LinearEasing))
     }
     val wash =
@@ -180,7 +182,7 @@ fun FixtureArtTileBackdrop(
         }
     Box(Modifier.fillMaxSize()) {
         AsyncImage(
-            model = FixtureArt.sized(art, 480),
+            model = FixtureArt.sized(art, 192),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             onError = { onFailed() },

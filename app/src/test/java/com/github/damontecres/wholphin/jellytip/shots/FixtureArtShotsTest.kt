@@ -24,8 +24,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import coil3.annotation.ExperimentalCoilApi
 import coil3.asImage
+import coil3.compose.AsyncImagePainter
 import coil3.compose.AsyncImagePreviewHandler
 import coil3.compose.LocalAsyncImagePreviewHandler
+import coil3.request.ErrorResult
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.iptv.ColourEdgeFixtureTile
 import com.github.damontecres.wholphin.jellytip.iptv.FxChannel
@@ -114,13 +116,14 @@ class FixtureArtShotsTest {
 
     @Composable
     private fun Tv(content: @Composable () -> Unit) {
+        val ok = AsyncImagePreviewHandler { request -> if ("badge" in request.data.toString()) badge else photo }
+        // "broken" = an explicit error state, so onError fires and the shot shows the fallback
         val handler =
-            AsyncImagePreviewHandler { request ->
-                val d = request.data.toString()
-                when {
-                    "broken" in d -> null
-                    "badge" in d -> badge
-                    else -> photo
+            AsyncImagePreviewHandler { loader, request ->
+                if ("broken" in request.data.toString()) {
+                    AsyncImagePainter.State.Error(null, ErrorResult(null, request, IllegalStateException("broken")))
+                } else {
+                    ok.handle(loader, request)
                 }
             }
         CompositionLocalProvider(LocalInspectionMode provides true, LocalAsyncImagePreviewHandler provides handler) {
