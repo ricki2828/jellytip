@@ -208,8 +208,12 @@ fun LiveMatchHero(
     count: Int = 1,
     onCycle: ((Int) -> Unit)? = null,
     onFocused: () -> Unit = {},
+    motion: Boolean = !com.github.damontecres.wholphin.jellytip.rememberReducedMotion(),
 ) {
     val pal = rememberFixturePalette(f)
+    // The fixture's photo (FixtureArt); a photo that fails to load falls back to the plain colour wash
+    var artFailed by remember(f.art) { mutableStateOf(false) }
+    val art = f.art?.takeUnless { artFailed }
     val wash =
         remember(pal) {
             Brush.horizontalGradient(0f to pal.home, 0.46f to Broadcast.Base, 0.54f to Broadcast.Base, 1f to pal.away)
@@ -225,8 +229,9 @@ fun LiveMatchHero(
             .fillMaxWidth()
             .height(230.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(wash),
+            .background(if (art == null) wash else androidx.compose.ui.graphics.SolidColor(Broadcast.Base)),
     ) {
+        if (art != null) FixtureArtHeroBackdrop(art, pal.home, pal.away, motion, onFailed = { artFailed = true })
         Box(Modifier.align(Alignment.CenterStart).padding(start = 28.dp)) { BigCrest(f.homeLogo, f.homeShort ?: f.home, pal.home, 104.dp, 34.sp) }
         if (f.away.isNotBlank()) {
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 28.dp)) { BigCrest(f.awayLogo, f.awayShort ?: f.away, pal.away, 104.dp, 34.sp) }
@@ -250,12 +255,27 @@ fun LiveMatchHero(
                     Cond(f.away, 44.sp, Broadcast.Text)
                 }
             }
-            Cond(
-                listOfNotNull(f.league, f.stage, "score hidden until you watch".takeIf { f.status != "pre" }).joinToString(" · "),
-                15.sp,
-                Broadcast.Secondary,
-                weight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                f.badge?.let { b ->
+                    var badgeFailed by remember(b) { mutableStateOf(false) }
+                    if (!badgeFailed) {
+                        AsyncImage(
+                            model = FixtureArt.sized(b, 96),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            onError = { badgeFailed = true },
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Cond(
+                    listOfNotNull(f.league, f.stage, "score hidden until you watch".takeIf { f.status != "pre" }).joinToString(" · "),
+                    15.sp,
+                    // On a photo the grey is too faint (FixtureArtTest); white keeps 4.5:1 over the dark centre
+                    if (art != null) Broadcast.Text else Broadcast.Secondary,
+                    weight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(top = 6.dp).focusGroup().let { m -> focusRequester?.let { m.focusRequester(it) } ?: m },
@@ -288,7 +308,7 @@ fun LiveMatchHero(
                 }
             }
             if (count > 1) {
-                Text("‹  ${index + 1} of $count of your games live  ›", color = Broadcast.Secondary, fontFamily = JellytipFontFamily, fontSize = 12.sp)
+                Text("‹  ${index + 1} of $count of your games live  ›", color = if (art != null) Broadcast.Text else Broadcast.Secondary, fontFamily = JellytipFontFamily, fontSize = 12.sp)
             }
         }
     }
@@ -308,6 +328,10 @@ fun ColourEdgeFixtureTile(
     onLongClick: (() -> Unit)? = null,
 ) {
     val pal = rememberFixturePalette(f)
+    var artFailed by remember(f.art) { mutableStateOf(false) }
+    val art = f.art?.takeUnless { artFailed }
+    // On a photo the grey status text is too faint (FixtureArtTest)
+    val quiet = if (art != null) Broadcast.Text else Broadcast.Secondary
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
@@ -327,6 +351,7 @@ fun ColourEdgeFixtureTile(
         modifier = modifier.size(320.dp, 140.dp),
     ) {
         Box(Modifier.fillMaxSize()) {
+            if (art != null) FixtureArtTileBackdrop(art, pal.home, pal.away.takeIf { f.away.isNotBlank() }, onFailed = { artFailed = true })
             Box(Modifier.align(Alignment.CenterStart).width(5.dp).fillMaxHeight().background(pal.home))
             if (f.away.isNotBlank()) Box(Modifier.align(Alignment.CenterEnd).width(5.dp).fillMaxHeight().background(pal.away))
             Column(Modifier.fillMaxSize().padding(start = 18.dp, end = 16.dp, top = 10.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -342,8 +367,8 @@ fun ColourEdgeFixtureTile(
                                 Color.White,
                                 modifier = Modifier.background(Color(0xFFE2264D), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 1.dp),
                             )
-                        "post" -> Cond("FT · " + (score?.let { "${it.home}–${it.away}" } ?: "score hidden"), 13.sp, Broadcast.Secondary)
-                        else -> Cond(SportFixtures.startsText(f.kickoff, now), 13.sp, Broadcast.Secondary)
+                        "post" -> Cond("FT · " + (score?.let { "${it.home}–${it.away}" } ?: "score hidden"), 13.sp, quiet)
+                        else -> Cond(SportFixtures.startsText(f.kickoff, now), 13.sp, quiet)
                     }
                     if (reminder) Text("🔔", fontSize = 11.sp)
                     if (f.recordingId != null) Text("●", color = Color(0xFFE2264D), fontSize = 11.sp)

@@ -83,6 +83,10 @@ data class FxItem(
     val awayAltColor: String? = null,
     /** In one of his followed leagues (the server's `why` carries "favourite league"). */
     val followedLeague: Boolean = false,
+    /** Background photo (league fanart, stable per fixture), absolute; null = today's look. See [FixtureArt]. */
+    val art: String? = null,
+    /** The league's badge, absolute; null = none. */
+    val badge: String? = null,
 ) {
     val title get() = if (away.isNotBlank()) "$home v $away" else home
 
@@ -246,6 +250,8 @@ object SportFixtures {
                     awayColor = away.color,
                     awayAltColor = away.altColor,
                     followedLeague = e.optJSONArray("why").let { w -> w != null && (0 until w.length()).any { i -> w.opt(i) == "favourite league" } },
+                    art = e.s("art")?.let(img),
+                    badge = e.s("badge")?.let(img),
                 )
         }
         val more =
