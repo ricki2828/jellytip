@@ -629,6 +629,9 @@ class JellytipApi
             }
         }
 
+        /** Cache key part for per-person answers: the signed-in Jellyfin user (by token), "" when signed out. */
+        fun currentUserKey(): String = api.accessToken?.hashCode()?.toString() ?: ""
+
         /** The companion base URL (no trailing slash); stream links and image paths from IPTV answers are relative to it. */
         suspend fun companionBase(): String = JellytipPreferences.apiBase(preferences.data.first().jellytipApiUrl)
 

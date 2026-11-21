@@ -105,9 +105,9 @@ object IptvSeasons {
         title: String,
         tmdbId: Int,
     ): IptvVodDetail? {
-        val key = "$tmdbId"
-        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         val api = JellytipApi.shared ?: return null
+        val key = "${api.currentUserKey()}|$tmdbId"
+        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         val got =
             try {
                 // Providers this person owns or has shared with them (same as the web's season lookup)
@@ -116,23 +116,28 @@ object IptvSeasons {
                         val a = JSONObject(b).optJSONArray("providers")
                         (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                     }
-                if (owned.isNullOrEmpty()) return null
-                val (code, body) =
-                    api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return null
-                if (code != 200) {
-                    null
-                } else {
-                    val base = vod.base()
-                    val hit = pickSeries(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), tmdbId, owned)
-                    hit?.let { vod.detail(it.id) }
-                }
+                if (owned.isNullOrEmpty()) null else lookupOwned(api, vod, title, tmdbId, owned)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
             }
-        cache[key] = System.currentTimeMillis() to got
+        cache[key] = System.currentTimeMillis() to got // no IPTV / not found is cached too: no refetch on every series page
         return got
+    }
+
+    private suspend fun lookupOwned(
+        api: JellytipApi,
+        vod: JellytipIptvVodService,
+        title: String,
+        tmdbId: Int,
+        owned: List<String>,
+    ): IptvVodDetail? {
+        val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return null
+        if (code != 200) return null
+        val base = vod.base()
+        val hit = pickSeries(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), tmdbId, owned) ?: return null
+        return vod.detail(hit.id)
     }
 }
 

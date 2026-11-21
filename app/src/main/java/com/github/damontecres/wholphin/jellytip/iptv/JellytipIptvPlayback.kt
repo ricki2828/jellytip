@@ -226,10 +226,11 @@ class JellytipIptvPlayback
                                 launchOpen(t, "renew after ${http?.responseCode}")
                                 return
                             }
-                            fail(t, IptvRules.failureText(code, "The stream stopped."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, _state.value is IptvPlayState.Playing))
+                            // Renew / connections in use: our link or the one connection, never the stream's fault
+                            fail(t, IptvRules.failureText(code, "The stream stopped."), null)
                         }
 
-                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, _state.value is IptvPlayState.Playing))
+                        else -> fail(t, IptvRules.failureText(code, "The stream stopped (${error.errorCodeName})."), IptvStreamFail.reasonFor(error.errorCode, http?.responseCode, code, _state.value is IptvPlayState.Playing))
                     }
                 }
             }
