@@ -94,9 +94,13 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
     var message by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        delay(50)
-        first.tryRequestFocus()
+    // First focus once the prefs are there (the list isn't drawn before)
+    val loaded = prefs != null
+    LaunchedEffect(loaded) {
+        if (loaded) {
+            delay(50)
+            first.tryRequestFocus()
+        }
     }
     LaunchedEffect(message) {
         if (message != null) {
@@ -108,6 +112,8 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
     /** PATCH with one retry after a 409 (the answer carried the server's copy; [body] is rebuilt from it). */
     fun save(
         what: String,
+        /** The row goes away on success (a remove): focus moves to "Add a team…" instead of being lost. */
+        removes: Boolean = false,
         body: (SportSettings) -> JSONObject,
     ) {
         scope.launch {
@@ -123,6 +129,11 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
                     message = "Couldn't save $what" + (err?.let { " ($it)" } ?: "")
                     break
                 }
+            }
+            if (!ok && message == null) message = "Couldn't save $what"
+            if (ok && removes) {
+                delay(50)
+                first.tryRequestFocus()
             }
             JellytipTrace.log("me", "sport settings $what ok=$ok")
         }
@@ -152,10 +163,10 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
             item { Head("Your teams and leagues") }
             item { Row2("Add a team…", "OK to search", Modifier.focusRequester(first)) { search = true } }
             items(s.teams, key = { "t:$it" }) { n ->
-                Row2(n, "OK to remove") { save("teams") { SportPrefs.teamsBody(SportPrefs.removeTeam(n, it)) } }
+                Row2(n, "OK to remove") { save("teams", removes = true) { SportPrefs.teamsBody(SportPrefs.removeTeam(n, it)) } }
             }
             items(s.leagues, key = { "l:$it" }) { n ->
-                Row2(n, "League · OK to remove") { save("leagues") { SportPrefs.leaguesBody(SportPrefs.removeLeague(n, it)) } }
+                Row2(n, "League · OK to remove") { save("leagues", removes = true) { SportPrefs.leaguesBody(SportPrefs.removeLeague(n, it)) } }
             }
             if (s.sportsSupported) {
                 item { Head("Sports I follow (OK: follow → hide → clear)") }
@@ -168,16 +179,20 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
                             SportPrefs.SportState.MUTE -> "⊘ Hidden"
                             SportPrefs.SportState.NEUTRAL -> "Not set"
                         },
-                    ) { save("sports") { cur -> SportPrefs.sportsBody(SportPrefs.applySport(value, SportPrefs.next(SportPrefs.sportState(value, cur)), cur)) } }
+                    ) {
+                        // The state the viewer saw decides the next one (a 409 retry applies it to the fresh copy, never re-flips)
+                        val to = SportPrefs.next(st)
+                        save("sports") { cur -> SportPrefs.sportsBody(SportPrefs.applySport(value, to, cur)) }
+                    }
                 }
             }
             item {
                 val on = SportPrefs.hasTag(s, SportPrefs.TAG_WOMENS)
-                Row2("Hide women's competitions", if (on) "On" else "Off") { save("women's") { cur -> SportPrefs.mutedBody(SportPrefs.withTag(cur, SportPrefs.TAG_WOMENS, !SportPrefs.hasTag(cur, SportPrefs.TAG_WOMENS))) } }
+                Row2("Hide women's competitions", if (on) "On" else "Off") { save("women's") { cur -> SportPrefs.mutedBody(SportPrefs.withTag(cur, SportPrefs.TAG_WOMENS, !on)) } }
             }
             item {
                 val on = SportPrefs.hasTag(s, SportPrefs.TAG_REPLAYS)
-                Row2("Hide replays and highlights", if (on) "On" else "Off") { save("replays") { cur -> SportPrefs.mutedBody(SportPrefs.withTag(cur, SportPrefs.TAG_REPLAYS, !SportPrefs.hasTag(cur, SportPrefs.TAG_REPLAYS))) } }
+                Row2("Hide replays and highlights", if (on) "On" else "Off") { save("replays") { cur -> SportPrefs.mutedBody(SportPrefs.withTag(cur, SportPrefs.TAG_REPLAYS, !on)) } }
             }
             item { Head("While you watch") }
             item { Row2("Show scores (spoilers) in match info", if (p.sportSpoilers) "On" else "Off") { sportPatch("spoilers", !p.sportSpoilers) } }
@@ -206,7 +221,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
                 item { Text("Nothing hidden. Hold OK on a live sport tile to hide a league or sport.", color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 13.sp) }
             }
             items(muted, key = { "m:${it.first}:${it.second}" }) { (kind, v) ->
-                Row2(v, "Hidden · OK to show again") { save("not interested") { cur -> SportPrefs.mutedBody(SportPrefs.unmute(cur, kind, v)) } }
+                Row2(v, "Hidden · OK to show again") { save("not interested", removes = true) { cur -> SportPrefs.mutedBody(SportPrefs.unmute(cur, kind, v)) } }
             }
         }
     }
@@ -230,6 +245,12 @@ private fun TeamSearchDialog(
 ) {
     var q by remember { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<TeamHit>?>(null) }
+    val field = remember { FocusRequester() }
+    val firstHit = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        field.tryRequestFocus()
+    }
     LaunchedEffect(q) {
         val term = q.trim()
         if (term.length < 2) {
@@ -244,7 +265,14 @@ private fun TeamSearchDialog(
     com.github.damontecres.wholphin.ui.components.BasicDialog(onDismissRequest = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(24.dp).width(520.dp)) {
             Text("Find a team", fontFamily = JellytipFontFamily, fontSize = 16.sp)
-            EditTextBox(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth())
+            EditTextBox(
+                value = q,
+                onValueChange = { q = it },
+                modifier = Modifier.fillMaxWidth().focusRequester(field),
+                // The keyboard's Search key jumps to the results
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { firstHit.tryRequestFocus() }),
+            )
             val h = hits
             when {
                 h == null -> Text("Type at least two letters.", fontFamily = JellytipFontFamily, fontSize = 13.sp)
@@ -252,7 +280,11 @@ private fun TeamSearchDialog(
                 else ->
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.heightIn(max = 360.dp)) {
                         items(h, key = { "${it.leagueKey}:${it.id}" }) { t ->
-                            Row2(t.line, if (SportPrefs.isFollowing(t, settings)) "★ Following" else "OK to follow") { onToggle(t) }
+                            Row2(
+                                t.line,
+                                if (SportPrefs.isFollowing(t, settings)) "★ Following" else "OK to follow",
+                                if (t === h.first()) Modifier.focusRequester(firstHit) else Modifier,
+                            ) { onToggle(t) }
                         }
                     }
             }

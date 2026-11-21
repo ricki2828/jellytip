@@ -77,6 +77,11 @@ class JellytipUpcomingSportViewModel
         val navigationManager: NavigationManager,
         val reminders: JellytipReminders,
     ) : ViewModel() {
+        init {
+            // The recording space ("Can't record: <reason>") is known before the first Record press
+            if (service.lastSpace == null) viewModelScope.launch { service.recordings() }
+        }
+
         /** Message after Record ("Recording scheduled…" or the server's reason); null = none. */
         var recordResult by mutableStateOf<Pair<Boolean, String>?>(null)
             private set

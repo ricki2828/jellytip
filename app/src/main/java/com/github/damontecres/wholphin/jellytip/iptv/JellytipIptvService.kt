@@ -402,12 +402,12 @@ class JellytipIptvService
         /** Last recordings answer of this process (Home draws its row on the first frame). */
         fun peekRecordings(): List<IptvRecording>? = recordingsCache
 
-        /** Recordings and the server's space; null = unavailable. */
         /** The server's recording space from the last recordings answer (can it record now, and why not). */
         @Volatile
         var lastSpace: IptvSpace? = null
             private set
 
+        /** Recordings and the server's space; null = unavailable. */
         suspend fun recordings(): Pair<IptvSpace?, List<IptvRecording>>? {
             val b = base()
             val (code, body) = get("v1/iptv/recordings") ?: return null

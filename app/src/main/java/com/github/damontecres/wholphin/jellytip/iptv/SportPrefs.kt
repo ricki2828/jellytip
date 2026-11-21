@@ -73,6 +73,9 @@ object SportPrefs {
 
     private fun JSONObject.id(k: String): String? = opt(k)?.takeIf { it != JSONObject.NULL }?.toString()?.takeIf { it.isNotBlank() }
 
+    /** A string field; Android's optString turns JSON null into "null", so read the raw value. */
+    private fun JSONObject.str(k: String): String? = (opt(k) as? String)?.takeIf { it.isNotBlank() }
+
     /** `sport` from GET /v1/me/prefs: teams mix plain names and {name, teamId, leagueKey}; teamRefs add refs. */
     fun parse(sp: JSONObject?): SportSettings {
         sp ?: return SportSettings()
@@ -84,9 +87,9 @@ object SportPrefs {
                 when (val v = t.opt(i)) {
                     is String -> if (v.isNotBlank() && names.none { same(it, v) }) names += v
                     is JSONObject -> {
-                        val n = v.optString("name").takeIf { it.isNotBlank() } ?: continue
+                        val n = v.str("name") ?: continue
                         if (names.none { same(it, n) }) names += n
-                        v.id("teamId")?.let { refs += TeamRef(it, v.optString("leagueKey").takeIf { s -> s.isNotBlank() }, n) }
+                        v.id("teamId")?.let { refs += TeamRef(it, v.str("leagueKey"), n) }
                     }
                 }
             }
@@ -95,8 +98,8 @@ object SportPrefs {
             for (i in 0 until r.length()) {
                 val o = r.optJSONObject(i) ?: continue
                 val id = o.id("teamId") ?: continue
-                val n = o.optString("name").takeIf { it.isNotBlank() } ?: continue
-                if (refs.none { it.teamId == id }) refs += TeamRef(id, o.optString("leagueKey").takeIf { it.isNotBlank() }, n)
+                val n = o.str("name") ?: continue
+                if (refs.none { it.teamId == id }) refs += TeamRef(id, o.str("leagueKey"), n)
             }
         }
         val m = sp.optJSONObject("muted")
@@ -125,10 +128,10 @@ object SportPrefs {
         for (i in 0 until a.length()) {
             val o = a.optJSONObject(i) ?: continue
             val id = o.id("id") ?: continue
-            val name = o.optString("name").takeIf { it.isNotBlank() } ?: continue
-            val lk = o.optString("leagueKey").takeIf { it.isNotBlank() }
+            val name = o.str("name") ?: continue
+            val lk = o.str("leagueKey")
             if (!seen.add("$lk:$id")) continue
-            out += TeamHit(id, name, o.optString("league").takeIf { it.isNotBlank() }, lk, o.optString("logo").takeIf { it.isNotBlank() }, o.optString("sport").takeIf { it.isNotBlank() })
+            out += TeamHit(id, name, o.str("league"), lk, o.str("logo"), o.str("sport"))
         }
         return out.take(20)
     }
