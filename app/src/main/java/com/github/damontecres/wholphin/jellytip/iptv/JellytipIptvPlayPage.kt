@@ -176,8 +176,13 @@ fun JellytipIptvPlayPage(
             androidx.compose.runtime.withFrameNanos { }
             playFocus.tryRequestFocus()
         } else {
+            swallowOkUp = false
             focus.tryRequestFocus()
         }
+    }
+    // A failed stream: hide the overlay so OK is "try again" again (the status card says so)
+    LaunchedEffect(playState is IptvPlayState.Failed) {
+        if (playState is IptvPlayState.Failed) overlay = false
     }
     // Back: hides the overlay; with it hidden the page's own Back leaves the player
     androidx.activity.compose.BackHandler(enabled = overlay) { overlay = false }
