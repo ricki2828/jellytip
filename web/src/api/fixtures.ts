@@ -82,6 +82,9 @@ export function showAllLeague(key: string): Promise<void> {
   return refreshFixtures(true);
 }
 
+/** The current list (null before the first answer), for code that has just awaited refreshFixtures. */
+export const fixturesNow = (): FixtureState | null => state;
+
 /** Fixtures: `data` null while loading, `unavailable` when the route is missing or failed (use the legacy path). */
 export function useFixtures(enabled = true): { data: FixtureState | null; unavailable: boolean } {
   const [, tick] = useState(0);

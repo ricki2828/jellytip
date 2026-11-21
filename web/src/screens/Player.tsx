@@ -27,7 +27,7 @@ import { localPosition, playableDownload, recordProgress, subtitleText, type Dow
 import { isNative, localFileUrl, NativeDownloads } from "../lib/native";
 import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
-import { remapActive } from "../lib/remoteSubtitles.ts";
+import { addedSubtitle, remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
 import { chainTarget, channelById, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels.ts";
 import { channelItems, rejoinPlan, takeChainHop } from "../api/channels";
@@ -770,7 +770,9 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     const streams = fresh.MediaSources?.find((m) => m.Id === p?.source.Id)?.MediaStreams;
     if (!p || !streams) return;
     const old = p.source.MediaStreams ?? [];
-    const added = select ? streams.find((x) => x.Type === "Subtitle" && x.IsTextSubtitleStream && !old.some((o) => o.Index === x.Index)) : undefined;
+    // by track identity, not index: an external track can be inserted before older ones and shift their indices
+    const newTrack = select ? addedSubtitle(old, streams) : null;
+    const added = newTrack?.IsTextSubtitleStream ? newTrack : null;
     if (added) {
       replayRef.current = null;
       remember({ subtitle: added.Index });
@@ -779,6 +781,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
     const np = { ...p, source: { ...p.source, MediaStreams: streams } };
     planRef.current = np;
     setPlan(np);
+    return !!added;
   };
   /** Auto-match timing: server aligns the selected subtitle to the audio and adds a new track; switch to it when it is listed. */
   const runAutoMatch = () => {

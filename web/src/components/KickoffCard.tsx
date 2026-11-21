@@ -6,7 +6,8 @@ import { hasLiveTv } from "../api/iptv";
 import { refreshFixtures, useFixtures } from "../api/fixtures";
 import { usePrefs } from "../api/me";
 import { useReminders } from "../api/reminderStore";
-import { fxTitle, pickChannel } from "../lib/gameCentre";
+import { fxTitle, isFavourite, pickChannel } from "../lib/gameCentre";
+import { getSession } from "../api/jellyfin";
 import { livePath } from "../lib/iptvPlay";
 import { isMuted } from "../lib/liveHero";
 import { findReminder } from "../lib/reminders";
@@ -15,10 +16,11 @@ import { KICKOFF_SHOW_MS, kickoffDue, kickoffHeadline, kickoffKey, type KickoffD
 import { afterStartup } from "../lib/startup";
 import "../screens/iptv/iptv.css";
 
-const SEEN_KEY = "jellytip.kickoffSeen";
+/** Per person: after an account switch in the same tab, the new person's cards are their own. */
+const seenKey = () => `jellytip.kickoffSeen.${getSession()?.userId ?? ""}`;
 const readSeen = (): Set<string> => {
   try {
-    return new Set(JSON.parse(sessionStorage.getItem(SEEN_KEY) ?? "[]") as string[]);
+    return new Set(JSON.parse(sessionStorage.getItem(seenKey()) ?? "[]") as string[]);
   } catch {
     return new Set();
   }
@@ -37,23 +39,37 @@ export function KickoffCard() {
   }, []);
   const { data } = useFixtures(live);
   const { prefs } = usePrefs({ defer: true });
-  const { items: reminders } = useReminders();
+  const { items: reminders, available: remindersOn } = useReminders();
+  const mountedAt = useRef(Date.now());
   const route = useRoute();
   const playing = route.name === "iptvplay" ? route.query.get("channel") : null;
   const [now, setNow] = useState(() => Date.now() / 1000);
-  // 15 s steps: "in 2.5 min" is caught within a few seconds of its window opening
+  // The clock steps every 15 s, so "in 2.5 min" is caught within seconds of its window opening. The list itself is asked for again
+  // every 15 s only while one of his games kicks off within 10 min, else every 5 min; never while the tab is hidden.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const refsRef = useRef(prefs?.sport.teamRefs);
+  refsRef.current = prefs?.sport.teamRefs;
   useEffect(() => {
     if (!live) return;
+    let last = Date.now();
     const t = window.setInterval(() => {
-      setNow(Date.now() / 1000);
-      void refreshFixtures();
+      if (document.hidden) return;
+      const n = Date.now() / 1000;
+      setNow(n);
+      const near = (dataRef.current?.items ?? []).some((f) => Math.abs(f.kickoff - n) <= 600 && f.status !== "post" && isFavourite(f, refsRef.current ?? []));
+      if (near || Date.now() - last >= 5 * 60_000) {
+        last = Date.now();
+        void refreshFixtures();
+      }
     }, 15_000);
     return () => window.clearInterval(t);
   }, [live]);
   const seen = useRef(readSeen());
   const [card, setCard] = useState<KickoffDue | null>(null);
   const due = useMemo(() => {
-    if (!data) return null;
+    // reminders still loading (route there, at most 20 s): a game with a reminder must get the reminder toast, not this card as well
+    if (!data || (reminders === null && remindersOn && Date.now() - mountedAt.current < 20_000)) return null;
     const muted = prefs?.sport.muted;
     return kickoffDue(data.items, now, seen.current, {
       refs: prefs?.sport.teamRefs ?? [],
@@ -61,13 +77,13 @@ export function KickoffCard() {
       hasReminder: (f) => !!findReminder(reminders, { fid: f.fid, matchId: f.matchId }),
       muted: (f) => isMuted(f, muted),
     });
-  }, [data, now, prefs, reminders, playing]);
+  }, [data, now, prefs, reminders, remindersOn, playing]);
   useEffect(() => {
     if (!due) return;
     seen.current.add(kickoffKey(due));
     if (due.phase === "live") seen.current.add(`${due.fixture.fid}:soon`);
     try {
-      sessionStorage.setItem(SEEN_KEY, JSON.stringify([...seen.current].slice(-200)));
+      sessionStorage.setItem(seenKey(), JSON.stringify([...seen.current].slice(-200)));
     } catch {
       /* fine: this tab only */
     }

@@ -16,9 +16,9 @@ export type SubtitleSearchDialogProps = {
   subtitleLangs?: readonly string[];
   where: "page" | "player";
   onClose: () => void;
-  /** a new track is listed: the refreshed item (so the caller can update its streams) */
-  onAdded?: (item: Item) => void;
-  /** One-press "Get subtitles": the first results are not listed for a pick; the best match (TV ranker) is downloaded at once. */
+  /** a new track is listed: the refreshed item (so the caller can update its streams); true = the caller turned it on */
+  onAdded?: (item: Item) => boolean | void;
+  /** One-press "Get subtitles": the best match (TV ranker) of the first answer is downloaded at once (the list stays visible). */
   quick?: { fileName: string | null };
 };
 
@@ -72,19 +72,22 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
       }
       poll.current = new AbortController();
       const r = await refreshAfterDownload(itemId, before, sourceId, poll.current.signal);
-      if (r.listed && r.item) onAdded?.(r.item); // also when the dialog was closed meanwhile but the track did show up
+      if (r.listed && r.item) turnedOn.current = onAdded?.(r.item) === true; // also when the dialog was closed meanwhile but the track did show up
       if (alive.current) dispatch({ type: "added", seq, listed: r.listed });
     } catch (e) {
       if (alive.current) dispatch({ type: "failed", seq, error: classifyError(e) });
     }
   };
 
-  // Get subtitles: the first answer's best match is downloaded straight away (once; a later search lists results as usual)
+  // Get subtitles: the first answer's best match is downloaded straight away. Only the first answer: an empty one, an error or a
+  // cancel uses up the auto-pick too, so a later search (another language) lists results for the person to pick, as usual.
   const autoPicked = useRef(false);
+  const turnedOn = useRef(false);
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
-    if (!quick || autoPicked.current || state.phase !== "results") return;
+    if (!quick || autoPicked.current || state.phase === "searching" || (state.phase === "idle" && !("note" in state && state.note))) return;
     autoPicked.current = true;
+    if (state.phase !== "results") return;
     const best = pickBest(state.results, quick.fileName);
     if (best) {
       setPicked(pickedLabel(best));
@@ -154,7 +157,7 @@ export function SubtitleSearchDialog({ itemId, title, sourceId, subtitleLangs, w
   let status: string | null = null;
   if (state.phase === "searching") status = `Searching subtitle providers for ${languageName(state.language)}. This can take up to a minute.`;
   else if (state.phase === "downloading") status = picked ? `${picked}. Downloading...` : `Downloading "${state.picked.name}"...`;
-  else if (state.phase === "added") status = quick && where === "player" && state.listed ? `Added "${state.picked.name}" and turned it on.` : addedMessage(state.listed, where, state.picked.name);
+  else if (state.phase === "added") status = quick && where === "player" && state.listed && turnedOn.current ? `Added "${state.picked.name}" and turned it on.` : addedMessage(state.listed, where, state.picked.name);
   else if (state.phase === "empty") status = NONE_FOUND;
   else if (state.phase === "error") status = errorMessage(state.error, state.action);
   else if (state.phase === "idle" && state.note) status = state.note;

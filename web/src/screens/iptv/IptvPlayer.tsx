@@ -8,7 +8,7 @@ import { CatchUpChoice, CatchUpRecap, FullTimeCard } from "../../components/Comp
 import { nextGame, nextLine } from "../../lib/sportWow";
 import { isMuted } from "../../lib/liveHero";
 import { fxTitle, pickChannel, type FxItem } from "../../lib/gameCentre";
-import { useFixtures } from "../../api/fixtures";
+import { fixturesNow, refreshFixtures, useFixtures } from "../../api/fixtures";
 import { cards as catchCards_, DECIDE_WAIT_MS, joiningLine, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, failedLately, failOf, isDecodeFault, nextAfterFailure } from "../../lib/streamFail";
@@ -946,11 +946,16 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     if (!id || feed.kind !== "final" || !panelAvail || !liveNow || revealClock.replay || catchHoldRef.current || ftShown.current.has(id)) return;
     ftShown.current.add(id);
     const muted = ftPrefs?.sport.muted;
-    const next = nextGame(fxData?.items ?? [], new Set([id]), Date.now() / 1000, ftPrefs?.sport.teamRefs ?? [], (f) => isMuted(f, muted));
-    setFullTime({ score: feed.score, next });
+    const score = feed.score;
     if (drawer && openedBy.current.by !== "user") closePanel(false);
+    // What's next from a fresh list (the one loaded when the player opened may be hours old); at most ~2.5 s, else what we have
+    // not cancelled when a dep changes: the id is already marked shown, so this answer is the only card for this game
+    void Promise.race([refreshFixtures(true), new Promise((r) => window.setTimeout(r, 2500))]).then(() => {
+      const items = fixturesNow()?.items ?? fxData?.items ?? [];
+      setFullTime({ score, next: nextGame(items, new Set([id]), Date.now() / 1000, ftPrefs?.sport.teamRefs ?? [], (f) => isMuted(f, muted)) });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feed.kind, extras?.matchId, panelAvail, liveNow, revealClock.replay]);
+  }, [feed.kind, extras?.matchId, panelAvail, liveNow, revealClock.replay, catchPhase]);
   const catchHold = catchPhase !== "done";
   const catchHoldRef = useRef(catchHold);
   catchHoldRef.current = catchHold;

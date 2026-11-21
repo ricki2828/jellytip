@@ -19,6 +19,9 @@ export function useCardKeys(root: RefObject<HTMLDivElement | null>, onEscape: ()
     const onKey = (e: KeyboardEvent) => {
       const btns = Array.from(root.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
       if (!btns.length) return;
+      // keys belong to the card only while focus is on it (or nowhere): an open panel or a menu keeps its own
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && !root.current?.contains(ae)) return;
       const at = btns.indexOf(document.activeElement as HTMLButtonElement);
       let handled = true;
       // focus lost (a click on the backdrop): arrows come back to the default button (Live / Next), not the first
