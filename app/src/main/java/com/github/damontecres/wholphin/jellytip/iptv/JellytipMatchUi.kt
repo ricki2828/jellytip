@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
