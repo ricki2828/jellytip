@@ -81,6 +81,23 @@ fun JellytipIptvPlayPage(
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
+    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
+    // Ramped seeking (web b662f0bc): a pending target that grows while Left/Right are pressed or held, seeked once settled
+    var pendingSeek by remember(target) { mutableStateOf<SeekRamp.State?>(null) }
+    var seekHeld by remember(target) { mutableStateOf(false) }
+    LaunchedEffect(pendingSeek != null) {
+        while (pendingSeek != null) {
+            delay(100)
+            val s = pendingSeek ?: break
+            if (SeekRamp.commitDue(s, System.currentTimeMillis(), seekHeld)) {
+                val to = (s.target * 1000).toLong()
+                playback.player?.seekTo(to)
+                watch.seeked()
+                position = to
+                pendingSeek = null
+            }
+        }
+    }
     // "This stream isn't working": Down opens it (and a failed stream shows it); Back closes it
     val canReport = target.vodId != null || target.episodeId != null
     var reportOpen by remember(target) { mutableStateOf(false) }
@@ -143,7 +160,6 @@ fun JellytipIptvPlayPage(
     // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
     val owner = remember { "item:" + java.util.UUID.randomUUID() }
     // Taste signals (web 4a830873): this IPTV film / episode's real playing time; closed when the page goes or it ends
-    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
     DisposableEffect(target) {
         val t =
             target.vodId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("movie", iptvId = it) }
@@ -245,6 +261,10 @@ fun JellytipIptvPlayPage(
             .background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionLeft || e.key == Key.DirectionRight)) {
+                    seekHeld = false
+                    return@onPreviewKeyEvent pendingSeek != null
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // The report button has focus: its keys go to it (Back is the BackHandler above)
                 if (reportOpen) return@onPreviewKeyEvent false
@@ -259,11 +279,29 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    Key.DirectionLeft, Key.DirectionRight, Key.MediaRewind, Key.MediaFastForward -> {
+                    Key.DirectionLeft, Key.DirectionRight -> {
                         if (p != null && p.isCurrentMediaItemSeekable) {
-                            val back = e.key == Key.DirectionLeft || e.key == Key.MediaRewind
+                            seekHeld = true
+                            pendingSeek =
+                                SeekRamp.advance(
+                                    pendingSeek,
+                                    if (e.key == Key.DirectionLeft) -1 else 1,
+                                    System.currentTimeMillis(),
+                                    e.nativeKeyEvent.repeatCount > 0,
+                                    p.currentPosition / 1000.0,
+                                    (p.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE / 2) / 1000.0,
+                                )
+                        }
+                        controlsTick++
+                        true
+                    }
+
+                    Key.MediaRewind, Key.MediaFastForward -> {
+                        if (p != null && p.isCurrentMediaItemSeekable) {
+                            val back = e.key == Key.MediaRewind
                             val to = (p.currentPosition + if (back) -10_000 else 30_000).coerceAtLeast(0)
                             p.seekTo(to)
+                            watch.seeked()
                             position = to
                         }
                         controlsTick++
@@ -355,15 +393,22 @@ fun JellytipIptvPlayPage(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (playing) "▶" else "❚❚", color = JellytipPalette.Vanilla, fontSize = 14.sp)
-                    Text(clockText(position), color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                    val frac = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                    // While seeking: where OK-free release will land (gold), else where the picture is
+                    val shown = pendingSeek?.let { (it.target * 1000).toLong() } ?: position
+                    Text(
+                        clockText(shown),
+                        color = if (pendingSeek != null) Color(0xFFFFC72C) else JellytipPalette.Vanilla.copy(alpha = 0.8f),
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 13.sp,
+                    )
+                    val frac = if (duration > 0) (shown.toFloat() / duration).coerceIn(0f, 1f) else 0f
                     Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f))) {
                         Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(JellytipPalette.Jelly))
                     }
                     Text(if (duration > 0) clockText(duration) else "--:--", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
                 }
                 Text(
-                    text = "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" + "   ·   ▲ audio & subtitles" + if (canReport) "   ·   ▼ not working?" else "",
+                    text = "OK  play / pause   ·   ◀ ▶ seek (hold to go faster)" + "   ·   ▲ audio & subtitles" + if (canReport) "   ·   ▼ not working?" else "",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 11.sp,
