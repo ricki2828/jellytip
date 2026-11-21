@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -173,7 +174,12 @@ class JellytipAskViewModel
                 }
         }
 
+        /** The pick last opened: Back from its page lands on it again (the grid is rebuilt on return). */
+        var lastOpened: String? = null
+            private set
+
         fun open(item: BaseItem) {
+            lastOpened = item.id.toString()
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(item.destination(), "ask pick OK")
         }
@@ -194,7 +200,19 @@ fun JellytipAskPage(
     var refocusChip by remember { mutableIntStateOf(-1) }
     val chips = state.chips
     val chipFocus = remember(chips.size) { List(chips.size + 1) { FocusRequester() } }
-    LaunchedEffect(Unit) { boxFocus.tryRequestFocus() }
+    val gridState = rememberLazyGridState()
+    val restore = remember { FocusRequester() }
+    // First composition (also on Back from a pick's page): the pick that was opened, else the text box
+    LaunchedEffect(Unit) {
+        val items = (state.result as? AskResult.Done)?.picks?.items.orEmpty()
+        val at = viewModel.lastOpened?.let { id -> items.indexOfFirst { it.id.toString() == id } } ?: -1
+        if (at >= 0) {
+            gridState.scrollToItem(at)
+            withFrameNanos { }
+            if (restore.tryRequestFocus()) return@LaunchedEffect
+        }
+        boxFocus.tryRequestFocus()
+    }
     LaunchedEffect(chips.map { it.id }, state.asked, state.reading) {
         val i = refocusChip
         if (i < 0) return@LaunchedEffect
@@ -335,11 +353,12 @@ fun JellytipAskPage(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                state = gridState,
                 modifier = Modifier.fillMaxWidth().weight(1f).focusGroup().focusRestorer(),
             ) {
                 items(r.picks.items.size, key = { r.picks.items[it].id.toString() }) { i ->
                     val item = r.picks.items[i]
-                    PosterCard(item, onClick = { viewModel.open(item) }, onLongClick = {}, modifier = Modifier)
+                    PosterCard(item, onClick = { viewModel.open(item) }, onLongClick = {}, modifier = if (item.id.toString() == viewModel.lastOpened) Modifier.focusRequester(restore) else Modifier)
                 }
             }
         }
