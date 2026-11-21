@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -40,7 +42,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.darkColorScheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.components.DialogItemEntry
 import com.github.damontecres.wholphin.ui.components.DialogPopupContent
@@ -114,29 +115,34 @@ fun Modifier.jellytipEnter(
     }
 }
 
-/** A soft pulsing placeholder block (static when animations are off). */
+/** The skeleton pulse: one animation per skeleton, read only while drawing (static when animations are off). */
+@Composable
+private fun rememberPulse(): () -> Float {
+    if (rememberReducedMotion()) return { 0.10f }
+    val t = rememberInfiniteTransition(label = "jellytip-skeleton")
+    val v = t.animateFloat(0.06f, 0.14f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "jellytip-skeleton-a")
+    return { v.value }
+}
+
+/** A placeholder block; [alpha] is read in the draw phase only. */
 @Composable
 fun JellytipSkeletonBlock(
     width: Dp,
     height: Dp,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(10.dp),
+    radius: Dp = 10.dp,
+    alpha: () -> Float = { 0.10f },
 ) {
-    val still = rememberReducedMotion()
-    val a =
-        if (still) {
-            0.10f
-        } else {
-            val t = rememberInfiniteTransition(label = "jellytip-skeleton")
-            val v by t.animateFloat(0.06f, 0.14f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "jellytip-skeleton-a")
-            v
-        }
-    Spacer(modifier.size(width, height).background(Color.White.copy(alpha = a), shape))
+    Spacer(
+        modifier.size(width, height).drawBehind {
+            drawRoundRect(Color.White.copy(alpha = alpha()), cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx()))
+        },
+    )
 }
 
 /**
  * Loading state for a page of tiles: a title bar and [rows] rows of [perRow] tiles ([tileW] x [tileH]); replaces the plain
- * "Loading…" text. [label] is announced for accessibility only (screen readers), not drawn.
+ * "Loading…" text; screen readers still hear "Loading".
  */
 @Composable
 fun JellytipSkeleton(
@@ -147,12 +153,13 @@ fun JellytipSkeleton(
     perRow: Int = 4,
     title: Boolean = true,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    val pulse = rememberPulse()
+    Column(modifier.semantics { contentDescription = "Loading" }, verticalArrangement = Arrangement.spacedBy(18.dp)) {
         repeat(rows) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (title) JellytipSkeletonBlock(180.dp, 18.dp, shape = RoundedCornerShape(6.dp))
+                if (title) JellytipSkeletonBlock(180.dp, 18.dp, radius = 6.dp, alpha = pulse)
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    repeat(perRow) { JellytipSkeletonBlock(tileW, tileH) }
+                    repeat(perRow) { JellytipSkeletonBlock(tileW, tileH, alpha = pulse) }
                 }
             }
         }
@@ -167,8 +174,9 @@ fun JellytipSkeletonList(
     width: Dp = 640.dp,
     lineHeight: Dp = 44.dp,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(lines) { i -> JellytipSkeletonBlock(width * (1f - i * 0.06f), lineHeight, shape = RoundedCornerShape(8.dp)) }
+    val pulse = rememberPulse()
+    Column(modifier.semantics { contentDescription = "Loading" }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        repeat(lines) { i -> JellytipSkeletonBlock(width * (1f - i * 0.06f), lineHeight, radius = 8.dp, alpha = pulse) }
     }
 }
 
@@ -197,16 +205,15 @@ fun JellytipDialog(
         }
     }
     Dialog(onDismissRequest = onDismissRequest, properties = properties) {
-        val base = MaterialTheme.colorScheme
+        // The app's own scheme (selected / error colours stay), with Jellytip surfaces and the pastel focus
         MaterialTheme(
             colorScheme =
-                darkColorScheme(
+                MaterialTheme.colorScheme.copy(
                     surface = Color(0xFF151515),
                     onSurface = JellytipPalette.Vanilla,
                     onSurfaceVariant = JellytipPalette.Vanilla.copy(alpha = 0.7f),
                     inverseSurface = JellytipSurfaceFocus.Pastel,
                     inverseOnSurface = JellytipSurfaceFocus.Ink,
-                    primary = base.primary,
                     border = JellytipFocus.Cream,
                 ),
             typography = MaterialTheme.typography,
@@ -230,12 +237,12 @@ fun JellytipDialog(
                             false
                         }
                         .width(480.dp)
+                        .jellytipEnter(rise = 8.dp) // the whole sheet (and its shadow) rises in
                         .shadow(12.dp, RoundedCornerShape(16.dp))
                         .graphicsLayer {
                             clip = true
                             shape = RoundedCornerShape(16.dp)
                         }.drawBehind { drawRect(Color(0xFF151515)) }
-                        .jellytipEnter(rise = 8.dp)
                         .padding(PaddingValues(horizontal = 20.dp, vertical = 18.dp)),
             )
         }

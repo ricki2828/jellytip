@@ -45,6 +45,9 @@ import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.requestFocus
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -133,13 +136,18 @@ class PolishShotsTest {
     }
 
     @Test
-    fun cards() {
-        captureRoboImage(out("cards-fulltime")) {
-            Tv { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now, Modifier.width(900.dp)) }
-        }
-        captureRoboImage(out("cards-catchup")) {
-            Tv { CatchUpChoiceCard(match, "You're joining 27 minutes in", canKickOff = true, cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp)) }
-        }
+    fun cardFullTime() {
+        compose.setContent { Tv { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now, Modifier.width(900.dp)) } }
+        // past the 260 ms enter motion
+        compose.mainClock.advanceTimeBy(600)
+        compose.onRoot().captureRoboImage(out("cards-fulltime"))
+    }
+
+    @Test
+    fun cardCatchUp() {
+        compose.setContent { Tv { CatchUpChoiceCard(match, "You're joining 27 minutes in", canKickOff = true, cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp)) } }
+        compose.mainClock.advanceTimeBy(600)
+        compose.onRoot().captureRoboImage(out("cards-catchup"))
     }
 
     @Test
@@ -235,6 +243,8 @@ class PolishShotsTest {
             )
         }
         compose.waitForIdle()
+        runCatching { compose.onNodeWithText("Watch live on Fox League").requestFocus() }
+        compose.mainClock.advanceTimeBy(600)
         captureScreenRoboImage(out("dialog-hold-ok-jellytip"))
     }
 }

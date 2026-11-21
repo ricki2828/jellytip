@@ -356,6 +356,8 @@ internal fun HubChip(
                 focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
                 focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier,
     ) {
@@ -450,7 +452,7 @@ fun JellytipHubCollectionPage(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
         ItemRowTitle(r?.title?.ifBlank { null } ?: title)
         when {
-            tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 2, perRow = 6, title = false, modifier = Modifier.padding(8.dp))
+            tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 2, perRow = 5, title = false, modifier = Modifier.padding(8.dp))
             tiles == null ->
                 Text(
                     "This collection isn't available right now.",
