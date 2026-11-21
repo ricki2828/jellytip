@@ -67,6 +67,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxNavItem
 import com.github.damontecres.wholphin.jellytip.nav.rememberJellytipStorage
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.preferences.UserPreferences
@@ -219,6 +220,8 @@ class NavDrawerViewModel
                             SEARCH_INDEX
                         } else if (key is Destination.NowPlaying) {
                             NOW_PLAYING_INDEX
+                        } else if (key is Destination.JellytipInbox) {
+                            INBOX_INDEX
                         } else {
                             val idx = asDestinations.indexOf(key)
                             if (idx >= 0) {
@@ -353,6 +356,7 @@ data class ServerNavDrawerItem(
 private const val HOME_INDEX = -1
 private const val SEARCH_INDEX = -2
 private const val NOW_PLAYING_INDEX = -3
+private const val INBOX_INDEX = -4 // Jellytip lane B: Inbox in the rail
 
 /**
  * Display the left side navigation drawer with [DestinationContent] on the right
@@ -530,6 +534,24 @@ fun NavDrawer(
                                             selectedIndex == HOME_INDEX,
                                             Modifier.focusRequester(focusRequester),
                                         ),
+                            )
+                        }
+                        // Jellytip lane B: Inbox with its unread badge (web Nav.tsx), right under Home
+                        item {
+                            val interactionSource = remember { MutableInteractionSource() }
+                            JellytipInboxNavItem(
+                                selected = selectedIndex == INBOX_INDEX,
+                                drawerOpen = isOpen,
+                                interactionSource = interactionSource,
+                                onClick = {
+                                    viewModel.setIndex(INBOX_INDEX)
+                                    viewModel.navigationManager.navigateToFromDrawer(Destination.JellytipInbox)
+                                },
+                                modifier =
+                                    Modifier.ifElse(
+                                        selectedIndex == INBOX_INDEX,
+                                        Modifier.focusRequester(focusRequester),
+                                    ),
                             )
                         }
                         itemsIndexed(serviceState.items) { index, it ->
