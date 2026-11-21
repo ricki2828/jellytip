@@ -1032,6 +1032,15 @@ fun JellytipLiveTvPage(
                     onGone = { viewModel.dismissHidden(h) },
                 )
             }
+            // Hidden (the server agreed): the row is gone, nothing should keep showing it as focused
+            LaunchedEffect(hidden) {
+                val h = hidden ?: return@LaunchedEffect
+                if (focusedChannel?.id == h.ch.id) {
+                    focusedChannel = null
+                    focusedProg = null
+                    focusedRow = -1
+                }
+            }
             val restored by viewModel.restored.collectAsState()
             LaunchedEffect(restored) {
                 val id = restored ?: return@LaunchedEffect
@@ -1062,12 +1071,6 @@ fun JellytipLiveTvPage(
         onDismiss = { actions = null },
         onHide = { ch ->
             afterHideKey = HideChannelLogic.neighbour(state.channels.orEmpty().map { it.id }, ch.id)?.let(keyForChannel)
-            // The row goes away: nothing should keep showing it as focused
-            if (focusedChannel?.id == ch.id) {
-                focusedChannel = null
-                focusedProg = null
-                focusedRow = -1
-            }
             viewModel.hide(ch)
         },
     )
