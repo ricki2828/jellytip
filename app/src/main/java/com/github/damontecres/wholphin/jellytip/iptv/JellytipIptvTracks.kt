@@ -26,6 +26,8 @@ object IptvTracks {
         val trackIndex: Int,
         val label: String,
         val selected: Boolean,
+        /** The group as it was when the menu opened: a pick checks it still sits at [groupIndex]. */
+        val group: androidx.media3.common.TrackGroup? = null,
     )
 
     /** "English · 5.1", "Commentary (English)", "Track 2": the track's own label first, then its language. */
@@ -37,7 +39,7 @@ object IptvTracks {
     ): String {
         val lang =
             language
-                ?.takeIf { it.isNotBlank() && it != "und" && it != C.LANGUAGE_UNDETERMINED }
+                ?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
                 ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH).ifBlank { it } }
         val ch =
             when (channels) {
@@ -66,7 +68,7 @@ object IptvTracks {
                 if (!g.isTrackSupported(ti)) return@mapNotNull null
                 val f = g.getTrackFormat(ti)
                 n++
-                Option(type, gi, ti, label(f.label, f.language, f.channelCount, n), g.isTrackSelected(ti))
+                Option(type, gi, ti, label(f.label, f.language, f.channelCount, n), g.isTrackSelected(ti), g.mediaTrackGroup)
             }
         }
     }
@@ -75,7 +77,11 @@ object IptvTracks {
         player: Player,
         o: Option,
     ) {
-        val group = player.currentTracks.groups.getOrNull(o.groupIndex) ?: return
+        // The tracks may have been republished since the menu opened: find the same group again (or do nothing)
+        val group =
+            player.currentTracks.groups.getOrNull(o.groupIndex)?.takeIf { it.type == o.type && (o.group == null || it.mediaTrackGroup == o.group) }
+                ?: player.currentTracks.groups.firstOrNull { it.type == o.type && o.group != null && it.mediaTrackGroup == o.group }
+                ?: return
         player.trackSelectionParameters =
             player.trackSelectionParameters
                 .buildUpon()
@@ -99,10 +105,19 @@ object IptvTracks {
      * On open: the person's preferred audio / subtitle languages, no picks left over from another title. Returns the
      * parameters before, for the page to put back when it goes (the player is shared with Live TV).
      */
+    /** Which page's [applyPrefs] is in force (a page puts the parameters back only while it is its own). */
+    @Volatile
+    var appliedBy: String? = null
+
+    /**
+     * On open: the person's preferred audio languages, no picks left over from another title. Subtitles are not turned on
+     * by language (an English film with English subtitle prefs would always get them): forced tracks still show, and the
+     * menu turns them on. Returns the parameters before, for [owner] to put back when its page goes.
+     */
     fun applyPrefs(
         player: Player,
         audioLangs: List<String>,
-        subtitleLangs: List<String>,
+        owner: String,
     ): androidx.media3.common.TrackSelectionParameters {
         val before = player.trackSelectionParameters
         player.trackSelectionParameters =
@@ -112,8 +127,8 @@ object IptvTracks {
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .setPreferredAudioLanguages(*audioLangs.toTypedArray())
-                .setPreferredTextLanguages(*subtitleLangs.toTypedArray())
                 .build()
+        appliedBy = owner
         return before
     }
 }

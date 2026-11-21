@@ -162,10 +162,14 @@ fun JellytipIptvPlayPage(
     DisposableEffect(target, player0) {
         val p = player0
         val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value
-        val before = p?.let { IptvTracks.applyPrefs(it, me?.audioLangs.orEmpty(), me?.subtitleLangs.orEmpty()) }
-        val mine = p?.trackSelectionParameters
-        // Put back only what this page set (a newer page, e.g. a copy swap, may already have set its own)
-        onDispose { if (p != null && before != null && p.trackSelectionParameters.preferredAudioLanguages == mine?.preferredAudioLanguages) p.trackSelectionParameters = before }
+        val before = p?.let { IptvTracks.applyPrefs(it, me?.audioLangs.orEmpty(), owner) }
+        // Put back only while still this page's (a newer page, e.g. a copy swap, has set its own by then)
+        onDispose {
+            if (p != null && before != null && IptvTracks.appliedBy == owner) {
+                p.trackSelectionParameters = before
+                IptvTracks.appliedBy = null
+            }
+        }
     }
     DisposableEffect(target) {
         playback.attach(owner)
