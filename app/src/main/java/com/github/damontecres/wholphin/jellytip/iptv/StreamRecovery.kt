@@ -188,7 +188,7 @@ object StreamRecovery {
     ): Step {
         val w = W(prev)
         val s0 = prev
-        if (s0.phase == Phase.ENDED || s0.phase == Phase.BLOCKED) {
+        if (s0.phase == Phase.ENDED || (s0.phase == Phase.BLOCKED && e !is Event.RetryNow)) {
             if (e == Event.Released && s0.conn == Conn.RELEASING) w.s = s0.copy(conn = Conn.CLOSED)
             return Step(w.s, w.fx)
         }
@@ -204,9 +204,10 @@ object StreamRecovery {
                         w.nextAttempt(e.canHls)
                     }
                     s0.phase == Phase.PLAYING || s0.phase == Phase.STALLED -> w.begin(e)
-                    s0.phase == Phase.RECONNECTING || s0.phase == Phase.SWITCHED ->
+                    s0.phase == Phase.RECONNECTING || s0.phase == Phase.SWITCHED -> {
                         // a failure while an attempt is already being released / queued is the same failure
                         if (s0.conn != Conn.RELEASING && s0.conn != Conn.CLOSED) w.nextAttempt(e.canHls)
+                    }
                     else -> {}
                 }
             Event.Busy ->
@@ -318,7 +319,7 @@ object StreamRecovery {
     fun deniedFailReason(r: Denied?): String? =
         when (r) {
             Denied.MISSING -> "open_failed"
-            Denied.DENIED -> "refused"
+            // A bare 401/403 is sign-in / permission (ours), never the stream's fault
             else -> null
         }
 

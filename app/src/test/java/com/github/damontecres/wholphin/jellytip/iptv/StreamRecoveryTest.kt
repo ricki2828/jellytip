@@ -91,6 +91,10 @@ class StreamRecoveryTest {
         assertTrue(fx.contains(Effect.Release))
         s = run(s2, Event.Released, Event.Busy).first
         assertEquals(Phase.BLOCKED, s.phase)
+        // Retry still works from "all connections are in use"
+        val (r, rfx) = run(s, Event.Released, Event.RetryNow(0, 50_000))
+        assertEquals(Phase.RECONNECTING, r.phase)
+        assertTrue(rfx.any { it is Effect.Open })
     }
 
     @Test
@@ -141,7 +145,8 @@ class StreamRecoveryTest {
         assertEquals(Denied.MISSING, StreamRecovery.permanentReason(404, null))
         assertNull(StreamRecovery.permanentReason(500, null))
         assertNull(StreamRecovery.permanentReason(0, "network"))
-        assertEquals("refused", StreamRecovery.deniedFailReason(Denied.DENIED))
+        assertNull(StreamRecovery.deniedFailReason(Denied.DENIED))
+        assertEquals("open_failed", StreamRecovery.deniedFailReason(Denied.MISSING))
         assertNull(StreamRecovery.deniedFailReason(Denied.AUTH))
     }
 }

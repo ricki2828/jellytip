@@ -140,6 +140,29 @@ class JellytipIptvPlayback
         private var releaseJob: Job? = null
 
         init {
+            // Offline / online for stream recovery: a Wi-Fi drop waits for the network instead of spending attempts and
+            // reporting a healthy channel as failing
+            runCatching {
+                val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+                cm?.registerDefaultNetworkCallback(
+                    object : android.net.ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: android.net.Network) {
+                            scope.launch {
+                                netOffline = false
+                                if (rec.offline) dispatch(StreamRecovery.Event.Online)
+                            }
+                        }
+
+                        override fun onLost(network: android.net.Network) {
+                            scope.launch {
+                                JellytipTrace.player("iptv", "network lost")
+                                netOffline = true
+                                dispatch(StreamRecovery.Event.Offline)
+                            }
+                        }
+                    },
+                )
+            }.onFailure { JellytipTrace.player("iptv", "no network callback: ${it.javaClass.simpleName}") }
             // Stop the stream whenever the app is hidden, even if no Live TV page is composed (a page that never
             // drew, or a stuck screen, must not keep the provider's one connection and the audio going)
             (context.applicationContext as? android.app.Application)?.registerActivityLifecycleCallbacks(
@@ -259,7 +282,7 @@ class JellytipIptvPlayback
                             JellytipTrace.player("iptv", "container unsupported ${t.channelId}: server remux from ${at / 1000} s")
                             stopPlayer()
                             _note.value = "Converting…"
-                            launchOpen(t.copy(resumeMs = at), "server remux (container unsupported)", remux = true)
+                            launchOpen(t, "server remux (container unsupported)", remux = true, seekMs = at)
                         } else {
                             JellytipTrace.player("iptv", "container unsupported ${t.channelId} even after asking for the remux")
                             reportFail(t, "decode")
@@ -351,6 +374,10 @@ class JellytipIptvPlayback
         private var watchJob: Job? = null
         private var stableJob: Job? = null
 
+        /** The TV has no network (ConnectivityManager); a new viewing starts in that state. */
+        @Volatile
+        private var netOffline = false
+
         /** One failure report per viewing (the first), like the web's OutcomeSession. */
         private var failReported = false
 
@@ -391,7 +418,7 @@ class JellytipIptvPlayback
             if (isRemux) {
                 JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
                 _note.value = "Converting…"
-                launchOpen(t.copy(resumeMs = ms), "remux seek", remux = true)
+                launchOpen(t, "remux seek", remux = true, seekMs = ms)
             } else {
                 player?.seekTo(ms)
             }
@@ -400,7 +427,7 @@ class JellytipIptvPlayback
         private fun resetRecovery(target: IptvTarget) {
             recTimer?.cancel()
             stableJob?.cancel()
-            rec = StreamRecovery.State(live = target.isLive)
+            rec = StreamRecovery.State(live = target.isLive, offline = netOffline)
             recTarget = target
             failReported = false
             remuxAsked = false
@@ -416,11 +443,14 @@ class JellytipIptvPlayback
             posSec: Long? = null,
         ) {
             if (reason == null || failReported) return
-            failReported = true
+            // Offline: our network, not the stream's fault (never ding a healthy channel)
+            if (rec.offline) return
+            // A device decode note is logged but doesn't use the one counted report of the viewing
+            if (reason != "decode") failReported = true
             IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec)
         }
 
-        private fun posSec(): Long = (player?.currentPosition ?: 0L) / 1000
+        private fun posSec(): Long = positionMs() / 1000
 
         private fun canHls(t: IptvTarget) = t.isLive && rec.format == "ts"
 
@@ -445,12 +475,13 @@ class JellytipIptvPlayback
                     StreamRecovery.Effect.CancelTimers -> recTimer?.cancel()
                     is StreamRecovery.Effect.Open -> {
                         recTimer?.cancel()
-                        val again = if (!t.isLive && fx.resumeAt != null) t.copy(resumeMs = fx.resumeAt * 1000) else t
+                        // The target keeps its identity (screens and stale-error checks compare it); the position goes apart
+                        val seek = if (!t.isLive) fx.resumeAt?.times(1000) else null
                         recTimer =
                             scope.launch {
                                 delay(fx.delayMs)
                                 if (recTarget != t) return@launch
-                                launchOpen(again, "recovery ${rec.attempt}/${rec.max} ${fx.format}", fx.format, recovering = true)
+                                launchOpen(t, "recovery ${rec.attempt}/${rec.max} ${fx.format}", fx.format, recovering = true, seekMs = seek)
                             }
                     }
                     StreamRecovery.Effect.Exit -> {}
@@ -482,6 +513,7 @@ class JellytipIptvPlayback
             val t = recTarget ?: return
             if (_state.value.target != t) return
             failReported = false
+            renewed = false
             dispatch(StreamRecovery.Event.RetryNow(posSec(), System.currentTimeMillis()))
         }
 
@@ -503,6 +535,8 @@ class JellytipIptvPlayback
                         val p = player ?: continue
                         val buffering = s is IptvPlayState.Playing && loadedTarget == t && p.playWhenReady && p.playbackState == Player.STATE_BUFFERING
                         if (!buffering) {
+                            // Came back by itself: clear "Stream is buffering…"
+                            if (rec.phase == StreamRecovery.Phase.STALLED && s is IptvPlayState.Playing) dispatch(StreamRecovery.Event.Recovered)
                             since = 0L
                             stallSent = false
                             continue
@@ -553,14 +587,17 @@ class JellytipIptvPlayback
             recovering: Boolean = false,
             /** Ask for the server remux (films / episodes); also kept for every reopen once asked. */
             remux: Boolean = remuxAsked,
+            /** Where to start (ms) instead of [IptvTarget.resumeMs]; the target itself is never copied (its identity matters). */
+            seekMs: Long? = null,
         ) {
+            val startMs = seekMs ?: target.resumeMs
             job?.cancel()
             okJob?.cancel()
             setState(IptvPlayState.Opening(target), reason)
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} format=$format ($reason)")
             job =
                 scope.launch {
-                    when (val r = service.playItem(target, format, remux = remux && !target.isLive, startSec = target.resumeMs / 1000)) {
+                    when (val r = service.playItem(target, format, remux = remux && !target.isLive, startSec = startMs / 1000)) {
                         is IptvPlayResult.Ok -> {
                             // Direct answers carry the provider's own absolute link (credentials inside: not traced)
                             val direct = r.answer.direct && Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(r.answer.url)
@@ -589,7 +626,7 @@ class JellytipIptvPlayback
                             remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null
                             if (remux && !r.answer.remux) JellytipTrace.player("iptv", "remux asked but the server sent the file as is (${target.channelId})")
                             // A remux already begins at the asked position
-                            if (target.resumeMs > 0 && !r.answer.remux) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
+                            if (startMs > 0 && !r.answer.remux) p.setMediaItem(item, startMs) else p.setMediaItem(item)
                             p.playWhenReady = true
                             p.prepare()
                             if (recovering && recTarget?.channelId == target.channelId) dispatch(StreamRecovery.Event.Opened)
@@ -601,6 +638,7 @@ class JellytipIptvPlayback
                             } else {
                             stopPlayer()
                             JellytipTrace.player("iptv", "full ${target.channelId}: ${r.message}")
+                            _note.value = null
                             setState(IptvPlayState.Full(target, r.message, r.holders), "409")
                             }
                         is IptvPlayResult.Failed -> {
@@ -629,6 +667,7 @@ class JellytipIptvPlayback
             fromPlayer: Boolean = false,
         ) {
             okJob?.cancel()
+            _note.value = null
             // Player errors are only the target's own when the player holds its stream (else: the previous channel's)
             if (reason != null && (!fromPlayer || loadedTarget == target)) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
