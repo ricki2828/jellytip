@@ -20,9 +20,10 @@ export function isMuted(f: Pick<FxItem, "league" | "leagueKey" | "sport">, muted
 
 const cmp = (a: FxItem, b: FxItem) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || b.significance - a.significance || a.kickoff - b.kickoff || a.fid.localeCompare(b.fid);
 
-/** A fixture of a league he follows (prefs sport.leagues, by name or key, as muting matches). */
-export const followsLeague = (f: Pick<FxItem, "league" | "leagueKey">, leagues: readonly string[] = []): boolean =>
-  leagues.some((m) => [f.league, f.leagueKey].some((l) => !!l && same(l, m)));
+/** A fixture of a league he follows: the server's verdict (`why`: "favourite league", league families included), else his
+ * prefs sport.leagues by name or key (as muting matches) when the server sent no `why`. */
+export const followsLeague = (f: Pick<FxItem, "league" | "leagueKey" | "followedLeague">, leagues: readonly string[] = []): boolean =>
+  f.followedLeague != null ? f.followedLeague : leagues.some((m) => [f.league, f.leagueKey].some((l) => !!l && same(l, m)));
 
 const liveWatchable = (items: readonly FxItem[], nowSec: number, muted?: Muted | null) =>
   items.filter((f) => f.status === "in" && !isMuted(f, muted) && pickChannel(f, nowSec).channel != null);

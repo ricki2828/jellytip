@@ -33,6 +33,10 @@ test("home: followed leagues count (by name or key, any case), ranked with his t
   assert.deepEqual(homePicks(items, NOW, [], muted, ["ENG.1"]).map((f) => f.fid), ["epl"]);
   assert.equal(followsLeague(items[2], ["Premier League"]), false);
   assert.equal(followsLeague(items[2], []), false);
+  // the server's verdict wins when it sent one (league families: "Cricket" followed covers a Sheffield Shield game)
+  assert.equal(followsLeague({ league: "Sheffield Shield", leagueKey: "shield", followedLeague: true }, ["Cricket"]), true);
+  assert.equal(followsLeague({ league: "Premier League", leagueKey: "eng.1", followedLeague: false }, ["Premier League"]), false);
+  assert.deepEqual(homePicks([fx("s", { league: "Sheffield Shield", followedLeague: true }), fx("ll", { league: "La Liga", followedLeague: false, rank: 1 })], NOW).map((f) => f.fid), ["s"]);
   // muted wins over followed
   assert.deepEqual(homePicks(items, NOW, [], { ...muted, leagues: ["Premier League"] }, ["Premier League"]), []);
 });
@@ -77,4 +81,12 @@ test("tag and line never carry a score", () => {
   assert.equal(countdown(NOW + 120 * 60, NOW), "In 2 h");
   assert.equal(heroLine(fx("a", { stage: "Round 12" })), "NRL · Round 12 · Score hidden until you watch");
   assert.equal(heroLine(fx("a", { status: "pre" })), "NRL");
+});
+
+import { parseFixtureList } from "../src/lib/gameCentre.ts";
+
+test("fixture list: why 'favourite league' → followedLeague; no why → null (prefs name match)", () => {
+  const row = (o: Record<string, unknown>) => ({ fid: "f", league: "La Liga", leagueKey: "esp.1", kickoff: 1000, status: "in", home: "H", away: "A", channels: [{ id: "c", name: "C", confidence: 1 }], best: "c", ...o });
+  const items = parseFixtureList({ items: [row({ fid: "a", why: ["favourite league", "big game"] }), row({ fid: "b", why: ["followed sport"] }), row({ fid: "c" })] }).items;
+  assert.deepEqual(items.map((f) => f.followedLeague), [true, false, null]);
 });
