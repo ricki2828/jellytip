@@ -101,7 +101,6 @@ object IptvSeasons {
 
     /** The person's IPTV copy of [title] ([tmdbId]) with its seasons; null when there is none or anything fails. */
     suspend fun lookup(
-        vod: JellytipIptvVodService,
         title: String,
         tmdbId: Int,
     ): IptvVodDetail? {
@@ -116,7 +115,7 @@ object IptvSeasons {
                         val a = JSONObject(b).optJSONArray("providers")
                         (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                     }
-                if (owned.isNullOrEmpty()) null else lookupOwned(api, vod, title, tmdbId, owned)
+                if (owned.isNullOrEmpty()) null else lookupOwned(api, title, tmdbId, owned)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -128,41 +127,43 @@ object IptvSeasons {
 
     private suspend fun lookupOwned(
         api: JellytipApi,
-        vod: JellytipIptvVodService,
         title: String,
         tmdbId: Int,
         owned: List<String>,
     ): IptvVodDetail? {
         val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return null
         if (code != 200) return null
-        val base = vod.base()
+        val base = api.companionBase().also { IptvVodParse.imageBase = it }
         val hit = pickSeries(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), tmdbId, owned) ?: return null
-        return vod.detail(hit.id)
+        val (dc, db) = api.userCall("v1/iptv/vod/${URLEncoder.encode(hit.id, "UTF-8")}") ?: return null
+        return if (dc == 200) IptvVodParse.detail(db, base) else null
+    }
+
+    /** The person's IPTV copy of a library series and the seasons only it has; null when there are none. */
+    suspend fun forSeries(
+        series: BaseItem,
+        librarySeasons: Collection<Int>,
+    ): Pair<IptvVodDetail, List<IptvSeason>>? {
+        val tmdb =
+            series.data.providerIds
+                ?.entries
+                ?.firstOrNull { it.key.equals("Tmdb", true) }
+                ?.value
+                ?.toIntOrNull() ?: return null
+        val d = lookup(series.name ?: return null, tmdb) ?: return null
+        val only = onlySeasons(librarySeasons.toSet(), d.seasons)
+        return if (only.isEmpty()) null else d to only
     }
 }
 
 @Composable
 fun JellytipIptvSeasonsSection(
     series: BaseItem,
-    librarySeasons: List<Int>,
+    d: IptvVodDetail,
+    seasons: List<IptvSeason>,
     modifier: Modifier = Modifier,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
-    val tmdb =
-        remember(series.id) {
-            series.data.providerIds
-                ?.entries
-                ?.firstOrNull { it.key.equals("Tmdb", true) }
-                ?.value
-                ?.toIntOrNull()
-        }
-    val detail by produceState<IptvVodDetail?>(null, series.id, tmdb) {
-        val t = tmdb ?: return@produceState
-        val name = series.name ?: return@produceState
-        value = IptvSeasons.lookup(viewModel.vod, name, t)
-    }
-    val d = detail ?: return
-    val seasons = remember(d, librarySeasons) { IptvSeasons.onlySeasons(librarySeasons.toSet(), d.seasons) }
     if (seasons.isEmpty()) return
     var sel by remember(d.item.id) { mutableIntStateOf(0) }
     val season = seasons[sel.coerceIn(0, seasons.size - 1)]

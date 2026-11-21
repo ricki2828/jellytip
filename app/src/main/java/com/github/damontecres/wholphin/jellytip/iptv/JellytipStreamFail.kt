@@ -101,9 +101,9 @@ object IptvStreamFail {
 
     /**
      * Reason for a player error ([errorCode] = Media3 PlaybackException code, [http] = the link's HTTP status, [code] =
-     * the companion's `X-Iptv-Error`), or null when it is not the stream's fault. A companion code wins over the HTTP
-     * status; 409 (connections in use) and expired links are never the stream's; decoder faults are this device only
-     * (`decode`, logged but never counted); errors after playback started are not reported (no retry machine here).
+     * the companion's `X-Iptv-Error`), or null when it may not be the stream's fault. A companion code wins; without one
+     * only 404/410 (gone) counts. Sign-in (401/403), our server (5xx), this TV offline (network) and anything after
+     * playback started are never reported; decoder faults at open are `decode` (logged, never counted by the server).
      */
     fun reasonFor(
         errorCode: Int,
@@ -113,13 +113,10 @@ object IptvStreamFail {
     ): String? =
         when {
             code != null -> reasonForCode(code)
-            http == 409 -> null
-            errorCode in 4001..4005 -> "decode"
             wasPlaying -> null
             http == 404 || http == 410 -> "open_failed"
-            http == 401 || http == 403 -> "refused"
-            errorCode == 2001 || errorCode == 2002 -> "unreachable"
-            else -> "open_failed"
+            errorCode in 4001..4005 -> "decode"
+            else -> null
         }
 
     /** id + kind the companion records for a target; null for recordings and catch-up (never dinged). */
@@ -160,7 +157,7 @@ object IptvStreamFail {
     ) {
         val (id, kind) = outcomeTarget(target) ?: return
         val now = System.currentTimeMillis() / 1000
-        if (ok) forgetLocal(id) else rememberLocal(id, reason ?: "open_failed", now)
+        if (ok) forgetLocal(id) else if (reason != "decode") rememberLocal(id, reason ?: "open_failed", now)
         val api = JellytipApi.shared ?: return
         scope.launch { runCatching { api.userCall("v1/iptv/play/outcome", outcomeBody(id, kind, ok, reason, posSec)) } }
     }

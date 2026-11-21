@@ -430,10 +430,23 @@ fun SeriesDetailsContent(
     // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
     val reviews by produceState<JellytipReviews?>(null, series.id) { value = JellytipApi.shared?.getReviews(series) }
     // Jellytip: companion "More like this" (library + IPTV mix); null = Jellyfin's similar list below
-    val jtSimilar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, series.id) {
+    val jtSimilarLoaded by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, series.id) {
         value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(series)?.let {
             com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
         }
+    // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
+    // Jellytip: seasons only the person's IPTV has; looked up with the page, shown only if known before the rows open
+    val jtIptvSeasonsLoaded by produceState<Pair<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSeason>>?>(null, series.id, seasons.size) {
+        value = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.forSeries(series, seasons.mapNotNull { it?.indexNumber })
+    }
+    var jtIptvSeasons by remember(series.id) { mutableStateOf<Pair<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSeason>>?>(null) }
+    LaunchedEffect(jtIptvSeasonsLoaded, sectionsActive) {
+        if (!sectionsActive) jtIptvSeasons = jtIptvSeasonsLoaded
+    }
+    var jtSimilar by remember(series.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
+    LaunchedEffect(jtSimilarLoaded, sectionsActive) {
+        if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
+    }
     }
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
@@ -608,11 +621,9 @@ fun SeriesDetailsContent(
                     }
                 }
                 // Jellytip: seasons the library lacks but the person's IPTV has (Season N · via IPTV)
-                if (sectionsActive) item(key = "jt-iptv-seasons") {
-                    com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvSeasonsSection(
-                        series = series,
-                        librarySeasons = remember(seasons) { seasons.mapNotNull { it?.indexNumber } },
-                    )
+                val iptvOnly = jtIptvSeasons
+                if (sectionsActive && iptvOnly != null) item(key = "jt-iptv-seasons") {
+                    com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvSeasonsSection(series, iptvOnly.first, iptvOnly.second)
                 }
                 if (people.isNotEmpty()) {
                     if (sectionsActive) item {
