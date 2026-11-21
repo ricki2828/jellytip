@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import javax.inject.Inject
@@ -34,6 +35,44 @@ data class TeamSide(
     val sport: String?,
     val league: String?,
 )
+
+/**
+ * The signed-in person's team reminders. [reset] (user switch) clears them and bumps [gen], so an answer fetched for the
+ * previous person ([loaded] / [missing] with an older generation) is dropped instead of showing their list.
+ */
+class TeamReminderState {
+    private val _items = MutableStateFlow<List<TeamReminder>?>(null)
+    val items: StateFlow<List<TeamReminder>?> = _items
+    private val _available = MutableStateFlow<Boolean?>(null)
+    val available: StateFlow<Boolean?> = _available
+
+    @Volatile
+    var gen = 0
+        private set
+
+    fun reset() {
+        gen++
+        _items.value = null
+        _available.value = null
+    }
+
+    fun loaded(
+        g: Int,
+        list: List<TeamReminder>,
+    ): Boolean {
+        if (g != gen) return false
+        _available.value = true
+        _items.value = list
+        return true
+    }
+
+    /** 404: this server has no team reminders. */
+    fun missing(g: Int): Boolean {
+        if (g != gen) return false
+        _available.value = false
+        return true
+    }
+}
 
 object TeamReminderLogic {
     private fun JSONObject.str(k: String): String? = (opt(k) as? String)?.trim()?.takeIf { it.isNotEmpty() }
@@ -73,14 +112,24 @@ class JellytipTeamReminders
     @Inject
     constructor(
         private val reminders: JellytipReminders,
+        service: JellytipIptvService,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        private val _items = MutableStateFlow<List<TeamReminder>?>(null)
+        private val state = TeamReminderState()
 
         /** null = not known yet, or the server has no route ([available] false). */
-        val items: StateFlow<List<TeamReminder>?> = _items
-        private val _available = MutableStateFlow<Boolean?>(null)
-        val available: StateFlow<Boolean?> = _available
+        val items: StateFlow<List<TeamReminder>?> = state.items
+        val available: StateFlow<Boolean?> = state.available
+
+        init {
+            // Another person signed in (or out): never show the previous person's teams; screens reload on open
+            scope.launch {
+                service.user.drop(1).collect {
+                    JellytipTrace.log("iptv", "team reminders: user switch, list cleared")
+                    state.reset()
+                }
+            }
+        }
 
         fun refresh() {
             scope.launch { load() }
@@ -88,17 +137,15 @@ class JellytipTeamReminders
 
         private suspend fun load() {
             val api = JellytipApi.shared ?: return
+            val g = state.gen
             val (code, body) = api.userCall("v1/iptv/reminders/teams") ?: return
             when (code) {
-                200 -> {
-                    _available.value = true
-                    _items.value = runCatching { TeamReminderLogic.parse(body) }.getOrNull() ?: emptyList()
-                }
-                404 -> _available.value = false
+                200 -> state.loaded(g, runCatching { TeamReminderLogic.parse(body) }.getOrNull() ?: emptyList())
+                404 -> state.missing(g)
             }
         }
 
-        fun reminderFor(teamId: String?): TeamReminder? = teamId?.let { id -> _items.value?.firstOrNull { it.teamId == id } }
+        fun reminderFor(teamId: String?): TeamReminder? = teamId?.let { id -> state.items.value?.firstOrNull { it.teamId == id } }
 
         /** Turn it on / off for [side]; [onDone] gets an error text or null. */
         fun toggle(
@@ -110,6 +157,7 @@ class JellytipTeamReminders
             val teamId = side.teamId ?: return onDone(null)
             scope.launch {
                 val api = JellytipApi.shared ?: return@launch onDone("Not signed in to the companion.")
+                val g = state.gen
                 val found = reminderFor(teamId)
                 val on = turnOn ?: (found == null)
                 // Turning off something already gone (or never loaded) is done
@@ -130,7 +178,7 @@ class JellytipTeamReminders
                 val err =
                     when {
                         code == 404 && existing == null -> {
-                            _available.value = false
+                            state.missing(g)
                             "Team reminders aren't available on this server yet."
                         }
                         code in listOf(200, 201, 204) || (existing != null && code == 404) -> null

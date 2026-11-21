@@ -63,10 +63,16 @@ class JellytipIptvService
 
         private val prefs by lazy { context.getSharedPreferences("jellytip_iptv", Context.MODE_PRIVATE) }
 
+        private val _user = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+        /** The signed-in Jellyfin user id (null = nobody yet / signed out); per-person singletons reset when it changes. */
+        val user: kotlinx.coroutines.flow.StateFlow<String?> = _user
+
         /** The signed-in person changed: forget the last answer and start from the one saved for them (null = never asked). */
         fun switchUser(id: String?) {
             if (id == userKey) return
             userKey = id
+            _user.value = id
             liveCheck = null
             JellytipIptvState.hasIptv.value = id?.let { k -> prefs.takeIf { it.contains("has_$k") }?.getBoolean("has_$k", false) }
         }
@@ -275,6 +281,19 @@ class JellytipIptvService
                 (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
             }.getOrNull()
         }
+
+        /** Own providers with their Direct switch (gap row 8); null = no answer / no route. */
+        suspend fun directPrefs(): List<IptvDirectPref>? {
+            val (code, body) = get("v1/iptv/providers") ?: return null
+            if (code != 200) return null
+            return runCatching { IptvDirectLogic.parse(body) }.getOrNull()
+        }
+
+        /** POST v1/iptv/providers/{pid} {"direct": on}: the http code (0 = no answer). */
+        suspend fun setDirect(
+            pid: String,
+            on: Boolean,
+        ): Int = api.userCall("v1/iptv/providers/${enc(pid)}", JSONObject().put("direct", on).toString())?.first ?: 0
 
         /** Guide refresh status of [pid]: (lastRun epoch s or null, running); null = no answer / old server (no `guide`). */
         suspend fun guideStatus(pid: String): Pair<Long?, Boolean>? {

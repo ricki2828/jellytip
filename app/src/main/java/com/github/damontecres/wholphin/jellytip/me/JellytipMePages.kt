@@ -167,7 +167,9 @@ fun JellytipMePage(
     val message by viewModel.message
     var dialog by remember { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
+    val directVm: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDirectViewModel = hiltViewModel()
     LaunchedEffect(Unit) {
+        directVm.load()
         JellytipMe.loadFollows()
         first.tryRequestFocus()
     }
@@ -219,6 +221,29 @@ fun JellytipMePage(
                     SettingRow("Live TV buffer (this TV, from the next channel)", com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.modeLabel(mode)) {
                         mode = com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.nextMode(mode)
                         com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.saveMode(ctx, mode)
+                    }
+                }
+                item {
+                    // Direct from provider (gap row 8): own providers only; hidden when there are none
+                    val direct by directVm.prefs.collectAsState()
+                    val directMsg by directVm.message.collectAsState()
+                    val list = direct.orEmpty()
+                    if (list.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            list.forEach { d ->
+                                SettingRow(
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.label(d, list.size > 1),
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.value(d),
+                                ) { directVm.toggle(d) }
+                            }
+                            Text(
+                                listOfNotNull(directMsg, com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.NOTE).joinToString("\n"),
+                                color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
+                                fontFamily = JellytipFontFamily,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
+                        }
                     }
                 }
                 item { SettingRow("Audio language", langName(p.audioLangs.firstOrNull())) { dialog = "audio" } }
