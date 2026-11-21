@@ -208,11 +208,19 @@ fun rememberJellytipRows(
     page: String,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ): JellytipRowsAnswer? {
-    val initial = remember(page) { viewModel.rows.peek(page) }
+    // Jellytip: Movies / Shows open with the person's My list (the Home answer's "mylist" row for that kind)
+    val myListPage = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.kindOf(page) != null
+    val initial =
+        remember(page) {
+            val own = viewModel.rows.peek(page)
+            if (myListPage) com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, own, viewModel.rows.peek("home")) else own
+        }
     val loaded by produceState(initial, page) {
         viewModel.rows.load(page)?.let {
-            value = it
-            viewModel.rows.prefetch(page, it)
+            val home = if (myListPage) viewModel.rows.load("home") else null
+            val shown = com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.withMyList(page, it, home) ?: it
+            value = shown
+            viewModel.rows.prefetch(page, shown)
         }
     }
     return loaded
