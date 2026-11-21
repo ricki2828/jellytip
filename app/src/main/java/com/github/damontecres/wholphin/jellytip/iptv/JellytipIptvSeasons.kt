@@ -154,8 +154,57 @@ object IptvSeasons {
                 ?.value
                 ?.toIntOrNull() ?: return null
         val d = lookup(series.name ?: return null, tmdb) ?: return null
-        val only = onlySeasons(librarySeasons.toSet(), d.seasons)
-        return if (only.isEmpty()) null else d to only
+        // The detail comes back even with no IPTV-only season: mixed seasons merge its episodes in (see [interleave])
+        return d to onlySeasons(librarySeasons.toSet(), d.seasons)
+    }
+
+    /** One season's IPTV episodes, duplicate season blocks merged (first copy of an episode wins), in episode order. */
+    fun episodesFor(
+        iptv: List<IptvSeason>,
+        season: Int,
+    ): List<IptvEpisode> {
+        val m = LinkedHashMap<Int, IptvEpisode>()
+        iptv.filter { it.season == season }.forEach { s -> s.episodes.forEach { e -> m.putIfAbsent(e.episode, e) } }
+        return m.values.sortedBy { it.episode }
+    }
+
+    /** A tile of a mixed season strip: the library episode at [index] of the season's list, or an IPTV-only episode. */
+    sealed interface SeasonTile {
+        data class Lib(
+            val index: Int,
+        ) : SeasonTile
+
+        data class Iptv(
+            val episode: IptvEpisode,
+        ) : SeasonTile
+    }
+
+    /**
+     * A season that is partly in the library and partly only on IPTV (Ricki 21-Nov, web seasonEpisodes mergeEpisodes):
+     * library episodes in their order with the IPTV episodes the library lacks slotted in by episode number. A library
+     * copy wins; a Jellyfin "missing" placeholder ([libVirtual]) gives way to an IPTV copy of the same episode. Library
+     * entries not loaded yet (null number) keep their place.
+     */
+    fun interleave(
+        libNumbers: List<Int?>,
+        libVirtual: List<Boolean>,
+        iptv: List<IptvEpisode>,
+    ): List<SeasonTile> {
+        val have = libNumbers.indices.mapNotNull { i -> libNumbers[i]?.takeIf { !libVirtual.getOrElse(i) { false } } }.toSet()
+        val extra = iptv.filter { it.episode !in have }.sortedBy { it.episode }
+        val extraNums = extra.map { it.episode }.toSet()
+        val out = ArrayList<SeasonTile>(libNumbers.size + extra.size)
+        var next = 0
+        for (i in libNumbers.indices) {
+            val n = libNumbers[i]
+            if (n != null) {
+                while (next < extra.size && extra[next].episode < n) out += SeasonTile.Iptv(extra[next++])
+                if (libVirtual.getOrElse(i) { false } && n in extraNums) continue // the IPTV copy replaces the placeholder
+            }
+            out += SeasonTile.Lib(i)
+        }
+        while (next < extra.size) out += SeasonTile.Iptv(extra[next++])
+        return out
     }
 }
 
@@ -223,6 +272,7 @@ fun JellytipIptvSeasonsSection(
 @Composable
 internal fun IptvEpisodeCard(
     e: IptvEpisode,
+    viaIptv: Boolean = false,
     onClick: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -254,8 +304,38 @@ internal fun IptvEpisodeCard(
                 )
             }
         }
+        if (viaIptv) {
+            Text("● via IPTV", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp)
+        }
         if (e.progress?.played == true) {
             Text("✓ Watched", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
+        }
+        // Failed-stream memory: "Failed 2 h ago" (the server's lastFail or this TV's own report)
+        val fail = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), System.currentTimeMillis() / 1000)
+        if (fail != null) {
+            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp)
+        }
+    }
+}
+
+/** An IPTV-only episode inside a library season's strip (marked "via IPTV"); OK plays it via IPTV. */
+@Composable
+fun JellytipMixedIptvEpisode(
+    series: BaseItem,
+    d: IptvVodDetail,
+    season: Int,
+    e: IptvEpisode,
+    modifier: Modifier = Modifier,
+    viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+) {
+    Box(modifier) {
+        IptvEpisodeCard(e, viaIptv = true) {
+            val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
+            JellytipTrace.log("iptv", "series page: mixed S${season}E${e.episode} via IPTV ${e.id}")
+            viewModel.navigationManager.navigateTo(
+                Destination.JellytipIptvPlay(title = "${series.name ?: d.item.title} · ${e.title}", seriesId = d.item.id, episodeId = e.id, resumeMs = resume),
+                "series page mixed IPTV episode OK",
+            )
         }
     }
 }

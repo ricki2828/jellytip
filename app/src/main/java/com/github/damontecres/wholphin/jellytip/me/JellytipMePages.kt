@@ -199,6 +199,15 @@ fun JellytipMePage(
                 item { SettingRow("Trailers play by themselves", if (p.trailerAutoplay) "On" else "Off") { viewModel.setPlaybackToggle("trailerAutoplay", !p.trailerAutoplay) } }
                 item { SettingRow("Trailer sound", if (p.trailerSound) "On" else "Off") { viewModel.setPlaybackToggle("trailerSound", !p.trailerSound) } }
                 item { SettingRow("Hero trailer sound", if (p.heroSound) "On" else "Off") { viewModel.patch(JSONObject().put("ui", JSONObject().put("heroSound", !p.heroSound))) } }
+                item {
+                    // Live TV buffer (this TV only; web 76e062ea): OK cycles Auto / Low / Normal / High / Max
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    var mode by remember { mutableStateOf(com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.loadMode(ctx)) }
+                    SettingRow("Live TV buffer (this TV, from the next channel)", com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.modeLabel(mode)) {
+                        mode = com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.nextMode(mode)
+                        com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.saveMode(ctx, mode)
+                    }
+                }
                 item { SettingRow("Audio language", langName(p.audioLangs.firstOrNull())) { dialog = "audio" } }
                 item { SettingRow("Subtitles", langName(p.subtitleLangs.firstOrNull())) { dialog = "subs" } }
                 item {

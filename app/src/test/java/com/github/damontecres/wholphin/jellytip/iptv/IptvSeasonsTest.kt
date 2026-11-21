@@ -44,4 +44,33 @@ class IptvSeasonsTest {
         assertEquals(listOf(1, 2, 3), out[0].episodes.map { it.episode })
         assertEquals("p1:e:2", out[0].episodes[1].id)
     }
+
+    @Test
+    fun mixedSeasonSlotsIptvEpisodesInByNumberLibraryWins() {
+        val iptv = listOf(ep(1, "i1"), ep(2, "i2"), ep(3, "i3"), ep(4, "i4"), ep(6, "i6"))
+        // library has 1, 2, 5 (loaded) and an unloaded entry
+        val out = IptvSeasons.interleave(listOf(1, 2, 5, null), listOf(false, false, false, false), iptv)
+        val shown =
+            out.map {
+                when (it) {
+                    is IptvSeasons.SeasonTile.Lib -> "L${it.index}"
+                    is IptvSeasons.SeasonTile.Iptv -> it.episode.id
+                }
+            }
+        assertEquals(listOf("L0", "L1", "i3", "i4", "L2", "L3", "i6"), shown)
+    }
+
+    @Test
+    fun placeholderGivesWayToIptvCopy() {
+        val out = IptvSeasons.interleave(listOf(1, 2), listOf(false, true), listOf(ep(2, "i2")))
+        assertEquals(listOf("L0", "i2"), out.map { if (it is IptvSeasons.SeasonTile.Lib) "L${it.index}" else (it as IptvSeasons.SeasonTile.Iptv).episode.id })
+        // no IPTV copy: the placeholder stays
+        assertEquals(2, IptvSeasons.interleave(listOf(1, 2), listOf(false, true), emptyList()).size)
+    }
+
+    @Test
+    fun episodesForMergesDuplicateBlocks() {
+        val iptv = listOf(IptvSeason(2, listOf(ep(2, "a"), ep(1, "b"))), IptvSeason(2, listOf(ep(2, "dup"), ep(3, "c"))), IptvSeason(1, listOf(ep(1, "x"))))
+        assertEquals(listOf("b", "a", "c"), IptvSeasons.episodesFor(iptv, 2).map { it.id })
+    }
 }

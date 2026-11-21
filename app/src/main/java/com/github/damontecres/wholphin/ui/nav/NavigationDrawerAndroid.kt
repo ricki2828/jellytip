@@ -39,11 +39,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -53,6 +56,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -78,16 +90,22 @@ fun ModalNavigationDrawer(
     drawerState: DrawerState = rememberDrawerState(DrawerValue.Closed),
     content: @Composable () -> Unit,
 ) {
+    // Jellytip (t5n): whether the page holds focus, so an arrow move from the page can be told from initial-focus
+    // search (nothing focused), which must be let in
+    var contentHasFocus by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         DrawerSheet(
             modifier =
                 Modifier
                     .align(Alignment.CenterStart),
             drawerState = drawerState,
+            contentHasFocus = { contentHasFocus },
             content = drawerContent,
         )
 
-        content()
+        Box(Modifier.onFocusChanged { contentHasFocus = it.hasFocus }) {
+            content()
+        }
     }
 }
 
@@ -95,6 +113,7 @@ fun ModalNavigationDrawer(
 private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
+    contentHasFocus: () -> Boolean = { true },
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     // indicates that the drawer has been set to its initial state and has grabbed focus if
@@ -102,6 +121,17 @@ private fun DrawerSheet(
     var initializationComplete: Boolean by remember { mutableStateOf(false) }
     var focusState by remember { mutableStateOf<FocusState?>(null) }
     val focusRequester = remember { FocusRequester() }
+    // Jellytip (t5n, 21-Nov): the drawer opens only when the person asks for it. Ricki saw it slide in and out on
+    // ordinary clicks: when a page's focused item is disposed during navigation (or its focus restore misses),
+    // Compose gives focus to the first focusable in the tree, the drawer, which opened it until the page took focus
+    // back a few frames later. Now: Left at the left edge (or a programmatic Open, e.g. Back on Home) opens it;
+    // Up/Down/Right into the rail are refused; any other arrival (fallback focus) keeps it closed and hands focus
+    // back to the page, opening only if the page never takes it (so focus is never left invisible).
+    var enterDirection by remember { mutableStateOf<FocusDirection?>(null) }
+    var enterAt by remember { mutableStateOf(0L) }
+    var uninvited by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
     LaunchedEffect(key1 = drawerState.currentValue) {
         if (drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus == false) {
             // used to grab focus if the drawer state is set to Open on start.
@@ -124,10 +154,77 @@ private fun DrawerSheet(
             // size based modifiers.
             .then(modifier)
             .onFocusChanged {
+                val had = focusState?.hasFocus == true
                 focusState = it
-
-                if (initializationComplete) {
-                    drawerState.setValue(if (it.hasFocus) DrawerValue.Open else DrawerValue.Closed)
+                if (!initializationComplete) return@onFocusChanged
+                if (!it.hasFocus) {
+                    uninvited = false
+                    enterDirection = null
+                    drawerState.setValue(DrawerValue.Closed)
+                    return@onFocusChanged
+                }
+                if (had) return@onFocusChanged // moving inside the drawer
+                // A Left entry counts only if it just happened (the rail's own onEnter may redirect focus inside the
+                // same move, re-entering with Enter: that must not cancel the Left)
+                val dir = enterDirection.takeIf { android.os.SystemClock.uptimeMillis() - enterAt < 500 }
+                enterDirection = null
+                if (dir == FocusDirection.Left || drawerState.currentValue == DrawerValue.Open) {
+                    uninvited = false
+                    drawerState.setValue(DrawerValue.Open)
+                } else {
+                    uninvited = true
+                    JellytipTrace.focus("drawer: focus arrived without Left (dir=${dir ?: "none"}): kept closed")
+                    scope.launch {
+                        // Slow pages (cold Home, loading screens) may have nothing focusable yet: keep trying for ~2 s
+                        // before opening, or the page grabbing focus later slides the drawer out again
+                        delay(UNINVITED_HANDBACK_MS)
+                        repeat(HANDBACK_TRIES) { n ->
+                            if (!uninvited || focusState?.hasFocus != true) return@launch
+                            if (focusManager.moveFocus(FocusDirection.Right)) {
+                                JellytipTrace.focus("drawer: page did not take focus; handed it right (try ${n + 1})")
+                                return@launch
+                            }
+                            delay(HANDBACK_RETRY_MS)
+                        }
+                        if (uninvited && focusState?.hasFocus == true) {
+                            JellytipTrace.focus("drawer: nothing to hand focus to after retries; opening")
+                            uninvited = false
+                            drawerState.setValue(DrawerValue.Open)
+                        }
+                    }
+                }
+            }.onPreviewKeyEvent { e ->
+                if (uninvited && drawerState.currentValue != DrawerValue.Open &&
+                    e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft
+                ) {
+                    uninvited = false
+                    drawerState.setValue(DrawerValue.Open)
+                    true
+                } else {
+                    false
+                }
+            }.focusProperties {
+                onEnter = {
+                    when (requestedFocusDirection) {
+                        // Arrow keys other than Left never pull focus into the rail
+                        FocusDirection.Up, FocusDirection.Down, FocusDirection.Right -> {
+                            // Only refuse a move that comes from the page: with nothing focused this is initial-focus
+                            // search (it starts top-left), which must be let in (then handed back) or the key goes dead
+                            if (drawerState.currentValue != DrawerValue.Open && contentHasFocus()) {
+                                cancelFocusChange()
+                            } else {
+                                enterDirection = requestedFocusDirection
+                                enterAt = android.os.SystemClock.uptimeMillis()
+                            }
+                        }
+                        else -> {
+                            val recentLeft = enterDirection == FocusDirection.Left && android.os.SystemClock.uptimeMillis() - enterAt < 500
+                            if (!recentLeft) {
+                                enterDirection = requestedFocusDirection
+                                enterAt = android.os.SystemClock.uptimeMillis()
+                            }
+                        }
+                    }
                 }
             }.focusGroup()
 
@@ -161,6 +258,11 @@ private fun DrawerSheet(
 internal class NavigationDrawerScopeImpl(
     override val hasFocus: Boolean,
 ) : NavigationDrawerScope
+
+/** How long fallback focus may sit on the closed rail before it is handed back to the page. */
+private const val UNINVITED_HANDBACK_MS = 350L
+private const val HANDBACK_RETRY_MS = 250L
+private const val HANDBACK_TRIES = 7
 
 internal val CollapsedDrawerItemWidth = 64.dp
 internal val ExpandedDrawerItemWidth = 224.dp

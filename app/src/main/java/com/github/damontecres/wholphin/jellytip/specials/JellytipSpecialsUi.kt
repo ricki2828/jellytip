@@ -748,6 +748,10 @@ private fun BoxScope.IptvArt(
     if (image != null && !failed) {
         AsyncImage(model = image, contentDescription = item.title, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
     }
+    // My list: the library cards' heart
+    if (com.github.damontecres.wholphin.jellytip.iptv.IptvMyList.isOn(item)) {
+        com.github.damontecres.wholphin.ui.cards.FavoriteIndicator(Modifier.align(Alignment.TopStart).padding(6.dp), fontSize = 16.sp)
+    }
     if (showTitle) {
         BottomScrim(0.7f)
         Text(

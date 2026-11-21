@@ -218,6 +218,16 @@ private suspend fun loadSections(): List<HubSection>? {
 
 private suspend fun loadCollection(id: String): JellytipServerRow? {
     val api = JellytipApi.shared ?: return null
+    // My list full page (web 1ec4d7bf "My list" button): the person's whole list from /v1/me/list
+    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.pageKind(id)?.let { kind ->
+        val (code, body) = api.userCall("v1/me/list?type=$kind&limit=500", timeoutMs = 15_000) ?: return null
+        if (code != 200) return null
+        val base = api.companionBase().also { com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase = it }
+        return runCatching {
+            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows
+                .pageRow(id, kind, com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.parse(body, base))
+        }.getOrNull()
+    }
     val (code, body) = api.userCall("v1/collections/${java.net.URLEncoder.encode(id, "UTF-8")}", timeoutMs = 15_000) ?: return null
     if (code != 200) return null
     return runCatching {
@@ -431,7 +441,7 @@ fun JellytipHubCollectionPage(
                     fontFamily = JellytipFontFamily,
                     modifier = Modifier.padding(8.dp),
                 )
-            tiles.isEmpty() -> Text("Nothing in this collection yet.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
+            tiles.isEmpty() -> Text(if (com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListRows.pageKind(id) != null) "Nothing in your list yet. Add titles with My list." else "Nothing in this collection yet.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, modifier = Modifier.padding(8.dp))
             else ->
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),

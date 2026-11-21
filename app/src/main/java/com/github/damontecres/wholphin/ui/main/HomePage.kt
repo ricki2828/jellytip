@@ -748,17 +748,19 @@ fun HomePageContent(
                             onClickItem(RowColumn(-1, -1), heroPlayItem)
                         },
                         // Sound for the hero trailer that is playing now; the next tile starts muted again (unless ui.heroSound)
-                        soundOn = JellytipTrailerControl.sound.takeIf { JellytipTrailerControl.isHeroPlaying },
+                        // Always offered (Ricki 21-Nov: no easy way to turn the sound on): the playing trailer, else the next ones
+                        soundOn = JellytipTrailerControl.heroSoundShown(),
                         onSound = { JellytipTrailerControl.toggleHeroSound() },
+                        // Focus goes to the Play button itself; invisible buttons never take focus (Ricki 21-Nov: Up
+                        // reached the row group, not a button, so the buttons couldn't be used)
+                        firstRequester = heroButtonsRequester,
+                        focusable = heroButtonsFocused || focusedEntry <= 0,
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)
                                 .padding(end = 48.dp, bottom = 6.dp)
                                 .graphicsLayer { alpha = heroButtonsAlpha }
-                                .focusRequester(heroButtonsRequester)
                                 .onFocusChanged { heroButtonsFocused = it.hasFocus }
-                                // Invisible buttons never take focus (on the group itself, so before focusGroup)
-                                .focusProperties { canFocus = heroButtonsAlpha > 0f }
                                 .focusGroup()
                                 .focusProperties {
                                     // Down returns to the row (or special) focus came from

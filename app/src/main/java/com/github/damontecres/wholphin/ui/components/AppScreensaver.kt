@@ -97,13 +97,19 @@ fun AppScreensaver(
     viewModel: ScreensaverViewModel = hiltViewModel(),
 ) {
     val currentItem by viewModel.currentItem.collectAsState(null)
-    AppScreensaverContent(
-        currentItem = currentItem,
+    // Jellytip (t5n): a favourite's game on now takes the screensaver (ambient scoreboard), else the stock stills
+    com.github.damontecres.wholphin.jellytip.iptv.JellytipSportAmbientOr(
         showClock = prefs.interfacePreferences.screensaverPreference.showClock,
-        duration = prefs.interfacePreferences.screensaverPreference.duration.milliseconds,
-        animate = prefs.interfacePreferences.screensaverPreference.animate,
         modifier = modifier,
-    )
+    ) {
+        AppScreensaverContent(
+            currentItem = currentItem,
+            showClock = prefs.interfacePreferences.screensaverPreference.showClock,
+            duration = prefs.interfacePreferences.screensaverPreference.duration.milliseconds,
+            animate = prefs.interfacePreferences.screensaverPreference.animate,
+            modifier = modifier,
+        )
+    }
 }
 
 @OptIn(ExperimentalCoilApi::class)
