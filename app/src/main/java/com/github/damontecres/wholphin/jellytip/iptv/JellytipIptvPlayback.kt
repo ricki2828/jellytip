@@ -200,6 +200,15 @@ class JellytipIptvPlayback
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     val t = _state.value.target ?: return
                     JellytipTrace.player("iptv", "state=$playbackState ${t.channelId}")
+                    // Live buffer Auto: a rebuffer while playing a live channel steps its level up (from the next open)
+                    if (playbackState == Player.STATE_BUFFERING && _state.value is IptvPlayState.Playing && loadedTarget == t) {
+                        LiveBuffer.stalled(context, t)?.let { lvl ->
+                            JellytipTrace.player("iptv", "live buffer auto: ${t.channelId} -> ${lvl.label}")
+                            android.widget.Toast
+                                .makeText(context, "Live buffer: ${lvl.label} from the next time you open this channel", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
                         setState(IptvPlayState.Playing(t), "ready")
@@ -253,7 +262,23 @@ class JellytipIptvPlayback
                 }
             }
 
-        private fun ensurePlayer(): ExoPlayer =
+        /** Live buffer profile the current player was built with (its LoadControl can't change after build). */
+        private var builtProfile: LiveBuffer.Profile = LiveBuffer.Profile.LOW
+
+        private fun ensurePlayer(profile: LiveBuffer.Profile = builtProfile): ExoPlayer {
+            val current = player
+            if (current != null && profile != builtProfile) {
+                // A different live buffer: rebuild at this open (the old stream is being replaced anyway)
+                JellytipTrace.player("iptv", "live buffer ${builtProfile.label} -> ${profile.label}: rebuilding player")
+                current.removeListener(listener)
+                current.release()
+                player = null
+            }
+            builtProfile = profile
+            return buildPlayer(profile)
+        }
+
+        private fun buildPlayer(profile: LiveBuffer.Profile): ExoPlayer =
             player ?: run {
                 val extractors =
                     DefaultExtractorsFactory().setTsExtractorFlags(
@@ -266,11 +291,11 @@ class JellytipIptvPlayback
                         .setAllowCrossProtocolRedirects(true)
                         .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
                         .setReadTimeoutMs(READ_TIMEOUT_MS)
-                // Small buffers: a zap should show the new channel in about a second
+                // Live buffer profile (Low = the old small buffers: a zap shows the new channel in about a second)
                 val load =
                     DefaultLoadControl
                         .Builder()
-                        .setBufferDurationsMs(2_000, 20_000, 700, 1_500)
+                        .setBufferDurationsMs(profile.minBufferMs, profile.maxBufferMs, profile.startMs, profile.afterRebufferMs)
                         .build()
                 ExoPlayer
                     .Builder(context)
@@ -310,6 +335,7 @@ class JellytipIptvPlayback
                 scope.launch {
                     when (val r = service.playItem(target)) {
                         is IptvPlayResult.Ok -> {
+                            val profile = LiveBuffer.profileFor(context, target)
                             // Direct answers carry the provider's own absolute link (credentials inside: not traced)
                             val direct = r.answer.direct && Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(r.answer.url)
                             val url = if (direct) r.answer.url else service.streamUrl(r.answer.url)
@@ -329,8 +355,12 @@ class JellytipIptvPlayback
                                     .Builder()
                                     .setUri(url)
                                     .apply { if (ts) setMimeType(MimeTypes.VIDEO_MP2T) }
-                                    .build()
-                            val p = ensurePlayer()
+                                    .apply {
+                                        if (target.isLive) {
+                                            setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(profile.behindMs).build())
+                                        }
+                                    }.build()
+                            val p = ensurePlayer(profile)
                             loadedTarget = target
                             if (target.resumeMs > 0) p.setMediaItem(item, target.resumeMs) else p.setMediaItem(item)
                             p.playWhenReady = true
