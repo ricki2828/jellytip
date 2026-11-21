@@ -165,6 +165,35 @@ fun JellytipIptvPlayPage(
 
     // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
     val owner = remember { "item:" + java.util.UUID.randomUUID() }
+    // Taste signals (web 4a830873): this IPTV film / episode's real playing time; closed when the page goes or it ends
+    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
+    DisposableEffect(target) {
+        val t =
+            target.vodId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("movie", iptvId = it) }
+                ?: target.seriesId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("series", iptvId = it) }
+        watch.begin(t?.let { com.github.damontecres.wholphin.jellytip.signals.WatchMeta(it, isFilm = target.vodId != null) }, 0.0)
+        onDispose {
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                .emit(watch.end(false, System.currentTimeMillis()))
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                .flushSoon()
+        }
+    }
+    // Audio & subtitles (Up): the menu, and the person's languages asked for on open (put back when the page goes)
+    var trackMenu by remember(target) { mutableStateOf(false) }
+    val player0 = playback.player
+    DisposableEffect(target, player0) {
+        val p = player0
+        val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value
+        val before = p?.let { IptvTracks.applyPrefs(it, me?.audioLangs.orEmpty(), owner) }
+        // Put back only while still this page's (a newer page, e.g. a copy swap, has set its own by then)
+        onDispose {
+            if (p != null && before != null && IptvTracks.appliedBy == owner) {
+                p.trackSelectionParameters = before
+                IptvTracks.appliedBy = null
+            }
+        }
+    }
     DisposableEffect(target) {
         playback.attach(owner)
         playback.setVolume(1f)
@@ -197,6 +226,14 @@ fun JellytipIptvPlayPage(
                 if (playState is IptvPlayState.Playing) lastGoodMs = position
                 duration = playback.durationMs()
                 playing = it.playWhenReady
+                if (it.isPlaying && playback.state.value.target == target) {
+                    watch.runtime(duration / 1000.0)
+                    watch.tick(it.currentPosition / 1000.0, 1.5)
+                }
+                if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && playback.state.value.target == target) {
+                    com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                        .emit(watch.end(true, System.currentTimeMillis()))
+                }
                 // "Play both" from a double feature: this IPTV film ended, start the other half
                 if (it.playbackState == androidx.media3.common.Player.STATE_ENDED && target.vodId != null) {
                     val next =
@@ -264,7 +301,7 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    // Recording still in progress: Up jumps to the channel live
+                    // Up: a recording still in progress jumps to the channel live; anything else opens audio & subtitles
                     Key.DirectionUp -> {
                         val m = recMeta
                         if (m != null && inProgress && m.channelId.isNotBlank()) {
@@ -275,6 +312,9 @@ fun JellytipIptvPlayPage(
                             playback.alternates = emptyMap()
                             viewModel.navigationManager.replaceTop(Destination.JellytipLiveTvPlayer(ch.id))
                             playback.play(IptvTarget(ch.id, ch.name), "recording: jump to live")
+                        } else if (playback.player != null && playState is IptvPlayState.Playing) {
+                            // Otherwise: audio & subtitles (t5k, web 51a17247)
+                            trackMenu = true
                         }
                         controlsTick++
                         true
@@ -314,6 +354,13 @@ fun JellytipIptvPlayPage(
             )
         }
         StreamBusyPopup(playState, playback)
+        val tp = playback.player
+        if (trackMenu && tp != null) {
+            IptvTrackMenu(tp) {
+                trackMenu = false
+                focus.tryRequestFocus()
+            }
+        }
         if (reportOpen) {
             androidx.tv.material3.Button(
                 onClick = notWorking,
@@ -364,7 +411,7 @@ fun JellytipIptvPlayPage(
                 Text(
                     text =
                         "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" +
-                            (if (inProgress) "   ·   ▲ live" else "") +
+                            (if (inProgress) "   ·   ▲ live" else "   ·   ▲ audio & subtitles") +
                             (if (target.recordingId != null) "   ·   ▼ delete" else if (canReport) "   ·   ▼ not working?" else ""),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                     fontFamily = JellytipFontFamily,

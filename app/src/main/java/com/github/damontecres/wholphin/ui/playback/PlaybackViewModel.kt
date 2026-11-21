@@ -190,6 +190,21 @@ class PlaybackViewModel
         internal lateinit var currentItem: PlaylistItem
         internal var forceTranscoding: Boolean = false
         private var activityListener: TrackActivityPlaybackListener? = null
+
+        /** Jellytip taste signals: the watch of the item playing now (real playing time, closed once). */
+        private val jellytipWatch = com.github.damontecres.wholphin.jellytip.signals.WatchSession()
+        private var jellytipWatchJob: kotlinx.coroutines.Job? = null
+
+        private fun jellytipEndWatch(ended: Boolean) {
+            val s = synchronized(jellytipWatch) { jellytipWatch.end(ended, System.currentTimeMillis()) }
+            if (s != null) {
+                com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                    .emit(s)
+                com.github.damontecres.wholphin.jellytip.signals.JellytipSignals
+                    .flushSoon()
+            }
+        }
+
         private var trackChangeListener: TracksChangedListener? = null
         private val jobs = mutableListOf<Job>()
         private var subscribeJob: Job? = null
@@ -500,6 +515,33 @@ class PlaybackViewModel
                 }
                 this@PlaybackViewModel.currentItem = playlistItem
                 this@PlaybackViewModel.itemId = item.id
+                // Jellytip taste signals: close the last title's watch, start this one's (intros and trailers say nothing)
+                jellytipEndWatch(false)
+                synchronized(jellytipWatch) {
+                    val target =
+                        if (playlistItem is PlaylistItem.Media) {
+                            com.github.damontecres.wholphin.jellytip.signals.TasteRules
+                                .libraryTarget(item)
+                        } else {
+                            null
+                        }
+                    jellytipWatch.begin(
+                        target?.let { com.github.damontecres.wholphin.jellytip.signals.WatchMeta(it, isFilm = item.type == BaseItemKind.MOVIE) },
+                        (item.data.runTimeTicks ?: 0L) / 10_000_000.0,
+                    )
+                }
+                if (jellytipWatchJob == null) {
+                    jellytipWatchJob =
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            while (true) {
+                                kotlinx.coroutines.delay(1_000)
+                                if (this@PlaybackViewModel::player.isInitialized && player.isPlaying) {
+                                    val t = player.currentPosition / 1000.0
+                                    synchronized(jellytipWatch) { jellytipWatch.tick(t) }
+                                }
+                            }
+                        }
+                }
 
                 val isLiveTv = item.type == BaseItemKind.TV_CHANNEL
                 val base = item.data
@@ -1114,6 +1156,7 @@ class PlaybackViewModel
             com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("playback", "state=$playbackState item=${runCatching { itemId }.getOrNull()}")
             if (playbackState == Player.STATE_ENDED) {
                 Timber.v("Playback state is STATE_ENDED")
+                jellytipEndWatch(true)
                 viewModelScope.launchDefault {
                     when (val nextItem = state.value.nextItem()) {
                         is PlaylistItem.Intro -> {
@@ -1477,6 +1520,9 @@ class PlaybackViewModel
 
         fun release() {
             Timber.v("release")
+            jellytipEndWatch(false)
+            jellytipWatchJob?.cancel()
+            jellytipWatchJob = null
             disconnectPlayer()
             activityListener = null
         }

@@ -970,8 +970,13 @@ private fun ClosetPicksRow(
                 is ClosetEntry.Pick -> {
                     val item = entry.item
                     val tmdb = entry.pick.tmdbId
+                    val iptv = entry.pick.iptv
                     if (item != null) {
                         actions.open(item)
+                    } else if (iptv != null) {
+                        // four_favourites: the IPTV copy of a film the library lacks
+                        JellytipTrailerControl.stop()
+                        actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title))
                     } else if (canRequest && tmdb != null) {
                         actions.navigate(
                             Destination.JellytipDiscover(
@@ -1008,7 +1013,7 @@ private fun ClosetPicksRow(
                         SpecialVideoSurface(owner, Modifier.fillMaxSize())
                         BottomScrim(0.7f)
                         Column(Modifier.align(Alignment.BottomStart).padding(sizes.px(18))) {
-                            KickerUnlessTitled("Closet picks", special.title)
+                            KickerUnlessTitled(special.kicker, special.title)
                             Text(
                                 text = special.guest,
                                 color = Color.White,
@@ -1041,6 +1046,15 @@ private fun ClosetPicksRow(
                                 onClick,
                                 onLongClick,
                                 cardModifier.alpha(lightAlpha).onFocusChanged { if (it.isFocused) onFocusItem(item, true) },
+                            )
+                        } else if (entry.pick.iptv != null) {
+                            com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
+                                item = entry.pick.iptv,
+                                width = SpecialTokens.POSTER_W,
+                                height = SpecialTokens.POSTER_H,
+                                poster = true,
+                                onClick = onClick,
+                                modifier = cardModifier.alpha(lightAlpha).onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
                             )
                         } else if (canRequest && entry.pick.tmdbId != null) {
                             SpecialCard(

@@ -133,6 +133,8 @@ sealed interface JellytipSpecial {
         val picks: List<Pick>,
         /** Admins: faded (not in library) picks can be requested ("Get it"). */
         val canRequest: Boolean,
+        /** "Closet picks" (closet_picks) or "Four favourites" (four_favourites, web b5a5c80a): same clip + picks shape. */
+        val kicker: String = "Closet picks",
     ) : JellytipSpecial {
         data class Pick(
             val title: String,
@@ -144,6 +146,8 @@ sealed interface JellytipSpecial {
             val atSec: Int?,
             /** TMDB media type for a request: "movie" (default when the server sends none) or "tv". */
             val mediaType: String = "movie",
+            /** four_favourites: the person's IPTV copy of a film the library lacks (OK opens it). */
+            val iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
         )
 
         override val itemIds get() = picks.mapNotNull { it.itemId }
@@ -309,7 +313,7 @@ object JellytipSpecialsParser {
                 JellytipSpecial.AroundHouse(id, position, title.ifBlank { "What friends are watching" }, entries)
             }
 
-            "closet_picks" -> {
+            "closet_picks", "four_favourites" -> {
                 val picks =
                     o.objects("picks").mapNotNull { p ->
                         JellytipSpecial.ClosetPicks.Pick(
@@ -320,6 +324,11 @@ object JellytipSpecialsParser {
                             posterUrl = p.str("posterUrl"),
                             mediaType = if (p.str("mediaType")?.lowercase() in setOf("tv", "series", "show")) "tv" else "movie",
                             atSec = if (!p.has("atSec") || p.isNull("atSec")) null else p.optDouble("atSec").takeIf { !it.isNaN() && it >= 0 }?.toInt(),
+                            iptv =
+                                p.optJSONObject("iptv")?.let {
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse
+                                        .item(it, com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
+                                },
                         )
                     }
                 if (picks.isEmpty()) return null
@@ -333,6 +342,7 @@ object JellytipSpecialsParser {
                     durationSec = o.optInt("durationSec", 0),
                     picks = picks,
                     canRequest = o.optBoolean("canRequest", false),
+                    kicker = if (o.optString("layout") == "four_favourites") "Four favourites" else "Closet picks",
                 )
             }
 

@@ -92,8 +92,16 @@ class JellytipGameCentreViewModel
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state
 
+        /** The person's recordings (for "Your recording, from the start" and to hide Record once one exists). */
+        var recordings by androidx.compose.runtime.mutableStateOf<List<IptvRecording>?>(service.peekRecordings())
+            private set
+
+        private var polls = 0
+
         suspend fun refresh() {
             val r = service.fixtures()
+            // After the fixtures (first paint isn't held up), and again every 4th poll so new recordings show up
+            if (recordings == null || polls++ % 4 == 0) recordings = service.recordings()?.second ?: service.peekRecordings() ?: recordings ?: emptyList()
             val s = _state.value
             when {
                 r == null -> if (s.base == null) _state.value = s.copy(failed = true)
@@ -135,6 +143,20 @@ class JellytipGameCentreViewModel
                         reminderOverride = if (ok) _state.value.reminderOverride + (f.fid to !on) else _state.value.reminderOverride,
                         message = if (ok) (if (on) "Reminder off" else "Reminder set for ${f.title}") else "Couldn't change the reminder",
                     )
+            }
+        }
+
+        /** Record [f] on [ch] (web f4e82c60), then refresh fixtures and recordings. */
+        fun record(
+            f: FxItem,
+            ch: FxChannel,
+        ) {
+            val start = ch.start ?: return
+            viewModelScope.launch {
+                val r = service.record(ch.id, start)
+                _state.value = _state.value.copy(message = if (r.ok) "Recording ${f.title}" else (r.message ?: "Couldn't set the recording"))
+                recordings = service.recordings()?.second ?: recordings
+                refresh()
             }
         }
 
@@ -301,9 +323,21 @@ fun JellytipGameCentrePage(
         }
     }
     menu?.let { f ->
+        val rec = SportFixtures.yourRecording(f, viewModel.recordings)
         FixtureMenu(
             f,
             now,
+            recordOn = SportFixtures.recordOn(f, rec, now),
+            yourRecording = rec,
+            onRecord = { ch ->
+                menu = null
+                viewModel.record(f, ch)
+            },
+            onRecording = { r ->
+                menu = null
+                com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+                viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = f.title, recordingId = r.id), "game centre recording")
+            },
             reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
             revealed = f.fid in revealed.value,
             onDismiss = { menu = null },
@@ -379,6 +413,10 @@ private fun MoreTile(
 private fun FixtureMenu(
     f: FxItem,
     now: Long,
+    recordOn: FxChannel?,
+    yourRecording: IptvRecording?,
+    onRecord: (FxChannel) -> Unit,
+    onRecording: (IptvRecording) -> Unit,
     reminder: Boolean,
     revealed: Boolean,
     onDismiss: () -> Unit,
@@ -390,6 +428,8 @@ private fun FixtureMenu(
     val best = pick.channel
     val items =
         buildList {
+            // A finished game you recorded: your recording first (no more "No replay available")
+            yourRecording?.let { r -> add(DialogItem("Your recording, from the start", dismissOnClick = true) { onRecording(r) }) }
             if (f.status == "in" && best != null) {
                 add(DialogItem((if (best.solid) "Watch live on " else "May be live on ") + best.name, dismissOnClick = true) { onWatch(best, false) })
             }
@@ -401,6 +441,7 @@ private fun FixtureMenu(
                     add(DialogItem((if (c.solid) "Live on " else "May be on ") + c.name, dismissOnClick = true) { onWatch(c, false) })
                 }
             }
+            recordOn?.let { ch -> add(DialogItem("Record on ${ch.name}", dismissOnClick = true) { onRecord(ch) }) }
             if (f.status != "post") add(DialogItem(if (reminder) "Reminder on — turn off" else "Remind me", dismissOnClick = true) { onReminder() })
             if (f.score != null && !revealed) add(DialogItem("Reveal score", dismissOnClick = true) { onReveal() })
             if (isEmpty()) add(DialogItem(if (f.status == "post") "No replay available" else "No stream found yet", dismissOnClick = true) {})
