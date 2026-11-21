@@ -339,3 +339,136 @@ fun JellytipMixedIptvEpisode(
         }
     }
 }
+
+/**
+ * Ways to watch on library details (web 59289c77): the person's IPTV copies of the same title (TMDB id, an allowed
+ * provider, foreign dubs skipped), so the library page shows every way to watch it. Cached per user + TMDB id.
+ */
+object LibraryIptvCopies {
+    /** The person (by token key) who has no IPTV providers: no lookups for them this run. */
+    @Volatile private var noProviders: String? = null
+    private val cache = ConcurrentHashMap<String, Pair<Long, List<IptvVodItem>>>()
+    private const val TTL_MS = 10 * 60_000L
+
+    /** Copies of [kind] (movie | series) matching [tmdbId] among [items] from [allowed] providers, English first. */
+    fun pick(
+        items: List<IptvVodItem>,
+        kind: String,
+        tmdbId: Int,
+        allowed: Collection<String>,
+    ): List<IptvVodItem> =
+        items
+            .filter { it.kind == kind && it.tmdbId == tmdbId && IptvSeasons.providerOf(it.id) in allowed && !IptvSeasons.foreignCopy(it.title) }
+            .distinctBy { it.id }
+            .sortedBy { if (it.langUnknown) 1 else 0 }
+
+    suspend fun forItem(item: BaseItem): List<IptvVodItem> {
+        val kind =
+            when (item.type) {
+                org.jellyfin.sdk.model.api.BaseItemKind.MOVIE -> "movie"
+                org.jellyfin.sdk.model.api.BaseItemKind.SERIES -> "series"
+                else -> return emptyList()
+            }
+        val tmdb =
+            item.data.providerIds
+                ?.entries
+                ?.firstOrNull { it.key.equals("Tmdb", true) }
+                ?.value
+                ?.toIntOrNull() ?: return emptyList()
+        val title = item.name ?: return emptyList()
+        val api = JellytipApi.shared ?: return emptyList()
+        if (MatchHidden.noIptv || noProviders == api.currentUserKey()) return emptyList()
+        val key = "${api.currentUserKey()}|$kind|$tmdb"
+        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
+        return try {
+            val pr = api.userCall("v1/iptv/providers")
+            val owned =
+                pr?.takeIf { it.first == 200 }?.let { (_, b) ->
+                    val a = JSONObject(b).optJSONArray("providers")
+                    (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
+                }
+            // No IPTV (no providers, or the route / person refused): stop asking this run
+            if ((owned != null && owned.isEmpty()) || pr?.first == 403 || pr?.first == 404) noProviders = api.currentUserKey()
+            val got =
+                if (owned.isNullOrEmpty()) {
+                    emptyList()
+                } else {
+                    val (code, body) = api.userCall("v1/iptv/vod?kind=$kind&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return emptyList()
+                    if (code != 200) {
+                        emptyList()
+                    } else {
+                        val base = api.companionBase().also { IptvVodParse.imageBase = it }
+                        pick(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), kind, tmdb, owned)
+                    }
+                }
+            cache[key] = System.currentTimeMillis() to got
+            got
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+}
+
+/** The row: "In your library" (OK plays) and each IPTV copy (provider · quality; OK opens it). Only when IPTV has copies. */
+@Composable
+fun JellytipLibraryWaysToWatch(
+    item: BaseItem,
+    copies: List<IptvVodItem>,
+    onPlayLibrary: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+) {
+    if (copies.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.fillMaxWidth()) {
+        Text("Ways to watch", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(start = 64.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 64.dp),
+            modifier = Modifier.focusGroup().focusRestorer(),
+        ) {
+            item(key = "library") {
+                WayTile("In your library", if (item.type == org.jellyfin.sdk.model.api.BaseItemKind.SERIES) "Open the episodes above" else "Play", onPlayLibrary)
+            }
+            items(copies, key = { it.id }) { c ->
+                val words =
+                    listOfNotNull(
+                        c.qualityLabel,
+                        c.audioLabel,
+                        "Language unknown".takeIf { c.langUnknown },
+                    ).joinToString("  ·  ")
+                WayTile("IPTV · ${c.providerName ?: "copy"}", words.ifEmpty { "Watch via IPTV" }) {
+                    JellytipTrace.log("iptv", "library ways to watch: ${c.id}")
+                    viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipIptvDetails(c.id, c.title), "library ways to watch IPTV")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WayTile(
+    title: String,
+    sub: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.06f),
+                focusedContainerColor = Color.White,
+                contentColor = JellytipPalette.Vanilla,
+                focusedContentColor = Color.Black,
+            ),
+        modifier = Modifier.size(260.dp, 72.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(title, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}

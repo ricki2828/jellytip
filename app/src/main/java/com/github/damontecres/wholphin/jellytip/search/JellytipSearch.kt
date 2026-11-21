@@ -38,10 +38,13 @@ data class SearchPerson(
 )
 
 data class SearchCollection(
+    /** 0 for a TV collection (a Collections-hub row, [hubId]). */
     val tmdbId: Int,
     val name: String,
     val inLibrary: Int,
     val total: Int,
+    /** TV collections are Collections-hub rows (web d0444d51 4d0ad94f): they open the hub row, not a TMDB page. */
+    val hubId: String? = null,
 )
 
 data class SearchList(
@@ -99,11 +102,13 @@ data class SearchResult(
     val collectionId: Int? = null,
     val inLibrary: Int = 0,
     val total: Int = 0,
+    /** A Collections-hub row (TV collections). */
+    val hubId: String? = null,
 ) {
     val isTitle get() = kind == "film" || kind == "series"
 
     /** Same entry (the top hit is also first in results). */
-    val key get() = "$kind:$source:${id ?: iptvId ?: personId ?: collectionId ?: tmdbId ?: title}"
+    val key get() = "$kind:$source:${id ?: iptvId ?: personId ?: hubId ?: collectionId ?: tmdbId ?: title}"
 }
 
 /** A result group in the server's order; only the list matching [type] is filled. */
@@ -152,7 +157,7 @@ data class SearchAnswer(
             val r = results ?: return emptyList()
             val media = r.filter { it.isTitle && it.source != "discover" && it.key != top?.key }
             val people = r.filter { it.kind == "person" && it.personId != null }
-            val collections = r.filter { it.kind == "collection" && it.collectionId != null }
+            val collections = r.filter { it.kind == "collection" && (it.collectionId != null || it.hubId != null) }
             val discover = r.filter { it.isTitle && it.source == "discover" && (it.tmdbId ?: 0) > 0 && it.key != top?.key }
             // Library and IPTV shown separately (plan "D"), each in rank order; an empty one is left out
             val lib = media.filter { it.source == "library" && it.id != null }
@@ -168,7 +173,7 @@ data class SearchAnswer(
                     SearchGroup("people", p.size, people = p.map { SearchPerson(it.personId!!, it.title, it.role ?: "actor", it.imageTag, it.filmCount) })
                 },
                 collections.takeIf { it.isNotEmpty() }?.let { c ->
-                    SearchGroup("collections", c.size, collections = c.map { SearchCollection(it.collectionId!!, it.title, it.inLibrary, it.total) })
+                    SearchGroup("collections", c.size, collections = c.map { SearchCollection(it.collectionId ?: 0, it.title, it.inLibrary, it.total, it.hubId) })
                 },
                 discover.takeIf { it.isNotEmpty() }?.let { d ->
                     SearchGroup(
@@ -283,8 +288,10 @@ object SearchParse {
                             total,
                             collections =
                                 items.mapNotNull {
-                                    val id = it.optInt("tmdbCollectionId", 0).takeIf { n -> n > 0 } ?: return@mapNotNull null
-                                    SearchCollection(id, it.str("name").orEmpty(), it.optInt("inLibrary", 0), it.optInt("total", 0))
+                                    val id = it.optInt("tmdbCollectionId", 0).takeIf { n -> n > 0 }
+                                    val hub = it.str("hubId")
+                                    if (id == null && hub == null) return@mapNotNull null
+                                    SearchCollection(id ?: 0, it.str("name").orEmpty(), it.optInt("inLibrary", 0), it.optInt("total", 0), hub)
                                 },
                         )
                     "iptv" ->
@@ -335,7 +342,8 @@ object SearchParse {
             groups = groups,
             pending = strings(root.optJSONArray("pending")),
             results = results,
-            top = result(root.optJSONObject("top")) ?: results?.firstOrNull(),
+            // A TV hub (collection row) is never the Top match (web d0444d51)
+            top = result(root.optJSONObject("top"))?.takeIf { it.hubId == null } ?: results?.firstOrNull { it.hubId == null },
             live = live(groupItems(root, "live") ?: root.optJSONArray("live"), resolve),
             liveFirst =
                 if (root.has("liveFirst")) {
@@ -441,12 +449,13 @@ object SearchParse {
                 collectionId = o.optInt("tmdbCollectionId", 0).takeIf { it > 0 },
                 inLibrary = o.optInt("inLibrary", 0),
                 total = o.optInt("total", 0),
+                hubId = o.str("hubId"),
             )
         // An entry the client can't open is dropped
         val openable =
             when {
                 kind == "person" -> r.personId != null
-                kind == "collection" -> r.collectionId != null
+                kind == "collection" -> r.collectionId != null || r.hubId != null
                 r.source == "library" -> r.id != null
                 r.source == "iptv" -> r.iptvId != null
                 r.source == "discover" -> r.tmdbId != null

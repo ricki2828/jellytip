@@ -73,4 +73,18 @@ class IptvSeasonsTest {
         val iptv = listOf(IptvSeason(2, listOf(ep(2, "a"), ep(1, "b"))), IptvSeason(2, listOf(ep(2, "dup"), ep(3, "c"))), IptvSeason(1, listOf(ep(1, "x"))))
         assertEquals(listOf("b", "a", "c"), IptvSeasons.episodesFor(iptv, 2).map { it.id })
     }
+
+    @Test
+    fun libraryCopiesSameTmdbAllowedEnglishFirst() {
+        val items =
+            listOf(
+                vod("p1:m:1", "Heat", 949, "movie").copy(langUnknown = true),
+                vod("p1:m:2", "Heat", 949, "movie"),
+                vod("p2:m:3", "Heat", 949, "movie"),
+                vod("p1:m:4", "Heat_ger", 949, "movie"),
+                vod("p1:s:5", "Heat", 949, "series"),
+                vod("p1:m:6", "Heat 2", 1, "movie"),
+            )
+        assertEquals(listOf("p1:m:2", "p1:m:1"), LibraryIptvCopies.pick(items, "movie", 949, listOf("p1")).map { it.id })
+    }
 }

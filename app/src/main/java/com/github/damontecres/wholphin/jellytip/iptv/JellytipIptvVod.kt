@@ -41,6 +41,8 @@ data class IptvVodItem(
     val played: Boolean = false,
     /** atmos | 5.1 | 7.1 | stereo (plan live-sport §1b values); null = unknown. Atmos and surround get a badge. */
     val audio: String? = null,
+    /** The server couldn't confirm this copy's audio is English (best copy, language unknown; web d897d21c). */
+    val langUnknown: Boolean = false,
 ) {
     /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
     val audioLabel: String?
@@ -169,6 +171,7 @@ object IptvVodParse {
             favourite = o.optBoolean("favourite", false),
             played = o.optBoolean("played", false) || o.optJSONObject("progress")?.optBoolean("played", false) == true,
             audio = o.str("audio") ?: o.optJSONObject("quality")?.str("audio"),
+            langUnknown = o.opt("langUnknown") == true,
         )
     }
 
@@ -234,6 +237,9 @@ object IptvVodParse {
     }
 
     private val VOD_ID_RE = Regex("^[A-Za-z0-9_-]{1,40}:[ms]:[A-Za-z0-9_.-]{1,64}$")
+
+    /** A film or series id (`pid:m:sid` / `pid:s:sid`), not an episode or a recording. */
+    fun isTitleId(id: String) = VOD_ID_RE.matches(id)
 
     /** `copies: [{id, providerName|providerTitle, quality, res, lang, langLabel, opted, current, lastFail}]`. */
     fun copies(a: JSONArray?): List<IptvCopy> {
