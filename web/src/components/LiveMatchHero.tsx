@@ -135,7 +135,7 @@ export function LiveMatchHero({ picks, nowSec, kicker, autoFocus, spoilers = fal
   const c = useFixtureColours(f ?? { matchId: null });
   const art = useArt(f?.art, 960);
   const shownAt = Math.min(index, picks.length - 1);
-  const place: SportPlace | null = f ? { fid: f.fid, surface, section: surface === "gamecentre" ? "hero" : undefined, pos: shownAt, listId: f.listId } : null;
+  const place: SportPlace | null = f ? { fid: f.fid, surface, section: surface === "gamecentre" ? "hero" : undefined, pos: shownAt + 1, listId: f.listId } : null;
   useSportShown(ref, place);
   useEffect(() => {
     // keyboard / remote only: on a touch screen a focus ring on Watch is noise

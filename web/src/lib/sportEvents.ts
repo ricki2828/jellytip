@@ -12,11 +12,11 @@ export interface SportEvent {
   surface: SportSurface;
   /** Where on the surface: Game Centre's group ("live", "yours", "big", "finished", "hero"). */
   section?: string;
-  /** 0-based position in that section. */
+  /** 1-based place in that section (the server stores 1..500). */
   pos?: number;
   /** The fixtures answer the tile came from (its `listId`). */
   listId?: string;
-  /** ms since the Unix epoch */
+  /** Client time, seconds since the Unix epoch (the server checks it against its own clock, a day either way). */
   at?: number;
   ms?: number;
 }
@@ -33,7 +33,7 @@ export function validSportEvent(e: SportEvent): boolean {
     SPORT_SURFACES.includes(e.surface) &&
     typeof e.fid === "string" &&
     e.fid.length > 0 &&
-    (e.pos === undefined || (Number.isInteger(e.pos) && e.pos >= 0)) &&
+    (e.pos === undefined || (Number.isInteger(e.pos) && e.pos >= 1)) &&
     (e.ms === undefined || (Number.isFinite(e.ms) && e.ms >= 0))
   );
 }

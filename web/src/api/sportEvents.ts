@@ -15,6 +15,7 @@ let owner = "";
 let timer: number | undefined;
 let off = false;
 let sending = false;
+let leftAt = 0;
 
 async function post(batch: SportEvent[], keepalive: boolean): Promise<number> {
   const body = { events: batch.map(wireEvent) };
@@ -33,6 +34,11 @@ async function post(batch: SportEvent[], keepalive: boolean): Promise<number> {
 /** Send what is queued. `leaving`: the page is going away, use a request that survives it. */
 export async function flushSportEvents(leaving = false): Promise<void> {
   if (sending && !leaving) return;
+  if (leaving) {
+    // visibilitychange(hidden) and pagehide both fire on close: one leaving flush, not the same batch twice
+    if (Date.now() - leftAt < 1000) return;
+    leftAt = Date.now();
+  }
   if (off) return queue.clear();
   sending = true;
   try {
@@ -62,7 +68,7 @@ export function logSport(e: Omit<SportEvent, "at"> & { at?: number }): void {
     queue.clear();
     owner = u;
   }
-  if (queue.add({ ...e, at: e.at ?? Date.now() }) && timer == null) timer = window.setInterval(() => void flushSportEvents(), FLUSH_MS);
+  if (queue.add({ ...e, at: e.at ?? Math.floor(Date.now() / 1000) }) && timer == null) timer = window.setInterval(() => void flushSportEvents(), FLUSH_MS);
 }
 
 if (typeof document !== "undefined") {

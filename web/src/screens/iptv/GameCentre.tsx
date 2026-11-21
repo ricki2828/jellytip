@@ -422,7 +422,7 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
               <FixtureCard
                 key={f.fid}
                 f={f}
-                place={{ fid: f.fid, surface: "gamecentre", section: g.id, pos: i, listId: f.listId }}
+                place={{ fid: f.fid, surface: "gamecentre", section: g.id, pos: i + 1, listId: f.listId }}
                 rec={f.recordingId != null ? recs?.find((r) => String(r.id) === String(f.recordingId)) ?? null : null}
                 now={now}
                 pref={pref}
