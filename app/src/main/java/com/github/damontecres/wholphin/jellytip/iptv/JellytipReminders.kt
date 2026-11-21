@@ -189,10 +189,11 @@ class JellytipReminders
         ) {
             JellytipTrailerControl.stop()
             val all = listOf(u.channel) + u.alternateChannels
+            // The page first: a blocked navigation must not leave a stream playing with no screen (sound, no picture)
+            if (!navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(ch.id), "reminder watch ${ch.name}")) return
             playback.lineup = all
             playback.alternates = all.associate { c -> c.id to all.filter { it.id != c.id } }
             playback.play(IptvTarget(ch.id, ch.name), "reminder watch")
-            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id), "reminder watch ${ch.name}")
         }
 
         companion object {

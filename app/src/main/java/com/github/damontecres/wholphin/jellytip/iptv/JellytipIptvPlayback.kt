@@ -324,6 +324,26 @@ class JellytipIptvPlayback
             }
             renewed = false
             launchOpen(target, reason)
+            guardOrphan(target)
+        }
+
+        private var orphanJob: Job? = null
+
+        /**
+         * Safety net (21-Nov bug: sound, no picture after a launch from Home): a stream that no screen claims within
+         * [ORPHAN_MS] (no guide, full screen or film page attached) is stopped, never left playing out of sight.
+         */
+        private fun guardOrphan(target: IptvTarget) {
+            orphanJob?.cancel()
+            orphanJob =
+                scope.launch {
+                    delay(ORPHAN_MS)
+                    val s = _state.value
+                    if (owners.isEmpty() && s.target == target && s !is IptvPlayState.Idle) {
+                        JellytipTrace.player("iptv", "orphan stream ${target.channelId}: no screen showing it, stopping")
+                        stop("no screen showing it")
+                    }
+                }
         }
 
         private fun launchOpen(
@@ -522,6 +542,7 @@ class JellytipIptvPlayback
             private const val OK_TICK_MS = 5_000L
 
             private const val HANDOVER_MS = 400L
+            private const val ORPHAN_MS = 3_000L
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000
