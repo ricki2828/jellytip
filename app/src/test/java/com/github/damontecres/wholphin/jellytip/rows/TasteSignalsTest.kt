@@ -31,8 +31,9 @@ class TasteSignalsTest {
         assertEquals("play", TasteRules.watchSignal(film, 600.0, 7200.0, false, at)?.type)
         assertEquals("finish", TasteRules.watchSignal(film, 6500.0, 7200.0, false, at)?.type)
         assertEquals("finish", TasteRules.watchSignal(film, 120.0, 0.0, true, at)?.type)
-        // short film or episode: no skip, just nothing / play
-        assertNull(TasteRules.watchSignal(film.copy(isFilm = false), 60.0, 7200.0, false, at))
+        // an episode leaving early is never a skip: a minute is a play
+        assertEquals("play", TasteRules.watchSignal(film.copy(isFilm = false), 60.0, 7200.0, false, at)?.type)
+        assertNull(TasteRules.watchSignal(film.copy(isFilm = false), 59.0, 7200.0, false, at))
         val chan = film.copy(channel = true)
         assertEquals("play", TasteRules.watchSignal(chan, 31.0, 7200.0, true, at)?.type)
     }
