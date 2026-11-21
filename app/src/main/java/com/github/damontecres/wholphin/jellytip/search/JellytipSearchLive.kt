@@ -234,10 +234,11 @@ internal fun SearchChannelsRow(
                         onOpened()
                         com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
                         val all = hits.map { it.channel }
-                        onNow.playback.lineup = all
-                        onNow.playback.alternates = emptyMap()
-                        onNow.playback.play(IptvTarget(c.channel.id, c.channel.name), "search channel OK")
-                        onNow.navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(c.channel.id), "search channel OK ${c.channel.name}")
+                        if (onNow.navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(c.channel.id), "search channel OK ${c.channel.name}")) {
+                            onNow.playback.lineup = all
+                            onNow.playback.alternates = emptyMap()
+                            onNow.playback.play(IptvTarget(c.channel.id, c.channel.name), "search channel OK")
+                        }
                     },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),

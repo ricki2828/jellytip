@@ -72,8 +72,9 @@ class JellytipOnNowViewModel
             fromKickOff: Boolean = false,
         ) {
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+            // The page first: a blocked navigation must not leave a stream playing with no screen
+            if (!navigationManager.navigateToChecked(Destination.JellytipLiveTvPlayer(channel.id), reason)) return
             playback.openOnNow(o, all, channel, reason, fromKickOff)
-            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(channel.id), reason)
         }
     }
 

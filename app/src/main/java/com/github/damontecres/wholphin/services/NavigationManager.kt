@@ -46,16 +46,27 @@ class NavigationManager
             /** Jellytip: why (key, timer, player...); traced with the call site. */
             reason: String? = null,
         ) {
+            navigateToChecked(destination, reason)
+        }
+
+        /**
+         * Jellytip: [navigateTo] that says whether it went. From a browse page, only an explicit OK opens a title (see
+         * JellytipNavGate); a blocked one returns false, so a caller that would start playback for it must not.
+         */
+        fun navigateToChecked(
+            destination: Destination,
+            reason: String? = null,
+        ): Boolean {
             val from = backStack.lastOrNull()
-            // Jellytip: from a browse page, only an explicit OK opens a title (see JellytipNavGate)
             if (!JellytipNavGate.allow(isBrowsePage(from), opensTitle(destination))) {
                 JellytipTrace.nav("BLOCKED", from, destination, reason)
                 Timber.w("Blocked navigation without OK: %s -> %s", from, destination)
-                return
+                return false
             }
             JellytipTrace.nav("to", from, destination, reason)
             backStack.add(destination)
             log()
+            return true
         }
 
         private fun isBrowsePage(d: Destination?): Boolean =
