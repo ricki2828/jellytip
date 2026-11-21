@@ -6,6 +6,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.offset
@@ -117,9 +118,16 @@ fun IptvVodTile(
     poster: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The caller's own long-press; null = the title's menu (films and series only, not episodes or recordings). */
+    onLongClick: (() -> Unit)? = null,
 ) {
+    // Long-press: the title's menu (web 6d8398bd): My list, Like / Not for me, Not interested, Mark watched
+    var menu by remember(item.id) { mutableStateOf(false) }
+    if (menu) IptvTileMenu(item, onOpen = onClick) { menu = false }
+    val titleMenu = IptvVodParse.isTitleId(item.id) && (item.kind == "movie" || item.kind == "series")
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick ?: { if (titleMenu) menu = true else onClick() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
         border =
@@ -447,7 +455,22 @@ fun JellytipIptvDetailsPage(
                     item.rating?.let { String.format(Locale.US, "TMDB %.1f", it) },
                     d.genres.take(3).joinToString(", ").takeIf { it.isNotEmpty() } ?: d.genre,
                 ).joinToString("  ·  ")
-            Text(meta, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(meta, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1)
+                if (item.langUnknown) {
+                    // Outlined, quiet: the server couldn't confirm this copy's audio language
+                    Text(
+                        "Language unknown",
+                        color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 12.sp,
+                        modifier =
+                            Modifier
+                                .border(1.dp, JellytipPalette.Vanilla.copy(alpha = 0.28f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
             if (item.overview.isNotBlank()) {
                 Text(
                     item.overview,
@@ -764,4 +787,70 @@ object IptvMyList {
     ) {
         overrides[id] = on
     }
+
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+
+    /** Shown at once, saved behind; put back with a note when the server says no. */
+    fun toggle(
+        id: String,
+        on: Boolean,
+        onError: (String?) -> Unit,
+    ) {
+        set(id, on)
+        scope.launch {
+            if (save(id, on) == null) {
+                set(id, !on)
+                onError("Couldn't update My list")
+            }
+        }
+    }
+
+    /** `POST v1/iptv/vod/{id}/favourite {on}`: the server's state, or null when it could not be changed. */
+    suspend fun save(
+        id: String,
+        on: Boolean,
+    ): Boolean? {
+        val api = com.github.damontecres.wholphin.jellytip.JellytipApi.shared ?: return null
+        val (code, body) = api.userCall("v1/iptv/vod/${java.net.URLEncoder.encode(id, "UTF-8")}/favourite", body = """{"on":$on}""") ?: return null
+        if (code !in 200..299) return null
+        val v = runCatching { org.json.JSONObject(body).optBoolean("favourite", on) }.getOrDefault(on)
+        set(id, v)
+        return v
+    }
+}
+
+/** An IPTV tile's long-press menu: the same reactions as the library tiles and IPTV details. */
+@Composable
+private fun IptvTileMenu(
+    item: IptvVodItem,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val available by me.available.collectAsState()
+    val kind = if (item.isSeries) "series" else "movie"
+    val key = me.iptvTasteKey(item.id, kind, item.tmdbId)
+    val thumb = me.thumbOfKey(key)
+    val toast: (String?) -> Unit = { err -> if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show() }
+    val inList = IptvMyList.isOn(item)
+    val items =
+        buildList {
+            add(com.github.damontecres.wholphin.ui.components.DialogItem("Open", dismissOnClick = true) { onOpen() })
+            add(
+                com.github.damontecres.wholphin.ui.components.DialogItem(if (inList) "♥  In My list — remove" else "♡  Add to My list", dismissOnClick = true) {
+                    // Fire and forget in a scope that outlives the menu (it closes on this click)
+                    IptvMyList.toggle(item.id, !inList, toast)
+                },
+            )
+            if (available) {
+                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == 1) "Liked ✓ — undo" else "Like", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) })
+                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == -1) "Not for me ✓ — undo" else "Not for me", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) })
+                val ni = me.isNotInterestedKey(key)
+                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (ni) "Not interested ✓ — undo" else "Not interested", dismissOnClick = true) { me.setIptvNotInterested(item.id, kind, item.tmdbId, !ni, toast) })
+                val played = item.played || item.progress?.played == true
+                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (played) "Mark unwatched" else "Mark watched", dismissOnClick = true) { me.setIptvPlayed(item.id, !played, toast) })
+            }
+        }
+    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true)
 }

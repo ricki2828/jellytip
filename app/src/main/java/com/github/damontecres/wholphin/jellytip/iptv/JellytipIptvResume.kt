@@ -265,6 +265,7 @@ fun JellytipResumeRow(
                         height = h,
                         poster = false,
                         onClick = onClick,
+                        onLongClick = onLongClick,
                         modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusIptv() },
                     )
 
