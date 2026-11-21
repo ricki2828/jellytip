@@ -385,13 +385,13 @@ object SportFixtures {
     }
 
     /**
-     * Match id to hand the player for a live launch: only from a live fixture, and only when the chosen channel is a
-     * solid link (a guessed match stays out of the player, web 49e6f1e3).
+     * Match id to hand the player for a Game Centre launch of a live fixture (web 74acc58b: live launches carry it, on any
+     * of the fixture's channels). Catch-up / recordings stay spoiler-free: no id.
      */
     fun liveMatchId(
         f: FxItem,
         chosen: FxChannel?,
-    ): String? = if (f.status == "in" && chosen != null && chosen.solid) f.companionId else null
+    ): String? = if (f.status == "in" && chosen != null) f.companionId else null
 
     const val SOON_S = 15 * 60L
 

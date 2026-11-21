@@ -433,7 +433,7 @@ fun DestinationContent(
 
         Destination.JellytipUpcomingSport -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.iptv.JellytipUpcomingSportPage(modifier = modifier)
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipGameCentrePage(modifier = modifier)
         }
 
         Destination.JellytipRecordings -> {
@@ -466,7 +466,7 @@ fun DestinationContent(
         }
 
         is Destination.JellytipLiveTvPlayer -> {
-            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPlayerPage(channelId = destination.channelId, modifier = modifier)
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipLiveTvPlayerPage(channelId = destination.channelId, matchId = destination.matchId, modifier = modifier)
         }
 
         is Destination.JellytipCollection -> {

@@ -1,0 +1,434 @@
+package com.github.damontecres.wholphin.jellytip.iptv
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
+import com.github.damontecres.wholphin.ui.components.DialogItem
+import com.github.damontecres.wholphin.ui.components.DialogPopup
+import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
+import com.github.damontecres.wholphin.ui.tryRequestFocus
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+/*
+ * Game Centre (web parity 21-Nov; web screens/iptv/GameCentre.tsx over GET v1/iptv/sport/fixtures): fixture tiles with
+ * crests in Live now / Your teams (starred first) / Upcoming / Finished rows, "+N more <league> today · Show all", and an
+ * OK menu with Watch live (carries the match id, so the companion works), catch-up from the start, the other channels,
+ * Remind me on/off and a deliberate "Reveal score". A server without the route (404) gets the old upcoming list.
+ */
+
+private const val POLL_MS = 30_000L
+
+@HiltViewModel
+class JellytipGameCentreViewModel
+    @Inject
+    constructor(
+        val service: JellytipIptvService,
+        val playback: JellytipIptvPlayback,
+        val navigationManager: NavigationManager,
+    ) : ViewModel() {
+        data class State(
+            val base: FxList? = null,
+            /** The uncapped answer, fetched once on the first "Show all". */
+            val full: List<FxItem> = emptyList(),
+            val expanded: Set<String> = emptySet(),
+            /** 404 = older server: show the legacy upcoming page. */
+            val legacy: Boolean = false,
+            val failed: Boolean = false,
+            /** Reminder state changed locally before the next poll (fid -> on). */
+            val reminderOverride: Map<String, Boolean> = emptyMap(),
+            val message: String? = null,
+        ) {
+            val items: List<FxItem> get() = base?.let { SportFixtures.merge(it.items, full, expanded) } ?: emptyList()
+        }
+
+        private val _state = MutableStateFlow(State())
+        val state: StateFlow<State> = _state
+
+        suspend fun refresh() {
+            val r = service.fixtures()
+            val s = _state.value
+            when {
+                r == null -> if (s.base == null) _state.value = s.copy(failed = true)
+                r.first == 404 -> _state.value = s.copy(legacy = true)
+                r.second != null -> {
+                    _state.value = s.copy(base = r.second, failed = false, reminderOverride = emptyMap())
+                    if (s.expanded.isNotEmpty()) loadFull()
+                }
+                s.base == null -> _state.value = s.copy(failed = true)
+            }
+        }
+
+        private suspend fun loadFull() {
+            val r = service.fixtures(capOff = true)?.second ?: return
+            _state.value = _state.value.copy(full = r.items)
+        }
+
+        fun showAll(key: String) {
+            JellytipTrace.log("iptv", "game centre show all $key")
+            viewModelScope.launch {
+                _state.value = _state.value.copy(expanded = _state.value.expanded + key)
+                loadFull()
+            }
+        }
+
+        fun reminderOn(f: FxItem): Boolean = _state.value.reminderOverride[f.fid] ?: (f.reminderId != null)
+
+        fun toggleReminder(f: FxItem) {
+            val on = reminderOn(f)
+            viewModelScope.launch {
+                val ok =
+                    if (on) {
+                        service.removeFixtureReminders(f.reminderId, f.fid, f.matchId)
+                    } else {
+                        service.addFixtureReminder(f.fid, f.matchId) != null
+                    }
+                _state.value =
+                    _state.value.copy(
+                        reminderOverride = if (ok) _state.value.reminderOverride + (f.fid to !on) else _state.value.reminderOverride,
+                        message = if (ok) (if (on) "Reminder off" else "Reminder set for ${f.title}") else "Couldn't change the reminder",
+                    )
+            }
+        }
+
+        fun dismissMessage() {
+            _state.value = _state.value.copy(message = null)
+        }
+
+        /**
+         * Full screen on [ch]: the fixture's other channels are the switcher's chips (and the failover order); a live
+         * launch carries the match id so the companion and scorebug work even when the guide has no fixture for the slot.
+         */
+        fun watch(
+            f: FxItem,
+            ch: FxChannel,
+            fromStart: Boolean,
+        ) {
+            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+            val order = SportFixtures.pickChannel(f, nowSec()).order
+            val main = ch.toIptvChannel()
+            playback.lineup = listOf(main)
+            playback.alternates = mapOf(main.id to (order.filter { it.id != ch.id }.map { it.toIptvChannel() }))
+            val start = ch.start
+            val stop = ch.stop
+            val target =
+                if (fromStart && start != null && stop != null && stop > start) {
+                    IptvTarget(ch.id, f.title, start, stop)
+                } else {
+                    IptvTarget(ch.id, ch.name)
+                }
+            val matchId = if (fromStart) null else SportFixtures.liveMatchId(f, ch)
+            playback.play(target, "game centre ${if (fromStart) "from start" else "live"} ${f.fid}")
+            JellytipTrace.log("iptv", "game centre watch ${f.fid} on ${ch.id} fromStart=$fromStart match=$matchId")
+            navigationManager.navigateTo(Destination.JellytipLiveTvPlayer(ch.id, matchId), "game centre ${f.title}")
+        }
+    }
+
+@Composable
+fun JellytipGameCentrePage(
+    modifier: Modifier = Modifier,
+    viewModel: JellytipGameCentreViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.refresh()
+            if (viewModel.state.value.legacy) return@LaunchedEffect
+            delay(POLL_MS)
+        }
+    }
+    if (state.legacy) {
+        JellytipUpcomingSportPage(modifier = modifier)
+        return
+    }
+    val now by produceState(nowSec()) {
+        while (true) {
+            delay(30_000)
+            value = nowSec()
+        }
+    }
+    val muted = rememberSportMuted()
+    val items = remember(state.base, state.full, state.expanded, muted) { state.items.filterNot { muted.mutes(it.league, it.sport) } }
+    val groups = remember(items) { SportFixtures.group(items) }
+    val more = remember(state.base, state.expanded, now) { SportFixtures.todayMore(state.base?.more.orEmpty(), now, state.expanded) }
+    var menu by remember { mutableStateOf<FxItem?>(null) }
+    val revealed = remember { mutableStateOf(setOf<String>()) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(groups.isNotEmpty()) {
+        if (groups.isNotEmpty()) {
+            withFrameNanos { }
+            first.tryRequestFocus()
+        }
+    }
+    Column(modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+            if (state.base?.degraded == true) {
+                Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
+            }
+        }
+        when {
+            state.base == null && state.failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            state.base == null -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            else ->
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+                    groups.forEachIndexed { gi, g ->
+                        item(key = g.id) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ItemRowTitle("${g.label} (${g.items.size})")
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                                    items(g.items, key = { it.fid }) { f ->
+                                        FixtureTile(
+                                            f,
+                                            now,
+                                            reminder = viewModel.reminderOn(f),
+                                            revealed = f.fid in revealed.value,
+                                            onClick = { menu = f },
+                                            modifier = if (gi == 0 && f === g.items.first()) Modifier.focusRequester(first) else Modifier,
+                                        )
+                                    }
+                                    // "+N more NBA games today · Show all" ends the Upcoming row (web d47d3b77)
+                                    if (g.id == "big" || (g.id == "yours" && groups.none { it.id == "big" })) {
+                                        items(more, key = { "more:${it.key}" }) { m -> MoreTile(m) { viewModel.showAll(m.key) } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (more.isNotEmpty() && groups.none { it.id == "big" || it.id == "yours" }) {
+                        item(key = "more") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                                items(more, key = { "more:${it.key}" }) { m -> MoreTile(m, if (groups.isEmpty()) Modifier.focusRequester(first) else Modifier) { viewModel.showAll(m.key) } }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+    menu?.let { f ->
+        FixtureMenu(
+            f,
+            now,
+            reminder = viewModel.reminderOn(f),
+            revealed = f.fid in revealed.value,
+            onDismiss = { menu = null },
+            onWatch = { ch, fromStart ->
+                menu = null
+                viewModel.watch(f, ch, fromStart)
+            },
+            onReminder = {
+                menu = null
+                viewModel.toggleReminder(f)
+            },
+            onReveal = {
+                menu = null
+                revealed.value = revealed.value + f.fid
+            },
+        )
+    }
+    state.message?.let { msg ->
+        LaunchedEffect(msg) {
+            delay(2_500)
+            viewModel.dismissMessage()
+        }
+        Box(Modifier.fillMaxSize().padding(bottom = 40.dp), contentAlignment = Alignment.BottomCenter) {
+            Text(
+                msg,
+                color = JellytipPalette.Vanilla,
+                fontFamily = JellytipFontFamily,
+                fontSize = 14.sp,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun tileBorder() =
+    ClickableSurfaceDefaults.border(
+        border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)),
+        focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
+    )
+
+@Composable
+private fun tileColors() =
+    ClickableSurfaceDefaults.colors(
+        containerColor = Color(0xFF141414),
+        focusedContainerColor = Color(0xFF242424),
+        contentColor = JellytipPalette.Vanilla,
+        focusedContentColor = Color.White,
+    )
+
+@Composable
+private fun FixtureTile(
+    f: FxItem,
+    now: Long,
+    reminder: Boolean,
+    revealed: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        colors = tileColors(),
+        border = tileBorder(),
+        modifier = modifier.size(340.dp, 112.dp),
+    ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                when (f.status) {
+                    "in" -> KindPill("live")
+                    "pre" -> {}
+                    else -> Text("FT", color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 9.sp)
+                }
+                if (f.favourite) Text("★", color = Color(0xFFFFC72C), fontSize = 12.sp)
+                Text(
+                    listOfNotNull(f.league, f.stage).joinToString(" · "),
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (reminder) Text("🔔", fontSize = 10.sp)
+                if (f.recordingId != null) Text("●", color = JellytipPalette.Jelly, fontSize = 10.sp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Crest(f.homeLogo, f.homeShort ?: f.home)
+                val score = f.score?.takeIf { revealed }
+                Text(
+                    if (f.away.isBlank()) f.home else "${f.homeShort ?: f.home}  ${score?.let { "${it.home} – ${it.away}" } ?: "v"}  ${f.awayShort ?: f.away}",
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (f.away.isNotBlank()) Crest(f.awayLogo, f.awayShort ?: f.away)
+            }
+            Text(SportFixtures.note(f, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun Crest(
+    logo: String?,
+    name: String,
+) {
+    var failed by remember(logo) { mutableStateOf(false) }
+    Box(Modifier.size(32.dp).background(Color.White.copy(alpha = 0.06f), CircleShape), contentAlignment = Alignment.Center) {
+        if (logo != null && !failed) {
+            AsyncImage(model = logo, contentDescription = null, contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.size(26.dp))
+        } else {
+            Text(initials(name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun MoreTile(
+    m: SportFixtures.MoreRow,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        colors = tileColors(),
+        border = tileBorder(),
+        modifier = modifier.size(220.dp, 112.dp),
+    ) {
+        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center) {
+            Text("+${m.hidden} more ${m.league} today", fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 2)
+            Text("Show all", fontFamily = JellytipFontFamily, fontSize = 12.sp, color = JellytipPalette.Vanilla.copy(alpha = 0.7f))
+        }
+    }
+}
+
+@Composable
+private fun FixtureMenu(
+    f: FxItem,
+    now: Long,
+    reminder: Boolean,
+    revealed: Boolean,
+    onDismiss: () -> Unit,
+    onWatch: (FxChannel, Boolean) -> Unit,
+    onReminder: () -> Unit,
+    onReveal: () -> Unit,
+) {
+    val pick = remember(f, now) { SportFixtures.pickChannel(f, now) }
+    val best = pick.channel
+    val items =
+        buildList {
+            if (f.status == "in" && best != null) {
+                add(DialogItem((if (best.solid) "Watch live on " else "May be live on ") + best.name, dismissOnClick = true) { onWatch(best, false) })
+            }
+            if (f.status != "pre" && best != null && best.startOver && best.start != null && best.stop != null && !best.dormant) {
+                add(DialogItem("Catch-up on ${best.name}, from the start", dismissOnClick = true) { onWatch(best, true) })
+            }
+            if (f.status == "in") {
+                pick.order.drop(1).forEach { c ->
+                    add(DialogItem((if (c.solid) "Live on " else "May be on ") + c.name, dismissOnClick = true) { onWatch(c, false) })
+                }
+            }
+            if (f.status != "post") add(DialogItem(if (reminder) "Reminder on — turn off" else "Remind me", dismissOnClick = true) { onReminder() })
+            if (f.score != null && !revealed) add(DialogItem("Reveal score", dismissOnClick = true) { onReveal() })
+            if (isEmpty()) add(DialogItem(if (f.status == "post") "No replay available" else "No stream found yet", dismissOnClick = true) {})
+        }
+    val title = f.title + (pick.skipped?.let { "  ·  skipped $it (failed earlier)" } ?: "")
+    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = false)
+}

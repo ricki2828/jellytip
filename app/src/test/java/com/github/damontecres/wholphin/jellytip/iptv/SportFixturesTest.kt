@@ -90,11 +90,12 @@ class SportFixturesTest {
     }
 
     @Test
-    fun liveMatchIdOnlyForSolidLiveLaunch() {
+    fun liveMatchIdOnlyForLiveLaunch() {
         val items = SportFixtures.parse(body).items
         val f1 = items[0]
         assertEquals("m1", SportFixtures.liveMatchId(f1, f1.channels[1]))
-        assertNull(SportFixtures.liveMatchId(f1, f1.channels[0]))
+        assertEquals("m1", SportFixtures.liveMatchId(f1, f1.channels[0]))
+        assertNull(SportFixtures.liveMatchId(f1, null))
         assertNull(SportFixtures.liveMatchId(items[1], items[1].channels[1]))
     }
 

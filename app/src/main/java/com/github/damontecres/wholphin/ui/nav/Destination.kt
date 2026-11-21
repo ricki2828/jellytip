@@ -216,6 +216,8 @@ sealed class Destination(
     @Serializable
     data class JellytipLiveTvPlayer(
         val channelId: String,
+        /** Jellytip: the match a Game Centre live launch is for (companion panel / scorebug); null = resolve from the guide. */
+        val matchId: String? = null,
     ) : Destination(true)
 
     /** Jellytip: an IPTV film or series ("via IPTV" details with Play / Resume, seasons and episodes). */

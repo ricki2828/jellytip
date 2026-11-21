@@ -287,6 +287,90 @@ class JellytipIptvService
 
         suspend fun deleteReminder(id: String): Boolean = api.userCall("v1/iptv/reminders/${enc(id)}/delete", "{}")?.first == 200
 
+        // ---------- Game Centre over fixtures (web parity, 21-Nov; contract in SportFixtures.kt) ----------
+
+        /**
+         * `GET v1/iptv/sport/fixtures` for 2 days back to 4 ahead, the device's timezone; [capOff] asks for every game
+         * ("Show all"). First = HTTP code (404 = older server: Game Centre falls back to the upcoming list).
+         */
+        suspend fun fixtures(capOff: Boolean = false): Pair<Int, FxList?>? {
+            val b = base()
+            val now = System.currentTimeMillis() / 1000
+            val tz = enc(java.util.TimeZone.getDefault().id)
+            val path = "v1/iptv/sport/fixtures?from=${now - SportFixtures.PAST_S}&to=${now + SportFixtures.AHEAD_S}&limit=120&tz=$tz" + if (capOff) "&cap=0" else ""
+            val (code, body) = api.userCall(path, timeoutMs = 15_000) ?: return null
+            if (code != 200) return code to null
+            return code to runCatching { SportFixtures.parse(body) { resolve(b, it) } }.getOrNull()
+        }
+
+        /** Remind me for a fixture: `{fid}` first (no channel needed), then `{matchId}` on an older server. New id or null. */
+        suspend fun addFixtureReminder(
+            fid: String?,
+            matchId: String?,
+        ): String? {
+            var res = fid?.let { api.userCall("v1/iptv/reminders", JSONObject().put("fid", it).toString()) }
+            if ((res == null || res.first == 400 || res.first == 404) && matchId != null) {
+                res = api.userCall("v1/iptv/reminders", JSONObject().put("matchId", matchId).toString())
+            }
+            JellytipTrace.log("iptv", "fixture reminder fid=$fid match=$matchId -> ${res?.first}")
+            if (res == null || (res.first != 200 && res.first != 201)) return null
+            return runCatching { JSONObject(res.second).opt("id")?.toString()?.takeIf { it.isNotBlank() && it != "null" } }.getOrNull() ?: ""
+        }
+
+        /** Every reminder row for the same game (fixture id, match id or the given id), so switching off leaves no twin. */
+        suspend fun removeFixtureReminders(
+            id: String?,
+            fid: String?,
+            matchId: String?,
+        ): Boolean {
+            val ids = LinkedHashSet<String>()
+            id?.let { ids += it }
+            val (code, body) = get("v1/iptv/reminders") ?: (0 to "")
+            if (code == 200) {
+                runCatching {
+                    val t = body.trim()
+                    val a = if (t.startsWith("[")) org.json.JSONArray(t) else JSONObject(t).optJSONArray("items") ?: org.json.JSONArray()
+                    for (i in 0 until a.length()) {
+                        val o = a.optJSONObject(i) ?: continue
+                        val rid = o.opt("id")?.toString()?.takeIf { it.isNotBlank() && it != "null" } ?: continue
+                        val rf = o.optString("fid").takeIf { it.isNotBlank() }
+                        val rm = o.optString("matchId").takeIf { it.isNotBlank() }
+                        if ((fid != null && rf == fid) || (matchId != null && rm == matchId)) ids += rid
+                    }
+                }
+            }
+            var ok = true
+            for (x in ids) {
+                val r = api.userCall("v1/iptv/reminders/${enc(x)}/delete", "{}")?.first
+                if (r != 200 && r != 204 && r != 404) ok = false
+            }
+            JellytipTrace.log("iptv", "fixture reminder off fid=$fid ids=$ids ok=$ok")
+            return ok
+        }
+
+        /** The person's saved spoiler delay for one channel (s); null = never set, or no route. */
+        suspend fun channelDelay(channelId: String): Int? {
+            val (pid, sid) = DelayMath.parseChannelKey(channelId)
+            val (code, body) = get("v1/me/sport/delay?pid=${enc(pid)}&sid=${enc(sid)}") ?: return null
+            if (code != 200) return null
+            return runCatching {
+                val o = JSONObject(body)
+                if (!o.has("sec") || o.isNull("sec")) null else DelayMath.clampDelay(o.optDouble("sec"))
+            }.getOrNull()
+        }
+
+        /** Save one channel's delay; false = the server could not take it (the TV keeps it for this session). */
+        suspend fun putChannelDelay(
+            channelId: String,
+            sec: Int,
+        ): Boolean {
+            val (pid, sid) = DelayMath.parseChannelKey(channelId)
+            val body = JSONObject().put("pid", pid).put("sid", sid).put("sec", sec).toString()
+            val r = api.userCall("v1/me/sport/delay", body, method = "PUT")?.first
+            JellytipTrace.log("iptv", "channel delay $channelId = $sec s -> $r")
+            return r == 200 || r == 204
+        }
+
         @Volatile
         private var recordingsCache: List<IptvRecording>? = null
 

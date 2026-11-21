@@ -242,7 +242,7 @@ class JellytipLiveTvViewModel
                             .filter { it.id != JellytipIptvService.FAV && !it.isDefault && it.count > 0 }
                             .forEach { add(LiveTvTab(it.id, cleanGroupName(it.name))) }
                         add(LiveTvTab(RECORDINGS, "Recordings"))
-                        add(LiveTvTab(UPCOMING, "Upcoming sport"))
+                        add(LiveTvTab(UPCOMING, "Game Centre"))
                     }
                 _state.update { it.copy(tabs = tabs) }
                 loadRecordings()

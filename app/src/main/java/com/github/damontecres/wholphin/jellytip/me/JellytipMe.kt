@@ -46,6 +46,10 @@ data class MePrefs(
     val fantasyAlerts: Boolean = true,
     /** `sport.panelStyle` (plan "In-match visual direction"): the live panel docked to the edge or floating. */
     val sportPanelStyle: String = "docked",
+    /** Spoiler delay default (s) for channels never calibrated (`sport.delaySec`). */
+    val sportDelaySec: Int = 30,
+    /** Live alerts: key | all | off (`sport.alerts`). */
+    val sportAlerts: String = "key",
     /** `ui.heroSound` (plan "TV hero trailer: unmute"): the Home / Movies / Shows hero trailer plays with sound. Default off. */
     val heroSound: Boolean = false,
 )
@@ -117,6 +121,8 @@ object MeParse {
             sportFlipAlerts = o.optJSONObject("sport")?.optBoolean("flipAlerts", true) != false,
             fantasyAlerts = o.optJSONObject("fantasy")?.optBoolean("alerts", true) != false,
             sportPanelStyle = o.optJSONObject("sport")?.optString("panelStyle")?.takeIf { it == "floating" } ?: "docked",
+            sportDelaySec = o.optJSONObject("sport")?.takeIf { it.has("delaySec") && !it.isNull("delaySec") }?.optDouble("delaySec")?.let { com.github.damontecres.wholphin.jellytip.iptv.DelayMath.clampDelay(it) } ?: 30,
+            sportAlerts = o.optJSONObject("sport")?.optString("alerts")?.takeIf { it == "all" || it == "off" } ?: "key",
             heroSound = o.optJSONObject("ui")?.optBoolean("heroSound", false) == true,
         )
     }

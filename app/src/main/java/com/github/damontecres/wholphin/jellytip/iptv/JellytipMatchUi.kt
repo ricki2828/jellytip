@@ -106,7 +106,7 @@ private sealed interface MatchLoad {
     data object Failed : MatchLoad
 }
 
-private suspend fun fetchMatch(
+internal suspend fun fetchMatch(
     id: String,
     withScore: Boolean = false,
 ): Pair<Int, MatchDetail?>? {
