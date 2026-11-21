@@ -395,12 +395,22 @@ fun MovieDetailsContent(
             com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
         }
     }
+    // Jellytip: Ways to watch (web 59289c77): the person's IPTV copies of this film, looked up with the page and
+    // only taken before the lower rows open (nothing moves under focus)
+    val jtCopiesLoaded by produceState(emptyList<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem>(), movie.id) {
+        value = com.github.damontecres.wholphin.jellytip.iptv.LibraryIptvCopies.forItem(movie)
+    }
+    var jtCopies by remember(movie.id) { mutableStateOf(emptyList<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem>()) }
+    val jtWaysFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(jtCopiesLoaded, sectionsActive) {
+        if (!sectionsActive) jtCopies = jtCopiesLoaded
+    }
     // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
     var jtSimilar by remember(movie.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
     LaunchedEffect(jtSimilarLoaded, sectionsActive) {
         if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
     }
-    val hasBelow = hasReviews || jtSimilar != null || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
+    val hasBelow = hasReviews || jtSimilar != null || jtCopies.isNotEmpty() || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
@@ -409,8 +419,9 @@ fun MovieDetailsContent(
             withFrameNanos { }
             if (listState.layoutInfo.totalItemsCount > 1) listState.animateScrollToItem(1)
             withFrameNanos { }
-            var focused = false
-            for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
+            // Jellytip: Ways to watch is the first lower row when present
+            var focused = jtCopies.isNotEmpty() && jtWaysFocus.tryRequestFocus()
+            if (!focused) for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
                 if (focusRequesters[r].tryRequestFocus()) {
                     focused = true
                     break
@@ -512,6 +523,16 @@ fun MovieDetailsContent(
                     modifier = Modifier.fillParentMaxSize().graphicsLayer { alpha = headerAlpha },
                     onFocusWithin = { topFocused = it },
                 )
+            }
+            if (sectionsActive && jtCopies.isNotEmpty()) {
+                item(key = "jt-ways") {
+                    com.github.damontecres.wholphin.jellytip.iptv.JellytipLibraryWaysToWatch(
+                        item = movie,
+                        copies = jtCopies,
+                        onPlayLibrary = { playOnClick.invoke(movie.playbackPosition) },
+                        modifier = Modifier.focusRequester(jtWaysFocus).padding(bottom = 8.dp),
+                    )
+                }
             }
             (if (sectionsActive) state.people else emptyList()).letNotEmpty { people ->
                 item {
