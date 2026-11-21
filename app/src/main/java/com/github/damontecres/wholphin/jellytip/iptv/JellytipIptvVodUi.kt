@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -281,9 +284,21 @@ fun JellytipIptvDetailsPage(
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.7f to Color.Transparent)))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
+        // Jellytip: "More like this" (companion /v1/similar) sits under the page; the column scrolls to it
+        val similar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, d?.item?.id) {
+            val it = d?.item ?: return@produceState
+            value =
+                com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar
+                    .path(if (it.isSeries) "series" else "movie", it.tmdbId, iptvId = it.id)
+                    ?.let { p -> com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(p) }
+        }
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 40.dp, end = 48.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 48.dp, bottom = 40.dp, end = 48.dp, top = 24.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
@@ -447,6 +462,11 @@ fun JellytipIptvDetailsPage(
                             }
                         }
                     }
+                }
+            }
+            similar?.let { row ->
+                Box(Modifier.padding(top = 12.dp).offset(x = (-48).dp)) {
+                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row)
                 }
             }
         }
