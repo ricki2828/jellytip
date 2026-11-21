@@ -28,4 +28,12 @@ class FantasyWatchTest {
         assertNull(FantasyWatch.fixtureFor(FantasyStarter("me", "W", null, "DET", 1.0, null, "post"), items))
         assertEquals("Pregame", FantasyWatch.stateText(FantasyStarter("me", "W", null, null, null, null, "pre")))
     }
+
+    @Test
+    fun sleeperCodeFindsEspnFixture() {
+        // Sleeper/server say WAS, ESPN fixtures say WSH
+        val items = listOf(fx("w", "WSH", "DAL", "in"), fx("j", "JAX", "TEN", "pre"))
+        assertEquals("w", FantasyWatch.fixtureFor(FantasyStarter("me", "T", null, "WAS", 1.0, null, "in"), items)?.fid)
+        assertEquals("j", FantasyWatch.fixtureFor(FantasyStarter("me", "U", null, "JAC", 1.0, null, "pre"), items)?.fid)
+    }
 }

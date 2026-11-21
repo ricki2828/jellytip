@@ -334,7 +334,7 @@ object FantasyGameLogic {
                 if (e.playerId != null && s.id != null) {
                     e.playerId == s.id
                 } else {
-                    full.isNotEmpty() && norm(e.name) == full && (e.nflTeam == null || norm(e.nflTeam) == norm(s.nflTeam))
+                    full.isNotEmpty() && norm(e.name) == full && (e.nflTeam == null || NflTeams.same(e.nflTeam, s.nflTeam))
                 }
             }.maxByOrNull { IptvParse.isoSeconds(it.at) ?: 0L }
     }

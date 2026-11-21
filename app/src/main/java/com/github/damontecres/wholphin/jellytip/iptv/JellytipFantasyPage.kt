@@ -60,9 +60,9 @@ object FantasyWatch {
         if (s.gameState != "in" && s.gameState != "pre") return null
         val live = items.filter { (it.status == "in" || it.status == "pre") && SportFixtures.pickChannel(it, nowSec()).channel != null }
         s.matchId?.let { id -> live.firstOrNull { it.fid == id || it.matchId == id }?.let { return it } }
-        val team = s.nflTeam?.uppercase() ?: return null
+        val team = NflTeams.code(s.nflTeam) ?: return null
         return live.firstOrNull { f ->
-            (f.leagueKey ?: "").lowercase().startsWith("nfl") && (f.homeShort?.uppercase() == team || f.awayShort?.uppercase() == team)
+            (f.leagueKey ?: "").lowercase().startsWith("nfl") && (NflTeams.same(f.homeShort, team) || NflTeams.same(f.awayShort, team))
         }
     }
 
