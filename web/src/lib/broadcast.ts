@@ -72,9 +72,14 @@ export function teamColors(f: (Pick<Fixture, "home" | "away"> & { kind?: "match"
     const c = seriesColor(f.leagueKey);
     return c ? { home: c, away: c, known: true } : { home: NEUTRAL[0], away: NEUTRAL[1], known: false };
   }
-  const h = f.home.color;
-  let a = f.away.color;
-  if (h && a && deltaE(h, a) < 20 && f.away.altColor) a = f.away.altColor;
+  return pairColors(f.home.color, f.away.color, f.away.altColor);
+}
+
+/** The colour rule on its own (fixture list or match record): the away side takes its alt colour when the primaries clash (ΔE < 20). */
+export function pairColors(home: string | null | undefined, away: string | null | undefined, awayAlt?: string | null): TeamColors {
+  const h = home || null;
+  let a = away || null;
+  if (h && a && deltaE(h, a) < 20 && awayAlt) a = awayAlt;
   return { home: h ?? NEUTRAL[0], away: a ?? NEUTRAL[1], known: !!(h || a) };
 }
 

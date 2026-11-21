@@ -32,6 +32,8 @@ interface Props {
   extra?: { id: string; node: React.ReactNode }[];
   /** With `extra`: ids in display order (library ids undashed); items not named go last, library first. */
   order?: string[];
+  /** One line under the title saying why (For you: "Because you like …"). */
+  reason?: string | null;
 }
 
 /** Calls `load` once the element nears the viewport; null while waiting, [] when it failed or came back empty. */
@@ -78,7 +80,7 @@ export function RowTitle({ title, onTitle }: { title: string; onTitle?: () => vo
   );
 }
 
-export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person, extra, order }: Props) {
+export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, layout, untitled, onTitle, person, extra, order, reason }: Props) {
   const ref = useRef<HTMLElement>(null);
   const lazy = useLazyItems(ref, items, load);
   // "Not interested" takes a title out of the row at once (the server drops it from tomorrow's rows)
@@ -127,6 +129,7 @@ export function Row({ title, items, load, onFocusItem, autoFocusFirst, onOpen, l
   return (
     <section className={poster ? "row poster-row" : "row"} ref={ref}>
       <RowTitle title={title} onTitle={onTitle} />
+      {reason && <p className="row-reason">{reason}</p>}
       <div className="row-scroll">
         {person && (
           <PersonTile

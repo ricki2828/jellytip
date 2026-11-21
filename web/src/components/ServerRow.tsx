@@ -135,6 +135,7 @@ export function serverRowElement(r: ServerRow, opts: { onFocusItem?: (item: Item
     <Row
       key={r.id}
       title={r.title}
+      reason={r.reason}
       load={load}
       layout={r.layout === "poster" ? "poster" : "standard"}
       untitled={untitled}

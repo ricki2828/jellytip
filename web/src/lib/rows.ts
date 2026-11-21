@@ -50,6 +50,8 @@ export interface ServerRow {
   ranks: Record<string, number>;
   /** Trending Top 10 rows: titles that are nowhere (library, IPTV), shown dimmed "Not available". */
   missing: MissingTitle[];
+  /** For you: why these picks ("Because you like Martin Scorsese and 2010s drama"); null when the server sends none. */
+  reason?: string | null;
 }
 
 export interface MissingTitle {
@@ -125,6 +127,13 @@ export function paddedOrder(row: Pick<ServerRow, "order" | "ranks" | "iptvItems"
 }
 
 /** Rows in server order; rows without an id, title or items are dropped. null = no `rows` field (old server). */
+/** The row's reason line: a plain sentence, trimmed and capped (one line under the title). */
+export const rowReason = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+  const t = v.replace(/\s+/g, " ").trim();
+  return t ? (t.length > 140 ? `${t.slice(0, 139)}…` : t) : null;
+};
+
 export function parseRows(raw: unknown): ServerRow[] | null {
   if (!Array.isArray(raw)) return null;
   const out: ServerRow[] = [];
@@ -153,6 +162,7 @@ export function parseRows(raw: unknown): ServerRow[] | null {
       order: strings((r as { order?: unknown }).order),
       ranks: parseRanks(r, (r as { iptvItems?: unknown }).iptvItems),
       missing: parseMissing((r as { missing?: unknown }).missing),
+      reason: rowReason((r as { reason?: unknown }).reason),
     });
   }
   return out;
