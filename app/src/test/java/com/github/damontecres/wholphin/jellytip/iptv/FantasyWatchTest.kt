@@ -11,7 +11,13 @@ class FantasyWatchTest {
         away: String,
         status: String,
         matchId: String? = null,
-    ) = FxItem(fid, "NFL", "nfl", null, home, away, null, null, home, away, null, null, 0, status, null, null, 0.0, null, false, false, emptyList(), null, null, null, matchId)
+    ) = FxItem(fid, "NFL", "nfl", null, home, away, null, null, home, away, null, null, 0, status, null, null, 0.0, null, false, false, listOf(FxChannel("p:$fid", "Ch $fid", null, null, null, 0.9, false, false, null, null, false, null)), null, null, null, matchId)
+
+    @Test
+    fun noPlayableChannelNoWatch() {
+        val bare = fx("z", "DET", "GB", "in").copy(channels = emptyList())
+        assertNull(FantasyWatch.fixtureFor(FantasyStarter("me", "X", null, "DET", 1.0, null, "in"), listOf(bare)))
+    }
 
     @Test
     fun byMatchIdThenTeam() {
