@@ -86,6 +86,7 @@ class JellytipLiveTvPlayerViewModel
         val playback: JellytipIptvPlayback,
         val navigationManager: com.github.damontecres.wholphin.services.NavigationManager,
         val reminders: JellytipReminders,
+        val specials: com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialsService,
     ) : ViewModel()
 
 private const val ZAP_SETTLE_MS = 700L
@@ -308,6 +309,33 @@ fun JellytipLiveTvPlayerPage(
     var chipsOpen by remember { mutableStateOf(false) }
     var chipCursor by remember { mutableIntStateOf(0) }
     val delaySheetAt = remember { longArrayOf(0L) }
+    // Round 3 (wow brief): break mode 4A, the full-time card (3) and catch me up (8)
+    val sportPrefs = remember { context.getSharedPreferences("jellytip_sport", android.content.Context.MODE_PRIVATE) }
+    var breakModeOn by remember { mutableStateOf(sportPrefs.getBoolean("breakMode", true)) }
+    var openedBy by remember { mutableStateOf(BreakModePolicy.Reason.USER) }
+    val openedAt = remember { longArrayOf(0L) }
+    var panelTouched by remember { mutableStateOf(false) }
+    var closedBreak by remember { mutableStateOf<String?>(null) }
+    var userClosedAt by remember { mutableStateOf<Long?>(null) }
+    val lastKindRef = remember { arrayOfNulls<GameKind>(1) }
+    val lastBreakRef = remember { arrayOfNulls<String>(1) }
+    var ftCard by remember { mutableStateOf<Pair<IptvMatch, FullTimeNext?>?>(null) }
+    var ftScore by remember { mutableStateOf<Pair<String?, String?>?>(null) }
+    val ftShown = remember { HashSet<String>() }
+    var catchOpen by remember { mutableStateOf(false) }
+    var catchCursor by remember { mutableIntStateOf(2) }
+    var catchLeft by remember { mutableStateOf(CatchUpPolicy.CHOICE_TIMEOUT_MS / 1000) }
+    var catchCards by remember { mutableStateOf<List<CatchUpPolicy.Card>?>(null) }
+    var catchIndex by remember { mutableIntStateOf(0) }
+    val catchOffered = remember { HashSet<String>() }
+    /** The viewer closed the panel: a break stays closed for the rest of that break, moments stay quiet 2 min. */
+    fun closePanelByUser(how: String) {
+        panelOpen = false
+        userClosedAt = System.currentTimeMillis()
+        if (lastKindRef[0] == GameKind.BREAK) closedBreak = lastBreakRef[0]
+        openedBy = BreakModePolicy.Reason.USER
+        JellytipTrace.player("iptv", "companion closed ($how)")
+    }
     var panelTab by remember { mutableIntStateOf(0) }
     var shownPanelMatch by remember { mutableStateOf<IptvMatch?>(null) }
     // Long-press OK while the panel is open: its menu (Docked / Floating, Match info)
@@ -500,10 +528,7 @@ fun JellytipLiveTvPlayerPage(
             delayNote = null
         }
     }
-    androidx.activity.compose.BackHandler(enabled = panelOpen) {
-        panelOpen = false
-        JellytipTrace.player("iptv", "companion closed (Back)")
-    }
+    androidx.activity.compose.BackHandler(enabled = panelOpen) { closePanelByUser("Back") }
     // Registered after the panel's, so Back closes the sheet / chips first
     androidx.activity.compose.BackHandler(enabled = delaySheetOpen) {
         delaySheetOpen = false
@@ -512,6 +537,12 @@ fun JellytipLiveTvPlayerPage(
     androidx.activity.compose.BackHandler(enabled = chipsOpen) {
         chipsOpen = false
         focus.tryRequestFocus()
+    }
+    // Round 3 cards: Back closes the card (and stays on this channel), never the player
+    androidx.activity.compose.BackHandler(enabled = ftCard != null) { ftCard = null }
+    androidx.activity.compose.BackHandler(enabled = catchOpen || catchCards != null) {
+        catchOpen = false
+        catchCards = null
     }
 
     // Top-right toasts shared by market flips and fantasy scoring (plan "fantasy alerts"): one at a time, 6 s each, at
@@ -611,6 +642,23 @@ fun JellytipLiveTvPlayerPage(
     var bugChangedAt by remember(liveId) { mutableStateOf<Long?>(null) }
     var bugClock by remember(liveId) { mutableStateOf<String?>(null) }
     var holdSecs by remember(liveId) { mutableStateOf<Int?>(null) }
+    fun openAuto(r: BreakModePolicy.Reason) {
+        openedBy = r
+        openedAt[0] = System.currentTimeMillis()
+        panelTouched = false
+        panelTab = panelTabs.indexOf("Stats").coerceAtLeast(0)
+        panelOpen = true
+        JellytipTrace.player("iptv", "companion opened by itself ($r) ${panelMatch?.id}")
+    }
+    /** Break mode on a released key moment: open for 6 s with the moment's wipe; false = not now (toast instead). */
+    fun tryMomentOpen(mo: LiveMoment): Boolean {
+        if (panelMatch == null) return false
+        val r = BreakModePolicy.autoOpen(breakModeOn, replayShown, panelOpen, lastKindRef[0], lastBreakRef[0], closedBreak, userClosedAt, System.currentTimeMillis(), freshMoment = true)
+        if (r != BreakModePolicy.Reason.MOMENT) return false
+        openAuto(r)
+        liveFlash = LiveFlash((liveFlash?.seq ?: 0) + 1, mo)
+        return true
+    }
     LaunchedEffect(liveId, panelIsOpen) {
         val id = liveId ?: return@LaunchedEffect
         val m = panelMatch ?: return@LaunchedEffect
@@ -666,6 +714,8 @@ fun JellytipLiveTvPlayerPage(
                     pendingAlerts += AlertPolicy.Candidate("mo|${mo.at}|${mo.label}", kind, gateAt, favourite = TeamAware.isFavouriteMoment(mo.kind, mo.team, favNow), late = late, payload = {
                     if (panelOpen) {
                         liveFlash = LiveFlash((liveFlash?.seq ?: 0) + 1, mo)
+                    } else if (tryMomentOpen(mo)) {
+                        // Break mode: the panel opened for 6 s on this moment
                     } else if (me?.sportFlipAlerts != false) {
                         val team = if (mo.team == "away") m.away else if (mo.team == "home") m.home else null
                         val score = if (d.scoreHome != null && d.scoreAway != null) " · ${m.home?.short ?: m.home?.name} ${d.scoreHome} – ${d.scoreAway} ${m.away?.short ?: m.away?.name}" else ""
@@ -800,6 +850,123 @@ fun JellytipLiveTvPlayerPage(
         panelOpen = false
         launchFixture(viewModel.playback, viewModel.navigationManager, c, ch, fromStart = false, from = "closer game", replaceTop = true)
     }
+    // Break mode (4A) and full time (3): once a second from the released answer (held to the delay)
+    LaunchedEffect(liveId) {
+        while (true) {
+            delay(1_000)
+            val d = bugData
+            val m = panelMatch
+            val kind = if (d != null && m != null && !m.isEvent) GameStateLogic.of(d, m.leagueKey, m.status, me?.sportSpoilers == true).kind else null
+            lastKindRef[0] = kind
+            lastBreakRef[0] = d?.let { BreakModePolicy.breakKey(it.period, it.clock) }
+            val nowMs = System.currentTimeMillis()
+            if (panelOpen && openedBy != BreakModePolicy.Reason.USER) {
+                if (BreakModePolicy.autoClose(openedBy, openedAt[0], nowMs, kind, panelTouched, replayShown)) {
+                    panelOpen = false
+                    JellytipTrace.player("iptv", "companion tucked away ($openedBy, now $kind)")
+                    openedBy = BreakModePolicy.Reason.USER
+                }
+            } else if (!panelOpen && m != null && !catchOpen && catchCards == null && ftCard == null) {
+                if (BreakModePolicy.autoOpen(breakModeOn, replayShown, false, kind, lastBreakRef[0], closedBreak, userClosedAt, nowMs, false) == BreakModePolicy.Reason.BREAK) {
+                    openAuto(BreakModePolicy.Reason.BREAK)
+                }
+            }
+            if (kind == GameKind.FINAL && d != null && m != null && m.id !in ftShown && !replayShown) {
+                ftShown += m.id
+                ftScore = d.scoreHome to d.scoreAway
+                val fx = viewModel.service.fixtures(maxAgeMs = 60_000)?.second
+                val next = fx?.let { FullTimePolicy.nextGame(it.items, setOfNotNull(m.id, matchId), nowSec()) }
+                val page = if (next == null) viewModel.specials.peek("home") else null
+                val pick = page?.specials?.filterIsInstance<com.github.damontecres.wholphin.jellytip.specials.JellytipSpecial.TonightsPick>()?.firstOrNull { it.itemId != null }
+                ftCard = m to FullTimeNext(next, pick?.title, pick?.itemId, pick?.itemId?.let { page?.items?.get(it)?.type })
+                if (panelOpen && openedBy != BreakModePolicy.Reason.USER) panelOpen = false
+                JellytipTrace.player("iptv", "full time ${m.id}: next ${next?.fid ?: pick?.title ?: "none"}")
+            }
+        }
+    }
+    LaunchedEffect(ftCard) {
+        if (ftCard != null) {
+            delay(30_000)
+            ftCard = null
+        }
+    }
+    // Catch me up (8): joining a live game 10+ min in offers From kick-off / Catch me up / Live (default, 20 s)
+    LaunchedEffect(panelMatch?.id, current.isLive) {
+        val m = panelMatch ?: return@LaunchedEffect
+        if (m.id in catchOffered) return@LaunchedEffect
+        delay(2_500) // the first /live answer says whether it's under way
+        val now = nowSec()
+        val st = snaps.latest()?.status ?: m.status?.let { if (it == "pre" && (m.startsAt ?: now) <= now) "in" else it }
+        if (CatchUpPolicy.offer(current.isLive, replayShown, spoilerNotice, st, m.startsAt, now)) {
+            catchOffered += m.id
+            catchCursor = 2
+            catchOpen = true
+            JellytipTrace.player("iptv", "catch-up offered ${m.id} ${(now - (m.startsAt ?: now)) / 60} min in")
+        }
+    }
+    LaunchedEffect(catchOpen) {
+        if (!catchOpen) return@LaunchedEffect
+        catchLeft = CatchUpPolicy.CHOICE_TIMEOUT_MS / 1000
+        while (catchLeft > 0) {
+            delay(1_000)
+            catchLeft--
+        }
+        catchOpen = false
+        JellytipTrace.player("iptv", "catch-up choice timed out: live")
+    }
+    LaunchedEffect(catchCards, catchIndex) {
+        val cs = catchCards ?: return@LaunchedEffect
+        delay(CatchUpPolicy.CARD_MS)
+        if (catchIndex < cs.size - 1) {
+            catchIndex++
+        } else {
+            catchCards = null
+            bugChangedAt = System.currentTimeMillis() // into live with the score showing
+        }
+    }
+    val canKickOff = current.isLive && nowNext?.now?.let { it.canStartOver && it.isOn(nowSec()) } == true
+    fun chooseCatchUp(c: Int) {
+        catchOpen = false
+        when (c) {
+            0 -> {
+                val prog = nowNext?.now ?: return
+                JellytipTrace.player("iptv", "catch-up: from kick-off ${channel.id}")
+                current = IptvTarget(channel.id, prog.title, prog.start, prog.stop)
+                playback.play(current, "catch-up from kick-off")
+                bannerTick++
+            }
+            1 -> {
+                val reveal: (Double?) -> Boolean = { revealClock.reveal(it) }
+                val cs = CatchUpPolicy.cards(snaps.releasedFull(reveal), snaps.latest(), reveal)
+                JellytipTrace.player("iptv", "catch-up: recap ${cs.size} cards")
+                if (cs.isEmpty()) {
+                    android.widget.Toast.makeText(context, "Nothing to catch up on yet", android.widget.Toast.LENGTH_SHORT).show()
+                    bugChangedAt = System.currentTimeMillis()
+                } else {
+                    catchIndex = 0
+                    catchCards = cs
+                }
+            }
+            else -> {
+                JellytipTrace.player("iptv", "catch-up: live")
+                bugChangedAt = System.currentTimeMillis()
+            }
+        }
+    }
+    fun ftAccept() {
+        val (_, next) = ftCard ?: return
+        ftCard = null
+        val g = next?.game
+        val ch = g?.let { SportFixtures.pickChannel(it, nowSec()).channel }
+        if (g != null && ch != null) {
+            launchFixture(viewModel.playback, viewModel.navigationManager, g, ch, fromStart = false, from = "full time next", replaceTop = true)
+        } else if (next?.pickId != null) {
+            viewModel.navigationManager.navigateTo(
+                com.github.damontecres.wholphin.ui.nav.Destination.MediaItem(next.pickId, next.pickKind ?: org.jellyfin.sdk.model.api.BaseItemKind.MOVIE),
+                "full time: tonight's pick",
+            )
+        }
+    }
     // Perf trace: the player with the panel open is measured on its own (perfByDest "…+panel")
     DisposableEffect(panelIsOpen) {
         com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.subState = if (panelIsOpen) "panel" else null
@@ -834,6 +1001,48 @@ fun JellytipLiveTvPlayerPage(
                     return@onPreviewKeyEvent true
                 }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val okKey = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (catchOpen) {
+                    val opts = listOfNotNull(if (canKickOff) 0 else null, 1, 2)
+                    val i = opts.indexOf(catchCursor).coerceAtLeast(0)
+                    when {
+                        e.key == Key.DirectionLeft -> catchCursor = opts[(i - 1).coerceAtLeast(0)]
+                        e.key == Key.DirectionRight -> catchCursor = opts[(i + 1).coerceAtMost(opts.size - 1)]
+                        okKey -> if (e.nativeKeyEvent.repeatCount == 0) chooseCatchUp(catchCursor)
+                        e.key == Key.Back || e.key == Key.Escape -> chooseCatchUp(2)
+                        e.key == Key.DirectionUp || e.key == Key.DirectionDown -> {}
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                catchCards?.let { cs ->
+                    when {
+                        okKey || e.key == Key.DirectionRight -> if (e.nativeKeyEvent.repeatCount == 0) {
+                            if (catchIndex < cs.size - 1) catchIndex++ else {
+                                catchCards = null
+                                bugChangedAt = System.currentTimeMillis()
+                            }
+                        }
+                        e.key == Key.Back || e.key == Key.Escape -> {
+                            catchCards = null
+                            bugChangedAt = System.currentTimeMillis()
+                        }
+                        e.key == Key.DirectionLeft || e.key == Key.DirectionUp || e.key == Key.DirectionDown -> {}
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (ftCard != null) {
+                    when {
+                        okKey -> if (e.nativeKeyEvent.repeatCount == 0) ftAccept()
+                        e.key == Key.Back || e.key == Key.Escape -> {
+                            ftCard = null
+                            JellytipTrace.player("iptv", "full-time card dismissed")
+                        }
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 if (trackSheetOpen) {
                     when (e.key) {
                         Key.DirectionUp -> trackCursor = Math.floorMod(trackCursor - 1, trackRows)
@@ -907,11 +1116,16 @@ fun JellytipLiveTvPlayerPage(
                 }
                 if (matchModal != null || preMenu || panelMenu) return@onPreviewKeyEvent false
                 // The side panel takes Left (close) and Up/Down (tabs) while it is open; the video keeps playing
+                if (panelOpen && openedBy != BreakModePolicy.Reason.USER) {
+                    // Opened by itself: a press already under way keeps its old meaning (swallowed); after that any key
+                    // means the viewer is using it, so it stays until they close it
+                    if (System.currentTimeMillis() - openedAt[0] < BreakModePolicy.KEY_GUARD_MS && e.key != Key.Back) return@onPreviewKeyEvent true
+                    panelTouched = true
+                }
                 if (panelOpen) {
                     when (e.key) {
                         Key.DirectionLeft -> {
-                            panelOpen = false
-                            JellytipTrace.player("iptv", "companion closed (Left)")
+                            closePanelByUser("Left")
                             return@onPreviewKeyEvent true
                         }
                         Key.DirectionUp -> {
@@ -1014,6 +1228,7 @@ fun JellytipLiveTvPlayerPage(
                         } else if (e.key == Key.DirectionRight && panelMatch != null && matchModal == null && !preMenu) {
                             // Live: Right opens the in-event panel (Right was unused here)
                             panelOpen = true
+                            openedBy = BreakModePolicy.Reason.USER
                             JellytipTrace.player("iptv", "companion opened ${panelMatch.id} (${if (me?.sportPanelStyle == "floating") "overlay" else "squeeze"})")
                             true
                         } else {
@@ -1111,9 +1326,21 @@ fun JellytipLiveTvPlayerPage(
             bug = { bugData },
             clock = { bugClock },
             changedAt = { bugChangedAt },
-            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !(bannerVisible && nflMatch != null) },
+            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
             modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
         )
+        // Round 3 cards: full time (bottom), catch me up (centre)
+        ftCard?.let { (m, next) ->
+            FullTimeCard(m, ftScore?.first, ftScore?.second, next, nowSec(), Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp))
+        }
+        if (catchOpen) {
+            panelMatch?.let { m ->
+                CatchUpChoiceCard(m, CatchUpPolicy.joiningLine(m.startsAt ?: nowSec(), nowSec()), canKickOff, catchCursor, catchLeft, Modifier.align(Alignment.Center))
+            }
+        }
+        catchCards?.let { cs ->
+            panelMatch?.let { m -> CatchUpRecapCard(m, cs[catchIndex.coerceIn(0, cs.size - 1)], catchIndex, cs.size, Modifier.align(Alignment.Center)) }
+        }
         if (chipsOpen) {
             ChannelChips(
                 chipChannels,
@@ -1151,6 +1378,11 @@ fun JellytipLiveTvPlayerPage(
                         },
                         com.github.damontecres.wholphin.ui.components.DialogItem(if (floating) "Floating  ✓" else "Floating", dismissOnClick = true) {
                             com.github.damontecres.wholphin.jellytip.me.JellytipMe.setPanelStyle("floating")
+                        },
+                        com.github.damontecres.wholphin.ui.components.DialogItem(if (breakModeOn) "Open by itself at breaks  ✓" else "Open by itself at breaks", dismissOnClick = true) {
+                            breakModeOn = !breakModeOn
+                            sportPrefs.edit().putBoolean("breakMode", breakModeOn).apply()
+                            JellytipTrace.player("iptv", "break mode ${if (breakModeOn) "on" else "off"}")
                         },
                         com.github.damontecres.wholphin.ui.components.DialogItem("Spoiler delay: $delayShown s — Adjust", dismissOnClick = true) {
                             delayCursor = 0
