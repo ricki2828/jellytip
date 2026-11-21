@@ -54,7 +54,7 @@ import org.json.JSONObject
 private const val PREFS_LOCAL = "jellytip_sport"
 
 @Composable
-private fun Row2(
+internal fun Row2(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
@@ -81,7 +81,7 @@ private fun Row2(
 }
 
 @Composable
-private fun Head(text: String) =
+internal fun Head(text: String) =
     Text(text, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(top = 14.dp, bottom = 2.dp))
 
 @Composable

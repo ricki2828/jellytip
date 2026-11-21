@@ -206,7 +206,11 @@ class JellytipReminders
             }
         }
 
-        fun remove(id: String) {
+        fun remove(
+            id: String,
+            /** True when at least one row was removed (called on the main thread). */
+            onDone: (Boolean) -> Unit = {},
+        ) {
             scope.launch {
                 // Switching off removes every row of the same game (key, fixture id, match id), so no twin keeps
                 // nudging (web f452ce07)
@@ -221,6 +225,7 @@ class JellytipReminders
                     _items.value = _items.value?.filter { it.reminderId !in ids }
                     refresh()
                 }
+                onDone(anyOk)
             }
         }
 
