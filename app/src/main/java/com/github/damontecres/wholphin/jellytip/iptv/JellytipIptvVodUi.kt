@@ -153,21 +153,29 @@ fun IptvVodTile(
             )
         }
         IptvCornerMark(listOfNotNull(item.qualityLabel, item.audioLabel).joinToString(" · ").ifEmpty { null }, Modifier.align(Alignment.TopEnd).padding(6.dp))
-        if (item.played) {
-            // Watched: a tick like the library's played mark
-            Text(
-                text = "✓",
-                color = Color.White,
-                fontFamily = JellytipFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .background(JellytipPalette.Jelly, RoundedCornerShape(50))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-            )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+        ) {
+            // My list: the library cards' heart (Ricki 21-Nov), kept in step with + My list anywhere in the app
+            if (IptvMyList.isOn(item)) {
+                com.github.damontecres.wholphin.ui.cards.FavoriteIndicator(fontSize = 16.sp)
+            }
+            if (item.played) {
+                // Watched: a tick like the library's played mark
+                Text(
+                    text = "✓",
+                    color = Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier =
+                        Modifier
+                            .background(JellytipPalette.Jelly, RoundedCornerShape(50))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+            }
         }
         item.progress?.takeIf { it.resumable && it.durationSecs > 0 }?.let { p ->
             Box(
@@ -375,6 +383,9 @@ fun JellytipIptvDetailsPage(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
+                if (item != null && IptvMyList.isOn(item)) {
+                    com.github.damontecres.wholphin.ui.cards.FavoriteIndicator(fontSize = 14.sp)
+                }
                 Text(
                     text = "via IPTV" + (item?.providerName?.let { " · $it" } ?: ""),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.8f),
@@ -687,7 +698,7 @@ private fun MyListButton(
     item: IptvVodItem,
     viewModel: JellytipIptvVodViewModel,
 ) {
-    var on by remember(item.id) { mutableStateOf(item.favourite) }
+    val on = IptvMyList.isOn(item)
     var busy by remember(item.id) { mutableStateOf(false) }
     var note by remember(item.id) { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -696,17 +707,17 @@ private fun MyListButton(
             onClick = {
                 if (busy) return@Button
                 val want = !on
-                on = want
+                IptvMyList.set(item.id, want)
                 busy = true
                 note = null
                 JellytipTrace.log("iptv", "my list ${item.id} on=$want")
                 scope.launch {
                     val result = viewModel.vod.setFavourite(item.id, want)
                     if (result == null) {
-                        on = !want
+                        IptvMyList.set(item.id, !want)
                         note = "Couldn't update My list"
                     } else {
-                        on = result
+                        IptvMyList.set(item.id, result)
                     }
                     busy = false
                 }
@@ -717,5 +728,22 @@ private fun MyListButton(
         note?.let {
             Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
+    }
+}
+
+/**
+ * My list state for IPTV titles across the app: the payload's `favourite`, overridden by changes made on this TV until
+ * the rows reload (so a tile's heart follows + My list at once). Cleared per title once a fresh payload agrees.
+ */
+object IptvMyList {
+    private val overrides = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+
+    fun isOn(item: IptvVodItem): Boolean = overrides[item.id] ?: item.favourite
+
+    fun set(
+        id: String,
+        on: Boolean,
+    ) {
+        overrides[id] = on
     }
 }
