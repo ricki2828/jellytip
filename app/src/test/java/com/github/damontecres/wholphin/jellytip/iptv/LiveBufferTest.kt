@@ -10,6 +10,12 @@ class LiveBufferTest {
     private val t0 = 1_000_000_000L
 
     @Test
+    fun tvAutoKeepsTheOldBuffers() {
+        assertEquals(LiveBuffer.Profile.LOW, LiveBuffer.TV_AUTO)
+        assertFalse(LiveBuffer.AUTO_STEPS)
+    }
+
+    @Test
     fun lowIsTheOldBuffers() {
         val p = LiveBuffer.Profile.LOW
         assertEquals(listOf(2_000, 20_000, 700, 1_500), listOf(p.minBufferMs, p.maxBufferMs, p.startMs, p.afterRebufferMs))
@@ -53,7 +59,7 @@ class LiveBufferTest {
     fun modesCycle() {
         assertEquals("low", LiveBuffer.nextMode("auto"))
         assertEquals("auto", LiveBuffer.nextMode("max"))
-        assertEquals("Auto", LiveBuffer.modeLabel("auto"))
+        assertEquals("Auto (Low)", LiveBuffer.modeLabel("auto"))
         assertEquals("High (~15 s)", LiveBuffer.modeLabel("high"))
     }
 }

@@ -8,8 +8,9 @@ import org.json.JSONObject
  * so a network hiccup doesn't freeze the picture. ExoPlayer mapping: each profile is a LoadControl (start cushion,
  * cushion after a rebuffer, buffer sizes) plus the live target offset for HLS. A LoadControl is fixed when the player
  * is built, so a different profile takes effect at the next channel opened (the player is rebuilt then); the web
- * applies some of it at once. Auto starts at Normal, steps up one level after a stall (to High at most, Max is manual),
- * remembers the level per channel and steps back down after 10 quiet minutes. Low = the buffers the TV used before.
+ * applies some of it at once. On the TV, Auto = Low (the buffers the TV used before; see [AUTO_STEPS]). The web's Auto
+ * (start at Normal, step up after a stall to High at most, per channel, back down after 10 quiet minutes) is kept below
+ * behind [AUTO_STEPS].
  * Films, episodes, recordings and catch-up always use Low (unchanged).
  */
 object LiveBuffer {
@@ -31,6 +32,13 @@ object LiveBuffer {
     }
 
     const val AUTO = "auto"
+
+    /**
+     * TV decision (21-Nov, lead): Auto keeps the TV's old behaviour = Low, so sport zaps don't change without warning;
+     * Normal / High / Max are opt-in. The web's stepping policy below stays off until that is decided otherwise.
+     */
+    const val AUTO_STEPS = false
+    val TV_AUTO = Profile.LOW
     val MODES = listOf(AUTO, "low", "normal", "high", "max")
     val AUTO_MIN = Profile.NORMAL
     val AUTO_MAX = Profile.HIGH
@@ -40,7 +48,7 @@ object LiveBuffer {
 
     fun profileOf(mode: String): Profile? = Profile.entries.firstOrNull { it.name.equals(mode, true) }
 
-    fun modeLabel(mode: String): String = if (mode == AUTO) "Auto" else profileOf(mode)?.let { "${it.label} (~${it.behindMs / 1000} s)" } ?: "Auto"
+    fun modeLabel(mode: String): String = if (mode == AUTO) "Auto (Low)" else profileOf(mode)?.let { "${it.label} (~${it.behindMs / 1000} s)" } ?: "Auto"
 
     fun nextMode(mode: String): String = MODES[(MODES.indexOf(mode).coerceAtLeast(0) + 1) % MODES.size]
 
@@ -132,7 +140,8 @@ object LiveBuffer {
     ): Profile {
         if (!target.isLive) return Profile.LOW
         val mode = loadMode(context)
-        if (mode != AUTO) return profileOf(mode) ?: AUTO_MIN
+        if (mode != AUTO) return profileOf(mode) ?: TV_AUTO
+        if (!AUTO_STEPS) return TV_AUTO
         val s = onTick(loadAuto(context, target.channelId, now), now)
         saveAuto(context, target.channelId, s)
         return s.level
@@ -144,7 +153,7 @@ object LiveBuffer {
         target: IptvTarget,
         now: Long = System.currentTimeMillis(),
     ): Profile? {
-        if (!target.isLive || loadMode(context) != AUTO) return null
+        if (!AUTO_STEPS || !target.isLive || loadMode(context) != AUTO) return null
         val (s, stepped) = onStall(loadAuto(context, target.channelId, now), now)
         saveAuto(context, target.channelId, s)
         return if (stepped) s.level else null
