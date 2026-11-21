@@ -579,7 +579,57 @@ fun SeriesDetailsContent(
                             modifier = Modifier.padding(start = 64.dp),
                         )
                         val eps = (episodes as? EpisodeList.Success)?.episodes
+                        // Jellytip: a season partly on IPTV shows its IPTV-only episodes in the strip too (library wins)
+                        val iptvCopy = jtIptvSeasons?.first
+                        val seasonNo = seasons.getOrNull(seasonIndex)?.indexNumber
+                        val iptvEps =
+                            remember(iptvCopy, seasonNo) {
+                                if (iptvCopy == null || seasonNo == null || seasonNo < 1) {
+                                    emptyList()
+                                } else {
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.episodesFor(iptvCopy.seasons, seasonNo)
+                                }
+                            }
                         if (eps != null) {
+                            val tiles =
+                                if (iptvEps.isEmpty()) {
+                                    null
+                                } else {
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.interleave(
+                                        eps.indices.map { eps[it]?.data?.indexNumber },
+                                        eps.indices.map { eps[it]?.data?.locationType == org.jellyfin.sdk.model.api.LocationType.VIRTUAL },
+                                        iptvEps,
+                                    )
+                                }
+                            val LibraryEpisodeCard: @Composable (Int, BaseItem?) -> Unit = { episodeIndex, episode ->
+                            BannerCardWithTitle(
+                                title =
+                                    episode?.let {
+                                        listOfNotNull(it.data.indexNumber?.let { n -> "E$n" }, it.name)
+                                            .joinToString(" \u00B7 ")
+                                    },
+                                subtitle = episode?.data?.overview?.replace('\n', ' '),
+                                item = episode,
+                                aspectRatio =
+                                    episode?.aspectRatio?.coerceAtLeast(AspectRatios.FOUR_THREE)
+                                        ?: AspectRatios.WIDE,
+                                played = episode?.data?.userData?.played ?: false,
+                                playPercent = episode?.data?.userData?.playedPercentage ?: 0.0,
+                                onClick = {
+                                    position = SEASONS_ROW
+                                    if (episode != null) onClickEpisode(episode)
+                                },
+                                onLongClick = {},
+                                cornerText = if (episode != null && episode.id == nextUpId) "Next" else null,
+                                cardHeight = 150.dp,
+                                useSeriesForPrimary = false,
+                                modifier =
+                                    Modifier.ifElse(
+                                        episodeIndex == initialEpisodeIndex,
+                                        Modifier.focusRequester(episodeRowRequester),
+                                    ),
+                            )
+                            }
                             val rowState = rememberLazyListState(initialEpisodeIndex)
                             LazyRow(
                                 state = rowState,
@@ -587,34 +637,18 @@ fun SeriesDetailsContent(
                                 contentPadding = PaddingValues(horizontal = 64.dp),
                                 modifier = Modifier.focusRestorer(episodeRowRequester),
                             ) {
-                                itemsIndexed(eps) { episodeIndex, episode ->
-                                    BannerCardWithTitle(
-                                        title =
-                                            episode?.let {
-                                                listOfNotNull(it.data.indexNumber?.let { n -> "E$n" }, it.name)
-                                                    .joinToString(" \u00B7 ")
-                                            },
-                                        subtitle = episode?.data?.overview?.replace('\n', ' '),
-                                        item = episode,
-                                        aspectRatio =
-                                            episode?.aspectRatio?.coerceAtLeast(AspectRatios.FOUR_THREE)
-                                                ?: AspectRatios.WIDE,
-                                        played = episode?.data?.userData?.played ?: false,
-                                        playPercent = episode?.data?.userData?.playedPercentage ?: 0.0,
-                                        onClick = {
-                                            position = SEASONS_ROW
-                                            if (episode != null) onClickEpisode(episode)
-                                        },
-                                        onLongClick = {},
-                                        cornerText = if (episode != null && episode.id == nextUpId) "Next" else null,
-                                        cardHeight = 150.dp,
-                                        useSeriesForPrimary = false,
-                                        modifier =
-                                            Modifier.ifElse(
-                                                episodeIndex == initialEpisodeIndex,
-                                                Modifier.focusRequester(episodeRowRequester),
-                                            ),
-                                    )
+                                if (tiles != null && iptvCopy != null && seasonNo != null) {
+                                    items(tiles.size) { t ->
+                                        when (val tile = tiles[t]) {
+                                            is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Iptv ->
+                                                com.github.damontecres.wholphin.jellytip.iptv.JellytipMixedIptvEpisode(series, iptvCopy, seasonNo, tile.episode)
+
+                                            is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib ->
+                                                LibraryEpisodeCard(tile.index, eps[tile.index])
+                                        }
+                                    }
+                                } else {
+                                    itemsIndexed(eps) { episodeIndex, episode -> LibraryEpisodeCard(episodeIndex, episode) }
                                 }
                             }
                         }
@@ -622,7 +656,7 @@ fun SeriesDetailsContent(
                 }
                 // Jellytip: seasons the library lacks but the person's IPTV has (Season N · via IPTV)
                 val iptvOnly = jtIptvSeasons
-                if (sectionsActive && iptvOnly != null) item(key = "jt-iptv-seasons") {
+                if (sectionsActive && iptvOnly != null && iptvOnly.second.isNotEmpty()) item(key = "jt-iptv-seasons") {
                     com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvSeasonsSection(series, iptvOnly.first, iptvOnly.second)
                 }
                 if (people.isNotEmpty()) {

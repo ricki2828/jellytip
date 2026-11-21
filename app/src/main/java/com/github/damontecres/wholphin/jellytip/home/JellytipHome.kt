@@ -234,7 +234,9 @@ fun JellytipHomeHero(
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
         viewModel.localTrailer(item)?.let { (url, trailerId) ->
             // Sound: only the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
-            val sound = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true || settings.trailerSound
+            val sound =
+                JellytipTrailerControl.heroSoundChoice
+                    ?: (com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.heroSound == true || settings.trailerSound)
             JellytipTrailerControl.start(item, url, trailerId, sound = sound)
         }
     }
