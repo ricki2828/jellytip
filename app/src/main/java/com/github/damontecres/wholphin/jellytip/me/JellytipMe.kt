@@ -50,6 +50,10 @@ data class MePrefs(
     val sportDelaySec: Int = 30,
     /** Live alerts: key | all | off (`sport.alerts`). */
     val sportAlerts: String = "key",
+    /** Followed team names (`sport.teams`: plain names, or the names of {name, teamId, leagueKey} entries). */
+    val sportTeams: List<String> = emptyList(),
+    /** Followed team catalogue ids (`sport.teams` objects + `sport.teamRefs`): teamId to leagueKey (null = any league). */
+    val sportTeamRefs: List<Pair<String, String?>> = emptyList(),
     /** `ui.heroSound` (plan "TV hero trailer: unmute"): the Home / Movies / Shows hero trailer plays with sound. Default off. */
     val heroSound: Boolean = false,
 )
@@ -123,6 +127,8 @@ object MeParse {
             sportPanelStyle = o.optJSONObject("sport")?.optString("panelStyle")?.takeIf { it == "floating" } ?: "docked",
             sportDelaySec = o.optJSONObject("sport")?.takeIf { it.has("delaySec") && !it.isNull("delaySec") }?.optDouble("delaySec")?.let { com.github.damontecres.wholphin.jellytip.iptv.DelayMath.clampDelay(it) } ?: 30,
             sportAlerts = o.optJSONObject("sport")?.optString("alerts")?.takeIf { it == "all" || it == "off" } ?: "key",
+            sportTeams = com.github.damontecres.wholphin.jellytip.iptv.TeamAware.teamNames(o.optJSONObject("sport")),
+            sportTeamRefs = com.github.damontecres.wholphin.jellytip.iptv.TeamAware.teamRefs(o.optJSONObject("sport")),
             heroSound = o.optJSONObject("ui")?.optBoolean("heroSound", false) == true,
         )
     }

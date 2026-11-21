@@ -20,6 +20,8 @@ data class MatchTeam(
     val altColor: String? = null,
     /** Tennis players carry a country (ISO 2 or 3 letters; a flag instead of a crest). */
     val country: String? = null,
+    /** Catalogue team id (matches `sport.teamRefs`: whose side is the viewer's team). */
+    val teamId: String? = null,
 )
 
 data class MatchScore(
@@ -119,7 +121,7 @@ object MatchParse {
     ): MatchTeam? {
         o ?: return null
         val name = o.str("name") ?: return null
-        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"), o.str("color"), o.str("altColor"), o.str("country"))
+        return MatchTeam(name, o.str("short"), o.str("logo")?.let { if (it.startsWith("http")) it else resolve(it) }, o.str("record"), o.str("color"), o.str("altColor"), o.str("country"), o.opt("teamId")?.takeIf { it != JSONObject.NULL }?.toString()?.takeIf { it.isNotBlank() })
     }
 
     /** A fixture: an id and both teams, or an event (`kind: "event"`) with an id and a title. */
