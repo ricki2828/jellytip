@@ -195,10 +195,14 @@ fun JellytipMyChannelsPage(
     var focused by remember { mutableStateOf(0) }
     val first = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(rows.isNotEmpty()) {
         if (rows.isEmpty()) return@LaunchedEffect
+        val at = rows.indexOfFirst { it.def.id == viewModel.lastId }
+        // The tuned row may be off screen (not composed): bring it in first, else fall back to the first row
+        if (at >= 0) listState.scrollToItem(at)
         withFrameNanos { }
-        if (rows.any { it.def.id == viewModel.lastId }) restore.tryRequestFocus() else first.tryRequestFocus()
+        if (at < 0 || !restore.tryRequestFocus()) first.tryRequestFocus()
     }
     val cur = rows.getOrNull(focused)
     Box(modifier.fillMaxSize().background(Color(0xFF14100C))) {
@@ -228,7 +232,7 @@ fun JellytipMyChannelsPage(
                     state.failed -> Note("Couldn't load your channels. Check the server and come back.")
                     rows.isEmpty() -> Note("Not enough in your library for any channel yet.")
                     else ->
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+                        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
                             itemsIndexed(rows, key = { _, r -> r.def.id }) { i, r ->
                                 ChannelTile(
                                     r,

@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
@@ -48,7 +47,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -119,8 +117,10 @@ class JellytipSportAmbientViewModel
         private val _pick = MutableStateFlow<SportAmbient.Pick?>(null)
         val pick: StateFlow<SportAmbient.Pick?> = _pick
 
-        init {
-            viewModelScope.launch { pollAmbient(service, _pick) }
+        /** Runs only while the screensaver is composed (the activity-scoped VM must not poll in the background). */
+        suspend fun poll() {
+            _pick.value = null
+            pollAmbient(service, _pick)
         }
 
         fun watch() {
@@ -139,6 +139,7 @@ fun JellytipSportAmbientOr(
     viewModel: JellytipSportAmbientViewModel = hiltViewModel(),
     fallback: @Composable () -> Unit,
 ) {
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.poll() }
     val pick by viewModel.pick.collectAsState()
     val p = pick
     DisposableEffect(p != null) {

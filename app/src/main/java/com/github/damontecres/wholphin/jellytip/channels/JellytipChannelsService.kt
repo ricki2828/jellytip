@@ -45,7 +45,8 @@ class JellytipChannelsService
 
         private val cache = ConcurrentHashMap<String, Entry>()
         private val locks = ConcurrentHashMap<String, Mutex>()
-        private val noIptv = ConcurrentHashMap.newKeySet<String>()
+        /** Person -> when IPTV answered "not for you" (404/501/403); retried after [NO_IPTV_TTL_MS]. */
+        private val noIptv = ConcurrentHashMap<String, Long>()
 
         @Volatile
         private var episodes: Pair<String, Pair<Long, List<BaseItemDto>>>? = null
@@ -224,7 +225,7 @@ class JellytipChannelsService
             prof: TasteProfile?,
         ): Pair<List<ChanItem>, Int> {
             val tg = def.tmdbGenres
-            if (tg.isNullOrEmpty() || u in noIptv) return emptyList<ChanItem>() to 0
+            if (tg.isNullOrEmpty() || (noIptv[u]?.let { System.currentTimeMillis() - it < NO_IPTV_TTL_MS } == true)) return emptyList<ChanItem>() to 0
             val episodes = def.type == ChanType.EPISODE
             val q = StringBuilder("v1/iptv/channel-pool?genres=${tg.joinToString("%2C")}&limit=200")
             if (episodes) {
@@ -237,7 +238,7 @@ class JellytipChannelsService
             }
             return try {
                 val r = jellytipApi.userCall(q.toString(), timeoutMs = 20_000) ?: return emptyList<ChanItem>() to 0
-                if (r.first in setOf(401, 403, 404, 501)) noIptv += u
+                if (r.first in setOf(403, 404, 501)) noIptv[u] = System.currentTimeMillis()
                 if (r.first != 200) return emptyList<ChanItem>() to 0
                 val (items, pending) =
                     if (episodes) {
@@ -271,6 +272,7 @@ class JellytipChannelsService
             private const val TTL_MS = 6 * 3600 * 1000L
             private const val PENDING_TTL_MS = 15 * 60 * 1000L
             private const val TASTE_TTL_MS = 30 * 60 * 1000L
+            private const val NO_IPTV_TTL_MS = 15 * 60 * 1000L
             private const val CAP = 150
             private const val PER_SERIES = 15
             private const val EPISODE_CAP = 300

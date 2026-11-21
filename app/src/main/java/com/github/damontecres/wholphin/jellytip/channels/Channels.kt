@@ -2,8 +2,6 @@ package com.github.damontecres.wholphin.jellytip.channels
 
 import org.json.JSONObject
 import kotlin.math.floor
-import kotlin.math.ln
-import kotlin.math.pow
 
 /*
  * My Channels (web parity, round 3 item 10): a straight port of web lib/channels.ts, lib/personalChannels.ts and
@@ -191,12 +189,12 @@ object Channels {
         def: ChannelDef? = null,
     ) = playable(items, def).size >= MIN_ITEMS
 
-    fun affinityWeight(a: Double?): Double = if (a == null || !a.isFinite()) 1.0 else 4.0.pow(a.coerceIn(0.0, 1.0) * 2 - 1)
+    fun affinityWeight(a: Double?): Double = if (a == null || !a.isFinite()) 1.0 else StrictMath.pow(4.0, a.coerceIn(0.0, 1.0) * 2 - 1)
 
     private fun wkey(
         h: Long,
         w: Double,
-    ): Double = -ln((h + 1) / 4294967297.0) / w
+    ): Double = -StrictMath.log((h + 1) / 4294967297.0) / w
 
     fun meanAff(items: List<ChanItem>): Double? {
         val a = items.mapNotNull { it.aff }
@@ -272,7 +270,7 @@ object Channels {
             blocks = pool.map { listOf(it) }.toMutableList()
         }
         if (pool.any { it.aff != null }) {
-            blocks = blocks.map { b -> (-ln(1 - r()) / affinityWeight(meanAff(b))) to b }.sortedBy { it.first }.map { it.second }.toMutableList()
+            blocks = blocks.map { b -> (-StrictMath.log(1 - r()) / affinityWeight(meanAff(b))) to b }.sortedBy { it.first }.map { it.second }.toMutableList()
         } else {
             for (i in blocks.size - 1 downTo 1) {
                 val j = floor(r() * (i + 1)).toInt()
@@ -327,9 +325,9 @@ object Channels {
                 list = lineup(pool, channelId, cycle)
                 i = 0
             }
-            val it = list[i++]
-            val end = t + seconds(it) * 1000
-            slots += Slot(it, t, end)
+            val item = list[i++]
+            val end = t + seconds(item) * 1000
+            slots += Slot(item, t, end)
             t = end
         }
         return Sched(slots, posMs / 1000, posMs.toDouble() / (seconds(slots[0].item) * 1000))

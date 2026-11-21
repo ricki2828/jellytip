@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -84,8 +85,11 @@ import javax.inject.Inject
 
 private const val POLL_MS = 3_000L
 
-/** Where phones vote (web app, Movie night → Join). */
-const val MOVIE_NIGHT_JOIN_HINT = "ricki28.palawan.usbx.me/jellytip  →  Movie night  →  Join"
+/** Where phones vote: the web app next to the companion (…/jellytip-api → …/jellytip), Movie night → Join. */
+fun movieNightJoinHint(companionBase: String): String {
+    val web = companionBase.removePrefix("https://").removePrefix("http://").trimEnd('/').removeSuffix("-api")
+    return "$web  →  Movie night  →  Join"
+}
 
 data class MnFilm(
     val id: String,
@@ -130,6 +134,9 @@ class JellytipMovieNightViewModel
             val error: String? = null,
             val offline: Boolean = false,
             val notice: String? = null,
+            val joinHint: String = "",
+            /** The result was shown once: a late joiner must not flip the screen back to voting. */
+            val revealed: Boolean = false,
         )
 
         private val _state = MutableStateFlow(State())
@@ -147,6 +154,7 @@ class JellytipMovieNightViewModel
         }
 
         fun start() {
+            viewModelScope.launch { _state.value = _state.value.copy(joinHint = movieNightJoinHint(jellytipApi.companionBase())) }
             val code = remembered()
             if (code != null) {
                 follow(code)
@@ -226,7 +234,7 @@ class JellytipMovieNightViewModel
             viewModelScope.launch {
                 val body = JSONObject().put("items", JSONArray(chosen)).toString()
                 val r = jellytipApi.userCall("v1/me/movienight", body)
-                val s = r?.takeIf { it.first == 200 }?.let { MovieNight.parse(it.second) }
+                val s = r?.takeIf { it.first in 200..299 }?.let { MovieNight.parse(it.second) }
                 if (s == null) {
                     _state.value = _state.value.copy(busy = false, error = MovieNight.errorText(r?.first ?: 0, r?.second))
                     return@launch
@@ -249,7 +257,7 @@ class JellytipMovieNightViewModel
                             r == null -> _state.value = _state.value.copy(offline = true)
                             r.first == 200 -> {
                                 MovieNight.parse(r.second)?.let { s ->
-                                    _state.value = _state.value.copy(phase = Phase.Night(s), offline = false)
+                                    _state.value = _state.value.copy(phase = Phase.Night(s), offline = false, revealed = _state.value.revealed || MovieNight.finished(s))
                                     ensureFilms(s.items)
                                 }
                             }
@@ -289,7 +297,7 @@ class JellytipMovieNightViewModel
                 val ns = r?.takeIf { it.first == 200 }?.let { MovieNight.parse(it.second) }
                 _state.value =
                     if (ns != null) {
-                        _state.value.copy(busy = false, phase = Phase.Night(ns))
+                        _state.value.copy(busy = false, phase = Phase.Night(ns), revealed = _state.value.revealed || MovieNight.finished(ns))
                     } else {
                         _state.value.copy(busy = false, error = MovieNight.errorText(r?.first ?: 0, r?.second))
                     }
@@ -298,12 +306,14 @@ class JellytipMovieNightViewModel
 
         /** Cancel (open) or Done (finished): close it on the server if it's ours and still open, forget it, back to the shortlist. */
         fun finish(then: (() -> Unit)? = null) {
+            if (_state.value.busy) return
+            _state.value = _state.value.copy(busy = true)
             val s = (_state.value.phase as? Phase.Night)?.session
             poll?.cancel()
             saveCode(null)
             viewModelScope.launch {
                 if (s != null && s.host && s.open) jellytipApi.userCall("v1/me/movienight/${s.code}/close", "{}")
-                _state.value = State(films = _state.value.films)
+                _state.value = State(films = _state.value.films, joinHint = _state.value.joinHint)
                 if (then != null) then() else loadShortlist()
             }
         }
@@ -340,7 +350,12 @@ fun JellytipMovieNightPage(
     }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         when (val p = state.phase) {
-            JellytipMovieNightViewModel.Phase.Loading -> Header(sub = "Finding films you haven't watched…")
+            JellytipMovieNightViewModel.Phase.Loading ->
+                Header(
+                    sub =
+                        state.error
+                            ?: if (state.offline) "Can't reach the server. Trying again…" else "Finding films you haven't watched…",
+                )
             JellytipMovieNightViewModel.Phase.Empty ->
                 Column {
                     Header(sub = state.notice ?: "Not enough unwatched films in your recommendations to start one yet.")
@@ -348,7 +363,7 @@ fun JellytipMovieNightPage(
             is JellytipMovieNightViewModel.Phase.Pick -> PickScreen(p, state, viewModel)
             is JellytipMovieNightViewModel.Phase.Night -> {
                 val s = p.session
-                if (MovieNight.finished(s)) RevealScreen(s, state, viewModel) else NightScreen(s, state, viewModel)
+                if (state.revealed || MovieNight.finished(s)) RevealScreen(s, state, viewModel) else NightScreen(s, state, viewModel)
             }
         }
     }
@@ -360,9 +375,9 @@ private fun Header(
     sub: String,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(start = 64.dp, top = 40.dp, end = 32.dp)) {
+    Column(modifier.padding(start = 64.dp, top = 28.dp, end = 24.dp)) {
         Text("MOVIE NIGHT", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 1.5.sp)
-        Text(title, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 40.sp)
+        Text(title, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 34.sp)
         Text(sub, color = JellytipPalette.Vanilla.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 16.sp, maxLines = 2)
     }
 }
@@ -380,16 +395,16 @@ private fun PickScreen(
     }
     Column(Modifier.fillMaxSize()) {
         Header(sub = state.notice ?: "OK ticks or unticks a film. Everyone votes on their phone once it starts.")
-        Row(Modifier.padding(start = 64.dp, top = 28.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        PosterRow(p.films.size) { w ->
             p.films.forEachIndexed { i, f ->
                 val on = f.id in p.on
                 Column {
-                    Poster(f, onClick = { vm.toggle(f.id) }, dim = !on, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier)
+                    Poster(f, w, onClick = { vm.toggle(f.id) }, dim = !on, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier)
                     Text(if (on) "✓  In" else "Left out", color = if (on) JellytipPalette.Vanilla else JellytipPalette.Vanilla.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }
-        Row(Modifier.padding(start = 64.dp, top = 24.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 64.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             val n = p.on.size
             Button(if (state.busy) "Starting…" else "Start movie night ($n film${if (n == 1) "" else "s"})", primary = true, enabled = n >= MovieNight.MIN_FILMS && !state.busy) { vm.create() }
             state.error?.let { Text(it, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 14.sp) }
@@ -412,7 +427,9 @@ private fun NightScreen(
     val joined = s.members.size
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
+          Row(verticalAlignment = Alignment.Top) {
             Header(
+                modifier = Modifier.weight(1f),
                 sub =
                     if (state.offline) {
                         "Can't reach the server. Showing the last update."
@@ -420,18 +437,20 @@ private fun NightScreen(
                         "Vote on your phone. $joined ${if (joined == 1) "person has" else "people have"} joined, $totalVotes vote${if (totalVotes == 1) "" else "s"} in."
                     },
             )
-            Row(Modifier.padding(start = 64.dp, top = 28.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            JoinCard(s.code, state.joinHint)
+          }
+            PosterRow(s.items.size) { w ->
                 s.items.forEach { id ->
                     val f = state.films[id]
                     val c = s.counts[id] ?: MnCounts()
                     Column {
-                        PosterBox(f)
+                        PosterBox(f, w)
                         VoteDots(c.yes + c.maybe, maxOf(joined, c.votes))
                         Text(MovieNight.votesLabel(c), color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
                     }
                 }
             }
-            Row(Modifier.padding(start = 64.dp, top = 24.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(start = 64.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (s.host && s.open) {
                     Button(if (state.busy) "Closing…" else "Close voting and reveal", primary = true, enabled = !state.busy, modifier = Modifier.focusRequester(close)) { vm.close() }
                     Button("Cancel") { vm.finish() }
@@ -445,22 +464,45 @@ private fun NightScreen(
                 color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
                 fontFamily = JellytipFontFamily,
                 fontSize = 12.sp,
-                modifier = Modifier.padding(start = 64.dp, top = 12.dp),
+                modifier = Modifier.padding(start = 64.dp, top = 8.dp),
             )
         }
-        // Join card, top right (mock-up 06)
-        Column(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 40.dp, end = 48.dp)
-                .background(Color(0xFFF4DCD0), RoundedCornerShape(10.dp))
-                .padding(horizontal = 24.dp, vertical = 14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("Join on your phone with code", color = Color(0xFF141414), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-            Text(MovieNight.showCode(s.code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 56.sp, letterSpacing = 4.sp)
-            Text(MOVIE_NIGHT_JOIN_HINT, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
-        }
+    }
+}
+
+/** Join card (mock-up 06), beside the header so it never covers the posters. */
+@Composable
+private fun JoinCard(
+    code: String,
+    hint: String,
+) {
+    Column(
+        Modifier
+            .padding(top = 24.dp, end = 32.dp)
+            .background(Color(0xFFF4DCD0), RoundedCornerShape(10.dp))
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Join on your phone with code", color = Color(0xFF141414), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        Text(MovieNight.showCode(code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = 3.sp)
+        if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
+    }
+}
+
+/**
+ * A row of [n] posters that always fits the page (about 870 dp beside the closed rail at 960x540 dp): posters
+ * shrink below 140 dp when there are more than five.
+ */
+@Composable
+private fun PosterRow(
+    n: Int,
+    content: @Composable (androidx.compose.ui.unit.Dp) -> Unit,
+) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 64.dp, top = 16.dp, end = 32.dp)) {
+        val gap = 16.dp
+        val count = n.coerceAtLeast(1)
+        val w = ((maxWidth - gap * (count - 1)) / count).coerceAtMost(140.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) { content(w) }
     }
 }
 
@@ -515,6 +557,7 @@ private fun RevealScreen(
 @Composable
 private fun Poster(
     f: MnFilm,
+    w: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     dim: Boolean,
     modifier: Modifier = Modifier,
@@ -529,15 +572,18 @@ private fun Poster(
                 border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp)),
                 focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = RoundedCornerShape(10.dp)),
             ),
-        modifier = modifier.size(176.dp, 264.dp),
+        modifier = modifier.size(w, w * 1.5f),
     ) {
         PosterArt(f, dim)
     }
 }
 
 @Composable
-private fun PosterBox(f: MnFilm?) {
-    Box(Modifier.size(176.dp, 264.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(10.dp))) {
+private fun PosterBox(
+    f: MnFilm?,
+    w: androidx.compose.ui.unit.Dp,
+) {
+    Box(Modifier.size(w, w * 1.5f).background(Color(0xFF1A1A1A), RoundedCornerShape(10.dp))) {
         PosterArt(f, false)
     }
 }
@@ -555,7 +601,7 @@ private fun PosterArt(
             color = Color.White,
             fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 17.sp,
+            fontSize = 15.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
@@ -569,9 +615,9 @@ private fun VoteDots(
     filled: Int,
     of: Int,
 ) {
-    Row(Modifier.padding(top = 10.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(of.coerceIn(1, 12)) { i ->
-            Box(Modifier.size(16.dp).background(if (i < filled) Color(0xFFFFC72C) else Color.White.copy(alpha = 0.15f), CircleShape))
+    Row(Modifier.padding(top = 8.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        repeat(of.coerceIn(1, 8)) { i ->
+            Box(Modifier.size(13.dp).background(if (i < filled) Color(0xFFFFC72C) else Color.White.copy(alpha = 0.15f), CircleShape))
         }
     }
 }
