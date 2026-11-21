@@ -290,7 +290,7 @@ fun JellytipIptvPlayPage(
             title = if (recConfirm) "Delete this recording for good?" else target.label,
             dialogItems =
                 listOf(
-                    com.github.damontecres.wholphin.ui.components.DialogItem(if (recConfirm) "Delete for good" else "Delete recording", dismissOnClick = recConfirm) {
+                    com.github.damontecres.wholphin.ui.components.DialogItem(if (recConfirm) "Delete for good" else "Delete recording", dismissOnClick = false) {
                         if (!recConfirm) {
                             recConfirm = true
                         } else if (id != null) {
@@ -304,6 +304,9 @@ fun JellytipIptvPlayPage(
                                 if (ok) {
                                     viewModel.service.recordings()
                                     viewModel.navigationManager.goBack()
+                                } else {
+                                    // Not deleted: back to watching it, never a black page
+                                    playback.play(target, "delete failed: resume")
                                 }
                             }
                         }
@@ -313,6 +316,8 @@ fun JellytipIptvPlayPage(
                 recMenu = false
                 recConfirm = false
             },
+            // The first pick only arms "Delete for good": the dialog must stay (DialogPopup dismisses before onClick)
+            dismissOnClick = false,
         )
     }
 }

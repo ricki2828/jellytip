@@ -143,6 +143,7 @@ class JellytipIptvPlayback
             // Offline / online for stream recovery: a Wi-Fi drop waits for the network instead of spending attempts and
             // reporting a healthy channel as failing
             runCatching {
+                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) return@runCatching
                 val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
                 cm?.registerDefaultNetworkCallback(
                     object : android.net.ConnectivityManager.NetworkCallback() {
