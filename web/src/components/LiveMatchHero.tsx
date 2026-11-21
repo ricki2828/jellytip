@@ -236,10 +236,11 @@ export function useHomeLivePicks(): { picks: FxItem[]; nowSec: number; mine: boo
   }, [live]);
   const refs = prefs?.sport.teamRefs;
   const muted = prefs?.sport.muted;
+  const leagues = prefs?.sport.leagues;
   return useMemo(() => {
-    const picks = live === true && data ? homePicks(data.items, now, refs ?? [], muted) : [];
+    const picks = live === true && data ? homePicks(data.items, now, refs ?? [], muted, leagues ?? []) : [];
     return { picks, nowSec: now, mine: picks.some((f) => isFavourite(f, refs ?? [])) };
-  }, [live, data, now, refs, muted]);
+  }, [live, data, now, refs, muted, leagues]);
 }
 
 /**

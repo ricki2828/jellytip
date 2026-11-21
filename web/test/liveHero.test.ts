@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countdown, cycle, gameCentrePicks, heroLine, heroTag, homePicks, isMuted } from "../src/lib/liveHero.ts";
+import { countdown, cycle, followsLeague, gameCentrePicks, heroLine, heroTag, homePicks, isMuted } from "../src/lib/liveHero.ts";
 import type { FxChannel, FxItem } from "../src/lib/gameCentre.ts";
 
 const NOW = 1_800_000_000;
@@ -12,31 +12,51 @@ const fx = (fid: string, o: Partial<FxItem> = {}): FxItem => ({
 });
 const muted = { sports: [], leagues: [], tags: [] };
 
-test("home: his live games, ranked; else the single top-ranked live game; none without a channel", () => {
+test("home: his live games, ranked; none without a channel", () => {
   const items = [fx("a", { rank: 2 }), fx("b", { rank: 1 }), fx("c", { favourite: true, rank: 5 }), fx("d", { favourite: true, rank: 3 }), fx("e", { favourite: true, channels: [] })];
   assert.deepEqual(homePicks(items, NOW).map((f) => f.fid), ["d", "c"]);
-  assert.deepEqual(homePicks(items.filter((f) => !f.favourite), NOW).map((f) => f.fid), ["b"]);
   assert.deepEqual(homePicks([fx("x", { status: "pre", favourite: true })], NOW), []);
   // a favourite by team ref, not only by the server flag
   assert.deepEqual(homePicks([fx("a", { rank: 1 }), fx("t", { homeId: "42", rank: 9 })], NOW, [{ teamId: "42" }]).map((f) => f.fid), ["t"]);
 });
 
+test("home: no fallback; a live game he doesn't follow (team or league) never takes the hero", () => {
+  // the 21-Nov report: a La Liga game he doesn't follow, top-ranked, with nothing of his on
+  const laLiga = fx("ll", { league: "La Liga", leagueKey: "esp.1", sport: "soccer", rank: 1, significance: 9 });
+  assert.deepEqual(homePicks([laLiga, fx("b", { rank: 2 })], NOW, [{ teamId: "42" }], muted, ["Premier League"]), []);
+  assert.deepEqual(homePicks([], NOW), []);
+});
+
+test("home: followed leagues count (by name or key, any case), ranked with his teams' games", () => {
+  const items = [fx("epl", { league: "Premier League", leagueKey: "eng.1", rank: 4 }), fx("t", { homeId: "42", rank: 6 }), fx("ll", { league: "La Liga", leagueKey: "esp.1", rank: 1 })];
+  assert.deepEqual(homePicks(items, NOW, [{ teamId: "42" }], muted, ["premier league"]).map((f) => f.fid), ["epl", "t"]);
+  assert.deepEqual(homePicks(items, NOW, [], muted, ["ENG.1"]).map((f) => f.fid), ["epl"]);
+  assert.equal(followsLeague(items[2], ["Premier League"]), false);
+  assert.equal(followsLeague(items[2], []), false);
+  // muted wins over followed
+  assert.deepEqual(homePicks(items, NOW, [], { ...muted, leagues: ["Premier League"] }, ["Premier League"]), []);
+});
+
 test("home: ties by significance, then kickoff, then id", () => {
-  const items = [fx("b", { significance: 1 }), fx("a", { significance: 1 }), fx("z", { significance: 3 })];
-  assert.deepEqual(homePicks(items, NOW).map((f) => f.fid), ["z"]);
-  assert.deepEqual(homePicks(items.slice(0, 2), NOW).map((f) => f.fid), ["a"]);
+  const items = [fx("b", { significance: 1, favourite: true }), fx("a", { significance: 1, favourite: true }), fx("z", { significance: 3, favourite: true })];
+  assert.deepEqual(homePicks(items, NOW).map((f) => f.fid), ["z", "a", "b"]);
 });
 
 test("muted leagues and sports never reach the hero", () => {
   assert.equal(isMuted(fx("a"), { ...muted, leagues: ["nrl"] }), true);
   assert.equal(isMuted(fx("a"), { ...muted, sports: ["Rugby-League"] }), true);
   assert.equal(isMuted(fx("a"), muted), false);
-  assert.deepEqual(homePicks([fx("a", { favourite: true }), fx("b", { league: "AFL", leagueKey: "afl" })], NOW, [], { ...muted, leagues: ["NRL"] }).map((f) => f.fid), ["b"]);
+  assert.deepEqual(homePicks([fx("a", { favourite: true }), fx("b", { league: "AFL", leagueKey: "afl", favourite: true })], NOW, [], { ...muted, leagues: ["NRL"] }).map((f) => f.fid), ["b"]);
+  assert.deepEqual(gameCentrePicks([fx("a", { rank: 1 }), fx("b", { league: "AFL", leagueKey: "afl", rank: 2 })], NOW, [], { ...muted, leagues: ["NRL"] }).map((f) => f.fid), ["b"]);
 });
 
 test("game centre: live picks first, else his next game within a day, else the top-ranked one", () => {
   const pre = (fid: string, inS: number, o: Partial<FxItem> = {}) => fx(fid, { status: "pre", kickoff: NOW + inS, ...o });
   assert.deepEqual(gameCentrePicks([fx("live"), pre("p", 600, { favourite: true })], NOW).map((f) => f.fid), ["live"]);
+  // Game Centre keeps the fallback: the top-ranked live game when none of his are on; his own first when they are
+  assert.deepEqual(gameCentrePicks([fx("a", { rank: 2 }), fx("b", { rank: 1 })], NOW).map((f) => f.fid), ["b"]);
+  assert.deepEqual(gameCentrePicks([fx("a", { rank: 1 }), fx("m", { favourite: true, rank: 5 })], NOW).map((f) => f.fid), ["m"]);
+  assert.deepEqual(gameCentrePicks([fx("a", { rank: 1 }), fx("l", { league: "Premier League", rank: 5 })], NOW, [], muted, ["Premier League"]).map((f) => f.fid), ["l"]);
   assert.deepEqual(gameCentrePicks([pre("a", 600, { rank: 1 }), pre("b", 7200, { favourite: true }), pre("c", 3600, { favourite: true })], NOW).map((f) => f.fid), ["c"]);
   assert.deepEqual(gameCentrePicks([pre("a", 600, { rank: 2 }), pre("b", 700, { rank: 1 }), pre("far", 2 * 86400, { favourite: true })], NOW).map((f) => f.fid), ["b"]);
   assert.deepEqual(gameCentrePicks([fx("done", { status: "post" })], NOW), []);
