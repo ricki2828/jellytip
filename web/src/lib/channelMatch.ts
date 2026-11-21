@@ -3,7 +3,8 @@
 import type { FxItem } from "./gameCentre";
 
 export const SOON_S = 15 * 60;
-export interface ChannelMatch { matchId: string; maybe: boolean; title: string }
+/** startsAt: the fixture's kick-off (catch me up needs it; the link of a channel opened from the guide has none). */
+export interface ChannelMatch { matchId: string; maybe: boolean; title: string; startsAt: number }
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -19,7 +20,7 @@ export function resolveChannelMatch(items: FxItem[], channel: string | null | un
     const c = f.channels.find((x) => norm(x.id) === want);
     if (!c) continue;
     if (!best || (live && !best.live) || (live === best.live && c.confidence > best.conf)) {
-      best = { m: { matchId: mid, maybe: c.maybe || c.dormant, title: f.home && f.away ? `${f.home} v ${f.away}` : f.league ?? "" }, conf: c.confidence, live };
+      best = { m: { matchId: mid, maybe: c.maybe || c.dormant, title: f.home && f.away ? `${f.home} v ${f.away}` : f.league ?? "", startsAt: f.kickoff }, conf: c.confidence, live };
     }
   }
   return best?.m ?? null;

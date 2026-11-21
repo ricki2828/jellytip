@@ -7,7 +7,7 @@ const fx = (o: Record<string, unknown>) => ({ fid: "f", home: "UCLA", away: "Min
 const NOW = 1000;
 
 test("live fixture with this channel resolves", () => {
-  assert.deepEqual(resolveChannelMatch([fx({ channels: [ch("1:2")] })], "1:2", NOW), { matchId: "m1", maybe: false, title: "UCLA v Minnesota" });
+  assert.deepEqual(resolveChannelMatch([fx({ channels: [ch("1:2")] })], "1:2", NOW), { matchId: "m1", maybe: false, title: "UCLA v Minnesota", startsAt: 1000 });
 });
 test("highest confidence wins; maybe is carried", () => {
   const r = resolveChannelMatch([fx({ matchId: "a", channels: [ch("1:2", 0.5, true)] }), fx({ matchId: "b", channels: [ch("1:2", 0.7, true)] })], "1:2", NOW);
