@@ -309,6 +309,67 @@ object JellytipMe {
 
     fun thumbOf(itemId: UUID): Int = thumbs[itemId.toString()] ?: 0
 
+    /**
+     * Key the server stores (and /reactions returns) for an IPTV title (web 6d8398bd): the TMDB id when known (one
+     * rating across copies and the library copy), else the IPTV id.
+     */
+    fun iptvTasteKey(
+        id: String,
+        kind: String,
+        tmdbId: Int?,
+    ): String = if (tmdbId != null && tmdbId > 0) (if (kind == "series") "tmdb:tv:$tmdbId" else "tmdb:$tmdbId") else "iptv:$id"
+
+    fun thumbOfKey(key: String): Int = thumbs[key] ?: 0
+
+    /** Thumb on an IPTV film / series (1 up, -1 down, 0 clear); [onDone] gets an error text or null. */
+    fun thumbIptv(
+        id: String,
+        kind: String,
+        tmdbId: Int?,
+        value: Int,
+        onDone: (String?) -> Unit = {},
+    ) {
+        val key = iptvTasteKey(id, kind, tmdbId)
+        val before = thumbs[key]
+        if (value == 0) thumbs.remove(key) else thumbs[key] = value
+        scope.launch {
+            val body = JSONObject().put("iptvId", id).put("kind", kind).put("value", value)
+            if (tmdbId != null && tmdbId > 0) body.put("tmdbId", tmdbId)
+            val r = api?.userCall("v1/me/thumbs", body.toString())
+            JellytipTrace.log("me", "iptv thumbs $key=$value -> ${r?.first}")
+            val ok = r != null && r.first in 200..204
+            if (ok) {
+                applyReactions(r)
+                com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.invalidate()
+            } else {
+                if (before == null) thumbs.remove(key) else thumbs[key] = before
+            }
+            withContext(Dispatchers.Main) { onDone(if (ok) null else if (r == null) "The server can't be reached." else "Server said ${r.first}") }
+        }
+    }
+
+    /** Watched / not watched for an IPTV film or whole series (`POST v1/iptv/played`); [onDone] gets an error text or null. */
+    fun setIptvPlayed(
+        id: String,
+        played: Boolean,
+        onDone: (String?) -> Unit = {},
+    ) {
+        scope.launch {
+            val r = api?.userCall("v1/iptv/played", JSONObject().put("id", id).put("played", played).toString())
+            JellytipTrace.log("me", "iptv played $id=$played -> ${r?.first}")
+            val ok = r != null && r.first in 200..204
+            if (ok) com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.invalidate()
+            val err =
+                when {
+                    ok -> null
+                    r == null -> "The server can't be reached."
+                    r.first == 409 -> "Open the show once so its episodes are known, then try again."
+                    else -> "Server said ${r.first}"
+                }
+            withContext(Dispatchers.Main) { onDone(err) }
+        }
+    }
+
     fun isNotInterested(itemId: UUID): Boolean = notInterested[itemId.toString()] == true
 
     fun setNotInterested(
