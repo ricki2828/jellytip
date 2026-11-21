@@ -100,21 +100,25 @@ object IptvStreamFail {
         }
 
     /**
-     * Reason for a player error ([errorCode] = Media3 PlaybackException code, [http] = the link's HTTP status):
-     * 404 = gone, 401/403 = refused, decoder faults = this device only (`decode`, never counted against the stream),
-     * network = unreachable, anything after playback started = recovery gave up.
+     * Reason for a player error ([errorCode] = Media3 PlaybackException code, [http] = the link's HTTP status, [code] =
+     * the companion's `X-Iptv-Error`), or null when it is not the stream's fault. A companion code wins over the HTTP
+     * status; 409 (connections in use) and expired links are never the stream's; decoder faults are this device only
+     * (`decode`, logged but never counted); errors after playback started are not reported (no retry machine here).
      */
     fun reasonFor(
         errorCode: Int,
         http: Int?,
+        code: String? = null,
         wasPlaying: Boolean = false,
-    ): String =
+    ): String? =
         when {
+            code != null -> reasonForCode(code)
+            http == 409 -> null
+            errorCode in 4001..4005 -> "decode"
+            wasPlaying -> null
             http == 404 || http == 410 -> "open_failed"
             http == 401 || http == 403 -> "refused"
-            errorCode in 4001..4005 -> "decode"
             errorCode == 2001 || errorCode == 2002 -> "unreachable"
-            wasPlaying -> "recovery_gave_up"
             else -> "open_failed"
         }
 

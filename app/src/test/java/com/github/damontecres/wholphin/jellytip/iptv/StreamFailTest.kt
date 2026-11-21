@@ -55,7 +55,12 @@ class StreamFailTest {
         assertEquals("refused", IptvStreamFail.reasonFor(2004, 403))
         assertEquals("decode", IptvStreamFail.reasonFor(4003, null))
         assertEquals("unreachable", IptvStreamFail.reasonFor(2001, null))
-        assertEquals("recovery_gave_up", IptvStreamFail.reasonFor(1000, null, wasPlaying = true))
+        assertNull(IptvStreamFail.reasonFor(1000, null, wasPlaying = true))
+        // connections in use (409) and expired links are never the stream's fault; the companion code wins over HTTP
+        assertNull(IptvStreamFail.reasonFor(2004, 409))
+        assertNull(IptvStreamFail.reasonFor(2004, 403, code = "expired"))
+        assertNull(IptvStreamFail.reasonFor(2004, 409, code = "max_connections"))
+        assertEquals("refused", IptvStreamFail.reasonFor(2004, 502, code = "provider_refused"))
         assertNull(IptvStreamFail.reasonForCode("disabled"))
         assertEquals("refused", IptvStreamFail.reasonForCode("provider_refused"))
     }

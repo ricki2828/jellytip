@@ -1,5 +1,10 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.offset
@@ -340,12 +345,29 @@ fun JellytipIptvDetailsPage(
                     .path(if (it.isSeries) "series" else "movie", it.tmdbId, iptvId = it.id)
                     ?.let { p -> com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(p) }
         }
+        // The row only composes once Down finds nothing more below (as the library pages do), so it never pushes the
+        // block up under focus when it arrives
+        var showSimilar by remember(id) { mutableStateOf(false) }
+        val similarFocus = remember { FocusRequester() }
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+        val pageScope = androidx.compose.runtime.rememberCoroutineScope()
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier =
                 Modifier
                     .align(Alignment.BottomStart)
-                    .verticalScroll(rememberScrollState())
+                    .onPreviewKeyEvent { ev ->
+                        if (showSimilar || similar == null || ev.type != KeyEventType.KeyDown || ev.key != Key.DirectionDown) return@onPreviewKeyEvent false
+                        if (!focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)) {
+                            showSimilar = true
+                            pageScope.launch {
+                                withFrameNanos { }
+                                withFrameNanos { }
+                                similarFocus.tryRequestFocus()
+                            }
+                        }
+                        true
+                    }.verticalScroll(rememberScrollState())
                     .padding(start = 48.dp, bottom = 40.dp, end = 48.dp, top = 24.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -495,9 +517,9 @@ fun JellytipIptvDetailsPage(
                     }
                 }
             }
-            similar?.let { row ->
+            similar?.takeIf { showSimilar }?.let { row ->
                 Box(Modifier.padding(top = 12.dp).offset(x = (-48).dp)) {
-                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row)
+                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row, Modifier.focusRequester(similarFocus))
                 }
             }
         }

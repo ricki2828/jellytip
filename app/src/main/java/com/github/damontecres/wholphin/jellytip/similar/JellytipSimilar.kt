@@ -69,8 +69,10 @@ object JellytipSimilar {
 
     /** The row for [path]; null on any failure or an empty answer. */
     suspend fun row(path: String): JellytipServerRow? {
-        cache[path]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         val api = JellytipApi.shared ?: return null
+        // One person's answer must never show for another (account switch)
+        val key = "${api.currentUserKey()}|$path"
+        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         val result =
             try {
                 val (code, body) = api.userCall(path) ?: return null // unreachable: not cached, retried next open
@@ -85,7 +87,7 @@ object JellytipSimilar {
             } catch (e: Exception) {
                 null
             }
-        cache[path] = System.currentTimeMillis() to result
+        cache[key] = System.currentTimeMillis() to result
         return result
     }
 
