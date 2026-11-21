@@ -446,11 +446,17 @@ fun HomeLiveHero(
     }
     val best = SportFixtures.pickChannel(f, now).channel
     val fromStart = best?.takeIf { it.startOver && it.start != null && it.stop != null && !it.dormant }
+    SportEventsFlushOnLeave()
+    // Home's hero is on screen while composed; cycling to another game = a new `shown`
+    androidx.compose.runtime.LaunchedEffect(f.fid, f.listId) {
+        kotlinx.coroutines.delay(SportEventRules.SHOWN_MIN_MS)
+        JellytipSportEvents.log(SportEventRules.SHOWN, f, SportEventRules.HOME_HERO, pos = index + 1)
+    }
     LiveMatchHero(
         f = f,
         now = now,
-        onWatch = best?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, false, "home hero") } },
-        onFromStart = fromStart?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, true, "home hero") } },
+        onWatch = best?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, false, "home hero", surface = SportEventRules.HOME_HERO) } },
+        onFromStart = fromStart?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, true, "home hero", surface = SportEventRules.HOME_HERO) } },
         onMore = {
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
             viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipUpcomingSport, "home hero More")

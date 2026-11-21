@@ -21,6 +21,8 @@ import com.github.damontecres.wholphin.ui.components.DialogItem
 fun rememberSportMuteItems(
     league: String?,
     sport: String?,
+    /** Saved (the sport event log's `not_interested`). */
+    onMuted: (() -> Unit)? = null,
 ): List<DialogItem> {
     val available by JellytipMe.available.collectAsState()
     val context = LocalContext.current
@@ -31,6 +33,7 @@ fun rememberSportMuteItems(
     ) = DialogItem("Not interested in $value", dismissOnClick = true) {
         JellytipMe.setSportMuted(kind, value, true) { ok ->
             if (ok) {
+                onMuted?.invoke()
                 JellytipUndo.show("Not interested in $value") { JellytipMe.setSportMuted(kind, value, false) }
             } else {
                 Toast.makeText(context, "Couldn't save that. Try again later.", Toast.LENGTH_SHORT).show()

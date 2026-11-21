@@ -123,6 +123,7 @@ class JellytipKickoff
             val first = KickoffCard(d)
             downKey = null
             _card.value = first
+            JellytipSportEvents.log(SportEventRules.SHOWN, d.fixture, SportEventRules.KICKOFF_CARD)
             // Team colours for the top bar (one match call; the card shows neutral until then)
             val m = runCatching { fetchMatch(d.fixture.companionId)?.second?.match }.getOrNull()
             if (m != null && _card.value?.due == d) _card.value = first.copy(home = m.home, away = m.away)
@@ -157,9 +158,12 @@ class JellytipKickoff
                 if (downKey != e.keyCode) return false
                 downKey = null
                 _card.value = null
+                // Only the real key paths log (the 15 s timeout and hush() send nothing)
                 if (ok) {
+                    JellytipSportEvents.log(SportEventRules.KICKOFF_OK, c.due.fixture, SportEventRules.KICKOFF_CARD)
                     watch(c.due.fixture)
                 } else {
+                    JellytipSportEvents.log(SportEventRules.KICKOFF_BACK, c.due.fixture, SportEventRules.KICKOFF_CARD)
                     JellytipTrace.log("iptv", "kick-off takeover dismissed ${c.due.key}")
                 }
                 return true
@@ -178,7 +182,7 @@ class JellytipKickoff
                 top is com.github.damontecres.wholphin.ui.nav.Destination.JellytipLiveTvPlayer ||
                     top is com.github.damontecres.wholphin.ui.nav.Destination.Playback ||
                     top is com.github.damontecres.wholphin.ui.nav.Destination.PlaybackList
-            launchFixture(playback, navigationManager, f, ch, fromStart = false, from = "kick-off", replaceTop = swap, forceMatch = true)
+            launchFixture(playback, navigationManager, f, ch, fromStart = false, from = "kick-off", replaceTop = swap, forceMatch = true, surface = SportEventRules.KICKOFF_CARD)
         }
 
         companion object {

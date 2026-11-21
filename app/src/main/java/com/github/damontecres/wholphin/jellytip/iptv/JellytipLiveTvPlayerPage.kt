@@ -1158,6 +1158,7 @@ fun JellytipLiveTvPlayerPage(
                                 chipsOpen = false
                                 if (ch != null && ch.id != channel.id) {
                                     JellytipTrace.player("iptv", "channel chip ${channel.id} -> ${ch.id}")
+                                    JellytipSportEvents.logChannel(SportEventRules.WATCH, ch.id, SportEventRules.PLAYER_SWITCHER) { viewModel.service.fixtures(maxAgeMs = 60_000)?.second?.items }
                                     tried += ch.id
                                     fallback = if (ch.id == lineup[index].id) null else ch
                                     current = IptvTarget(ch.id, ch.name)

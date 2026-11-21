@@ -87,6 +87,8 @@ data class FxItem(
     val art: String? = null,
     /** The league's badge, absolute; null = none. */
     val badge: String? = null,
+    /** The served list this item came in (the answer's `listId`), for the sport event log; null = older server. */
+    val listId: String? = null,
 ) {
     val title get() = if (away.isNotBlank()) "$home v $away" else home
 
@@ -108,6 +110,10 @@ data class FxList(
     val items: List<FxItem>,
     val degraded: Boolean,
     val more: List<FxMore>,
+    /** The answer's id for the event log (each item carries it too); null = older server. */
+    val listId: String? = null,
+    /** The server's ranker version. */
+    val ranker: String? = null,
 )
 
 data class FxGroup(
@@ -207,6 +213,7 @@ object SportFixtures {
         val list = if (root == null && trimmed.startsWith("[")) JSONArray(trimmed) else root?.optJSONArray("items")
         val out = ArrayList<FxItem>()
         val seen = HashSet<String>()
+        val listId = root?.s("listId")
         for (e in list.objects()) {
             val fid = e.id("fid") ?: continue
             val ko = kickoff(e) ?: continue
@@ -252,6 +259,7 @@ object SportFixtures {
                     followedLeague = e.optJSONArray("why").let { w -> w != null && (0 until w.length()).any { i -> w.opt(i) == "favourite league" } },
                     art = e.s("art")?.let(img),
                     badge = e.s("badge")?.let(img),
+                    listId = listId,
                 )
         }
         val more =
@@ -261,7 +269,7 @@ object SportFixtures {
                 val hidden = m.n("hidden")?.toInt()?.takeIf { it > 0 } ?: return@mapNotNull null
                 FxMore(league, m.s("leagueKey"), day, hidden)
             }
-        return FxList(out, root?.optBoolean("degraded", false) == true, more)
+        return FxList(out, root?.optBoolean("degraded", false) == true, more, listId, root?.s("ranker"))
     }
 
     fun localDay(
@@ -447,6 +455,8 @@ object SportFixtures {
         val matchId: String,
         val maybe: Boolean,
         val title: String,
+        /** The fixture itself (the sport event log). */
+        val fixture: FxItem? = null,
     )
 
     fun resolveChannelMatch(
@@ -464,7 +474,7 @@ object SportFixtures {
             val c = f.channels.firstOrNull { it.id.trim().lowercase() == want } ?: continue
             val b = best
             if (b == null || (live && !b.third) || (live == b.third && c.confidence > b.second)) {
-                best = Triple(ChannelMatch(mid, c.maybe || c.dormant, if (f.away.isNotBlank()) "${f.home} v ${f.away}" else f.league ?: ""), c.confidence, live)
+                best = Triple(ChannelMatch(mid, c.maybe || c.dormant, if (f.away.isNotBlank()) "${f.home} v ${f.away}" else f.league ?: "", f), c.confidence, live)
             }
         }
         return best?.first

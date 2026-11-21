@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -144,6 +145,7 @@ class JellytipGameCentreViewModel
                     } else {
                         service.addFixtureReminder(f.fid, f.matchId) != null
                     }
+                if (ok && !on) JellytipSportEvents.log(SportEventRules.REMIND, f, SportEventRules.GAMECENTRE)
                 _state.value =
                     _state.value.copy(
                         reminderOverride = if (ok) _state.value.reminderOverride + (f.fid to !on) else _state.value.reminderOverride,
@@ -160,6 +162,7 @@ class JellytipGameCentreViewModel
             val start = ch.start ?: return
             viewModelScope.launch {
                 val r = service.record(ch.id, start)
+                if (r.ok) JellytipSportEvents.log(SportEventRules.RECORD, f, SportEventRules.GAMECENTRE)
                 _state.value = _state.value.copy(message = if (r.ok) "Recording ${f.title}" else (r.message ?: "Couldn't set the recording"))
                 recordings = service.recordings()?.second ?: recordings
                 refresh()
@@ -178,7 +181,7 @@ class JellytipGameCentreViewModel
             f: FxItem,
             ch: FxChannel,
             fromStart: Boolean,
-        ) = launchFixture(playback, navigationManager, f, ch, fromStart, "game centre")
+        ) = launchFixture(playback, navigationManager, f, ch, fromStart, "game centre", surface = SportEventRules.GAMECENTRE)
     }
 
 @Composable
@@ -187,6 +190,7 @@ fun JellytipGameCentrePage(
     viewModel: JellytipGameCentreViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    SportEventsFlushOnLeave()
     LaunchedEffect(Unit) {
         while (true) {
             viewModel.refresh()
@@ -251,6 +255,11 @@ fun JellytipGameCentrePage(
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
                     hero?.let { h ->
                         item(key = "hero") {
+                            // The hero is the list's first item: on screen while composed (cycling = a new fixture)
+                            LaunchedEffect(h.fid, h.listId) {
+                                delay(SportEventRules.SHOWN_MIN_MS)
+                                JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1)
+                            }
                             val best = SportFixtures.pickChannel(h, now).channel
                             val fromStart = best?.takeIf { h.status != "pre" && it.startOver && it.start != null && it.stop != null && !it.dormant }
                             LiveMatchHero(
@@ -284,13 +293,16 @@ fun JellytipGameCentrePage(
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ItemRowTitle("${g.label} (${g.items.size})")
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
-                                    items(g.items, key = { it.fid }) { f ->
+                                    itemsIndexed(g.items, key = { _, it -> it.fid }) { i, f ->
                                         ColourEdgeFixtureTile(
                                             f,
                                             now,
                                             reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
                                             revealed = f.fid in revealed.value,
-                                            onClick = { open(f) },
+                                            onClick = {
+                                                JellytipSportEvents.log(SportEventRules.OPENED, f, SportEventRules.GAMECENTRE, g.id, i + 1)
+                                                open(f)
+                                            },
                                             onLongClick = {
                                                 viewModel.lastFid = f.fid
                                                 menu = f
@@ -300,7 +312,7 @@ fun JellytipGameCentrePage(
                                                     f.fid == viewModel.lastFid -> Modifier.focusRequester(restore)
                                                     gi == 0 && f === g.items.first() -> Modifier.focusRequester(first)
                                                     else -> Modifier
-                                                },
+                                                }.sportShown(f, SportEventRules.GAMECENTRE, g.id, i + 1),
                                         )
                                     }
                                     // "+N more NBA games today · Show all" ends the Upcoming row (web d47d3b77)
@@ -501,6 +513,8 @@ fun launchFixture(
     replaceTop: Boolean = false,
     /** Carry the match id even before kick-off (kick-off takeover: the companion is ready when the game starts). */
     forceMatch: Boolean = false,
+    /** The sport event log's surface for this launch (a `watch` event); null = not logged. */
+    surface: String? = null,
 ) {
     com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
     val matchId = if (fromStart) null else if (forceMatch) f.companionId else SportFixtures.liveMatchId(f, ch)
@@ -511,6 +525,7 @@ fun launchFixture(
     } else if (!navigationManager.navigateToChecked(dest, "$from ${f.title}")) {
         return
     }
+    surface?.let { JellytipSportEvents.log(SportEventRules.WATCH, f, it) }
     val order = SportFixtures.pickChannel(f, nowSec()).order
     val main = ch.toIptvChannel()
     playback.lineup = listOf(main)

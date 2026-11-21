@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -149,12 +150,21 @@ fun JellytipUpcomingSportRow(
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
             modifier = modifier.jellytipRowBleed().fillMaxWidth(),
         ) {
-            items(shown, key = { it.key }) { u ->
-                UpcomingTile(u, now, onClick = { overlay = u }, modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() })
+            itemsIndexed(shown, key = { _, it -> it.key }) { i, u ->
+                UpcomingTile(
+                    u,
+                    now,
+                    onClick = {
+                        JellytipSportEvents.logFid(SportEventRules.OPENED, u.fid, SportEventRules.HOME_ROW, i + 1)
+                        overlay = u
+                    },
+                    modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() }.sportShownFid(u.fid, SportEventRules.HOME_ROW, i + 1),
+                )
             }
         }
     }
-    UpcomingOverlays(overlay, now, onDismiss = { overlay = null }, viewModel)
+    UpcomingOverlays(overlay, now, onDismiss = { overlay = null }, viewModel, surface = SportEventRules.HOME_ROW)
+    SportEventsFlushOnLeave()
 }
 
 /** "in 2h 10m", "in 25m"; a day or more away = the day and time. */
@@ -226,8 +236,10 @@ internal fun UpcomingOverlays(
     onDismiss: () -> Unit,
     viewModel: JellytipUpcomingSportViewModel,
     fromReminders: Boolean = false,
+    /** The sport event log's surface (Home's row); null = not logged. */
+    surface: String? = null,
 ) {
-    overlay?.let { u -> UpcomingOverlay(u, now, onDismiss, viewModel, fromReminders) }
+    overlay?.let { u -> UpcomingOverlay(u, now, onDismiss, viewModel, fromReminders, surface) }
     viewModel.recordResult?.let { (ok, text) ->
         com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
@@ -257,12 +269,17 @@ private fun UpcomingOverlay(
     onDismiss: () -> Unit,
     viewModel: JellytipUpcomingSportViewModel,
     fromReminders: Boolean = false,
+    /** The sport event log's surface (Home's row); null = not logged. */
+    surface: String? = null,
 ) {
+    fun ev(type: String) {
+        surface?.let { JellytipSportEvents.logFid(type, u.fid, it) }
+    }
     val remindersOn by viewModel.reminders.available.collectAsState()
     val reminderList by viewModel.reminders.items.collectAsState()
     val teamAvailable by viewModel.teamReminders.available.collectAsState()
     val teamItems by viewModel.teamReminders.items.collectAsState()
-    val muteItems = rememberSportMuteItems(u.league, u.sportName)
+    val muteItems = rememberSportMuteItems(u.league, u.sportName, onMuted = { ev(SportEventRules.NOT_INTERESTED) })
     var showMatch by remember(u.key) { mutableStateOf(false) }
     val m = u.matchInfo
     if (showMatch && m != null) {
@@ -271,6 +288,7 @@ private fun UpcomingOverlay(
             onWatch = { ch ->
                 showMatch = false
                 onDismiss()
+                ev(SportEventRules.WATCH)
                 viewModel.watch(u, ch)
             },
             onDismiss = {
@@ -280,6 +298,7 @@ private fun UpcomingOverlay(
             onRemind =
                 if (remindersOn == true && viewModel.reminders.reminderIdFor(u, reminderList) == null) {
                     {
+                        ev(SportEventRules.REMIND)
                         viewModel.reminders.add(u)
                         showMatch = false
                         onDismiss()
@@ -290,6 +309,7 @@ private fun UpcomingOverlay(
             onRecord =
                 if (u.recordable && u.recordingId == null && u.stop > now) {
                     {
+                        ev(SportEventRules.RECORD)
                         viewModel.record(u)
                         showMatch = false
                         onDismiss()
@@ -315,7 +335,12 @@ private fun UpcomingOverlay(
                             )
                         },
                         trailingContent = { QualityChips(ch.quality) },
-                        onClick = { if (live) viewModel.watch(u, ch) },
+                        onClick = {
+                            if (live) {
+                                ev(SportEventRules.WATCH)
+                                viewModel.watch(u, ch)
+                            }
+                        },
                         enabled = live,
                         dismissOnClick = true,
                     ),
@@ -329,7 +354,12 @@ private fun UpcomingOverlay(
                     if (space != null && !space.canRecord) {
                         add(DialogItem("Can't record: ${space.reason ?: "no space on the server"}", dismissOnClick = true) {})
                     } else {
-                        add(DialogItem("Record", dismissOnClick = true) { viewModel.record(u) })
+                        add(
+                            DialogItem("Record", dismissOnClick = true) {
+                                ev(SportEventRules.RECORD)
+                                viewModel.record(u)
+                            },
+                        )
                     }
                 }
                 !u.recordable && u.stop > now && viewModel.service.lastSpace?.canRecord == false ->
@@ -357,7 +387,13 @@ private fun UpcomingOverlay(
             if (remindersOn == true && u.stop > now) {
                 val rid = viewModel.reminders.reminderIdFor(u, reminderList)
                 when {
-                    rid == null -> add(DialogItem("Remind me", dismissOnClick = true) { viewModel.reminders.add(u) })
+                    rid == null ->
+                        add(
+                            DialogItem("Remind me", dismissOnClick = true) {
+                                ev(SportEventRules.REMIND)
+                                viewModel.reminders.add(u)
+                            },
+                        )
                     fromReminders -> add(DialogItem("Remove reminder", dismissOnClick = true) { viewModel.reminders.remove(rid) })
                     else -> add(DialogItem("Reminder set ✓", dismissOnClick = true) { viewModel.reminders.remove(rid) })
                 }
