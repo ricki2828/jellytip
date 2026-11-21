@@ -77,8 +77,10 @@ object IptvStreamReport {
     suspend fun reportAndFindNext(
         target: IptvTarget,
         positionMs: Long,
+        /** The player already reported this failure (Failed state): don't count it twice. */
+        alreadyReported: Boolean = false,
     ): Next {
-        IptvStreamFail.report(target, ok = false, reason = "user_report", posSec = positionMs / 1000)
+        if (!alreadyReported) IptvStreamFail.report(target, ok = false, reason = "user_report", posSec = positionMs / 1000)
         val now = System.currentTimeMillis() / 1000
         return try {
             val vodId = target.vodId

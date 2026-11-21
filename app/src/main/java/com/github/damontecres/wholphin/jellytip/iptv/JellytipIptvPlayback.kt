@@ -304,6 +304,7 @@ class JellytipIptvPlayback
                     .build()
                     .also {
                         it.addListener(listener)
+                        it.volume = volume
                         player = it
                         JellytipTrace.player("iptv", "player created")
                     }
@@ -356,8 +357,9 @@ class JellytipIptvPlayback
                                     .setUri(url)
                                     .apply { if (ts) setMimeType(MimeTypes.VIDEO_MP2T) }
                                     .apply {
-                                        if (target.isLive) {
-                                            setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(profile.behindMs).build())
+                                        // Low (the default) keeps the stream's own hold-back; bigger profiles only ask for at least their distance
+                                        if (target.isLive && profile != LiveBuffer.Profile.LOW) {
+                                            setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setMinOffsetMs(profile.behindMs).build())
                                         }
                                     }.build()
                             val p = ensurePlayer(profile)
@@ -472,7 +474,11 @@ class JellytipIptvPlayback
             scope.launch { service.saveProgress(item, pos, dur, series) }
         }
 
+        /** Kept so a rebuilt player (live buffer change) starts at the same volume (the guide preview is muted). */
+        private var volume = 1f
+
         fun setVolume(volume: Float) {
+            this.volume = volume
             player?.volume = volume
         }
 

@@ -107,22 +107,28 @@ fun JellytipIptvPlayPage(
             reportBusy = true
             scope.launch {
                 val pos = playback.player?.currentPosition ?: 0L
+                // Same film / episode on another copy: carry on from here
+                val resume = if (playState is IptvPlayState.Playing) pos else target.resumeMs
                 JellytipTrace.player("iptv", "user: stream isn't working ${target.label}")
-                val next = IptvStreamReport.reportAndFindNext(target, pos)
+                val next = IptvStreamReport.reportAndFindNext(target, pos, alreadyReported = playState is IptvPlayState.Failed)
                 reportBusy = false
                 android.widget.Toast.makeText(ctx, next.message, android.widget.Toast.LENGTH_LONG).show()
+                // Back pressed while looking: this page is no longer on top, so don't pop whatever is
+                val top = viewModel.navigationManager.backStack.lastOrNull() as? Destination.JellytipIptvPlay
+                val stillHere = top != null && top.vodId == target.vodId && top.episodeId == target.episodeId
+                if (!stillHere) return@launch
                 when (next) {
                     is IptvStreamReport.Next.Vod -> {
                         reportOpen = false
                         viewModel.navigationManager.goBack()
-                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = target.label, vodId = next.id), "stream isn't working: next copy")
+                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = target.label, vodId = next.id, resumeMs = resume), "stream isn't working: next copy")
                     }
 
                     is IptvStreamReport.Next.Episode -> {
                         reportOpen = false
                         viewModel.navigationManager.goBack()
                         viewModel.navigationManager.navigateTo(
-                            Destination.JellytipIptvPlay(title = target.label, seriesId = next.seriesId, episodeId = next.episodeId),
+                            Destination.JellytipIptvPlay(title = target.label, seriesId = next.seriesId, episodeId = next.episodeId, resumeMs = resume),
                             "stream isn't working: same episode, next copy",
                         )
                     }
@@ -133,18 +139,23 @@ fun JellytipIptvPlayPage(
         }
     }
 
+    // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
+    val owner = remember { "item:" + java.util.UUID.randomUUID() }
     DisposableEffect(target) {
-        playback.attach("item")
+        playback.attach(owner)
         playback.setVolume(1f)
         playback.play(target, "open ${target.label}")
         onDispose {
             playback.saveProgress(target)
-            playback.detach("item")
+            playback.detach(owner)
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        playback.saveProgress(target)
-        playback.stop("app hidden (item)")
+        // Only this page's own stream: a page leaving behind a newer one (copy swap) must not stop it
+        if (playback.state.value.target == target) {
+            playback.saveProgress(target)
+            playback.stop("app hidden (item)")
+        }
     }
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
     LaunchedEffect(controlsTick) {
