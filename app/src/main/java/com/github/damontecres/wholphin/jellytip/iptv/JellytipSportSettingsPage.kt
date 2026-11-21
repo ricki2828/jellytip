@@ -63,13 +63,14 @@ internal fun Row2(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.05f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier.fillMaxWidth().height(48.dp),
     ) {
@@ -162,7 +163,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
         if (p == null) {
-            Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
             return@Column
         }
         val s = p.sport

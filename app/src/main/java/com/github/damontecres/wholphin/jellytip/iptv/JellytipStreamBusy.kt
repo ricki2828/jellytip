@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 
 /**
  * "Recording is using your stream" pop-up (plan "Stop recording + recording-is-using-your-stream pop-up"): Play came
@@ -42,7 +41,7 @@ fun StreamBusyPopup(
                 add(DialogItem("OK", dismissOnClick = true) { dismissed = true })
             }
         }
-    DialogPopup(showDialog = true, title = title, dialogItems = items, onDismissRequest = { dismissed = true })
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = title, dialogItems = items, onDismissRequest = { dismissed = true })
 }
 
 /** REC sheet title: a running recording shows its padded end ("recording until 21:42"), anything else [default]. */

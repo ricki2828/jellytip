@@ -93,13 +93,14 @@ private fun PlayerRow(
     Surface(
         onClick = { watch?.invoke() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.05f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier.fillMaxWidth().height(48.dp),
     ) {

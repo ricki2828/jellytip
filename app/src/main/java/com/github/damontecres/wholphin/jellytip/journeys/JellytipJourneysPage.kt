@@ -224,7 +224,7 @@ fun JellytipJourneysPage(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp)) {
         Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
         when {
-            g == null -> Text("Loading…", color = dim, fontFamily = JellytipFontFamily)
+            g == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 240.dp, tileH = 96.dp, rows = 2, perRow = 3)
             g.isEmpty -> {
                 Text(if (state.groupsFailed) "Journeys aren't available right now." else "No journeys yet.", color = dim, fontFamily = JellytipFontFamily)
                 if (state.groupsFailed) {
@@ -268,13 +268,14 @@ internal fun JourneyCard(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(10.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.07f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier.width(240.dp).height(96.dp),
     ) {
@@ -301,7 +302,7 @@ fun JellytipJourneyPage(
     val focus = remember { FocusRequester() }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp, end = 24.dp)) {
         when (val r = state.result) {
-            null -> Text("Loading…", color = dim, fontFamily = JellytipFontFamily)
+            null -> com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
             JourneyResult.Error -> {
                 Text("Couldn't load this journey.", color = dim, fontFamily = JellytipFontFamily)
                 Button(if (state.retrying) "Retrying…" else "Retry", Modifier.focusRequester(focus)) { if (!state.retrying) viewModel.loadJourney(id, retry = true) }
@@ -368,7 +369,7 @@ private fun JourneyView(
     }
     when {
         entries != null && next == null && p != null && p.playable > 0 -> Text("All watched.", color = dim, fontFamily = JellytipFontFamily)
-        entriesState is JourneyEntriesState.Loading -> Text("Loading your progress…", color = dim, fontFamily = JellytipFontFamily)
+        entriesState is JourneyEntriesState.Loading -> com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
         entriesState is JourneyEntriesState.Failed ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Couldn't load your progress.", color = dim, fontFamily = JellytipFontFamily)
@@ -429,13 +430,14 @@ internal fun FilmRow(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (isNext) JellytipPalette.Jelly.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -453,13 +455,14 @@ private fun Button(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (primary) JellytipPalette.Jelly else Color.White.copy(alpha = 0.10f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = Color.White,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier,
     ) {

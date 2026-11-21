@@ -71,7 +71,6 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.components.ConfirmDeleteDialog
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -499,7 +498,7 @@ fun JellytipLiveTvPage(
     val state by viewModel.state.collectAsState()
     LaunchedEffect(initialTab) { initialTab?.let(viewModel::openTab) }
     if (state.recordConfirm != null) {
-        DialogPopup(
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
             title = "Recording scheduled. It'll appear on Home.",
             dialogItems =
@@ -960,7 +959,7 @@ private fun ProgrammeActions(
             add(DialogItem(if (ch.favourite) "Remove from Favourites" else "Add to Favourites", dismissOnClick = true) { viewModel.toggleFavourite(ch) })
         }
     val subtitle = if (p.title.isNotEmpty()) "${p.title}  ·  ${hhmm(p.start)}–${hhmm(p.stop)}" else ch.name
-    DialogPopup(
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(
         showDialog = true,
         title = subtitle,
         dialogItems = items,
@@ -1010,13 +1009,14 @@ private fun RecordingsList(
                             onClick = { if (r.playable && r.state != "recording") onPlay(r) else menu = r },
                             onLongClick = { menu = r },
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
+                            border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(4.dp)),
                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                             colors =
                                 ClickableSurfaceDefaults.colors(
                                     containerColor = Color.White.copy(alpha = 0.06f),
-                                    focusedContainerColor = Color.White,
+                                    focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                                     contentColor = JellytipPalette.Vanilla,
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                                 ),
                             modifier = Modifier.fillMaxWidth().height(ROW_H),
                         ) {
@@ -1042,7 +1042,7 @@ private fun RecordingsList(
                 addAll(recordingSheetItems(r, onPlay = { onPlay(r) }, onCancel = { onCancel(r) }))
                 if (!r.upcoming) add(DialogItem("Delete", dismissOnClick = true) { confirmDelete = r })
             }
-        DialogPopup(showDialog = true, title = recordingSheetTitle(r, r.title), dialogItems = items, onDismissRequest = { menu = null })
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = recordingSheetTitle(r, r.title), dialogItems = items, onDismissRequest = { menu = null })
     }
     confirmDelete?.let { r ->
         ConfirmDeleteDialog(
@@ -1241,13 +1241,14 @@ private fun ProgCell(
         onClick = onClick,
         onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(4.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = if (onNow) 0.12f else if (past) 0.03f else 0.07f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla.copy(alpha = if (past) 0.5f else 0.9f),
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier,
     ) {
@@ -1280,13 +1281,14 @@ private fun TabChip(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier,
     ) {

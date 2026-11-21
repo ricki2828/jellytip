@@ -11,7 +11,6 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 import java.util.Locale
 
 /*
@@ -159,7 +158,7 @@ fun IptvTrackMenu(
             subs.forEach { o -> add(DialogItem("Subtitles: ${o.label}" + if (o.selected) "  ✓" else "", dismissOnClick = true) { IptvTracks.pick(player, o) }) }
         }
     if (shown) {
-        DialogPopup(
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
             title = "Audio & subtitles",
             dialogItems = items,

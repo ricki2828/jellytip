@@ -206,4 +206,35 @@ class PolishShotsTest {
         compose.waitForIdle()
         captureScreenRoboImage(out("dialog-hold-ok"))
     }
+
+    @Test
+    fun skeleton() {
+        captureRoboImage(out("skeleton-gamecentre")) {
+            Tv { com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2) }
+        }
+        captureRoboImage(out("skeleton-list")) {
+            Tv { com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 5) }
+        }
+    }
+
+    @Test
+    fun jellytipDialog() {
+        compose.setContent {
+            Tv { Text("Game Centre", color = Color.White) }
+            com.github.damontecres.wholphin.jellytip.JellytipDialog(
+                showDialog = true,
+                title = "Penrith Panthers v New Zealand Warriors",
+                dialogItems =
+                    listOf(
+                        DialogItem(headlineContent = { Text("Watch live on Fox League") }, onClick = {}),
+                        DialogItem(headlineContent = { Text("From kick-off") }, onClick = {}),
+                        DialogItem(headlineContent = { Text("Remind me") }, onClick = {}),
+                    ),
+                onDismissRequest = {},
+                waitToLoad = false,
+            )
+        }
+        compose.waitForIdle()
+        captureScreenRoboImage(out("dialog-hold-ok-jellytip"))
+    }
 }

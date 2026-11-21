@@ -469,7 +469,7 @@ fun JellytipIptvPlayPage(
 
     if (recMenu) {
         val id = target.recordingId
-        com.github.damontecres.wholphin.ui.components.DialogPopup(
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(
             showDialog = true,
             title = if (recConfirm) "Delete this recording for good?" else target.label,
             dialogItems =

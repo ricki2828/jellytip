@@ -2,7 +2,9 @@
 
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import com.github.damontecres.wholphin.jellytip.jellytipEnter
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1330,16 +1332,19 @@ fun JellytipLiveTvPlayerPage(
                 is IptvPlayState.Playing -> null
             }
         status?.let {
+            // The recovery / tuning note: a Broadcast-styled card (gold edge) that rises in each time the line changes
             Text(
                 text = it,
                 color = JellytipPalette.Vanilla,
                 fontFamily = JellytipFontFamily,
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 modifier =
                     Modifier
                         .align(Alignment.Center)
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                        .jellytipEnter(it, rise = 10.dp)
+                        .background(Broadcast.Base.copy(alpha = 0.92f), RoundedCornerShape(10.dp))
+                        .border(1.dp, Broadcast.Gold.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
             )
         }
         StreamBusyPopup(playState, playback)
@@ -1434,7 +1439,7 @@ fun JellytipLiveTvPlayerPage(
         if (panelMenu) {
             val floating = me?.sportPanelStyle == "floating"
             val pm = panelMatch
-            com.github.damontecres.wholphin.ui.components.DialogPopup(
+            com.github.damontecres.wholphin.jellytip.JellytipDialog(
                 showDialog = true,
                 title = "Live panel",
                 dialogItems =
@@ -1589,7 +1594,7 @@ fun JellytipLiveTvPlayerPage(
             if (items.isEmpty()) {
                 preMenu = false
             } else {
-                com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = preProg.title, dialogItems = items, onDismissRequest = { preMenu = false })
+                com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = preProg.title, dialogItems = items, onDismissRequest = { preMenu = false })
             }
         }
         if (bannerVisible) {

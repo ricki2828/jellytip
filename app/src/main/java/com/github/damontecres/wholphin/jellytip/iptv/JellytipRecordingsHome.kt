@@ -46,7 +46,6 @@ import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
 import com.github.damontecres.wholphin.ui.components.ConfirmDeleteDialog
 import com.github.damontecres.wholphin.ui.components.DialogItem
-import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -162,7 +161,7 @@ fun JellytipRecordingsRow(
                     },
                 )
             }
-        DialogPopup(showDialog = true, title = recordingSheetTitle(r, "${r.title}  ·  ${whenLabel(r.start)}"), dialogItems = options, onDismissRequest = { sheet = null })
+        com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = recordingSheetTitle(r, "${r.title}  ·  ${whenLabel(r.start)}"), dialogItems = options, onDismissRequest = { sheet = null })
     }
     confirmDelete?.let { r ->
         ConfirmDeleteDialog(
@@ -188,13 +187,14 @@ private fun RecordingCard(
         onClick = onClick,
         onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(6.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.07f),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = JellytipPalette.Vanilla,
-                focusedContentColor = Color.Black,
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         modifier = modifier.size(300.dp, 84.dp),
     ) {

@@ -113,13 +113,14 @@ fun JellytipInboxPage(
                         Surface(
                             onClick = { viewModel.open(e) },
                             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                            border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
                             colors =
                                 ClickableSurfaceDefaults.colors(
                                     containerColor = Color.White.copy(alpha = if (e.read) 0.04f else 0.09f),
-                                    focusedContainerColor = Color.White,
+                                    focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                                     contentColor = JellytipPalette.Vanilla,
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                                 ),
                             modifier = Modifier.fillMaxWidth().let { if (i == 0) it.focusRequester(first) else it },
                         ) {

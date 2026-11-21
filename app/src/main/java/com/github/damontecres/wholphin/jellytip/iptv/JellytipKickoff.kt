@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import com.github.damontecres.wholphin.jellytip.jellytipEnter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -242,7 +243,8 @@ fun JellytipKickoffCard(
         }
     }
     Box(modifier.fillMaxSize().padding(top = 36.dp, end = 48.dp), contentAlignment = Alignment.TopEnd) {
-        Column(Modifier.widthIn(min = 360.dp, max = 520.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.96f))) {
+        // Rises and fades in (260 ms; still when animations are off)
+        Column(Modifier.jellytipEnter(card.due.key).widthIn(min = 360.dp, max = 520.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.96f))) {
             Row(Modifier.fillMaxWidth().height(6.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().background(if (pal.known) pal.home else Broadcast.Gold))
                 Box(Modifier.weight(1f).fillMaxSize().background(if (pal.known) pal.away else Broadcast.Gold))

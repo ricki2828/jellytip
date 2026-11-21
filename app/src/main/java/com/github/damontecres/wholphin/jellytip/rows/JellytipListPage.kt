@@ -70,7 +70,7 @@ fun JellytipListPage(
             fontSize = 26.sp,
         )
         when (s) {
-            ListState.Loading -> Text("Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            ListState.Loading -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 1, perRow = 6, title = false)
             ListState.Missing -> Text("This list isn't available.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             is ListState.Loaded -> {
                 Text(

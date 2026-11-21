@@ -245,7 +245,7 @@ fun AlternatesMenu(
                 dismissOnClick = true,
             )
         }
-    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = o.title, dialogItems = channels + extra, onDismissRequest = onDismiss)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = o.title, dialogItems = channels + extra, onDismissRequest = onDismiss)
 }
 
 /** Home: "Live sport on now" — only when at least two sport channels are live (people without IPTV get nothing). */

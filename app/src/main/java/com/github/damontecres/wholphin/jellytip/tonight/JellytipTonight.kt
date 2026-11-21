@@ -357,13 +357,14 @@ fun JellytipTonightPage(
                         all?.let { a -> picks = Tonight.nextThree(a, Tonight.shownFor(store, ids), ids) }
                     },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+                    border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                     colors =
                         ClickableSurfaceDefaults.colors(
                             containerColor = if (on) JellytipPalette.Jelly.copy(alpha = 0.35f) else JellytipPalette.Vanilla.copy(alpha = 0.12f),
-                            focusedContainerColor = Color.White,
+                            focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                             contentColor = JellytipPalette.Vanilla,
-                            focusedContentColor = Color.Black,
+                            focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
                         ),
                 ) {
                     Text((if (on) "✓ " else "") + c.label, fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))

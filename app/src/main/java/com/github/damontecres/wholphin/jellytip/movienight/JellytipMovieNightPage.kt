@@ -809,9 +809,9 @@ private fun Button(
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (primary) Color(0xFFEDEDED) else Color(0xFF242424),
-                focusedContainerColor = Color.White,
+                focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 contentColor = if (primary) Color(0xFF111111) else JellytipPalette.Vanilla,
-                focusedContentColor = Color(0xFF111111),
+                focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
         border =
             ClickableSurfaceDefaults.border(
