@@ -19,6 +19,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -336,8 +337,10 @@ fun JellytipTonightPage(
         if (picks == null) picks = Tonight.nextThree(a, Tonight.shownFor(store, ids), ids)
     }
     val first = remember { FocusRequester() }
+    // A chip toggle keeps focus on the chips; new picks from the buttons (or the first load) take it
+    var chipsFocused by remember { mutableStateOf(false) }
     LaunchedEffect(picks) {
-        if (!picks.isNullOrEmpty()) {
+        if (!chipsFocused) {
             withFrameNanos { }
             first.tryRequestFocus()
         }
@@ -345,7 +348,7 @@ fun JellytipTonightPage(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 32.dp)) {
         Text("Pick for tonight", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         // Constraint chips: OK toggles one; the picks start fresh for the new set (Up from the picks reaches them)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.focusGroup()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.onFocusChanged { chipsFocused = it.hasFocus }.focusGroup()) {
             Tonight.CONSTRAINTS.forEach { c ->
                 val on = c.id in ids
                 Surface(
@@ -381,7 +384,7 @@ fun JellytipTonightPage(
                         color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
                         fontFamily = JellytipFontFamily,
                     )
-                    if (!all.isNullOrEmpty()) {
+                    if (!all.isNullOrEmpty() && Tonight.applyConstraints(all.orEmpty(), ids).isNotEmpty()) {
                         Button(
                             onClick = {
                                 Tonight.shownFor(store, ids).clear()
