@@ -221,6 +221,31 @@ fun JellytipMePage(
                         com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.saveMode(ctx, mode)
                     }
                 }
+                item {
+                    // Direct from provider (gap row 8): own providers only; hidden when there are none
+                    val directVm: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDirectViewModel = hiltViewModel()
+                    val direct by directVm.prefs.collectAsState()
+                    val directMsg by directVm.message.collectAsState()
+                    LaunchedEffect(Unit) { directVm.load() }
+                    val list = direct.orEmpty()
+                    if (list.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            list.forEach { d ->
+                                SettingRow(
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.label(d, list.size > 1),
+                                    com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.value(d),
+                                ) { directVm.toggle(d) }
+                            }
+                            Text(
+                                directMsg ?: com.github.damontecres.wholphin.jellytip.iptv.IptvDirectLogic.NOTE,
+                                color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
+                                fontFamily = JellytipFontFamily,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
+                        }
+                    }
+                }
                 item { SettingRow("Audio language", langName(p.audioLangs.firstOrNull())) { dialog = "audio" } }
                 item { SettingRow("Subtitles", langName(p.subtitleLangs.firstOrNull())) { dialog = "subs" } }
                 item {
