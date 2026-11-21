@@ -181,6 +181,8 @@ class TasteQueue(
     fun done(sent: List<TasteSignal>) {
         val gone = sent.toSet()
         list.removeAll { it in gone }
+        // Sent events can't come back from the queue: their dedupe keys can go (the server dedupes too)
+        sent.forEach { keys.remove(TasteRules.dedupeKey(it)) }
     }
 
     @Synchronized
@@ -270,7 +272,7 @@ object JellytipSignals {
     private val queue = TasteQueue()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
-    private var timer: Job? = null
+    @Volatile private var timer: Job? = null
 
     @Volatile private var off = false
 
@@ -287,13 +289,16 @@ object JellytipSignals {
             owner = who
         }
         if (queue.add(s) && timer == null) {
-            timer =
-                scope.launch {
-                    while (true) {
-                        delay(FLUSH_MS)
-                        flush()
+            synchronized(this) {
+                if (timer != null) return
+                timer =
+                    scope.launch {
+                        while (true) {
+                            delay(FLUSH_MS)
+                            flush()
+                        }
                     }
-                }
+            }
         }
     }
 

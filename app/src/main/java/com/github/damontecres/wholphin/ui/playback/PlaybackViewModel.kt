@@ -204,6 +204,7 @@ class PlaybackViewModel
                     .flushSoon()
             }
         }
+
         private var trackChangeListener: TracksChangedListener? = null
         private val jobs = mutableListOf<Job>()
         private var subscribeJob: Job? = null
