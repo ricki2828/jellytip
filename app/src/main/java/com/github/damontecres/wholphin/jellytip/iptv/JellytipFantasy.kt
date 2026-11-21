@@ -50,6 +50,8 @@ data class FantasyStarter(
     /** The match (matchInfo.id, compared verbatim; plan "fantasy ids and shape"). */
     val matchId: String?,
     val gameState: String?,
+    /** Catalogue player id, when sent (last scoring play is matched by it first). */
+    val id: String? = null,
 )
 
 data class FantasyLeague(
@@ -76,6 +78,8 @@ data class FantasyEvent(
     val side: String?,
     /** The play from the ESPN play-by-play ("TD catch, 34 yds"); null = none matched. */
     val reason: String? = null,
+    val playerId: String? = null,
+    val nflTeam: String? = null,
 )
 
 data class FantasyLive(
@@ -107,7 +111,7 @@ object FantasyParse {
         } else {
             (0 until a.length()).mapNotNull { i ->
                 val e = a.optJSONObject(i) ?: return@mapNotNull null
-                FantasyEvent(e.str("at") ?: return@mapNotNull null, e.str("league"), e.str("name") ?: return@mapNotNull null, e.dbl("delta") ?: return@mapNotNull null, e.str("side"), e.str("reason"))
+                FantasyEvent(e.str("at") ?: return@mapNotNull null, e.str("league"), e.str("name") ?: return@mapNotNull null, e.dbl("delta") ?: return@mapNotNull null, e.str("side"), e.str("reason"), playerId = e.str("playerId"), nflTeam = e.str("nflTeam"))
             }
         }
 
@@ -134,7 +138,7 @@ object FantasyParse {
                     starters =
                         (0 until (sa?.length() ?: 0)).mapNotNull { j ->
                             val s = sa!!.optJSONObject(j) ?: return@mapNotNull null
-                            FantasyStarter(s.str("side") ?: "me", s.str("name") ?: return@mapNotNull null, s.str("pos"), s.str("nflTeam"), s.dbl("points"), s.str("matchId"), s.str("gameState"))
+                            FantasyStarter(s.str("side") ?: "me", s.str("name") ?: return@mapNotNull null, s.str("pos"), s.str("nflTeam"), s.dbl("points"), s.str("matchId"), s.str("gameState"), id = s.str("id") ?: s.str("playerId"))
                         },
                 )
             }
@@ -257,6 +261,8 @@ fun FantasyTab(
                 } else {
                     game?.firstOrNull { it.id == l.id }?.starters ?: l.starters.filter { sameGame(it.matchId, matchId) }
                 }
+            // Matchup summary (web 1c129131): who leads, by how much, how many of yours are playing, your projection
+            FantasyGameLogic.summaryLine(l)?.let { BodyText(it, 12.sp, Broadcast.Secondary, maxLines = 1) }
             if (here.isNotEmpty()) {
                 Cond(if (multi) "Live now" else "In this game", 12.sp, Broadcast.Secondary, weight = FontWeight.SemiBold, tracking = 0.06f)
                 here.sortedWith(compareBy({ if (it.side == "me") 0 else 1 }, { -(it.points ?: 0.0) })).forEach { st ->
@@ -271,6 +277,12 @@ fun FantasyTab(
                             maxLines = 1,
                         )
                         Cond(pts(st.points), 15.sp)
+                    }
+                    // Your player's last scoring play (web 0d44f288: by player id, else full name + team; never a bare surname)
+                    if (st.side == "me") {
+                        FantasyGameLogic.lastEvent(live, l, st)?.let { ev ->
+                            BodyText("Last: ${if (ev.delta >= 0) "+" else ""}${pts(ev.delta)}" + (ev.reason?.let { " · $it" } ?: ""), 11.sp, Broadcast.Secondary, modifier = Modifier.padding(start = 9.dp), maxLines = 1)
+                        }
                     }
                 }
             }
@@ -291,4 +303,46 @@ fun FantasyPill(count: Int) {
         maxLines = 1,
         modifier = Modifier.background(Color(0xFFB5E3A1), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
     )
+}
+
+/** Fantasy ↔ game (web lib/fantasyGame.ts): a starter's last scoring play and the matchup summary. Pure; FantasyGameTest. */
+object FantasyGameLogic {
+    private fun norm(s: String?) = (s ?: "").lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    /**
+     * The starter's newest scoring event: by player id when both carry one, else by full name plus team (when the event
+     * names one). An event belongs to a league by id; by name only when no other league shares that name.
+     */
+    fun lastEvent(
+        live: FantasyLive,
+        league: FantasyLeague,
+        s: FantasyStarter,
+    ): FantasyEvent? {
+        val nameUnique = live.leagues.count { it.name == league.name } == 1
+        val full = norm(s.name)
+        return live.events
+            .filter { e -> e.side == "me" && (e.league == league.id || (nameUnique && e.league == league.name)) }
+            .filter { e ->
+                if (e.playerId != null && s.id != null) {
+                    e.playerId == s.id
+                } else {
+                    full.isNotEmpty() && norm(e.name) == full && (e.nflTeam == null || norm(e.nflTeam) == norm(s.nflTeam))
+                }
+            }.maxByOrNull { IptvParse.isoSeconds(it.at) ?: 0L }
+    }
+
+    /** "You lead by 14.6 · 3 playing · projected 112.4"; null without points. */
+    fun summaryLine(l: FantasyLeague): String? {
+        val me = l.mePoints ?: return null
+        val opp = l.oppPoints ?: return null
+        val d = me - opp
+        val lead =
+            when {
+                kotlin.math.abs(d) < 0.05 -> "Level"
+                d > 0 -> "You lead by ${pts(d)}"
+                else -> "You trail by ${pts(-d)}"
+            }
+        val playing = l.starters.count { it.side == "me" && it.gameState == "in" }
+        return listOfNotNull(lead, if (playing > 0) "$playing playing" else null, l.meProjected?.let { "projected ${pts(it)}" }).joinToString(" · ")
+    }
 }
