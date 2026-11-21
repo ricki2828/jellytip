@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -272,8 +273,7 @@ fun LiveMatchHero(
     }
 }
 
-private fun Modifier.onFocusChangedCompat(onFocused: () -> Unit): Modifier =
-    this.then(androidx.compose.ui.Modifier.onFocusChanged { if (it.isFocused) onFocused() })
+private fun Modifier.onFocusChangedCompat(onFocused: () -> Unit): Modifier = this.onFocusChanged { if (it.isFocused) onFocused() }
 
 /** The 2A fixture tile: crests and names in condensed caps on two lines, a team-colour edge each side, the status line. */
 @Composable
@@ -354,4 +354,61 @@ private fun TeamLine(
         )
         if (star) Text("★", color = Broadcast.Gold, fontSize = 13.sp)
     }
+}
+
+/**
+ * Home's live match hero (Ricki 21-Nov, option 1): his teams' live games (else the top-ranked live one) from the fixtures,
+ * re-checked every minute; muted leagues / sports left out. Empty = no live game (Home is as before); null = not known yet.
+ */
+@Composable
+fun rememberHomeLiveHero(viewModel: JellytipGameCentreViewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()): List<FxItem>? {
+    val picks by produceState<List<FxItem>?>(null) {
+        while (true) {
+            val r = viewModel.service.fixtures(maxAgeMs = 60_000)
+            val muted = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value?.sportMuted
+            val items = r?.second?.items?.filterNot { muted?.mutes(it.league, it.sport) == true }
+            // Unreachable / no IPTV: no hero (keep the last answer while it is only a blip)
+            value = if (items != null) LiveHero.homePicks(items, nowSec()) else (value ?: emptyList())
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
+    return picks
+}
+
+/** The hero on Home: the 2A card; Watch = the best channel with the match id, From kick-off, More = Game Centre. */
+@Composable
+fun HomeLiveHero(
+    picks: List<FxItem>,
+    onFocused: () -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+    viewModel: JellytipGameCentreViewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(),
+) {
+    if (picks.isEmpty()) return
+    var index by remember { mutableStateOf(0) }
+    val f = picks[index.coerceIn(0, picks.size - 1)]
+    val now by produceState(nowSec()) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            value = nowSec()
+        }
+    }
+    val best = SportFixtures.pickChannel(f, now).channel
+    val fromStart = best?.takeIf { it.startOver && it.start != null && it.stop != null && !it.dormant }
+    LiveMatchHero(
+        f = f,
+        now = now,
+        onWatch = best?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, false, "home hero") } },
+        onFromStart = fromStart?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, true, "home hero") } },
+        onMore = {
+            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipUpcomingSport, "home hero More")
+        },
+        focusRequester = focusRequester,
+        index = index,
+        count = picks.size,
+        onCycle = { index = it },
+        onFocused = onFocused,
+        modifier = modifier,
+    )
 }
