@@ -1,0 +1,54 @@
+// Golden vectors for the TV port of web/src/lib/askParse.ts (origin/jellytip-web). Run: node gen.mts > ask-vectors.json
+import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
+import { readFileSync } from "node:fs";
+const NOW = new Date(2026, 5, 1);
+const fromTests = readFileSync(new URL("./queries.txt", import.meta.url), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const extra = [
+  "scary","tense","mind-bending","mindbending","hilarious","romantic","sci-fi","war","action","family","cartoon","heartwarming",
+  "90s comedy","'80s","the seventies","1960s","2010s drama","from 1994","after 2010","before 2000","recent",
+  "I haven't seen","havent watched","never seen it","unwatched","something unseen","new to me","not seen yet","a rewatch","rewatch",
+  "well rated","rated over 8","rated 7.5+","critically acclaimed","rated 90s","a movie","a tv show","something",
+  "not scary","no horror","anything but comedy","not sad","funny but not for kids","no more than 90 minutes",
+  "80s or 90s","1980s and 1990s","2010 to 2015","movie or series","rewatch but unwatched","scary comedy well rated","sci-fi action",
+  "rated 7","7.0 stars","under 1.5 hours","under 2 hours","under 2.5 hours","8 stars","rated 9.5 or higher","top-rated","under an hour and a half",
+  "not more than 2 hours","a 70s thriller from 1975","from the 2020s","made after 2030","before 1899","1999-1990","funny and scary and tense",
+  "kid-friendly cartoon","family friendly","show me shows","tv","the best documentaries","war movie","date night romcom","whodunit",
+  "edge of my seat","it's 2.5 hrs","under 100m","over 1 h","within 45 mins","rated 0","rated 11","5 stars","rated 7 or better",
+  "recent sci-fi I haven't watched","single season","limited series","a funny one-season show","nothing scary","without violence",
+  "except horror","excluding kids","non-fiction","not too scary","not very long","but not for my kids","Funny!!! Under 90 Minutes??",
+  "it’s 80’s","I've never watched it before","seen before","watched before","already seen","under 90 min, over 60 min","rated 6 rated 8",
+  "children's animated movie from the 90s","a 4.5 star western","spooky sci fi series under 50 minutes","gangster flicks 1970-1979",
+  "short tv shows","heist movie no more than 2 hours","musicals","historical war drama","up to 3 hrs","max of 100 minutes","at most 2h",
+  "anything but", "no", "not", "123", "''", "- + .", "rated 8.5/10", "score 9", "scored above 7", "rating of 6.5",
+];
+const queries = [...new Set([...EXAMPLES, ...fromTests, ...extra])];
+const show = (q: Record<string, unknown>) => Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+const cases = queries.map((q) => {
+  const r = parseAsk(q, NOW);
+  return {
+    q,
+    chips: r.chips.map((c) => ({ id: c.id, label: c.label, pos: c.pos, src: c.src })),
+    ignored: r.ignored, notes: r.notes,
+    query: show(buildQuery(r.chips)), shuffled: show(buildQuery(r.chips, { shuffle: true })),
+    limit: fetchLimit(r.chips), client: needsClientFilter(r.chips), applied: appliedNotes(r.chips),
+  };
+});
+// Filtering + coverage over a fixed synthetic page
+const items: any[] = [];
+const G = [["Comedy"],["Horror"],["Comedy","Horror"],["Science Fiction"],["Sci-Fi & Fantasy","Action & Adventure"],["Drama"],[],["comedy"],["Thriller","Mystery"],["Family","Animation"]];
+for (let i = 0; i < 40; i++) items.push({ Id: `i${i}`, Type: i % 3 === 0 ? "Series" : "Movie", RunTimeTicks: i % 7 === 0 ? undefined : (30 + i * 4) * 600_000_000, ChildCount: i % 3 === 0 ? (i % 5) : undefined, Genres: G[i % G.length] });
+const big = Array.from({ length: FETCH_LIMIT }, (_, i) => ({ Id: `b${i}`, Type: "Movie", RunTimeTicks: 80 * 600_000_000, Genres: ["Comedy", "Horror"] }));
+const pickQs = ["funny under 90 minutes","scary comedy","short series","over 2 hours","sci-fi action","funny","under 100 minutes","something","scary comedy well rated","a miniseries"];
+const picks = pickQs.flatMap((q) => {
+  const chips = parseAsk(q, NOW).chips;
+  return [
+    { q, page: "items", total: 40, shuffled: false }, { q, page: "items", total: null, shuffled: false }, { q, page: "items", total: 500, shuffled: true },
+    { q, page: "big", total: 1200, shuffled: false }, { q, page: "big", total: null, shuffled: true }, { q, page: "big", total: 300, shuffled: false },
+  ].map((c) => {
+    const page = c.page === "big" ? big : items;
+    const p = pickFrom(page, c.total ?? undefined, chips, c.shuffled);
+    const kept = filterItems(page, chips).map((x) => x.Id);
+    return { ...c, keptCount: kept.length, kept: c.page === "big" ? kept.slice(0, 30) : kept, ids: p.items.map((x) => x.Id), note: p.note };
+  });
+});
+console.log(JSON.stringify({ year: 2026, cases, items, picks }));

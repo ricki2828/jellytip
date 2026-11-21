@@ -33,7 +33,7 @@ jobs:
       - name: "Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)"
         run: bash .github/scripts/jellytip-fixture-scan.sh
       - name: Jellytip unit tests
-        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --tests 'com.github.damontecres.wholphin.jellytip.channels.*' --tests 'com.github.damontecres.wholphin.jellytip.movienight.*' --no-daemon
+        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --tests 'com.github.damontecres.wholphin.jellytip.channels.*' --tests 'com.github.damontecres.wholphin.jellytip.movienight.*' --tests 'com.github.damontecres.wholphin.jellytip.ask.*' --tests 'com.github.damontecres.wholphin.jellytip.journeys.*' --no-daemon
       - name: Build debug app
         run: ./gradlew assembleDefaultDebug --no-daemon
       - name: Build release app
