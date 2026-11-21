@@ -327,6 +327,7 @@ fun JellytipLiveTvPlayerPage(
     // From the page opening until the catch-up offer is decided: nothing live shows (the card promises a hidden score)
     var catchPending by remember { mutableStateOf(true) }
     var catchRequest by remember { mutableIntStateOf(0) }
+    var catchLoading by remember { mutableStateOf(false) }
     var catchCursor by remember { mutableIntStateOf(2) }
     var catchLeft by remember { mutableStateOf(CatchUpPolicy.CHOICE_TIMEOUT_MS / 1000) }
     var catchCards by remember { mutableStateOf<List<CatchUpPolicy.Card>?>(null) }
@@ -658,7 +659,7 @@ fun JellytipLiveTvPlayerPage(
     }
     /** Break mode on a released key moment: open for 6 s with the moment's wipe; false = not now (toast instead). */
     fun tryMomentOpen(mo: LiveMoment): Boolean {
-        if (panelMatch == null || catchPending || catchOpen || catchCards != null || ftCard != null || overlaysUp()) return false
+        if (panelMatch == null || catchPending || catchLoading || catchOpen || catchCards != null || ftCard != null || overlaysUp()) return false
         val r = BreakModePolicy.autoOpen(breakModeOn, replayShown, panelOpen, lastKindRef[0], lastBreakRef[0], closedBreak, userClosedAt, System.currentTimeMillis(), freshMoment = true)
         if (r != BreakModePolicy.Reason.MOMENT) return false
         openAuto(r)
@@ -793,7 +794,7 @@ fun JellytipLiveTvPlayerPage(
                 val sh = shownSnap?.scoreHome?.toIntOrNull()
                 val sa = shownSnap?.scoreAway?.toIntOrNull()
                 val blowout = AlertPolicy.isBlowout(shownSnap?.layout, sh, sa, AlertPolicy.isLateGame(shownSnap?.layout, shownSnap?.period, shownSnap?.clock))
-                if (catchPending || catchOpen || catchCards != null) {
+                if (catchPending || catchLoading || catchOpen || catchCards != null) {
                     // Catch me up is deciding / showing: alerts wait (still gated by the delay afterwards)
                     delay(1_000)
                     continue
@@ -877,7 +878,7 @@ fun JellytipLiveTvPlayerPage(
                     JellytipTrace.player("iptv", "companion tucked away ($openedBy, now $kind)")
                     openedBy = BreakModePolicy.Reason.USER
                 }
-            } else if (!panelOpen && m != null && !catchPending && !catchOpen && catchCards == null && ftCard == null && !overlaysUp()) {
+            } else if (!panelOpen && m != null && !catchPending && !catchLoading && !catchOpen && catchCards == null && ftCard == null && !overlaysUp()) {
                 if (BreakModePolicy.autoOpen(breakModeOn, replayShown, false, kind, lastBreakRef[0], closedBreak, userClosedAt, nowMs, false) == BreakModePolicy.Reason.BREAK) {
                     openAuto(BreakModePolicy.Reason.BREAK)
                 }
@@ -899,6 +900,7 @@ fun JellytipLiveTvPlayerPage(
     val kickoffQuiet = catchOpen || catchCards != null || ftCard != null
     DisposableEffect(kickoffQuiet) {
         viewModel.kickoff.quiet = kickoffQuiet
+        if (kickoffQuiet) viewModel.kickoff.hush()
         onDispose { viewModel.kickoff.quiet = false }
     }
     LaunchedEffect(ftCard) {
@@ -957,12 +959,14 @@ fun JellytipLiveTvPlayerPage(
     // Catch me up: one full /live answer (plays, timeline) into the store, then the recap from what the delay released
     LaunchedEffect(catchRequest) {
         if (catchRequest == 0) return@LaunchedEffect
+        catchLoading = true
         val id = liveId
         val full = id?.let { fetchLive(it, light = false)?.second }
         if (full != null) snaps.add(full, full = true, arrivedSec = nowSec())
         val reveal: (Double?) -> Boolean = { revealClock.reveal(it) }
         val cs = CatchUpPolicy.cards(snaps.releasedFull(reveal), snaps.latest(), reveal)
         JellytipTrace.player("iptv", "catch-up: recap ${cs.size} cards (full answer ${full != null})")
+        catchLoading = false
         if (cs.isEmpty()) {
             android.widget.Toast.makeText(context, "Nothing to catch up on yet", android.widget.Toast.LENGTH_SHORT).show()
             bugChangedAt = System.currentTimeMillis()
@@ -1365,7 +1369,7 @@ fun JellytipLiveTvPlayerPage(
             bug = { bugData },
             clock = { bugClock },
             changedAt = { bugChangedAt },
-            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
+            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchLoading && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
             modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
         )
         // Round 3 cards: full time (bottom), catch me up (centre)

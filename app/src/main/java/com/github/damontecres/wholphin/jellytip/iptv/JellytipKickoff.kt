@@ -120,6 +120,7 @@ class JellytipKickoff
             if (d.phase == "live") nudged += "${d.fixture.fid}:soon"
             JellytipTrace.log("iptv", "kick-off takeover ${d.key} ${d.fixture.title}")
             val first = KickoffCard(d)
+            downKey = null
             _card.value = first
             // Team colours for the top bar (one match call; the card shows neutral until then)
             val m = runCatching { fetchMatch(d.fixture.companionId)?.second?.match }.getOrNull()
@@ -128,7 +129,15 @@ class JellytipKickoff
 
         /** Dismiss by announcement key (the card is replaced once team colours arrive). */
         fun dismiss(key: String) {
-            if (_card.value?.due?.key == key) _card.value = null
+            if (_card.value?.due?.key == key) {
+                _card.value = null
+                downKey = null
+            }
+        }
+
+        /** The player's own card wants OK: an announcement already up goes (it would read "OK to watch" but not act). */
+        fun hush() {
+            _card.value?.let { dismiss(it.due.key) }
         }
 
         /** While the card shows: OK = watch, Back = dismiss (both swallowed, down and up); other keys pass. */
