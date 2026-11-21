@@ -207,9 +207,19 @@ class JellytipIptvPlayback
                         okJob?.cancel()
                         okJob =
                             scope.launch {
-                                kotlinx.coroutines.delay(IptvStreamFail.GOOD_PLAY_S * 1000)
-                                val now = _state.value
-                                if (now is IptvPlayState.Playing && now.target == t && loadedTarget == t) IptvStreamFail.report(t, ok = true, posSec = IptvStreamFail.GOOD_PLAY_S)
+                                // Count only time the picture really moves (not paused, not stuck buffering)
+                                var playedS = 0L
+                                var lastPos = player?.currentPosition ?: 0L
+                                while (playedS < IptvStreamFail.GOOD_PLAY_S) {
+                                    kotlinx.coroutines.delay(OK_TICK_MS)
+                                    val now = _state.value
+                                    if (now !is IptvPlayState.Playing || now.target != t || loadedTarget != t) return@launch
+                                    val p = player ?: return@launch
+                                    val pos = p.currentPosition
+                                    if (p.isPlaying && pos > lastPos) playedS += OK_TICK_MS / 1000
+                                    lastPos = pos
+                                }
+                                IptvStreamFail.report(t, ok = true, posSec = playedS)
                             }
                     }
                 }
@@ -338,6 +348,7 @@ class JellytipIptvPlayback
         }
 
         private var okJob: kotlinx.coroutines.Job? = null
+        private val OK_TICK_MS = 5_000L
 
         /** The target whose stream the player holds now; during a zap the old stream plays on while the state already names the new one. */
         @Volatile

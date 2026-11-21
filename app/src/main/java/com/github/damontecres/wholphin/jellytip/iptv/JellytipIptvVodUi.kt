@@ -461,7 +461,8 @@ fun JellytipIptvDetailsPage(
                                         com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.IptvHalf(item),
                                         partner,
                                     )
-                                playMovie(fromStart = true)
+                                // The double bill names this copy: never auto-skip to another one here
+                                playMovie(fromStart = true, manual = true)
                             },
                         ) { Text("Play both") }
                     }
@@ -493,7 +494,7 @@ fun JellytipIptvDetailsPage(
             } else if (d.seasons.isEmpty()) {
                 Text("No episodes are available.", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
             } else {
-                var season by remember(id) { mutableIntStateOf(0) }
+                var season by remember(item.id) { mutableIntStateOf(0) }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
                     items(d.seasons.size) { i ->
                         Surface(

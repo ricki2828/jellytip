@@ -107,11 +107,12 @@ object IptvSeasons {
         val api = JellytipApi.shared ?: return null
         val key = "${api.currentUserKey()}|$tmdbId"
         cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
+        var failed = false
         val got =
             try {
                 // Providers this person owns or has shared with them (same as the web's season lookup)
                 val owned =
-                    api.userCall("v1/iptv/providers")?.takeIf { it.first == 200 }?.let { (_, b) ->
+                    api.userCall("v1/iptv/providers").also { if (it == null) failed = true }?.takeIf { it.first == 200 }?.let { (_, b) ->
                         val a = JSONObject(b).optJSONArray("providers")
                         (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                     }
@@ -119,9 +120,11 @@ object IptvSeasons {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                failed = true
                 null
             }
-        cache[key] = System.currentTimeMillis() to got // no IPTV / not found is cached too: no refetch on every series page
+        // No IPTV / not found is cached (no refetch on every series page); an unreachable server is not
+        if (!failed) cache[key] = System.currentTimeMillis() to got
         return got
     }
 
