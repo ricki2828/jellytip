@@ -240,6 +240,7 @@ class JellytipIptvPlayback
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
                         setState(IptvPlayState.Playing(t), "ready")
+                        pendingRemuxSeekMs = null
                         if (recTarget == t) {
                             dispatch(StreamRecovery.Event.Recovered)
                             watchStalls(t)
@@ -422,7 +423,14 @@ class JellytipIptvPlayback
             private set
 
         /** Position in the item (ms), counting a remux's start offset. */
-        fun positionMs(): Long = (if (isRemux) remuxStartMs else 0L) + (player?.currentPosition ?: 0L)
+        fun positionMs(): Long = pendingRemuxSeekMs ?: ((if (isRemux) remuxStartMs else 0L) + (player?.currentPosition ?: 0L))
+
+        /**
+         * A remux seek asked for and not playing yet ("Converting…"): the position is that, so a second seek counts from
+         * where the viewer asked to be, not from the old stream (t5k 21-Nov). Cleared when the new stream plays.
+         */
+        @Volatile
+        private var pendingRemuxSeekMs: Long? = null
 
         /**
          * The recording being played (its times and state), set by the page: a recording's length comes from it when the
@@ -447,6 +455,7 @@ class JellytipIptvPlayback
             if (isRemux) {
                 JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
                 _note.value = "Converting…"
+                pendingRemuxSeekMs = ms
                 launchOpen(t, "remux seek", remux = true, seekMs = ms)
             } else {
                 player?.seekTo(ms)
@@ -463,6 +472,7 @@ class JellytipIptvPlayback
             isRemux = false
             remuxStartMs = 0L
             remuxDurationMs = null
+            pendingRemuxSeekMs = null
             _note.value = null
         }
 
