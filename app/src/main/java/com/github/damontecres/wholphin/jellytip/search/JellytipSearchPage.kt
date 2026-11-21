@@ -466,10 +466,15 @@ private fun ResultGroup(
                     modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer(),
                 ) {
                     items(g.collections, key = { "c${it.tmdbId}" }) { c ->
-                        TextCard(c.name, "${c.inLibrary} of ${c.total} in the library") {
+                        TextCard(c.name, if (c.hubId != null) "${c.total} titles" else "${c.inLibrary} of ${c.total} in the library") {
                             viewModel.opened("collection")
-                            viewModel.clicked { it.kind == "collection" && it.collectionId == c.tmdbId }
-                            viewModel.navigationManager.navigateTo(Destination.JellytipCollection(c.tmdbId, c.name), "search collection OK")
+                            viewModel.clicked { it.kind == "collection" && (if (c.hubId != null) it.hubId == c.hubId else it.collectionId == c.tmdbId) }
+                            val hub = c.hubId
+                            if (hub != null) {
+                                viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(hub, c.name), "search hub collection OK")
+                            } else {
+                                viewModel.navigationManager.navigateTo(Destination.JellytipCollection(c.tmdbId, c.name), "search collection OK")
+                            }
                         }
                     }
                     items(g.lists, key = { "l${it.slug}" }) { l ->
@@ -652,7 +657,7 @@ private fun TopHit(
             r.year?.toString(),
             r.seasons?.let { if (it == 1) "1 season" else "$it seasons" },
             r.filmCount.takeIf { r.kind == "person" && it > 0 }?.let { "$it films" },
-            r.total.takeIf { r.kind == "collection" && it > 0 }?.let { "${r.inLibrary} of $it in the library" },
+            r.total.takeIf { r.kind == "collection" && it > 0 }?.let { if (r.hubId != null) "$it titles" else "${r.inLibrary} of $it in the library" },
             r.rating?.let { String.format(java.util.Locale.US, "★ %.1f", it) },
             when (r.source) {
                 "iptv" -> "via IPTV"
@@ -716,6 +721,7 @@ private fun openResult(
     val nav = viewModel.navigationManager
     when {
         r.kind == "person" && r.personId != null -> nav.navigateTo(Destination.MediaItem(r.personId, BaseItemKind.PERSON), "search top person")
+        r.kind == "collection" && r.hubId != null -> nav.navigateTo(Destination.JellytipHubCollection(r.hubId, r.title), "search hub collection")
         r.kind == "collection" && r.collectionId != null -> nav.navigateTo(Destination.JellytipCollection(r.collectionId, r.title), "search top collection")
         r.source == "library" && r.id != null ->
             nav.navigateTo(Destination.MediaItem(r.id, if (r.kind == "series") BaseItemKind.SERIES else BaseItemKind.MOVIE), "search top library")
