@@ -27,12 +27,12 @@ class JoinQrTest {
         val url = "https://host.example/jellytip/#/movienight?join=QRT789"
         val m = JoinQr.matrix(url)
         assertTrue(m.size >= 25 && m.size == m[0].size)
-        // orientation (the decoder forgives a mirror; these don't): finder corners top-left and top-right, none bottom-right
+        // finder corners where a QR has them (top-left, top-right, bottom-left; quiet zone 2): catches a flip, which the
+        // decoder alone would forgive. A transpose keeps the finders in place; m[y][x] = get(x, y) is checked by reading.
         val last = m.size - 3
-        assertTrue(m[2][2])
-        assertTrue(m[2][last])
-        assertTrue(m[last][2])
-        assertTrue(!(m[last][last] && m[last - 6][last] && m[last][last - 6]))
+        assertTrue(m[2][2] && m[2][last] && m[last][2])
+        // the separator ring inside each finder is light
+        assertTrue(!m[3][3] && !m[3][last - 1] && !m[last - 1][3])
         val scale = 4
         val n = m.size * scale
         val px = IntArray(n * n) { i -> if (m[(i / n) / scale][(i % n) / scale]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt() }
