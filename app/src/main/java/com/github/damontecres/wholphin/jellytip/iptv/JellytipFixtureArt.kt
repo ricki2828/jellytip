@@ -10,20 +10,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 
 /*
  * Game Centre / Home live hero artwork (Ricki 21-Nov): the fixture's `art` (league fanart, served path) behind the hero and
  * tiles, with the team colours as an overlay. Hero = art full-bleed, a black dim, home colour from the left and away from
- * the right at [TEAM_ALPHA] meeting in a dark centre, a bottom scrim; tiles = the art blurred and dimmed with a lighter
- * colour wash (the colour edges stay). No art, or art that fails to load = today's look.
+ * the right at [TEAM_ALPHA] meeting in a dark centre, a bottom scrim; tiles = the art dimmed with a lighter colour wash
+ * (the colour edges stay; no runtime blur: too costly per tile on a Chromecast GPU). No art, or art that fails to load = today's look.
  *
  * The alphas were picked against the worst case (a white photo, a light-grey team colour that still passes
  * [FixtureColours.usable]); [FixtureArtTest] re-checks the contrast with [heroBehind] / [tileBehind].
@@ -162,7 +160,7 @@ fun FixtureArtHeroBackdrop(
     }
 }
 
-/** The tile background with art: the photo blurred (API 31+; elsewhere just dimmed), dim, a light team-colour wash. */
+/** The tile background with art: the photo (small size, no runtime blur: jank on weak TV GPUs), dim, a light team-colour wash. */
 @Composable
 fun FixtureArtTileBackdrop(
     art: String,
@@ -186,7 +184,7 @@ fun FixtureArtTileBackdrop(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             onError = { onFailed() },
-            modifier = Modifier.fillMaxSize().blur(6.dp),
+            modifier = Modifier.fillMaxSize(),
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = FixtureArt.TILE_DIM)))
         Box(Modifier.fillMaxSize().background(wash))
