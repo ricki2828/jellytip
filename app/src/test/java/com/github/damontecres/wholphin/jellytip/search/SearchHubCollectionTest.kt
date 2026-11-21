@@ -16,11 +16,14 @@ class SearchHubCollectionTest {
         val json =
             """{"q":"nordic noir","results":[
               {"kind":"collection","source":"library","title":"Nordic Noir","hubId":"world:tv-nordic","total":6},
+              {"kind":"collection","source":"library","title":"French Noir","hubId":"world:tv-french","total":3},
               {"kind":"collection","source":"library","title":"Heist","tmdbCollectionId":5,"total":4,"inLibrary":2}
             ]}"""
         val a = SearchParse.answer(json)
         assertNull(a.top?.hubId)
         val coll = a.rankedGroups.first { it.type == "collections" }.collections
-        assertEquals(listOf("world:tv-nordic", null), coll.map { it.hubId })
+        assertEquals(listOf("world:tv-nordic", "world:tv-french", null), coll.map { it.hubId })
+        // Two TV collections must not share a row key (LazyRow keys are hubId-based)
+        assertEquals(coll.size, coll.map { it.hubId?.let { h -> "h$h" } ?: "c${it.tmdbId}" }.toSet().size)
     }
 }

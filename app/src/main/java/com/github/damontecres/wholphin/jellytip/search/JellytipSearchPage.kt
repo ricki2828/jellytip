@@ -465,7 +465,7 @@ private fun ResultGroup(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer(),
                 ) {
-                    items(g.collections, key = { "c${it.tmdbId}" }) { c ->
+                    items(g.collections, key = { it.hubId?.let { h -> "h$h" } ?: "c${it.tmdbId}" }) { c ->
                         TextCard(c.name, if (c.hubId != null) "${c.total} titles" else "${c.inLibrary} of ${c.total} in the library") {
                             viewModel.opened("collection")
                             viewModel.clicked { it.kind == "collection" && (if (c.hubId != null) it.hubId == c.hubId else it.collectionId == c.tmdbId) }

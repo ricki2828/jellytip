@@ -118,13 +118,16 @@ fun IptvVodTile(
     poster: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The caller's own long-press; null = the title's menu (films and series only, not episodes or recordings). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     // Long-press: the title's menu (web 6d8398bd): My list, Like / Not for me, Not interested, Mark watched
     var menu by remember(item.id) { mutableStateOf(false) }
     if (menu) IptvTileMenu(item, onOpen = onClick) { menu = false }
+    val titleMenu = IptvVodParse.isTitleId(item.id) && (item.kind == "movie" || item.kind == "series")
     Surface(
         onClick = onClick,
-        onLongClick = { menu = true },
+        onLongClick = onLongClick ?: { if (titleMenu) menu = true else onClick() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
         border =
@@ -785,6 +788,23 @@ object IptvMyList {
         overrides[id] = on
     }
 
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+
+    /** Shown at once, saved behind; put back with a note when the server says no. */
+    fun toggle(
+        id: String,
+        on: Boolean,
+        onError: (String?) -> Unit,
+    ) {
+        set(id, on)
+        scope.launch {
+            if (save(id, on) == null) {
+                set(id, !on)
+                onError("Couldn't update My list")
+            }
+        }
+    }
+
     /** `POST v1/iptv/vod/{id}/favourite {on}`: the server's state, or null when it could not be changed. */
     suspend fun save(
         id: String,
@@ -808,7 +828,6 @@ private fun IptvTileMenu(
 ) {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val available by me.available.collectAsState()
     val kind = if (item.isSeries) "series" else "movie"
     val key = me.iptvTasteKey(item.id, kind, item.tmdbId)
@@ -820,14 +839,8 @@ private fun IptvTileMenu(
             add(com.github.damontecres.wholphin.ui.components.DialogItem("Open", dismissOnClick = true) { onOpen() })
             add(
                 com.github.damontecres.wholphin.ui.components.DialogItem(if (inList) "♥  In My list — remove" else "♡  Add to My list", dismissOnClick = true) {
-                    IptvMyList.set(item.id, !inList)
-                    scope.launch {
-                        val ok = IptvMyList.save(item.id, !inList)
-                        if (ok == null) {
-                            IptvMyList.set(item.id, inList)
-                            toast("Couldn't update My list")
-                        }
-                    }
+                    // Fire and forget in a scope that outlives the menu (it closes on this click)
+                    IptvMyList.toggle(item.id, !inList, toast)
                 },
             )
             if (available) {

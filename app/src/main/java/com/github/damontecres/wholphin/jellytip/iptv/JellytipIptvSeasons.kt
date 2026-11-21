@@ -345,6 +345,8 @@ fun JellytipMixedIptvEpisode(
  * provider, foreign dubs skipped), so the library page shows every way to watch it. Cached per user + TMDB id.
  */
 object LibraryIptvCopies {
+    /** The person (by token key) who has no IPTV providers: no lookups for them this run. */
+    @Volatile private var noProviders: String? = null
     private val cache = ConcurrentHashMap<String, Pair<Long, List<IptvVodItem>>>()
     private const val TTL_MS = 10 * 60_000L
 
@@ -375,6 +377,7 @@ object LibraryIptvCopies {
                 ?.toIntOrNull() ?: return emptyList()
         val title = item.name ?: return emptyList()
         val api = JellytipApi.shared ?: return emptyList()
+        if (MatchHidden.noIptv || noProviders == api.currentUserKey()) return emptyList()
         val key = "${api.currentUserKey()}|$kind|$tmdb"
         cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         return try {
@@ -383,6 +386,7 @@ object LibraryIptvCopies {
                     val a = JSONObject(b).optJSONArray("providers")
                     (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                 }
+            if (owned != null && owned.isEmpty()) noProviders = api.currentUserKey() // no IPTV: stop asking this run
             val got =
                 if (owned.isNullOrEmpty()) {
                     emptyList()

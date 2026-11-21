@@ -421,10 +421,12 @@ fun MovieDetailsContent(
             withFrameNanos { }
             // Jellytip: Ways to watch is the first lower row when present
             var focused = jtCopies.isNotEmpty() && jtWaysFocus.tryRequestFocus()
-            if (!focused) for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
-                if (focusRequesters[r].tryRequestFocus()) {
-                    focused = true
-                    break
+            if (!focused) {
+                for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
+                    if (focusRequesters[r].tryRequestFocus()) {
+                        focused = true
+                        break
+                    }
                 }
             }
             // Nothing took focus: fall back to the header so Down is not swallowed forever

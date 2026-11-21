@@ -238,6 +238,9 @@ object IptvVodParse {
 
     private val VOD_ID_RE = Regex("^[A-Za-z0-9_-]{1,40}:[ms]:[A-Za-z0-9_.-]{1,64}$")
 
+    /** A film or series id (`pid:m:sid` / `pid:s:sid`), not an episode or a recording. */
+    fun isTitleId(id: String) = VOD_ID_RE.matches(id)
+
     /** `copies: [{id, providerName|providerTitle, quality, res, lang, langLabel, opted, current, lastFail}]`. */
     fun copies(a: JSONArray?): List<IptvCopy> {
         a ?: return emptyList()
