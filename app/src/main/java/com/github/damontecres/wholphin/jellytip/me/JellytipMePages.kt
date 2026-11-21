@@ -202,6 +202,17 @@ fun JellytipMePage(
                 item { SettingRow("Trailer sound", if (p.trailerSound) "On" else "Off") { viewModel.setPlaybackToggle("trailerSound", !p.trailerSound) } }
                 item { SettingRow("Hero trailer sound", if (p.heroSound) "On" else "Off") { viewModel.patch(JSONObject().put("ui", JSONObject().put("heroSound", !p.heroSound))) } }
                 item {
+                    // Inbox (web de17f4d4): new episodes of your shows, requests that arrived
+                    val inbox = com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService.shared
+                    // current() loads this person's store, so the count shows before any look
+                    val flow = remember(inbox) { inbox?.also { it.current() }?.store ?: kotlinx.coroutines.flow.MutableStateFlow(null) }
+                    val store by flow.collectAsState()
+                    val unread = store?.let { com.github.damontecres.wholphin.jellytip.inbox.Inbox.unread(it, System.currentTimeMillis()) } ?: 0
+                    SettingRow("Inbox", if (unread > 0) "$unread new" else "Nothing new") {
+                        viewModel.navigationManager.navigateTo(Destination.JellytipInbox, "personalise: inbox")
+                    }
+                }
+                item {
                     // Live TV buffer (this TV only; web 76e062ea): OK cycles Auto / Low / Normal / High / Max
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     var mode by remember { mutableStateOf(com.github.damontecres.wholphin.jellytip.iptv.LiveBuffer.loadMode(ctx)) }

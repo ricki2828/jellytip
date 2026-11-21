@@ -434,6 +434,8 @@ fun HomePageContent(
     val iptvResumeCont by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.continueItems.collectAsState()
     val iptvResumeNext by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.nextItems.collectAsState()
     if (specialsPage == "home") LaunchedEffect(Unit) { com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.refresh() }
+    // Jellytip inbox: look again on Home (at most every 15 min; the first look only seeds)
+    if (specialsPage == "home") LaunchedEffect(Unit) { com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService.shared?.refresh() }
     val rowsSettled = homeRows.none { it is HomeRowLoadingState.Loading || it is HomeRowLoadingState.Pending }
     val hasContinueRow = homeRows.any { (it as? HomeRowLoadingState.Success)?.rowType.let { t -> t is HomeRowConfig.ContinueWatching || t is HomeRowConfig.ContinueWatchingCombined } }
     val hasNextRow = homeRows.any { (it as? HomeRowLoadingState.Success)?.rowType.let { t -> t is HomeRowConfig.NextUp || t is HomeRowConfig.ContinueWatchingCombined } }

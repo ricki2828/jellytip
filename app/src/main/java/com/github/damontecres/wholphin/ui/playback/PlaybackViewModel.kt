@@ -614,9 +614,9 @@ class PlaybackViewModel
                                 prefs = preferences,
                             )
                     }
-                val audioIndex = audioResult?.stream?.index
+                val wholphinAudioIndex = audioResult?.stream?.index
 
-                val subtitleIndex =
+                val wholphinSubtitleIndex =
                     mediaSource?.let {
                         streamChoiceService
                             .chooseSubtitleStream(
@@ -628,6 +628,45 @@ class PlaybackViewModel
                                 prefs = preferences,
                             )?.stream
                             ?.index
+                    }
+                // Jellytip: the person's ordered languages (web 60561c2a) when nothing was chosen for this title / series
+                val jellytipLangs = com.github.damontecres.wholphin.jellytip.me.JellytipMe.prefs.value
+                val jellytipNoAudioChoice = (itemPlayback?.audioIndex ?: TrackIndex.UNSPECIFIED) == TrackIndex.UNSPECIFIED && audioStc == null
+                // Subtitles only in Wholphin's default / smart mode: an explicit Always / Off / Only forced setting wins
+                val jellytipSubMode =
+                    when (preferences.userPreferences?.subtitleMode) {
+                        com.github.damontecres.wholphin.preferences.SubtitleModePreference.USE_USER_PROFILE ->
+                            serverRepository.currentUserDto?.configuration?.subtitleMode
+                        com.github.damontecres.wholphin.preferences.SubtitleModePreference.ALWAYS -> org.jellyfin.sdk.model.api.SubtitlePlaybackMode.ALWAYS
+                        com.github.damontecres.wholphin.preferences.SubtitleModePreference.NONE -> org.jellyfin.sdk.model.api.SubtitlePlaybackMode.NONE
+                        com.github.damontecres.wholphin.preferences.SubtitleModePreference.ONLY_FORCED -> org.jellyfin.sdk.model.api.SubtitlePlaybackMode.ONLY_FORCED
+                        else -> org.jellyfin.sdk.model.api.SubtitlePlaybackMode.DEFAULT
+                    }
+                val jellytipNoSubChoice =
+                    (itemPlayback?.subtitleIndex ?: TrackIndex.UNSPECIFIED) == TrackIndex.UNSPECIFIED &&
+                        subtitleStc == null &&
+                        (jellytipSubMode == null || jellytipSubMode == org.jellyfin.sdk.model.api.SubtitlePlaybackMode.DEFAULT || jellytipSubMode == org.jellyfin.sdk.model.api.SubtitlePlaybackMode.SMART)
+                val jellytipStreams = mediaSource?.let { com.github.damontecres.wholphin.jellytip.JellytipTrackPick.streams(it) }.orEmpty()
+                val audioIndex =
+                    if (jellytipLangs != null && jellytipNoAudioChoice && jellytipLangs.audioLangs.isNotEmpty()) {
+                        com.github.damontecres.wholphin.jellytip.JellytipTrackPick
+                            .pickAudio(jellytipStreams, jellytipLangs.audioLangs, wholphinAudioIndex)
+                    } else {
+                        wholphinAudioIndex
+                    }
+                val subtitleIndex =
+                    if (jellytipLangs != null && jellytipNoSubChoice && (jellytipLangs.audioLangs.isNotEmpty() || jellytipLangs.subtitleLangs.isNotEmpty())) {
+                        com.github.damontecres.wholphin.jellytip.JellytipTrackPick
+                            .pickSubtitle(
+                                jellytipStreams,
+                                audioIndex,
+                                jellytipLangs.audioLangs,
+                                jellytipLangs.subtitleLangs,
+                                // Wholphin chose its subtitle for its own audio pick: when the audio changed, start from off
+                                if (audioIndex != wholphinAudioIndex) TrackIndex.DISABLED else wholphinSubtitleIndex ?: TrackIndex.DISABLED,
+                            ).takeIf { it != TrackIndex.DISABLED }
+                    } else {
+                        wholphinSubtitleIndex
                     }
                 Timber.d(
                     "Selected mediaSource=%s, audioIndex=%s, subtitleIndex=%s",

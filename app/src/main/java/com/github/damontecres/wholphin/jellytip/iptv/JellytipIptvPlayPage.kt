@@ -81,6 +81,23 @@ fun JellytipIptvPlayPage(
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
+    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
+    // Ramped seeking (web b662f0bc): a pending target that grows while Left/Right are pressed or held, seeked once settled
+    var pendingSeek by remember(target) { mutableStateOf<SeekRamp.State?>(null) }
+    var seekHeld by remember(target) { mutableStateOf(false) }
+    LaunchedEffect(pendingSeek != null) {
+        while (pendingSeek != null) {
+            delay(100)
+            val s = pendingSeek ?: break
+            if (SeekRamp.commitDue(s, System.currentTimeMillis(), seekHeld)) {
+                val to = (s.target * 1000).toLong()
+                playback.seekTo(to)
+                watch.seeked()
+                position = to
+                pendingSeek = null
+            }
+        }
+    }
     // A recording's own times (length when the file can't say; still recording = jump to live), refreshed each minute
     // while it records (gap row fb816e09 6f62ba3e)
     var recMeta by remember { mutableStateOf<IptvRecording?>(null) }
@@ -166,7 +183,6 @@ fun JellytipIptvPlayPage(
     // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
     val owner = remember { "item:" + java.util.UUID.randomUUID() }
     // Taste signals (web 4a830873): this IPTV film / episode's real playing time; closed when the page goes or it ends
-    val watch = remember(target) { com.github.damontecres.wholphin.jellytip.signals.WatchSession() }
     DisposableEffect(target) {
         val t =
             target.vodId?.let { com.github.damontecres.wholphin.jellytip.signals.TasteTarget("movie", iptvId = it) }
@@ -270,6 +286,10 @@ fun JellytipIptvPlayPage(
             .background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionLeft || e.key == Key.DirectionRight)) {
+                    seekHeld = false
+                    return@onPreviewKeyEvent pendingSeek != null
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // The report button has focus: its keys go to it (Back is the BackHandler above)
                 if (reportOpen) return@onPreviewKeyEvent false
@@ -290,11 +310,30 @@ fun JellytipIptvPlayPage(
                         true
                     }
 
-                    Key.DirectionLeft, Key.DirectionRight, Key.MediaRewind, Key.MediaFastForward -> {
+                    Key.DirectionLeft, Key.DirectionRight -> {
+                        // Ramped seek (lane B) on t5j's remux-aware position/seek
                         if (p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)) {
-                            val back = e.key == Key.DirectionLeft || e.key == Key.MediaRewind
+                            seekHeld = true
+                            pendingSeek =
+                                SeekRamp.advance(
+                                    pendingSeek,
+                                    if (e.key == Key.DirectionLeft) -1 else 1,
+                                    System.currentTimeMillis(),
+                                    e.nativeKeyEvent.repeatCount > 0,
+                                    playback.positionMs() / 1000.0,
+                                    (playback.durationMs().takeIf { d -> d > 0 } ?: Long.MAX_VALUE / 2) / 1000.0,
+                                )
+                        }
+                        controlsTick++
+                        true
+                    }
+
+                    Key.MediaRewind, Key.MediaFastForward -> {
+                        if (p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)) {
+                            val back = e.key == Key.MediaRewind
                             val to = (playback.positionMs() + if (back) -10_000 else 30_000).coerceAtLeast(0)
                             playback.seekTo(to)
+                            watch.seeked()
                             position = to
                         }
                         controlsTick++
@@ -401,8 +440,15 @@ fun JellytipIptvPlayPage(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (playing) "▶" else "❚❚", color = JellytipPalette.Vanilla, fontSize = 14.sp)
-                    Text(clockText(position), color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-                    val frac = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                    // While seeking: where OK-free release will land (gold), else where the picture is
+                    val shown = pendingSeek?.let { (it.target * 1000).toLong() } ?: position
+                    Text(
+                        clockText(shown),
+                        color = if (pendingSeek != null) Color(0xFFFFC72C) else JellytipPalette.Vanilla.copy(alpha = 0.8f),
+                        fontFamily = JellytipFontFamily,
+                        fontSize = 13.sp,
+                    )
+                    val frac = if (duration > 0) (shown.toFloat() / duration).coerceIn(0f, 1f) else 0f
                     Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f))) {
                         Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(JellytipPalette.Jelly))
                     }
@@ -410,7 +456,7 @@ fun JellytipIptvPlayPage(
                 }
                 Text(
                     text =
-                        "OK  play / pause   ·   ◀ 10 s   ·   30 s ▶" +
+                        "OK  play / pause   ·   ◀ ▶ seek (hold to go faster)" +
                             (if (inProgress) "   ·   ▲ live" else "   ·   ▲ audio & subtitles") +
                             (if (target.recordingId != null) "   ·   ▼ delete" else if (canReport) "   ·   ▼ not working?" else ""),
                     color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
