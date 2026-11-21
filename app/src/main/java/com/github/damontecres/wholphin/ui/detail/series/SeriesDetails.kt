@@ -429,6 +429,12 @@ fun SeriesDetailsContent(
     val hasBelow = true
     // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
     val reviews by produceState<JellytipReviews?>(null, series.id) { value = JellytipApi.shared?.getReviews(series) }
+    // Jellytip: companion "More like this" (library + IPTV mix); null = Jellyfin's similar list below
+    val jtSimilar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, series.id) {
+        value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(series)?.let {
+            com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
+        }
+    }
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
@@ -657,7 +663,18 @@ fun SeriesDetailsContent(
                         )
                     }
                 }
-                if (similar.isNotEmpty()) {
+                val simRow = jtSimilar
+                if (simRow != null) {
+                    if (sectionsActive) item(key = "jt-similar") {
+                        com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
+                            row = simRow,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequesters[SIMILAR_ROW]),
+                        )
+                    }
+                } else if (similar.isNotEmpty()) {
                     if (sectionsActive) item {
                         ItemRow(
                             title = stringResource(R.string.more_like_this),

@@ -379,7 +379,13 @@ fun MovieDetailsContent(
     // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
     val reviews by produceState<JellytipReviews?>(null, movie.id) { value = JellytipApi.shared?.getReviews(movie) }
     val hasReviews = reviews?.reviews?.isNotEmpty() == true
-    val hasBelow = hasReviews || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
+    // Jellytip: companion "More like this" (library + IPTV mix); null = Jellyfin's similar list below
+    val jtSimilar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, movie.id) {
+        value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(movie)?.let {
+            com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(it)
+        }
+    }
+    val hasBelow = hasReviews || jtSimilar != null || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
     LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
     LaunchedEffect(sectionsActive) {
         if (sectionsActive) {
@@ -554,7 +560,18 @@ fun MovieDetailsContent(
                     )
                 }
             }
-            (if (sectionsActive) state.similar else emptyList()).letNotEmpty { similar ->
+            jtSimilar?.takeIf { sectionsActive }?.let { simRow ->
+                item(key = "jt-similar") {
+                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
+                        row = simRow,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequesters[SIMILAR_ROW]),
+                    )
+                }
+            }
+            (if (sectionsActive && jtSimilar == null) state.similar else emptyList()).letNotEmpty { similar ->
                 item {
                     val imageHeight =
                         remember(movie.type) {
