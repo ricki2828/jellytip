@@ -292,6 +292,8 @@ export interface FxItem {
   significance: number;
   rank: number | null;
   favourite: boolean;
+  /** The server ranked it as a followed league ("favourite league" in `why`, league families included); null = `why` not sent. */
+  followedLeague?: boolean | null;
   autoRecord: boolean;
   channels: FxChannel[];
   best: string | null;
@@ -430,6 +432,7 @@ export function parseFixtureList(raw: unknown): { items: FxItem[]; degraded: boo
       significance: n(e.significance) ?? 0,
       rank: n(e.rank),
       favourite: e.favourite === true,
+      followedLeague: Array.isArray(e.why) ? e.why.includes("favourite league") : null,
       autoRecord: e.autoRecord === true,
       channels,
       best: idOf(e.best),

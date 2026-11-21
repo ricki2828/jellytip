@@ -1,6 +1,6 @@
 // Live match hero (TV port: jellytip/iptv/JellytipLiveHero.kt `LiveHero`, Game Centre look 2A). Which fixtures the hero shows:
-// on Home his teams' live games (else the single top-ranked live game); on Game Centre the same, else his next game within a day,
-// else the top-ranked game starting within a day. Spoiler-safe: a tag and the teams, never a score. Pure; tested in
+// on Home only live games of his starred teams or followed leagues (none: the normal hero; Ricki 21-Nov, no top-ranked fallback);
+// on Game Centre those, else the top-ranked live game, else his next game within a day, else the top-ranked game starting within a day. Spoiler-safe: a tag and the teams, never a score. Pure; tested in
 // test/liveHero.test.ts.
 import { isFavourite, pickChannel, type FxItem } from "./gameCentre.ts";
 import type { Muted } from "./prefs.ts";
@@ -20,19 +20,25 @@ export function isMuted(f: Pick<FxItem, "league" | "leagueKey" | "sport">, muted
 
 const cmp = (a: FxItem, b: FxItem) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || b.significance - a.significance || a.kickoff - b.kickoff || a.fid.localeCompare(b.fid);
 
-/** Live fixtures with somewhere to watch: his teams (ranked), else the single top-ranked live game. Muted leagues / sports left out. */
-export function homePicks(items: readonly FxItem[], nowSec: number, refs: Refs = [], muted?: Muted | null): FxItem[] {
-  const live = items.filter((f) => f.status === "in" && !isMuted(f, muted) && pickChannel(f, nowSec).channel != null);
-  const mine = live.filter((f) => isFavourite(f, refs)).sort(cmp);
-  if (mine.length) return mine;
-  const top = [...live].sort(cmp)[0];
-  return top ? [top] : [];
+/** A fixture of a league he follows: the server's verdict (`why`: "favourite league", league families included), else his
+ * prefs sport.leagues by name or key (as muting matches) when the server sent no `why`. */
+export const followsLeague = (f: Pick<FxItem, "league" | "leagueKey" | "followedLeague">, leagues: readonly string[] = []): boolean =>
+  f.followedLeague != null ? f.followedLeague : leagues.some((m) => [f.league, f.leagueKey].some((l) => !!l && same(l, m)));
+
+const liveWatchable = (items: readonly FxItem[], nowSec: number, muted?: Muted | null) =>
+  items.filter((f) => f.status === "in" && !isMuted(f, muted) && pickChannel(f, nowSec).channel != null);
+
+/** Home: live fixtures with somewhere to watch of his starred teams or followed leagues (ranked). Nothing else: no fallback game. */
+export function homePicks(items: readonly FxItem[], nowSec: number, refs: Refs = [], muted?: Muted | null, leagues: readonly string[] = []): FxItem[] {
+  return liveWatchable(items, nowSec, muted).filter((f) => isFavourite(f, refs) || followsLeague(f, leagues)).sort(cmp);
 }
 
-/** Game Centre's hero: the Home picks, else his next game within a day, else the top-ranked game starting within a day. */
-export function gameCentrePicks(items: readonly FxItem[], nowSec: number, refs: Refs = [], muted?: Muted | null): FxItem[] {
-  const home = homePicks(items, nowSec, refs, muted);
+/** Game Centre's hero (the sport page keeps a fallback): the Home picks, else the top-ranked live game, else his next game within a day, else the top-ranked game starting within a day. */
+export function gameCentrePicks(items: readonly FxItem[], nowSec: number, refs: Refs = [], muted?: Muted | null, leagues: readonly string[] = []): FxItem[] {
+  const home = homePicks(items, nowSec, refs, muted, leagues);
   if (home.length) return home;
+  const top = liveWatchable(items, nowSec, muted).sort(cmp)[0];
+  if (top) return [top];
   const soon = items.filter((f) => f.status === "pre" && !isMuted(f, muted) && f.kickoff - nowSec >= 0 && f.kickoff - nowSec <= DAY_S);
   const mine = soon.filter((f) => isFavourite(f, refs)).sort((a, b) => a.kickoff - b.kickoff)[0];
   const next = mine ?? [...soon].sort(cmp)[0];

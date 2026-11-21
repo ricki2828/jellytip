@@ -119,7 +119,7 @@ export function pickPlayable<T extends Pickable>(first: T, rest: readonly T[], n
 }
 export const skippedNote = (name: string) => `Skipped ${name}: failed earlier`;
 
-/** The next thing to offer after "This stream isn't working": the first of `others` (in order) that has not failed lately, else null. */
+/** The next alternate to offer after a failed stream (the user report button was removed 21-Nov; kept for reuse): the first of `others` (in order) that has not failed lately, else null. */
 export function nextAfterFailure<T extends Pickable>(current: string, others: readonly T[], nowS: number): T | null {
   return others.find((c) => c.id !== current && !failedLately(failOf(c.id, c.lastFail), nowS)) ?? null;
 }

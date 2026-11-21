@@ -382,7 +382,7 @@ function FixtureGameCentre({ items, degraded, more, expanded, focusFid }: { item
   useEffect(() => {
     if (heroPicks.length) heroFocused.current = true;
   });
-  const heroPicks = useMemo(() => gameCentrePicks(items, now, prefs?.sport.teamRefs ?? [], prefs?.sport.muted), [items, now, prefs]);
+  const heroPicks = useMemo(() => gameCentrePicks(items, now, prefs?.sport.teamRefs ?? [], prefs?.sport.muted, prefs?.sport.leagues ?? []), [items, now, prefs]);
   const heroMine = heroPicks.some((f) => isFavourite(f, prefs?.sport.teamRefs ?? []));
   return (
     <>

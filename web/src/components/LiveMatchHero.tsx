@@ -209,7 +209,7 @@ export function useEdgeStyle(f: Pick<FxItem, "matchId" | "away" | "homeColor" | 
 }
 
 /**
- * Home's live match picks (TV: Ricki 21-Nov, option 1): his teams' live games, else the top-ranked live one. Empty when no game is live,
+ * Home's live match picks: live games of his starred teams or followed leagues only (Ricki 21-Nov: no top-ranked fallback). Empty when none is live,
  * the person has no Live TV, or the fixtures route is missing. Re-checked every minute.
  */
 export function useHomeLivePicks(): { picks: FxItem[]; nowSec: number; mine: boolean } {
@@ -236,10 +236,11 @@ export function useHomeLivePicks(): { picks: FxItem[]; nowSec: number; mine: boo
   }, [live]);
   const refs = prefs?.sport.teamRefs;
   const muted = prefs?.sport.muted;
+  const leagues = prefs?.sport.leagues;
   return useMemo(() => {
-    const picks = live === true && data ? homePicks(data.items, now, refs ?? [], muted) : [];
+    const picks = live === true && data ? homePicks(data.items, now, refs ?? [], muted, leagues ?? []) : [];
     return { picks, nowSec: now, mine: picks.some((f) => isFavourite(f, refs ?? [])) };
-  }, [live, data, now, refs, muted]);
+  }, [live, data, now, refs, muted, leagues]);
 }
 
 /**
