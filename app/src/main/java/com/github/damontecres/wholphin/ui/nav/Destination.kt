@@ -222,6 +222,12 @@ sealed class Destination(
     @Serializable
     data object JellytipMyChannels : Destination(false)
 
+    // ---- t5n (21-Nov): Ask (plain-language discovery, web #/ask) + Journeys (web #/journeys) ----
+
+    /** Jellytip: Ask, "something funny under 90 minutes" -> chips -> library picks ("Not sure? Ask" on Search). */
+    @Serializable
+    data object JellytipAsk : Destination(false)
+
     // ---- end t5n ----
 
     /** Jellytip: an IPTV channel full screen (zapping with Up/Down through the guide tab it came from). */
