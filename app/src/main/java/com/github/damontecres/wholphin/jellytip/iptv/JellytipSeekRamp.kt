@@ -60,10 +60,13 @@ object SeekRamp {
         now: Long,
     ) = s != null && now - s.lastAt >= SETTLE_MS
 
-    /** Never while the arrow is held, else once settled. */
+    /** A held key repeats at least every [REPEAT_THROTTLE_MS]: this long without a press means the release was missed. */
+    const val STALE_HOLD_MS = 1500L
+
+    /** Never while the arrow is held, else once settled; a "hold" that stopped repeating counts as released. */
     fun commitDue(
         s: State?,
         now: Long,
         held: Boolean,
-    ) = !held && settled(s, now)
+    ) = settled(s, now) && (!held || now - s!!.lastAt >= STALE_HOLD_MS)
 }

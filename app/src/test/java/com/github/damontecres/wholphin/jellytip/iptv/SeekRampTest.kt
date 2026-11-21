@@ -37,5 +37,7 @@ class SeekRampTest {
         assertFalse(SeekRamp.commitDue(s, 500, false))
         assertFalse(SeekRamp.commitDue(s, 800, true))
         assertTrue(SeekRamp.commitDue(s, 800, false))
+        // the release was missed (a dialog took the key up): commit once the "hold" stopped repeating
+        assertTrue(SeekRamp.commitDue(s, 1600, true))
     }
 }

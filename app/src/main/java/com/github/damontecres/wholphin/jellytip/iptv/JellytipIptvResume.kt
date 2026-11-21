@@ -352,7 +352,7 @@ fun JellytipResumeRow(
 
                 is ResumeTile.Iptv ->
                     IptvVodTile(
-                        item = t.r.asVodItem().let { v -> v.copy(title = "${v.title}\n${IptvContinueRules.rowLabel(t.r)}") },
+                        item = t.r.asVodItem().let { v -> v.copy(title = "${IptvContinueRules.rowLabel(t.r)}\n${v.title}") },
                         width = h * 16f / 9f,
                         height = h,
                         poster = false,
