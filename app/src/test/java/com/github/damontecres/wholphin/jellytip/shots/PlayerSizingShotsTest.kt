@@ -145,6 +145,20 @@ class PlayerSizingShotsTest {
 
     private val live = MatchLive("in", "45:10", "2nd Half", "12", "6", emptyList(), emptyList(), emptyList(), null, null, null, emptyList(), updatedAt = null)
 
+    /** Docked panel, teams with no short names: the score strip falls back to codes, the score keeps its room. */
+    @Test
+    fun dockedPanelLongNames() =
+        shot("player-panel-longnames") {
+            JellytipLivePanel(
+                match.copy(home = match.home?.copy(short = null), away = match.away?.copy(short = null)),
+                tab = 0,
+                spoilerNotice = false,
+                data = live.copy(scoreHome = "112", scoreAway = "108"),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.28f),
+                topRow = { DelayChipText(replay = { false }, hold = { null }, delaySec = { 30 }) },
+            )
+        }
+
     /** Docked live panel with the delay chip as its first row (the chip never sits on the score strip; P1 insets). */
     @Test
     fun cornersWithDockedPanel() =
