@@ -1196,9 +1196,13 @@ class SourceNeutralShotsTest {
             expected.map { label ->
                 val nodes = compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
                 assertEquals("$name: exactly one '$label' (menu texts=$labels)", 1, nodes.size)
-                nodes.first().boundsInRoot.top
+                nodes.first().boundsInRoot.let { b -> if (b.height > 0f) b.top else null }
             }
-        assertTrue("$name: $expected must read top to bottom (tops=$tops)", tops == tops.sorted() && tops.distinct().size == tops.size)
+        // (a long menu scrolls: an item below the fold has no placed bounds, so the order is checked on the placed ones; the full
+        //  order is pinned by JellytipTitleMenuTest)
+        val placed = tops.filterNotNull()
+        println("shot $name: label tops=$tops")
+        assertTrue("$name: $expected must read top to bottom (tops=$tops)", placed == placed.sorted() && placed.distinct().size == placed.size)
         absent.forEach { label ->
             assertEquals("$name: no '$label' (menu texts=$labels)", 0, compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes().size)
         }
