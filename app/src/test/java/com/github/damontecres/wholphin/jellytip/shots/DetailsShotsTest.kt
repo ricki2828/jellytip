@@ -737,9 +737,14 @@ class DetailsShotsTest {
             pressDown(name)
             advance(1500)
             // Chip 2 is Season 3, which only IPTV has
-            runCatching { compose.onNodeWithTag("jellytip-season-chip-2").requestFocus() }
-                .onFailure { println("shot $name: chip focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            // (enter the chips row on the selected chip, then Right twice)
+            compose.onNodeWithTag("jellytip-season-chip-0").requestFocus()
+            advance(400)
+            pressKey(name, Key.DirectionRight)
+            advance(400)
+            pressKey(name, Key.DirectionRight)
             advance(800)
+            compose.onNodeWithTag("jellytip-season-chip-2").assertIsFocused()
             pressOk(name)
             advance(1200)
             assertEquals("an IPTV-only season is not a library season change", emptyList<Int>(), changes)
@@ -759,7 +764,10 @@ class DetailsShotsTest {
             advance(1500)
             // Focus only moves: Season 1 stays the selected season and the episodes stay put
             // (focus by text did not take on the chip in CI: its tagged, clickable node is the focus target)
-            compose.onNodeWithTag("jellytip-season-chip-1").requestFocus()
+            // The chips row sends any focus that ENTERS it to the selected chip (focusRestorer), so: enter the row, then Right
+            compose.onNodeWithTag("jellytip-season-chip-0").requestFocus()
+            advance(400)
+            pressKey(name, Key.DirectionRight)
             advance(800)
             compose.onNodeWithTag("jellytip-season-chip-1").assertIsFocused()
             assertEquals("focusing a season chip must not change the season", emptyList<Int>(), changes)
@@ -776,7 +784,10 @@ class DetailsShotsTest {
             pressDown(name)
             advance(1500)
             // (focus by text did not take on the chip in CI: its tagged, clickable node is the focus target)
-            compose.onNodeWithTag("jellytip-season-chip-1").requestFocus()
+            // The chips row sends any focus that ENTERS it to the selected chip (focusRestorer), so: enter the row, then Right
+            compose.onNodeWithTag("jellytip-season-chip-0").requestFocus()
+            advance(400)
+            pressKey(name, Key.DirectionRight)
             advance(800)
             compose.onNodeWithTag("jellytip-season-chip-1").assertIsFocused()
             assertEquals("not before OK", emptyList<Int>(), changes)
