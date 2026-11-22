@@ -7,11 +7,12 @@ import { getItems, uid, type Item } from "../api/jellyfin";
 import { companionCall } from "../api/companionCall";
 import { itemsByIds } from "../components/ServerRow";
 import { Card } from "../components/Card";
+import { IptvCard } from "../components/IptvTile";
 import { EXAMPLES } from "../lib/askParse";
 import { isNative } from "../lib/native";
 import { go } from "../lib/router";
 import {
-  alignCards, applyError, applyResponse, ChatSender, dismissNotice, displayChips, emptyState, noticeSeen, NOTICE_TEXT, refineChat, retry, submitText, tapChip, TOO_LONG_TEXT,
+  alignCards, applyError, applyResponse, cardKeyOf, ChatSender, dismissNotice, displayChips, emptyState, isIptvCard, libraryIds, noticeSeen, NOTICE_TEXT, refineChat, retry, scopeHint, submitText, tapChip, TOO_LONG_TEXT,
   type Call, type ChatBody, type ChatState, type Op,
 } from "../lib/askChat";
 import { Ask } from "./Ask";
@@ -25,7 +26,6 @@ const speechCtor = (): (new () => Speech) | null => {
   const w = window as unknown as { SpeechRecognition?: new () => Speech; webkitSpeechRecognition?: new () => Speech };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 };
-const scopeLabel = (s: string) => (s === "library" ? "Library" : s === "iptv" ? "IPTV" : s);
 
 export function AskChat() {
   const userId = uid();
@@ -95,8 +95,10 @@ export function AskChat() {
   }, [state.turns.length, state.pending]);
 
   // The server's cards, exactly its ids in its order: fetched as library Items; an id the fetch drops is a gap, never a substitute
-  const ids = useMemo(() => state.cards.map((c) => c.id), [state.cards]);
+  // (TV cards are drawn from the server's own fields: only the library ids are fetched)
+  const ids = useMemo(() => libraryIds(state.cards), [state.cards]);
   const cardKey = ids.join(",");
+  const resultKey = useMemo(() => state.cards.map(cardKeyOf).join(","), [state.cards]);
   useEffect(() => {
     if (!cardKey) {
       setFetched({ key: "", items: [], people: [] });
@@ -318,7 +320,7 @@ export function AskChat() {
           )}
           {state.sources.length > 0 && !pending && state.turns.length > 0 && (
             <p className="ac-scope" aria-label="Searched">
-              {state.sources.map(scopeLabel).join(" · ")}
+              {scopeHint(state.sources)}
               {state.matched > 0 ? ` · ${state.matched} fit` : ""}
             </p>
           )}
@@ -330,10 +332,28 @@ export function AskChat() {
             </div>
           ) : (
             shown.length > 0 && (
-              <div className="grid ask-grid">
-                {shown.map(({ item }) => (
-                  <Card key={item.Id} item={item} width={0} />
-                ))}
+              <div className="grid ask-grid" data-result={resultKey}>
+                {shown.map(({ card, item }) =>
+                  item ? (
+                    <Card key={item.Id} item={item} width={0} />
+                  ) : isIptvCard(card) ? (
+                    <IptvCard
+                      key={cardKeyOf(card)}
+                      width={0}
+                      item={{
+                        id: card.iptvId,
+                        title: card.title ?? "",
+                        year: card.year ?? null,
+                        quality: card.quality ?? [],
+                        poster: card.poster ?? null,
+                        backdrop: card.backdrop ?? null,
+                        tech: card.tech ?? [],
+                        kind: card.kind === "film" ? "movie" : "series",
+                        tmdbId: card.tmdbId ?? null,
+                      }}
+                    />
+                  ) : null,
+                )}
               </div>
             )
           )}
