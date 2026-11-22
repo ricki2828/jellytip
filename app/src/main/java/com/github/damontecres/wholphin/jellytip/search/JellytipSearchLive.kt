@@ -156,7 +156,7 @@ private fun IptvOnNow.toUpcoming() =
     )
 
 @Composable
-private fun SearchLiveCard(
+internal fun SearchLiveCard(
     o: IptvOnNow,
     now: Long,
     onClick: () -> Unit,

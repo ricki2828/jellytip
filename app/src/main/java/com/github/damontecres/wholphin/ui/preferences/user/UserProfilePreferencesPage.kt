@@ -109,8 +109,13 @@ fun UserProfilePreferencesContent(
         LaunchedEffect(Unit) {
             focusRequester.tryRequestFocus()
         }
+        // Jellytip safe area (as the main Settings panel): the background still runs to the page edge, the content starts at
+        // y = 28 dp and ends 48 dp from the screen's right edge (page inset 16 + 16 here + the list's own 16 end padding)
         Column(
-            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)),
+            modifier =
+                Modifier
+                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                    .padding(top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = 16.dp),
         ) {
             Text(
                 text = stringResource(R.string.profile_specific_settings),
@@ -120,6 +125,7 @@ fun UserProfilePreferencesContent(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .padding(end = 16.dp)
                         .padding(vertical = 8.dp),
             )
             LazyColumn(

@@ -181,10 +181,7 @@ fun IptvVodTile(
         onLongClick = onLongClick ?: { if (titleMenu) menu = true else onClick() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-        border =
-            ClickableSurfaceDefaults.border(
-                focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, com.github.damontecres.wholphin.jellytip.JellytipFocus.Cream), shape = RoundedCornerShape(8.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
         scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(width),
         modifier = modifier.size(width, height),
     ) {
@@ -868,7 +865,7 @@ private fun WaysToWatchRow(
                     onClick = { onPick(c) },
                     shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                     border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+                    scale = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.scale(),
                     colors =
                         ClickableSurfaceDefaults.colors(
                             containerColor = if (selected) JellytipPalette.Vanilla.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f),

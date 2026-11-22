@@ -217,15 +217,15 @@ fun JellytipMyChannelsPage(
             )
         }
         Row(Modifier.fillMaxSize()) {
-            Column(Modifier.width(560.dp).fillMaxHeight().padding(start = 56.dp, top = 40.dp)) {
+            Column(Modifier.width(560.dp).fillMaxHeight().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
                 Text("MY CHANNELS", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 1.5.sp)
-                Text("Always on, joined mid-programme", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 32.sp)
+                Text("Always on, joined mid-programme", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
                 Text(
                     "▲▼ change channel · OK join · hold OK from the start",
                     color = JellytipPalette.Vanilla.copy(alpha = 0.65f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
                 )
                 when {
                     state.loading && rows.isEmpty() -> Note("Tuning your channels…")
@@ -276,7 +276,7 @@ private fun Note(text: String) {
 }
 
 @Composable
-private fun ChannelTile(
+internal fun ChannelTile(
     r: ChannelRow,
     nowMs: Long,
     onClick: () -> Unit,
@@ -288,7 +288,7 @@ private fun ChannelTile(
         onClick = onClick,
         onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
+        scale = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.scale(row = true),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color(0xFF1B1B1B),
@@ -298,10 +298,7 @@ private fun ChannelTile(
                 pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
-        border =
-            ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(10.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(10.dp)),
         modifier = modifier.fillMaxWidth().height(84.dp),
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {

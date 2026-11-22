@@ -344,7 +344,7 @@ private fun SearchContent(
                     if (answer.liveFirst) liveRows()
                     if (answer.results != null) {
                         // Newer server: the top hit, one ranked row of films and shows, then people, collections, not available
-                        answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top, viewModel) } }
+                        answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top) { openResult(top, viewModel) } } }
                         val ranked = answer.rankedGroups
                         val libraryRows = ranked.takeWhile { it.type == "results-library" }
                         libraryRows.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
@@ -561,10 +561,7 @@ internal fun PosterCard(
             onClick = onClick,
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-            border =
-                ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, com.github.damontecres.wholphin.jellytip.JellytipFocus.Cream), shape = RoundedCornerShape(8.dp)),
-                ),
+            border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
             scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(120.dp),
             modifier = Modifier.size(120.dp, 180.dp),
         ) {
@@ -652,9 +649,9 @@ private fun SearchIptv.toVodItem() =
 
 /** The best hit as a wide card: its art, title, facts (kind · year · seasons · rating · where), OK opens it. */
 @Composable
-private fun TopHit(
+internal fun TopHit(
     r: SearchResult,
-    viewModel: JellytipSearchViewModel,
+    onOpen: () -> Unit,
 ) {
     val images = LocalImageUrlService.current
     val density = LocalDensity.current
@@ -693,14 +690,12 @@ private fun TopHit(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp)) {
         ItemRowTitle("Top hit")
         Surface(
-            onClick = { openResult(r, viewModel) },
+            onClick = onOpen,
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+            scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(TOP_W),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-            border =
-                ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
-                ),
+            border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
+            glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
             modifier = Modifier.size(TOP_W, TOP_H),
         ) {
             var failed by remember(image) { mutableStateOf(false) }

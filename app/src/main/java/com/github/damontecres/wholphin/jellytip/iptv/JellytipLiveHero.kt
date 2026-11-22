@@ -352,7 +352,8 @@ fun ColourEdgeFixtureTile(
         onClick = onClick,
         onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(320.dp),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color(0xFF141414),
@@ -360,10 +361,7 @@ fun ColourEdgeFixtureTile(
                 contentColor = Broadcast.Text,
                 focusedContentColor = Color.White,
             ),
-        border =
-            ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(3.dp, Color(0xFFF2F2F0)), shape = RoundedCornerShape(10.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(10.dp)),
         modifier = modifier.size(320.dp, 140.dp),
     ) {
         Box(Modifier.fillMaxSize()) {

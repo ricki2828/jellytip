@@ -113,7 +113,7 @@ fun rememberJellytipDiscover(
 }
 
 @Composable
-private fun DiscoverTile(
+internal fun DiscoverTile(
     title: DiscoverTitle,
     state: RequestState?,
     onClick: () -> Unit,
@@ -127,11 +127,9 @@ private fun DiscoverTile(
                 containerColor = Color(0xFF141414),
                 focusedContainerColor = Color(0xFF141414),
             ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
-        border =
-            ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, JellytipPalette.Vanilla), shape = RoundedCornerShape(6.dp)),
-            ),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale((TILE_HEIGHT_DP * 16 / 9).dp),
+        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(6.dp)),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(

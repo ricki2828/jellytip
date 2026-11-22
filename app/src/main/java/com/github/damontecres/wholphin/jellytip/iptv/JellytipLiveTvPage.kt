@@ -846,7 +846,10 @@ fun JellytipLiveTvPage(
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         // Top: preview + what's focused
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(PREVIEW_H)) {
-            LivePreview(playback, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
+            // Nothing focused and nothing playing: LivePreview would draw an empty box, so FocusInfo takes the width (the row keeps its height)
+            if (livePreviewShown(playState, focusedChannel)) {
+                LivePreview({ playback.player }, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
+            }
             FocusInfo(focusedChannel, focusedProg, now, state.message, Modifier.weight(1f))
             // Header action (Up from the group chips): refresh the guide now, with its last-updated status
             val refresh by viewModel.refresh.collectAsState()
@@ -1273,14 +1276,20 @@ private fun RecordingsList(
     }
 }
 
+/** False when [LivePreview] would draw only an empty box: idle, and no channel focused (no text, no player). */
+internal fun livePreviewShown(
+    playState: IptvPlayState,
+    focused: IptvChannel?,
+): Boolean = playState !is IptvPlayState.Idle || focused != null
+
 @Composable
-private fun LivePreview(
-    playback: JellytipIptvPlayback,
+internal fun LivePreview(
+    playerOf: () -> androidx.media3.exoplayer.ExoPlayer?,
     playState: IptvPlayState,
     focused: IptvChannel?,
     modifier: Modifier,
 ) {
-    val player = playback.player
+    val player = playerOf()
     Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFF141414))) {
         if (player != null && (playState is IptvPlayState.Playing || playState is IptvPlayState.Opening)) {
             PlayerSurface(player = player, surfaceType = SURFACE_TYPE_TEXTURE_VIEW, modifier = Modifier.fillMaxSize())
@@ -1308,7 +1317,7 @@ private fun LivePreview(
 }
 
 @Composable
-private fun FocusInfo(
+internal fun FocusInfo(
     ch: IptvChannel?,
     prog: IptvProg?,
     now: Long,

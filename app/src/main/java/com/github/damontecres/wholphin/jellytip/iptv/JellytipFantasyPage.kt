@@ -140,7 +140,7 @@ fun JellytipFantasyPage(
         }
     }
     Column(modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Fantasy", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Fantasy", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         val l0 = live
         if (l0 == null || l0.leagues.isEmpty()) {
             Text(
@@ -148,7 +148,7 @@ fun JellytipFantasyPage(
                 color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                 fontFamily = JellytipFontFamily,
                 fontSize = 14.sp,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
             )
             return@Column
         }
