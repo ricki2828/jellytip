@@ -13,6 +13,8 @@ import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.details.PlayCandidate
+import com.github.damontecres.wholphin.jellytip.details.resolveSeriesPlay
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.ExtrasService
@@ -67,6 +69,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
@@ -78,6 +81,7 @@ import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetEpisodesRequest
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
 import org.jellyfin.sdk.model.api.request.GetSimilarItemsRequest
 import timber.log.Timber
 import java.util.UUID
@@ -120,12 +124,24 @@ class SeriesViewModel
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
 
+        private val _playTarget = MutableStateFlow<BaseItem?>(null)
+
+        /**
+         * The episode the series page's primary button plays (and names): the most recently played part-watched episode,
+         * else Jellyfin's next up, else the first episode; null until known. See [refreshPlayTarget].
+         */
+        val playTarget: StateFlow<BaseItem?> = _playTarget
+
         @Volatile
         private var nextUp: BaseItemDto? = null
 
         /** Set when the series page opens an episode so Back lands on the episode row. */
         @Volatile
         var returnToEpisodes = false
+
+        /** The IPTV-only season picked and the IPTV episode last played on the page: Back from IPTV playback lands there. */
+        @Volatile
+        var iptvPosition = com.github.damontecres.wholphin.jellytip.details.IptvSeasonPosition()
 
         private val navPrefs by lazy { context.getSharedPreferences("jellytip_nav", Context.MODE_PRIVATE) }
 
@@ -156,24 +172,11 @@ class SeriesViewModel
                 }
                 backdropService.submit(series)
 
-                val nextUpDeferred =
-                    run {
-                        viewModelScope.async(WholphinDispatchers.IO) {
-                            try {
-                                api.tvShowsApi
-                                    .getNextUp(seriesId = seriesId)
-                                    .content.items
-                                    .firstOrNull()
-                            } catch (ex: CancellationException) {
-                                throw ex
-                            } catch (ex: Exception) {
-                                Timber.w(ex, "Could not fetch next up for %s", seriesId)
-                                null
-                            }
-                        }
-                    }
+                // What the primary button plays (part-watched, else next up, else first): the page also opens on its season and episode
+                val nextUpDeferred = viewModelScope.async(WholphinDispatchers.IO) { resolvePlayDto() }
                 val seasonsDeferred = getSeasons(series, seasonEpisodeIds?.seasonNumber)
                 nextUp = nextUpDeferred.await()
+                _playTarget.value = nextUp?.let { BaseItem(it) }
 
                 // Opened without a season: last-viewed season for this series, else the one holding the next-up episode
                 val resolvedIds =
@@ -329,6 +332,8 @@ class SeriesViewModel
         }
 
         fun onResumePage() {
+            // Page resumed (first show, or back from playback): what the primary button plays may have moved
+            if (seriesPageType == SeriesPageType.DETAILS) refreshPlayTarget()
             state.value.series.successValue?.let { item ->
                 viewModelScope.launchDefault { backdropService.submit(item) }
                 viewModelScope.launchDefault {
@@ -341,12 +346,96 @@ class SeriesViewModel
             state.value.series.successValue?.let { item ->
                 viewModelScope.launchIO {
                     (state.value.seasons as? ApiRequestPager<*>)?.refresh()
+                    // Progress and watched ticks on the episode tiles change while playing
+                    ((state.value.episodes as? EpisodeList.Success)?.episodes)?.refresh()
                 }
             }
         }
 
         fun release() {
             themeSongPlayer.stop()
+        }
+
+        /** Ask again which episode the primary button plays and publish it as [playTarget] (see [resolvePlayDto]). */
+        fun refreshPlayTarget() {
+            viewModelScope.launchIO {
+                _playTarget.value = resolvePlayDto()?.let { BaseItem(it) }
+            }
+        }
+
+        /**
+         * Work out which episode the primary button plays. Three asks, all for this series only: Jellyfin resume items under
+         * it (part-watched episodes), its next up, and its first episode. [resolveSeriesPlay] picks one; the label and the
+         * action both come from that one item. It cannot know what was watched elsewhere until the server does, and a
+         * failed ask counts as "none".
+         */
+        private suspend fun resolvePlayDto(): BaseItemDto? {
+            val userId = serverRepository.currentUser?.id
+            val resume =
+                try {
+                    api.itemsApi
+                        .getResumeItems(
+                            GetResumeItemsRequest(
+                                userId = userId,
+                                parentId = seriesId,
+                                includeItemTypes = listOf(BaseItemKind.EPISODE),
+                                enableUserData = true,
+                                limit = 20,
+                                enableTotalRecordCount = false,
+                            ),
+                        ).content.items
+                        .filter { it.type == BaseItemKind.EPISODE && it.seriesId == seriesId }
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not fetch resume items for %s", seriesId)
+                    emptyList()
+                }
+            val next =
+                try {
+                    api.tvShowsApi
+                        .getNextUp(seriesId = seriesId)
+                        .content.items
+                        .firstOrNull()
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not fetch next up for %s", seriesId)
+                    null
+                }
+            // The first episode is only needed when neither of the others answered
+            val first =
+                if (resume.any { (it.userData?.playbackPositionTicks ?: 0L) > 0L } || next != null) {
+                    null
+                } else {
+                    try {
+                        // (the first REAL episode: not a Specials entry, which sorts first as season 0)
+                        api.tvShowsApi
+                            .getEpisodes(seriesId, limit = 10)
+                            .content.items
+                            .let { eps -> eps.firstOrNull { it.parentIndexNumber != 0 } ?: eps.firstOrNull() }
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Could not fetch first episode for %s", seriesId)
+                        null
+                    }
+                }
+            fun candidate(dto: BaseItemDto) =
+                PlayCandidate(
+                    id = dto.id,
+                    season = dto.parentIndexNumber,
+                    episode = dto.indexNumber,
+                    positionTicks = dto.userData?.playbackPositionTicks ?: 0L,
+                    lastPlayed = dto.userData?.lastPlayedDate,
+                )
+            val chosen =
+                resolveSeriesPlay(
+                    resume = resume.map(::candidate),
+                    nextUp = next?.let(::candidate),
+                    first = first?.let(::candidate),
+                ) ?: return null
+            return (resume + listOfNotNull(next, first)).firstOrNull { it.id == chosen.id }
         }
 
         private fun getSeasons(

@@ -53,6 +53,10 @@ sealed interface ContextMenu {
         val canRemoveNextUp: Boolean,
         val actions: ContextMenuActions,
         val showRemoveFromPlaylist: Boolean = false,
+        /** Jellytip: page-specific entries drawn before the standard ones (the series page's "Details" on an episode). */
+        val leadingItems: List<DialogItem> = emptyList(),
+        /** Jellytip: page-specific entries drawn after the standard ones (the series page's "Discover"). */
+        val trailingItems: List<DialogItem> = emptyList(),
     ) : ContextMenu
 
     data class ForPerson(
@@ -352,6 +356,7 @@ private fun buildContextMenuItems(
     onClickPlayWith: () -> Unit,
 ): List<DialogItem> =
     buildList {
+        addAll(contextMenu.leadingItems)
         // Songs should not show Go to
         if (contextMenu.showGoTo && item.type != BaseItemKind.AUDIO) {
             add(
@@ -730,6 +735,7 @@ private fun buildContextMenuItems(
                 },
             )
         }
+        addAll(contextMenu.trailingItems)
     }
 
 private fun buildPlayWith(

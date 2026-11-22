@@ -20,6 +20,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -101,7 +102,7 @@ fun JellytipDetailsBackground(
     buttonRowFocused: Boolean,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
-    viewModel: JellytipDetailsViewModel = hiltViewModel(),
+    viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
     val settings by viewModel.settings.collectAsState(JellytipSettings())
     val extras by produceState<JellytipExtras?>(null, item.id) {
@@ -156,10 +157,7 @@ fun JellytipDetailsBackground(
 
     if (stills.isEmpty() && trailerUrl == null) return
 
-    // The page content is inset by the collapsed nav drawer (+ padding); bleed back out so the still covers
-    // the whole screen behind the drawer, whose icons sit on top of the left scrim.
-    Box(modifier = modifier.fillFullBleed().background(Color.Black)) {
-        stills.firstOrNull()?.let { url -> KenBurnsImage(url, focal) }
+    JellytipDetailsStill(url = stills.firstOrNull(), focal = focal, dimmed = dimmed, modifier = modifier) {
         AnimatedVisibility(
             visible = trailerPlaying && trailerUrl != null,
             enter = fadeIn(tween(800)),
@@ -177,8 +175,32 @@ fun JellytipDetailsBackground(
                 )
             }
         }
+    }
+}
+
+/**
+ * The drawing of the details backdrop from a plain still url (library items and IPTV titles both use it): a full-bleed
+ * Ken Burns still, [underScrim] (a passive trailer layer), the bottom-left vignette scrim and the dim while focus is in
+ * the rows below.
+ *
+ * @param url the still; null draws only the black base, [underScrim] and the scrim
+ * @param underScrim drawn over the still and under the scrim, in the box's scope
+ */
+@Composable
+fun JellytipDetailsStill(
+    url: String?,
+    focal: JellytipFocal?,
+    dimmed: Boolean,
+    modifier: Modifier = Modifier,
+    underScrim: @Composable BoxScope.() -> Unit = {},
+) {
+    // The page content is inset by the collapsed nav drawer (+ padding); bleed back out so the still covers
+    // the whole screen behind the drawer, whose icons sit on top of the left scrim.
+    Box(modifier = modifier.fillFullBleed().background(Color.Black)) {
+        url?.let { KenBurnsImage(it, focal) }
+        underScrim()
         // Soft vignette from the bottom-left corner only, behind the text block; denser on bright or busy art
-        val scrim by animateFloatAsState(JellytipScrim.strength(stills.firstOrNull()), tween(400), label = "jellytip-scrim")
+        val scrim by animateFloatAsState(JellytipScrim.strength(url), tween(400), label = "jellytip-scrim")
         Box(
             Modifier
                 .fillMaxSize()
@@ -325,7 +347,7 @@ internal fun TrailerLayer(
 fun JellytipScoreRow(
     item: BaseItem,
     modifier: Modifier = Modifier,
-    viewModel: JellytipDetailsViewModel = hiltViewModel(),
+    viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
     val extras by produceState<JellytipExtras?>(null, item.id) {
         value = viewModel.getExtras(item)

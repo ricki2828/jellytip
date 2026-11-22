@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
+import com.github.damontecres.wholphin.jellytip.details.seasonChipLabel
+import com.github.damontecres.wholphin.jellytip.details.myListLabel
 import androidx.compose.runtime.CompositionLocalProvider
 import com.github.damontecres.wholphin.jellytip.LocalJellytipRowFocused
 import androidx.compose.animation.AnimatedVisibility
@@ -197,13 +199,7 @@ fun SeriesOverviewContent(
                         }
                     val seasonLabels =
                         remember(seasons.size, seasons.map { it?.indexNumber }) {
-                            seasons.mapIndexed { i, season ->
-                                when (val n = season?.indexNumber) {
-                                    null -> "S${i + 1}"
-                                    0 -> "Specials"
-                                    else -> "S$n"
-                                }
-                            }
+                            seasons.mapIndexed { i, season -> seasonChipLabel(season?.indexNumber, i) }
                         }
                     val seasonCrumb =
                         seasons.getOrNull(selectedTabIndex)?.let { s ->
@@ -263,13 +259,7 @@ fun SeriesOverviewContent(
                                 )
                                 add(
                                     JellytipButton(
-                                        stringResource(
-                                            if (focusedEpisode?.data?.userData?.isFavorite == true) {
-                                                R.string.remove_favorite
-                                            } else {
-                                                R.string.add_favorite
-                                            },
-                                        ),
+                                        myListLabel(focusedEpisode?.data?.userData?.isFavorite == true),
                                         favoriteOnClick,
                                     ),
                                 )
