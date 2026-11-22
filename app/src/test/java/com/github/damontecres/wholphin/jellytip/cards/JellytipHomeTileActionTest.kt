@@ -17,9 +17,17 @@ class JellytipHomeTileActionTest {
     }
 
     @Test
-    fun filmInContinueOrNextUpKeepsTodaysBehaviour() {
-        assertEquals(HomeTileAction.OPEN, homeTileAction(true, BaseItemKind.MOVIE, clickToPlay = false))
-        assertEquals(HomeTileAction.PLAY, homeTileAction(true, BaseItemKind.MOVIE, clickToPlay = true))
+    fun filmInContinueOrNextUpPlaysWhateverClickToPlaySays() {
+        for (type in listOf(BaseItemKind.MOVIE, BaseItemKind.VIDEO, BaseItemKind.MUSIC_VIDEO)) {
+            assertEquals(HomeTileAction.PLAY, homeTileAction(true, type, clickToPlay = false))
+            assertEquals(HomeTileAction.PLAY, homeTileAction(true, type, clickToPlay = true))
+        }
+    }
+
+    @Test
+    fun otherTypesInContinueOrNextUpFollowClickToPlay() {
+        assertEquals(HomeTileAction.OPEN, homeTileAction(true, BaseItemKind.SEASON, clickToPlay = false))
+        assertEquals(HomeTileAction.PLAY, homeTileAction(true, BaseItemKind.SEASON, clickToPlay = true))
     }
 
     @Test
@@ -37,9 +45,11 @@ class JellytipHomeTileActionTest {
     }
 
     @Test
-    fun detailsItemOnlyForEpisodesInThoseRows() {
+    fun detailsItemOnlyForEpisodesAndFilmsInThoseRows() {
         assertTrue(homeTileHasDetailsItem(true, BaseItemKind.EPISODE))
-        assertFalse(homeTileHasDetailsItem(true, BaseItemKind.MOVIE))
+        assertTrue(homeTileHasDetailsItem(true, BaseItemKind.MOVIE))
+        assertFalse(homeTileHasDetailsItem(true, BaseItemKind.SERIES))
         assertFalse(homeTileHasDetailsItem(false, BaseItemKind.EPISODE))
+        assertFalse(homeTileHasDetailsItem(false, BaseItemKind.MOVIE))
     }
 }

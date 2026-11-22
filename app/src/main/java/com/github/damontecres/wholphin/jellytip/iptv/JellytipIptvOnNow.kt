@@ -142,8 +142,8 @@ fun OnNowCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    // (audit 22-Nov) at the 12 sp floor a narrow card has no room for two chips and a name: the audio chip goes first, and under 260 dp (the guide strip) both
-                    QualityChips(o.channel.quality?.takeIf { width >= 260.dp }?.let { if (width < 300.dp) it.copy(audio = null) else it })
+                    // (audit 22-Nov) at the 12 sp floor a narrow card has no room for two chips and a name: the audio chip goes first, and under 260 dp (the guide strip) both; the audio chip needs a card WIDER than 300 dp
+                    QualityChips(o.channel.quality?.takeIf { width >= 260.dp }?.let { if (width <= 300.dp) it.copy(audio = null) else it })
                     // NFL games with your fantasy starters (plan "Fantasy live scoring for NFL")
                     if (isNfl(o.match)) {
                         val fantasy by JellytipFantasy.live.collectAsState()
@@ -281,8 +281,8 @@ fun JellytipLiveSportRow(
                 OnNowCard(
                     o,
                     now,
-                    280.dp,
-                    72.dp,
+                    300.dp,
+                    84.dp,
                     onClick = { viewModel.open(o, shown, "home live sport OK") },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
                     // Long press: the other channels and "Not interested in ‹league›" / "‹sport›"

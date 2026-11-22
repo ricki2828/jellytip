@@ -384,14 +384,14 @@ internal fun SuggestionsContent(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (recent.isNotEmpty()) {
             ItemRowTitle("Recent")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset), modifier = Modifier.focusGroup().focusRestorer()) {
                 items(recent) { q -> Chip(q) { onPick(q) } }
                 item { Chip("Clear") { onClearRecent() } }
             }
         }
         if (suggested.isNotEmpty()) {
             ItemRowTitle("Try")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset), modifier = Modifier.focusGroup().focusRestorer()) {
                 items(suggested) { q -> Chip(q) { onPick(q) } }
             }
         }

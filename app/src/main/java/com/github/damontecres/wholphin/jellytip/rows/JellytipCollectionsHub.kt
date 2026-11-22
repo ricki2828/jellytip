@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -287,7 +286,7 @@ internal fun JellytipCollectionsHubContent(
         }
     }
     // Title, chips, section row and grid all carry their own 8 dp: the extra RowPageStart puts them on the 96 dp left line
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
@@ -346,11 +345,13 @@ internal fun JellytipCollectionsHubContent(
                     columns = GridCells.Adaptive(220.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 ) {
-                    items(section.items, key = { "${section.key}:${it.id}" }) { c ->
-                        HubCard(c, modifier = if (c === section.items.first()) Modifier.testTag("hub-tile0") else Modifier) { onOpen(c) }
+                    items(section.items.size, key = { "${section.key}:${section.items[it].id}" }) { i ->
+                        val c = section.items[i]
+                        // "hub-tile0" = the first card (left line); every card is tagged so the right edge can be measured
+                        HubCard(c, modifier = Modifier.testTag("hub-tile$i")) { onOpen(c) }
                     }
                 }
             }
@@ -514,7 +515,7 @@ internal fun JellytipHubCollectionContent(
             first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
         ItemRowTitle(r?.title?.ifBlank { null } ?: title)
         when {
             tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 100.dp, tileH = 150.dp, rows = 2, perRow = 6, title = false, modifier = Modifier.padding(8.dp))
@@ -531,12 +532,12 @@ internal fun JellytipHubCollectionContent(
                     columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(first),
                 ) {
                     items(tiles.size, key = { tiles[it].key }) { i ->
                         val t = tiles[i]
-                        val m = if (i == 0) Modifier.focusRequester(first) else Modifier
+                        val m = Modifier.testTag("collection-tile$i").then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                         Box {
                             when (t) {
                                 is TrendTile.Lib ->

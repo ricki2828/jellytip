@@ -54,7 +54,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.test.core.app.ApplicationProvider
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.NavigationDrawerScope
@@ -96,6 +96,7 @@ import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
 import com.github.damontecres.wholphin.ui.components.DialogItem
+import com.github.damontecres.wholphin.ui.nav.ExpandedDrawerItemWidth
 import com.github.damontecres.wholphin.ui.nav.IconNavItem
 import com.github.damontecres.wholphin.ui.nav.ModalNavigationDrawer
 import com.github.damontecres.wholphin.ui.nav.NavDrawerItem
@@ -118,6 +119,9 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.UserItemDataDto
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -130,8 +134,8 @@ import java.util.UUID
 /*
  * Audit 2, commit 0: "before" shots for the layout fixes the next commit makes (hub grid right edge, collection detail left
  * line, Home item menu Details / Go To, event tile sizes, Search RECENT / TRY rows, nav drawer open, Settings panel). Not
- * compared, for eyes; NO position asserts (this documents today's state; measured positions go to the CI log as
- * "shot <name>: ..." lines). Harness as LeftLineShotsTest: Robolectric + Roborazzi, sdk 34, w960dp-h540dp-land-xhdpi (a
+ * compared, for eyes. Commit 1 (the fixes) adds position / content asserts to the same shots (same names, so before / after
+ * pair up); measured positions still go to the CI log as "shot <name>: ..." lines. Harness as LeftLineShotsTest: Robolectric + Roborazzi, sdk 34, w960dp-h540dp-land-xhdpi (a
  * 1920x1080 TV at 2x), the app theme + a tv-material Surface, keyboard input mode, fake image handler, a full 960x540 dp
  * frame with magenta safe-area guides (x = 48 / 912, y = 27 / 513), a yellow guide at x = 80 and a cyan one at x = 96 dp.
  *
@@ -253,6 +257,37 @@ class Audit2ShotsTest {
                     "w=${b.right.value - b.left.value} h=${b.bottom.value - b.top.value}",
             )
         }.onFailure { println("shot $name: $what not measured (${it.message?.lineSequence()?.firstOrNull()})") }
+    }
+
+    private fun leftOf(matcher: SemanticsMatcher): Float = compose.onAllNodes(matcher, useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().left.value
+
+    private fun tagStartsWith(prefix: String) =
+        SemanticsMatcher("test tag starts with $prefix") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true }
+
+    private fun assertLeft(
+        shot: String,
+        what: String,
+        expected: Float,
+        matcher: SemanticsMatcher,
+    ) = assertEquals("$shot: $what left edge (dp)", expected, leftOf(matcher), 0.5f)
+
+    /** Every node whose test tag starts with [prefix] (at least [min] of them) ends at or before [limit] dp. */
+    private fun assertRightsAtMost(
+        shot: String,
+        prefix: String,
+        limit: Float,
+        min: Int,
+    ) {
+        val nodes = compose.onAllNodes(tagStartsWith(prefix), useUnmergedTree = true)
+        val n = nodes.fetchSemanticsNodes().size
+        assertTrue("$shot: expected at least $min '$prefix*' nodes, found $n", n >= min)
+        var maxRight = 0f
+        for (i in 0 until n) {
+            val r = nodes[i].getUnclippedBoundsInRoot().right.value
+            maxRight = maxOf(maxRight, r)
+            assertTrue("$shot: '$prefix' node $i right edge $r dp must be <= $limit", r <= limit)
+        }
+        println("shot $shot: $n '$prefix*' nodes, max right=$maxRight (limit $limit)")
     }
 
     /** Render [content] in the [Frame], settle, run [steps] (focus), settle again, capture the whole screen. */
@@ -383,8 +418,15 @@ class Audit2ShotsTest {
             )
         shot(
             "audit2-collections-hub",
-            steps = { focusNode("audit2-collections-hub", hasTestTag("hub-tile0")) },
-            measure = { logBox("audit2-collections-hub", "first tile", hasTestTag("hub-tile0")) },
+            // second card focused: the first stays unscaled, so its left edge is the layout's
+            steps = { focusNode("audit2-collections-hub", hasTestTag("hub-tile1")) },
+            measure = {
+                logBox("audit2-collections-hub", "first tile", hasTestTag("hub-tile0"))
+                assertLeft("audit2-collections-hub", "title", 96f, hasText("Collections"))
+                assertLeft("audit2-collections-hub", "first tile", 96f, hasTestTag("hub-tile0"))
+                // 48 dp from the right screen edge: the grid's cards (focus growth of the focused one included) end by x = 912
+                assertRightsAtMost("audit2-collections-hub", "hub-tile", 912.5f, min = 3)
+            },
         ) {
             JellytipCollectionsHubContent(sections = sections, failed = false, onJourneys = {}, onOpen = {}, modifier = Modifier.fillMaxSize())
         }
@@ -413,8 +455,14 @@ class Audit2ShotsTest {
             )
         shot(
             "audit2-collections-detail",
-            steps = { focusNode("audit2-collections-detail", hasClickAction()) },
-            measure = { logBox("audit2-collections-detail", "title", hasText("HEIST FILMS")) },
+            // second tile focused: the first stays unscaled, so its left edge is the layout's
+            steps = { focusNode("audit2-collections-detail", hasTestTag("collection-tile1")) },
+            measure = {
+                logBox("audit2-collections-detail", "title", hasText("HEIST FILMS"))
+                assertLeft("audit2-collections-detail", "title", 96f, hasText("HEIST FILMS"))
+                assertLeft("audit2-collections-detail", "first tile", 96f, hasTestTag("collection-tile0"))
+                assertRightsAtMost("audit2-collections-detail", "collection-tile", 912.5f, min = 6)
+            },
         ) {
             JellytipHubCollectionContent(
                 id = "c1",
@@ -455,12 +503,13 @@ class Audit2ShotsTest {
         fromLongClick = true,
         item = item,
         chosenStreams = null,
-        showGoTo = true,
+        // HomePage: "Details" and "Go To" open the same page, so Details replaces Go To
+        showGoTo = !withDetails,
         showStreamChoices = false,
         canDelete = false,
         canRemoveContinueWatching = true,
         canRemoveNextUp = false,
-        // HomePage: homeTileHasDetailsItem(inContinueOrNextUpRow, type) = an EPISODE tile in Continue Watching / Next Up
+        // HomePage: homeTileHasDetailsItem(inContinueOrNextUpRow, type) = an EPISODE or film tile in Continue Watching / Next Up
         leadingItems = if (withDetails) listOf(DialogItem("Details", dismissOnClick = true) {}) else emptyList(),
         actions = noopActions(),
     )
@@ -494,13 +543,17 @@ class Audit2ShotsTest {
             }
         println("shot $name: menu items=$labels")
         captureScreenRoboImage(out(name))
+        val goTo = ApplicationProvider.getApplicationContext<android.content.Context>().getString(R.string.go_to)
+        assertEquals("$name: exactly one Details item in $labels", 1, labels.count { it.startsWith("Details") })
+        assertTrue("$name: Details is the first item in $labels", labels.firstOrNull()?.startsWith("Details") == true)
+        assertFalse("$name: no Go To item in $labels", labels.any { it.startsWith(goTo) })
     }
 
     @Test
     fun homeCwMenuEpisode() = menuShot("audit2-home-cw-menu-episode", episode("Slow Horses", "Failure's Contagious", 3, 60.0), withDetails = true, focusLabel = "Details")
 
     @Test
-    fun homeCwMenuFilm() = menuShot("audit2-home-cw-menu-film", movie("Heat", 35.0), withDetails = false, focusLabel = "Go To")
+    fun homeCwMenuFilm() = menuShot("audit2-home-cw-menu-film", movie("Heat", 35.0), withDetails = true, focusLabel = "Details")
 
     // ---- 4. The four event tiles ----
 
@@ -590,13 +643,19 @@ class Audit2ShotsTest {
             inset = false,
             measure = {
                 for (t in listOf("t-guide", "t-home", "t-upcoming", "t-recording")) logBox("audit2-event-tiles", t, hasTestTag(t))
+                fun size(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().let { it.width.value to it.height.value }
+                for ((tag, w, h) in listOf(Triple("t-guide", 230f, 56f), Triple("t-home", 300f, 84f), Triple("t-upcoming", 300f, 84f), Triple("t-recording", 300f, 84f))) {
+                    val (mw, mh) = size(tag)
+                    assertEquals("audit2-event-tiles: $tag width (dp)", w, mw, 0.5f)
+                    assertEquals("audit2-event-tiles: $tag height (dp)", h, mh, 0.5f)
+                }
             },
         ) {
             Column(Modifier.padding(start = 96.dp, top = 60.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                    // Guide "On now" strip (JellytipIptvOnNow.kt:187): 230 x 56; Home "Live sport on now" (:281): 280 x 72
+                    // Guide "On now" strip (JellytipIptvOnNow.kt:187): 230 x 56; Home "Live sport on now": 300 x 84 (same as Upcoming / Recordings)
                     Sized("t-guide", "OnNowCard guide 230 x 56 dp") { m -> OnNowCard(onNow, now, 230.dp, 56.dp, onClick = {}, modifier = m) }
-                    Sized("t-home", "OnNowCard Home 280 x 72 dp") { m -> OnNowCard(onNow, now, 280.dp, 72.dp, onClick = {}, modifier = m) }
+                    Sized("t-home", "OnNowCard Home 300 x 84 dp") { m -> OnNowCard(onNow, now, 300.dp, 84.dp, onClick = {}, modifier = m) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                     // Upcoming sport tile and Recordings (Home) tile: both fixed at 300 x 84 inside the composable
@@ -613,12 +672,17 @@ class Audit2ShotsTest {
     fun search() {
         shot(
             "audit2-search",
-            steps = { focusNode("audit2-search", hasText("severance")) },
+            // second Recent chip focused: the first stays unscaled, so its left edge is the layout's
+            steps = { focusNode("audit2-search", hasText("heat")) },
             measure = {
                 logBox("audit2-search", "RECENT title", hasText("RECENT"))
                 logBox("audit2-search", "TRY title", hasText("TRY"))
-                logBox("audit2-search", "first Recent chip", hasText("heat"))
+                logBox("audit2-search", "first Recent chip", hasText("severance"))
                 logBox("audit2-search", "first Try chip", hasText("slow horses"))
+                // The chips are the clickable (merged) nodes; the labels are the Text nodes (ItemRowTitle's 8 dp is outside its bounds)
+                val chipLeft = { text: String -> compose.onAllNodes(hasText(text)).onFirst().getUnclippedBoundsInRoot().left.value }
+                assertEquals("audit2-search: first Recent chip vs RECENT label (dp)", leftOf(hasText("RECENT")), chipLeft("severance"), 0.5f)
+                assertEquals("audit2-search: first Try chip vs TRY label (dp)", leftOf(hasText("TRY")), chipLeft("slow horses"), 0.5f)
             },
         ) {
             // Stand-in for the top row (VoiceSearchButton + SearchEditTextBox take a Hilt-provided voice manager); the column and
@@ -668,7 +732,7 @@ class Audit2ShotsTest {
             )
         ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(fontSize = com.github.damontecres.wholphin.jellytip.rememberJellytipSizes().sp(24))) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxHeight(),
             ) {
@@ -681,7 +745,7 @@ class Audit2ShotsTest {
                 )
                 LazyColumn(
                     contentPadding = PaddingValues(0.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.spacedByWithFooter(4.dp),
                     modifier = Modifier.fillMaxHeight(),
                 ) {
@@ -721,6 +785,20 @@ class Audit2ShotsTest {
                 for (label in listOf("Search", "Home", "Inbox", "Movies", "Collections", "Settings", "325 GB free of 3.7 TB", "Ricki Hendersonville-Longname")) {
                     logBox(name, "label '$label'", hasText(label))
                 }
+                if (open) {
+                    // Item labels (headlines) share ONE x; every label and sub-line ends 16 dp before the drawer's right edge
+                    val headlines = listOfNotNull("Search", "Home", "Inbox".takeIf { inbox != null }, "Movies", "TV Shows", "Collections", "Settings", "Ricki Hendersonville-Longname")
+                    val lefts = headlines.associateWith { leftOf(hasText(it)) }
+                    println("shot $name: label lefts=$lefts")
+                    val first = lefts.values.first()
+                    for ((label, left) in lefts) assertEquals("$name: label '$label' left (dp) vs '${headlines.first()}'", first, left, 0.5f)
+                    val limit = ExpandedDrawerItemWidth.value - 16f
+                    val all = headlines + listOf("325 GB free of 3.7 TB", "my-very-long-server-hostname.example.com")
+                    for (label in all) {
+                        val right = compose.onAllNodes(hasText(label), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().right.value
+                        assertTrue("$name: '$label' right edge $right dp must be <= $limit", right <= limit + 0.5f)
+                    }
+                }
             },
         ) {
             val state = rememberDrawerState(if (open) DrawerValue.Open else DrawerValue.Closed)
@@ -755,11 +833,21 @@ class Audit2ShotsTest {
                 logBox("audit2-settings-panel", "title", hasText("Settings"))
                 logBox("audit2-settings-panel", "group title", hasText("Playback"))
                 logBox("audit2-settings-panel", "switch row", hasText("Auto-play next episode"))
+                // Stand-in geometry (see above): rows end by x = 912 and the title starts at or below y = 28
+                val title = compose.onAllNodes(hasText("Settings"), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot()
+                assertTrue("audit2-settings-panel: title top ${title.top.value} dp must be >= 27.5", title.top.value >= 27.5f)
+                for (row in listOf("Auto-play next episode", "Skip intros", "Preferred audio language", "Customise home", "Show clock")) {
+                    val b = compose.onAllNodes(hasText(row)).onFirst().getUnclippedBoundsInRoot()
+                    println("shot audit2-settings-panel: row '$row' left=${b.left.value} right=${b.right.value} w=${b.right.value - b.left.value}")
+                    assertTrue("audit2-settings-panel: row '$row' right edge ${b.right.value} dp must be <= 912.5", b.right.value <= 912.5f)
+                }
             },
         ) {
-            // Stand-in container with PreferencesPage / PreferencesContent's geometry (PreferencesContent.kt: fillMaxWidth(.4f),
-            // fillMaxHeight, TopEnd inside the page inset; title headlineSmall centred, vertical padding 8; LazyColumn contentPadding
-            // 16; group title titleMedium, padding top 8 bottom 4); the rows are the real SwitchPreference / ClickPreference
+            // STAND-IN container with PreferencesPage / PreferencesContent's geometry (PreferencesContent.kt: fillMaxWidth(.4f),
+            // fillMaxHeight, TopEnd inside the page inset; Column padding top PageTop + end 16 inside the background; title
+            // headlineSmall centred, end 16, vertical padding 8; LazyColumn contentPadding 16; group title titleMedium, padding
+            // top 8 bottom 4); the rows are the real SwitchPreference / ClickPreference. The asserts below measure THIS stand-in,
+            // not the real PreferencesContent (three Hilt view models): keep it in step with PreferencesContent.kt.
             Box(Modifier.fillMaxSize()) {
                 Column(
                     modifier =
@@ -768,14 +856,15 @@ class Audit2ShotsTest {
                             .fillMaxWidth(.4f)
                             .fillMaxHeight()
                             .align(Alignment.TopEnd)
-                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)),
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                            .padding(top = JellytipLayout.PageTop, end = 16.dp),
                 ) {
                     Text(
                         text = "Settings",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(end = 16.dp).padding(vertical = 8.dp),
                     )
                     LazyColumn(
                         horizontalAlignment = Alignment.Start,

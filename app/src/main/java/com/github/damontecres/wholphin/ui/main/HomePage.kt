@@ -197,7 +197,7 @@ fun HomePage(
                         }
                         // OK always opens the item. Free the hero player/decoder before the main player or details page starts
                         JellytipTrailerControl.stop()
-                        // Episodes in Continue Watching / Next Up play (resume); films there follow the click-to-play setting
+                        // Episodes and films in Continue Watching / Next Up play (resume); other tiles follow the click-to-play setting
                         if (homeTileAction(
                                 inContinueOrNextUpRow = currentHomeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true,
                                 type = item.type,
@@ -221,12 +221,15 @@ fun HomePage(
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
                             row?.rowType is HomeRowConfig.NextUp || row?.rowType is HomeRowConfig.ContinueWatchingCombined
+                        // "Details" and the stock "Go To" open the same page: show only one
+                        val hasDetails =
+                            homeTileHasDetailsItem(currentHomeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
                                 chosenStreams = null,
-                                showGoTo = true,
+                                showGoTo = !hasDetails,
                                 showStreamChoices = false,
                                 canDelete =
                                     viewModel.canDelete(
@@ -235,9 +238,9 @@ fun HomePage(
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
                                 canRemoveNextUp = canRemoveNextUp,
-                                // OK plays an episode in these rows, so its page (the series page at that episode) is one item away
+                                // OK plays an episode or film in these rows, so its page is one item away
                                 leadingItems =
-                                    if (homeTileHasDetailsItem(currentHomeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)) {
+                                    if (hasDetails) {
                                         listOf(
                                             DialogItem("Details", dismissOnClick = true) {
                                                 JellytipTrailerControl.stop()

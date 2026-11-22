@@ -515,7 +515,7 @@ fun RecommendedContent(
                     position = position,
                     onClickItem = { clicked, item ->
                         JellytipTrailerControl.stop()
-                        // The leading Continue Watching / Next Up rows: an episode there plays (resume), like on Home
+                        // The leading Continue Watching / Next Up rows: an episode or film there plays (resume), like on Home
                         val inResumeRow = clicked.row in 0 until viewModel.jellytipLeadingRows
                         if (homeTileAction(inResumeRow, item.type, clickToPlay = false) == HomeTileAction.PLAY) {
                             viewModel.navigationManager.navigateTo(Destination.Playback(item), "recommended OK (continue / next up row)")
@@ -524,18 +524,20 @@ fun RecommendedContent(
                         }
                     },
                     onLongClickItem = longClick@{ position, item ->
+                        // "Details" and the stock "Go To" open the same page: show only one
+                        val hasDetails = homeTileHasDetailsItem(position.row in 0 until viewModel.jellytipLeadingRows, item.type)
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
                                 chosenStreams = null,
-                                showGoTo = true,
+                                showGoTo = !hasDetails,
                                 showStreamChoices = false,
                                 canDelete = viewModel.canDelete(item, preferences.appPreferences),
                                 canRemoveContinueWatching = false,
                                 canRemoveNextUp = false,
                                 leadingItems =
-                                    if (homeTileHasDetailsItem(position.row in 0 until viewModel.jellytipLeadingRows, item.type)) {
+                                    if (hasDetails) {
                                         listOf(
                                             DialogItem("Details", dismissOnClick = true) {
                                                 viewModel.navigationManager.navigateTo(item.destination())

@@ -23,12 +23,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.ui.FontAwesome
+import com.github.damontecres.wholphin.ui.nav.NavigationDrawerItem
+import com.github.damontecres.wholphin.ui.nav.drawerTextOverflow
 import com.github.damontecres.wholphin.ui.nav.jellytipSelectedBar
 import com.github.damontecres.wholphin.ui.nav.navItemColor
 
@@ -41,7 +42,7 @@ fun inboxBadge(unread: Int): String? =
     }
 
 /**
- * Inbox in the nav rail (web Nav.tsx de17f4d4): a bell with the unread count, visible with the drawer shut too.
+ * Inbox in the nav rail (uses the same drawer item as every other row, so its leading inset, width and label x match; the stock tv item has other widths) (web Nav.tsx de17f4d4): a bell with the unread count, visible with the drawer shut too.
  * The count follows [JellytipInboxService.store], so reading the Inbox (markRead) clears it straight away.
  */
 @Composable
@@ -101,13 +102,13 @@ fun NavigationDrawerScope.JellytipInboxNavItem(
         },
         supportingContent =
             if (unread > 0) {
-                { Text(text = "$unread new", maxLines = 1) }
+                { Text(text = "$unread new", maxLines = 1, overflow = drawerTextOverflow(drawerOpen)) }
             } else {
                 null
             },
         interactionSource = interactionSource,
     ) {
-        Text(text = "Inbox", color = color, maxLines = 1)
+        Text(text = "Inbox", color = color, maxLines = 1, overflow = drawerTextOverflow(drawerOpen))
     }
 }
 
