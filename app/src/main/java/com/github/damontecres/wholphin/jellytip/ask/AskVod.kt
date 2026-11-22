@@ -36,6 +36,9 @@ object AskVod {
     /** How many IPTV titles one ask fetches per kind (the route's own maximum). */
     const val VOD_LIMIT = 200
 
+    /** The route's largest runtime filter (minutes). */
+    const val MAX_RUNTIME = 1000
+
     private inline fun <reified T : ChipData> List<AskChip>.of(): List<T> = mapNotNull { it.data as? T }
 
     private fun ids(genres: List<String>) = genres.mapNotNull { TMDB_GENRES[it.lowercase()] }.distinct()
@@ -54,12 +57,18 @@ object AskVod {
         val p = LinkedHashMap<String, String>()
         p["limit"] = VOD_LIMIT.toString()
         p["sort"] = "rating"
-        // US ratings only on the route (NR / unrated never match): the kids rule's G / PG / TV-* list as it is
-        chips.of<ChipData.Kids>().firstOrNull()?.let { k -> p["certifications"] = k.ratings.filter { it != "U" }.joinToString("|") }
+        // US ratings only on the route (NR / unrated never match). None left (e.g. only "U") = no IPTV at all: an empty
+        // list would mean no rating filter on the route (fail open)
+        chips.of<ChipData.Kids>().firstOrNull()?.let { k ->
+            val certs = k.ratings.filter { it != "U" }
+            if (certs.isEmpty()) return emptyList()
+            p["certifications"] = certs.joinToString("|")
+        }
         val maxRt = chips.of<ChipData.MaxRuntime>().minOfOrNull { it.min }
         val minRt = chips.of<ChipData.MinRuntime>().maxOfOrNull { it.min } ?: 0
-        if (maxRt != null) p["maxRuntime"] = maxRt.toString()
-        if (minRt > 0) p["minRuntime"] = minRt.toString()
+        // The route takes 1..1000 minutes (else 400 for the whole query): a length beyond that is no filter there
+        if (maxRt != null && maxRt <= MAX_RUNTIME) p["maxRuntime"] = maxRt.toString()
+        if (minRt in 1..MAX_RUNTIME) p["minRuntime"] = minRt.toString()
         val minRating = chips.of<ChipData.MinRating>().maxOfOrNull { it.value } ?: 0.0
         if (minRating > 0) p["minRating"] = AskParse.num(minRating)
         val years = chips.of<ChipData.Years>()
@@ -92,6 +101,9 @@ object AskVod {
         if (chips.of<ChipData.Kids>().isNotEmpty()) parts.add("IPTV titles without a known age rating are left out")
         if (chips.of<ChipData.MaxRuntime>().isNotEmpty() || chips.of<ChipData.MinRuntime>().isNotEmpty()) parts.add("IPTV titles without a known length are left out")
         if (chips.of<ChipData.MaxSeasons>().isNotEmpty()) parts.add("IPTV season counts aren't known")
+        // A genre IPTV can't name (not in the TMDB table): nothing on IPTV can match it
+        val unknown = chips.filter { (it.data as? ChipData.Genre)?.let { g -> ids(g.genres).isEmpty() } == true }.map { it.label }
+        if (unknown.isNotEmpty()) parts.add("IPTV can't match ${unknown.joinToString(", ") { "“$it”" }}")
         return if (parts.isEmpty()) null else "${parts.joinToString("; ")}."
     }
 }

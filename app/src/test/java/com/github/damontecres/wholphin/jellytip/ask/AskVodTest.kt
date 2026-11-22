@@ -53,6 +53,29 @@ class AskVodTest {
             assertEquals("keep: $text", (0 until keep.length()).map { keep.getBoolean(it) }, items.map { AskVod.vodKeep(it, chips) })
             assertEquals("note: $text", if (c.isNull("note")) null else c.getString("note"), AskVod.vodNote(chips))
         }
+        // Chips from data: kids with no US rating left (no IPTV at all), a genre IPTV can't name
+        val fd = v.getJSONArray("fromData")
+        for (i in 0 until fd.length()) {
+            val c = fd.getJSONObject(i)
+            val list = c.getJSONArray("list")
+            val chips =
+                AskParse.chipsFromData(
+                    (0 until list.length()).map { j ->
+                        val o = list.getJSONObject(j)
+                        val g = o.getJSONArray("genres").let { a -> (0 until a.length()).map { a.getString(it) } }
+                        when (o.getString("t")) {
+                            "kids" -> ChipData.Kids(o.getJSONArray("ratings").let { a -> (0 until a.length()).map { a.getString(it) } }, g)
+                            "genre" -> ChipData.Genre(g)
+                            "notGenre" -> ChipData.NotGenre(g)
+                            else -> error(o.toString())
+                        }
+                    },
+                )
+            assertEquals("fromData queries $i", queries(c.getJSONArray("queries")), ours(AskVod.vodQueries(chips)))
+            val keep = c.getJSONArray("keep")
+            assertEquals("fromData keep $i", (0 until keep.length()).map { keep.getBoolean(it) }, items.map { AskVod.vodKeep(it, chips) })
+            assertEquals("fromData note $i", if (c.isNull("note")) null else c.getString("note"), AskVod.vodNote(chips))
+        }
         val person = AskParse.chipsFromData(listOf(ChipData.Person("d1", "C", "Director")))
         assertEquals(emptyList<VodQuery>(), AskVod.vodQueries(person))
         assertEquals(v.getJSONObject("person").getString("note"), AskVod.vodNote(person))

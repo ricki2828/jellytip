@@ -6,7 +6,7 @@ const qs = [
   "for the kids, under 2 hours, well rated 90s", "a funny movie", "a short series", "80s or 2010 to 2015", "sci-fi",
   "I'm here with my two kids, want something non animated not scary that would work for all", "unwatched comedy", "a rewatch",
   "nothing scary or animated", "feel-good for the kids", "over 2 hours rated 8", "family friendly", "something", "documentaries from 2020",
-  "single season", "funny and scary", "for the kids, nothing animated",
+  "single season", "funny and scary", "for the kids, nothing animated", "under 2000 hours", "over 2000 minutes",
 ];
 const G = TMDB_GENRES;
 const items: VodView[] = [];
@@ -20,4 +20,9 @@ const cases = qs.map((q) => {
   return { q, queries: vodQueries(chips), keep: items.map((it) => vodKeep(it, chips)), note: vodNote(chips) };
 });
 const person = chipsFromData([{ t: "person", id: "d1", name: "C", role: "Director" }]);
-console.log(JSON.stringify({ tmdb: G, items, cases, person: { queries: vodQueries(person), note: vodNote(person) } }));
+const fromData = [
+  [{ t: "kids", ratings: ["U"], genres: ["Family"] }],
+  [{ t: "genre", genres: ["Anime"] }],
+  [{ t: "genre", genres: ["Comedy"] }, { t: "notGenre", genres: ["Anime"] }],
+].map((list: any) => { const c = chipsFromData(list); return { list, queries: vodQueries(c), keep: items.map((it) => vodKeep(it, c)), note: vodNote(c) }; });
+console.log(JSON.stringify({ tmdb: G, items, cases, person: { queries: vodQueries(person), note: vodNote(person) }, fromData }));
