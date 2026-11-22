@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeChips, appliedNotes, buildQuery, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
+import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
 
 const NOW = new Date("2026-11-06T00:00:00Z");
@@ -177,21 +177,105 @@ test("coverage disclosure never implies more than was checked", () => {
   assert.match(pickFrom(page, undefined, parseAsk("funny", NOW).chips, false).note, /the first 300 matches/);
 });
 
-test("negatives are never inverted: left out, listed as ignored, with a note", () => {
-  for (const [q, ign] of [["not scary", "not scary"], ["no horror", "no horror"], ["anything but comedy", "anything but comedy"], ["not sad", "not sad"]] as const) {
+test("negated genres leave those genres out; other negatives are left out with a note", () => {
+  for (const [q, id] of [["not scary", "notgenre:Horror"], ["no horror", "notgenre:Horror"], ["anything but comedy", "notgenre:Comedy"], ["non-animated", "notgenre:Animation"], ["non animated", "notgenre:Animation"], ["nothing scary", "notgenre:Horror"], ["not too scary", "notgenre:Horror"], ["except horror", "notgenre:Horror"]] as const) {
+    const r = parseAsk(q, NOW);
+    assert.deepEqual(r.chips.map((c) => c.id), [id], q);
+    assert.deepEqual(r.ignored, [], q);
+    assert.equal(r.notes.length, 0, q);
+  }
+  // Not a genre ("sad" would drop every drama), or not a mood at all: never guessed
+  for (const [q, ign] of [["not sad", "not sad"], ["not very long", "not very long"], ["without violence", "without violence"]] as const) {
     const r = parseAsk(q, NOW);
     assert.equal(r.chips.length, 0, q);
     assert.deepEqual(r.ignored, [ign], q);
-    assert.match(r.notes.join(" "), /Negatives like 'not scary' aren't supported yet/, q);
+    assert.match(r.notes.join(" "), /Negatives only work for genres/, q);
   }
   const r = parseAsk("funny but not for kids", NOW);
   assert.deepEqual(r.chips.map((c) => c.id), ["genre:Comedy"]);
   assert.equal(buildQuery(r.chips).OfficialRatings, undefined);
   assert.ok(r.ignored.includes("but not for kids"));
-  // supported phrases that contain "not"/"no" still work
+  // supported phrases that contain "not"/"no" still work, and "none" is not "non"
   assert.ok(ids("not seen yet").includes("unplayed"));
   assert.ok(ids("no more than 90 minutes").includes("maxrt:90"));
   assert.ok(!parseAsk("funny", NOW).notes.length);
+  assert.deepEqual(ids("none"), []);
+});
+
+test("Ricki 22-Nov: with the kids, nothing animated, nothing scary, works for everyone", () => {
+  const r = parseAsk("I'm here with my two kids, want something non animated not scary that would work for all", NOW);
+  assert.deepEqual(r.chips.map((c) => c.id).sort(), ["kids", "notgenre:Animation", "notgenre:Horror"]);
+  const q = buildQuery(r.chips);
+  // The kids rule no longer brings Animation back, and both left-out genres are checked over a full page
+  assert.equal(q.Genres, "Family|Kids");
+  assert.equal(q.OfficialRatings, "G|PG|TV-Y|TV-Y7|TV-G|TV-PG|U");
+  assert.equal(q.Fields, "PrimaryImageAspectRatio,Genres");
+  assert.equal(q.Limit, FETCH_LIMIT);
+  const out = filterItems(
+    [item({ Genres: ["Family", "Adventure"] }), item({ Genres: ["Family", "Animation"] }), item({ Genres: ["Kids", "Horror"] }), item({})],
+    r.chips,
+  );
+  // Live-action family film kept; animated and horror out; unknown genres kept (nothing says it is either)
+  assert.equal(out.length, 2);
+  const notes = appliedNotes(r.chips).join(" ");
+  assert.match(notes, /genres Family or Kids/);
+  assert.match(notes, /Left out: titles in Animation, Horror \(titles with no genres listed/);
+  assert.match(pickFrom(Array.from({ length: FETCH_LIMIT }, () => item({ Genres: ["Family"] })), 900, r.chips, false).note, /left-out-genre check is only checked within those/);
+});
+
+test("a negation never turns into the genre it rules out (articles, or-lists)", () => {
+  const sorted = (q: string) => ids(q).sort();
+  assert.deepEqual(sorted("not a scary movie"), ["kind:Movie", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing that's scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("anything but a horror"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror, or cartoons"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("not scary nor animated nor romantic"), ["notgenre:Animation", "notgenre:Horror", "notgenre:Romance"]);
+  // "and" does not carry the negation; a non-mood ends the list and is read as usual
+  assert.deepEqual(sorted("not scary and funny"), ["genre:Comedy", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or long, a comedy"), ["genre:Comedy", "notgenre:Horror"]);
+  // "not X or Y" is neither, whatever X is: never read back as a positive filter
+  assert.deepEqual(sorted("not too long or funny"), ["notgenre:Comedy"]);
+  assert.deepEqual(sorted("nothing too long or scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no sequels or horror"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or long or animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror or sequels or not animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  // List items skip the same lead-in words as the first one
+  assert.deepEqual(sorted("not too long or too scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror or any cartoons"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing for kids or anything scary"), ["notgenre:Horror"]);
+  const r = parseAsk("nothing scary or long or animated", NOW);
+  assert.deepEqual(r.ignored, ["or long"]);
+  assert.match(r.notes.join(" "), /Negatives only work for genres/);
+});
+
+test("a mood and its negation: the later one wins, and a negated genre is never asked for", () => {
+  const r = parseAsk("feel-good but not animated", NOW);
+  assert.deepEqual(r.chips.map((c) => c.id).sort(), ["genre:Feel-good", "notgenre:Animation"]);
+  assert.ok(!String(buildQuery(r.chips).Genres).split("|").includes("Animation"));
+  const c = parseAsk("not scary, scary", NOW);
+  assert.deepEqual(c.chips.map((x) => x.id), ["genre:Horror"]);
+  assert.match(c.notes.join(" "), /contradict/);
+});
+
+test("chipFor / chipsFromData: a query made outside the parser (refine chips, an LLM) uses the same filters", () => {
+  const chips = chipsFromData([
+    { t: "kids", ratings: ["G", "PG"], genres: ["Family", "Kids"] },
+    { t: "notGenre", genres: ["Animation"] },
+    { t: "notGenre", genres: ["Animation"] },
+    { t: "years", from: 1990, to: 1999 },
+    { t: "maxRuntime", min: 100 },
+  ]);
+  assert.deepEqual(chips.map((c) => c.id), ["kids", "notgenre:Animation", "years:1990-1999", "maxrt:100"]);
+  assert.deepEqual(chips.map((c) => c.label), ["for kids (rated G, PG)", "no animation", "1990s", "under 100 min"]);
+  const q = buildQuery(chips);
+  assert.equal(q.Genres, "Family|Kids");
+  assert.equal(q.OfficialRatings, "G|PG");
+  // Same id as the parser's, so a parsed chip and a refine chip never double up
+  assert.equal(chipFor({ t: "notGenre", genres: ["Horror"] }).id, parseAsk("not scary", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "notGenre", genres: ["Science Fiction", "Sci-Fi & Fantasy"] }).id, parseAsk("no sci-fi", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "genre", genres: ["Comedy"] }).id, parseAsk("funny", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "genre", genres: ["Kids"] }).label, "Kids");
 });
 
 test("several year ranges are unioned", () => {
