@@ -144,13 +144,17 @@ fun JellytipIptvPlayPage(
     }
     // Subtitles (Ricki 22-Nov, Celebrity Traitors: "subtitles don't work"): the menu picked a text track but this page drew no
     // cues. The stream's cues for THIS page's player, drawn over the picture below; cleared when the target or player changes.
-    var subtitleCues by remember(target, player0) { mutableStateOf(player0?.currentCues?.cues.orEmpty()) }
+    // Only once the player holds this page's own stream: while it opens, the previous stream (Live TV) still plays and must
+    // not caption the "Opening…" screen.
+    var subtitleCues by remember(target, player0) {
+        mutableStateOf(if (playback.holds(target)) player0?.currentCues?.cues.orEmpty() else emptyList())
+    }
     DisposableEffect(target, player0) {
         val p = player0
         val listener =
             object : androidx.media3.common.Player.Listener {
                 override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
-                    subtitleCues = if (playback.state.value.target == target) cueGroup.cues else emptyList()
+                    subtitleCues = if (playback.state.value.target == target && playback.holds(target)) cueGroup.cues else emptyList()
                 }
             }
         p?.addListener(listener)
@@ -355,7 +359,7 @@ fun JellytipIptvPlayPage(
             }.focusable(),
     ) {
         playback.player?.let { PlayerSurface(player = it, surfaceType = SURFACE_TYPE_SURFACE_VIEW, modifier = Modifier.fillMaxSize()) }
-        // Text and bitmap (PGS / DVB) cues alike; the person's system caption style and size (as the Live TV player draws them)
+        // Text and bitmap (PGS / DVB) cues alike, in the person's system caption style and size
         androidx.compose.ui.viewinterop.AndroidView(
             factory = {
                 androidx.media3.ui.SubtitleView(it).apply {
