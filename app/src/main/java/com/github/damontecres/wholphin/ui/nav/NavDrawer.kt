@@ -429,7 +429,7 @@ fun NavDrawer(
 
             ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(fontSize = rememberJellytipSizes().sp(24))) {
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.spacedBy(spacedBy),
                     modifier = Modifier.fillMaxHeight(),
                 ) {
@@ -477,7 +477,7 @@ fun NavDrawer(
                     LazyColumn(
                         state = navDrawerListState,
                         contentPadding = PaddingValues(0.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        horizontalAlignment = Alignment.Start,
                         verticalArrangement = Arrangement.spacedByWithFooter(spacedBy),
                         modifier =
                             Modifier
@@ -701,6 +701,7 @@ fun NavigationDrawerScope.ProfileIcon(
             Text(
                 text = serverName,
                 maxLines = 1,
+                overflow = drawerTextOverflow(drawerOpen),
             )
         },
         interactionSource = interactionSource,
@@ -709,6 +710,7 @@ fun NavigationDrawerScope.ProfileIcon(
             modifier = Modifier,
             text = user.name ?: user.id.toString(),
             maxLines = 1,
+            overflow = drawerTextOverflow(drawerOpen),
         )
     }
 }
@@ -744,6 +746,7 @@ fun NavigationDrawerScope.IconNavItem(
                     Text(
                         text = it,
                         maxLines = 1,
+                        overflow = drawerTextOverflow(drawerOpen),
                     )
                 }
             },
@@ -754,6 +757,7 @@ fun NavigationDrawerScope.IconNavItem(
             text = text,
             color = navItemColor(selected, focused, drawerOpen),
             maxLines = 1,
+            overflow = drawerTextOverflow(drawerOpen),
         )
     }
 }
@@ -865,6 +869,7 @@ fun NavigationDrawerScope.NavItem(
             text = library.name(context),
             color = navItemColor(selected, focused, drawerOpen),
             maxLines = 1,
+            overflow = drawerTextOverflow(drawerOpen),
         )
     }
 }

@@ -153,7 +153,7 @@ fun SeriesDetails(
     viewModel: SeriesViewModel =
         hiltViewModel<SeriesViewModel, SeriesViewModel.Factory>(
             creationCallback = {
-                it.create(destination.itemId, null, SeriesPageType.DETAILS)
+                it.create(destination.itemId, destination.openAt, SeriesPageType.DETAILS)
             },
         ),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
@@ -252,7 +252,19 @@ fun SeriesDetails(
             }
             val openEpisodeDetails: (BaseItem) -> Unit = {
                 viewModel.returnToEpisodes = true
-                viewModel.navigateTo(it.destination())
+                // The old Overview page, named explicitly: BaseItem.destination() now points an episode at this series page
+                val seasonId = it.data.seasonId
+                viewModel.navigateTo(
+                    if (seasonId != null) {
+                        Destination.SeriesOverview(
+                            series.id,
+                            BaseItemKind.SERIES,
+                            SeasonEpisodeIds(seasonId, it.data.parentIndexNumber, it.id, it.indexNumber),
+                        )
+                    } else {
+                        it.destination()
+                    },
+                )
             }
             SeriesDetailsContent(
                 preferences = preferences,

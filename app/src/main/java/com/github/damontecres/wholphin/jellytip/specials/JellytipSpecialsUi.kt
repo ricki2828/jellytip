@@ -296,7 +296,8 @@ private fun TrailerBreakRow(
         modifier =
             focusModifier
                 .onFocusChanged { active = it.hasFocus }
-                .padding(horizontal = SpecialTokens.SPACING)
+                // (start on the row line: the same 8 dp inset as a row title, not the 10 dp tile gap)
+                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = SpecialTokens.SPACING)
                 .fillMaxWidth()
                 .height(SpecialTokens.BAND_H)
                 .background(BAND_BG, RoundedCornerShape(8.dp))

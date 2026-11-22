@@ -223,6 +223,8 @@ class HomeViewModel
                                             libraries = libraries,
                                             limit = prefs.maxItemsPerRow,
                                             isRefresh = refresh,
+                                            // Jellytip (Ricki 22-Nov): Favourites rows have no cap; pages load as he scrolls
+                                            usePaging = row.config is HomeRowConfig.Favorite,
                                         )
                                     } catch (ex: InvalidStatusException) {
                                         if (ex.status == 404) {
@@ -416,7 +418,12 @@ class HomeViewModel
             deleteItem(context, mediaManagementService, item) {
                 viewModelScope.launchDefault {
                     val row = state.value.homeRows.getOrNull(position.row)
-                    if (row is HomeRowLoadingState.Success) {
+                    // A paged row (Favourites): drop its pages from here on and fetch again (copying it would load every
+                    // page and freeze the unloaded ones as blank cards)
+                    val pager = (row as? HomeRowLoadingState.Success)?.items as? com.github.damontecres.wholphin.util.ApiRequestPager<*>
+                    if (pager != null) {
+                        pager.refreshPagesAfter(position.column)
+                    } else if (row is HomeRowLoadingState.Success) {
                         _state.update {
                             val newRow =
                                 row.items.toMutableList().apply {

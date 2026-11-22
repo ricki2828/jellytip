@@ -56,6 +56,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.layout
@@ -103,6 +104,7 @@ import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
+import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.FocusableItemRow
@@ -152,6 +154,9 @@ fun HomePage(
     val loading = state.loadingState
     val refreshing = state.refreshState
     val homeRows = state.homeRows
+    // The click lambdas below are remembered once: they must read the rows as they are NOW (rows load after the page first
+    // composes; a stale list would class a Continue Watching tile as an ordinary one)
+    val currentHomeRows by rememberUpdatedState(homeRows)
     val homeSettings = state.settings
     val rowConfigs = remember(homeSettings) { homeSettings.rows.map { it.config } }
 
@@ -192,10 +197,14 @@ fun HomePage(
                         }
                         // OK always opens the item. Free the hero player/decoder before the main player or details page starts
                         JellytipTrailerControl.stop()
-                        if (currentHomePrefs.clickToPlay &&
-                            homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
+                        // Episodes and films in Continue Watching / Next Up play (resume); other tiles follow the click-to-play setting
+                        if (homeTileAction(
+                                inContinueOrNextUpRow = currentHomeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true,
+                                type = item.type,
+                                clickToPlay = currentHomePrefs.clickToPlay,
+                            ) == HomeTileAction.PLAY
                         ) {
-                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (click-to-play row)")
+                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (continue / next up row)")
                         } else {
                             viewModel.navigationManager.navigateTo(item.destination(), "home OK")
                         }
@@ -207,17 +216,20 @@ fun HomePage(
                         // row -1 = a server-row tile: keep the remembered row position as it is
                         if (clickedPosition.row >= 0) position = clickedPosition
                         val row =
-                            (homeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
+                            (currentHomeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
                         val canRemoveContinueWatching =
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
                             row?.rowType is HomeRowConfig.NextUp || row?.rowType is HomeRowConfig.ContinueWatchingCombined
+                        // "Details" and the stock "Go To" open the same page: show only one
+                        val hasDetails =
+                            homeTileHasDetailsItem(currentHomeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
                                 chosenStreams = null,
-                                showGoTo = true,
+                                showGoTo = !hasDetails,
                                 showStreamChoices = false,
                                 canDelete =
                                     viewModel.canDelete(
@@ -226,6 +238,18 @@ fun HomePage(
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
                                 canRemoveNextUp = canRemoveNextUp,
+                                // OK plays an episode or film in these rows, so its page is one item away
+                                leadingItems =
+                                    if (hasDetails) {
+                                        listOf(
+                                            DialogItem("Details", dismissOnClick = true) {
+                                                JellytipTrailerControl.stop()
+                                                viewModel.navigationManager.navigateTo(item.destination(), "home Details")
+                                            },
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                                 actions =
                                     ContextMenuActions(
                                         navigateTo = { destination ->
@@ -430,6 +454,8 @@ fun HomePageContent(
     var reminders by remember { mutableStateOf(remindersNow) }
     // Jellytip: his live games (starred teams / followed leagues only) lead the hero carousel (Ricki 22-Nov: a slide, not a takeover row)
     val liveHeroNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberHomeLiveHero() else null
+    // Blank-text-after-wake hunt (22-Nov): Home leaves a text measurement in the trace on every resume
+    if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbeOnResume("home")
     // Jellytip IPTV (8h Block 1): IPTV-only Continue Watching / Next Up rows when Jellyfin has none here (Home only),
     // decided once every row has loaded so the layout doesn't jump
     val iptvResumeCont by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.continueItems.collectAsState()
@@ -824,7 +850,9 @@ fun HomePageContent(
                                 rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
                             }
                         }
-                    }.fillMaxSize(),
+                    }.fillMaxSize()
+                    // Header text, row titles and first tiles share one left line at 96 dp (72 inset + 16 + 8)
+                    .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart),
         ) {
             Box(
                 modifier =
@@ -935,13 +963,20 @@ fun HomePageContent(
             // Rows bleed through the drawer's page padding: their scroll rule works on the visible part only
             val bleed =
                 com.github.damontecres.wholphin.jellytip.JellytipRowBleed(
-                    com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp,
+                    // The page's 72 dp inset plus the 16 dp the rows and header are shifted by (JellytipLayout.RowPageStart):
+                    // title 72 + 16 + 8 = 96, first tile 88 + 8 = 96
+                    com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart,
                     16.dp,
                 )
             val defaultBringIntoViewSpec =
                 remember(platformBringIntoViewSpec, density, bleed) {
                     with(density) {
-                        com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(platformBringIntoViewSpec, bleed.start.toPx(), bleed.end.toPx())
+                        // A focused tile comes to rest on the left line (the row's own 8 dp inset past the bleed), like the first tile
+                        com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(
+                            platformBringIntoViewSpec,
+                            (bleed.start + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset).toPx(),
+                            bleed.end.toPx(),
+                        )
                     }
                 }
             CompositionLocalProvider(
@@ -1250,6 +1285,8 @@ fun HomePageContent(
                                                     viewOptions = viewOptions,
                                                     modifier =
                                                         cardModifier
+                                                            // (test hook: shots assert the first tile's left edge)
+                                                            .then(if (index == 0) Modifier.testTag("row-$rowIndex-tile0") else Modifier)
                                                             .onFocusChanged { onFocus(it.isFocused) }
                                                             .onKeyEvent { onKey(it) },
                                                 )

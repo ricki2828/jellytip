@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.CollectionFolderFilter
@@ -52,6 +53,8 @@ fun CollectionFolderMovie(
         tabs = tabs,
         modifier = modifier,
         showTabs = showHeader,
+        // The first tab's label (+16 dp of its own) lands on the 96 dp left line
+        tabsStartPadding = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart - 16.dp,
     ) { tabIndex, tabDetails ->
         when (tabIndex) {
             // Recommended
