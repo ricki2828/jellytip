@@ -386,6 +386,19 @@ class JellytipIptvVodService
             return runCatching { org.json.JSONObject(body).optBoolean("favourite", on) }.getOrDefault(on)
         }
 
+        /** GET v1/iptv/chapters for a film or an episode (parity §5); null = not a film / episode, an older server, offline. */
+        suspend fun chapters(t: IptvTarget): IptvChapters? {
+            val enc = { v: String -> URLEncoder.encode(v, "UTF-8") }
+            val q =
+                when {
+                    t.vodId != null -> "vod=${enc(t.vodId)}"
+                    t.episodeId != null && t.seriesId != null -> "episode=${enc(t.episodeId)}&series=${enc(t.seriesId)}"
+                    else -> return null
+                }
+            val (code, body) = api.userCall("v1/iptv/chapters?$q") ?: return null
+            return if (code == 200) IptvChapterSkip.parse(body) else null
+        }
+
         suspend fun detail(id: String): IptvVodDetail? {
             val b = base()
             val (code, body) = api.userCall("v1/iptv/vod/${URLEncoder.encode(id, "UTF-8")}") ?: return null

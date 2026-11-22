@@ -18,6 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -149,6 +152,8 @@ internal fun IptvPlayOverlay(
     onNext: () -> Unit = {},
     /** "S2 E5 · Episode title" (episodes) or the year (films) under the title: [IptvTitleBlock]; null = none. */
     subtitle: String? = null,
+    /** Chapter starts as fractions of the length (IptvChapterSkip.marks): ticks on the bar. */
+    marks: List<Float> = emptyList(),
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -184,7 +189,21 @@ internal fun IptvPlayOverlay(
         val scrubSource = remember { MutableInteractionSource() }
         val scrubF by scrubSource.collectIsFocusedAsState()
         val bar = @Composable { h: androidx.compose.ui.unit.Dp ->
-            Box(Modifier.fillMaxWidth().height(h).clip(RoundedCornerShape(h / 2)).background(Color.White.copy(alpha = 0.2f))) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(h)
+                    .clip(RoundedCornerShape(h / 2))
+                    .background(Color.White.copy(alpha = 0.2f))
+                    .drawWithContent {
+                        drawContent()
+                        // Chapter starts: a 2 dp gap in the bar, as the library player's chapter marks
+                        val w = 2.dp.toPx()
+                        for (f in marks) {
+                            drawRect(Color.Black.copy(alpha = 0.7f), topLeft = Offset(size.width * f - w / 2, 0f), size = Size(w, size.height))
+                        }
+                    },
+            ) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(if (seeking) Color(0xFFFFC72C) else JellytipPalette.Jelly))
             }
         }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -330,6 +331,69 @@ fun JellytipIptvPlayPage(
     }
     val ownsStream = playState.target == target && playback.holds(target)
     val cardShown = UpNextTiming.showCard(upNext != null && !upNextNever, upNextCancelled, ownsStream, ended, position, duration)
+    // Chapters + Intro / Recap / Credits skips from the file's named chapters (parity §5): the server reads them from the first
+    // bytes it relays, so it is asked again while it says "not probed yet"
+    var chapters by remember(target) { mutableStateOf<IptvChapters?>(null) }
+    LaunchedEffect(target) {
+        if (target.vodId == null && target.episodeId == null) return@LaunchedEffect
+        var waited = 0L
+        for (d in IptvChapterSkip.POLL_DELAYS_MS) {
+            delay(d - waited)
+            waited = d
+            val c =
+                try {
+                    viewModel.vod.chapters(target)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            if (c?.chapters != null) {
+                chapters = c
+                JellytipTrace.log("player", "chapters ${target.label}: ${c.chapters.size}, skip ${c.skip.joinToString { "${it.kind} ${it.s.toInt()}-${it.e.toInt()} s" }.ifEmpty { "none" }}")
+                break
+            }
+        }
+    }
+    val skipSeg = chapters?.let { IptvChapterSkip.active(it.skip, position) }
+    val skipFirstSeen = remember(target) { mutableStateMapOf<String, Long>() }
+    val skipDismissed = remember(target) { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(skipSeg?.kind) {
+        val k = skipSeg?.kind ?: return@LaunchedEffect
+        if (k !in skipFirstSeen) skipFirstSeen[k] = position
+    }
+    val skipShown =
+        !overlay && !cardShown && ownsStream &&
+            IptvChapterSkip.visible(skipSeg, position, skipSeg?.let { skipFirstSeen[it.kind] }, skipSeg?.let { skipDismissed[it.kind] } == true)
+    var skipOkDown by remember { mutableStateOf(false) }
+
+    fun doSkip(seg: IptvSkipSeg) {
+        skipDismissed[seg.kind] = true
+        when (val a = IptvChapterSkip.action(seg, upNext != null)) {
+            IptvChapterSkip.Action.Next -> {
+                JellytipTrace.player("iptv", "skip ${seg.kind} -> next episode")
+                playNext("skip credits")
+            }
+
+            is IptvChapterSkip.Action.Seek -> {
+                if (!playback.canSkip()) {
+                    seekRefused()
+                    return
+                }
+                JellytipTrace.player("iptv", "skip ${seg.kind} ${position / 1000} s -> ${a.ms / 1000} s (${if (playback.isRemux) "remux" else "direct"})")
+                playback.seekTo(a.ms)
+                watch.seeked()
+                position = a.ms
+            }
+        }
+    }
+    // Back on the skip button: it goes for this part and doesn't come back
+    androidx.activity.compose.BackHandler(enabled = skipShown) {
+        skipSeg?.let {
+            skipDismissed[it.kind] = true
+            JellytipTrace.player("iptv", "skip ${it.kind} dismissed")
+        }
+    }
     // Before the end the card counts the episode's time left (OK = play now); auto-advance only at ENDED (never cut the
     // ending: IPTV has no credit markers). Unknown runtime: the card first shows at ENDED with the library's countdown.
     var cardSeen by remember(target) { mutableStateOf(false) }
@@ -416,6 +480,13 @@ fun JellytipIptvPlayPage(
                     if (cardShown) playNext("card ok")
                     return@onPreviewKeyEvent true
                 }
+                // The skip button's OK acts on its key-up too (consumed here, like the card's)
+                if (e.type == KeyEventType.KeyUp && isOk && skipOkDown) {
+                    skipOkDown = false
+                    swallowOkUp = false
+                    if (skipShown) skipSeg?.let { doSkip(it) }
+                    return@onPreviewKeyEvent true
+                }
                 if (e.type == KeyEventType.KeyUp && isOk && swallowOkUp) {
                     swallowOkUp = false
                     return@onPreviewKeyEvent true
@@ -468,6 +539,11 @@ fun JellytipIptvPlayPage(
                 // The overlay's buttons have focus: the D-pad and OK are theirs (Back is the BackHandler); on the scrub bar
                 // Left / Right seek as below
                 if (overlay && !IptvPlayControls.scrubSeeks(overlay, scrubFocused, dir)) return@onPreviewKeyEvent false
+                // The skip button is showing (overlay hidden): OK skips the intro / recap / credits
+                if (!overlay && skipShown && isOk) {
+                    if (e.nativeKeyEvent.repeatCount == 0) skipOkDown = true
+                    return@onPreviewKeyEvent true
+                }
                 // The Up next card is showing (overlay hidden): OK plays the next episode now
                 if (!overlay && cardShown && isOk) {
                     if (e.nativeKeyEvent.repeatCount == 0) cardOkDown = true
@@ -574,6 +650,7 @@ fun JellytipIptvPlayPage(
             IptvPlayOverlay(
                 title = block.title,
                 subtitle = block.subtitle,
+                marks = remember(chapters, duration) { IptvChapterSkip.marks(chapters?.chapters, duration) },
                 shownMs = pendingSeek?.let { (it.target * 1000).toLong() } ?: position,
                 durationMs = duration,
                 seeking = pendingSeek != null,
@@ -599,6 +676,12 @@ fun JellytipIptvPlayPage(
                 onScrubFocus = { scrubFocused = it },
                 nextLabel = upNext?.let { "Next: ${it.ep.code}" },
                 onNext = { playNext("overlay") },
+            )
+        }
+        if (skipShown && skipSeg != null) {
+            IptvSkipButton(
+                label = IptvChapterSkip.label(skipSeg.kind),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 32.dp),
             )
         }
         val up = upNext
