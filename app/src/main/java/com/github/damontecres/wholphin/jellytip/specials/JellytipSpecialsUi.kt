@@ -1403,6 +1403,15 @@ internal fun PosterCard(
         } else {
             Caption(item.title ?: "", alpha = 0.9f, maxLines = 4, modifier = Modifier.align(Alignment.Center).padding(8.dp))
         }
+        // The same badges as every tile: watched tick, heart, progress bar (no corner pill on posters)
+        val userData = item.data.userData
+        com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges(
+            played = userData?.played == true,
+            favorite = item.favorite,
+            playPercent = userData?.playedPercentage ?: 0.0,
+            cornerText = null,
+            titled = true,
+        )
     }
 }
 

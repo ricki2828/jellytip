@@ -51,6 +51,14 @@ data class IptvResume(
     val poster: String?,
     val backdrop: String?,
     val tech: List<String>,
+    /** Optional (absent = today's tile): title logo, text-free backdrop, "the backdrop has no text", TMDB ids (later commits). */
+    val logo: String? = null,
+    val textlessBackdrop: String? = null,
+    val backdropTextless: Boolean = false,
+    /** Movies: `tmdbId`. */
+    val tmdbId: Int? = null,
+    /** Episodes: `seriesTmdbId`. */
+    val seriesTmdbId: Int? = null,
 ) {
     /** Tile text: "Series · S1 E2 · Title" for episodes. */
     val label: String
@@ -79,6 +87,20 @@ data class IptvResume(
             providerName = null,
             progress = IptvProgress(pos, dur, false).takeIf { pos > 0 },
             tech = tech,
+        )
+
+    /**
+     * The source-neutral Continue Watching tile: an episode is its SERIES title with the library's "E5" corner pill (what the
+     * library's episode tile shows), a film is its title; the bar comes from [pos] / [dur] like the library's.
+     */
+    fun asTileItem() =
+        asVodItem().copy(
+            title = if (kind == "episode") (seriesTitle ?: title) else title,
+            tmdbId = if (kind == "episode") seriesTmdbId else tmdbId,
+            logo = logo,
+            textlessBackdrop = textlessBackdrop,
+            backdropTextless = backdropTextless,
+            episodeNumber = if (kind == "episode") episode else null,
         )
 
     /** Where OK goes: the IPTV player at the saved position. */
@@ -168,6 +190,11 @@ object IptvResumeParse {
                 poster = IptvVodParse.image(base, o.str("poster")),
                 backdrop = IptvVodParse.image(base, o.str("backdrop")),
                 tech = o.optJSONArray("tech")?.let { t -> (0 until t.length()).mapNotNull { t.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
+                logo = IptvVodParse.image(base, IptvVodParse.strictString(o, "logo")),
+                textlessBackdrop = IptvVodParse.image(base, IptvVodParse.strictString(o, "textlessBackdrop")),
+                backdropTextless = o.opt("backdropTextless") == true,
+                tmdbId = (o.opt("tmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
+                seriesTmdbId = (o.opt("seriesTmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
             ).takeIf { kind != "episode" || it.seriesId != null }
         }
     }
@@ -352,7 +379,8 @@ fun JellytipResumeRow(
 
                 is ResumeTile.Iptv ->
                     IptvVodTile(
-                        item = t.r.asVodItem().let { v -> v.copy(title = "${IptvContinueRules.rowLabel(t.r)}\n${v.title}") },
+                        // As the library's Continue Watching tile: the title set in the art, "E5" in the corner pill, the bar
+                        item = t.r.asTileItem(),
                         width = h * 16f / 9f,
                         height = h,
                         poster = false,

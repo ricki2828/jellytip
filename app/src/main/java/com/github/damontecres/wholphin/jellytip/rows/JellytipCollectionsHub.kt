@@ -570,21 +570,7 @@ internal fun JellytipHubCollectionContent(
                                         ) { MissingTrendArt(t.m) }
                                     }
                             }
-                            if (t is TrendTile.Lib && t.item.data.userData?.played == true) {
-                                Text(
-                                    "✓",
-                                    color = Color.White,
-                                    fontFamily = JellytipFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    modifier =
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                            .background(JellytipPalette.Jelly, RoundedCornerShape(50))
-                                            .padding(horizontal = 5.dp, vertical = 1.dp),
-                                )
-                            }
+                            // (the watched tick is drawn by PosterCard / IptvVodTile themselves, as on every tile)
                             if (ranked && t.rank > 0) {
                                 Text(
                                     t.rank.toString(),

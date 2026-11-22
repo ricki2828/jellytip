@@ -439,12 +439,15 @@ private fun ResultGroup(
                             collection = null,
                         )
                     }
-                JellytipServerRowView(
-                    row = row,
-                    onFocusItem = { _, _ -> },
-                    onLongClickItem = null,
-                    focusModifier = Modifier.focusGroup(),
-                )
+                // Tiles only: LocalJellytipHome is what makes a library card the Jellytip tile (titled art, pills, the Jellytip bar) instead of the stock card
+                androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome provides true) {
+                    JellytipServerRowView(
+                        row = row,
+                        onFocusItem = { _, _ -> },
+                        onLongClickItem = null,
+                        focusModifier = Modifier.focusGroup(),
+                    )
+                }
             }
 
         "people" -> PeopleRow(g, viewModel)
@@ -466,13 +469,15 @@ private fun ResultGroup(
                         order = g.order,
                     )
                 }
-            JellytipServerRowView(
-                row = row,
-                onFocusItem = { _, _ -> },
-                onLongClickItem = null,
-                focusModifier = Modifier.focusGroup(),
-                onOpened = { id -> viewModel.clickedId(id) },
-            )
+            androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome provides true) {
+                JellytipServerRowView(
+                    row = row,
+                    onFocusItem = { _, _ -> },
+                    onLongClickItem = null,
+                    focusModifier = Modifier.focusGroup(),
+                    onOpened = { id -> viewModel.clickedId(id) },
+                )
+            }
         }
 
         else ->

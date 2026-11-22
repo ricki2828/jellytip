@@ -888,11 +888,12 @@ private fun MixedRow(
     val w = if (row.isPoster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason)), modifier = focusModifier) {
         ItemRowTitle(row.title, subtitle = row.reason)
+        com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope { rowFocusModifier ->
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(options.spacing.dp, 8.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .jellytipRowBleed()
                     .fillMaxWidth()
                     .focusGroup()
@@ -926,6 +927,7 @@ private fun MixedRow(
                 }
             }
             if (seeAll != null) item(key = "see-all") { SeeAllCard(w, h, onClick = seeAll) }
+        }
         }
     }
 }

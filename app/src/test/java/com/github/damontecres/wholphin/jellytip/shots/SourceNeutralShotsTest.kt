@@ -31,7 +31,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -39,6 +41,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.core.app.ApplicationProvider
@@ -56,11 +59,12 @@ import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTech
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTileTags
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
-import com.github.damontecres.wholphin.jellytip.iptv.IptvContinueRules
+import com.github.damontecres.wholphin.jellytip.iptv.IPTV_CORNER_MARK_TAG
 import com.github.damontecres.wholphin.jellytip.iptv.IptvProgress
 import com.github.damontecres.wholphin.jellytip.iptv.IptvResume
 import com.github.damontecres.wholphin.jellytip.iptv.IptvTileMenu
@@ -93,6 +97,9 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.UserItemDataDto
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -103,9 +110,11 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.UUID
 
 /*
- * Source-neutral, commit 0: "before" shots of how a LIBRARY tile and an IPTV tile of the SAME synthetic titles differ today,
- * for the redesign the next commits make ("IPTV content looks the same as library content; one tile per title"). Documents
- * today's state: NO asserts; measured bounds go to the CI log as "shot <name>: ..." lines. Harness as Audit3ShotsTest:
+ * Source-neutral shots of how a LIBRARY tile and an IPTV tile of the SAME synthetic titles look. Commit 0 shot today's state
+ * (no asserts); commit 1 ("one shared tile") keeps the same shot names so before / after pair up and now ASSERTS (row-tiles,
+ * poster-tiles, continue, series-pills): the IPTV tile has the library tile's size, its badges (tick, heart, progress bar,
+ * corner pill, 4K / Atmos pills, title) at the same offsets inside the tile, and no IPTV corner mark. Bounds also go to the CI
+ * log as "shot <name>: ..." lines. Harness as Audit3ShotsTest:
  * Robolectric + Roborazzi, sdk 34, w960dp-h540dp-land-xhdpi (a 1920x1080 TV at 2x), app theme + tv-material Surface, keyboard
  * input mode, fake image handler (every image is the same synthetic photo), full 960x540 dp frame with magenta safe-area
  * guides, the 72 dp start / 16 dp end page inset DestinationContent gives pages.
@@ -259,6 +268,124 @@ class SourceNeutralShotsTest {
         logAll(name, "text E5 (library episode pill)", hasText("E5"))
     }
 
+    // ---- asserts (unmerged tree, getUnclippedBoundsInRoot, 0.5 dp tolerance: as Audit3ShotsTest) ----
+
+    private val tol = 0.5f
+
+    private data class Rel(
+        val dx: Float,
+        val dy: Float,
+        val w: Float,
+        val h: Float,
+    )
+
+    private fun boundsOf(matcher: SemanticsMatcher): List<DpRect> {
+        val nodes = compose.onAllNodes(matcher, useUnmergedTree = true)
+        val n = nodes.fetchSemanticsNodes().size
+        return (0 until n).map { nodes[it].getUnclippedBoundsInRoot() }
+    }
+
+    /** The tiles (clickable nodes) in tree order; [expected] of them or the shot's assert fails with a readable message. */
+    private fun tilesOf(
+        name: String,
+        expected: Int,
+    ): List<DpRect> {
+        val tiles = boundsOf(hasClickAction())
+        assertEquals("$name: tile count (clickable nodes)", expected, tiles.size)
+        return tiles
+    }
+
+    private fun w(r: DpRect) = r.right.value - r.left.value
+
+    private fun h(r: DpRect) = r.bottom.value - r.top.value
+
+    /** Each (library, IPTV) pair of tiles has the same width and height. */
+    private fun assertSameSizes(
+        name: String,
+        tiles: List<DpRect>,
+        pairs: List<Pair<Int, Int>>,
+    ) {
+        for ((l, i) in pairs) {
+            println("shot $name: tile $l vs $i size ${w(tiles[l])}x${h(tiles[l])} vs ${w(tiles[i])}x${h(tiles[i])}")
+            assertEquals("$name: tile $i width = library tile $l", w(tiles[l]), w(tiles[i]), tol)
+            assertEquals("$name: tile $i height = library tile $l", h(tiles[l]), h(tiles[i]), tol)
+        }
+    }
+
+    /** Nodes [matcher] finds inside [tile], as offsets from the tile's top-left (and their size), top-to-bottom then left-to-right. */
+    private fun insideTile(
+        tile: DpRect,
+        matcher: SemanticsMatcher,
+    ): List<Rel> =
+        boundsOf(matcher)
+            .filter { b ->
+                val cx = (b.left.value + b.right.value) / 2
+                val cy = (b.top.value + b.bottom.value) / 2
+                cx >= tile.left.value && cx <= tile.right.value && cy >= tile.top.value && cy <= tile.bottom.value
+            }.map { b -> Rel(b.left.value - tile.left.value, b.top.value - tile.top.value, w(b), h(b)) }
+            .sortedWith(compareBy({ it.dy }, { it.dx }))
+
+    /**
+     * For each (library, IPTV) pair: [matcher]'s nodes sit in the same number, at the same offsets, with the same size, in
+     * both tiles (none in both is fine: "state without it"). [what] names the badge in the failure message.
+     */
+    private fun assertSameInside(
+        name: String,
+        what: String,
+        tiles: List<DpRect>,
+        pairs: List<Pair<Int, Int>>,
+        matcher: SemanticsMatcher,
+    ) {
+        for ((l, i) in pairs) {
+            val lib = insideTile(tiles[l], matcher)
+            val iptv = insideTile(tiles[i], matcher)
+            println("shot $name: $what tile $l (library) $lib vs tile $i (IPTV) $iptv")
+            assertEquals("$name: $what count in tile $i vs library tile $l", lib.size, iptv.size)
+            lib.zip(iptv).forEach { (a, b) ->
+                assertEquals("$name: $what dx tile $i vs $l", a.dx, b.dx, tol)
+                assertEquals("$name: $what dy tile $i vs $l", a.dy, b.dy, tol)
+                assertEquals("$name: $what width tile $i vs $l", a.w, b.w, tol)
+                assertEquals("$name: $what height tile $i vs $l", a.h, b.h, tol)
+            }
+        }
+    }
+
+    /** At least one of the pairs has the badge (so "same absence everywhere" cannot pass vacuously). */
+    private fun assertSomewhere(
+        name: String,
+        what: String,
+        matcher: SemanticsMatcher,
+        atLeast: Int,
+    ) {
+        val n = boundsOf(matcher).size
+        assertTrue("$name: $what found $n times, expected at least $atLeast (is the state not drawn at all?)", n >= atLeast)
+    }
+
+    /** No IPTV corner mark and no "●" anywhere in the frame. */
+    private fun assertNoCornerMark(name: String) {
+        compose.onAllNodes(hasTestTag(IPTV_CORNER_MARK_TAG), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("●", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        println("shot $name: no IPTV corner mark")
+    }
+
+    /** The shared badge checks for tiles in the same order in both rows: library tiles first, IPTV tiles after. */
+    private fun assertBadgesMatch(
+        name: String,
+        tiles: List<DpRect>,
+        pairs: List<Pair<Int, Int>>,
+        titles: List<String> = emptyList(),
+    ) {
+        assertSameSizes(name, tiles, pairs)
+        assertSameInside(name, "watched tick", tiles, pairs, hasTestTag(JellytipTileTags.TICK))
+        assertSameInside(name, "heart", tiles, pairs, hasTestTag(JellytipTileTags.HEART))
+        assertSameInside(name, "progress bar", tiles, pairs, hasTestTag(JellytipTileTags.BAR))
+        assertSameInside(name, "corner pill", tiles, pairs, hasTestTag(JellytipTileTags.PILL))
+        assertSameInside(name, "4K pill", tiles, pairs, hasText("4K"))
+        assertSameInside(name, "ATMOS pill", tiles, pairs, hasText("ATMOS"))
+        titles.forEach { assertSameInside(name, "title '$it'", tiles, pairs, hasText(it)) }
+        assertNoCornerMark(name)
+    }
+
     /** Render [content] in the [Frame], settle, run [steps] (focus), settle again, capture the whole screen, then measure. */
     private fun shot(
         name: String,
@@ -316,7 +443,8 @@ class SourceNeutralShotsTest {
                 name = t.name,
                 productionYear = t.year,
                 runTimeTicks = minutes(130),
-                imageTags = mapOf(ImageType.PRIMARY to "poster"),
+                // Heat has a clearlogo (logo over the backdrop); Collateral and Ronin do not (title text set in the art)
+                imageTags = if (t.name == "Heat") mapOf(ImageType.PRIMARY to "poster", ImageType.LOGO to "logo") else mapOf(ImageType.PRIMARY to "poster"),
                 backdropImageTags = listOf("backdrop"),
                 userData =
                     UserItemDataDto(
@@ -421,9 +549,15 @@ class SourceNeutralShotsTest {
         favourite = favourite,
         played = state == 1,
         audio = if (state == 2) "atmos" else null,
+        // The server's new optional art fields: Heat has a logo + a text-free backdrop; Collateral and Ronin send none
+        logo = if (t.name == "Heat") "https://h/logo/Heat" else null,
+        textlessBackdrop = if (t.name == "Heat") "https://h/tl/Heat" else null,
     )
 
-    private fun vodSeries(name: String) =
+    private fun vodSeries(
+        name: String,
+        unplayedCount: Int? = null,
+    ) =
         IptvVodItem(
             id = "vod-series-${name.lowercase()}",
             kind = "series",
@@ -439,6 +573,7 @@ class SourceNeutralShotsTest {
             progress = null,
             tech = listOf("4k"),
             favourite = true,
+            unplayedCount = unplayedCount,
         )
 
     private val wide = jellytipRowOptions(HomeRowViewOptions())
@@ -517,7 +652,19 @@ class SourceNeutralShotsTest {
     }
 
     @Test
-    fun rowTiles() = shot("srcneutral-row-tiles") { RowTilesContent() }
+    fun rowTiles() =
+        shot("srcneutral-row-tiles", measure = {
+            measureTiles("srcneutral-row-tiles")
+            val n = "srcneutral-row-tiles"
+            val tiles = tilesOf(n, 6)
+            assertBadgesMatch(n, tiles, listOf(0 to 3, 1 to 4, 2 to 5), titles = listOf("Collateral", "Ronin"))
+            // the states the shot is built to show are drawn at all (watched tile 1, favourite + 40% tile 2)
+            assertSomewhere(n, "watched tick", hasTestTag(JellytipTileTags.TICK), 2)
+            assertSomewhere(n, "heart", hasTestTag(JellytipTileTags.HEART), 2)
+            assertSomewhere(n, "progress bar", hasTestTag(JellytipTileTags.BAR), 2)
+            assertSomewhere(n, "4K pill", hasText("4K"), 6)
+            assertSomewhere(n, "ATMOS pill", hasText("ATMOS"), 2)
+        }) { RowTilesContent() }
 
     @Test
     fun rowTilesFocusLibrary() = shot("srcneutral-row-tiles-focus-library", steps = { focusClickable("srcneutral-row-tiles-focus-library", 0) }) { RowTilesContent() }
@@ -529,12 +676,20 @@ class SourceNeutralShotsTest {
 
     @Test
     fun posterTiles() =
-        shot("srcneutral-poster-tiles") {
+        shot("srcneutral-poster-tiles", measure = {
+            val n = "srcneutral-poster-tiles"
+            measureTiles(n)
+            val tiles = tilesOf(n, 6)
+            assertBadgesMatch(n, tiles, listOf(0 to 3, 1 to 4, 2 to 5))
+            assertSomewhere(n, "watched tick", hasTestTag(JellytipTileTags.TICK), 2)
+            assertSomewhere(n, "heart", hasTestTag(JellytipTileTags.HEART), 2)
+            assertSomewhere(n, "progress bar", hasTestTag(JellytipTileTags.BAR), 2)
+        }) {
             HomeStyle {
                 Column(Modifier.fillMaxSize().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     PosterRow("Library: PosterCard (specials)", ttls.mapIndexed { i, t -> libFilm(t, i) })
                     IptvRow("IPTV: IptvVodTile(poster = true)", ttls.mapIndexed { i, t -> vodFilm(t, i) }, poster = true, heightDp = 150)
-                    Cap("Tiles left to right: plain / watched / 40% in progress + My list + 4K + Atmos. PosterCard draws none of the states.")
+                    Cap("Tiles left to right: plain / watched / 40% in progress + My list. Posters carry no 4K pills; both rows draw the same badges.")
                 }
             }
         }
@@ -567,10 +722,10 @@ class SourceNeutralShotsTest {
             cardContent = { index, t, cardModifier, onClick, onLongClick ->
                 when (t) {
                     is CwTile.Lib -> HomePageCardContent(index, t.item, onClick, onLongClick, wide, cardModifier)
-                    // As JellytipResumeRow (JellytipIptvResume.kt): asVodItem with the two-line "<rowLabel>\n<label>" title
+                    // As JellytipResumeRow (JellytipIptvResume.kt): asTileItem (series title in the art, "E5" pill, bar)
                     is CwTile.Iptv ->
                         IptvVodTile(
-                            item = t.r.asVodItem().let { v -> v.copy(title = "${IptvContinueRules.rowLabel(t.r)}\n${v.title}") },
+                            item = t.r.asTileItem(),
                             width = h * 16f / 9f,
                             height = h,
                             poster = false,
@@ -587,7 +742,39 @@ class SourceNeutralShotsTest {
 
     @Test
     fun continueWatching() =
-        shot("srcneutral-continue") {
+        shot("srcneutral-continue", measure = {
+            val n = "srcneutral-continue"
+            measureTiles(n)
+            val tiles = tilesOf(n, 4)
+            assertSameSizes(n, tiles, listOf(0 to 1, 2 to 3))
+            assertSameInside(n, "watched tick", tiles, listOf(0 to 1, 2 to 3), hasTestTag(JellytipTileTags.TICK))
+            assertSameInside(n, "heart", tiles, listOf(0 to 1, 2 to 3), hasTestTag(JellytipTileTags.HEART))
+            assertSameInside(n, "progress bar", tiles, listOf(0 to 1, 2 to 3), hasTestTag(JellytipTileTags.BAR))
+            assertSameInside(n, "corner pill (episode E5)", tiles, listOf(0 to 1), hasTestTag(JellytipTileTags.PILL))
+            assertSomewhere(n, "corner pill", hasTestTag(JellytipTileTags.PILL), 2)
+            assertSomewhere(n, "progress bar", hasTestTag(JellytipTileTags.BAR), 4)
+            assertNoCornerMark(n)
+            // The old two-line label under the IPTV tile is gone: no text starts at or just under an IPTV tile's bottom edge
+            val ignore = listOf("Continue watching", "Same show")
+            val texts =
+                compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes().mapNotNull { node ->
+                    val t = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("|") { it.text } ?: return@mapNotNull null
+                    if (ignore.any { t.startsWith(it) }) return@mapNotNull null
+                    t to node.boundsInRoot
+                }
+            val density = ApplicationProvider.getApplicationContext<android.content.Context>().resources.displayMetrics.density
+            for (idx in listOf(1, 3)) {
+                val tile = tiles[idx]
+                val below =
+                    texts.filter { (_, b) ->
+                        val top = b.top / density
+                        val left = b.left / density
+                        val right = b.right / density
+                        top >= tile.bottom.value - tol && top <= tile.bottom.value + 16f && right > tile.left.value && left < tile.right.value
+                    }
+                if (below.isNotEmpty()) fail("$n: text under IPTV tile $idx: ${below.map { it.first }}")
+            }
+        }) {
             val episode =
                 IptvResume(
                     kind = "episode",
@@ -603,6 +790,8 @@ class SourceNeutralShotsTest {
                     poster = "https://h/p/slow-horses",
                     backdrop = "https://h/b/slow-horses",
                     tech = listOf("4k"),
+                    logo = "https://h/logo/slow-horses",
+                    textlessBackdrop = "https://h/tl/slow-horses",
                 )
             val film =
                 IptvResume(
@@ -623,8 +812,35 @@ class SourceNeutralShotsTest {
             HomeStyle {
                 Column(Modifier.fillMaxSize().padding(top = 36.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     CwRow("Continue watching: episode (library, IPTV)", listOf(CwTile.Lib(libEpisode()), CwTile.Iptv(episode)))
-                    CwRow("Continue watching: film (library, IPTV)", listOf(CwTile.Lib(libFilm(ttls[0], 2)), CwTile.Iptv(film)))
+                    CwRow("Continue watching: film (library, IPTV)", listOf(CwTile.Lib(libFilm(ttls[0], 2, favourite = false)), CwTile.Iptv(film)))
                     Cap("Same show / film, 40% watched, in both sources. Library tile left, IPTV resume tile right.")
+                }
+            }
+        }
+
+    // ---- 3b. Series: the unplayed count in the corner pill ----
+
+    @Test
+    fun seriesPills() =
+        shot("srcneutral-series-pills", measure = {
+            val n = "srcneutral-series-pills"
+            measureTiles(n)
+            val tiles = tilesOf(n, 4)
+            val pairs = listOf(0 to 2, 1 to 3)
+            assertBadgesMatch(n, tiles, pairs)
+            assertSameInside(n, "unplayed count '4'", tiles, pairs, hasText("4"))
+            assertSomewhere(n, "corner pill", hasTestTag(JellytipTileTags.PILL), 2)
+        }) {
+            HomeStyle {
+                Column(Modifier.fillMaxSize().padding(top = 36.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LibRow("Library series: unplayed count in the corner pill (4, then none)", listOf(libSeries("Slow Horses", 4), libSeries("Severance", 0)))
+                    IptvRow(
+                        "IPTV series: unplayedCount (4, then none)",
+                        listOf(vodSeries("Slow Horses", unplayedCount = 4), vodSeries("Severance", unplayedCount = 0)),
+                        poster = false,
+                        heightDp = wide.heightDp,
+                    )
+                    Cap("Same two series in both sources: the pill sits in the same corner with the same look.")
                 }
             }
         }

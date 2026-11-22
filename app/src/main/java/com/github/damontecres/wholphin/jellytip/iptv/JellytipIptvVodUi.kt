@@ -35,6 +35,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -132,7 +133,10 @@ fun iptvPassiveTrailer(
     autoplay: Boolean,
 ): Boolean = autoplay && !url.isNullOrBlank() && !IptvVodParse.isYouTube(url)
 
-/** The IPTV cue: a small jelly dot, with the quality next to it ("● 4K"). */
+/** Test tag of [IptvCornerMark]: tiles no longer draw one (source-neutral tiles), so shots assert it is absent from them. */
+const val IPTV_CORNER_MARK_TAG = "iptv-corner-mark"
+
+/** The IPTV cue: a small jelly dot, with the quality next to it ("● 4K"). Not on tiles any more (they look like library tiles); still on the Top hit and special cards. */
 @Composable
 fun IptvCornerMark(
     quality: String?,
@@ -141,7 +145,7 @@ fun IptvCornerMark(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier.background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 2.dp),
+        modifier = modifier.testTag(IPTV_CORNER_MARK_TAG).background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 2.dp),
     ) {
         Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
         quality?.let {
@@ -160,7 +164,10 @@ fun IptvCornerMark(
     }
 }
 
-/** An IPTV film/series tile: backdrop (or poster) with its title, the corner dot + quality, resume bar. */
+/**
+ * An IPTV film/series tile: the same tile as a library item's ([com.github.damontecres.wholphin.jellytip.cards.JellytipTile]):
+ * same size, art treatment, title-in-art, badges and focus, fed by [toTileModel]. No source mark.
+ */
 @Composable
 fun IptvVodTile(
     item: IptvVodItem,
@@ -176,75 +183,17 @@ fun IptvVodTile(
     var menu by remember(item.id) { mutableStateOf(false) }
     if (menu) IptvTileMenu(item, onDismiss = { menu = false }, onOpen = onClick)
     val titleMenu = IptvVodParse.isTitleId(item.id) && (item.kind == "movie" || item.kind == "series")
-    Surface(
+    // My list: the library cards' heart, kept in step with + My list anywhere in the app
+    val favorite = IptvMyList.isOn(item)
+    val model = remember(item, poster, favorite) { item.toTileModel(poster, favorite) }
+    com.github.damontecres.wholphin.jellytip.cards.JellytipTile(
+        model = model,
+        width = width,
+        height = height,
         onClick = onClick,
         onLongClick = onLongClick ?: { if (titleMenu) menu = true else onClick() },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
-        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(width),
-        modifier = modifier.size(width, height),
-    ) {
-        val image = if (poster) item.poster ?: item.backdrop else item.backdrop ?: item.poster
-        var failed by remember(image) { mutableStateOf(false) }
-        if (image != null && !failed) {
-            AsyncImage(model = image, contentDescription = item.title, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
-        }
-        if (!poster || image == null || failed) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))),
-            )
-            Text(
-                text = item.title,
-                color = Color.White,
-                fontFamily = JellytipFontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
-            )
-        }
-        IptvCornerMark(listOfNotNull(item.qualityLabel, item.audioLabel.takeIf { width >= 150.dp }).joinToString(" · ").ifEmpty { null },  // (a 100 dp poster holds one label at the 12 sp floor)
-            Modifier.align(Alignment.TopEnd).padding(6.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-        ) {
-            // My list: the library cards' heart (Ricki 21-Nov), kept in step with + My list anywhere in the app
-            if (IptvMyList.isOn(item)) {
-                com.github.damontecres.wholphin.ui.cards.FavoriteIndicator(fontSize = 16.sp)
-            }
-            if (item.played) {
-                // Watched: a tick like the library's played mark
-                Text(
-                    text = "✓",
-                    color = Color.White,
-                    fontFamily = JellytipFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    modifier =
-                        Modifier
-                            .background(JellytipPalette.Jelly, RoundedCornerShape(50))
-                            .padding(horizontal = 5.dp, vertical = 1.dp),
-                )
-            }
-        }
-        item.progress?.takeIf { it.resumable && it.durationSecs > 0 }?.let { p ->
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth((p.positionSecs / p.durationSecs).toFloat().coerceIn(0f, 1f))
-                    .height(3.dp)
-                    .background(JellytipPalette.Jelly),
-            )
-        }
-    }
+        modifier = modifier,
+    )
 }
 
 /** A server row of IPTV titles (`iptvItems`), drawn like a normal row; OK opens the "via IPTV" details. */
@@ -291,20 +240,23 @@ internal fun IptvVodRowContent(
     val w = if (poster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(subtitle)), modifier = modifier) {
         ItemRowTitle(title, subtitle = subtitle)
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
-            modifier = Modifier.jellytipRowBleed().fillMaxWidth().focusGroup().focusRestorer(),
-        ) {
-            items(items, key = { it.id }) { item ->
-                IptvVodTile(
-                    item = item,
-                    width = w,
-                    height = h,
-                    poster = poster,
-                    onClick = { onOpen(item) },
-                    modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusTile() },
-                )
+        // The library rows' focus scope: the focused tile glows and its siblings dim
+        com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp),
+                modifier = rowFocusModifier.jellytipRowBleed().fillMaxWidth().focusGroup().focusRestorer(),
+            ) {
+                items(items, key = { it.id }) { item ->
+                    IptvVodTile(
+                        item = item,
+                        width = w,
+                        height = h,
+                        poster = poster,
+                        onClick = { onOpen(item) },
+                        modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusTile() },
+                    )
+                }
             }
         }
     }

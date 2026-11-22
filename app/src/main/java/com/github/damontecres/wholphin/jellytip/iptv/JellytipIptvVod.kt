@@ -43,6 +43,22 @@ data class IptvVodItem(
     val audio: String? = null,
     /** The server couldn't confirm this copy's audio is English (best copy, language unknown; web d897d21c). */
     val langUnknown: Boolean = false,
+    /** TMDB title logo drawn over the art like a library tile's clearlogo; null = none / older server. */
+    val logo: String? = null,
+    /** A text-free backdrop (`textlessBackdrop`); null = none. */
+    val textlessBackdrop: String? = null,
+    /** The item's own [backdrop] has no text baked in (`backdropTextless`). */
+    val backdropTextless: Boolean = false,
+    /** Series: episodes not yet watched (`unplayedCount`), drawn in the library's corner pill; null = unknown. */
+    val unplayedCount: Int? = null,
+    /** Series: the next episode to watch (`nextUp`). Kept for later commits. */
+    val nextUp: IptvNextUp? = null,
+    /** The library item this title is also in (`libraryId`). Kept for later commits. */
+    val libraryId: String? = null,
+    /** Every place the title can be played from (`sources`). Kept for later commits. */
+    val sources: List<IptvSource> = emptyList(),
+    /** Continue Watching episodes: the episode number, drawn as the library's "E5" corner pill; null = not an episode tile. */
+    val episodeNumber: Int? = null,
 ) {
     /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
     val audioLabel: String?
@@ -66,6 +82,22 @@ data class IptvVodItem(
                 }
             }
 }
+
+/** `nextUp: {season, episode, id}` on a series. */
+data class IptvNextUp(
+    val season: Int,
+    val episode: Int,
+    val id: String,
+)
+
+/** One entry of `sources: [{type: "library" | "iptv", id, quality?, tech?, copies?}]`. */
+data class IptvSource(
+    val type: String,
+    val id: String,
+    val quality: List<String> = emptyList(),
+    val tech: List<String> = emptyList(),
+    val copies: Int? = null,
+)
 
 data class IptvEpisode(
     val id: String,
@@ -172,7 +204,53 @@ object IptvVodParse {
             played = o.optBoolean("played", false) || o.optJSONObject("progress")?.optBoolean("played", false) == true,
             audio = o.str("audio") ?: o.optJSONObject("quality")?.str("audio"),
             langUnknown = o.opt("langUnknown") == true,
+            logo = image(base, strictString(o, "logo")),
+            textlessBackdrop = image(base, strictString(o, "textlessBackdrop")),
+            backdropTextless = o.opt("backdropTextless") == true,
+            unplayedCount = (o.opt("unplayedCount") as? Number)?.toInt()?.takeIf { it >= 0 },
+            nextUp = nextUp(o.optJSONObject("nextUp")),
+            libraryId = o.str("libraryId"),
+            sources = sources(o.optJSONArray("sources")),
         )
+    }
+
+    /** A value that is a JSON string (a number or object under an expected URL key is malformed, not "42"); blank / "null" = null. */
+    fun strictString(
+        o: JSONObject,
+        key: String,
+    ): String? = (o.opt(key) as? String)?.takeIf { it.isNotBlank() && it != "null" }
+
+    /** `nextUp`: all three of season, episode (numbers) and id (string) or nothing. */
+    fun nextUp(o: JSONObject?): IptvNextUp? {
+        o ?: return null
+        val season = (o.opt("season") as? Number)?.toInt() ?: return null
+        val episode = (o.opt("episode") as? Number)?.toInt() ?: return null
+        val id = o.str("id") ?: return null
+        return IptvNextUp(season, episode, id)
+    }
+
+    private fun strings(v: Any?): List<String> =
+        when (v) {
+            is String -> listOf(v).filter { it.isNotBlank() }
+            is JSONArray -> (0 until v.length()).mapNotNull { (v.opt(it) as? String)?.takeIf { s -> s.isNotBlank() } }
+            else -> emptyList()
+        }
+
+    /** `sources`: entries of type library | iptv with an id; anything else is dropped. */
+    fun sources(a: JSONArray?): List<IptvSource> {
+        a ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i ->
+            val c = a.optJSONObject(i) ?: return@mapNotNull null
+            val type = c.str("type")?.lowercase()?.takeIf { it == "library" || it == "iptv" } ?: return@mapNotNull null
+            val id = c.str("id") ?: return@mapNotNull null
+            IptvSource(
+                type = type,
+                id = id,
+                quality = strings(c.opt("quality")),
+                tech = strings(c.opt("tech")),
+                copies = (c.opt("copies") as? Number)?.toInt()?.takeIf { it > 0 },
+            )
+        }
     }
 
     fun items(

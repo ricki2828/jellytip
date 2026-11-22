@@ -166,7 +166,6 @@ fun JellytipTitledImage(
 ) {
     val service = LocalImageUrlService.current
     val density = LocalDensity.current
-    val sizes = rememberJellytipSizes()
     val widthPx = remember(cardWidth, density) { with(density) { cardWidth.roundToPx() } }
     val heightPx = remember(cardHeight, density) { with(density) { cardHeight.roundToPx() } }
     // Photo-ranked backdrop: wait up to 300 ms for the companion before first paint, then settle on index 0 and upgrade if it arrives late
@@ -197,17 +196,35 @@ fun JellytipTitledImage(
                 JellytipCardArt(null, false, null)
             }
         }
+    // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
+    val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
+    JellytipTitledArt(art = art, title = item.title, tech = tech, cardWidth = cardWidth, cardHeight = cardHeight, modifier = modifier)
+}
+
+/**
+ * The drawing half of [JellytipTitledImage], from plain values (no BaseItem): the base image, then the 60% scrim with the
+ * [art]'s logo, or the [title] as text when the art carries none, and the [tech] pills. Source-neutral: library tiles and
+ * IPTV tiles both draw through this. Extract-only: the library path is the same code it was.
+ */
+@Composable
+fun JellytipTitledArt(
+    art: JellytipCardArt,
+    title: String?,
+    tech: List<String>,
+    cardWidth: Dp,
+    cardHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val sizes = rememberJellytipSizes()
     var baseError by remember(art.baseUrl) { mutableStateOf(false) }
     var logoError by remember(art.logoUrl) { mutableStateOf(false) }
     val showLogo = !art.titledAlready && art.logoUrl != null && !logoError
     val showText = !art.titledAlready && !showLogo
-    // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
-    val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
     Box(modifier = modifier.fillMaxSize().background(Color(0xFF141414))) {
         if (art.baseUrl != null && !baseError) {
             AsyncImage(
                 model = art.baseUrl,
-                contentDescription = item.title,
+                contentDescription = title,
                 contentScale = ContentScale.Crop,
                 onError = {
                     logCoilError(art.baseUrl, it.result)
@@ -256,7 +273,7 @@ fun JellytipTitledImage(
                         .padding(start = pad, end = if (tech.isEmpty()) pad else TECH_INSET, bottom = pad),
             ) {
                 Text(
-                    text = item.title ?: "",
+                    text = title ?: "",
                     color = Color.White,
                     style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
                     fontFamily = JellytipFontFamily,
