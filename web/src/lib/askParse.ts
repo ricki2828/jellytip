@@ -156,22 +156,36 @@ export function parseAsk(raw: string, now = new Date()): Reading {
 
   // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out;
   // anything else ("not too long", "not for kids", "not sad") is left out of the reading (never guessed) and reported
-  const NEG = /\b(?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*/g;
-  t = t.replace(NEG, (m, off: number, whole: string) => {
-    const rest = whole.slice(off + m.length);
+  // The negated word may follow an article ("not a scary movie", "nothing that's scary"); a negated mood carries through an
+  // "or" / "nor" list of moods ("nothing scary or animated"), never through "and" ("not scary and funny" wants funny)
+  const NEG = /\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)/g;
+  const negMood = (w: string) => MOODS.find(([re, , label]) => INVERTIBLE.has(label) && new RegExp(re.source).test(` ${w} `));
+  t = t.replace(NEG, (m: string, head: string, chain: string, off: number, whole: string) => {
+    const rest = whole.slice(off + head.length);
     // Phrases that are supported and are not negations of a filter
-    if (/^(?:not|no)\s+(?:more than|seen|watched|played)\b/.test(whole.slice(off)) || /^no more than\b/.test(whole.slice(off)) || /^(?:not|no)\s+(?:seen|watched|played)\b/.test(m + rest)) return m;
-    const word = (m.match(/[a-z][a-z0-9'-]*$/) ?? [""])[0];
-    const mood = /\bfor\s/.test(m) ? undefined : MOODS.find(([re, , label]) => INVERTIBLE.has(label) && new RegExp(re.source).test(` ${word} `));
-    if (mood) {
-      const [, genres, label] = mood;
-      cur = { pos: off, src: clean(m) };
-      add({ id: `notgenre:${label}`, label: `no ${label.toLowerCase()}`, data: { t: "notGenre", genres } });
-    } else {
-      ignored.push(clean(m));
+    if (/^(?:not|no)\s+(?:more than|seen|watched|played)\b/.test(whole.slice(off)) || /^no more than\b/.test(whole.slice(off)) || /^(?:not|no)\s+(?:seen|watched|played)\b/.test(head + rest)) return m;
+    const word = (head.match(/[a-z][a-z0-9'-]*$/) ?? [""])[0];
+    const mood = /\bfor\s/.test(head) ? undefined : negMood(word);
+    if (!mood) {
+      ignored.push(clean(head));
       if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.");
+      // The words after it are read as usual
+      return " ".repeat(head.length) + chain;
     }
-    return " ".repeat(m.length);
+    cur = { pos: off, src: clean(head) };
+    add({ id: `notgenre:${mood[2]}`, label: `no ${mood[2].toLowerCase()}`, data: { t: "notGenre", genres: mood[1] } });
+    // The list carries the negation while each word is a mood that can be negated
+    const link = /^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)/;
+    let used = 0;
+    for (;;) {
+      const cm = link.exec(chain.slice(used));
+      const md = cm ? negMood(cm[1]) : undefined;
+      if (!cm || !md) break;
+      cur = { pos: off + head.length + used, src: clean(cm[0]) };
+      add({ id: `notgenre:${md[2]}`, label: `no ${md[2].toLowerCase()}`, data: { t: "notGenre", genres: md[1] } });
+      used += cm[0].length;
+    }
+    return " ".repeat(head.length + used) + chain.slice(used);
   });
 
   // "show me" / "give me" are requests, not the word "show"
@@ -414,7 +428,7 @@ export function appliedNotes(chips: Chip[]): string[] {
     notes.push(`For kids: rated ${kids.data.ratings.join(", ")}${moods || kg.length === 0 ? "" : `, genres ${kg.join(" or ")}`}. Unrated titles are left out.`);
   }
   const left = of(chips, "notGenre").flatMap((c) => c.data.genres);
-  if (left.length) notes.push(`Left out: titles in ${[...new Set(left)].join(", ")}.`);
+  if (left.length) notes.push(`Left out: titles in ${[...new Set(left)].join(", ")} (titles with no genres listed can't be checked and are kept).`);
   if (of(chips, "maxRuntime").length || of(chips, "minRuntime").length) notes.push("Length: shows are judged by episode length; titles without a known length are left out.");
   if (of(chips, "genre").length > 1) notes.push("Several moods: a title must match each one (any of that mood's genres).");
   if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");

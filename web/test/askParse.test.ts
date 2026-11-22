@@ -219,8 +219,23 @@ test("Ricki 22-Nov: with the kids, nothing animated, nothing scary, works for ev
   assert.equal(out.length, 2);
   const notes = appliedNotes(r.chips).join(" ");
   assert.match(notes, /genres Family or Kids/);
-  assert.match(notes, /Left out: titles in Animation, Horror/);
+  assert.match(notes, /Left out: titles in Animation, Horror \(titles with no genres listed/);
   assert.match(pickFrom(Array.from({ length: FETCH_LIMIT }, () => item({ Genres: ["Family"] })), 900, r.chips, false).note, /left-out-genre check is only checked within those/);
+});
+
+test("a negation never turns into the genre it rules out (articles, or-lists)", () => {
+  const sorted = (q: string) => ids(q).sort();
+  assert.deepEqual(sorted("not a scary movie"), ["kind:Movie", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing that's scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("anything but a horror"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror, or cartoons"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("not scary nor animated nor romantic"), ["notgenre:Animation", "notgenre:Horror", "notgenre:Romance"]);
+  // "and" does not carry the negation; a non-mood ends the list and is read as usual
+  assert.deepEqual(sorted("not scary and funny"), ["genre:Comedy", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or long, a comedy"), ["genre:Comedy", "notgenre:Horror"]);
+  // An unsupported negative keeps the list after it for normal reading
+  assert.deepEqual(sorted("not too long or funny"), ["genre:Comedy"]);
 });
 
 test("a mood and its negation: the later one wins, and a negated genre is never asked for", () => {
