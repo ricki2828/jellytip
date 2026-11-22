@@ -20,11 +20,13 @@ enum class JourneyKind(
     LIST("l"),
 }
 
-/** One film on a path; itemId null = not in the person's library (shown greyed, skipped). */
+/** One film on a path; itemId null = not in the person's library: on IPTV ([vod]) it still plays, else greyed and skipped. */
 data class JourneyPart(
     val itemId: String?,
     val title: String,
     val year: Int?,
+    /** The IPTV copy of a film the library lacks (source-neutral: the path plays it from there). */
+    val vod: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
 )
 
 data class JourneyDef(
@@ -76,6 +78,8 @@ data class JourneyEntry(
     val inProgress: Boolean,
     val positionTicks: Long = 0,
     val type: String? = null,
+    /** Played from IPTV (no library copy): OK opens its details. */
+    val vod: com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem? = null,
 )
 
 /** A Letterboxd list from the carousels manifest (ids as the library gives them). */
@@ -83,7 +87,14 @@ data class JourneyList(
     val slug: String,
     val name: String,
     val itemIds: List<String>,
-)
+    /** S8: library ids and IPTV ids interleaved in the list's own order (empty = an older server: [itemIds]). */
+    val order: List<String> = emptyList(),
+    /** S8: the IPTV titles of [order], by id. */
+    val iptv: Map<String, com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem> = emptyMap(),
+) {
+    /** The list's entries: [order] when the server sends it, else the library ids. */
+    val entryIds: List<String> get() = order.ifEmpty { itemIds }
+}
 
 /** The franchise page fields a path needs (`/v1/collections/{tmdbId}` partsOrder). */
 data class FranchisePage(
@@ -215,12 +226,16 @@ object Journeys {
         return JourneyDef(journeyId(JourneyKind.DIRECTOR, personId), JourneyKind.DIRECTOR, name, parts, maxOf(total ?: 0, movies.size))
     }
 
-    /** A Letterboxd list in the list's own order, first LIST_CAP. */
+    /** A Letterboxd list in the list's own order (library and IPTV films interleaved when the server sends `order`), first LIST_CAP. */
     fun listDef(list: JourneyList): JourneyDef? {
-        val all = list.itemIds.distinct()
+        val all = list.entryIds.distinct()
         val ids = all.take(LIST_CAP)
         if (ids.size < 2) return null
-        return JourneyDef(journeyId(JourneyKind.LIST, list.slug), JourneyKind.LIST, list.name, ids.map { JourneyPart(it, "", null) }, all.size)
+        val parts =
+            ids.map { id ->
+                list.iptv[id]?.let { v -> JourneyPart(null, v.title, v.year, vod = v) } ?: JourneyPart(id, "", null)
+            }
+        return JourneyDef(journeyId(JourneyKind.LIST, list.slug), JourneyKind.LIST, list.name, parts, all.size)
     }
 
     // ---------- the journeys page (no per-journey calls: counts from the hub and manifest) ----------
@@ -248,10 +263,10 @@ object Journeys {
         val list =
             lists
                 .orEmpty()
-                .filter { parseJourneyId(journeyId(JourneyKind.LIST, it.slug)) != null && it.itemIds.toSet().size >= 2 }
+                .filter { parseJourneyId(journeyId(JourneyKind.LIST, it.slug)) != null && it.entryIds.toSet().size >= 2 }
                 .take(LISTS_SHOWN)
                 .map {
-                    val films = minOf(it.itemIds.toSet().size, LIST_CAP)
+                    val films = minOf(it.entryIds.toSet().size, LIST_CAP)
                     JourneySummary(journeyId(JourneyKind.LIST, it.slug), JourneyKind.LIST, titleFor(it.name, films, JourneyKind.LIST), films = films)
                 }
         return JourneyGroups(franchise, director, list)
@@ -268,6 +283,22 @@ object Journeys {
         return def.parts.mapIndexed { i, p ->
             val hit = p.itemId?.let { id -> by[norm(id)] }
             val playable = hit != null && hit.locationType != "Virtual"
+            // Not in the library but on IPTV: plays from there (source-neutral), its own watched / progress state
+            val vod = p.vod?.takeIf { !playable }
+            if (vod != null) {
+                return@mapIndexed JourneyEntry(
+                    n = i + 1,
+                    itemId = null,
+                    title = vod.title.ifEmpty { p.title },
+                    year = vod.year ?: p.year,
+                    playable = true,
+                    // The IPTV tiles' rule: its own flag or its progress says played
+                    watched = vod.played || vod.progress?.played == true,
+                    inProgress = !(vod.played || vod.progress?.played == true) && vod.progress?.resumable == true,
+                    type = "Movie",
+                    vod = vod,
+                )
+            }
             val watched = playable && hit!!.played
             JourneyEntry(
                 n = i + 1,
@@ -357,6 +388,12 @@ class JourneyCache(
     }
 
     fun clear() = synchronized(m) { m.clear() }
+
+    /** Forget one journey (its IPTV parts carry watched / progress state, which the cache would keep for [TTL_MS]). */
+    fun drop(
+        user: String,
+        key: String,
+    ) = synchronized(m) { m.remove("$user|$key") }
 
     companion object {
         const val TTL_MS = 10 * 60_000L

@@ -61,6 +61,8 @@ data class IptvVodItem(
     val episodeNumber: Int? = null,
     /** Continue Watching / Next Up info line (set by [IptvResume.asTileItem]); null = none. */
     val infoLine: String? = null,
+    /** TMDB genre ids (`genreIds`, list route): Ask checks moods / left-out genres against them; empty = unknown. */
+    val genreIds: List<Int> = emptyList(),
 ) {
     /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
     val audioLabel: String?
@@ -213,6 +215,7 @@ object IptvVodParse {
             nextUp = nextUp(o.optJSONObject("nextUp")),
             libraryId = o.str("libraryId"),
             sources = sources(o.optJSONArray("sources")),
+            genreIds = o.optJSONArray("genreIds")?.let { g -> (0 until g.length()).mapNotNull { (g.opt(it) as? Number)?.toInt() } }.orEmpty(),
         )
     }
 
