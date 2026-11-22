@@ -248,7 +248,7 @@ class MainActivity : AppCompatActivity() {
 
         // Blank-text hunt: the in-app screensaver's end is a wake with no lifecycle event
         screensaverService.state
-            .onEach { com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.screensaver(it.show) }
+            .onEach { com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.screensaver(it.show, it.showDim) }
             .catch { ex -> Timber.e(ex, "Error tracing the screensaver") }
             .launchIn(lifecycleScope)
 

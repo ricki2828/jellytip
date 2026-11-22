@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.SystemClock
-import android.view.Choreographer
+import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,8 +36,8 @@ import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
  * shapes were fine. Until it is caught again, Home leaves evidence in the trace ("[app]" lines):
  *  - lifecycle with the time spent stopped, window focus, hardware acceleration and display state at each start;
  *  - every configuration change (density / font scale / size / ui mode) and memory trim;
- *  - the in-app screensaver showing / going (its wake fires no lifecycle event);
- *  - frames drawn in the 3 s after each wake ("not redrawn" vs "drawn blank");
+ *  - the in-app screensaver and its dim overlay showing / going (no lifecycle event fires for them);
+ *  - window draws in the 3 s after each wake (real draws, not vsync: "not redrawn" vs "drawn blank");
  *  - on every Home resume and in-app screensaver wake, sample text in both app fonts measured AND drawn into a software
  *    bitmap (inked pixels): 0 = fonts / metrics broken; normal while the screen shows blank text = the GPU side.
  */
@@ -49,6 +49,10 @@ object JellytipTextProbe {
         private set
 
     private var screensaverShown = false
+    private var dimShown = false
+
+    /** The activity, for its window (draw counting after an in-app screensaver wake). */
+    private var activityRef: java.lang.ref.WeakReference<Activity>? = null
 
     fun stopped() {
         stoppedAt = SystemClock.uptimeMillis()
@@ -59,8 +63,9 @@ object JellytipTextProbe {
         val away = if (stoppedAt == 0L) "-" else "${(SystemClock.uptimeMillis() - stoppedAt) / 1000}s"
         val hw = runCatching { activity.window.decorView.isHardwareAccelerated }.getOrNull()
         val display = runCatching { activity.window.decorView.display?.state }.getOrNull()
+        activityRef = java.lang.ref.WeakReference(activity)
         JellytipTrace.log("app", "start (stopped for $away) hw=$hw display=${displayState(display)}")
-        countFrames("start")
+        countDraws("start")
     }
 
     fun focus(hasFocus: Boolean) = JellytipTrace.log("app", "window focus $hasFocus")
@@ -81,35 +86,40 @@ object JellytipTextProbe {
         JellytipTrace.log("app", "trim memory $name")
     }
 
-    /** The in-app screensaver's visibility (ScreensaverState.show); its end counts as a wake. */
-    fun screensaver(show: Boolean) {
-        if (show == screensaverShown) return
-        screensaverShown = show
-        JellytipTrace.log("app", "in-app screensaver ${if (show) "on" else "off"}")
-        if (!show) {
-            wakeTick++
-            countFrames("screensaver off")
+    /** The in-app screensaver (ScreensaverState.show) and its dim overlay (showDim); either ending counts as a wake. */
+    fun screensaver(
+        show: Boolean,
+        dim: Boolean,
+    ) {
+        if (show != screensaverShown) {
+            screensaverShown = show
+            JellytipTrace.log("app", "in-app screensaver ${if (show) "on" else "off"}")
+            if (!show) wake("screensaver off")
+        }
+        if (dim != dimShown) {
+            dimShown = dim
+            JellytipTrace.log("app", "screensaver dim ${if (dim) "on" else "off"}")
+            if (!dim) wake("dim off")
         }
     }
 
-    /** Frames drawn in the next 3 s (Choreographer), on the main thread. */
-    private fun countFrames(what: String) {
+    private fun wake(what: String) {
+        wakeTick++
+        countDraws(what)
+    }
+
+    /** Real window draws in the next 3 s (OnDrawListener; vsync ticks would count with nothing drawn), main thread. */
+    private fun countDraws(what: String) {
+        val view = activityRef?.get()?.window?.decorView ?: return
         runCatching {
-            val start = System.nanoTime()
-            var frames = 0
-            val choreographer = Choreographer.getInstance()
-            val callback =
-                object : Choreographer.FrameCallback {
-                    override fun doFrame(frameTimeNanos: Long) {
-                        frames++
-                        if (frameTimeNanos - start < 3_000_000_000L) {
-                            choreographer.postFrameCallback(this)
-                        } else {
-                            JellytipTrace.log("app", "frames after $what: $frames in 3 s")
-                        }
-                    }
-                }
-            choreographer.postFrameCallback(callback)
+            var draws = 0
+            val listener = ViewTreeObserver.OnDrawListener { draws++ }
+            view.viewTreeObserver.addOnDrawListener(listener)
+            // Removed from a posted runnable: removing inside onDraw is not allowed
+            view.postDelayed({
+                runCatching { view.viewTreeObserver.removeOnDrawListener(listener) }
+                JellytipTrace.log("app", "draws after $what: $draws in 3 s")
+            }, 3_000)
         }
     }
 
