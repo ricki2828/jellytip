@@ -91,7 +91,12 @@ object JellytipTitleOpen {
         sources: List<IptvSource>,
     ) {
         val k = libraryKind(kind) ?: kindOfId(iptvId) ?: return
-        libraryIdOf(libraryId, sources)?.let { remember(iptvId, it, k) }
+        val lib = libraryIdOf(libraryId, sources)
+        when {
+            lib != null -> remember(iptvId, lib, k)
+            // The server listed this title's sources and there is no library one now (copy removed): forget the old link
+            sources.isNotEmpty() -> libraryByIptv.remove("${userKey()}|$iptvId")
+        }
     }
 
     /** The library page of an IPTV title the app knows has one; null = none known. */
