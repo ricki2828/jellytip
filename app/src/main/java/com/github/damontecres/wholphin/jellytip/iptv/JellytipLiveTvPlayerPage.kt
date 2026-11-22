@@ -1049,26 +1049,32 @@ fun JellytipLiveTvPlayerPage(
         if (t.start == null || t.recordingId != null || t.vodId != null || t.seriesId != null || t.episodeId != null) return@LaunchedEffect
         var everPlayed = false
         var openingMs = 0L
+        var playedMs = 0L
         while (true) {
+            delay(500)
+            // App in the background (stream stopped) or paused: nothing is judged, no time is counted
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || playback.player?.playWhenReady == false) continue
             val s = playback.state.value
             val mine = s.target == t
-            if (mine && s is IptvPlayState.Playing) everPlayed = true
+            if (mine && s is IptvPlayState.Playing) {
+                everPlayed = true
+                playedMs += 500
+            }
             if (mine && s is IptvPlayState.Opening) openingMs += 500
             val failed = mine && s is IptvPlayState.Failed
             val endedUnplayed = mine && !everPlayed && playback.player?.playbackState == androidx.media3.common.Player.STATE_ENDED
             if (CatchUpPolicy.catchUpGaveUp(failed || endedUnplayed, everPlayed, openingMs)) {
                 val why = if (failed) (s as IptvPlayState.Failed).message else if (endedUnplayed) "ended before playing" else "never started"
-                JellytipTrace.player("iptv", "catch-up gave up ${t.channelId} ($why): back to live")
+                JellytipTrace.player("iptv", "catch-up gave up ${t.channelId} ($why, played ${playedMs / 1000} s): back to live")
                 // Back on live: the catch-up card must not pop up and offer the same broken window again
                 sourceMatch?.id?.let { catchOffered += it }
                 val name = if (channel.id == t.channelId) channel.name else t.label
                 current = IptvTarget(t.channelId, name)
                 playback.play(current, "catch-up failed: back to live")
                 bannerTick++
-                android.widget.Toast.makeText(context, CatchUpPolicy.FAILED_TOAST, android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, CatchUpPolicy.gaveUpToast(playedMs), android.widget.Toast.LENGTH_LONG).show()
                 return@LaunchedEffect
             }
-            delay(500)
         }
     }
     fun ftAccept() {

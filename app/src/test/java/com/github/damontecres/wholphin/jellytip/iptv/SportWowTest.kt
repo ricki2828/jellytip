@@ -112,10 +112,13 @@ class SportWowTest {
     // Reveal released up to t = 1000; null is "released" too, so the wallclock != null rule is what hides it
     private val upTo1000: (Double?) -> Boolean = { (it ?: 0.0) <= 1000 }
 
+    // Plays are gated on wallclock + slack: these wallclocks sit [CatchUpPolicy.WALLCLOCK_SLACK_SEC] before the stamps
+    private fun wc(t: Double) = t - CatchUpPolicy.WALLCLOCK_SLACK_SEC
+
     @Test
     fun catchUpCardsFromAnUnreleasedFullAnswer() {
         // Newest first, as the server sends them: c not yet released, b released by its own wallclock, n has none
-        val full = answer(listOf(play("c", 1500.0), play("n", null), play("b", 900.0), play("x", 800.0, scoring = false), play("a", 500.0)))
+        val full = answer(listOf(play("c", wc(1500.0)), play("n", null), play("b", wc(900.0)), play("x", wc(800.0), scoring = false), play("a", wc(500.0))))
         val cards = CatchUpPolicy.cards(null, full, full, upTo1000)
         assertEquals(listOf("Play a", "Play b"), cards.map { it.text })
         // Reveal off (replay): nothing
@@ -128,7 +131,7 @@ class SportWowTest {
     fun catchUpCardsMergeReleasedAndNewestDeDuped() {
         // The released full answer (older) has a and z; the newest one has b (released stamp), a again, and c (held)
         val released = answer(listOf(play("a", null), play("z", null)), updatedAt = 900)
-        val newest = answer(listOf(play("c", 1500.0), play("b", 950.0), play("a", 500.0)))
+        val newest = answer(listOf(play("c", wc(1500.0)), play("b", wc(950.0)), play("a", wc(500.0))))
         val cards = CatchUpPolicy.cards(released, newest, newest, upTo1000)
         // a once; z (only in the released one) counts as older; oldest first
         assertEquals(listOf("Play z", "Play a", "Play b"), cards.map { it.text })
@@ -138,6 +141,14 @@ class SportWowTest {
         assertEquals(listOf("Play n"), CatchUpPolicy.cards(rel2, new2, new2, upTo1000).map { it.text })
         // Released answer alone (no newer full one)
         assertEquals(listOf("Play z", "Play a"), CatchUpPolicy.cards(released, released, released, upTo1000).map { it.text })
+    }
+
+    @Test
+    fun catchUpPlaysWaitForWallclockPlusSlack() {
+        // Event at 970: its moment stamp is later, so at reveal 1000 (970 + 60 = 1030 not yet released) it is held
+        val full = answer(listOf(play("late", 970.0), play("early", 900.0)))
+        assertEquals(listOf("Play early"), CatchUpPolicy.cards(null, full, full, upTo1000).map { it.text })
+        assertEquals(listOf("Play early", "Play late"), CatchUpPolicy.cards(null, full, full) { (it ?: 0.0) <= 1030 }.map { it.text })
     }
 
     @Test
@@ -154,7 +165,7 @@ class SportWowTest {
     fun catchUpCardsNrlTimelineUnchanged() {
         val tl = listOf(TimelineEntry("1", "try", "home", "Try Warriors", "12'", 900.0), TimelineEntry("2", "conversion", "home", "Conversion", "13'", 1100.0))
         // The timeline wins over plays; each entry gated on its own time
-        val full = answer(listOf(play("a", 500.0)), timeline = tl)
+        val full = answer(listOf(play("a", wc(500.0))), timeline = tl)
         val cards = CatchUpPolicy.cards(null, full, full, upTo1000)
         assertEquals(listOf("Try Warriors"), cards.map { it.text })
         assertEquals(4, cards[0].points)
@@ -182,5 +193,9 @@ class SportWowTest {
         assertTrue(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = false, openingMs = CatchUpPolicy.START_TIMEOUT_MS))
         // Played once: a later reconnect is the recovery machine's (it ends in Failed if it gives up)
         assertFalse(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = true, openingMs = 60_000))
+        // Honest copy: never worked vs worked then stopped
+        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(0))
+        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS))
+        assertEquals(CatchUpPolicy.STOPPED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS + 500))
     }
 }

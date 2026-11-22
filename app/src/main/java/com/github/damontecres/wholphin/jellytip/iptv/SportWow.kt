@@ -165,6 +165,12 @@ object CatchUpPolicy {
     /** Twelve cards at 5 s: the "60 s of key plays". */
     const val MAX_CARDS = 12
 
+    /**
+     * ESPN's play `wallclock` is the real event time, earlier than the moment stamps the spoiler delay is calibrated
+     * to: a play is released only once wallclock + this has been.
+     */
+    const val WALLCLOCK_SLACK_SEC = 60.0
+
     /** The full /live answer fetched while deciding the card may take this long (it runs during the 2.5 s wait). */
     const val DECIDE_FETCH_MS = 5_000L
 
@@ -224,7 +230,8 @@ object CatchUpPolicy {
         if (newestFull != null && newestFull !== released) {
             for (p in newestFull.plays) {
                 if (!p.scoring) continue
-                val ok = p.key in relKeys || (p.wallclock != null && reveal(p.wallclock))
+                val wc = p.wallclock
+                val ok = p.key in relKeys || (wc != null && reveal(wc + WALLCLOCK_SLACK_SEC))
                 if (ok && seen.add(p.key)) out += p
             }
         }
@@ -248,6 +255,13 @@ object CatchUpPolicy {
     const val START_TIMEOUT_MS = StreamRecovery.VOD_IDLE_MS
 
     const val FAILED_TOAST = "Catch-up isn't working on this channel right now"
+    const val STOPPED_TOAST = "Catch-up stopped — back to live"
+
+    /** A window that played this long before failing worked: it "stopped", it isn't "not working". */
+    const val PLAYED_OK_MS = 5_000L
+
+    /** The toast when a catch-up window gives up after playing [playedMs]. */
+    fun gaveUpToast(playedMs: Long): String = if (playedMs > PLAYED_OK_MS) STOPPED_TOAST else FAILED_TOAST
 
     /**
      * A catch-up target of a live channel gave up: it failed (no_catchup refusal, recovery gave up), or it has been
