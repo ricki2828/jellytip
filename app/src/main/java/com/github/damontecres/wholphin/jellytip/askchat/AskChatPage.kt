@@ -58,7 +58,6 @@ import com.github.damontecres.wholphin.jellytip.JellytipSkeleton
 import com.github.damontecres.wholphin.jellytip.ask.AskButton
 import com.github.damontecres.wholphin.jellytip.ask.AskChipButton
 import com.github.damontecres.wholphin.jellytip.ask.AskParse
-import com.github.damontecres.wholphin.jellytip.ask.JellytipAskPage
 import com.github.damontecres.wholphin.jellytip.ask.askItem
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
@@ -70,6 +69,7 @@ import com.github.damontecres.wholphin.ui.components.VoiceInputManager
 import com.github.damontecres.wholphin.ui.components.VoiceSearchButton
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
+import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -255,6 +255,12 @@ class JellytipAskChatViewModel
             navigationManager.navigateTo(Destination.JellytipIptvDetails(card.iptvId, card.title.orEmpty()), "chat TV pick OK")
         }
 
+        /** Chat is switched off on the server (404): tell the person and pop back to the Ask page they came from. */
+        fun chatOff() {
+            viewModelScope.launch { showToast(context, "Chat isn't available right now") }
+            navigationManager.goBack()
+        }
+
         override fun onCleared() {
             sender.cancelAll()
         }
@@ -284,8 +290,8 @@ fun JellytipAskChatPage(
 ) {
     val ui by viewModel.ui.collectAsState()
     if (ui.chat.error == ChatError.Off) {
-        // The server has chat switched off (404): the classic Ask screen instead
-        JellytipAskPage(modifier = modifier)
+        // The server has chat switched off (404): back to Ask with a short notice (no destinations stacking up on repeated taps)
+        LaunchedEffect(Unit) { viewModel.chatOff() }
     } else {
         val actions =
             remember(viewModel) {
@@ -328,7 +334,7 @@ internal fun AskChatContent(
     val libKey = AskChat.libraryIds(chat.cards).joinToString(",")
     val ready = ui.fetched?.key == libKey
     val fetched = ui.fetched
-    val shown = remember(ready, fetched, chat.cards) { if (ready && fetched != null) AskChat.alignCards(chat.cards, fetched.items) { it.id.toString() } else emptyList() }
+    val shown = remember(ready, fetched, chat.cards) { if (ready && fetched != null) AskChat.alignCards(chat.cards, fetched.items) { it.id.toString() }.distinctBy { AskChat.cardKey(it.card) } else emptyList() }
     val chips = AskChat.displayChips(chat)
     val refine =
         remember(ready, pending, fetched, chat.chips) {
@@ -351,7 +357,10 @@ internal fun AskChatContent(
     LaunchedEffect(pending) {
         if (pending) boxFocus.tryRequestFocus()
     }
-    LaunchedEffect(chat.turns.size, pending) { turnsScroll.animateScrollTo(turnsScroll.maxValue) }
+    LaunchedEffect(chat.turns.size, pending) {
+        withFrameNanos { } // let the new line be measured, then scroll to the NEW bottom
+        turnsScroll.animateScrollTo(turnsScroll.maxValue)
+    }
 
     Row(
         modifier =
@@ -453,7 +462,7 @@ internal fun AskChatContent(
                     contentPadding = PaddingValues(JellytipLayout.FocusRoom),
                     modifier = Modifier.focusGroup().focusRestorer(),
                 ) {
-                    items(chips, key = { it.chip.id }) { s ->
+                    items(chips.distinctBy { it.chip.id }, key = { it.chip.id }) { s ->
                         val c = s.chip
                         if (s.provisional || !c.removable) {
                             // the local reading while pending: dimmed, not focusable ("reading…")
@@ -498,7 +507,7 @@ internal fun AskChatContent(
                 JellytipSkeleton(tileW = SpecialTokens.POSTER_W, tileH = SpecialTokens.POSTER_H, rows = 2, perRow = 4, title = false, modifier = Modifier.padding(JellytipLayout.FocusRoom))
             } else if (shown.isNotEmpty()) {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.FixedSize(SpecialTokens.POSTER_W),
                     horizontalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap),
                     verticalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap),
                     contentPadding = PaddingValues(JellytipLayout.FocusRoom),
