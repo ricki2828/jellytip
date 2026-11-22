@@ -156,36 +156,43 @@ export function parseAsk(raw: string, now = new Date()): Reading {
 
   // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out;
   // anything else ("not too long", "not for kids", "not sad") is left out of the reading (never guessed) and reported
-  // The negated word may follow an article ("not a scary movie", "nothing that's scary"); a negated mood carries through an
-  // "or" / "nor" list of moods ("nothing scary or animated"), never through "and" ("not scary and funny" wants funny)
+  // The negated word may follow an article ("not a scary movie", "nothing that's scary"); the negation carries through an
+  // "or" / "nor" list ("nothing scary or animated"), never through "and" ("not scary and funny" wants funny)
   const NEG = /\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)/g;
   const negMood = (w: string) => MOODS.find(([re, , label]) => INVERTIBLE.has(label) && new RegExp(re.source).test(` ${w} `));
   t = t.replace(NEG, (m: string, head: string, chain: string, off: number, whole: string) => {
     const rest = whole.slice(off + head.length);
     // Phrases that are supported and are not negations of a filter
     if (/^(?:not|no)\s+(?:more than|seen|watched|played)\b/.test(whole.slice(off)) || /^no more than\b/.test(whole.slice(off)) || /^(?:not|no)\s+(?:seen|watched|played)\b/.test(head + rest)) return m;
+    const unsupported = (words: string) => {
+      ignored.push(clean(words));
+      if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.");
+    };
     const word = (head.match(/[a-z][a-z0-9'-]*$/) ?? [""])[0];
     const mood = /\bfor\s/.test(head) ? undefined : negMood(word);
-    if (!mood) {
-      ignored.push(clean(head));
-      if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.");
-      // The words after it are read as usual
-      return " ".repeat(head.length) + chain;
+    if (mood) {
+      cur = { pos: off, src: clean(head) };
+      add({ id: `notgenre:${mood[2]}`, label: `no ${mood[2].toLowerCase()}`, data: { t: "notGenre", genres: mood[1] } });
+    } else {
+      unsupported(head);
     }
-    cur = { pos: off, src: clean(head) };
-    add({ id: `notgenre:${mood[2]}`, label: `no ${mood[2].toLowerCase()}`, data: { t: "notGenre", genres: mood[1] } });
-    // The list carries the negation while each word is a mood that can be negated
+    // "not X or Y" is neither: every item of the or-list is negated too; moods leave their genres out, the rest is left out
+    // (never read back as a positive filter)
     const link = /^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)/;
     let used = 0;
     for (;;) {
       const cm = link.exec(chain.slice(used));
-      const md = cm ? negMood(cm[1]) : undefined;
-      if (!cm || !md) break;
-      cur = { pos: off + head.length + used, src: clean(cm[0]) };
-      add({ id: `notgenre:${md[2]}`, label: `no ${md[2].toLowerCase()}`, data: { t: "notGenre", genres: md[1] } });
+      if (!cm) break;
+      const md = negMood(cm[1]);
+      if (md) {
+        cur = { pos: off + head.length + used, src: clean(cm[0]) };
+        add({ id: `notgenre:${md[2]}`, label: `no ${md[2].toLowerCase()}`, data: { t: "notGenre", genres: md[1] } });
+      } else {
+        unsupported(cm[0].replace(/^\s*,?\s*/, ""));
+      }
       used += cm[0].length;
     }
-    return " ".repeat(head.length + used) + chain.slice(used);
+    return " ".repeat(m.length);
   });
 
   // "show me" / "give me" are requests, not the word "show"

@@ -234,8 +234,15 @@ test("a negation never turns into the genre it rules out (articles, or-lists)", 
   // "and" does not carry the negation; a non-mood ends the list and is read as usual
   assert.deepEqual(sorted("not scary and funny"), ["genre:Comedy", "notgenre:Horror"]);
   assert.deepEqual(sorted("nothing scary or long, a comedy"), ["genre:Comedy", "notgenre:Horror"]);
-  // An unsupported negative keeps the list after it for normal reading
-  assert.deepEqual(sorted("not too long or funny"), ["genre:Comedy"]);
+  // "not X or Y" is neither, whatever X is: never read back as a positive filter
+  assert.deepEqual(sorted("not too long or funny"), ["notgenre:Comedy"]);
+  assert.deepEqual(sorted("nothing too long or scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no sequels or horror"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing scary or long or animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror or sequels or not animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  const r = parseAsk("nothing scary or long or animated", NOW);
+  assert.deepEqual(r.ignored, ["or long"]);
+  assert.match(r.notes.join(" "), /Negatives only work for genres/);
 });
 
 test("a mood and its negation: the later one wins, and a negated genre is never asked for", () => {
