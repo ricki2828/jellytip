@@ -542,7 +542,10 @@ class JellytipIptvPlayback
             // stop() without clearMediaItems(): the old stream's connection closes (a provider-direct one too, which the server
             // can't cut) and nothing replays it, while the surface keeps its last frame
             player?.stop()
-            launchOpen(t, why, remux = true, seekMs = ms)
+            // Mid-recovery (a skip's remux open failed and is backing off): the reopen counts as the recovery's own, so the
+            // machine sees Opened then Recovered and doesn't leave "Reconnecting…" over a playing picture
+            val recovering = recTarget == t && rec.phase in setOf(StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED)
+            launchOpen(t, why, recovering = recovering, remux = true, seekMs = ms)
         }
 
         private fun resetRecovery(target: IptvTarget) {
@@ -556,6 +559,7 @@ class JellytipIptvPlayback
             remuxStartMs = 0L
             remuxDurationMs = null
             pendingRemuxSeekMs = null
+            skipDurMs = 0L
             _note.value = null
         }
 
