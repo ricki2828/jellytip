@@ -210,7 +210,7 @@ fun JellytipDiscoverBrowsePage(
         }
     }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
-        Column(Modifier.fillMaxSize().padding(start = 24.dp, top = 20.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -263,7 +263,7 @@ fun JellytipDiscoverBrowsePage(
                 }
             }
             if (!state.available && state.rows.all { it.entries != null }) {
-                Caption("Discover is not available right now (admins only).", alpha = 0.8f, px = JellytipHomeTokens.TEXT_PX)
+                Caption("Discover is not available right now (admins only).", alpha = 0.8f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             }
             LazyColumn(
                 state = listState,
@@ -311,7 +311,7 @@ fun JellytipDiscoverBrowsePage(
 }
 
 @Composable
-private fun DiscoverBrowseTile(
+internal fun DiscoverBrowseTile(
     entry: JellytipDiscoverEntry,
     onClick: () -> Unit,
     modifier: Modifier,
@@ -329,7 +329,9 @@ private fun DiscoverBrowseTile(
                     text = b,
                     color = Color.White,
                     fontFamily = JellytipFontFamily,
-                    fontSize = rememberJellytipSizes().sp(15),
+                    fontSize = rememberJellytipSizes().sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier =
                         Modifier
                             .align(Alignment.BottomStart)
@@ -345,7 +347,7 @@ private fun DiscoverBrowseTile(
             text = t.title + (t.year?.let { " ($it)" } ?: ""),
             color = JellytipPalette.Vanilla.copy(alpha = 0.75f),
             fontFamily = JellytipFontFamily,
-            fontSize = rememberJellytipSizes().sp(16),
+            fontSize = rememberJellytipSizes().sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -353,7 +355,7 @@ private fun DiscoverBrowseTile(
 }
 
 @Composable
-private fun Chip(
+internal fun Chip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -376,7 +378,7 @@ private fun Chip(
             text = label,
             fontFamily = JellytipFontFamily,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+            fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
         )
     }

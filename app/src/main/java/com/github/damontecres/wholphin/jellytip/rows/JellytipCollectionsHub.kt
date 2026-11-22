@@ -398,7 +398,7 @@ private fun HubCard(
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
         Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
             Text(c.title, color = Color.White, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(c.subtitle, color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+            Text(c.subtitle, color = Color.White.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1)
         }
     }
 }
@@ -452,7 +452,7 @@ fun JellytipHubCollectionPage(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
         ItemRowTitle(r?.title?.ifBlank { null } ?: title)
         when {
-            tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 2, perRow = 5, title = false, modifier = Modifier.padding(8.dp))
+            tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 100.dp, tileH = 150.dp, rows = 2, perRow = 6, title = false, modifier = Modifier.padding(8.dp))
             tiles == null ->
                 Text(
                     "This collection isn't available right now.",

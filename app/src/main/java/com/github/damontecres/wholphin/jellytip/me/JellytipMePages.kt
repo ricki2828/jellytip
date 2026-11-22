@@ -44,6 +44,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
@@ -173,7 +174,7 @@ fun JellytipMePage(
         first.tryRequestFocus()
     }
     val p = prefs
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 40.dp, top = 24.dp, end = 40.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Personalise", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         Text(
             message ?: "These follow you on every device.",
@@ -348,7 +349,7 @@ fun JellytipTastePage(
         kotlinx.coroutines.delay(8_000)
         if (taste == null) failed = true
     }
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 40.dp, top = 24.dp, end = 40.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Your taste", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         val t = taste
         if (t == null) {
@@ -454,7 +455,7 @@ fun JellytipHomeEditPage(
             "Saved. Home updates the next time it loads.",
         )
     }
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 40.dp, top = 24.dp, end = 40.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Edit Home", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         Text(
             message ?: "Pin keeps a row every day; hide drops it; ↑ ↓ set the order.",

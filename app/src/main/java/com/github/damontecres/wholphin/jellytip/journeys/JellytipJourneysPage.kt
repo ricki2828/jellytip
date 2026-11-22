@@ -41,6 +41,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.jellytipFocusRoom
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -221,7 +222,7 @@ fun JellytipJourneysPage(
             if (back == null || !restore.tryRequestFocus()) first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
         Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
         when {
             g == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 240.dp, tileH = 96.dp, rows = 2, perRow = 3)
@@ -241,7 +242,7 @@ fun JellytipJourneysPage(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(GROUPS[i], color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 18.sp)
                                 val rowState = rememberLazyListState(initialFirstVisibleItemIndex = if (back?.first == i) back.second else 0)
-                                LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+                                LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom, end = 24.dp), modifier = Modifier.jellytipFocusRoom().focusGroup().focusRestorer()) {
                                     items(list, key = { it.id }) { s ->
                                         // both may sit on one card: `first` must stay attached for the column's focusRestorer
                                         val m =
@@ -282,7 +283,7 @@ internal fun JourneyCard(
         modifier = modifier.width(240.dp).height(96.dp),
     ) {
         Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp)) {
-            s.kicker?.let { Text(it.uppercase(), fontFamily = JellytipFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = JellytipPalette.Jelly) }
+            s.kicker?.let { Text(it.uppercase(), fontFamily = JellytipFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = JellytipPalette.Jelly) }
             Text(s.title, fontFamily = JellytipFontFamily, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -302,7 +303,7 @@ fun JellytipJourneyPage(
         onPauseOrDispose { }
     }
     val focus = remember { FocusRequester() }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp, end = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
         when (val r = state.result) {
             null -> com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
             JourneyResult.Error -> {

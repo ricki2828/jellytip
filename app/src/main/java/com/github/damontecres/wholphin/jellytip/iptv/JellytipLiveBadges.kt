@@ -48,7 +48,7 @@ fun KindPill(
         kind == "live" || (kind == null && legacyLive) -> Pill("LIVE", Color.White, JellytipPalette.Jelly)
         // Broadcast (plan "In-match visual direction"): condensed caps on slate
         kind == "replay" || kind == "highlights" ->
-            Cond("Replay", 11.sp, Color.White, modifier = Modifier.background(Broadcast.Loss, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp), tracking = 0.06f)
+            Cond("Replay", 12.sp, Color.White, modifier = Modifier.background(Broadcast.Loss, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp), tracking = 0.06f)
     }
 }
 
@@ -63,7 +63,7 @@ fun IdentifiedMark() =
         text = "identified",
         color = Color.White.copy(alpha = 0.75f),
         fontFamily = JellytipFontFamily,
-        fontSize = 9.sp,
+        fontSize = 12.sp,
         maxLines = 1,
         modifier = Modifier.background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
     )
@@ -96,7 +96,7 @@ fun startsLabel(
 fun SoonPill() = Pill("STARTING SOON", Color.Black, MayBuffer)
 
 @Composable
-private fun Pill(
+internal fun Pill(
     text: String,
     color: Color,
     background: Color,
@@ -106,7 +106,7 @@ private fun Pill(
         color = color,
         fontFamily = JellytipFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 9.sp,
+        fontSize = 12.sp,
         letterSpacing = 0.6.sp,
         maxLines = 1,
         modifier = Modifier.background(background, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
@@ -150,7 +150,7 @@ fun QualityChips(
                 text = "may buffer",
                 color = MayBuffer,
                 fontFamily = JellytipFontFamily,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
             )
         }
@@ -240,7 +240,7 @@ fun SportArtSlot(
         home != null && away != null ->
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
                 Badge(home, art?.homeName, height)
-                Text("v", fontFamily = JellytipFontFamily, fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                Text("v", fontFamily = JellytipFontFamily, fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
                 Badge(away, art?.awayName, height)
             }
 

@@ -27,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -121,7 +122,7 @@ fun JellytipRemindersPage(
     val now = nowSec()
     val zone = ZoneId.systemDefault()
     val gameList = games?.let { RemindersPageLogic.upcoming(it, now) }
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 40.dp, top = 24.dp, end = 40.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Reminders", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         Text(
             message ?: "OK on a reminder removes it.",

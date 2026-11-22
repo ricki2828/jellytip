@@ -268,7 +268,7 @@ private fun SearchContent(
             modifier
                 .fillMaxSize()
                 .background(JellytipPalette.Night)
-                .padding(start = 24.dp, top = 20.dp, end = 16.dp)
+                .padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
                 .onPreviewKeyEvent { e ->
                     // The remote's Search / mic key: listen right away
                     if (e.type == KeyEventType.KeyUp && (e.key == Key.Search || e.key == Key.VoiceAssist) && viewModel.voiceInputManager.isAvailable) {
@@ -535,7 +535,7 @@ private fun PeopleRow(
 }
 
 @Composable
-private fun PosterCard(
+internal fun PosterCard(
     url: String?,
     caption: String,
     onClick: () -> Unit,
@@ -547,8 +547,9 @@ private fun PosterCard(
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
             border =
                 ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
+                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, com.github.damontecres.wholphin.jellytip.JellytipFocus.Cream), shape = RoundedCornerShape(8.dp)),
                 ),
+            scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(120.dp),
             modifier = Modifier.size(120.dp, 180.dp),
         ) {
             var failed by remember(url) { mutableStateOf(false) }

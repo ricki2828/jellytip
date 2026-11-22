@@ -26,6 +26,6 @@ fun BoxScope.TimeDisplay(modifier: Modifier = Modifier) {
         modifier =
             modifier
                 .align(Alignment.TopEnd)
-                .padding(vertical = 16.dp, horizontal = 24.dp),
+                .padding(vertical = 28.dp, horizontal = 48.dp), // Jellytip audit 22-Nov: inside the 5% TV safe area (was 16 / 24)
     )
 }
