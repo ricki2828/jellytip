@@ -46,6 +46,12 @@ class IptvTitleBlockTest {
         assertEquals("S1 E5", IptvTitleBlock.episodeLine(1, 5, "Ep. 5"))
         assertEquals("S1 E5", IptvTitleBlock.episodeLine(1, 5, " "))
         assertEquals("S1 E5 · Pilot", IptvTitleBlock.episodeLine(1, 5, "Pilot"))
+        // provider-style titles that only repeat the number, or the show's name
+        assertEquals("S2 E5", IptvTitleBlock.episodeLine(2, 5, "S02E05"))
+        assertEquals("S2 E5", IptvTitleBlock.episodeLine(2, 5, "Black Doves - S02E05"))
+        assertEquals("S2 E5", IptvTitleBlock.episodeLine(2, 5, "2x05"))
+        assertEquals("S2 E5", IptvTitleBlock.episodeLine(2, 5, "black doves", show = "Black Doves"))
+        assertEquals("S2 E5 · Deep Space 9", IptvTitleBlock.episodeLine(2, 5, "Deep Space 9"))
     }
 
     @Test

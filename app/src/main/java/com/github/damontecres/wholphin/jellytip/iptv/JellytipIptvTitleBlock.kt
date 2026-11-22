@@ -11,7 +11,9 @@ object IptvTitleBlock {
         val logo: String?,
     )
 
-    private val GENERIC = Regex("^(episode|ep\\.?|e)\\s*\\d+$", RegexOption.IGNORE_CASE)
+    /** "Episode 5", "Ep. 5", "S02E05", "Show - S02E05", "2x05": only the number again. */
+    private val GENERIC =
+        Regex("^(?:.*[-–·:|]\\s*)?(?:(?:episode|ep\\.?|e)\\s*\\d+|s\\d+\\s*e\\d+|\\d+x\\d+)$", RegexOption.IGNORE_CASE)
 
     /** [label] is the target's own label ("Show · Episode title" / "Film"): the fallback until (or when) the detail is missing. */
     fun of(
@@ -24,7 +26,7 @@ object IptvTitleBlock {
         if (episodeId == null) return Block(name, detail.item.year?.toString(), detail.logo)
         for (s in detail.seasons) {
             val e = s.episodes.firstOrNull { it.id == episodeId } ?: continue
-            return Block(name, episodeLine(s.season, e.episode, e.title), detail.logo)
+            return Block(name, episodeLine(s.season, e.episode, e.title, name), detail.logo)
         }
         // An episode the detail doesn't list (a newer episode, an older answer): the label's episode part
         return fromLabel(label, true).copy(title = name, logo = detail.logo)
@@ -35,10 +37,12 @@ object IptvTitleBlock {
         season: Int,
         episode: Int,
         title: String?,
+        show: String? = null,
     ): String {
         val code = "S$season E$episode"
         val t = title?.trim().orEmpty()
-        return if (t.isEmpty() || GENERIC.matches(t)) code else "$code · $t"
+        val same = show != null && t.equals(show.trim(), ignoreCase = true)
+        return if (t.isEmpty() || same || GENERIC.matches(t)) code else "$code · $t"
     }
 
     private fun fromLabel(
