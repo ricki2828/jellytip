@@ -179,7 +179,7 @@ fun JellytipReviewsRow(
 }
 
 @Composable
-private fun JellytipReviewCard(
+internal fun JellytipReviewCard(
     review: JellytipReview,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

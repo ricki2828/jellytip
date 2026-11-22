@@ -410,7 +410,7 @@ private fun UpcomingOverlay(
 }
 
 @Composable
-private fun UpcomingTile(
+internal fun UpcomingTile(
     u: IptvUpcoming,
     now: Long,
     onClick: () -> Unit,

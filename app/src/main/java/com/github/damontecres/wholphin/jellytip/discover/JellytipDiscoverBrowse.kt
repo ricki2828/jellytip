@@ -311,7 +311,7 @@ fun JellytipDiscoverBrowsePage(
 }
 
 @Composable
-private fun DiscoverBrowseTile(
+internal fun DiscoverBrowseTile(
     entry: JellytipDiscoverEntry,
     onClick: () -> Unit,
     modifier: Modifier,
@@ -353,7 +353,7 @@ private fun DiscoverBrowseTile(
 }
 
 @Composable
-private fun Chip(
+internal fun Chip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,

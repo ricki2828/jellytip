@@ -96,7 +96,7 @@ fun startsLabel(
 fun SoonPill() = Pill("STARTING SOON", Color.Black, MayBuffer)
 
 @Composable
-private fun Pill(
+internal fun Pill(
     text: String,
     color: Color,
     background: Color,

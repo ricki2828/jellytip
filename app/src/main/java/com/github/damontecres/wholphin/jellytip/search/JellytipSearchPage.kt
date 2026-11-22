@@ -535,7 +535,7 @@ private fun PeopleRow(
 }
 
 @Composable
-private fun PosterCard(
+internal fun PosterCard(
     url: String?,
     caption: String,
     onClick: () -> Unit,

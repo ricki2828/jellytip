@@ -806,7 +806,7 @@ fun JellytipCollectionPage(
 }
 
 @Composable
-private fun MissingPoster(
+internal fun MissingPoster(
     part: JellytipCollection.Missing,
     showGetIt: Boolean,
 ) {

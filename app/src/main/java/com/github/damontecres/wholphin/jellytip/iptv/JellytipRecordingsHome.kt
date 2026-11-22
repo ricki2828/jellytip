@@ -176,7 +176,7 @@ fun JellytipRecordingsRow(
 }
 
 @Composable
-private fun RecordingCard(
+internal fun RecordingCard(
     r: IptvRecording,
     now: Long,
     onClick: () -> Unit,
