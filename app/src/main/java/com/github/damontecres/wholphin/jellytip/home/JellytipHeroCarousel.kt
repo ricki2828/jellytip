@@ -23,8 +23,8 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 /*
  * The top of Home is a rotating hero carousel again (Ricki 22-Nov: "it should just rotate and be part of the group ... use
  * arrows to rotate through the hero carousel"; replaces the 1-Nov focus-only hero for the top of Home). While focus is on
- * the top row or the hero's buttons the hero shows the current slide: his live game first (his starred teams / followed
- * leagues only, LiveHero.homePicks), then a featured mix of what Home already loaded (new releases, just added, the day's
+ * the top row or the hero's buttons the hero shows the current slide: his top live game first, one at most (his starred
+ * teams / followed leagues only, LiveHero.homePicks), then a featured mix of what Home already loaded (new releases, just added, the day's
  * specials; never Continue Watching / Next Up). A slide lasts [JellytipHeroCarousel.SLIDE_MS]; Left on the first hero
  * button / Right on the last steps. Lower rows: the hero follows the focused tile, as since 1-Nov.
  */
@@ -63,11 +63,14 @@ object JellytipHeroCarousel {
     const val PER_SOURCE = 4
     const val MAX_SLIDES = 14
 
-    /** The live games first (already ranked and filtered to his teams / leagues), then the mix. */
+    /**
+     * At most ONE live game (his top pick: already ranked and filtered to his teams / leagues) as slide 1, then the mix
+     * (Ricki 22-Nov: a mix of all sorts, not a games carousel).
+     */
     fun slides(
         matches: List<FxItem>,
         mix: List<HeroSlide.Title>,
-    ): List<HeroSlide> = matches.distinctBy { it.fid }.map { HeroSlide.Match(it) } + mix
+    ): List<HeroSlide> = listOfNotNull(matches.firstOrNull()?.let { HeroSlide.Match(it) }) + mix
 
     /** The next / previous slide, wrapping. */
     fun step(

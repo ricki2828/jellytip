@@ -6,6 +6,14 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,7 +67,8 @@ import org.robolectric.annotation.GraphicsMode
  * Home hero carousel (Ricki 22-Nov): his live game as a slide of the normal hero (full-bleed art + team colours, text
  * bottom left, the hero's own button row with the "1 / 3" pager), and the arrows stepping through the slides with the
  * real button row: Right on the last button = next (wraps at the end), Left on the first button of the first slide is
- * not taken. Synthetic art. The film slides need the Hilt hero, so the rotation uses three game slides.
+ * not taken. Synthetic art. One game slide at most, then the mix; the film slides are stand-ins (the real one is the
+ * Hilt film hero) with the same button row.
  */
 @OptIn(ExperimentalCoilApi::class, ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -121,12 +130,38 @@ class HeroCarouselShotsTest {
         badge = badge,
     )
 
-    private val slides =
-        listOf(
-            fx("1", "New Zealand", "England", "#000000", "#ffffff", "https://h/v1/iptv/img/art/1.sig"),
-            fx("2", "Crusaders", "Blues", "#c8102e", "#0b2265", "https://h/v1/iptv/img/art/2.sig", "https://h/badge/9", league = "Super Rugby"),
-            fx("3", "Gold Coast", "Storm", "#ffd100", "#632390", null, league = "NRL"),
-        )
+    private val game = fx("2", "Crusaders", "Blues", "#c8102e", "#0b2265", "https://h/v1/iptv/img/art/2.sig", "https://h/badge/9", league = "Super Rugby")
+    private val noArtGame = fx("3", "Gold Coast", "Storm", "#ffd100", "#632390", null, league = "NRL")
+
+    /** A film slide (stand-in: the real one is the Hilt film hero): its still, kicker and title, Play / More info. */
+    private data class Film(
+        val title: String,
+        val kicker: String,
+        val top: Int,
+        val bottom: Int,
+    )
+
+    /** As Home builds them: at most one live game first, then the mix of films / shows from Home's rows. */
+    private val slides: List<Any> = listOf(game, Film("Akira", "New release", 0xFF7A2E8C.toInt(), 0xFFE0703A.toInt()), Film("Dune: Part Two", "Just added", 0xFFC9A36B.toInt(), 0xFF3B2A1A.toInt()))
+
+    @Composable
+    private fun FilmStandIn(film: Film) {
+        val still =
+            remember(film) {
+                val b = Bitmap.createBitmap(960, 540, Bitmap.Config.ARGB_8888)
+                val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                p.shader = LinearGradient(0f, 0f, 960f, 540f, film.top, film.bottom, Shader.TileMode.CLAMP)
+                Canvas(b).drawRect(0f, 0f, 960f, 540f, p)
+                b.asImageBitmap()
+            }
+        Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION)) {
+            Image(still, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Column(Modifier.padding(start = 56.dp, top = 190.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(film.kicker.uppercase(), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+            Text(film.title, color = Color.White, fontSize = 30.sp)
+        }
+    }
 
     @Composable
     private fun Tv(content: @Composable () -> Unit) {
@@ -141,17 +176,22 @@ class HeroCarouselShotsTest {
     private fun Carousel(
         start: Int,
         first: FocusRequester,
+        gameSlide: FxItem = game,
         onIndex: (Int) -> Unit,
     ) {
         var index by remember { mutableIntStateOf(start) }
         onIndex(index)
-        val f = slides[index]
+        val slide = slides[index]
         Box(Modifier.fillMaxSize().background(JellytipPalette.Night)) {
-            HeroMatchBackdrop(f, motion = false, modifier = Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION))
+            if (slide is Film) {
+                FilmStandIn(slide)
+            } else {
+                HeroMatchBackdrop(gameSlide, motion = false, modifier = Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION))
+            }
             Box(Modifier.padding(start = 48.dp)) {
-                HeroMatchHeader(f, now)
+                if (slide !is Film) HeroMatchHeader(gameSlide, now)
                 JellytipHeroActionButtons(
-                    buttons = listOf("▶  Watch" to {}, "From kick-off" to {}, "More" to {}),
+                    buttons = if (slide is Film) listOf("▶  Play" to {}, "More info" to {}) else listOf("▶  Watch" to {}, "From kick-off" to {}, "More" to {}),
                     soundOn = false,
                     firstRequester = first,
                     onEdge = { right ->
@@ -189,7 +229,7 @@ class HeroCarouselShotsTest {
     @Test
     fun sportSlideWithoutArt() {
         val first = FocusRequester()
-        compose.setContent { Tv { Carousel(2, first) {} } }
+        compose.setContent { Tv { Carousel(0, first, gameSlide = noArtGame) {} } }
         settle()
         compose.onRoot().captureRoboImage(out("hero-sport-slide-noart"))
     }
@@ -256,10 +296,11 @@ class HeroCarouselShotsTest {
         press(Key.DirectionRight)
         assertEquals(0, index)
         compose.onRoot().captureRoboImage(out("hero-carousel-arrow-wrap"))
-        // On slide 2, back along the row to Watch (the buttons' own Left), then Left on Watch = the previous slide
+        // On slide 2 (a film: Play / More info / Sound), back along the row to Play (the buttons' own Left), then Left on
+        // Play = the previous slide
         press(Key.DirectionRight)
         assertEquals(1, index)
-        repeat(3) { press(Key.DirectionLeft) }
+        repeat(2) { press(Key.DirectionLeft) }
         assertEquals(1, index)
         press(Key.DirectionLeft)
         assertEquals(0, index)

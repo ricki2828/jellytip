@@ -25,9 +25,10 @@ class HeroCarouselTest {
         )
 
     @Test
-    fun liveGamesLeadTheSlides() {
-        val s = JellytipHeroCarousel.slides(listOf(fx("a"), fx("b"), fx("a")), emptyList())
-        assertEquals(listOf("m:a", "m:b"), s.map { it.key })
+    fun oneLiveGameAtMostLeadsTheSlides() {
+        // Five live games of his: only the top pick is a slide (no games carousel inside the hero)
+        val s = JellytipHeroCarousel.slides(listOf(fx("a"), fx("b"), fx("c"), fx("d"), fx("e")), emptyList())
+        assertEquals(listOf("m:a"), s.map { it.key })
         assertTrue(JellytipHeroCarousel.slides(emptyList(), emptyList()).isEmpty())
     }
 
@@ -53,13 +54,13 @@ class HeroCarouselTest {
 
     @Test
     fun aRebuildKeepsTheSlideOnScreen() {
-        val before = JellytipHeroCarousel.slides(listOf(fx("a"), fx("b")), emptyList())
-        // Game a ended: b moves from 1 to 0 and stays on screen
-        val after = JellytipHeroCarousel.slides(listOf(fx("b")), emptyList())
-        assertEquals(0, JellytipHeroCarousel.keep(after, before[1].key, 1))
-        // A new game arrives first: b moves to 1
-        val more = JellytipHeroCarousel.slides(listOf(fx("c"), fx("b")), emptyList())
-        assertEquals(1, JellytipHeroCarousel.keep(more, "m:b", 0))
+        val g = HeroSlide.Match(fx("b"))
+        val x = HeroSlide.Match(fx("x"))
+        val y = HeroSlide.Match(fx("y"))
+        // The slide on screen moved (a game slide came or went in front of it): it keeps its place by key
+        assertEquals(0, JellytipHeroCarousel.keep(listOf(g, y), "m:b", 1))
+        assertEquals(2, JellytipHeroCarousel.keep(listOf(x, y, g), "m:b", 0))
+        val after = listOf<HeroSlide>(g)
         // The slide on screen is gone: same place, clamped
         assertEquals(0, JellytipHeroCarousel.keep(after, "m:zzz", 5))
         assertEquals(0, JellytipHeroCarousel.keep(emptyList(), "m:b", 3))
