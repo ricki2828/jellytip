@@ -365,6 +365,8 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
     Filters: flags.length ? flags.join(",") : undefined,
     OfficialRatings: kids ? kids.data.ratings.join("|") : undefined,
     PersonIds: of(chips, "person").length ? of(chips, "person").map((c) => c.data.id).join(",") : undefined,
+    // "directed by X" means as director (PersonIds alone matches any role)
+    PersonTypes: of(chips, "person").length ? [...new Set(of(chips, "person").map((c) => c.data.role))].join(",") : undefined,
     MinCommunityRating: minRating > 0 ? minRating : undefined,
   };
 }

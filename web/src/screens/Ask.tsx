@@ -204,7 +204,16 @@ export function Ask() {
             <div className="chips ask-refine" aria-label="Narrow it down">
               <span className="ask-refine-label">Narrow it down</span>
               {refine.map((c) => (
-                <button key={c.id} className="chip" data-nav onClick={() => setAdded((a) => [...a, c])}>
+                <button
+                  key={c.id}
+                  className="chip"
+                  data-nav
+                  onClick={() => {
+                    // Something he removed earlier comes back as asked, not as a no-op
+                    setRemoved((r) => r.filter((id) => id !== c.id));
+                    setAdded((a) => [...a, c]);
+                  }}
+                >
                   + {c.label}
                 </button>
               ))}

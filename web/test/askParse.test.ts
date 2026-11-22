@@ -360,6 +360,8 @@ test("refine chips: people shared by picks, genres to keep / leave out, decades,
 test("a person chip asks Jellyfin for that person; refine asks for genres", () => {
   const chips = chipsFromData([{ t: "person", id: "d1", name: "Chris Columbus", role: "Director" }]);
   assert.equal(buildQuery(chips).PersonIds, "d1");
+  assert.equal(buildQuery(chips).PersonTypes, "Director");
+  assert.equal(buildQuery(chipsFromData([{ t: "person", id: "d1", name: "C", role: "Director" }, { t: "person", id: "a1", name: "R", role: "Actor" }])).PersonTypes, "Director,Actor");
   assert.equal(buildQuery(parseAsk("funny", NOW).chips, { refine: true }).Fields, "PrimaryImageAspectRatio,Genres");
   assert.equal(buildQuery(parseAsk("funny", NOW).chips).Fields, "PrimaryImageAspectRatio");
   assert.deepEqual(refineOptions([], [], chips), []);
