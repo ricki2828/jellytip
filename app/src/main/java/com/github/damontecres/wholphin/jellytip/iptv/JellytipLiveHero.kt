@@ -264,10 +264,11 @@ fun LiveMatchHero(
                 tracking = 0.06f,
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Cond(f.home, 44.sp, Broadcast.Text)
+                // Long names give way (ellipsis) instead of squeezing "v" and the away side (design audit O1)
+                Cond(f.home, 44.sp, Broadcast.Text, modifier = Modifier.weight(1f, fill = false))
                 if (f.away.isNotBlank()) {
                     Cond("v", 44.sp, Broadcast.Gold)
-                    Cond(f.away, 44.sp, Broadcast.Text)
+                    Cond(f.away, 44.sp, Broadcast.Text, modifier = Modifier.weight(1f, fill = false))
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
