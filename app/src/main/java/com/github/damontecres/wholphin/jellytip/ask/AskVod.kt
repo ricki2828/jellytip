@@ -2,7 +2,7 @@ package com.github.damontecres.wholphin.jellytip.ask
 
 /*
  * Ask over IPTV films and series (GET v1/iptv/vod, live 22-Nov with t5q's certifications / minRuntime / maxRuntime): port
- * of web/src/lib/askVod.ts (jellytip-web-askvod 7d8ca9e7), held to resources/jellytip/askvod-vectors.json. The same chips as
+ * of web/src/lib/askVod.ts (jellytip-web-askvod 682f026b), held to resources/jellytip/askvod-vectors.json. The same chips as
  * the library query become one IPTV query per kind plus a client-side check for what the route can't filter (genres:
  * items carry TMDB genre ids; exact years; played). Pure; the screen wiring comes with Fable's source-neutral tiles.
  */
@@ -32,6 +32,13 @@ object AskVod {
             "kids" to 10762, "news" to 10763, "reality" to 10764, "sci-fi & fantasy" to 10765, "soap" to 10766, "talk" to 10767,
             "war & politics" to 10768,
         )
+
+    /** TMDB's movie genre ids and TV genre ids differ (TV has no Horror / Thriller; Kids, Sci-Fi & Fantasy are TV-only). */
+    val MOVIE_GENRE_IDS = setOf(28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 10770, 53, 10752, 37)
+    val TV_GENRE_IDS = setOf(10759, 16, 35, 80, 99, 18, 10751, 10762, 9648, 10763, 10764, 10765, 10766, 10767, 10768, 37)
+
+    /** The route takes at most this many ids per genre param (else 400). */
+    const val MAX_GENRE_IDS = 30
 
     /** How many IPTV titles one ask fetches per kind (the route's own maximum). */
     const val VOD_LIMIT = 200
@@ -73,7 +80,35 @@ object AskVod {
         if (minRating > 0) p["minRating"] = AskParse.num(minRating)
         val years = chips.of<ChipData.Years>()
         if (years.isNotEmpty()) p["year"] = "${years.minOf { it.from }}-${years.maxOf { it.to }}"
-        return list.map { kind -> VodQuery(kind, linkedMapOf("kind" to kind) + p) }
+        // Genres on the route (vodgenre, live 22-Nov; any-of, ids of THAT kind): one mood chip = its genres; no mood but kids =
+        // the kids genres; several moods = none on the route (the device checks). Left-out genres: excludeGenreIds. A kind
+        // that has none of the one mood's genres can't match it: no query for that kind.
+        val moods = chips.of<ChipData.Genre>()
+        val want =
+            when {
+                moods.size == 1 -> moods[0].genres
+                moods.isEmpty() && chips.of<ChipData.Kids>().isNotEmpty() -> AskParse.kidsGenres(chips)
+                else -> emptyList()
+            }
+        val out = chips.of<ChipData.NotGenre>().flatMap { it.genres }
+
+        fun forKind(
+            genres: List<String>,
+            kind: String,
+        ) = ids(genres).filter { it in (if (kind == "movie") MOVIE_GENRE_IDS else TV_GENRE_IDS) }.take(MAX_GENRE_IDS)
+        return list.mapNotNull { kind ->
+            val q = LinkedHashMap<String, String>()
+            q["kind"] = kind
+            q.putAll(p)
+            if (want.isNotEmpty()) {
+                val g = forKind(want, kind)
+                if (g.isEmpty()) return@mapNotNull null
+                q["genreIds"] = g.joinToString(",")
+            }
+            val x = forKind(out, kind)
+            if (x.isNotEmpty()) q["excludeGenreIds"] = x.joinToString(",")
+            VodQuery(kind, q)
+        }
     }
 
     /** The client-side check over the IPTV page (web vodKeep). */
