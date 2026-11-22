@@ -292,8 +292,9 @@ object Journeys {
                     title = vod.title.ifEmpty { p.title },
                     year = vod.year ?: p.year,
                     playable = true,
-                    watched = vod.played,
-                    inProgress = !vod.played && vod.progress?.resumable == true,
+                    // The IPTV tiles' rule: its own flag or its progress says played
+                    watched = vod.played || vod.progress?.played == true,
+                    inProgress = !(vod.played || vod.progress?.played == true) && vod.progress?.resumable == true,
                     type = "Movie",
                     vod = vod,
                 )
@@ -387,6 +388,12 @@ class JourneyCache(
     }
 
     fun clear() = synchronized(m) { m.clear() }
+
+    /** Forget one journey (its IPTV parts carry watched / progress state, which the cache would keep for [TTL_MS]). */
+    fun drop(
+        user: String,
+        key: String,
+    ) = synchronized(m) { m.remove("$user|$key") }
 
     companion object {
         const val TTL_MS = 10 * 60_000L

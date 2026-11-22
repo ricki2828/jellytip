@@ -47,6 +47,9 @@ class JourneysTest {
         assertTrue(e[1].inProgress)
         // Next up: the IPTV film (the first unwatched playable one)
         assertEquals("Aliens", Journeys.nextUp(e)?.first?.title)
+        // Finished through progress counts as watched (the IPTV tiles' rule)
+        val done = Journeys.buildEntries(d.copy(parts = listOf(d.parts[1].copy(vod = vod("v:aliens", "Aliens", 1986, progress = IptvProgress(7900.0, 8000.0, true))))), emptyList())
+        assertTrue(done.single().watched)
         // A library copy that turned up wins over the IPTV one
         val withLib = Journeys.buildEntries(d.copy(parts = d.parts.mapIndexed { i, p -> if (i == 1) p.copy(itemId = "b") else p }), listOf(JourneyItem("b")))
         assertNull(withLib[1].vod)

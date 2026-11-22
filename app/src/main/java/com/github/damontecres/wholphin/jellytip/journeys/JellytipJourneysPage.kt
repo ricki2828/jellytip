@@ -105,6 +105,9 @@ class JellytipJourneysViewModel
         private var entriesJob: Job? = null
         private var journeyId: String? = null
 
+        /** An IPTV film was opened from the path: on return the journey is rebuilt (IPTV watched state rides in it). */
+        private var iptvOpened = false
+
         fun loadGroups() {
             if (groupsJob?.isActive == true) return
             _state.update { it.copy(retrying = it.groupsFailed) }
@@ -135,10 +138,22 @@ class JellytipJourneysViewModel
 
         /** Fresh watched state (on open, and on every resume: the page sits under the player). */
         fun refreshEntries(again: Boolean = false) {
-            val def = (_state.value.result as? JourneyResult.Ok)?.def ?: return
+            var def = (_state.value.result as? JourneyResult.Ok)?.def ?: return
+            val rebuild = iptvOpened
+            iptvOpened = false
             entriesJob?.cancel()
             entriesJob =
                 viewModelScope.launch {
+                    // Back from an IPTV film: its watched / progress state lives in the journey itself, so build it again
+                    if (rebuild) {
+                        journeyId?.let { id ->
+                            service.forget(id)
+                            (service.result(id) as? JourneyResult.Ok)?.let { ok ->
+                                _state.update { it.copy(result = ok) }
+                                def = ok.def
+                            }
+                        }
+                    }
                     // The list (or the Failed line with its focused Retry) stays on screen while this runs
                     fetchEntries(def)
                     // Back from the player: its "stopped" report is sent without waiting, so ask once more a little later
@@ -184,6 +199,7 @@ class JellytipJourneysViewModel
             // On IPTV only: its details page (its own Play / Resume there; an IPTV title the library has opens the library page)
             entry.vod?.let {
                 lastFilm = entry.n
+                iptvOpened = true
                 navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film")
                 return
             }
@@ -196,6 +212,7 @@ class JellytipJourneysViewModel
         fun details(entry: JourneyEntry) {
             entry.vod?.let {
                 lastFilm = entry.n
+                iptvOpened = true
                 navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film OK")
                 return
             }

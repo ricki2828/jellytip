@@ -114,6 +114,9 @@ class JellytipJourneysService
 
         suspend fun result(id: String): JourneyResult = cache.get(user()?.toString().orEmpty(), id) { Journeys.build(id, deps) }
 
+        /** Next [result] for [id] is built fresh (an IPTV film of it was opened: its watched state moves). */
+        fun forget(id: String) = cache.drop(user()?.toString().orEmpty(), id)
+
         /** The path with fresh watched state: one Items call by Ids (no type filter: whatever the library holds the film as). */
         suspend fun entries(def: JourneyDef): List<JourneyEntry> {
             val ids = def.parts.mapNotNull { it.itemId }.distinct()
