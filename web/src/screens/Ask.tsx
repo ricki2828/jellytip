@@ -1,18 +1,24 @@
 // #/ask: plain-language discovery. "something funny under 90 minutes" → removable chips → up to 24 library picks.
-// Deterministic (lib/askParse.ts), no LLM. Library only: IPTV and requests are not searched here.
+// Deterministic (lib/askParse.ts), no LLM. Library only: IPTV and requests are not searched here. "Narrow it down" offers
+// refine chips drawn from what was found (people, genres to keep / leave out, decades, kind, length, unwatched).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getItems, uid, type Item } from "../api/jellyfin";
-import { activeChips, appliedNotes, buildQuery, EXAMPLES, parseAsk, pickFrom, removeChip, type Picks } from "../lib/askParse";
+import { activeChips, appliedNotes, buildQuery, EXAMPLES, filterItems, parseAsk, pickFrom, refineOptions, removeChip, type Chip, type Picks } from "../lib/askParse";
 import { Card } from "../components/Card";
 import "./Ask.css";
 
-type State = { kind: "idle" } | { kind: "loading" } | { kind: "error" } | { kind: "done"; picks: Picks };
+// kept = the fetched titles that pass every check (what the refine chips are drawn from)
+type State = { kind: "idle" } | { kind: "loading" } | { kind: "error" } | { kind: "done"; picks: Picks; kept: Item[] };
 
 export function Ask() {
   const userId = uid();
   const [text, setText] = useState("");
   const [asked, setAsked] = useState("");
   const [removed, setRemoved] = useState<string[]>([]);
+  // Refine chips he tapped (added after the reading; removable like the others)
+  const [added, setAdded] = useState<Chip[]>([]);
+  // The shown picks with their people (a second, small request): the director / actor refine chips
+  const [withPeople, setWithPeople] = useState<{ key: string; items: Item[] } | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [state, setState] = useState<State>({ kind: "idle" });
@@ -21,7 +27,10 @@ export function Ask() {
   const refocus = useRef<number | null>(null);
 
   const reading = useMemo(() => parseAsk(asked), [asked]);
-  const chips = useMemo(() => activeChips(reading, removed), [reading, removed]);
+  const chips = useMemo(() => {
+    const read = activeChips(reading, removed);
+    return [...read, ...added.filter((c) => !removed.includes(c.id) && !read.some((r) => r.id === c.id))];
+  }, [reading, removed, added]);
   const chipKey = chips.map((c) => c.id).join("|");
 
   useEffect(() => {
@@ -31,8 +40,20 @@ export function Ask() {
     }
     let alive = true;
     setState({ kind: "loading" });
-    getItems(buildQuery(chips, { shuffle }))
-      .then((r) => alive && setState({ kind: "done", picks: pickFrom(r.Items as Item[], r.TotalRecordCount, chips, shuffle) }))
+    getItems(buildQuery(chips, { shuffle, refine: true }))
+      .then((r) => {
+        if (!alive) return;
+        const items = r.Items as Item[];
+        const picks = pickFrom(items, r.TotalRecordCount, chips, shuffle);
+        setState({ kind: "done", picks, kept: filterItems(items, chips) });
+        // People only for the shown picks; a failure just means no people chips
+        const ids = picks.items.map((it) => it.Id);
+        if (ids.length > 1) {
+          getItems({ Ids: ids.join(","), Fields: "People", Limit: ids.length })
+            .then((pr) => alive && setWithPeople({ key: ids.join("|"), items: pr.Items as Item[] }))
+            .catch(() => {});
+        }
+      })
       .catch(() => alive && setState({ kind: "error" }));
     return () => {
       alive = false;
@@ -54,10 +75,17 @@ export function Ask() {
     setText(v);
     setAsked(q);
     setRemoved([]);
+    setAdded([]);
+    setWithPeople(null);
     setShuffle(false);
     setNonce((n) => n + 1);
   };
   const notes = [...reading.notes, ...appliedNotes(chips)];
+  const refine = useMemo(() => {
+    if (state.kind !== "done") return [];
+    const people = withPeople?.key === state.picks.items.map((it) => it.Id).join("|") ? withPeople.items : [];
+    return refineOptions(state.kept, people, chips);
+  }, [state, withPeople, chips]);
   const hasAsk = asked.length > 0;
 
   return (
@@ -103,7 +131,7 @@ export function Ask() {
 
       {hasAsk && (
         <section aria-live="polite">
-          {reading.chips.length > 0 ? (
+          {chips.length > 0 || reading.chips.length > 0 ? (
             <div className="chips ask-chips" ref={chipBox} aria-label="How this was read">
               {chips.map((c, i) => (
                 <button
@@ -172,6 +200,25 @@ export function Ask() {
               Shuffle
             </button>
           </div>
+          {refine.length > 0 && (
+            <div className="chips ask-refine" aria-label="Narrow it down">
+              <span className="ask-refine-label">Narrow it down</span>
+              {refine.map((c) => (
+                <button
+                  key={c.id}
+                  className="chip"
+                  data-nav
+                  onClick={() => {
+                    // Something he removed earlier comes back as asked, not as a no-op
+                    setRemoved((r) => r.filter((id) => id !== c.id));
+                    setAdded((a) => [...a, c]);
+                  }}
+                >
+                  + {c.label}
+                </button>
+              ))}
+            </div>
+          )}
           {state.kind === "loading" ? (
             <div className="grid ask-grid" aria-busy="true">
               {Array.from({ length: 8 }, (_, i) => (

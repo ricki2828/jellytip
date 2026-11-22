@@ -14,7 +14,9 @@ export type ChipData =
   | { t: "minRating"; value: number }
   | { t: "maxSeasons"; n: number }
   /** "not scary", "non-animated": titles in any of these genres are left out (checked client-side over the fetched page). */
-  | { t: "notGenre"; genres: string[] };
+  | { t: "notGenre"; genres: string[] }
+  /** A director or actor (refine chips): Jellyfin PersonIds. */
+  | { t: "person"; id: string; name: string; role: "Director" | "Actor" };
 
 export interface Chip {
   /** Stable for a given reading, so a removed chip stays removed while the text is unchanged. */
@@ -76,11 +78,31 @@ const INVERTIBLE = new Set(["Horror", "Animation", "Comedy", "Thriller", "Romanc
 
 const lc = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
 
-/** The mood label for a genre list (same genres as a mood = that mood's label, so ids match the parser's), else the first genre. */
-function moodLabel(genres: string[]): string {
-  const want = [...lc(genres)].sort().join("|");
-  const m = MOODS.find(([, g]) => [...lc(g)].sort().join("|") === want);
-  return m ? m[2] : genres[0];
+/** Case-insensitive order, ordinal on the lower-cased strings (the same in the TV port and the server's Python port). */
+const ciSort = (xs: string[]) => [...xs].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0));
+
+/**
+ * The label for a genre list (chip contract v1, C3; ~/ai/plans/jellytip-chat-search.md 3a), so ids never collide:
+ *  1. the genres are one mood's set (any case): that mood's label ("Comedy", "Sci-fi");
+ *  2. else they are exactly the union of 2+ moods' sets: those moods (each mood whose set is inside the genres, in MOODS
+ *     order, kept when it adds a genre not yet covered), labels sorted and joined " or " ("Adventure or Comedy");
+ *  3. else the genres themselves, sorted and joined " or " (a single refine genre stays as it is: "Adventure").
+ */
+export function moodLabel(genres: string[]): string {
+  const set = lc(genres);
+  const key = (xs: Iterable<string>) => [...xs].sort().join("|");
+  const exact = MOODS.find(([, g]) => key(lc(g)) === key(set));
+  if (exact) return exact[2];
+  const covered = new Set<string>();
+  const kept: string[] = [];
+  for (const [, g, label] of MOODS) {
+    const gs = [...lc(g)];
+    if (!gs.every((x) => set.has(x)) || gs.every((x) => covered.has(x))) continue;
+    gs.forEach((x) => covered.add(x));
+    kept.push(label);
+  }
+  if (kept.length >= 2 && covered.size === set.size) return ciSort(kept).join(" or ");
+  return ciSort([...new Map(genres.map((g) => [g.toLowerCase(), g])).values()]).join(" or ");
 }
 
 /**
@@ -111,11 +133,16 @@ export function chipFor(d: ChipData): Chip {
       return { id: `minrating:${d.value}`, label: `rated ${d.value}+`, data: d };
     case "maxSeasons":
       return { id: `maxseasons:${d.n}`, label: d.n === 1 ? "1 season" : `up to ${d.n} seasons`, data: d };
+    case "person":
+      return { id: `person:${d.id}`, label: d.role === "Director" ? `directed by ${d.name}` : `with ${d.name}`, data: d };
   }
 }
 
 /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
 export const chipsFromData = (list: ChipData[]): Chip[] => list.map(chipFor).filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
+
+/** The mood table (label + genres, in order) for the chip contract's golden file and the server's port. */
+export const MOOD_TABLE = MOODS.map(([, genres, label]) => ({ label, genres }));
 
 const DECADE_WORDS: Record<string, number> = {
   twenties: 1920, thirties: 1930, forties: 1940, fifties: 1950, sixties: 1960, seventies: 1970, eighties: 1980, nineties: 1990,
@@ -330,7 +357,7 @@ export function kidsGenres(chips: Chip[]): string[] {
 }
 
 /** Jellyfin Items params for the chips. Runtime, season counts and "each mood matches" are checked client-side (see pickFrom). */
-export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: number } = {}): Params {
+export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: number; refine?: boolean } = {}): Params {
   const kinds = of(chips, "kind").map((c) => c.data.kind);
   const genres = new Set<string>();
   for (const c of of(chips, "genre")) c.data.genres.forEach((g) => genres.add(g));
@@ -354,11 +381,15 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
     Limit: opts.limit ?? fetchLimit(chips),
     StartIndex: 0,
     // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 || out.size ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
+    // Genres also for the refine chips (opts.refine: the screen offers ways to narrow what was found)
+    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 || out.size || opts.refine ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
     Genres: genres.size ? [...genres].join("|") : undefined,
     Years: yearSet.size ? [...yearSet].sort((a, b) => a - b).join(",") : undefined,
     Filters: flags.length ? flags.join(",") : undefined,
     OfficialRatings: kids ? kids.data.ratings.join("|") : undefined,
+    PersonIds: of(chips, "person").length ? of(chips, "person").map((c) => c.data.id).join(",") : undefined,
+    // "directed by X" means as director (PersonIds alone matches any role)
+    PersonTypes: of(chips, "person").length ? [...new Set(of(chips, "person").map((c) => c.data.role))].join(",") : undefined,
     MinCommunityRating: minRating > 0 ? minRating : undefined,
   };
 }
@@ -441,4 +472,81 @@ export function appliedNotes(chips: Chip[]): string[] {
   if (of(chips, "genre").length > 1) notes.push("Several moods: a title must match each one (any of that mood's genres).");
   if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");
   return notes;
+}
+
+// ---------- refine chips ----------
+
+/** Most suggestions offered under the results at once. */
+export const REFINE_MAX = 8;
+/** A suggestion needs at least this many of the fitting titles behind it (people: this many of the picks). */
+export const REFINE_MIN = 3;
+export const PEOPLE_MIN = 2;
+
+/**
+ * Ways to narrow what was found, from the titles themselves (the fetched page after the client checks, and the people of
+ * the shown picks): directors / actors shared by several picks, the commonest genres to keep or leave out, decades,
+ * movies vs shows, "under 2 h", unwatched. Never one already applied, nothing that would match none or all of them. Pure;
+ * the chips come from chipFor, so a tapped suggestion is the same filter the parser (or an LLM) would make.
+ */
+export function refineOptions(kept: Item[], picks: Item[], chips: Chip[]): Chip[] {
+  const have = new Set(chips.map((c) => c.id));
+  const n = kept.length;
+  const out: Chip[] = [];
+  const offer = (d: ChipData) => {
+    const c = chipFor(d);
+    if (!have.has(c.id) && !out.some((x) => x.id === c.id)) out.push(c);
+  };
+  // Useful only when it splits the titles: some have it, not all
+  const splits = (count: number) => count >= REFINE_MIN && count < n;
+
+  // People shared by several of the picks (directors first)
+  const people = new Map<string, { name: string; role: "Director" | "Actor"; count: number; first: number }>();
+  picks.forEach((it, i) => {
+    const seen = new Set<string>();
+    for (const p of it.People ?? []) {
+      if (!p.Id || !p.Name || (p.Type !== "Director" && p.Type !== "Actor") || seen.has(p.Id)) continue;
+      seen.add(p.Id);
+      const cur = people.get(p.Id) ?? { name: p.Name, role: p.Type, count: 0, first: i };
+      if (p.Type === "Director") cur.role = "Director";
+      cur.count++;
+      people.set(p.Id, cur);
+    }
+  });
+  [...people.entries()]
+    .filter(([, p]) => p.count >= PEOPLE_MIN && p.count < picks.length)
+    .sort(([, a], [, b]) => (a.role === b.role ? 0 : a.role === "Director" ? -1 : 1) || b.count - a.count || a.first - b.first)
+    .slice(0, 3)
+    .forEach(([id, p]) => offer({ t: "person", id, name: p.name, role: p.role }));
+
+  // Genres: the commonest to keep, and to leave out
+  const left = excludedGenres(chips);
+  const counts = new Map<string, number>();
+  for (const it of kept) for (const g of new Set(it.Genres ?? [])) counts.set(g, (counts.get(g) ?? 0) + 1);
+  const ranked = [...counts.entries()].filter(([g, c]) => !left.has(g.toLowerCase()) && splits(c)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  ranked.slice(0, 3).forEach(([g]) => offer({ t: "genre", genres: [g] }));
+  ranked.slice(0, 2).forEach(([g]) => offer({ t: "notGenre", genres: [g] }));
+
+  // Decades
+  if (!of(chips, "years").length) {
+    const dec = new Map<number, number>();
+    for (const it of kept) if (it.ProductionYear) dec.set(Math.floor(it.ProductionYear / 10) * 10, (dec.get(Math.floor(it.ProductionYear / 10) * 10) ?? 0) + 1);
+    [...dec.entries()].filter(([, c]) => splits(c)).sort((a, b) => b[1] - a[1] || b[0] - a[0]).slice(0, 2).forEach(([d]) => offer({ t: "years", from: d, to: d + 9 }));
+  }
+  // Movies vs shows
+  if (!of(chips, "kind").length && !of(chips, "maxSeasons").length) {
+    const movies = kept.filter((it) => it.Type === "Movie").length;
+    if (splits(movies)) offer({ t: "kind", kind: "Movie" });
+    if (splits(kept.filter((it) => it.Type === "Series").length)) offer({ t: "kind", kind: "Series" });
+  }
+  // Length
+  if (!of(chips, "maxRuntime").length && !of(chips, "minRuntime").length) {
+    const short = kept.filter((it) => (runtimeMin(it) ?? Infinity) <= 120).length;
+    if (splits(short)) offer({ t: "maxRuntime", min: 120 });
+  }
+  // Unwatched
+  if (!of(chips, "unplayed").length && !of(chips, "played").length) {
+    const fresh = kept.filter((it) => it.UserData?.Played === false || (it.UserData != null && !it.UserData.Played)).length;
+    if (splits(fresh)) offer({ t: "unplayed" });
+  }
+  return out.slice(0, REFINE_MAX);
 }

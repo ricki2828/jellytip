@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
+import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, moodLabel, MOOD_TABLE, refineOptions, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
+import { readFileSync } from "node:fs";
 
 const NOW = new Date("2026-11-06T00:00:00Z");
 const ids = (q: string) => parseAsk(q, NOW).chips.map((c) => c.id);
@@ -320,4 +321,62 @@ test("disclosure mentions the multi-mood check and unrated exclusion", () => {
   assert.match(pickFrom(page, 900, chips, false).note, /all-moods check is only checked within those/);
   assert.match(appliedNotes(chips).join(" "), /must match each one/);
   assert.match(appliedNotes(chips).join(" "), /without a community rating/);
+});
+
+test("refine chips: people shared by picks, genres to keep / leave out, decades, kind, length, unwatched", () => {
+  const p = (Id: string, Name: string, Type: string) => ({ Id, Name, Type });
+  const kept = [
+    item({ Genres: ["Family", "Adventure"], ProductionYear: 1993, mins: 120, UserData: { Played: false }, People: [p("d1", "Chris Columbus", "Director"), p("a1", "Robin Williams", "Actor")] }),
+    item({ Genres: ["Family", "Adventure"], ProductionYear: 1995, mins: 104, UserData: { Played: false }, People: [p("d1", "Chris Columbus", "Director"), p("a1", "Robin Williams", "Actor")] }),
+    item({ Genres: ["Family", "Comedy"], ProductionYear: 1997, mins: 90, UserData: { Played: true }, People: [p("a1", "Robin Williams", "Actor")] }),
+    item({ Genres: ["Family", "Adventure"], ProductionYear: 2004, mins: 150, UserData: { Played: false } }),
+    item({ Type: "Series", Genres: ["Family", "Comedy"], ProductionYear: 2001, mins: 30, UserData: { Played: false } }),
+    item({ Genres: ["Family", "Comedy"], ProductionYear: 1999, mins: 95, UserData: { Played: false } }),
+  ];
+  const chips = parseAsk("for the kids, nothing scary", NOW).chips;
+  const ids = refineOptions(kept, kept, chips).map((c) => c.id);
+  // People first (a director before actors), only if shared by 2+ picks and not by all
+  assert.equal(ids[0], "person:d1");
+  assert.ok(ids.includes("person:a1"));
+  // Family is on all 6: no use as a filter; Adventure and Comedy split them
+  assert.ok(!ids.includes("genre:Family") && !ids.includes("notgenre:Family"));
+  assert.ok(ids.includes("genre:Adventure") && ids.includes("notgenre:Adventure"));
+  assert.ok(ids.includes("years:1990-1999"));
+  // Five movies of six split them; the cap keeps the first 8 (people, genres, decades, kind): length and unwatched are cut
+  assert.equal(ids.length, 8);
+  assert.equal(ids[7], "kind:Movie");
+  assert.ok(!ids.includes("maxrt:120") && !ids.includes("unplayed"));
+  // Without the people they fit: five of six under 2 h, five of six unwatched
+  const noPeople = refineOptions(kept, [], chips).map((c) => c.id);
+  assert.ok(noPeople.includes("maxrt:120") && noPeople.includes("unplayed"));
+  // One series among movies: below the 3-title floor, no "shows" chip
+  assert.ok(!ids.includes("kind:Series"));
+  // Already applied ("nothing scary") is never offered again; at most REFINE_MAX
+  assert.ok(!ids.includes("notgenre:Horror"));
+  assert.ok(ids.length <= 8);
+  const labels = refineOptions(kept, kept, chips).map((c) => c.label);
+  assert.ok(labels.includes("directed by Chris Columbus") && labels.includes("with Robin Williams"));
+});
+
+test("a person chip asks Jellyfin for that person; refine asks for genres", () => {
+  const chips = chipsFromData([{ t: "person", id: "d1", name: "Chris Columbus", role: "Director" }]);
+  assert.equal(buildQuery(chips).PersonIds, "d1");
+  assert.equal(buildQuery(chips).PersonTypes, "Director");
+  assert.equal(buildQuery(chipsFromData([{ t: "person", id: "d1", name: "C", role: "Director" }, { t: "person", id: "a1", name: "R", role: "Actor" }])).PersonTypes, "Director,Actor");
+  assert.equal(buildQuery(parseAsk("funny", NOW).chips, { refine: true }).Fields, "PrimaryImageAspectRatio,Genres");
+  assert.equal(buildQuery(parseAsk("funny", NOW).chips).Fields, "PrimaryImageAspectRatio");
+  assert.deepEqual(refineOptions([], [], chips), []);
+});
+
+test("chip contract v1 golden file (shared with the TV and the server): chipFor, the mood table, the C3 labels", () => {
+  const g = JSON.parse(readFileSync(new URL("./fixtures/chip-contract-v1.json", import.meta.url), "utf8"));
+  assert.equal(g.v, 1);
+  assert.deepEqual(g.moods, MOOD_TABLE);
+  for (const v of g.variants) assert.deepEqual([chipFor(v.data).id, chipFor(v.data).label], [v.id, v.label], JSON.stringify(v.data));
+  for (const c of g.c3) {
+    assert.equal(moodLabel(c.genres), c.label, JSON.stringify(c.genres));
+    assert.equal(chipFor({ t: "notGenre", genres: c.genres }).label, c.notGenreLabel);
+  }
+  // A merged chip and a later single-genre chip no longer share an id
+  assert.notEqual(chipFor({ t: "genre", genres: ["Adventure", "Action & Adventure", "Comedy"] }).id, chipFor({ t: "genre", genres: ["Adventure"] }).id);
 });
