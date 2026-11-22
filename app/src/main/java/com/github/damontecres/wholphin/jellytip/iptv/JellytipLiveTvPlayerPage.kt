@@ -1468,26 +1468,10 @@ fun JellytipLiveTvPlayerPage(
                 closer = closerGame,
                 allowWinProb = me?.sportSpoilers == true,
                 reveal = { revealClock.reveal(it) },
+                // The delay chip rides on the panel's first row (it shows only with the panel open; never over it)
+                topRow = { DelayChipText(replay = { replayShown }, hold = { holdSecs }, delaySec = { delayShown }) },
             )
         }
-        if (open) {
-            DelayChipText(
-                replay = { replayShown },
-                hold = { holdSecs },
-                delaySec = { delayShown },
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 16.dp),
-            )
-        }
-        // Scorebug (web Companion/Scorebug): the newest released score, 8 s after a change; never in the panel's place.
-        // Its own composable reading lambdas, so the running clock doesn't recompose this page every second.
-        ScorebugSlot(
-            match = panelMatch,
-            bug = { bugData },
-            clock = { bugClock },
-            changedAt = { bugChangedAt },
-            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
-        )
         // Round 3 cards: full time (bottom), catch me up (centre)
         ftCard?.let { (m, next) ->
             FullTimeCard(m, ftScore?.first, ftScore?.second, next, nowSec(), Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp))
@@ -1567,39 +1551,46 @@ fun JellytipLiveTvPlayerPage(
         LaunchedEffect(toast) { if (toast != null) lastToast = toast }
         val shownToast = toast ?: lastToast
         val toastShown by remember { derivedStateOf { toastIn.value > 0f } }
-        if (toastShown && shownToast != null) {
-            Row(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 24.dp, end = 24.dp)
-                        .graphicsLayer {
-                            translationX = (1f - toastIn.value) * (size.width + 24.dp.toPx())
-                            alpha = toastIn.value
-                        }.width(330.dp)
-                        .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
-                        .background(Broadcast.Base.copy(alpha = 0.96f)),
-            ) {
-                Box(Modifier.width(8.dp).fillMaxHeight().background(shownToast.edge))
-                Box(Modifier.width(36.dp).fillMaxHeight().background(Broadcast.Chip), contentAlignment = Alignment.Center) {
-                    androidx.tv.material3.Icon(shownToast.icon, contentDescription = null, tint = shownToast.kickerColor, modifier = Modifier.size(19.dp))
-                }
-                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    shownToast.kicker?.let { Cond(it, 12.sp, shownToast.kickerColor, tracking = 0.08f) }
-                    Text(
-                        shownToast.main.uppercase(java.util.Locale.ROOT),
-                        color = Color.White,
-                        fontFamily = BarlowCondensed,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        lineHeight = 20.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    shownToast.sub?.let { BodyText(it, 12.sp, maxLines = 1) }
-                }
+        // Banner extras (only while the now/next banner shows): the key hint and the fantasy chip
+        val bannerCatchUp = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
+        val hintItems: List<String> =
+            if (!bannerVisible) {
+                emptyList()
+            } else if (bannerCatchUp != null) {
+                listOf("▶  Right: back to live")
+            } else {
+                val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
+                val info = sourceMatch?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
+                listOfNotNull(
+                    if (kick) "◀  From kick-off" else null,
+                    if (panelMatch != null) "→  Companion" else null,
+                    if (current.isLive && chipChannels.size > 1) "▼  Other channels" else null,
+                    if (info) "Hold OK: match info" else null,
+                )
             }
-        }
+        // Fantasy chip "🏈 CCP 87.4 – 79.2" (the league with starters in this game, else the first)
+        val fantasyText =
+            if (!bannerVisible || nflMatch == null) null else JellytipFantasy.leagueFor(fantasyShown.takeUnless { replayShown }, nflMatch?.id)?.let { l -> "🏈  ${l.short} ${l.scoreLine}" }
+        PlayerCornerOverlays(
+            // Shown on the panel's first row instead (JellytipLivePanel topRow)
+            delayChip = null,
+            // Scorebug (web Companion/Scorebug): the newest released score, 8 s after a change; never in the panel's place.
+            // Its own composable reading lambdas, so the running clock doesn't recompose this page every second.
+            scorebug = {
+                ScorebugSlot(
+                    match = panelMatch,
+                    bug = { bugData },
+                    clock = { bugClock },
+                    changedAt = { bugChangedAt },
+                    allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
+                )
+            },
+            toast = shownToast?.takeIf { toastShown },
+            toastProgress = { toastIn.value },
+            fantasy = fantasyText,
+            hint = hintItems,
+            trackMessage = trackMessage.takeIf { bannerVisible },
+        )
         matchModal?.let { m ->
             JellytipMatchModal(
                 m,
@@ -1689,65 +1680,11 @@ fun JellytipLiveTvPlayerPage(
             val cu = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
             val shown = if (cu != null) IptvNowNext(IptvProg(cu.start!!, cu.stop!!, cu.label, null, true), null) else nowNext
             NowNextBanner(channel, shown, now, Modifier.align(Alignment.BottomStart), catchUp = cu != null)
-            val hint =
-                when {
-                    cu != null -> "▶  Right: back to live"
-                    else -> {
-                        val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
-                        val info = sourceMatch?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
-                        listOfNotNull(
-                            if (kick) "◀  From kick-off" else null,
-                            if (panelMatch != null) "→  Companion" else null,
-                            if (current.isLive && chipChannels.size > 1) "▼  Other channels" else null,
-                            if (info) "Hold OK: match info" else null,
-                        ).joinToString("   ·   ").ifEmpty { null }
-                    }
-                }
-            // Fantasy chip "🏈 CCP 87.4 – 79.2" (the league with starters in this game, else the first)
-            JellytipFantasy.leagueFor(fantasyShown.takeUnless { replayShown }, nflMatch?.id)?.takeIf { nflMatch != null }?.let { l ->
-                Text(
-                    "🏈  ${l.short} ${l.scoreLine}",
-                    color = Color.White,
-                    fontFamily = JellytipFontFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopStart)
-                            .padding(top = 32.dp, start = 48.dp)
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-            hint?.let {
-                Text(
-                    it,
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.85f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 14.sp,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 32.dp, end = 48.dp)
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-            trackMessage?.let {
-                Text(
-                    it,
-                    color = Color.White,
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 15.sp,
-                    modifier = Modifier.align(Alignment.TopStart).padding(top = 76.dp, start = 48.dp)
-                        .background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                )
-            }
         }
         if (trackSheetOpen) {
             Column(
-                modifier = Modifier.align(Alignment.CenterEnd).padding(32.dp).widthIn(min = 320.dp, max = 440.dp)
+                // 48 dp from the right: the safe area (audit P2)
+                modifier = Modifier.align(Alignment.CenterEnd).padding(start = 32.dp, top = 32.dp, bottom = 32.dp, end = 48.dp).widthIn(min = 320.dp, max = 440.dp)
                     .fillMaxHeight(0.85f).background(Broadcast.Base.copy(alpha = 0.97f), RoundedCornerShape(12.dp))
                     .verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

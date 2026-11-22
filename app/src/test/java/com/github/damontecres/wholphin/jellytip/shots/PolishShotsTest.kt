@@ -150,12 +150,12 @@ class PolishShotsTest {
         }
 
     @Test
-    fun cardFullTime() = shot("cards-fulltime", focused = false) { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now, Modifier.width(900.dp)) }
+    fun cardFullTime() = shot("cards-fulltime", focused = false) { FullTimeCard(match, "24", "18", FullTimeNext(game = fx("9")), now) }
 
     @Test
     fun cardCatchUp() =
         shot("cards-catchup", focused = false) {
-            CatchUpChoiceCard(match, "You're joining 27 minutes in", options = listOf(0, 1, 2), catchUpLine = CatchUpPolicy.catchUpLine(5), cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp))
+            CatchUpChoiceCard(match, "You're joining 27 minutes in", options = listOf(0, 1, 2), catchUpLine = CatchUpPolicy.catchUpLine(5), cursor = 2, secondsLeft = { 19L })
         }
 
     @Test
