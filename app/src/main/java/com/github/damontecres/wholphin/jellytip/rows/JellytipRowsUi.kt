@@ -386,7 +386,7 @@ private fun PersonRow(
                                 color = Color.White,
                                 fontFamily = JellytipFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                 style = TextStyle(shadow = SoftShadow),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -559,7 +559,7 @@ private fun FranchiseRow(
                                         color = Color.White,
                                         fontFamily = JellytipFontFamily,
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+                                        fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                         style = TextStyle(shadow = SoftShadow),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -694,19 +694,19 @@ fun JellytipCollectionPage(
                     overflow = TextOverflow.Ellipsis,
                 )
                 when (state) {
-                    CollectionPageState.Loading -> Caption("Loading…", alpha = 0.7f, px = JellytipHomeTokens.TEXT_PX)
-                    CollectionPageState.Failed -> Caption("This collection isn't available right now.", alpha = 0.8f, px = JellytipHomeTokens.TEXT_PX)
+                    CollectionPageState.Loading -> Caption("Loading…", alpha = 0.7f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
+                    CollectionPageState.Failed -> Caption("This collection isn't available right now.", alpha = 0.8f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
                     is CollectionPageState.Loaded -> {
                         val c = (state as CollectionPageState.Loaded).collection
-                        if (c.overview.isNotBlank()) Caption(c.overview, alpha = 0.85f, px = JellytipHomeTokens.TEXT_PX, maxLines = 3)
+                        if (c.overview.isNotBlank()) Caption(c.overview, alpha = 0.85f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3)
                         Caption(
                             c.progressText + "  ·  ${c.inLibrary} in the library",
                             alpha = 0.7f,
-                            px = JellytipHomeTokens.TEXT_PX,
+                            px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX,
                         )
                     }
                 }
-                Caption(focused ?: " ", alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
+                Caption(focused ?: " ", alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             }
             if (entries.isNotEmpty()) {
                 LazyRow(
@@ -832,7 +832,7 @@ internal fun MissingPoster(
                 color = Color.White,
                 fontFamily = JellytipFontFamily,
                 fontWeight = FontWeight.Medium,
-                fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
@@ -1089,7 +1089,7 @@ internal fun BoxScope.MissingTrendArt(m: JellytipServerRow.Missing) {
         "Not available",
         color = Color.White.copy(alpha = 0.85f),
         fontFamily = JellytipFontFamily,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         modifier =
             Modifier
                 .align(Alignment.BottomCenter)

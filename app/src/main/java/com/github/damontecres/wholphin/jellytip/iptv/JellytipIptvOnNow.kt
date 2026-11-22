@@ -137,7 +137,7 @@ fun OnNowCard(
                                 alsoOnText(o.alternates.size),
                             ).joinToString("  ·  "),
                         fontFamily = JellytipFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -155,7 +155,7 @@ fun OnNowCard(
                 }
                 val startsAt = o.startsAt
                 if (o.isPre(now) && startsAt != null) {
-                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1)
                 } else {
                     val frac = ((now - o.start).toFloat() / (o.stop - o.start).coerceAtLeast(1)).coerceIn(0f, 1f)
                     Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.Gray.copy(alpha = 0.4f))) {
@@ -236,7 +236,7 @@ fun AlternatesMenu(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else {
-                            Text(initials(ch.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                            Text(initials(ch.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
                         }
                     }
                 },

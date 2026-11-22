@@ -466,7 +466,7 @@ internal fun UpcomingTile(
                             color = Color.White.copy(alpha = 0.9f),
                             fontFamily = JellytipFontFamily,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 9.sp,
+                            fontSize = 12.sp,
                             letterSpacing = 0.6.sp,
                             maxLines = 1,
                             modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
@@ -476,22 +476,33 @@ internal fun UpcomingTile(
                     Text(
                         text = listOfNotNull(if (u.favourite) "★" else null, u.league).joinToString(" ").ifEmpty { u.channel.name },
                         fontFamily = JellytipFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     QualityChips(u.channel.quality)
                 }
-                Text(u.displayTitle, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (u.matchInfo?.inferred == true && u.matchInfo.matchup != null) IdentifiedMark()
+                // (audit 22-Nov) the 84 dp tile holds the pill row plus two more lines at the 12 sp floor: a two-line title only when
+                // nothing follows it, and one trailing line at most ("LA Clippers at Dallas / Mavericks" was cut at the tile's edge)
+                val identified = u.matchInfo?.inferred == true && u.matchInfo.matchup != null
                 val startsAt = u.startsAt
-                if (u.phase == "pre" && startsAt != null && now < startsAt) {
-                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)
-                }
-                alsoOnText(u.alternateChannels.size)?.let {
-                    Text(it, fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1)
-                }
+                val trailing =
+                    when {
+                        identified -> null
+                        u.phase == "pre" && startsAt != null && now < startsAt -> startsLabel(startsAt, now)
+                        else -> alsoOnText(u.alternateChannels.size)
+                    }
+                Text(
+                    u.displayTitle,
+                    fontFamily = JellytipFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    maxLines = if (identified || trailing != null) 1 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (identified) IdentifiedMark()
+                trailing?.let { Text(it, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         }
         if (u.art?.hasBadge == true) CornerLogo(u.channel.logo, Modifier.align(Alignment.BottomEnd).padding(6.dp))

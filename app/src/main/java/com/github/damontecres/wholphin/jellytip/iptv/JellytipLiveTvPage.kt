@@ -67,6 +67,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -842,7 +843,7 @@ fun JellytipLiveTvPage(
         }
     }
 
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 16.dp, end = 16.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         // Top: preview + what's focused
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(PREVIEW_H)) {
             LivePreview(playback, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
@@ -850,7 +851,8 @@ fun JellytipLiveTvPage(
             // Header action (Up from the group chips): refresh the guide now, with its last-updated status
             val refresh by viewModel.refresh.collectAsState()
             refresh?.let { r ->
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // (audit 22-Nov) the clock owns the top-right corner: the button sat under it. Start one clock line lower
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = JellytipLayout.ClockClear)) {
                     TabChip(if (r.running) "Refreshing guide…" else "⟳  Refresh guide", false) {
                         if (!r.running) viewModel.startGuideRefresh()
                     }
@@ -858,7 +860,7 @@ fun JellytipLiveTvPage(
                         r.message ?: r.lastRun?.let { "Updated ${agoText(now - it)}" } ?: "Not updated yet",
                         color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                         fontFamily = JellytipFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 2,
                         modifier = Modifier.width(180.dp),
                     )
@@ -1349,9 +1351,9 @@ private fun FocusInfo(
         }
         Text(
             text = message ?: "OK  watch full screen   ·   hold OK  favourite",
-            color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
+            color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
             fontFamily = JellytipFontFamily,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             maxLines = 1,
         )
     }

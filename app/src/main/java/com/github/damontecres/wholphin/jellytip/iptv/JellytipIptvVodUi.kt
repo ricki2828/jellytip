@@ -60,6 +60,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.github.damontecres.wholphin.jellytip.jellytipFocusRoom
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
@@ -123,8 +124,8 @@ fun IptvCornerMark(
                 color = Color.White.copy(alpha = 0.8f),
                 fontFamily = JellytipFontFamily,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
                 letterSpacing = 0.6.sp,
             )
         }
@@ -154,8 +155,9 @@ fun IptvVodTile(
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
         border =
             ClickableSurfaceDefaults.border(
-                focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
+                focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, com.github.damontecres.wholphin.jellytip.JellytipFocus.Cream), shape = RoundedCornerShape(8.dp)),
             ),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(width),
         modifier = modifier.size(width, height),
     ) {
         val image = if (poster) item.poster ?: item.backdrop else item.backdrop ?: item.poster
@@ -632,7 +634,7 @@ fun JellytipIptvDetailsPage(
                     }
                 }
                 val eps = d.seasons.getOrNull(season)?.episodes.orEmpty()
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom), modifier = Modifier.fillMaxWidth().jellytipFocusRoom().focusGroup().focusRestorer()) {
                     items(eps, key = { it.id }) { e ->
                         IptvEpisodeCard(e) { playEpisode(e) }
                     }
@@ -667,7 +669,7 @@ private fun WaysToWatchRow(
     val now = remember(copies) { System.currentTimeMillis() / 1000 }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Ways to watch", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom), modifier = Modifier.jellytipFocusRoom().focusGroup().focusRestorer()) {
             items(copies, key = { it.id }) { c ->
                 val selected = c.id == current
                 val fail = IptvStreamFail.note(IptvStreamFail.failOf(c.id, c.lastFail), now)
@@ -701,10 +703,10 @@ private fun WaysToWatchRow(
                             Text(chips.joinToString("  ·  "), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (c.opted == false) {
-                            Text("Outside your switched-on groups", fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, modifier = Modifier.alpha(0.7f))
+                            Text("Outside your switched-on groups", fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, modifier = Modifier.alpha(0.7f))
                         }
                         if (fail != null) {
-                            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+                            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1)
                         }
                     }
                 }
@@ -814,9 +816,9 @@ private fun CastRow(people: List<IptvCastMember>) {
                             Text(p.name.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString(""), fontFamily = JellytipFontFamily, fontSize = 16.sp)
                         }
                     }
-                    Text(p.name, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                    Text(p.name, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                     p.character?.let {
-                        Text(it, fontFamily = JellytipFontFamily, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = JellytipPalette.Vanilla.copy(alpha = 0.6f))
+                        Text(it, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = JellytipPalette.Vanilla.copy(alpha = 0.6f))
                     }
                 }
             }

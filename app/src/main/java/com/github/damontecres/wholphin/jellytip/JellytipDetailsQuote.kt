@@ -114,7 +114,7 @@ fun BoxScope.JellytipDetailsPullQuote(
                 color = JellytipPalette.Vanilla.copy(alpha = 0.82f),
                 fontFamily = JellytipFontFamily,
                 fontStyle = FontStyle.Italic,
-                fontSize = sizes.sp(JellytipHomeTokens.QUOTE_PX),
+                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                 textAlign = TextAlign.End,
                 style = TextStyle(shadow = shadow),
                 maxLines = 3,
@@ -132,7 +132,7 @@ fun BoxScope.JellytipDetailsPullQuote(
                         appendQuoteSource(quote.source, quote.author, quote.mark)
                     },
                 color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
-                fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                 style = TextStyle(shadow = shadow, fontFamily = JellytipFontFamily),
             )
         }

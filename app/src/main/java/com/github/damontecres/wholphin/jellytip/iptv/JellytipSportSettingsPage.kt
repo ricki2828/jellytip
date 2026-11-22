@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
@@ -155,7 +156,7 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
     ) = save(key) { JSONObject().put("sport", JSONObject().put(key, value)) }
 
     val p = prefs
-    Column(modifier.fillMaxSize().padding(start = 40.dp, top = 24.dp, end = 40.dp)) {
+    Column(modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Live sport", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         Text(
             message ?: "Teams, leagues and sports you follow come first in Live TV, Game Centre and on Home.",

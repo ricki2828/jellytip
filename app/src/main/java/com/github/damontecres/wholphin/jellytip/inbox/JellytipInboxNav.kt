@@ -91,7 +91,7 @@ fun NavigationDrawerScope.JellytipInboxNavItem(
                         Text(
                             text = badge,
                             color = Color(0xFF14121A),
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                         )

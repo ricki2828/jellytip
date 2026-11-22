@@ -156,7 +156,7 @@ fun JellytipReviewsRow(
             LazyRow(
                 state = rememberLazyListState(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(8.dp),
+                contentPadding = PaddingValues(horizontal = JellytipLayout.FocusRoomWide, vertical = 8.dp),
                 modifier =
                     rowFocusModifier
                         .fillMaxWidth()
@@ -193,7 +193,7 @@ internal fun JellytipReviewCard(
         interactionSource = interactionSource,
         shape = CardDefaults.shape(shape),
         border = JellytipFocus.border(shape),
-        scale = JellytipFocus.scale(),
+        scale = JellytipFocus.scaleFor(300.dp),
         glow = JellytipFocus.glow(),
         colors = CardDefaults.colors(containerColor = Color.Transparent),
         modifier = modifier.size(width = 300.dp, height = 150.dp).jellytipSiblingDim(focused),

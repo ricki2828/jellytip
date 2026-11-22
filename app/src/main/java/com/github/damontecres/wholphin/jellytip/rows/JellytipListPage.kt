@@ -60,7 +60,7 @@ fun JellytipListPage(
         val l = viewModel.carousels.manifest()?.letterboxd?.firstOrNull { it.slug == slug }
         value = if (l == null) ListState.Missing else ListState.Loaded(l)
     }
-    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = 20.dp)) {
+    Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
         val s = state
         Text(
             (s as? ListState.Loaded)?.list?.name ?: name,
@@ -70,7 +70,7 @@ fun JellytipListPage(
             fontSize = 26.sp,
         )
         when (s) {
-            ListState.Loading -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 140.dp, tileH = 210.dp, rows = 1, perRow = 5, title = false)
+            ListState.Loading -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 188.dp, tileH = 106.dp, rows = 1, perRow = 4, title = false)  // (the loaded tiles' size: no jump)
             ListState.Missing -> Text("This list isn't available.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
             is ListState.Loaded -> {
                 Text(

@@ -64,7 +64,7 @@ fun JellytipBreadcrumb(
     modifier: Modifier = Modifier,
 ) {
     val sizes = rememberJellytipSizes()
-    val textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = sizes.sp(JellytipHomeTokens.BADGE_PX))
+    val textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX))
     Row(
         horizontalArrangement = Arrangement.spacedBy(sizes.px(6f)),
         verticalAlignment = Alignment.CenterVertically,
@@ -86,7 +86,7 @@ fun JellytipBreadcrumb(
                     when {
                         focused -> Color.White
                         last -> Cream
-                        else -> Cream.copy(alpha = 0.5f)
+                        else -> Cream.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA)
                     },
                 modifier =
                     Modifier
@@ -116,7 +116,7 @@ fun JellytipSeasonChips(
     onConfirm: () -> Unit = {},
 ) {
     val sizes = rememberJellytipSizes()
-    val textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX))
+    val textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX))
     val listState = rememberLazyListState()
     val currentOnSelect by rememberUpdatedState(onSelect)
     var rowFocused by remember { mutableStateOf(false) }
@@ -160,7 +160,7 @@ fun JellytipSeasonChips(
                         when {
                             focused -> Color.White
                             selected -> Cream
-                            else -> Cream.copy(alpha = 0.5f)
+                            else -> Cream.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA)
                         },
                 )
                 Box(
