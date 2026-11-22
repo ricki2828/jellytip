@@ -55,6 +55,9 @@ import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlock
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsPullQuote
 import com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsViewModel
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsScaffold
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsSection
+import com.github.damontecres.wholphin.jellytip.details.rememberJellytipDetailsScaffoldState
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipReviews
 import com.github.damontecres.wholphin.jellytip.JellytipReviewsRow
@@ -357,26 +360,12 @@ fun MovieDetailsContent(
     /** Opened from a double feature: the other film's title, shown as "Double feature with …". */
     doubleFeatureWith: String? = null,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var position by rememberInt(0)
-    val focusRequesters = remember { List(REVIEWS_ROW + 1) { FocusRequester() } }
     val dto = movie.data
     val resumePosition = dto.userData?.playbackPositionTicks?.ticks ?: Duration.ZERO
 
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-
-    // Always open hero-first: Play focused, list scrolled to top (never restore a saved cast/extras row).
-    val listState = rememberLazyListState()
-    LaunchedEffect(Unit) {
-        listState.scrollToItem(0)
-        focusRequesters[HEADER_ROW].tryRequestFocus()
-    }
-    var buttonRowFocused by remember { mutableStateOf(false) }
-    var topFocused by remember { mutableStateOf(true) }
-    // Sections are not composed at all until the user presses Down from the header, so moving along the
-    // buttons can never scroll to, reveal or flash them.
-    var sectionsActive by remember { mutableStateOf(false) }
+    // Page skeleton (backdrop, hero, Down-reveals-sections, focus, scroll, fade) lives in JellytipDetailsScaffold
+    val scaffoldState = rememberJellytipDetailsScaffoldState()
     // Jellytip taste signals: details dwell (8 s or more) when the page goes or moves to another title
     androidx.compose.runtime.DisposableEffect(movie.id) {
         val since = System.currentTimeMillis()
@@ -402,145 +391,96 @@ fun MovieDetailsContent(
         value = com.github.damontecres.wholphin.jellytip.iptv.LibraryIptvCopies.forItem(movie)
     }
     var jtCopies by remember(movie.id) { mutableStateOf(emptyList<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem>()) }
-    val jtWaysFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(jtCopiesLoaded, sectionsActive) {
-        if (!sectionsActive) jtCopies = jtCopiesLoaded
+    LaunchedEffect(jtCopiesLoaded, scaffoldState.sectionsActive) {
+        if (!scaffoldState.sectionsActive) jtCopies = jtCopiesLoaded
     }
     // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
     var jtSimilar by remember(movie.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
-    LaunchedEffect(jtSimilarLoaded, sectionsActive) {
-        if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
+    LaunchedEffect(jtSimilarLoaded, scaffoldState.sectionsActive) {
+        if (jtSimilarLoaded != null && !scaffoldState.sectionsActive) jtSimilar = jtSimilarLoaded
     }
-    val hasBelow = hasReviews || jtSimilar != null || jtCopies.isNotEmpty() || state.people.isNotEmpty() || state.chapters.isNotEmpty() || state.extras.isNotEmpty() || state.similar.isNotEmpty() || state.discovered.isNotEmpty()
-    LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
-    LaunchedEffect(sectionsActive) {
-        if (sectionsActive) {
-            // Rows only exist once sectionsActive composes them: wait for that, scroll to them, then focus
-            withFrameNanos { }
-            withFrameNanos { }
-            if (listState.layoutInfo.totalItemsCount > 1) listState.animateScrollToItem(1)
-            withFrameNanos { }
-            // Jellytip: Ways to watch is the first lower row when present
-            var focused = jtCopies.isNotEmpty() && jtWaysFocus.tryRequestFocus()
-            if (!focused) {
-                for (r in listOf(PEOPLE_ROW, REVIEWS_ROW, CHAPTER_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) {
-                    if (focusRequesters[r].tryRequestFocus()) {
-                        focused = true
-                        break
-                    }
-                }
-            }
-            // Nothing took focus: fall back to the header so Down is not swallowed forever
-            if (!focused) {
-                sectionsActive = false
-                listState.scrollToItem(0)
-                focusRequesters[HEADER_ROW].tryRequestFocus()
-            }
-        }
-    }
-    val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
-    var pageHasFocus by remember { mutableStateOf(false) }
-    RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
-    Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
-        JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = !topFocused)
+    JellytipDetailsScaffold(
+        modifier = modifier,
+        state = scaffoldState,
+        backdrop = { buttonRowFocused, dimmed ->
+            JellytipDetailsBackground(movie, state.trailers, buttonRowFocused, dimmed = dimmed)
+        },
         // One review, bottom right, balancing the info block (loaded with the page, fades in once)
-        JellytipDetailsPullQuote(reviews) { headerAlpha }
-        LazyColumn(
-                state = listState,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 8.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item {
-                JellytipDetailsBlock(
-                    item = movie,
-                    subtitle = doubleFeatureWith?.let { "Double feature with $it" },
-                    buttons =
-                        buildList {
-                            add(
-                                JellytipButton(
-                                    label =
-                                        stringResource(
-                                            if (resumePosition > Duration.ZERO) R.string.resume else R.string.play,
-                                        ),
-                                    primary = true,
-                                    onClick = {
-                                        position = HEADER_ROW
-                                        playOnClick.invoke(resumePosition)
-                                    },
-                                ),
-                            )
-                            if (resumePosition > Duration.ZERO) {
-                                add(
-                                    JellytipButton(stringResource(R.string.restart), {
-                                        position = HEADER_ROW
-                                        playOnClick.invoke(Duration.ZERO)
-                                    }),
-                                )
-                            }
-                            if (onPlayBoth != null) {
-                                add(
-                                    JellytipButton("\u25B6 Play both", {
-                                        position = HEADER_ROW
-                                        onPlayBoth()
-                                    }),
-                                )
-                            }
-                            add(
-                                JellytipButton(
+        overlay = { headerAlpha -> JellytipDetailsPullQuote(reviews, headerAlpha) },
+        hero = { slot ->
+            JellytipDetailsBlock(
+                item = movie,
+                subtitle = doubleFeatureWith?.let { "Double feature with $it" },
+                buttons =
+                    buildList {
+                        add(
+                            JellytipButton(
+                                label =
                                     stringResource(
-                                        if (dto.userData?.isFavorite == true) R.string.remove_favorite else R.string.add_favorite,
+                                        if (resumePosition > Duration.ZERO) R.string.resume else R.string.play,
                                     ),
-                                    favoriteOnClick,
-                                ),
+                                primary = true,
+                                onClick = {
+                                    position = HEADER_ROW
+                                    playOnClick.invoke(resumePosition)
+                                },
+                            ),
+                        )
+                        if (resumePosition > Duration.ZERO) {
+                            add(
+                                JellytipButton(stringResource(R.string.restart), {
+                                    position = HEADER_ROW
+                                    playOnClick.invoke(Duration.ZERO)
+                                }),
                             )
-                            add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
-                        },
-                    trailers = state.trailers,
-                    onTrailer = {
-                        position = TRAILER_ROW
-                        trailerOnClick.invoke(it)
+                        }
+                        if (onPlayBoth != null) {
+                            add(
+                                JellytipButton("▶ Play both", {
+                                    position = HEADER_ROW
+                                    onPlayBoth()
+                                }),
+                            )
+                        }
+                        add(
+                            JellytipButton(
+                                stringResource(
+                                    if (dto.userData?.isFavorite == true) R.string.remove_favorite else R.string.add_favorite,
+                                ),
+                                favoriteOnClick,
+                            ),
+                        )
+                        add(JellytipButton(stringResource(R.string.jellytip_more), moreOnClick))
                     },
-                    onOverview = overviewOnClick,
-                    buttonRowModifier =
-                        Modifier
-                            .focusRequester(focusRequesters[HEADER_ROW])
-                            .onPreviewKeyEvent {
-                                if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
-                                    // Already active: let the focus system move Down normally
-                                    if (sectionsActive) {
-                                        false
-                                    } else {
-                                        sectionsActive = true
-                                        true
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                            .onFocusChanged {
-                                buttonRowFocused = it.hasFocus
-                                if (it.hasFocus) position = HEADER_ROW
-                            },
-                    modifier = Modifier.fillParentMaxSize().graphicsLayer { alpha = headerAlpha },
-                    onFocusWithin = { topFocused = it },
-                )
-            }
-            if (sectionsActive && jtCopies.isNotEmpty()) {
-                item(key = "jt-ways") {
+                trailers = state.trailers,
+                onTrailer = {
+                    position = TRAILER_ROW
+                    trailerOnClick.invoke(it)
+                },
+                onOverview = overviewOnClick,
+                buttonRowModifier =
+                    slot.buttonRowModifier.onFocusChanged {
+                        if (it.hasFocus) position = HEADER_ROW
+                    },
+                modifier = slot.modifier,
+                onFocusWithin = slot.onFocusWithin,
+            )
+        },
+        sections =
+            listOf(
+                // Jellytip: Ways to watch is the first lower row when present
+                JellytipDetailsSection("ways", jtCopies.isNotEmpty()) { focus ->
                     com.github.damontecres.wholphin.jellytip.iptv.JellytipLibraryWaysToWatch(
                         item = movie,
                         copies = jtCopies,
                         onPlayLibrary = { playOnClick.invoke(movie.playbackPosition) },
-                        modifier = Modifier.focusRequester(jtWaysFocus).padding(bottom = 8.dp),
+                        modifier = Modifier.focusRequester(focus).padding(bottom = 8.dp),
                     )
-                }
-            }
-            (if (sectionsActive) state.people else emptyList()).letNotEmpty { people ->
-                item {
+                },
+                JellytipDetailsSection("people", state.people.isNotEmpty()) { focus ->
                     PersonRow(
-                        people = people,
+                        people = state.people,
                         onClick = {
                             position = PEOPLE_ROW
                             onClickPerson.invoke(it)
@@ -552,25 +492,23 @@ fun MovieDetailsContent(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusRequesters[PEOPLE_ROW]),
+                                .focusRequester(focus),
                     )
-                }
-            }
-            reviews?.takeIf { sectionsActive && hasReviews }?.let { r ->
-                item {
-                    JellytipReviewsRow(
-                        reviews = r,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[REVIEWS_ROW]),
-                    )
-                }
-            }
-            (if (sectionsActive) state.chapters else emptyList()).letNotEmpty { chapters ->
-                item {
+                },
+                JellytipDetailsSection("reviews", hasReviews) { focus ->
+                    reviews?.let { r ->
+                        JellytipReviewsRow(
+                            reviews = r,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focus),
+                        )
+                    }
+                },
+                JellytipDetailsSection("chapters", state.chapters.isNotEmpty()) { focus ->
                     ChapterRow(
-                        chapters = chapters,
+                        chapters = state.chapters,
                         onClick = {
                             position = CHAPTER_ROW
                             playOnClick.invoke(it.position)
@@ -579,14 +517,12 @@ fun MovieDetailsContent(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusRequesters[CHAPTER_ROW]),
+                                .focusRequester(focus),
                     )
-                }
-            }
-            (if (sectionsActive) state.extras else emptyList()).letNotEmpty { extras ->
-                item {
+                },
+                JellytipDetailsSection("extras", state.extras.isNotEmpty()) { focus ->
                     ExtrasRow(
-                        extras = extras,
+                        extras = state.extras,
                         onClickItem = { index, item ->
                             position = EXTRAS_ROW
                             onClickExtra.invoke(index, item)
@@ -595,67 +531,63 @@ fun MovieDetailsContent(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusRequesters[EXTRAS_ROW]),
+                                .focusRequester(focus),
                     )
-                }
-            }
-            jtSimilar?.takeIf { sectionsActive }?.let { simRow ->
-                item(key = "jt-similar") {
-                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
-                        row = simRow,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[SIMILAR_ROW]),
-                    )
-                }
-            }
-            (if (sectionsActive && jtSimilar == null) state.similar else emptyList()).letNotEmpty { similar ->
-                item {
-                    val imageHeight =
-                        remember(movie.type) {
-                            if (movie.type == BaseItemKind.MOVIE) {
-                                Cards.height2x3
-                            } else {
-                                Cards.heightEpisode
+                },
+                JellytipDetailsSection("similar", jtSimilar != null || state.similar.isNotEmpty()) { focus ->
+                    val simRow = jtSimilar
+                    if (simRow != null) {
+                        com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
+                            row = simRow,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focus),
+                        )
+                    } else {
+                        val imageHeight =
+                            remember(movie.type) {
+                                if (movie.type == BaseItemKind.MOVIE) {
+                                    Cards.height2x3
+                                } else {
+                                    Cards.heightEpisode
+                                }
                             }
-                        }
-                    ItemRow(
-                        title = stringResource(R.string.more_like_this),
-                        items = similar,
-                        onClickItem = { index, item ->
-                            position = SIMILAR_ROW
-                            onClickItem.invoke(index, item)
-                        },
-                        onLongClickItem = { index, similar ->
-                            position = SIMILAR_ROW
-                            onLongClickSimilar.invoke(index, similar)
-                        },
-                        cardContent = { index, item, mod, onClick, onLongClick ->
-                            SeasonCard(
-                                item = item,
-                                onClick = onClick,
-                                onLongClick = onLongClick,
-                                modifier = mod,
-                                showImageOverlay = true,
-                                imageHeight = imageHeight,
-                                imageWidth = Dp.Unspecified,
-                            )
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[SIMILAR_ROW]),
-                    )
-                }
-            }
-            (if (sectionsActive) state.discovered else emptyList()).letNotEmpty { discovered ->
-                item {
+                        ItemRow(
+                            title = stringResource(R.string.more_like_this),
+                            items = state.similar,
+                            onClickItem = { index, item ->
+                                position = SIMILAR_ROW
+                                onClickItem.invoke(index, item)
+                            },
+                            onLongClickItem = { index, similar ->
+                                position = SIMILAR_ROW
+                                onLongClickSimilar.invoke(index, similar)
+                            },
+                            cardContent = { index, item, mod, onClick, onLongClick ->
+                                SeasonCard(
+                                    item = item,
+                                    onClick = onClick,
+                                    onLongClick = onLongClick,
+                                    modifier = mod,
+                                    showImageOverlay = true,
+                                    imageHeight = imageHeight,
+                                    imageWidth = Dp.Unspecified,
+                                )
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focus),
+                        )
+                    }
+                },
+                JellytipDetailsSection("discover", state.discovered.isNotEmpty()) { focus ->
                     DiscoverRow(
                         row =
                             DiscoverRowData(
                                 ResStringProvider(R.string.discover),
-                                DataLoadingState.Success(discovered),
+                                DataLoadingState.Success(state.discovered),
                                 type = DiscoverRequestType.UNKNOWN,
                             ),
                         onClickItem = { index: Int, item: DiscoverItem ->
@@ -664,14 +596,9 @@ fun MovieDetailsContent(
                         },
                         onLongClickItem = { _, _ -> },
                         onCardFocus = {},
-                        focusRequester = focusRequesters[DISCOVER_ROW],
+                        focusRequester = focus,
                     )
-                }
-            }
-        }
-        BoxScopeDownHint(
-            visible = topFocused && hasBelow && !sectionsActive,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
-    }
+                },
+            ),
+    )
 }

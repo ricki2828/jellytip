@@ -32,6 +32,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +49,8 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.LocalTrailer
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsHero
+import com.github.damontecres.wholphin.jellytip.details.heroOf
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.ui.components.TrailerDialog
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
@@ -62,9 +66,9 @@ data class JellytipButton(
 )
 
 /**
- * The bottom-left text block of the details page: studio logo (or typeset title), a quiet info line with
- * file-detail badges, a dim director/country line, a one-line synopsis, a quiet scores line and small
- * text buttons. Sizes come from [JellytipHomeTokens] so home and details stay consistent.
+ * The bottom-left text block of the details page for a library item: loads the companion extras (and, for admins, the
+ * audience) through [JellytipDetailsSource], maps everything to a [JellytipDetailsHero] and draws it with
+ * [JellytipDetailsBlockContent].
  *
  * @param buttonRowModifier applied to the buttons row (focus requester, focus tracking); focus group is added here
  * @param onOverview opens the full synopsis; the synopsis line is focusable (one press up from the buttons)
@@ -84,11 +88,71 @@ fun JellytipDetailsBlock(
     below: @Composable () -> Unit = {},
     viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
-    val sizes = rememberJellytipSizes()
     val extras by produceState<JellytipExtras?>(null, item.id) {
         value = viewModel.getExtras(item)
     }
-    val dto = item.data
+    val logoUrl = rememberLogoUrl(item)
+    // Premium formats (4K · Dolby Vision · Dolby Atmos) come from the companion's /backdrops answer.
+    val premium =
+        com.github.damontecres.wholphin.jellytip.cards.JellytipTech.fullNames(
+            com.github.damontecres.wholphin.jellytip.cards.JellytipTech
+                .of(item.id, item.data.seriesId),
+        )
+    // Admin only: who requested it and who has watched it, to help decide whether it can go
+    val isAdmin by rememberIsJellytipAdmin()
+    val audienceLine =
+        if (isAdmin) {
+            val audience by produceState<JellytipAudience?>(null, item.id) { value = viewModel.getAudience(item) }
+            audience?.summary()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+    LocalConfiguration.current // a language change re-resolves the "Directed by" string below
+    val resources = LocalContext.current.resources
+    val hero =
+        heroOf(
+            item = item,
+            extras = extras,
+            premium = premium,
+            directedBy = { resources.getString(R.string.directed_by, it) },
+            logoUrl = logoUrl,
+            subtitle = subtitle,
+            audienceLine = audienceLine,
+        )
+    JellytipDetailsBlockContent(
+        hero = hero,
+        buttons = buttons,
+        trailers = trailers,
+        onTrailer = onTrailer,
+        onOverview = onOverview,
+        buttonRowModifier = buttonRowModifier,
+        modifier = modifier,
+        onFocusWithin = onFocusWithin,
+        bottomPadding = bottomPadding,
+        below = below,
+    )
+}
+
+/**
+ * The details text block drawn from a source-neutral [JellytipDetailsHero] only (no view model, no BaseItem): studio
+ * logo (or typeset title), subtitle, status line, a quiet info line with file-detail badges, a dim director/country
+ * line, a one-line synopsis, a quiet scores line and small text buttons. Sizes come from [JellytipHomeTokens] so home
+ * and details stay consistent.
+ */
+@Composable
+fun JellytipDetailsBlockContent(
+    hero: JellytipDetailsHero,
+    buttons: List<JellytipButton>,
+    trailers: List<Trailer>,
+    onTrailer: (Trailer) -> Unit,
+    onOverview: () -> Unit,
+    buttonRowModifier: Modifier,
+    modifier: Modifier = Modifier,
+    onFocusWithin: (Boolean) -> Unit = {},
+    bottomPadding: Dp? = null,
+    below: @Composable () -> Unit = {},
+) {
+    val sizes = rememberJellytipSizes()
     val body =
         MaterialTheme.typography.bodyMedium.copy(
             fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
@@ -112,8 +176,8 @@ fun JellytipDetailsBlock(
                 verticalArrangement = Arrangement.spacedBy(sizes.px(JellytipHomeTokens.DETAILS_GAP_PX)),
                 modifier = Modifier.width(sizes.px(JellytipHomeTokens.DETAILS_WIDTH_PX)),
             ) {
-                DetailsTitle(item, sizes)
-                subtitle?.let {
+                DetailsTitle(hero, sizes)
+                hero.subtitle?.let {
                     Text(
                         text = it,
                         style = body,
@@ -123,26 +187,20 @@ fun JellytipDetailsBlock(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                hero.statusLine?.let {
+                    Text(
+                        text = it,
+                        style = body,
+                        color = quiet.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
 
                 // Info line: year · rating · runtime · premium formats · genres, then quiet file-detail badges.
-                // Premium formats (4K · Dolby Vision · Dolby Atmos) come from the companion's /backdrops answer.
-                val premium =
-                    com.github.damontecres.wholphin.jellytip.cards.JellytipTech.fullNames(
-                        com.github.damontecres.wholphin.jellytip.cards.JellytipTech
-                            .of(item.id, dto.seriesId),
-                    )
-                val info =
-                    remember(item.id, premium) {
-                        listOfNotNull(
-                            dto.productionYear?.toString(),
-                            dto.officialRating,
-                            runtimeText(dto.runTimeTicks),
-                            premium.joinToString("  ·  ").takeIf { it.isNotEmpty() },
-                            dto.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
-                        ).joinToString("  ·  ")
-                    }
-                val badges = remember(item.id, premium) { fileBadges(item).filterNot { it == "4K" && "4K" in premium } }
-                if (info.isNotEmpty() || badges.isNotEmpty()) {
+                val info = hero.infoText
+                val badges = hero.badges
+                if (info.isNotEmpty() || badges.isNotEmpty() || hero.sourceBadge != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(sizes.px(8f)),
@@ -158,22 +216,12 @@ fun JellytipDetailsBlock(
                             )
                         }
                         badges.forEach { Badge(it, sizes) }
+                        hero.sourceBadge?.let { Badge(it, sizes) }
                     }
                 }
 
                 // Second dim line: director and country
-                val director =
-                    remember(item.id) {
-                        dto.people
-                            ?.filter { it.type == PersonKind.DIRECTOR && !it.name.isNullOrBlank() }
-                            ?.joinToString(", ") { it.name!! }
-                            ?.takeIf { it.isNotBlank() }
-                    }
-                val country = dto.productionLocations?.firstOrNull()
-                val dim =
-                    listOfNotNull(director?.let { stringResource(R.string.directed_by, it) }, country)
-                        .joinToString("  ·  ")
-                if (dim.isNotEmpty()) {
+                hero.dimLine?.let { dim ->
                     Text(
                         text = dim,
                         style = body,
@@ -183,22 +231,17 @@ fun JellytipDetailsBlock(
                     )
                 }
 
-                // Admin only: who requested it and who has watched it, to help decide whether it can go
-                val isAdmin by rememberIsJellytipAdmin()
-                if (isAdmin) {
-                    val audience by produceState<JellytipAudience?>(null, item.id) { value = viewModel.getAudience(item) }
-                    audience?.summary()?.takeIf { it.isNotEmpty() }?.let {
-                        Text(
-                            text = it,
-                            style = body,
-                            color = quiet.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                hero.audienceLine?.let {
+                    Text(
+                        text = it,
+                        style = body,
+                        color = quiet.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
-                dto.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                hero.overview?.let { overview ->
                     val source = remember { MutableInteractionSource() }
                     val focused by source.collectIsFocusedAsState()
                     Text(
@@ -217,13 +260,13 @@ fun JellytipDetailsBlock(
                     )
                 }
 
-            scoreLine(extras)?.let {
-                MarkText(
-                    text = it,
-                    style = body,
-                    color = quiet.copy(alpha = 0.85f),
-                )
-            }
+                hero.scores?.let {
+                    MarkText(
+                        text = it,
+                        style = body,
+                        color = quiet.copy(alpha = 0.85f),
+                    )
+                }
 
                 ButtonsRow(buttons, trailers, onTrailer, buttonRowModifier, sizes)
             }
@@ -234,18 +277,18 @@ fun JellytipDetailsBlock(
 
 @Composable
 private fun DetailsTitle(
-    item: BaseItem,
+    hero: JellytipDetailsHero,
     sizes: JellytipSizes,
 ) {
-    val logoUrl = rememberLogoUrl(item)
+    val logoUrl = hero.logoUrl
     var logoFailed by remember(logoUrl) { mutableStateOf(false) }
     if (logoUrl != null && !logoFailed) {
         AsyncImage(
             model = logoUrl,
-            contentDescription = item.title,
+            contentDescription = hero.title,
             contentScale = ContentScale.Fit,
             alignment = Alignment.BottomStart,
-            colorFilter = JellytipLogoTint.filter(logoUrl, item),
+            colorFilter = JellytipLogoTint.filterForIds(logoUrl, hero.logoStyleIds),
             onError = { logoFailed = true },
             // Tall/narrow logos render tiny and unreadable; typeset the title instead
             onSuccess = { state ->
@@ -260,7 +303,7 @@ private fun DetailsTitle(
         )
     } else {
         Text(
-            text = item.title ?: "",
+            text = hero.title ?: "",
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.Medium,
@@ -377,60 +420,6 @@ private fun TextButton(
             fontWeight = if (button.primary) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
         )
-    }
-}
-
-private fun runtimeText(ticks: Long?): String? {
-    if (ticks == null || ticks <= 0) return null
-    val minutes = (ticks / 600_000_000L).toInt()
-    if (minutes <= 0) return null
-    return if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
-}
-
-/** e.g. ["1080p", "HEVC", "EAC3 5.1"] from the first media source; empty when the server sent none. */
-private fun fileBadges(item: BaseItem): List<String> {
-    val streams =
-        item.data.mediaSources
-            ?.firstOrNull()
-            ?.mediaStreams
-            .orEmpty()
-    val video = streams.firstOrNull { it.type == MediaStreamType.VIDEO }
-    val audio =
-        streams.firstOrNull { it.type == MediaStreamType.AUDIO && it.isDefault }
-            ?: streams.firstOrNull { it.type == MediaStreamType.AUDIO }
-    return buildList {
-        video?.height?.let { h ->
-            add(
-                when {
-                    h >= 2000 -> "4K"
-                    h >= 1000 -> "1080p"
-                    h >= 700 -> "720p"
-                    else -> "SD"
-                },
-            )
-        }
-        video?.codec?.let { c ->
-            add(
-                when (c.lowercase()) {
-                    "hevc", "h265" -> "HEVC"
-                    "h264", "avc" -> "H.264"
-                    else -> c.uppercase()
-                },
-            )
-        }
-        audio?.let { a ->
-            val ch =
-                when (a.channels) {
-                    1 -> "1.0"
-                    2 -> "2.0"
-                    6 -> "5.1"
-                    8 -> "7.1"
-                    else -> null
-                }
-            val codec = a.codec?.uppercase()
-            val text = listOfNotNull(codec, ch).joinToString(" ")
-            if (text.isNotEmpty()) add(text)
-        }
     }
 }
 
