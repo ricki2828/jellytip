@@ -30,3 +30,6 @@
 .ask-ignored {
   font-style: italic;
 }
+
+.ask-refine { align-items: center; margin-top: 4px; }
+.ask-refine-label { font-size: 13px; opacity: 0.7; margin-right: 4px; }

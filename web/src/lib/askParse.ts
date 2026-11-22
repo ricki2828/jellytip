@@ -14,7 +14,9 @@ export type ChipData =
   | { t: "minRating"; value: number }
   | { t: "maxSeasons"; n: number }
   /** "not scary", "non-animated": titles in any of these genres are left out (checked client-side over the fetched page). */
-  | { t: "notGenre"; genres: string[] };
+  | { t: "notGenre"; genres: string[] }
+  /** A director or actor (refine chips): Jellyfin PersonIds. */
+  | { t: "person"; id: string; name: string; role: "Director" | "Actor" };
 
 export interface Chip {
   /** Stable for a given reading, so a removed chip stays removed while the text is unchanged. */
@@ -111,6 +113,8 @@ export function chipFor(d: ChipData): Chip {
       return { id: `minrating:${d.value}`, label: `rated ${d.value}+`, data: d };
     case "maxSeasons":
       return { id: `maxseasons:${d.n}`, label: d.n === 1 ? "1 season" : `up to ${d.n} seasons`, data: d };
+    case "person":
+      return { id: `person:${d.id}`, label: d.role === "Director" ? `directed by ${d.name}` : `with ${d.name}`, data: d };
   }
 }
 
@@ -330,7 +334,7 @@ export function kidsGenres(chips: Chip[]): string[] {
 }
 
 /** Jellyfin Items params for the chips. Runtime, season counts and "each mood matches" are checked client-side (see pickFrom). */
-export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: number } = {}): Params {
+export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: number; refine?: boolean } = {}): Params {
   const kinds = of(chips, "kind").map((c) => c.data.kind);
   const genres = new Set<string>();
   for (const c of of(chips, "genre")) c.data.genres.forEach((g) => genres.add(g));
@@ -354,11 +358,13 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
     Limit: opts.limit ?? fetchLimit(chips),
     StartIndex: 0,
     // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 || out.size ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
+    // Genres also for the refine chips (opts.refine: the screen offers ways to narrow what was found)
+    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 || out.size || opts.refine ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
     Genres: genres.size ? [...genres].join("|") : undefined,
     Years: yearSet.size ? [...yearSet].sort((a, b) => a - b).join(",") : undefined,
     Filters: flags.length ? flags.join(",") : undefined,
     OfficialRatings: kids ? kids.data.ratings.join("|") : undefined,
+    PersonIds: of(chips, "person").length ? of(chips, "person").map((c) => c.data.id).join(",") : undefined,
     MinCommunityRating: minRating > 0 ? minRating : undefined,
   };
 }
@@ -441,4 +447,81 @@ export function appliedNotes(chips: Chip[]): string[] {
   if (of(chips, "genre").length > 1) notes.push("Several moods: a title must match each one (any of that mood's genres).");
   if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");
   return notes;
+}
+
+// ---------- refine chips ----------
+
+/** Most suggestions offered under the results at once. */
+export const REFINE_MAX = 8;
+/** A suggestion needs at least this many of the fitting titles behind it (people: this many of the picks). */
+export const REFINE_MIN = 3;
+export const PEOPLE_MIN = 2;
+
+/**
+ * Ways to narrow what was found, from the titles themselves (the fetched page after the client checks, and the people of
+ * the shown picks): directors / actors shared by several picks, the commonest genres to keep or leave out, decades,
+ * movies vs shows, "under 2 h", unwatched. Never one already applied, nothing that would match none or all of them. Pure;
+ * the chips come from chipFor, so a tapped suggestion is the same filter the parser (or an LLM) would make.
+ */
+export function refineOptions(kept: Item[], picks: Item[], chips: Chip[]): Chip[] {
+  const have = new Set(chips.map((c) => c.id));
+  const n = kept.length;
+  const out: Chip[] = [];
+  const offer = (d: ChipData) => {
+    const c = chipFor(d);
+    if (!have.has(c.id) && !out.some((x) => x.id === c.id)) out.push(c);
+  };
+  // Useful only when it splits the titles: some have it, not all
+  const splits = (count: number) => count >= REFINE_MIN && count < n;
+
+  // People shared by several of the picks (directors first)
+  const people = new Map<string, { name: string; role: "Director" | "Actor"; count: number; first: number }>();
+  picks.forEach((it, i) => {
+    const seen = new Set<string>();
+    for (const p of it.People ?? []) {
+      if (!p.Id || !p.Name || (p.Type !== "Director" && p.Type !== "Actor") || seen.has(p.Id)) continue;
+      seen.add(p.Id);
+      const cur = people.get(p.Id) ?? { name: p.Name, role: p.Type, count: 0, first: i };
+      if (p.Type === "Director") cur.role = "Director";
+      cur.count++;
+      people.set(p.Id, cur);
+    }
+  });
+  [...people.entries()]
+    .filter(([, p]) => p.count >= PEOPLE_MIN && p.count < picks.length)
+    .sort(([, a], [, b]) => (a.role === b.role ? 0 : a.role === "Director" ? -1 : 1) || b.count - a.count || a.first - b.first)
+    .slice(0, 3)
+    .forEach(([id, p]) => offer({ t: "person", id, name: p.name, role: p.role }));
+
+  // Genres: the commonest to keep, and to leave out
+  const left = excludedGenres(chips);
+  const counts = new Map<string, number>();
+  for (const it of kept) for (const g of new Set(it.Genres ?? [])) counts.set(g, (counts.get(g) ?? 0) + 1);
+  const ranked = [...counts.entries()].filter(([g, c]) => !left.has(g.toLowerCase()) && splits(c)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  ranked.slice(0, 3).forEach(([g]) => offer({ t: "genre", genres: [g] }));
+  ranked.slice(0, 2).forEach(([g]) => offer({ t: "notGenre", genres: [g] }));
+
+  // Decades
+  if (!of(chips, "years").length) {
+    const dec = new Map<number, number>();
+    for (const it of kept) if (it.ProductionYear) dec.set(Math.floor(it.ProductionYear / 10) * 10, (dec.get(Math.floor(it.ProductionYear / 10) * 10) ?? 0) + 1);
+    [...dec.entries()].filter(([, c]) => splits(c)).sort((a, b) => b[1] - a[1] || b[0] - a[0]).slice(0, 2).forEach(([d]) => offer({ t: "years", from: d, to: d + 9 }));
+  }
+  // Movies vs shows
+  if (!of(chips, "kind").length && !of(chips, "maxSeasons").length) {
+    const movies = kept.filter((it) => it.Type === "Movie").length;
+    if (splits(movies)) offer({ t: "kind", kind: "Movie" });
+    if (splits(kept.filter((it) => it.Type === "Series").length)) offer({ t: "kind", kind: "Series" });
+  }
+  // Length
+  if (!of(chips, "maxRuntime").length && !of(chips, "minRuntime").length) {
+    const short = kept.filter((it) => (runtimeMin(it) ?? Infinity) <= 120).length;
+    if (splits(short)) offer({ t: "maxRuntime", min: 120 });
+  }
+  // Unwatched
+  if (!of(chips, "unplayed").length && !of(chips, "played").length) {
+    const fresh = kept.filter((it) => it.UserData?.Played === false || (it.UserData != null && !it.UserData.Played)).length;
+    if (splits(fresh)) offer({ t: "unplayed" });
+  }
+  return out.slice(0, REFINE_MAX);
 }
