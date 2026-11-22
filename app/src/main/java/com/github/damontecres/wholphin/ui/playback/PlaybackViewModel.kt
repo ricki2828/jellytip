@@ -1207,6 +1207,9 @@ class PlaybackViewModel
                 Timber.v("Playback state is STATE_ENDED")
                 jellytipEndWatch(true)
                 viewModelScope.launchDefault {
+                    // Jellytip: a split series whose next episode is on IPTV (the shared split list, not Jellyfin's next up,
+                    // which skips IPTV episodes): offer that one instead of the playlist's next or leaving
+                    if (currentItem !is PlaylistItem.Intro && jellytipOfferIptvNext()) return@launchDefault
                     when (val nextItem = state.value.nextItem()) {
                         is PlaylistItem.Intro -> {
                             Timber.v("Next item is intro, so playing immediately")
@@ -1246,8 +1249,6 @@ class PlaybackViewModel
 
                         null -> {
                             Timber.v("No next up")
-                            // Jellytip: the show goes on only via IPTV (split series): offer it instead of leaving
-                            if (jellytipOfferIptvNext()) return@launchDefault
                             navigationManager.goBack()
                             // Jellytip "Play both" whose other half is on IPTV: start it now
                             val then =
@@ -1321,7 +1322,8 @@ class PlaybackViewModel
                                     outroShownSegments.add(currentSegment.id)
                                 ) {
                                     val nextItem = state.nextItem()
-                                    if (nextItem is PlaylistItem.Media) {
+                                    // Jellytip: not the library's next when the split series' next is on IPTV (offered at the end)
+                                    if (nextItem is PlaylistItem.Media && jellytipIptvPending == null) {
                                         Timber.v("Setting next up during outro to ${nextItem?.id}")
                                         _state.update { it.copy(nextUp = nextItem.item) }
                                     }

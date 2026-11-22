@@ -61,8 +61,8 @@ object NextEpisodeLoader {
     private fun tmdbOf(ids: Map<String, String?>?): Int? = ids?.entries?.firstOrNull { it.key.equals("Tmdb", true) }?.value?.toIntOrNull()
 
     /**
-     * A library series' episodes in the library's order (Specials where it puts them), "missing" placeholders marked
-     * (the series page shows them, IPTV copies replace them, they are never played), as [NextEpisode.Ep]s.
+     * A library series' episodes, "missing" placeholders marked (an IPTV copy takes their slot, they are never played),
+     * as [NextEpisode.Ep]s for the shared split list.
      */
     private suspend fun libraryEpisodes(
         api: ApiClient,
@@ -77,7 +77,7 @@ object NextEpisodeLoader {
                 val n = e.indexNumber ?: return@mapNotNull null
                 // Its own resume point (Jellyfin clears it once played): ticks are 100 ns
                 val resume = (e.userData?.playbackPositionTicks ?: 0L).takeIf { e.userData?.played != true }?.div(10_000) ?: 0L
-                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n", resume, missing = e.locationType == LocationType.VIRTUAL)
+                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n", resume, missing = e.locationType == LocationType.VIRTUAL, played = e.userData?.played == true)
             }
 
     /**

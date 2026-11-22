@@ -1,11 +1,10 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
 /**
- * "Next episode" across a split series (Ricki 22-Nov, Celebrity Traitors on IPTV): EXACTLY the series page's order
- * ([mergeSeasons] then [seasonTiles], jellytip/details/JellytipSeasonMerge.kt): library seasons in library order (Specials
- * where the library puts them), IPTV-only seasons slotted in by number, and inside a library season the IPTV episodes the
- * library lacks interleaved (library wins; a "missing" library placeholder gives way to the IPTV copy). IPTV season 0 is
- * ignored. Pure: both players and the tests use it.
+ * "Next episode" across a split series (Ricki 22-Nov, Celebrity Traitors on IPTV): the shared split-series list the series
+ * page uses ([splitEpisodes], jellytip/details/JellytipSplitNext.kt: every real episode of both sources by (season, episode),
+ * the library copy with a file wins a slot, "missing" placeholders give way, no Specials) and its [nextAfter]. This object
+ * only converts the players' episodes in and out. Pure: both players and the tests use it.
  */
 object NextEpisode {
     enum class Source { LIBRARY, IPTV }
@@ -19,65 +18,55 @@ object NextEpisode {
         val title: String,
         /** A library episode's own resume point (ms); 0 = from the start. */
         val resumeMs: Long = 0,
-        /** A Jellyfin "missing" placeholder (LocationType VIRTUAL): a tile on the series page, never played. */
+        /** A Jellyfin "missing" placeholder (LocationType VIRTUAL): never played; an IPTV copy takes its slot. */
         val missing: Boolean = false,
+        val played: Boolean = false,
     ) {
         /** "S2 E2" */
         val code: String get() = "S$season E$episode"
     }
 
-    /**
-     * The whole series in the series page's tile order. [library] = the library's episodes in library order (seasons in
-     * the order they first appear, episodes in their order), "missing" placeholders included and marked.
-     */
+    /** A library [Ep]'s id as the shared helper's UUID (real Jellyfin ids parse; anything else gets a stable one). */
+    private fun uuidOf(id: String): java.util.UUID = runCatching { java.util.UUID.fromString(id) }.getOrNull() ?: java.util.UUID.nameUUIDFromBytes(id.toByteArray())
+
+    /** The whole series in the shared split order, as [Ep]s. */
     fun merged(
         library: List<Ep>,
         iptv: List<IptvSeason>,
-    ): List<Ep> {
-        val seasons = library.map { it.season }.distinct()
-        val bySeason = library.groupBy { it.season }
-        val refs = seasons.mapIndexed { i, n -> com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef(i, n) }
-        return com.github.damontecres.wholphin.jellytip.details.mergeSeasons(refs, iptv).flatMap { m ->
-            val libEps = m.libraryIndex?.let { bySeason[seasons[it]] }.orEmpty()
-            com.github.damontecres.wholphin.jellytip.details
-                .seasonTiles(m, libEps.size, true, { libEps[it].episode }, { libEps[it].missing })
-                .map { t ->
-                    when (t) {
-                        is IptvSeasons.SeasonTile.Lib -> libEps[t.index]
-                        is IptvSeasons.SeasonTile.Iptv -> Ep(Source.IPTV, t.episode.id, m.number ?: 0, t.episode.episode, t.episode.title)
-                    }
-                }
-        }
+    ): List<Ep> = slots(library, iptv).mapNotNull { (_, ep) -> ep }
+
+    private fun slots(
+        library: List<Ep>,
+        iptv: List<IptvSeason>,
+    ): List<Pair<com.github.damontecres.wholphin.jellytip.details.SplitEp, Ep?>> {
+        val byId = HashMap<java.util.UUID, Ep>()
+        val lib =
+            library.map { e ->
+                val u = uuidOf(e.id)
+                byId[u] = e
+                com.github.damontecres.wholphin.jellytip.details.SplitLibEp(u, e.season, e.episode, e.played, e.resumeMs * 10_000, e.missing)
+            }
+        return com.github.damontecres.wholphin.jellytip.details
+            .splitEpisodes(lib, iptv)
+            .map { it to toEp(it, byId) }
     }
 
-    /**
-     * The first playable episode after [current] in [merged] order, crossing seasons; null after the last one. [current] is
-     * found by source + id; when it isn't a tile (an IPTV copy the library wins over, or an unknown id) by its season and
-     * episode number. "Missing" placeholders are skipped.
-     */
+    private fun toEp(
+        s: com.github.damontecres.wholphin.jellytip.details.SplitEp,
+        byId: Map<java.util.UUID, Ep>,
+    ): Ep? =
+        s.lib?.let { byId[it.id] }
+            ?: s.iptv?.let { Ep(Source.IPTV, it.id, s.season, it.episode, it.title, played = it.progress?.played == true) }
+
+    /** The episode after [current] by the shared [nextAfter] (crossing seasons, either source); null after the last one. */
     fun after(
         current: Ep,
         library: List<Ep>,
         iptv: List<IptvSeason>,
     ): Ep? {
-        val list = merged(library, iptv)
-        val at = list.indexOfFirst { it.source == current.source && it.id == current.id }
-        val from = if (at >= 0) at + 1 else startAfter(list, current.season, current.episode)
-        return list.drop(from).firstOrNull { !it.missing }
-    }
-
-    /** Where "after S[season] E[episode]" begins in [list] when that episode isn't a tile. */
-    private fun startAfter(
-        list: List<Ep>,
-        season: Int,
-        episode: Int,
-    ): Int {
-        val inSeason = list.indices.filter { list[it].season == season }
-        if (inSeason.isNotEmpty()) {
-            return inSeason.firstOrNull { list[it].episode > episode } ?: (inSeason.last() + 1)
-        }
-        // A season the list doesn't have: where the page would slot it (before the first higher-numbered season)
-        return list.indexOfFirst { it.season > season }.takeIf { it >= 0 } ?: list.size
+        val all = slots(library, iptv)
+        val next = com.github.damontecres.wholphin.jellytip.details.nextAfter(all.map { it.first }, current.season, current.episode) ?: return null
+        return all.firstOrNull { it.first === next }?.second
     }
 
     /** The IPTV episode [episodeId] as an [Ep], from the IPTV series' seasons; null when it isn't there. */

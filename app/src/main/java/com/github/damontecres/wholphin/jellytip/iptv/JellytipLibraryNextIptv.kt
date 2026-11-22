@@ -31,10 +31,11 @@ import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 
 /*
- * Library player, split series only (t5n 22-Nov): when Jellyfin has no next episode at the end of an episode and the
- * show's next episode is only on IPTV (the series page's merge: IPTV-only seasons and episodes the library lacks), offer
- * it through the same Up next card and countdown instead of leaving. Hooks in upstream code: the item start (prefetch),
- * PlaybackViewModel's "No next up" branch, and one call in PlaybackPage. With no IPTV next nothing changes and nothing waits.
+ * Library player, split series only (t5n 22-Nov): whenever the series is split and the next episode in the shared split
+ * list (splitEpisodes + nextAfter, as the series page) is an IPTV one, offer it through the same Up next card and countdown
+ * at the end, instead of the playlist's next (Jellyfin's next up skips IPTV episodes: S2E2 -> E6 over IPTV E3-E5) or
+ * leaving. Hooks in upstream code: the item start (prefetch), the top of PlaybackViewModel's STATE_ENDED handling, the
+ * outro next-up (held back), and one call in PlaybackPage. Not split / library next: upstream untouched, nothing waits.
  */
 
 /** When an item starts: forget the last offer, and look up this episode's IPTV next in the background (time-boxed). */
@@ -57,7 +58,7 @@ fun PlaybackViewModel.jellytipPrefetchIptvNext() {
 }
 
 /**
- * At STATE_ENDED with no next playlist item: true when the prefetched IPTV next is now offered ([PlaybackViewModel.jellytipIptvNext]);
+ * At STATE_ENDED (before the playlist's next): true when the prefetched IPTV next is now offered ([PlaybackViewModel.jellytipIptvNext]);
  * false = carry on exactly as before (leave). Never waits. Respects "never show next up".
  */
 fun PlaybackViewModel.jellytipOfferIptvNext(): Boolean {

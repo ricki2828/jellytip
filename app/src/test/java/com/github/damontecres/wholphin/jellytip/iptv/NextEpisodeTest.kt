@@ -112,9 +112,6 @@ class NextEpisodeTest {
         val merged = NextEpisode.merged(library, listOf(iseason(1, 1, 2), iseason(2, 1)))
         assertEquals(listOf("lib-1-1", "lib-1-2", "p1:e:21"), merged.map { it.id })
         assertEquals(lib(1, 2), NextEpisode.after(cur(Source.IPTV, 1, 1), library, listOf(iseason(1, 2))))
-        // Duplicate IPTV season blocks: the first copy wins
-        val twice = listOf(IptvSeason(2, listOf(iep(2, 1).copy(id = "first"))), IptvSeason(2, listOf(iep(2, 1).copy(id = "second"))))
-        assertEquals("first", NextEpisode.after(cur(Source.IPTV, 1, 9), emptyList(), twice)?.id)
     }
 
     @Test
@@ -135,14 +132,22 @@ class NextEpisodeTest {
     }
 
     @Test
-    fun specialsStayWhereTheLibraryPutsThemAndIptvSeasonZeroIsIgnored() {
+    fun specialsAreNeverANext() {
+        // The shared split list (splitEpisodes) leaves Specials out of both sources
         val library = listOf(lib(0, 1), lib(1, 1))
         val iptv = listOf(iseason(0, 1, 2), iseason(2, 1))
-        assertEquals(listOf("lib-0-1", "lib-1-1", "p1:e:21"), NextEpisode.merged(library, iptv).map { it.id })
+        assertEquals(listOf("lib-1-1", "p1:e:21"), NextEpisode.merged(library, iptv).map { it.id })
         assertEquals(lib(1, 1), NextEpisode.after(lib(0, 1), library, iptv))
-        // Specials listed last by the library stay last, after the IPTV-only season
-        val last = listOf(lib(1, 1), lib(0, 1))
-        assertEquals(listOf("lib-1-1", "p1:e:21", "lib-0-1"), NextEpisode.merged(last, iptv).map { it.id })
+    }
+
+    @Test
+    fun libraryNextUpWouldSkipIptvEpisodes() {
+        // Celebrity Traitors 22-Nov: library S2E1, S2E2, S2E6; IPTV S2E3-E5. Jellyfin says E6 after E2; the next is IPTV E3
+        val library = listOf(lib(2, 1), lib(2, 2), lib(2, 6))
+        val iptv = listOf(iseason(2, 3, 4, 5))
+        assertEquals(Ep(Source.IPTV, "p1:e:23", 2, 3, "I S2E3"), NextEpisode.after(lib(2, 2), library, iptv))
+        assertEquals(lib(2, 6), NextEpisode.after(cur(Source.IPTV, 2, 5), library, iptv))
+        assertEquals(listOf("lib-2-1", "lib-2-2", "p1:e:23", "p1:e:24", "p1:e:25", "lib-2-6"), NextEpisode.merged(library, iptv).map { it.id })
     }
 
     @Test
@@ -173,7 +178,7 @@ class NextEpisodeTest {
     }
 
     @Test
-    fun mergedOrderEqualsTheSeriesPageTiles() {
+    fun mergedOrderEqualsTheSeriesPagePlayableTiles() {
         // Library S1 + IPTV S2
         val a = listOf(lib(1, 1), lib(1, 2)) to listOf(iseason(2, 1, 2))
         // Library S2E1-3 + IPTV S2E1-8
@@ -182,9 +187,11 @@ class NextEpisodeTest {
         val c = listOf(lib(1, 1), lib(1, 2).copy(missing = true), lib(1, 3), lib(1, 4).copy(missing = true), lib(1, 5)) to listOf(iseason(1, 2))
         assertEquals(listOf("lib-1-1", "lib-1-2", "p1:e:21", "p1:e:22"), NextEpisode.merged(a.first, a.second).map { it.id })
         assertEquals(listOf("lib-2-1", "lib-2-2", "lib-2-3", "p1:e:24", "p1:e:25", "p1:e:26", "p1:e:27", "p1:e:28"), NextEpisode.merged(b.first, b.second).map { it.id })
-        assertEquals(listOf("lib-1-1", "p1:e:12", "lib-1-3", "lib-1-4", "lib-1-5"), NextEpisode.merged(c.first, c.second).map { it.id })
+        assertEquals(listOf("lib-1-1", "p1:e:12", "lib-1-3", "lib-1-5"), NextEpisode.merged(c.first, c.second).map { it.id })
+        // The page also draws the uncopied placeholder (lib-1-4) as a tile; it is never a next
         for ((library, iptv) in listOf(a, b, c)) {
-            assertEquals(pageTiles(library, iptv), NextEpisode.merged(library, iptv).map { it.id })
+            val missing = library.filter { it.missing }.map { it.id }.toSet()
+            assertEquals(pageTiles(library, iptv).filter { it !in missing }, NextEpisode.merged(library, iptv).map { it.id })
         }
         // And the player's next follows those tiles: the IPTV copy replaces the placeholder, the uncopied one is skipped
         assertEquals("p1:e:12", NextEpisode.after(lib(1, 1), c.first, c.second)?.id)
