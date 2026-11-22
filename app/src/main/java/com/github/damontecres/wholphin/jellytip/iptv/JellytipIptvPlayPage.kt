@@ -467,7 +467,7 @@ fun JellytipIptvPlayPage(
         val p = playback.player
         val items =
             IptvPlayControls.more(
-                seekable = p != null && (p.isCurrentMediaItemSeekable || playback.isRemux),
+                seekable = playback.canSkip(),
                 recording = target.recordingId != null,
                 inProgressWithChannel = inProgress && recMeta?.channelId?.isNotBlank() == true,
             )
