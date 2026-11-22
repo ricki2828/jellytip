@@ -776,7 +776,12 @@ fun HomePageContent(
     Box(modifier = modifier.onFocusChanged { hasFocus = it.hasFocus }) {
         // Hero trailers wait while the carousel turns by itself (each would start, then be cut at the next slide); once
         // he holds the buttons the slide stays and its trailer plays (Sound pauses the carousel)
-        heroComposable?.invoke(heroItem, hasFocus && !(carouselActive && heroSlides.size > 1 && !heroButtonsHeld))
+        val holdAutoplay = carouselActive && heroSlides.size > 1 && !heroButtonsHeld
+        DisposableEffect(holdAutoplay) {
+            com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.holdAutoplay = holdAutoplay
+            onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.holdAutoplay = false }
+        }
+        heroComposable?.invoke(heroItem, hasFocus)
         // Jellytip: a live-game slide of the hero carousel (the film hero skips its still underneath)
         val shownMatch = heroMatch
         val shownGames = remember { HashSet<String>() }

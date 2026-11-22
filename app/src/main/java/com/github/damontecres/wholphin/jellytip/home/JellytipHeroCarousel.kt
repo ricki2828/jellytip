@@ -52,6 +52,9 @@ object JellytipHeroCarousel {
     /** A match slide covers the hero: the film hero skips its still / Ken Burns underneath (set by Home). */
     var matchCovers by mutableStateOf(false)
 
+    /** The carousel turns by itself: no hero autoplay (each preview would be cut at the next slide). Set by Home. */
+    var holdAutoplay by mutableStateOf(false)
+
     /** Same pace as the web hero (heroMix SLIDE_MS). */
     const val SLIDE_MS = 8_000L
 

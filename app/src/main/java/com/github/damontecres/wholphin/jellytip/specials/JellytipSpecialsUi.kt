@@ -280,8 +280,8 @@ private fun TrailerBreakRow(
                     val url = resolve()
                     if (url == null) {
                         actions.open(item)
-                    } else {
-                        JellytipTrailerControl.focusedSpecial = owner
+                    } else if (JellytipTrailerControl.focusedSpecial == owner) {
+                        // Still on the tile (focus may have moved while the link was fetched)
                         JellytipTrailerControl.startSpecial(owner, url, sound = true, itemId = item.id)
                     }
                 }

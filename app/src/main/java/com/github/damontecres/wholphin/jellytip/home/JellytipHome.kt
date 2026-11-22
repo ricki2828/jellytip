@@ -229,11 +229,13 @@ fun JellytipHomeHero(
     }
 
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
-    val trailerWanted = hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused
+    val trailerWanted =
+        hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused && !JellytipHeroCarousel.holdAutoplay
     LaunchedEffect(item?.id, trailerWanted) {
-        // This item's trailer started by its Trailer button (with sound) outlives the autoplay rule flipping
+        // This item's trailer with sound (Trailer button, Sound) outlives only the carousel's autoplay hold; Home hidden,
+        // focus off the page (drawer) or a video special still stop it
         val mine = item != null && JellytipTrailerControl.isHeroPlaying && JellytipTrailerControl.itemId == item.id
-        if (mine && JellytipTrailerControl.sound) return@LaunchedEffect
+        if (mine && JellytipTrailerControl.sound && hasFocus && resumed && !JellytipTrailerControl.specialVideoFocused) return@LaunchedEffect
         // A special's video (Trailer Break, Closet Picks) is not the hero's to stop
         JellytipTrailerControl.stopIfOwner(null)
         if (item == null) return@LaunchedEffect
@@ -249,10 +251,12 @@ fun JellytipHomeHero(
     // The Trailer button (an explicit OK): this item's trailer with sound, whatever the autoplay rule says
     val trailerRequest = JellytipTrailerControl.heroTrailerRequest
     LaunchedEffect(trailerRequest) {
-        if (trailerRequest == null) return@LaunchedEffect
-        JellytipTrailerControl.heroTrailerRequest = null
-        val target = item?.takeIf { it.id == trailerRequest } ?: return@LaunchedEffect
-        viewModel.localTrailer(target)?.let { (url, trailerId) -> JellytipTrailerControl.start(target, url, trailerId, sound = true) }
+        val wanted = trailerRequest ?: return@LaunchedEffect
+        val target = item?.takeIf { it.id == wanted }
+        val found = target?.let { viewModel.localTrailer(it) }
+        if (target != null && found != null) JellytipTrailerControl.start(target, found.first, found.second, sound = true)
+        // Cleared last: clearing first would cancel this effect if the lookup suspended
+        if (JellytipTrailerControl.heroTrailerRequest == wanted) JellytipTrailerControl.heroTrailerRequest = null
     }
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url
