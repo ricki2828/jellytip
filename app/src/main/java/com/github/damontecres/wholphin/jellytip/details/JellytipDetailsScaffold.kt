@@ -126,6 +126,9 @@ fun JellytipDetailsScaffold(
     }
     LaunchedEffect(state.topFocused) { if (state.topFocused) state.sectionsActive = false }
     var pageHasFocus by remember { mutableStateOf(false) }
+    // While an openAt landing is in flight nothing is focused yet: the resume hook below must not take that as "focus was lost"
+    // and put it on the hero (which would close the sections and land Back-from-playback on Play again)
+    var openingAt by remember { mutableStateOf(openAt != null) }
     LaunchedEffect(state.sectionsActive) {
         if (state.sectionsActive) {
             // Rows only exist once sectionsActive composes them: wait for that, scroll to them, then focus
@@ -168,11 +171,12 @@ fun JellytipDetailsScaffold(
                 listState.scrollToItem(0)
                 heroFocus.tryRequestFocus()
             }
+            openingAt = false
         }
     }
     val headerAlpha by animateFloatAsState(if (state.topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
-    RestoreFocusOnResume(heroFocus, pageHasFocus)
+    RestoreFocusOnResume(heroFocus, pageHasFocus || openingAt)
     Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         backdrop(state.buttonRowFocused, !state.topFocused)
         overlay(this) { headerAlpha }

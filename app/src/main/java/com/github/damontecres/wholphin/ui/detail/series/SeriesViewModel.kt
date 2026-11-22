@@ -405,10 +405,11 @@ class SeriesViewModel
                     null
                 } else {
                     try {
+                        // (the first REAL episode: not a Specials entry, which sorts first as season 0)
                         api.tvShowsApi
-                            .getEpisodes(seriesId, limit = 1)
+                            .getEpisodes(seriesId, limit = 10)
                             .content.items
-                            .firstOrNull()
+                            .let { eps -> eps.firstOrNull { it.parentIndexNumber != 0 } ?: eps.firstOrNull() }
                     } catch (ex: CancellationException) {
                         throw ex
                     } catch (ex: Exception) {
