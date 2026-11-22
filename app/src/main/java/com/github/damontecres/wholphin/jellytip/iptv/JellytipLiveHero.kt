@@ -167,7 +167,7 @@ internal fun heroTag(
     }
 
 @Composable
-private fun BigCrest(
+internal fun BigCrest(
     logo: String?,
     label: String,
     bg: Color,
@@ -441,42 +441,35 @@ fun rememberHomeLiveHero(viewModel: JellytipGameCentreViewModel = androidx.hilt.
     return picks
 }
 
-/** The hero on Home: the 2A card; Watch = the best channel with the match id, From kick-off, More = Game Centre. */
-@Composable
-fun HomeLiveHero(
-    picks: List<FxItem>,
-    onFocused: () -> Unit,
-    focusRequester: FocusRequester,
-    modifier: Modifier = Modifier,
-    viewModel: JellytipGameCentreViewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(),
+/**
+ * The Home hero carousel's match slide buttons (Watch = the best channel with the match id, From kick-off, More = Game
+ * Centre); labels and actions for [f] at [now]. The slide itself is drawn by HeroMatchBackdrop / HeroMatchHeader.
+ */
+class HomeMatchActions internal constructor(
+    private val vm: JellytipGameCentreViewModel,
 ) {
-    if (picks.isEmpty()) return
-    var index by remember { mutableStateOf(0) }
-    val f = picks[index.coerceIn(0, picks.size - 1)]
-    val now by produceState(nowSec()) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000)
-            value = nowSec()
+    fun buttons(
+        f: FxItem,
+        now: Long,
+    ): List<Pair<String, () -> Unit>> {
+        val best = SportFixtures.pickChannel(f, now).channel
+        val fromStart = best?.takeIf { it.startOver && it.start != null && it.stop != null && !it.dormant }
+        val out = ArrayList<Pair<String, () -> Unit>>()
+        best?.let { ch ->
+            out.add("\u25B6  Watch" to { launchFixture(vm.playback, vm.navigationManager, f, ch, false, "home hero", surface = SportEventRules.HOME_HERO) })
         }
-    }
-    val best = SportFixtures.pickChannel(f, now).channel
-    val fromStart = best?.takeIf { it.startOver && it.start != null && it.stop != null && !it.dormant }
-    SportEventsFlushOnLeave()
-    LiveMatchHero(
-        f = f,
-        now = now,
-        onWatch = best?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, false, "home hero", surface = SportEventRules.HOME_HERO) } },
-        onFromStart = fromStart?.let { ch -> { launchFixture(viewModel.playback, viewModel.navigationManager, f, ch, true, "home hero", surface = SportEventRules.HOME_HERO) } },
-        onMore = {
+        fromStart?.let { ch ->
+            out.add("From kick-off" to { launchFixture(vm.playback, vm.navigationManager, f, ch, true, "home hero", surface = SportEventRules.HOME_HERO) })
+        }
+        val more: () -> Unit = {
             com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-            viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipUpcomingSport, "home hero More")
-        },
-        focusRequester = focusRequester,
-        index = index,
-        count = picks.size,
-        onCycle = { index = it },
-        onFocused = onFocused,
-        modifier = modifier,
-        onShown = { JellytipSportEvents.log(SportEventRules.SHOWN, f, SportEventRules.HOME_HERO, pos = index + 1) },
-    )
+            vm.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipUpcomingSport, "home hero More")
+        }
+        out.add("More" to more)
+        return out
+    }
 }
+
+@Composable
+fun rememberHomeMatchActions(viewModel: JellytipGameCentreViewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()): HomeMatchActions =
+    remember(viewModel) { HomeMatchActions(viewModel) }

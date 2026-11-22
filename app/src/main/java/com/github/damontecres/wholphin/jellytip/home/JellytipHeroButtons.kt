@@ -9,6 +9,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +35,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipFocus
 import com.github.damontecres.wholphin.ui.playback.playable
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 
 /**
@@ -41,19 +56,119 @@ fun JellytipHeroButtons(
     firstRequester: FocusRequester? = null,
     /** False while the buttons are faded out: they never take focus then. */
     focusable: Boolean = true,
+    /** Carousel arrows: Left on the first button (false) / Right on the last (true); true = consumed. */
+    onEdge: ((right: Boolean) -> Boolean)? = null,
+    /** "2 / 9" after the buttons while the hero carousel runs. */
+    pager: String? = null,
 ) {
-    val resume = item.resumeMs > 0
+    JellytipHeroActionButtons(
+        buttons = heroPlayButtons(item, onPlay, onInfo),
+        modifier = modifier,
+        soundOn = soundOn,
+        onSound = onSound,
+        firstRequester = firstRequester,
+        focusable = focusable,
+        onEdge = onEdge,
+        pager = pager,
+    )
+}
+
+/** A film / show slide's buttons: Play (Resume when started; Watch opens a series' page) and More info. */
+fun heroPlayButtons(
+    item: BaseItem,
+    onPlay: () -> Unit,
+    onInfo: () -> Unit,
+): List<Pair<String, () -> Unit>> {
+    val label = if (!item.type.playable) "\u25B6  Watch" else if (item.resumeMs > 0) "\u25B6  Resume" else "\u25B6  Play"
+    return listOf(label to onPlay, "More info" to onInfo)
+}
+
+/**
+ * The hero button row for any slide (a film's Play / More info, a live game's Watch / From kick-off / More): the first
+ * is primary and takes [firstRequester]; Sound last. Keyed by place, so a slide change keeps focus where it was.
+ */
+@Composable
+fun JellytipHeroActionButtons(
+    buttons: List<Pair<String, () -> Unit>>,
+    modifier: Modifier = Modifier,
+    soundOn: Boolean? = null,
+    onSound: () -> Unit = {},
+    firstRequester: FocusRequester? = null,
+    focusable: Boolean = true,
+    onEdge: ((right: Boolean) -> Boolean)? = null,
+    pager: String? = null,
+) {
     val canFocus = Modifier.focusProperties { this.canFocus = focusable }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier) {
-        HeroButton(
-            if (!item.type.playable) "▶  Watch" else if (resume) "▶  Resume" else "▶  Play",
-            primary = true,
-            onClick = onPlay,
-            modifier = canFocus.let { m -> firstRequester?.let { m.focusRequester(it) } ?: m },
-        )
-        HeroButton("More info", primary = false, onClick = onInfo, modifier = canFocus)
-        // Sound for the trailer playing now, or for the next ones when none is playing; again mutes
-        soundOn?.let { on -> HeroButton(if (on) "\uD83D\uDD0A  Sound on" else "\uD83D\uDD07  Sound off", primary = false, onClick = onSound, modifier = canFocus) }
+    // Which action button holds focus (-1 = none / Sound). Buttons are keyed by position, so a slide with other labels
+    // keeps focus in place; a slide (or rebuild) with fewer buttons moves it to the last one left instead of dropping it
+    var focusedAt by remember { mutableIntStateOf(-1) }
+    // When the last focused action button lost focus: a removed button loses it just before the list shrinks; long ago =
+    // focus went elsewhere on purpose (the rows), and it is never pulled back
+    val lostAt = remember { longArrayOf(0L) }
+    val requesters = remember { ArrayList<FocusRequester>() }
+    while (requesters.size < buttons.size) requesters.add(FocusRequester())
+    fun requesterAt(i: Int) = if (i == 0) firstRequester ?: requesters[0] else requesters[i]
+    LaunchedEffect(buttons.size) {
+        val justLost = android.os.SystemClock.uptimeMillis() - lostAt[0] < REFOCUS_WINDOW_MS
+        if (buttons.isNotEmpty() && focusedAt >= buttons.size && justLost) {
+            val to = buttons.size - 1
+            focusedAt = to
+            requesterAt(to).tryRequestFocus()
+        }
+    }
+    val all =
+        buttons +
+            listOfNotNull(
+                // Sound for the trailer playing now, or for the next ones when none is playing; again mutes
+                soundOn?.let { on -> (if (on) "\uD83D\uDD0A  Sound on" else "\uD83D\uDD07  Sound off") to onSound },
+            )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        all.forEachIndexed { i, (label, action) ->
+            val first = i == 0
+            val last = i == all.lastIndex
+            val isSound = soundOn != null && i == all.lastIndex
+            // Keyed by place (Sound: its own key, its label flips): a slide change keeps the focused node
+            androidx.compose.runtime.key(if (isSound) "sound" else "b$i") {
+                // Removed while focused: note it here too (the blur may come before or after the removal)
+                if (!isSound) {
+                    DisposableEffect(Unit) {
+                        onDispose { if (focusedAt == i) lostAt[0] = android.os.SystemClock.uptimeMillis() }
+                    }
+                }
+                HeroButton(
+                    label,
+                    primary = first,
+                    onClick = action,
+                    modifier =
+                        canFocus
+                            .let { m -> if (isSound) m else m.focusRequester(requesterAt(i)) }
+                            .onFocusChanged {
+                                if (it.isFocused) {
+                                    focusedAt = if (isSound) -1 else i
+                                } else if (focusedAt == i && !isSound) {
+                                    lostAt[0] = android.os.SystemClock.uptimeMillis()
+                                }
+                            }
+                            .onPreviewKeyEvent { e ->
+                                if (onEdge == null || e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                when {
+                                    first && e.key == Key.DirectionLeft -> onEdge(false)
+                                    last && e.key == Key.DirectionRight -> onEdge(true)
+                                    else -> false
+                                }
+                            },
+                )
+            }
+        }
+        pager?.let {
+            Text(
+                it,
+                fontFamily = JellytipFontFamily,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
     }
 }
 
@@ -84,3 +199,5 @@ private fun HeroButton(
         Text(label, fontFamily = JellytipFontFamily, fontSize = 15.sp, fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
     }
 }
+
+private const val REFOCUS_WINDOW_MS = 500L
