@@ -28,6 +28,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Surface
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.playback.overlay.PlaybackButton
@@ -121,6 +127,9 @@ internal fun IptvPlayOverlay(
     onMore: () -> Unit,
     onInteraction: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "Next: S2 E2" when the series has a next episode (t5n 22-Nov); null = no Next button. */
+    nextLabel: String? = null,
+    onNext: () -> Unit = {},
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -164,6 +173,8 @@ internal fun IptvPlayOverlay(
             val playF by playSource.collectIsFocusedAsState()
             val tracksF by tracksSource.collectIsFocusedAsState()
             val moreF by moreSource.collectIsFocusedAsState()
+            val nextSource = remember { MutableInteractionSource() }
+            val nextF by nextSource.collectIsFocusedAsState()
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -190,16 +201,61 @@ internal fun IptvPlayOverlay(
                     onControllerInteraction = onInteraction,
                     interactionSource = moreSource,
                 )
+                if (nextLabel != null) {
+                    IptvNextButton(nextLabel, nextF, onNext, onInteraction, nextSource)
+                }
                 // The focused button's name (the icons alone are not obvious from the sofa)
                 val name =
                     when {
                         playF -> if (playing) "Pause" else "Play"
                         tracksF -> "Audio & subtitles"
                         moreF -> "More"
+                        nextF -> "Next episode"
                         else -> ""
                     }
                 Text(name, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
             }
+        }
+    }
+}
+
+/** The overlay's Next episode button: icon and its code ("Next: S2 E2"), always labelled; paper when focused. */
+@Composable
+private fun IptvNextButton(
+    label: String,
+    focused: Boolean,
+    onClick: () -> Unit,
+    onInteraction: () -> Unit,
+    source: MutableInteractionSource,
+) {
+    val ink = Color(0xFF0A0A0A)
+    val paper = Color(0xFFF2F2F0)
+    Surface(
+        onClick = {
+            onInteraction()
+            onClick()
+        },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp)),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.12f),
+                focusedContainerColor = paper,
+                contentColor = paper,
+                focusedContentColor = ink,
+                pressedContainerColor = paper,
+                pressedContentColor = ink,
+            ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        interactionSource = source,
+        modifier = Modifier.height(40.dp).testTag("iptv-next"),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxHeight().padding(start = 12.dp, end = 16.dp),
+        ) {
+            Icon(painterResource(R.drawable.jt_skip_next), contentDescription = null, tint = if (focused) ink else paper, modifier = Modifier.size(20.dp))
+            Text(label, color = if (focused) ink else paper, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1)
         }
     }
 }

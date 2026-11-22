@@ -4,6 +4,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipLibraryIptvUpNext
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
@@ -719,6 +720,8 @@ fun PlaybackPageContent(
                 )
             }
         }
+        // Jellytip: a split series' next episode that only IPTV has (t5n 22-Nov)
+        JellytipLibraryIptvUpNext(viewModel)
     }
 
     if (subtitleSearchState.status != SubtitleSearchStatus.Inactive) {

@@ -42,6 +42,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private const val CONTROLS_MS = 4_000L
@@ -218,6 +219,80 @@ fun JellytipIptvPlayPage(
         viewModel.navigationManager.replaceTop(Destination.JellytipLiveTvPlayer(ch.id))
         playback.play(IptvTarget(ch.id, ch.name), "recording: jump to live")
     }
+    // Next episode (t5n 22-Nov, Ricki: "skip to the next episode"): a series episode only. The next comes from the IPTV
+    // series and the library's copy of the show (split-series rule, NextEpisode); offered as an overlay button and as an
+    // Up next card in the last 30 s (or at the end when the runtime is unknown) with the library player's countdown.
+    var upNext by remember(target) { mutableStateOf<NextEpisodeLoader.UpNext?>(null) }
+    var upNextCancelled by remember(target) { mutableStateOf(false) }
+    var ended by remember(target) { mutableStateOf(false) }
+    var countdown by remember(target) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(target) {
+        val sid = target.seriesId ?: return@LaunchedEffect
+        val eid = target.episodeId ?: return@LaunchedEffect
+        upNext =
+            try {
+                viewModel.vod.detail(sid)?.let { d ->
+                    NextEpisodeLoader.afterIptv(viewModel.jellyfin, viewModel.serverRepository.currentUser?.id, d, eid)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                JellytipTrace.log("player", "next episode: lookup failed ${e.javaClass.simpleName}")
+                null
+            }
+        JellytipTrace.log("player", "next episode for ${target.label}: ${upNext?.let { "${it.ep.code} via ${it.ep.source.name.lowercase()}" } ?: "none"}")
+    }
+    val upNextPrefs by androidx.compose.runtime.produceState<Pair<Boolean, Long>?>(null) {
+        value =
+            runCatching {
+                viewModel.appPreferences.data
+                    .first()
+                    .playbackPreferences
+                    .let { it.autoPlayNext to it.autoPlayNextDelaySeconds.toLong() }
+            }.getOrNull() ?: (true to 15L)
+    }
+
+    /** Leave for the next episode: an IPTV one replaces this page's target, a library one opens the library player. */
+    fun playNext(how: String) {
+        val up = upNext ?: return
+        // Only while this page still owns the stream (a newer page or a stopped app must not be navigated away from)
+        if (playback.state.value.target != target) return
+        NextEpisodeLoader.trace(up, how)
+        playback.saveProgress(target)
+        when (up.ep.source) {
+            NextEpisode.Source.IPTV ->
+                viewModel.navigationManager.replaceTop(
+                    Destination.JellytipIptvPlay(title = up.label, seriesId = up.iptvSeriesId, episodeId = up.ep.id, resumeMs = up.resumeMs),
+                )
+
+            NextEpisode.Source.LIBRARY -> {
+                val id = runCatching { java.util.UUID.fromString(up.ep.id) }.getOrNull() ?: return
+                viewModel.navigationManager.replaceTop(Destination.Playback(id, 0L))
+            }
+        }
+    }
+    val ownsStream = playState.target == target && playback.holds(target)
+    val cardShown = UpNextTiming.showCard(upNext != null, upNextCancelled, ownsStream, ended, position, duration)
+    LaunchedEffect(cardShown, upNextPrefs) {
+        countdown = null
+        if (!cardShown) return@LaunchedEffect
+        val prefs = upNextPrefs ?: return@LaunchedEffect
+        val start = UpNextTiming.countdownStart(prefs.first, prefs.second) ?: return@LaunchedEffect
+        var left = start
+        countdown = left
+        while (left > 0) {
+            delay(1_000)
+            left--
+            countdown = left
+        }
+        if (!upNextCancelled) playNext("auto")
+    }
+    // Back on the card (overlay hidden): cancel and stay; it doesn't come back for this episode
+    androidx.activity.compose.BackHandler(enabled = cardShown && !overlay) {
+        upNext?.let { NextEpisodeLoader.traceCancelled(it) }
+        upNextCancelled = true
+        countdown = null
+    }
     LaunchedEffect(target) {
         var sinceSave = 0L
         while (true) {
@@ -226,6 +301,7 @@ fun JellytipIptvPlayPage(
                 // A server remux begins at its start offset: the item's position, not the stream's
                 position = playback.positionMs()
                 duration = playback.durationMs()
+                ended = it.playbackState == androidx.media3.common.Player.STATE_ENDED && playback.state.value.target == target
                 playing = it.playWhenReady
                 if (it.isPlaying && playback.state.value.target == target) {
                     watch.runtime(duration / 1000.0)
@@ -312,6 +388,14 @@ fun JellytipIptvPlayPage(
                 }
                 // The overlay's buttons have focus: the D-pad and OK are theirs (Back is the BackHandler)
                 if (overlay) return@onPreviewKeyEvent false
+                // The Up next card is showing: OK plays the next episode now
+                if (cardShown && isOk) {
+                    if (e.nativeKeyEvent.repeatCount == 0) {
+                        swallowOkUp = true
+                        playNext("card ok")
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 // Stream recovery gave up: OK tries again at the same position
                 val failedNow = playState as? IptvPlayState.Failed
                 if (failedNow != null && failedNow.canRetry && isOk) {
@@ -425,6 +509,21 @@ fun JellytipIptvPlayPage(
                 onMore = { moreOpen = true },
                 onInteraction = { overlayTick++ },
                 modifier = Modifier.align(Alignment.BottomStart),
+                nextLabel = upNext?.let { "Next: ${it.ep.code}" },
+                onNext = { playNext("overlay") },
+            )
+        }
+        val up = upNext
+        if (cardShown && up != null) {
+            JellytipUpNextCard(
+                up = up,
+                secondsLeft = countdown,
+                crossover = up.ep.source == NextEpisode.Source.LIBRARY,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        // Above the overlay / progress strip while they show, else in the bottom safe area
+                        .padding(end = 48.dp, bottom = if (overlay || controlsVisible) 176.dp else 32.dp),
             )
         }
     }

@@ -92,6 +92,11 @@ class JellytipLiveTvPlayerViewModel
         val reminders: JellytipReminders,
         val specials: com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialsService,
         val kickoff: JellytipKickoff,
+        /** Next episode in the IPTV player (t5n 22-Nov): the series' seasons, the library's copy, the library's countdown. */
+        val vod: JellytipIptvVodService,
+        val jellyfin: org.jellyfin.sdk.api.client.ApiClient,
+        val serverRepository: com.github.damontecres.wholphin.data.ServerRepository,
+        val appPreferences: androidx.datastore.core.DataStore<com.github.damontecres.wholphin.preferences.AppPreferences>,
     ) : ViewModel()
 
 private const val ZAP_SETTLE_MS = 700L

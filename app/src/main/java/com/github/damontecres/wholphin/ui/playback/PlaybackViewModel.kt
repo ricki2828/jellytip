@@ -41,6 +41,7 @@ import com.github.damontecres.wholphin.mpv.MpvPlayer
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.ShowNextUpWhen
+import com.github.damontecres.wholphin.jellytip.iptv.jellytipOfferIptvNext
 import com.github.damontecres.wholphin.preferences.SkipSegmentBehavior
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.preferences.enabled
@@ -183,6 +184,9 @@ class PlaybackViewModel
             )
 
         private val _state = MutableStateFlow(PlaybackState())
+
+        /** Jellytip (t5n 22-Nov): the IPTV-only next episode offered at the end of a split series' library episodes. */
+        val jellytipIptvNext = MutableStateFlow<com.github.damontecres.wholphin.jellytip.iptv.NextEpisodeLoader.UpNext?>(null)
         val state: StateFlow<PlaybackState> = _state
 
         internal lateinit var preferences: UserPreferences
@@ -1236,6 +1240,8 @@ class PlaybackViewModel
 
                         null -> {
                             Timber.v("No next up")
+                            // Jellytip: the show goes on only via IPTV (split series): offer it instead of leaving
+                            if (jellytipOfferIptvNext()) return@launchDefault
                             navigationManager.goBack()
                             // Jellytip "Play both" whose other half is on IPTV: start it now
                             val then =
