@@ -152,6 +152,21 @@ class SportWowTest {
     }
 
     @Test
+    fun catchUpPlaysSortedByWallclockNotServerOrder() {
+        // Oldest first from the server this time: the cards still come out oldest first, the cap keeps the newest
+        val full = answer(listOf(play("a", 100.0), play("c", 300.0), play("b", 200.0)))
+        assertEquals(listOf("Play a", "Play b", "Play c"), CatchUpPolicy.cards(null, full, full) { true }.map { it.text })
+        val many = answer((1..20).map { play("p$it", it.toDouble()) })
+        val cards = CatchUpPolicy.cards(null, many, many) { true }
+        assertEquals("Play p9", cards.first().text)
+        assertEquals("Play p20", cards.last().text)
+        // Released plays with no wallclock count as older than stamped ones
+        val rel = answer(listOf(play("old", null)), updatedAt = 900)
+        val newest = answer(listOf(play("new", 100.0)))
+        assertEquals(listOf("Play old", "Play new"), CatchUpPolicy.cards(rel, newest, newest) { true }.map { it.text })
+    }
+
+    @Test
     fun catchUpCardsCapKeepsTheNewest() {
         val plays = (20 downTo 1).map { play("p$it", it.toDouble()) }
         val full = answer(plays)
@@ -195,7 +210,22 @@ class SportWowTest {
         assertFalse(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = true, openingMs = 60_000))
         // Honest copy: never worked vs worked then stopped
         assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(0))
-        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS))
-        assertEquals(CatchUpPolicy.STOPPED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS + 500))
+        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS - 500))
+        assertEquals(CatchUpPolicy.STOPPED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS))
+        assertEquals("Catch-up stopped — back to live", CatchUpPolicy.gaveUpToast(60_000))
+        assertEquals("Catch-up isn't working on this channel right now", CatchUpPolicy.gaveUpToast(0))
+    }
+
+    @Test
+    fun catchUpFailureClassification() {
+        // Back to live: the server's no_catchup, recovery gave up, a missing stream, anything unclassified
+        listOf(FailCause.NO_CATCHUP, FailCause.GAVE_UP, FailCause.MISSING, FailCause.OTHER).forEach { assertTrue(it.name, CatchUpPolicy.fallsBack(it)) }
+        // Their own screens: all connections in use, sign-in / permission, a stale link, rate limited
+        listOf(FailCause.BLOCKED, FailCause.AUTH, FailCause.DENIED, FailCause.LINK, FailCause.RATE).forEach { assertFalse(it.name, CatchUpPolicy.fallsBack(it)) }
+        // The recovery machine's refusals map over
+        assertEquals(FailCause.NO_CATCHUP, FailCause.of(StreamRecovery.permanentReason(400, "no_catchup")))
+        assertEquals(FailCause.AUTH, FailCause.of(StreamRecovery.permanentReason(401, "provider_auth")))
+        assertEquals(FailCause.RATE, FailCause.of(StreamRecovery.permanentReason(429, null)))
+        assertEquals(FailCause.OTHER, FailCause.of(StreamRecovery.permanentReason(500, null)))
     }
 }

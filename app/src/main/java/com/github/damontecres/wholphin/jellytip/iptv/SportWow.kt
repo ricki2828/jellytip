@@ -236,7 +236,8 @@ object CatchUpPolicy {
             }
         }
         for (p in rel) if (seen.add(p.key)) out += p
-        return out
+        // Newest first by event time; plays with no wallclock keep their (server) order after the stamped ones
+        return out.sortedWith(compareBy<LivePlay, Double?>(nullsLast(reverseOrder<Double>())) { it.wallclock })
     }
 
     /** The choice card's options: 0 From kick-off, 1 Catch me up, 2 Live. Empty = Live alone, so no prompt at all. */
@@ -260,8 +261,19 @@ object CatchUpPolicy {
     /** A window that played this long before failing worked: it "stopped", it isn't "not working". */
     const val PLAYED_OK_MS = 5_000L
 
+    /**
+     * Failures that send a catch-up window back to live: the server's no_catchup, recovery giving up, a missing stream or
+     * an unclassified failure. All connections in use, sign-in / permission, a stale link and rate limits keep their
+     * own screens (live wouldn't play either, and their copy says what to do).
+     */
+    fun fallsBack(cause: FailCause): Boolean =
+        when (cause) {
+            FailCause.NO_CATCHUP, FailCause.GAVE_UP, FailCause.MISSING, FailCause.OTHER -> true
+            FailCause.BLOCKED, FailCause.AUTH, FailCause.DENIED, FailCause.LINK, FailCause.RATE -> false
+        }
+
     /** The toast when a catch-up window gives up after playing [playedMs]. */
-    fun gaveUpToast(playedMs: Long): String = if (playedMs > PLAYED_OK_MS) STOPPED_TOAST else FAILED_TOAST
+    fun gaveUpToast(playedMs: Long): String = if (playedMs >= PLAYED_OK_MS) STOPPED_TOAST else FAILED_TOAST
 
     /**
      * A catch-up target of a live channel gave up: it failed (no_catchup refusal, recovery gave up), or it has been
