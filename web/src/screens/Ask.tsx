@@ -3,8 +3,12 @@
 // refine chips drawn from what was found (people, genres to keep / leave out, decades, kind, length, unwatched).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getItems, uid, type Item } from "../api/jellyfin";
-import { activeChips, appliedNotes, buildQuery, EXAMPLES, filterItems, parseAsk, pickFrom, refineOptions, removeChip, type Chip, type Picks } from "../lib/askParse";
+import { activeChips, appliedNotes, buildQuery, EXAMPLES, filterItems, parseAsk, pickFrom, PICKS, refineOptions, removeChip, type Chip, type Picks } from "../lib/askParse";
+import { askIptvPicks, vodNote, vodQueries } from "../lib/askVod";
+import { parseVodItems, type VodItem } from "../lib/iptvVod";
+import { hasLiveTv, iptvGet } from "../api/iptv";
 import { Card } from "../components/Card";
+import { IptvCard } from "../components/IptvTile";
 import { go } from "../lib/router";
 import "./Ask.css";
 
@@ -23,6 +27,9 @@ export function Ask() {
   const [shuffle, setShuffle] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [state, setState] = useState<State>({ kind: "idle" });
+  // The IPTV half (source-neutral: same grid, after the library picks); key = the library answer it belongs to
+  const [iptv, setIptv] = useState<{ key: number; items: VodItem[]; note: string | null; pending: boolean } | null>(null);
+  const loadSeq = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const chipBox = useRef<HTMLDivElement>(null);
   const refocus = useRef<number | null>(null);
@@ -40,13 +47,18 @@ export function Ask() {
       return;
     }
     let alive = true;
+    const seq = ++loadSeq.current;
     setState({ kind: "loading" });
-    getItems(buildQuery(chips, { shuffle, refine: true }))
+    setIptv(null);
+    const q = buildQuery(chips, { shuffle, refine: true });
+    // ProviderIds: the TMDB ids that keep an IPTV twin of a library pick out of the grid
+    getItems({ ...q, Fields: [q.Fields, "ProviderIds"].filter(Boolean).join(",") })
       .then((r) => {
         if (!alive) return;
         const items = r.Items as Item[];
         const picks = pickFrom(items, r.TotalRecordCount, chips, shuffle);
         setState({ kind: "done", picks, kept: filterItems(items, chips) });
+        void loadIptv(seq, picks.items, () => alive);
         // People only for the shown picks; a failure just means no people chips
         const ids = picks.items.map((it) => it.Id);
         if (ids.length > 1) {
@@ -61,6 +73,45 @@ export function Ask() {
     };
     // chipKey stands for the chips; userId so a different signed-in user never sees another's picks
   }, [chipKey, shuffle, nonce, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** IPTV titles that fit, after the library picks (twins of a library pick left out); errors = library only. */
+  async function loadIptv(seq: number, libraryPicks: Item[], alive: () => boolean) {
+    const queries = vodQueries(chips);
+    const note = vodNote(chips);
+    // Pending before the IPTV check too: no "Nothing fits." flash while it answers
+    setIptv({ key: seq, items: [], note: null, pending: true });
+    const has = await hasLiveTv().catch(() => false);
+    if (!alive()) return;
+    // No IPTV, or nothing IPTV can be asked (a person chip, kids with no known rating): the note says why, when he has IPTV
+    if (!has || !queries.length) {
+      setIptv(has && note ? { key: seq, items: [], note, pending: false } : null);
+      return;
+    }
+    try {
+      const answers = await Promise.all(
+        queries.map((vq) =>
+          iptvGet<{ items?: unknown }>(`v1/iptv/vod?${new URLSearchParams(vq.params)}`)
+            .then((a) => (a.status === 200 ? parseVodItems(a.data?.items) : []))
+            .catch(() => [] as VodItem[]),
+        ),
+      );
+      if (!alive()) return;
+      const fetched = answers.flat();
+      const ordered = shuffle ? shuffled(fetched) : fetched;
+      const lib = new Set(
+        libraryPicks.flatMap((it) => {
+          const t = it.ProviderIds?.Tmdb;
+          return t ? [`${it.Type === "Series" ? "series" : "movie"}:${t}`] : [];
+        }),
+      );
+      const { shown, kept } = askIptvPicks(ordered, chips, lib, PICKS);
+      const checked = fetched.length ? `IPTV: ${shown.length} more from the top ${fetched.length} by rating (${kept} fit).` : null;
+      setIptv({ key: seq, items: shown, note: [checked, note].filter(Boolean).join(" ") || null, pending: false });
+    } catch {
+      if (alive()) setIptv(null);
+    }
+  }
+  const iptvNow = iptv && state.kind === "done" && iptv.key === loadSeq.current ? iptv : null;
 
   // After a chip is removed its button is gone: land on its neighbour (or the box) so keyboard and remote do not lose their place
   useEffect(() => {
@@ -190,7 +241,9 @@ export function Ask() {
         <section>
           <div className="ask-bar">
             <p className="ask-coverage" role="status">
-              {state.kind === "done" ? `${state.picks.items.length === 0 ? "Nothing fits. " : ""}${state.picks.note}` : "Looking…"}
+              {state.kind === "done"
+                ? [state.picks.items.length === 0 && !iptvNow?.items.length && !iptvNow?.pending ? "Nothing fits." : "", state.picks.note, iptvNow?.note ?? ""].filter(Boolean).join(" ")
+                : "Looking…"}
             </p>
             <button
               className="btn small"
@@ -234,10 +287,21 @@ export function Ask() {
               {state.picks.items.map((it) => (
                 <Card key={it.Id} item={it} width={0} />
               ))}
+              {iptvNow?.items.map((v) => <IptvCard key={`v:${v.id}`} item={v} width={0} />)}
             </div>
           )}
         </section>
       )}
     </div>
   );
+}
+
+/** Fisher-Yates (unbiased). */
+function shuffled<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }

@@ -39,6 +39,8 @@ export interface VodItem {
   thumb?: 1 | -1 | 0 | null;
   /** Hidden from rows and picks ("Not interested"). */
   notInterested?: boolean;
+  /** TMDB genre ids of this kind (list route; absent = not said). */
+  genreIds?: number[];
 }
 
 export interface VodEpisode {
@@ -143,6 +145,7 @@ export function parseVodItem(raw: unknown): VodItem | null {
     // absent = the server doesn't say (keep whatever reactions loaded); 0 = says none
     ...(r.thumb === 1 || r.thumb === -1 || r.thumb === 0 ? { thumb: r.thumb } : {}),
     ...(typeof r.notInterested === "boolean" ? { notInterested: r.notInterested } : {}),
+    ...(Array.isArray(r.genreIds) ? { genreIds: (r.genreIds as unknown[]).filter((g): g is number => typeof g === "number" && Number.isFinite(g)) } : {}),
   };
 }
 
