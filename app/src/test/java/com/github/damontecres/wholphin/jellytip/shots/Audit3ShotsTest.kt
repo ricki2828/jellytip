@@ -424,14 +424,14 @@ class Audit3ShotsTest {
             name,
             steps = { if (focus) focusNode(name, hasClickAction()) },
             measure = {
-                logBox(name, "band", hasTestTag("tb-band"))
+                logBox(name, "band", hasTestTag("trailer-break-band"))
                 // the panel tile is the only clickable node of the band
                 logBox(name, "tile (16:9 panel)", hasClickAction())
                 logBox(name, "kicker", hasText("TRAILER BREAK"))
                 logBox(name, "title text (no logo)", hasText("The Italian Job"))
                 logBox(name, "reason", hasText("Because you watched Heat"))
                 logBox(name, "meta", hasText("1995", substring = true))
-                val band = runCatching { compose.onAllNodes(hasTestTag("tb-band"), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot() }.getOrNull()
+                val band = runCatching { compose.onAllNodes(hasTestTag("trailer-break-band"), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot() }.getOrNull()
                 val tile = runCatching { compose.onAllNodes(hasClickAction(), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot() }.getOrNull()
                 // asserts: the band ends inside the safe area; the title area uses its width; the overview line shows
                 atMost("trailer break band right", bounds(hasTestTag("trailer-break-band")).right.value, 912.5f)
@@ -455,7 +455,6 @@ class Audit3ShotsTest {
                     onOk = {},
                     onLongClick = {},
                     onTileFocused = {},
-                    modifier = Modifier.testTag("tb-band"),
                     overview = "A crew of thieves plans one last job in Turin, and nothing about the getaway goes as planned.",
                 )
             }
@@ -938,7 +937,13 @@ class Audit3ShotsTest {
         shot(
             name,
             inset = false,
-            steps = { focusNode(name, hasText("Home")) },
+            // (the hub takes focus for itself when it loads: let that settle, then move focus to the drawer so it stays open)
+            steps = {
+                advance(1500)
+                focusNode(name, hasText("Home"))
+                advance(700)
+                logFocus(name)
+            },
             measure = {
                 logAll(name, "hub tile", hasTestTag("hub-tile0").or(hasTestTag("hub-tile1")).or(hasTestTag("hub-tile2")))
                 logBox(name, "Collections title", hasText("Collections"))
@@ -949,7 +954,8 @@ class Audit3ShotsTest {
                 val page = bounds(hasTestTag("sidebar-page"))
                 near("page left (drawer open)", page.left.value, 72f)
                 atMost("page right (drawer open)", page.right.value, 944.5f)
-                near("collections title left (drawer open)", bounds(hasText("Collections")).left.value, 96f)
+                // (the open drawer has a "Collections" item too: the page title is the right-most of the two)
+                near("collections title left (drawer open)", allBounds(hasText("Collections")).maxOf { it.left.value }, 96f)
             },
         ) {
             val state = rememberDrawerState(DrawerValue.Open)
