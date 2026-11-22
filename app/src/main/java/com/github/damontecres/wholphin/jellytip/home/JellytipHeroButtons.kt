@@ -78,9 +78,11 @@ fun heroPlayButtons(
     item: BaseItem,
     onPlay: () -> Unit,
     onInfo: () -> Unit,
+    /** The slide's trailer with sound (an explicit OK); null = no trailer found. */
+    onTrailer: (() -> Unit)? = null,
 ): List<Pair<String, () -> Unit>> {
     val label = if (!item.type.playable) "\u25B6  Watch" else if (item.resumeMs > 0) "\u25B6  Resume" else "\u25B6  Play"
-    return listOf(label to onPlay, "More info" to onInfo)
+    return listOfNotNull(label to onPlay, onTrailer?.let { "Trailer" to it }, "More info" to onInfo)
 }
 
 /**

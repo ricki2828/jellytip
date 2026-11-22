@@ -231,15 +231,28 @@ fun JellytipHomeHero(
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted = hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused
     LaunchedEffect(item?.id, trailerWanted) {
+        // This item's trailer started by its Trailer button (with sound) outlives the autoplay rule flipping
+        val mine = item != null && JellytipTrailerControl.isHeroPlaying && JellytipTrailerControl.itemId == item.id
+        if (mine && JellytipTrailerControl.sound) return@LaunchedEffect
         // A special's video (Trailer Break, Closet Picks) is not the hero's to stop
         JellytipTrailerControl.stopIfOwner(null)
-        if (!trailerWanted || item == null) return@LaunchedEffect
+        if (item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
-        viewModel.localTrailer(item)?.let { (url, trailerId) ->
-            // Sound: only the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
-            val sound = JellytipTrailerControl.heroSoundChoice ?: JellytipTrailerControl.heroSoundSetting
-            JellytipTrailerControl.start(item, url, trailerId, sound = sound)
-        }
+        // Looked up after the rest either way: the hero's Trailer button shows only when there is one
+        val found = viewModel.localTrailer(item) ?: return@LaunchedEffect
+        JellytipTrailerControl.heroTrailerFor = item.id
+        if (!trailerWanted || JellytipTrailerControl.isHeroPlaying) return@LaunchedEffect
+        // Autoplay (a preview): the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
+        val sound = JellytipTrailerControl.heroSoundChoice ?: JellytipTrailerControl.heroSoundSetting
+        JellytipTrailerControl.start(item, found.first, found.second, sound = sound)
+    }
+    // The Trailer button (an explicit OK): this item's trailer with sound, whatever the autoplay rule says
+    val trailerRequest = JellytipTrailerControl.heroTrailerRequest
+    LaunchedEffect(trailerRequest) {
+        if (trailerRequest == null) return@LaunchedEffect
+        JellytipTrailerControl.heroTrailerRequest = null
+        val target = item?.takeIf { it.id == trailerRequest } ?: return@LaunchedEffect
+        viewModel.localTrailer(target)?.let { (url, trailerId) -> JellytipTrailerControl.start(target, url, trailerId, sound = true) }
     }
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url

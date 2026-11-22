@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import com.github.damontecres.wholphin.data.model.BaseItem
 import java.util.UUID
 
+/** What an OK (click) on a trailer does. */
+enum class TrailerOk { SOUND_ON, START_WITH_SOUND, OPEN_DETAILS }
+
 /**
  * State of the home hero trailer, shared between the hero (plays it) and the home specials that take the player over.
  * One home page is on screen at a time, so a process-wide holder is enough.
@@ -57,6 +60,46 @@ object JellytipTrailerControl {
         playing: Boolean,
         sound: Boolean,
     ): Boolean = if (playing) !sound else true
+
+    /**
+     * OK on a trailer (Ricki 22-Nov): the focus preview stays muted, an explicit OK means sound. Playing muted = sound on;
+     * not playing = start it with sound; already playing with sound = the next OK opens the details (Trailer Break).
+     */
+    fun trailerOk(
+        playing: Boolean,
+        sound: Boolean,
+    ): TrailerOk =
+        when {
+            !playing -> TrailerOk.START_WITH_SOUND
+            !sound -> TrailerOk.SOUND_ON
+            else -> TrailerOk.OPEN_DETAILS
+        }
+
+    /** OK on [owner]'s trailer tile (Trailer Break): turns the sound on itself; the caller starts / opens for the others. */
+    fun specialOk(owner: String): TrailerOk {
+        val answer = trailerOk(isPlayingForOwner(owner), sound)
+        if (answer == TrailerOk.SOUND_ON) sound = true
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("special:$owner", "OK -> $answer")
+        return answer
+    }
+
+    /** The hero found a trailer for this item (its Trailer button shows). */
+    var heroTrailerFor by mutableStateOf<UUID?>(null)
+
+    /** The hero's Trailer button asked for this item's trailer with sound (the hero starts it). */
+    var heroTrailerRequest by mutableStateOf<UUID?>(null)
+
+    /** OK on the hero's Trailer button for [itemId]: sound on now, or a start with sound; with sound already, nothing. */
+    fun heroTrailerOk(itemId: UUID): TrailerOk {
+        val answer = trailerOk(isHeroPlaying && this.itemId == itemId, sound)
+        when (answer) {
+            TrailerOk.SOUND_ON -> sound = true
+            TrailerOk.START_WITH_SOUND -> heroTrailerRequest = itemId
+            TrailerOk.OPEN_DETAILS -> {}
+        }
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.player("hero", "trailer OK $itemId -> $answer")
+        return answer
+    }
 
     /** What the Sound button shows: the playing trailer's sound, else the choice / setting the next trailer will use. */
     fun heroSoundShown(): Boolean = if (isHeroPlaying) sound else heroSoundChoice ?: heroSoundSetting

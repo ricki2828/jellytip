@@ -875,6 +875,13 @@ fun HomePageContent(
                                     com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
                                     onClickItem(RowColumn(-1, -1), heroPlayItem)
                                 },
+                                // OK on the trailer = sound (Ricki 22-Nov; the preview behind stays muted)
+                                onTrailer =
+                                    if (JellytipTrailerControl.heroTrailerFor == heroPlayItem.id) {
+                                        { JellytipTrailerControl.heroTrailerOk(heroPlayItem.id) }
+                                    } else {
+                                        null
+                                    },
                             )
                         } else {
                             emptyList()
