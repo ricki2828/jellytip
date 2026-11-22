@@ -1,0 +1,154 @@
+/* #/ask/chat: chat column + results. Reuses Ask.css (.ask, .ask-form, .ask-note, .chips) and the shared .chip / .grid / .card-skeleton. */
+.askchat {
+  gap: 10px;
+}
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 var(--pad);
+}
+.ac-head .page-title {
+  margin: 0;
+}
+.ac-cols {
+  display: grid;
+  grid-template-columns: minmax(300px, 38%) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.ac-chat {
+  display: grid;
+  gap: 12px;
+  padding-left: var(--pad);
+  position: sticky;
+  top: 76px;
+}
+.ac-results {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-right: var(--pad);
+}
+.ac-results .grid {
+  padding-left: 0;
+  padding-right: 0;
+}
+.ac-turns {
+  display: grid;
+  gap: 14px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.ac-turn {
+  display: grid;
+  gap: 4px;
+}
+.ac-user {
+  margin: 0;
+  justify-self: end;
+  max-width: 92%;
+  padding: 7px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 15px;
+}
+.ac-reply {
+  margin: 0;
+  max-width: 92%;
+  color: var(--vanilla);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.ac-dim {
+  color: var(--dim);
+}
+.ac-hello {
+  margin: 0;
+  color: var(--dim);
+  font-size: 15px;
+}
+.ac-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+}
+.ac-form .btn.on {
+  background: var(--vanilla);
+  color: var(--night);
+}
+.ac-notice {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+.ac-link {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  color: var(--dim);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ac-link:focus {
+  outline: 2px solid var(--vanilla);
+  outline-offset: 2px;
+  color: var(--vanilla);
+}
+.ac-prov {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.35);
+}
+.ac-static {
+  cursor: default;
+}
+.ac-off {
+  opacity: 0.6;
+}
+.ac-sub {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.ac-hint,
+.ac-scope {
+  color: var(--faint);
+  font-size: 12px;
+  margin: 0;
+  align-self: center;
+}
+.ac-notes {
+  display: grid;
+  gap: 8px;
+}
+.ac-note {
+  display: grid;
+  gap: 6px;
+}
+@media (max-width: 720px) {
+  .ac-cols {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .ac-chat {
+    position: static;
+    padding-right: var(--pad);
+  }
+  .ac-turns {
+    max-height: none;
+  }
+  .ac-results {
+    padding-left: var(--pad);
+  }
+  .ac-form {
+    flex-wrap: wrap;
+  }
+  .ac-head {
+    padding-top: 0;
+  }
+}

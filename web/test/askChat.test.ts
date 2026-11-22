@@ -7,6 +7,7 @@ import {
 } from "../src/lib/askChat.ts";
 import { chipFor } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
+import { parseHash } from "../src/lib/routeParse.ts";
 
 const live = JSON.parse(readFileSync(new URL("./fixtures/askchat-live-20261122.json", import.meta.url), "utf8")) as Record<string, { status: number; body: ChatBody; resp: unknown }>;
 const NOW = new Date("2026-11-22T00:00:00Z");
@@ -260,4 +261,11 @@ test("notice: once per device, in localStorage", () => {
   assert.equal(mem.get(NOTICE_KEY), "1");
   assert.equal(noticeSeen({ getItem: () => { throw new Error("blocked"); }, setItem: () => {} }), false);
   assert.doesNotThrow(() => dismissNotice({ getItem: () => null, setItem: () => { throw new Error("full"); } }));
+});
+
+test("routes: #/ask/chat is the chat screen, #/ask stays classic Ask", () => {
+  assert.equal(parseHash("#/ask/chat").name, "askchat");
+  assert.equal(parseHash("#/ask").name, "ask");
+  assert.equal(parseHash("#/ask?x=1").name, "ask");
+  assert.equal(parseHash("#/ask/other").name, "ask");
 });
