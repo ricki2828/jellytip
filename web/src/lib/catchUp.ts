@@ -1,7 +1,7 @@
 // Catch me up when joining a live game late (port of the TV's CatchUpPolicy, jellytip/iptv/SportWow.kt). Joining 10+ min in
-// offers three choices, with the score held back until one is picked: from kick-off (when the channel can start over), catch me
-// up (up to 12 cards of the key plays the spoiler delay has released, 5 s each, then live) or live. Pure; tested in
-// test/catchUp.test.ts.
+// offers up to three choices, with the score held back until one is picked: from kick-off (when the channel can start over), catch
+// me up (when there are cards: up to 12 of the key plays the spoiler delay has released, 5 s each, then live) or live. When only
+// Live would be left there is no card. Pure; tested in test/catchUp.test.ts.
 import { TIMELINE_POINTS, type LiveStats } from "./liveStats.ts";
 
 /** Joining at least this far into a game offers the choice. */
@@ -38,25 +38,46 @@ export function offer(i: OfferIn): boolean {
   return st !== "pre" && st !== "post" && i.nowSec - i.startsAt >= LATE_SEC;
 }
 
+type Play = LiveStats["plays"][number];
+/** A play's identity across answers: the server id, else what it says and when. */
+const playKey = (p: Play) => p.id ?? `${p.period ?? ""}|${p.clock ?? ""}|${p.text}`;
+
 /**
  * Key plays before now, oldest first, only what the reveal clock has released: the rugby league timeline (each entry gated on
- * its own time), else the scoring plays of the released answer, else the released key moments.
+ * its own time), else scoring plays, else the released key moments.
+ *
+ * Scoring plays come from two answers: the newest full answer (`latest`, possibly still held by the spoiler delay as a whole),
+ * each play only when it carries a `wallclock` the clock has released (one without is never shown from an unreleased answer),
+ * plus every scoring play of the released answer (already released). De-duplicated by play id; the newest MAX_CARDS. Before
+ * this, cards came from the released answer only, which for the first 30 s of a join is the light one with no plays: an
+ * empty recap.
  */
 export function cards(released: LiveStats | null, latest: LiveStats | null, reveal: (atSec?: number) => boolean): CatchCard[] {
   // Nothing at all while reveal is off (replay): asked with no time, the clock answers for "now"
   if (!reveal()) return [];
   const tl = (latest?.timeline ?? []).filter((t) => t.at != null && reveal(t.at));
   if (tl.length) return tl.slice(-MAX_CARDS).map((t) => ({ when: t.clock ?? "", text: t.text, team: t.team, points: TIMELINE_POINTS[t.kind] ?? null }));
-  const plays = (released?.plays ?? []).filter((p) => p.scoring);
-  // plays arrive newest first
+  const rel = (released?.plays ?? []).filter((p) => p.scoring);
+  const relKeys = new Set(rel.map(playKey));
+  // newest first: the latest answer's order, then released plays it no longer carries (older: they fell off its list)
+  const seen = new Set<string>();
+  const plays: Play[] = [];
+  const add = (p: Play) => {
+    const k = playKey(p);
+    if (seen.has(k)) return;
+    seen.add(k);
+    plays.push(p);
+  };
+  if (latest && latest !== released) for (const p of latest.plays) if (p.scoring && (relKeys.has(playKey(p)) || (p.wallclock != null && reveal(p.wallclock)))) add(p);
+  for (const p of rel) add(p);
   if (plays.length) return plays.slice(0, MAX_CARDS).reverse().map((p) => ({ when: [p.period, p.clock].filter(Boolean).join(" "), text: p.text, team: p.team, points: p.delta != null && p.delta > 0 ? p.delta : null }));
   const moments = [...(released?.moments ?? []), ...(latest?.moments ?? [])].filter((m) => reveal(m.at));
-  const seen = new Set<string>();
+  const seenM = new Set<string>();
   const uniq = moments
     .sort((a, b) => a.at - b.at)
     .filter((m) => {
       const k = `${m.at}|${m.kind}|${m.team}`;
-      return !seen.has(k) && !!seen.add(k);
+      return !seenM.has(k) && !!seenM.add(k);
     });
   return uniq.slice(-MAX_CARDS).map((m) => ({ when: "", text: m.label, team: m.team, points: null }));
 }
@@ -67,14 +88,47 @@ export function joiningLine(startsAt: number, nowSec: number): string {
   return m >= 120 ? `You're joining ${Math.floor(m / 60)} h ${m % 60} min in` : `You're joining ${m} minutes in`;
 }
 
-/** The choices on the card, in order (From kick-off only when the channel can start the programme over). */
-export function choices(canKickOff: boolean): { id: "kickoff" | "catchup" | "live"; title: string; sub: string }[] {
-  const all = [
-    { id: "kickoff" as const, title: "From kick-off", sub: "Watch the whole game" },
-    { id: "catchup" as const, title: "Catch me up", sub: "60 s of key plays, then live" },
+export type ChoiceId = "kickoff" | "catchup" | "live";
+
+/**
+ * The choices on the card, in order: From kick-off only when the channel can start the programme over (the server's flags),
+ * Catch me up only when there are cards to show (`plays` = how many), Live always. Empty when only Live would be left: then
+ * there is no card at all (the player goes straight to live).
+ */
+export function choices(canKickOff: boolean, plays: number): { id: ChoiceId; title: string; sub: string }[] {
+  if (!canKickOff && plays <= 0) return [];
+  return [
+    ...(canKickOff ? [{ id: "kickoff" as const, title: "From kick-off", sub: "Watch the whole game" }] : []),
+    ...(plays > 0 ? [{ id: "catchup" as const, title: `Catch me up · ${plays} ${plays === 1 ? "play" : "plays"}`, sub: `${plays * (CARD_MS / 1000)} s of key plays, then live` }] : []),
     { id: "live" as const, title: "Live", sub: "Jump straight in" },
   ];
-  return canKickOff ? all : all.slice(1);
+}
+
+/** The note when From kick-off could not play: the player goes back to live with it. */
+export const CATCHUP_FAILED_TEXT = "Catch-up isn't working on this channel right now";
+/** A From kick-off target with no picture this long after it began opening has failed (the provider's dead archive answers 200 + nothing). */
+export const KICKOFF_START_MS = 20_000;
+
+export interface KickoffIn {
+  /** The player's state ("loading" | "playing" | "error" | "full" ...). */
+  state: string;
+  /** The recovery machine's phase ("playing" | "failed" | "denied" ...); null for a player without one. */
+  phase: string | null;
+  /** A picture has been shown on this target. */
+  played: boolean;
+  /** How long since the target began opening (ms). */
+  sinceMs: number;
+}
+
+/**
+ * Has a From kick-off (catch-up) target failed? Refused or errored (the server's 400 no_catchup, a dead link, recovery gave up),
+ * or no picture KICKOFF_START_MS after it began opening (the provider's dead archive answers 200 + nothing). The player then goes
+ * back to the live target with CATCHUP_FAILED_TEXT. "Every connection is in use" (full) keeps its own pop-up.
+ */
+export function kickoffFailed(i: KickoffIn): boolean {
+  if (i.state === "full") return false;
+  if (i.state === "error" || i.phase === "failed" || i.phase === "denied") return true;
+  return !i.played && i.sinceMs >= KICKOFF_START_MS;
 }
 
 // Once per match per page load: switching back to the same game does not ask again (a full reload may ask again, which only holds the score)

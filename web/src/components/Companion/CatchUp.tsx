@@ -64,8 +64,8 @@ function Slabs({ fixture, middle }: { fixture: Fixture | null; middle?: ReactNod
   );
 }
 
-/** The three choices when joining late; Live is focused and is what happens when the countdown runs out. */
-export function CatchUpChoice({ fixture, joining, canKickOff, onChoose }: { fixture: Fixture | null; joining: string; canKickOff: boolean; onChoose: (c: CatchChoice) => void }) {
+/** The choices when joining late (lib/catchUp choices: the player shows this only when there is more than Live); Live is focused and is what happens when the countdown runs out. */
+export function CatchUpChoice({ fixture, joining, canKickOff, plays, onChoose }: { fixture: Fixture | null; joining: string; canKickOff: boolean; plays: number; onChoose: (c: CatchChoice) => void }) {
   const root = useRef<HTMLDivElement>(null);
   const [left, setLeft] = useState(Math.round(CHOICE_TIMEOUT_MS / 1000));
   const choose = useRef(onChoose);
@@ -87,7 +87,7 @@ export function CatchUpChoice({ fixture, joining, canKickOff, onChoose }: { fixt
           <div className="cu-gold">{joining}</div>
           <p className="cu-dim">Score stays hidden until you choose.</p>
           <div className="cu-choices">
-            {choices(canKickOff).map((c) => (
+            {choices(canKickOff, plays).map((c) => (
               <button key={c.id} className="cu-choice" data-choice={c.id} onClick={() => choose.current(c.id)}>
                 <span className="t">{c.title}</span>
                 <span className="s">{c.sub}</span>
