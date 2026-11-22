@@ -78,6 +78,13 @@
   letter-spacing: 0.02em;
   vertical-align: 1px;
 }
+.ac-form .search-input {
+  margin: 0;
+  width: auto;
+  max-width: none;
+  flex: 1 1 160px;
+  min-width: 0;
+}
 .ac-form .btn.on {
   background: var(--vanilla);
   color: var(--night);
