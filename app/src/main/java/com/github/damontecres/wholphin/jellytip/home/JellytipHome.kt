@@ -250,12 +250,15 @@ fun JellytipHomeHero(
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
         Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
-            Crossfade(
-                targetState = lastUrl,
-                animationSpec = if (reducedMotion) snap<Float>() else tween<Float>(700),
-                modifier = Modifier.fillMaxSize(),
-                label = "jellytip-home-still",
-            ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed && !reducedMotion) }
+            // A live-game slide covers the hero: no still / Ken Burns drawn under it (weak TV GPUs)
+            if (!JellytipHeroCarousel.matchCovers) {
+                Crossfade(
+                    targetState = lastUrl,
+                    animationSpec = if (reducedMotion) snap<Float>() else tween<Float>(700),
+                    modifier = Modifier.fillMaxSize(),
+                    label = "jellytip-home-still",
+                ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed && !reducedMotion) }
+            }
 
             var usedPlayer by remember { mutableStateOf(false) }
             if (trailerUrl != null) usedPlayer = true

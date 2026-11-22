@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -83,6 +84,7 @@ import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRowView
 import com.github.damontecres.wholphin.jellytip.home.JellytipCarouselRows
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
+import com.github.damontecres.wholphin.jellytip.fillFullBleed
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -426,9 +428,8 @@ fun HomePageContent(
     // Jellytip IPTV: "Your reminders" first after Continue Watching (Home only; nothing on 404)
     val remindersNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberReminders() else null
     var reminders by remember { mutableStateOf(remindersNow) }
-    // Jellytip: live match hero (Ricki 21-Nov): position 0 while one of his games (else the top-ranked one) is live
+    // Jellytip: his live games (starred teams / followed leagues only) lead the hero carousel (Ricki 22-Nov: a slide, not a takeover row)
     val liveHeroNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberHomeLiveHero() else null
-    var liveHero by remember { mutableStateOf(liveHeroNow) }
     // Jellytip IPTV (8h Block 1): IPTV-only Continue Watching / Next Up rows when Jellyfin has none here (Home only),
     // decided once every row has loaded so the layout doesn't jump
     val iptvResumeCont by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.continueItems.collectAsState()
@@ -457,8 +458,8 @@ fun HomePageContent(
     var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
     val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
     val entries =
-        remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero) {
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHero)
+        remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext) {
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         }
     val focusedEntry =
         remember(entries, specialFocus?.id, position.row) {
@@ -479,7 +480,7 @@ fun HomePageContent(
         // A late live-sport answer is taken only if it does not move the focused row (else next visit)
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHero)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred live sport row: would move focused $key")
@@ -492,7 +493,7 @@ fun HomePageContent(
         // Same rule as live sport: a late answer that would move the focused row waits for the next visit
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordingsNow, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHero)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordingsNow, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred recordings row: would move focused $key")
@@ -504,7 +505,7 @@ fun HomePageContent(
         if (upcomingNow == upcoming) return@LaunchedEffect
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcomingNow, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHero)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcomingNow, reminders, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred upcoming sport row: would move focused $key")
@@ -516,7 +517,7 @@ fun HomePageContent(
         if (remindersNow == reminders) return@LaunchedEffect
         val key = currentFocusedKey
         val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, remindersNow, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHero)
+            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, remindersNow, iptvOnlyContinue, iptvOnlyNext)
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
             JellytipTrace.layout("deferred reminders row: would move focused $key")
@@ -546,7 +547,6 @@ fun HomePageContent(
                 reminders,
                 iptvOnlyContinue,
                 iptvOnlyNext,
-                liveHero = liveHero,
             )
         val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
         if (moves) {
@@ -570,30 +570,93 @@ fun HomePageContent(
         }
         lastFocusedIndex = key to index
     }
-    // The hero always shows the focused tile (Continue Watching / Next Up included); specials drive it through specialFocus
-    val heroTarget = focusedItem
-    val heroHeaderTarget = headerItem
+    // Jellytip: while the hero's own buttons have focus the hero holds still (no focus follow)
+    var heroButtonsFocused by remember { mutableStateOf(false) }
+    // Jellytip hero carousel (Ricki 22-Nov): on the top row / the hero buttons the hero rotates through his live games and
+    // a featured mix; Left on the first button / Right on the last steps. Lower rows: the hero follows the focused tile.
+    val carouselOn = specialsPage == "home" && heroComposable != null && LocalJellytipHome.current
+    val heroMix = if (carouselOn) com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroMix(homeRows, specials, serverRows) else emptyList()
+    val heroSlides = remember(liveHeroNow, heroMix) { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.slides(liveHeroNow.orEmpty(), heroMix) }
+    var slideIndex by rememberSaveable { mutableStateOf(0) }
+    var slideKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // A rebuild (game starts / ends, rows refresh) keeps the slide on screen by key
+    LaunchedEffect(heroSlides) {
+        slideIndex = com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.keep(heroSlides, slideKey, slideIndex)
+        slideKey = heroSlides.getOrNull(slideIndex)?.key
+    }
+    val slide = heroSlides.getOrNull(slideIndex.coerceIn(0, (heroSlides.size - 1).coerceAtLeast(0)))
+    val carouselActive = carouselOn && slide != null && (focusedEntry <= 0 || heroButtonsFocused)
+    val goSlide: (Int, String) -> Unit = { i, why ->
+        slideIndex = i
+        slideKey = heroSlides.getOrNull(i)?.key
+        JellytipTrace.focus("hero carousel " + why + " -> " + (i + 1) + "/" + heroSlides.size + " " + (slideKey ?: "-"))
+    }
+    var heroButtonsHeld by remember { mutableStateOf(false) }
+    LaunchedEffect(heroButtonsFocused) {
+        heroButtonsHeld = false
+        if (heroButtonsFocused) {
+            delay(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.BUTTON_HOLD_MS)
+            heroButtonsHeld = true
+        }
+    }
+    var homeResumed by remember { mutableStateOf(true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        homeResumed = true
+        onPauseOrDispose { homeResumed = false }
+    }
+    val carouselPaused =
+        com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.paused(
+            buttonsHeld = heroButtonsHeld,
+            trailerWithSound = JellytipTrailerControl.isHeroPlaying && JellytipTrailerControl.sound,
+            resumed = homeResumed,
+            pageFocused = hasFocus,
+        )
+    LaunchedEffect(carouselActive, carouselPaused, slideIndex, heroSlides.size) {
+        if (!carouselActive || carouselPaused || heroSlides.size < 2) return@LaunchedEffect
+        delay(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.SLIDE_MS)
+        goSlide(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.step(slideIndex, heroSlides.size, 1), "auto")
+    }
+    val onHeroEdge: ((Boolean) -> Boolean)? =
+        if (carouselActive && heroSlides.size > 1) {
+            { right ->
+                val to = com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.arrow(slideIndex, heroSlides.size, right)
+                if (to != null) goSlide(to, if (right) "right" else "left")
+                to != null
+            }
+        } else {
+            null
+        }
+    val heroPager = if (carouselActive && heroSlides.size > 1) "\u2039  " + (slideIndex + 1) + " / " + heroSlides.size + "  \u203A" else null
+    val slideTitle = (slide as? com.github.damontecres.wholphin.jellytip.home.HeroSlide.Title)?.item
+    val slideMatch = (slide as? com.github.damontecres.wholphin.jellytip.home.HeroSlide.Match)?.f
+    // The hero shows the slide on the top row / its buttons, else the focused tile (specials drive it through specialFocus)
+    val heroTarget = if (carouselActive) slideTitle else focusedItem
+    val heroHeaderTarget = if (carouselActive) slideTitle else headerItem
+    val heroMatchTarget = if (carouselActive) slideMatch else null
     // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
     var heroItem by remember { mutableStateOf(heroTarget) }
     var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
-    // Jellytip: while the hero's own buttons have focus the hero holds still (no focus follow)
-    var heroButtonsFocused by remember { mutableStateOf(false) }
+    var heroMatch by remember { mutableStateOf(heroMatchTarget) }
     // Keyed on ids, not the items: a refreshed row hands out equal-id copies of the focused tile, and keying on the
     // objects restarted this effect (debounce + trace) with focus not having moved at all
     val latestHeroTarget by rememberUpdatedState(heroTarget)
     val latestHeaderTarget by rememberUpdatedState(heroHeaderTarget)
-    LaunchedEffect(heroTarget?.id, heroHeaderTarget?.id, heroButtonsFocused) {
-        if (heroButtonsFocused) return@LaunchedEffect
+    val latestMatchTarget by rememberUpdatedState(heroMatchTarget)
+    LaunchedEffect(heroTarget?.id, heroHeaderTarget?.id, heroMatchTarget?.fid, heroButtonsFocused) {
+        // Buttons focused: the hero holds still, except for the carousel's own steps
+        if (heroButtonsFocused && !carouselActive) return@LaunchedEffect
         delay(HERO_DEBOUNCE_MS)
         heroItem = latestHeroTarget
         heroHeaderItem = latestHeaderTarget
+        heroMatch = latestMatchTarget
         JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
     }
     // Same tile, fresher copy (watched state, progress): take it at once, no debounce, no trace
-    LaunchedEffect(heroTarget, heroHeaderTarget) {
-        if (heroButtonsFocused) return@LaunchedEffect
+    LaunchedEffect(heroTarget, heroHeaderTarget, heroMatchTarget) {
+        if (heroButtonsFocused && !carouselActive) return@LaunchedEffect
         if (heroItem?.id == heroTarget?.id) heroItem = heroTarget
         if (heroHeaderItem?.id == heroHeaderTarget?.id) heroHeaderItem = heroHeaderTarget
+        if (heroMatch?.fid == heroMatchTarget?.fid) heroMatch = heroMatchTarget
     }
 
     val heroButtonsRequester = remember { FocusRequester() }
@@ -671,44 +734,6 @@ fun HomePageContent(
     // Jellytip: no library row to land on (only server rows/specials, or the Watchlist with only IPTV favourites in
     // extraRows): focus the first row of any kind once nothing is still loading
     val anyRowFocus = remember { FocusRequester() }
-    val heroFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    // Live match hero: a late answer is taken unless it moves the focused row; re-checked on every focus move. On the
-    // hero itself (or before anything has focus) it always updates.
-    LaunchedEffect(liveHeroNow, focusedKey) {
-        if (liveHeroNow == liveHero) return@LaunchedEffect
-        val key = currentFocusedKey
-        val candidate =
-            jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, liveHero = liveHeroNow)
-        val onHero = key == "live-hero" && !liveHeroNow.isNullOrEmpty()
-        // Focus on the top row: the hero arrives above it and takes focus (hero always first)
-        val atTop = key != null && entries.indexOfFirst { it.key == key } <= 0
-        val arriving = liveHero.isNullOrEmpty() && !liveHeroNow.isNullOrEmpty()
-        // A hero that leaves (game over) always goes: rows keep their place by key; focus on it moves to the first row
-        val leaving = !liveHero.isNullOrEmpty() && liveHeroNow.isNullOrEmpty()
-        val moves = currentHasFocus && key != null && !onHero && !leaving && !(atTop && arriving) && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
-        if (moves) {
-            JellytipTrace.layout("deferred live hero: would move focused $key")
-        } else {
-            // Focus off a leaving hero first (the row below is composed while the hero is), then drop it: changing
-            // state first would cancel this effect (focusedKey changes) and leave focus nowhere
-            if (leaving && key == "live-hero") {
-                if (rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus() != true) {
-                    heroFocusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
-                }
-                specialFocus = null
-                savedSpecialId = null
-            }
-            liveHero = liveHeroNow
-            // Never out of the nav rail: only at the top of Home, or before Home's first focus landed
-            if (arriving && ((atTop && currentHasFocus) || !firstFocused) && takeFocus) {
-                withFrameNanos { }
-                withFrameNanos { }
-                listState.scrollToItem(0)
-                specialRequesters.getOrPut("live-hero") { FocusRequester() }.tryRequestFocus()
-                JellytipTrace.focus("home: live hero arrived, focus on it")
-            }
-        }
-    }
     if (takeFocus) {
         LaunchedEffect(homeRows, entries.size, extraRows != null) {
             if (firstFocused) return@LaunchedEffect
@@ -744,19 +769,34 @@ fun HomePageContent(
     }
     Box(modifier = modifier.onFocusChanged { hasFocus = it.hasFocus }) {
         heroComposable?.invoke(heroItem, hasFocus)
-        // Jellytip: the live match hero has the page; the film hero's still steps aside behind it
-        if (entries.getOrNull(focusedEntry) is JellytipHomeEntry.LiveHero) {
+        // Jellytip: a live-game slide of the hero carousel (the film hero skips its still underneath)
+        val shownMatch = heroMatch
+        DisposableEffect(shownMatch != null) {
+            com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = shownMatch != null
+            onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = false }
+        }
+        if (shownMatch != null) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            0f to com.github.damontecres.wholphin.jellytip.iptv.Broadcast.Base,
-                            1f to androidx.compose.ui.graphics.Color.Black,
-                        ),
-                    ),
-            )
+                    .fillFullBleed(),
+            ) {
+                com.github.damontecres.wholphin.jellytip.iptv.HeroMatchBackdrop(
+                    f = shownMatch,
+                    motion = !com.github.damontecres.wholphin.jellytip.rememberReducedMotion(),
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens.HERO_HEIGHT_FRACTION),
+                    onShown = {
+                        com.github.damontecres.wholphin.jellytip.iptv.JellytipSportEvents.log(
+                            com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.SHOWN,
+                            shownMatch,
+                            com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.HOME_HERO,
+                            pos = heroSlides.indexOfFirst { it.key == "m:" + shownMatch.fid }.takeIf { it >= 0 }?.plus(1),
+                        )
+                    },
+                )
+            }
         }
+        if (carouselOn) com.github.damontecres.wholphin.jellytip.iptv.SportEventsFlushOnLeave()
         Column(
             modifier =
                 Modifier
@@ -779,32 +819,58 @@ fun HomePageContent(
                         layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
                     },
             ) {
-                headerComposable.invoke(heroHeaderItem)
+                val headerMatch = heroMatch
+                val nowSec by androidx.compose.runtime.produceState(System.currentTimeMillis() / 1000) {
+                    while (true) {
+                        delay(30_000)
+                        value = System.currentTimeMillis() / 1000
+                    }
+                }
+                if (headerMatch != null) {
+                    com.github.damontecres.wholphin.jellytip.iptv.HeroMatchHeader(headerMatch, nowSec)
+                } else {
+                    headerComposable.invoke(heroHeaderItem)
+                }
+                val matchActions = if (carouselOn) com.github.damontecres.wholphin.jellytip.iptv.rememberHomeMatchActions() else null
                 // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
                 val heroPlayItem = heroHeaderItem
-                if (LocalJellytipHome.current && heroComposable != null && heroPlayItem != null) {
+                if (LocalJellytipHome.current && heroComposable != null && (heroPlayItem != null || (headerMatch != null && matchActions != null))) {
                     // Only on the top row (or while they hold focus); fades out once focus is on a lower row
                     val heroButtonsAlpha by animateFloatAsState(
                         if (heroButtonsFocused || focusedEntry <= 0) 1f else 0f,
                         tween(150),
                         label = "jellytip-hero-buttons",
                     )
-                    com.github.damontecres.wholphin.jellytip.home.JellytipHeroButtons(
-                        item = heroPlayItem,
-                        onPlay = {
-                            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-                            JellytipTrace.focus("hero play ${heroPlayItem.name}")
-                            if (heroPlayItem.type.playable) {
-                                currentOnClickPlay(RowColumn(-1, -1), heroPlayItem)
-                            } else {
-                                onClickItem(RowColumn(-1, -1), heroPlayItem)
-                            }
-                        },
-                        onInfo = {
-                            // Stopped first, so OK opens the page instead of unmuting the trailer
-                            com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
-                            onClickItem(RowColumn(-1, -1), heroPlayItem)
-                        },
+                    // One button row for every slide (same call site, keyed buttons): stepping between a film and a
+                    // live game keeps focus on the button it was on
+                    val heroButtonList =
+                        if (headerMatch != null && matchActions != null) {
+                            matchActions.buttons(headerMatch, nowSec)
+                        } else if (heroPlayItem != null) {
+                            com.github.damontecres.wholphin.jellytip.home.heroPlayButtons(
+                                item = heroPlayItem,
+                                onPlay = {
+                                    com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+                                    JellytipTrace.focus("hero play ${heroPlayItem.name}")
+                                    if (heroPlayItem.type.playable) {
+                                        currentOnClickPlay(RowColumn(-1, -1), heroPlayItem)
+                                    } else {
+                                        onClickItem(RowColumn(-1, -1), heroPlayItem)
+                                    }
+                                },
+                                onInfo = {
+                                    // Stopped first, so OK opens the page instead of unmuting the trailer
+                                    com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.stop()
+                                    onClickItem(RowColumn(-1, -1), heroPlayItem)
+                                },
+                            )
+                        } else {
+                            emptyList()
+                        }
+                    com.github.damontecres.wholphin.jellytip.home.JellytipHeroActionButtons(
+                        buttons = heroButtonList,
+                        onEdge = onHeroEdge,
+                        pager = heroPager,
                         // Sound for the hero trailer that is playing now; the next tile starts muted again (unless ui.heroSound)
                         // Always offered (Ricki 21-Nov: no easy way to turn the sound on): the playing trailer, else the next ones
                         soundOn = JellytipTrailerControl.heroSoundShown(),
@@ -829,7 +895,7 @@ fun HomePageContent(
                 }
             }
 
-            val heroButtonsShown = LocalJellytipHome.current && heroComposable != null && heroHeaderItem != null
+            val heroButtonsShown = LocalJellytipHome.current && heroComposable != null && (heroHeaderItem != null || heroMatch != null)
             val density = LocalDensity.current
             val spaceAbovePx =
                 remember(density) {
@@ -887,21 +953,6 @@ fun HomePageContent(
                                 .animateItem(placementSpec = null)
                                 .graphicsLayer { alpha = rowAlpha }
                                 .padding(bottom = 8.dp)
-                        if (entry is JellytipHomeEntry.LiveHero) {
-                            val id = entry.key
-                            com.github.damontecres.wholphin.jellytip.iptv.HomeLiveHero(
-                                picks = entry.picks,
-                                onFocused = {
-                                    // No item: the hero image steps aside (no trailer behind it), the team wash shows
-                                    JellytipTrailerControl.stop()
-                                    specialFocus = JellytipSpecialFocus(id, null, false)
-                                    savedSpecialId = id
-                                },
-                                focusRequester = specialRequesters.getOrPut(id) { FocusRequester() },
-                                modifier = rowModifier.padding(start = 48.dp, end = 48.dp, top = 8.dp),
-                            )
-                            return@items
-                        }
                         if (entry is JellytipHomeEntry.UpcomingSport) {
                             val id = entry.key
                             CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {

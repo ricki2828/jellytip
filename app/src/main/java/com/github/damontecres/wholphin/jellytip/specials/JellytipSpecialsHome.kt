@@ -68,13 +68,6 @@ sealed interface JellytipHomeEntry {
         override val key get() = "upcoming-sport"
     }
 
-    /** The live match hero (Ricki 21-Nov): always position 0 while one of his games (or the top-ranked one) is live. */
-    data class LiveHero(
-        val picks: List<com.github.damontecres.wholphin.jellytip.iptv.FxItem>,
-    ) : JellytipHomeEntry {
-        override val key get() = "live-hero"
-    }
-
     /** A server-built row (rows=1 manifest). */
     data class Server(
         val row: JellytipServerRow,
@@ -108,12 +101,9 @@ fun jellytipHomeEntries(
     /** Add the IPTV-only Continue Watching / Next Up rows (see [JellytipHomeEntry.IptvResumeOnly]). */
     iptvContinue: Boolean = false,
     iptvNext: Boolean = false,
-    /** Live match hero picks: first of all when not empty (nothing ever goes above it). */
-    liveHero: List<com.github.damontecres.wholphin.jellytip.iptv.FxItem>? = null,
-): List<JellytipHomeEntry> {
-    val withoutHero = homeEntriesNoHero(rows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvContinue, iptvNext)
-    return if (liveHero.isNullOrEmpty()) withoutHero else listOf(JellytipHomeEntry.LiveHero(liveHero)) + withoutHero
-}
+): List<JellytipHomeEntry> =
+    // His live games are hero carousel slides now (Ricki 22-Nov), not a row
+    homeEntriesNoHero(rows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvContinue, iptvNext)
 
 private fun homeEntriesNoHero(
     rows: List<HomeRowLoadingState>,
