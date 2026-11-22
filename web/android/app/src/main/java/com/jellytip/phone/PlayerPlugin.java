@@ -35,7 +35,7 @@ public class PlayerPlugin extends Plugin {
         current = this;
     }
 
-    /** {url, title, mime?, live, growing?, resumeMs?, note?, channelId?, alternates?, programmeStart?, programmeStop?}: open the player; resolves when it closes. */
+    /** {url, title, mime?, live, growing?, catchUp?, resumeMs?, note?, channelId?, alternates?, programmeStart?, programmeStop?}: open the player; resolves when it closes. */
     @PluginMethod
     public void open(PluginCall call) {
         String url = call.getString("url");
@@ -72,6 +72,7 @@ public class PlayerPlugin extends Plugin {
         i.putExtra(PlayerActivity.EXTRA_RESUME_MS, call.getLong("resumeMs", 0L));
         i.putExtra(PlayerActivity.EXTRA_NOTE, call.getString("note", ""));
         i.putExtra(PlayerActivity.EXTRA_GROWING, Boolean.TRUE.equals(call.getBoolean("growing", false)));
+        i.putExtra(PlayerActivity.EXTRA_CATCH_UP, Boolean.TRUE.equals(call.getBoolean("catchUp", false)));
         // Live extras (plan "8h Block 3"): the channel, its event's alternates (failover) and the programme on now
         // (From kick-off); links for them come later through "needUrl" -> provideUrl
         i.putExtra(PlayerActivity.EXTRA_CHANNEL_ID, call.getString("channelId"));

@@ -75,7 +75,8 @@ export interface LiveStats {
   score: { home: number; away: number } | null;
   stats: { label: string; home: string; away: string }[];
   leaders: { team: string | null; name: string; line: string; headshot: string | null }[];
-  plays: { clock: string | null; period: string | null; text: string; scoring: boolean; team: "home" | "away" | null; delta: number | null; id: string | null }[];
+  /** Newest first. `wallclock`: when it happened (epoch seconds, ESPN), null when the server sent none. */
+  plays: { clock: string | null; period: string | null; text: string; scoring: boolean; team: "home" | "away" | null; delta: number | null; id: string | null; wallclock: number | null }[];
   /** Sport layout key ("basketball", "nfl", "football", "rugby", "cricket") and its sport-specific `situation`. */
   layout: string | null;
   situation: Record<string, unknown> | null;
@@ -183,7 +184,7 @@ export function parseLive(raw: unknown): LiveStats | null {
       .flatMap((x) => {
         const o = obj(x);
         const text = str(o?.text);
-        return o && text ? [{ clock: str(o.clock), period: str(o.period), text, scoring: o.scoring === true, team: side(o.team), delta: num(o.delta) ?? num(o.points), id: str(o.id) }] : [];
+        return o && text ? [{ clock: str(o.clock), period: str(o.period), text, scoring: o.scoring === true, team: side(o.team), delta: num(o.delta) ?? num(o.points), id: str(o.id), wallclock: parseStartsAt(o.wallclock) }] : [];
       })
       .slice(0, 15),
     games: arr(r.games).flatMap((x): Game[] => {

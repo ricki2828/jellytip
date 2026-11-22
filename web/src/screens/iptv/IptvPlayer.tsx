@@ -9,7 +9,7 @@ import { nextGame, nextLine } from "../../lib/sportWow";
 import { isMuted } from "../../lib/liveHero";
 import { fxTitle, pickChannel, type FxItem } from "../../lib/gameCentre";
 import { fixturesNow, refreshFixtures, useFixtures } from "../../api/fixtures";
-import { cards as catchCards_, DECIDE_WAIT_MS, joiningLine, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
+import { CATCHUP_FAILED_TEXT, CATCHUP_STOPPED_TEXT, cards as catchCards_, choices as catchChoices, DECIDE_WAIT_MS, joiningLine, kickoffClockHeld, kickoffFailed, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, isDecodeFault } from "../../lib/streamFail";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
@@ -586,7 +586,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         if (recRef.current.phase !== "blocked") return false; // one delayed retry scheduled
       } else dispatchRef.current({ t: "blocked" });
     }
-    if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
+    // a second "every connection is in use" after stopping another stream stays the busy message (not an error: a kick-off
+    // target would read that as "catch-up isn't working")
+    if (retry && what === "full") setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection });
+    else if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
     else if (what === "full") {
       const b = parseBlocker(a.data);
       // Only a blocker we can say something useful about gets the pop-up; older servers keep today's message
@@ -743,14 +746,44 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     flashNote("Back to live");
     go(livePath(target.channel, title, extrasIn), true);
   }, [target.channel, title, extrasIn]);
+  // From kick-off that never played (the server's 400 no_catchup, a dead link, the provider's empty archive): back to live with the
+  // honest note, never an error screen or an endless spinner. Played and then ended: the ordinary "Back to live".
+  const kickoffPlayed = useRef(false);
+  // when this target began opening; not the attempt clock, which every recovery attempt restarts (a loop must not hide the failure).
+  // Restarted while "every connection is in use" is up: the wait for a free one is not the archive's fault
+  const kickoffSince = useRef(Date.now());
+  const kickoffFail = useCallback((why: string, played = false) => {
+    if (returned.current || !target.channel) return;
+    returned.current = true;
+    debugEvent("iptv-player", "catch-up failed, back to live", { why, played, channel: target.channel });
+    flashNote(played ? CATCHUP_STOPPED_TEXT : CATCHUP_FAILED_TEXT);
+    go(livePath(target.channel, title, extrasIn), true);
+  }, [target.channel, title, extrasIn]);
+  useEffect(() => {
+    if (!kickoffRun.current) return;
+    const check = () => {
+      if (firstFrame.current) kickoffPlayed.current = true;
+      const v = videoRef.current;
+      const k = { state: state.kind, phase: recRef.current.phase, played: kickoffPlayed.current, sinceMs: Date.now() - kickoffSince.current, paused: !!v?.paused && state.kind === "playing" && recRef.current.phase === "playing" && linkRef.current != null, hidden: document.hidden };
+      if (kickoffClockHeld(k)) kickoffSince.current = Date.now();
+      if (kickoffFailed(k)) kickoffFail(`${k.state}/${k.phase}${k.played ? "" : " no picture"}`, k.played);
+    };
+    check();
+    const t = setInterval(check, 1000);
+    return () => clearInterval(t);
+  }, [state.kind, rec.phase, kickoffFail]);
   useEffect(() => {
     if (!kickoffRun.current || state.kind !== "playing") return;
-    // mpegts has no "ended": the stream finished loading and playback has stopped moving
+    // mpegts has no "ended": the stream finished loading and playback has stopped moving (a 0-byte catch-up "finishes" at once: failed)
     const t = setInterval(() => {
-      if (loadDone.current && Date.now() - lastMove.current >= 3000) backToLive();
+      if (firstFrame.current) kickoffPlayed.current = true;
+      if (loadDone.current && Date.now() - lastMove.current >= 3000) {
+        if (kickoffPlayed.current) backToLive();
+        else kickoffFail("loaded, no picture");
+      }
     }, 1000);
     return () => clearInterval(t);
-  }, [state.kind, backToLive]);
+  }, [state.kind, backToLive, kickoffFail]);
   useEffect(() => {
     if (state.kind !== "playing") return;
     lastMove.current = Date.now();
@@ -902,6 +935,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras?.matchId]);
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  /** From kick-off as decided when the card opened: frozen, so the card cannot lose an option while it is up. */
+  const [catchKick, setCatchKick] = useState(false);
   // ---- Full time (TV port): when the released state says the game is over, the score and what's next (the next game, else Pick for tonight)
   const [fullTime, setFullTime] = useState<{ score: { home: number; away: number } | null; next: FxItem | null } | null>(null);
   const fullTimeRef = useRef(false);
@@ -940,8 +975,16 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       // a "pre" fixture record may lag (or predate kick-off): only its "post" overrides the start time (TV: pre + started = in)
       const fxStatus = snap.fixture?.status === "post" ? "post" : null;
       const ask = offer({ live: liveNow, replay: revealClock.replay, status: snap.raw?.status ?? fxStatus, startsAt: catchStartsAt, nowSec: Date.now() / 1000 });
+      // Decide what to offer before offering: the cards from the feed's full answers (newest + released), From kick-off only on
+      // the server's flags. Only Live left = no card at all.
+      const cs = ask ? catchCards_(snap.shown, snap.raw, revealClock.reveal) : [];
+      const canKick = !!(isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop);
+      const show = ask && catchChoices(canKick, cs.length).length > 0;
+      if (ask && !show) debugEvent("iptv-player", "catch-up not offered", { kickoff: canKick, cards: cs.length }, "info");
       if (ask) markOffered(id);
-      setCatchPhase(ask ? "choice" : "done");
+      setCatchCards(cs);
+      setCatchKick(canKick);
+      setCatchPhase(show ? "choice" : "done");
     };
     const off = feedSource.subscribe(() => {
       const st = feedSource.get().state;
@@ -1319,7 +1362,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         onDoubleClick={() => { if (window.matchMedia("(pointer: fine)").matches) fs.toggle(); }}
         onPointerUp={onVideoPointerUp}
         onPlay={() => setPaused(false)}
-        onEnded={() => { watch.end(true); if (kickoffRun.current) backToLive(); else nextOnChannel(); }}
+        onEnded={() => { watch.end(true); if (kickoffRun.current) { if (kickoffPlayed.current || firstFrame.current) backToLive(); else kickoffFail("ended, no picture"); } else nextOnChannel(); }}
         onPause={() => { if (!liveBuf.handlePause()) setPaused(true); }}
         onTimeUpdate={(e) => {
           watch.tick(toTimeline(e.currentTarget.currentTime, remuxRef.current?.off ?? 0));
@@ -1361,21 +1404,19 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         <CatchUpChoice
           fixture={feedSource.get().fixture}
           joining={joiningLine(catchStartsAt, Date.now() / 1000)}
-          canKickOff={!!kickoff}
+          canKickOff={catchKick}
+          plays={catchCards.length}
           onChoose={(c) => {
-            if (c === "kickoff" && kickoff) {
+            const ko = extras?.kickoff;
+            if (c === "kickoff" && catchKick && ko) {
               // the hold stays until the route change unmounts this player (no frame with the live score)
-              go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+              go(`${targetPath({ channel: target.channel, start: ko.start, stop: ko.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
             } else if (c === "catchup") {
+              // fresh cards when the feed has as many by now, else the ones the card was offered with (never an empty recap)
               const f = feedSource.get();
               const cs = catchCards_(f.shown, f.raw, revealClock.reveal);
-              if (cs.length) {
-                setCatchCards(cs);
-                setCatchPhase("recap");
-              } else {
-                flashNote("Nothing to catch up on yet");
-                setCatchPhase("done");
-              }
+              if (cs.length >= catchCards.length) setCatchCards(cs);
+              setCatchPhase(cs.length || catchCards.length ? "recap" : "done");
             } else setCatchPhase("done");
           }}
         />
@@ -1579,6 +1620,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
 const DIRECT_NOTE = "Playing straight from your provider: Jellytip can't see other devices on this connection.";
 
 /** Why the native player gave up, in words (no links: a direct one carries the provider login). */
+/** A From kick-off session that ends or fails before this far in never really played (the native player reports no frames). */
+const KICKOFF_PLAYED_MS = 5_000;
+
 function nativeFailureText(r: NativePlayerResult): string {
   if (r.httpStatus) return `The stream was refused (${r.httpStatus}).`;
   switch (r.errorCode) {
@@ -1639,6 +1683,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
     isLive && !extras?.replay && extras?.matchId && catchStartsAt && Date.now() / 1000 - catchStartsAt >= LATE_SEC && !wasOffered(extras.matchId) && shouldShowLiveExtras(extras) ? "deciding" : "done",
   );
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  /** From kick-off as decided when the card opened: frozen, so the card cannot lose an option while it is up. */
+  const [catchKick, setCatchKick] = useState(false);
   const spoilers = !!userPrefs?.sport.spoilers;
   const { source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: catchPhase === "deciding" || catchPhase === "choice", liveNow: true, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
   useEffect(() => {
@@ -1651,8 +1697,15 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       const snap = feedSource.get();
       const fxStatus = snap.fixture?.status === "post" ? "post" : null;
       const ask = offer({ live: true, replay: false, status: snap.raw?.status ?? fxStatus, startsAt: catchStartsAt, nowSec: Date.now() / 1000 });
+      // as the web player: decide what to offer first; only Live left = no card
+      const cs = ask ? catchCards_(snap.shown, snap.raw, revealClock.reveal) : [];
+      const canKick = !!(isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop);
+      const show = ask && catchChoices(canKick, cs.length).length > 0;
+      if (ask && !show) debugEvent("iptv-player", "catch-up not offered", { kickoff: canKick, cards: cs.length }, "info");
       if (ask) markOffered(id);
-      setCatchPhase(ask ? "choice" : "done");
+      setCatchCards(cs);
+      setCatchKick(canKick);
+      setCatchPhase(show ? "choice" : "done");
     };
     const off = feedSource.subscribe(() => {
       if (feedSource.get().state !== "loading") decide();
@@ -1706,6 +1759,17 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   }, [fxData, ftOn, extras?.matchId]);
 
   const exit = useCallback(() => back(channelId ? "/channels" : target.recording ? "/recordings" : "/livetv"), [target.recording, channelId]);
+  // From kick-off (catch-up of the programme on now) that never played: back to the live target with the honest note, not the
+  // error screen (the server's 400 no_catchup, ExoPlayer failing on the provider's empty archive, or ending at once)
+  const kickoffRun = useRef(!isLiveTarget(target) && !!target.channel && target.stop != null && target.stop * 1000 > Date.now());
+  const kickoffBack = useRef(false);
+  const kickoffFail = useCallback((why: string, played = false) => {
+    if (kickoffBack.current || !target.channel) return;
+    kickoffBack.current = true;
+    debugEvent("iptv-player", "catch-up failed, back to live", { why, played, channel: target.channel, player: "exoplayer" });
+    flashNote(played ? CATCHUP_STOPPED_TEXT : CATCHUP_FAILED_TEXT);
+    go(livePath(target.channel, title, extrasIn), true);
+  }, [target.channel, title, extrasIn]);
 
   // One native session: open the player, save progress while it plays, then act on how it closed
   const session = useCallback(
@@ -1787,6 +1851,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
           mime: a.mime,
           live,
           growing: !live && !!a.growing,
+          // From kick-off target: the native player watches it for stalls (10 s buffering = closes with an error -> back to live)
+          ...(kickoffRun.current ? { catchUp: true } : {}),
           resumeMs,
           note: link.direct ? DIRECT_NOTE : undefined,
           // The portrait panel for anything that is not a match (description, what's next), and the user's alert settings
@@ -1834,7 +1900,21 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
           return;
         }
       }
+      // (a stale link is renewed once and "every connection is in use" keeps its pop-up, as below)
+      const kickWhat = r.reason === "error" ? linkFailure(r.httpStatus ?? 0, r.iptvError) : null;
+      // ended at once = never played; an error at any point = back to live ("stopped" once it had played a while)
+      if (kickoffRun.current && ((r.reason === "ended" && r.positionMs < KICKOFF_PLAYED_MS) || r.reason === "error") && kickWhat !== "full" && !(kickWhat === "renew" && !renewed.current)) {
+        kickoffFail(`${r.reason} ${r.errorCode ?? r.httpStatus ?? ""}`.trim(), r.positionMs >= KICKOFF_PLAYED_MS);
+        return;
+      }
       if (r.reason === "ended") watch.end(true);
+      // From kick-off played to its end (it ends where the programme was when it opened): on to live, as the web player does
+      if (r.reason === "ended" && kickoffRun.current && target.channel && !kickoffBack.current) {
+        kickoffBack.current = true;
+        flashNote("Back to live");
+        go(livePath(target.channel, title, extrasIn), true);
+        return;
+      }
       if (r.reason === "ended" && channelId) {
         // The film finished: on to what the clock says is next on the channel
         void nextChannelPath(channelId, curId, (Date.now() - openedAt.current) / 1000, resume).then((path) => {
@@ -1914,8 +1994,13 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         return true;
       }
       const what = linkFailure(a.status, a.data?.code);
+      if (kickoffRun.current && what !== "full") {
+        kickoffFail(`play ${a.status} ${a.data?.code ?? ""}`.trim());
+        return false;
+      }
       const text = a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`);
-      if (retry) setState({ kind: "error", text });
+      if (retry && what === "full") setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection });
+      else if (retry) setState({ kind: "error", text });
       else if (what === "full") {
         const b = parseBlocker(a.data);
         const popup = b && (canStop(b) || (b.kind === "viewer" && (b.title || b.channel))) ? b : undefined;
@@ -1949,20 +2034,17 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         <CatchUpChoice
           fixture={feedSource.get().fixture}
           joining={joiningLine(catchStartsAt, Date.now() / 1000)}
-          canKickOff={!!extras?.kickoff}
+          canKickOff={catchKick}
+          plays={catchCards.length}
           onChoose={(c) => {
             const k = extras?.kickoff;
-            if (c === "kickoff" && k) go(`${targetPath({ channel: target.channel, start: k.start, stop: k.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+            if (c === "kickoff" && catchKick && k) go(`${targetPath({ channel: target.channel, start: k.start, stop: k.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
             else if (c === "catchup") {
+              // fresh cards when the feed has as many by now, else the ones the card was offered with (never an empty recap)
               const f = feedSource.get();
               const cs = catchCards_(f.shown, f.raw, revealClock.reveal);
-              if (cs.length) {
-                setCatchCards(cs);
-                setCatchPhase("recap");
-              } else {
-                flashNote("Nothing to catch up on yet");
-                setCatchPhase("done");
-              }
+              if (cs.length >= catchCards.length) setCatchCards(cs);
+              setCatchPhase(cs.length || catchCards.length ? "recap" : "done");
             } else setCatchPhase("done");
           }}
         />
