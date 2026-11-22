@@ -157,9 +157,10 @@ sealed interface AppPreference<Pref, T> {
         val HomePageItems =
             AppSliderPreference<AppPreferences>(
                 title = R.string.max_homepage_items,
-                defaultValue = 25,
+                // Jellytip (Ricki 22-Nov): rows much longer; Favourites rows are not capped by this at all (they page)
+                defaultValue = 50,
                 min = 5,
-                max = 50,
+                max = 100,
                 interval = 1,
                 getter = { it.homePagePreferences.maxItemsPerRow.toLong() },
                 setter = { prefs, value ->

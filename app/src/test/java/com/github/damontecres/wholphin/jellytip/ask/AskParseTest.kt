@@ -389,6 +389,27 @@ class AskParseTest {
     }
 
     @Test
+    fun kidsTriggerV1() {
+        val f =
+            JSONObject(
+                javaClass.classLoader!!
+                    .getResourceAsStream("jellytip/kids-trigger-v1.json")!!
+                    .bufferedReader()
+                    .readText(),
+            )
+        assertEquals(1, f.getInt("v"))
+        assertEquals(f.getString("regex"), AskParse.KIDS_TRIGGER_PATTERN)
+        for (q in f.getJSONArray("positives").strings()) assertTrue("positive: $q", AskParse.KIDS_TRIGGER.containsMatchIn(q))
+        for (q in f.getJSONArray("negatives").strings()) assertFalse("negative: $q", AskParse.KIDS_TRIGGER.containsMatchIn(q))
+        // A weak phrase alone is no kids chip; with a real trigger it is
+        for (q in listOf("something that works for everyone at the party", "all ages comedy", "whole family, no war")) {
+            assertFalse(q, ids(q).contains("kids"))
+        }
+        assertTrue(ids("for the kids").contains("kids"))
+        assertTrue(ids("a family movie that works for everyone").contains("kids"))
+    }
+
+    @Test
     fun rickiWithTheKidsNothingAnimatedNothingScary() {
         val r = parse("I'm here with my two kids, want something non animated not scary that would work for all")
         assertEquals(listOf("kids", "notgenre:Animation", "notgenre:Horror"), r.chips.map { it.id }.sorted())
