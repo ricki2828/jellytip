@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The TV must read a phrase exactly as the web does. resources/jellytip/ask-vectors.json was made by running the web's own
- * lib/askParse.ts (jellytip-web-askrefine 29fdfee4) under node 24 over the web test phrases, the examples and edge cases; the generator
+ * lib/askParse.ts (jellytip-web-askchips 3cc845f7) under node 24 over the web test phrases, the examples and edge cases; the generator
  * is ask-vectors.gen.mts.txt next to it. The named tests below are the web's askParse.test.ts, ported.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -290,10 +290,11 @@ class AskParseTest {
                 "kids" -> ChipData.Kids(o.getJSONArray("ratings").strings(), o.getJSONArray("genres").strings())
                 "minRating" -> ChipData.MinRating(o.getDouble("value"))
                 "maxSeasons" -> ChipData.MaxSeasons(o.getInt("n"))
+                "person" -> ChipData.Person(o.getString("id"), o.getString("name"), o.getString("role"))
                 else -> error(o.toString())
             }
         val cases = v.getJSONArray("fromData")
-        assertEquals(3, cases.length())
+        assertEquals(4, cases.length())
         for (i in 0 until cases.length()) {
             val c = cases.getJSONObject(i)
             val list = c.getJSONArray("list")
@@ -303,6 +304,40 @@ class AskParseTest {
             assertEquals("labels $i", (0 until want.length()).map { want.getJSONObject(it).getString("label") }, chips.map { it.label })
             assertEquals("query $i", c.getJSONObject("query").map(), AskParse.buildQuery(chips).params())
             assertEquals("applied $i", c.getJSONArray("applied").strings(), AskParse.appliedNotes(chips))
+        }
+    }
+
+    @Test
+    fun refineMatchesWeb() {
+        // The refine chips over a fixed synthetic page (people, years, user data, runtimes) read exactly as on the web
+        val raw = v.getJSONArray("rItems")
+        val items =
+            (0 until raw.length()).map { i ->
+                val o = raw.getJSONObject(i)
+                val people = o.getJSONArray("People")
+                o.getString("Id") to
+                    AskItem(
+                        type = o.getString("Type"),
+                        runTimeTicks = if (o.has("RunTimeTicks")) o.getLong("RunTimeTicks") else null,
+                        childCount = null,
+                        genres = o.getJSONArray("Genres").strings(),
+                        productionYear = if (o.has("ProductionYear")) o.getInt("ProductionYear") else null,
+                        played = if (o.has("UserData")) o.getJSONObject("UserData").getBoolean("Played") else null,
+                        people = (0 until people.length()).map { j -> people.getJSONObject(j).let { AskPerson(it.getString("Id"), it.getString("Name"), it.getString("Type")) } },
+                    )
+            }
+        val cases = v.getJSONArray("refine")
+        assertTrue(cases.length() >= 20)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val what = "${c.getString("q")} picks ${c.getInt("picksFrom")}+${c.getInt("picksCount")}"
+            val chips = parse(c.getString("q")).chips
+            val kept = AskParse.filterItems(items, chips) { it.second }
+            assertEquals("kept: $what", c.getInt("keptCount"), kept.size)
+            val picks = items.drop(c.getInt("picksFrom")).take(c.getInt("picksCount"))
+            val got = AskParse.refineOptions(kept, picks, chips) { it.second }
+            assertEquals("ids: $what", c.getJSONArray("ids").strings(), got.map { it.id })
+            assertEquals("labels: $what", c.getJSONArray("labels").strings(), got.map { it.label })
         }
     }
 

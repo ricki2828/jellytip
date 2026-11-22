@@ -1,5 +1,5 @@
-// Golden vectors for the TV port of web/src/lib/askParse.ts (jellytip-web-askrefine 29fdfee4). Run: node gen.mts > ask-vectors.json
-import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, chipsFromData, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
+// Golden vectors for the TV port of web/src/lib/askParse.ts (jellytip-web-askchips 3cc845f7). Run: node gen.mts > ask-vectors.json
+import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, chipsFromData, refineOptions, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
 import { readFileSync } from "node:fs";
 const NOW = new Date(2026, 5, 1);
 const fromTests = readFileSync(new URL("./queries.txt", import.meta.url), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -64,6 +64,25 @@ const fromDataLists: any[] = [
   [{ t: "kids", ratings: ["G", "PG"], genres: ["Family", "Kids"] }, { t: "notGenre", genres: ["Animation"] }, { t: "notGenre", genres: ["Animation"] }, { t: "years", from: 1990, to: 1999 }, { t: "maxRuntime", min: 100 }],
   [{ t: "genre", genres: ["Science Fiction", "Sci-Fi & Fantasy"] }, { t: "notGenre", genres: ["Horror"] }, { t: "kind", kind: "Series" }, { t: "maxSeasons", n: 1 }, { t: "minRating", value: 7.5 }],
   [{ t: "genre", genres: ["Kids"] }, { t: "years", from: 2001, to: 2001 }, { t: "years", from: 2010, to: 2015 }, { t: "unplayed" }, { t: "minRuntime", min: 120 }, { t: "maxSeasons", n: 3 }],
+  [{ t: "person", id: "d1", name: "Chris Columbus", role: "Director" }, { t: "person", id: "a1", name: "Robin Williams", role: "Actor" }, { t: "kids", ratings: ["G"], genres: ["Family"] }],
 ];
 const fromData = fromDataLists.map((list) => { const chips = chipsFromData(list); return { list, chips: chips.map((c) => ({ id: c.id, label: c.label })), query: show(buildQuery(chips)), applied: appliedNotes(chips) }; });
-console.log(JSON.stringify({ year: 2026, cases, items, picks, fromData }));
+// Refine chips over a fixed synthetic page (people on some, years, user data, runtimes)
+const P = (Id: string, Name: string, Type: string) => ({ Id, Name, Type });
+const GR = [["Family","Adventure"],["Family","Comedy"],["Family","Adventure","Fantasy"],["Comedy"],["Drama","Family"],["Animation","Family"],["Science Fiction","Adventure"],[]];
+const rItems: any[] = [];
+for (let i = 0; i < 24; i++) rItems.push({
+  Id: `r${i}`, Type: i % 5 === 0 ? "Series" : "Movie", RunTimeTicks: i % 6 === 0 ? undefined : (60 + i * 7) * 600_000_000,
+  Genres: GR[i % GR.length], ProductionYear: i % 9 === 0 ? undefined : 1980 + (i * 3) % 40, UserData: i % 4 === 0 ? undefined : { Played: i % 3 === 0 },
+  People: [i % 3 === 0 ? P("d1", "Chris Columbus", "Director") : P("d2", "Nora Ephron", "Director"), P(i % 2 ? "a1" : "a2", i % 2 ? "Robin Williams" : "Meg Ryan", "Actor"), P("a3", "Tom Hanks", i % 4 === 1 ? "Actor" : "Producer"), ...(i % 7 === 0 ? [P("d1", "Chris Columbus", "Actor")] : [])],
+});
+const refineQs = ["for the kids, nothing scary", "funny", "something", "family films from the 90s", "unwatched shows under 2 hours", "no animation, no adventure"];
+const refine = refineQs.flatMap((q) => {
+  const chips = parseAsk(q, NOW).chips;
+  return [[0, 24], [0, 8], [3, 3], [0, 0]].map(([a, b]) => {
+    const kept = filterItems(rItems, chips);
+    const picks = rItems.slice(a, a + b);
+    return { q, picksFrom: a, picksCount: b, keptCount: kept.length, ids: refineOptions(kept, picks, chips).map((c) => c.id), labels: refineOptions(kept, picks, chips).map((c) => c.label) };
+  });
+});
+console.log(JSON.stringify({ year: 2026, cases, items, picks, fromData, rItems, refine }));

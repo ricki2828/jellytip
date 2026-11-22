@@ -58,6 +58,13 @@ sealed interface ChipData {
     data class NotGenre(
         val genres: List<String>,
     ) : ChipData
+
+    /** A director or actor (refine chips): Jellyfin PersonIds. [role] = "Director" or "Actor". */
+    data class Person(
+        val id: String,
+        val name: String,
+        val role: String,
+    ) : ChipData
 }
 
 data class AskChip(
@@ -95,6 +102,8 @@ data class AskQuery(
     val filters: List<String>,
     val officialRatings: List<String>,
     val minCommunityRating: Double?,
+    /** Refine chips: titles with any of these people. */
+    val personIds: List<String> = emptyList(),
 ) {
     /** The web's wire form (comma / pipe joined), for parity tests and logs. */
     fun params(): Map<String, String> =
@@ -111,16 +120,28 @@ data class AskQuery(
             if (filters.isNotEmpty()) put("Filters", filters.joinToString(","))
             if (officialRatings.isNotEmpty()) put("OfficialRatings", officialRatings.joinToString("|"))
             minCommunityRating?.let { put("MinCommunityRating", AskParse.num(it)) }
+            if (personIds.isNotEmpty()) put("PersonIds", personIds.joinToString(","))
         }
 }
 
-/** The slice of an item the client-side checks need. */
+/** The slice of an item the client-side checks (and the refine chips) need. */
 data class AskItem(
     /** "Movie", "Series", ... */
     val type: String?,
     val runTimeTicks: Long?,
     val childCount: Int?,
     val genres: List<String>?,
+    val productionYear: Int? = null,
+    /** null = no user data. */
+    val played: Boolean? = null,
+    val people: List<AskPerson> = emptyList(),
+)
+
+/** A person on an item; [type] = "Director", "Actor", ... */
+data class AskPerson(
+    val id: String,
+    val name: String,
+    val type: String,
 )
 
 data class AskPicks<T>(
@@ -210,6 +231,7 @@ object AskParse {
             is ChipData.Kids -> AskChip("kids", "for kids (rated G, PG)", d)
             is ChipData.MinRating -> AskChip("minrating:${num(d.value)}", "rated ${num(d.value)}+", d)
             is ChipData.MaxSeasons -> AskChip("maxseasons:${d.n}", if (d.n == 1) "1 season" else "up to ${d.n} seasons", d)
+            is ChipData.Person -> AskChip("person:${d.id}", if (d.role == "Director") "directed by ${d.name}" else "with ${d.name}", d)
         }
 
     /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
@@ -490,6 +512,8 @@ object AskParse {
         chips: List<AskChip>,
         shuffle: Boolean = false,
         limit: Int? = null,
+        /** Also ask for genres: the screen offers refine chips drawn from what was found. */
+        refine: Boolean = false,
     ): AskQuery {
         val kinds = chips.of<ChipData.Kind>().map { it.kind }
         val genres = LinkedHashSet<String>()
@@ -512,12 +536,13 @@ object AskParse {
             sortOrder = if (shuffle) null else listOf("Descending", "Ascending"),
             limit = limit ?: fetchLimit(chips),
             // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 || out.isNotEmpty() }, "ChildCount".takeIf { wantSeasons }),
+            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 || out.isNotEmpty() || refine }, "ChildCount".takeIf { wantSeasons }),
             genres = genres.toList(),
             years = years.toList(),
             filters = flags,
             officialRatings = kids?.ratings.orEmpty(),
             minCommunityRating = minRating.takeIf { it > 0 },
+            personIds = chips.of<ChipData.Person>().map { it.id },
         )
     }
 
@@ -608,5 +633,99 @@ object AskParse {
         if (chips.of<ChipData.Genre>().size > 1) notes.add("Several moods: a title must match each one (any of that mood's genres).")
         if (chips.of<ChipData.MinRating>().isNotEmpty()) notes.add("Rating: titles without a community rating are left out.")
         return notes
+    }
+
+    // ---------- refine chips (web refineOptions) ----------
+
+    const val REFINE_MAX = 8
+    const val REFINE_MIN = 3
+    const val PEOPLE_MIN = 2
+
+    /** JavaScript's default localeCompare order (ICU root collation). */
+    private val COLLATOR = java.text.Collator.getInstance(java.util.Locale.ROOT)
+
+    /**
+     * Ways to narrow what was found, from the titles themselves ([kept]: the fetched page after the client checks; [picks]:
+     * the shown picks with their people): directors / actors shared by several picks, the commonest genres to keep or leave
+     * out, decades, movies vs shows, "under 2 h", unwatched. Never one already applied, nothing that matches none or all.
+     * Chips come from [chipFor], so a tapped one is the same filter the parser (or an LLM) would make.
+     */
+    fun <T> refineOptions(
+        kept: List<T>,
+        picks: List<T>,
+        chips: List<AskChip>,
+        view: (T) -> AskItem,
+    ): List<AskChip> {
+        val have = chips.map { it.id }.toSet()
+        val k = kept.map(view)
+        val n = k.size
+        val out = mutableListOf<AskChip>()
+
+        fun offer(d: ChipData) {
+            val c = chipFor(d)
+            if (c.id !in have && out.none { it.id == c.id }) out.add(c)
+        }
+
+        fun splits(count: Int) = count >= REFINE_MIN && count < n
+
+        // People shared by several of the picks (directors first)
+        class P(
+            val id: String,
+            val name: String,
+            var role: String,
+            var count: Int,
+            val first: Int,
+        )
+        val people = LinkedHashMap<String, P>()
+        picks.map(view).forEachIndexed { i, it ->
+            val seen = HashSet<String>()
+            for (p in it.people) {
+                if (p.id.isEmpty() || p.name.isEmpty() || (p.type != "Director" && p.type != "Actor") || !seen.add(p.id)) continue
+                val cur = people.getOrPut(p.id) { P(p.id, p.name, p.type, 0, i) }
+                if (p.type == "Director") cur.role = "Director"
+                cur.count++
+            }
+        }
+        people.values
+            .filter { it.count >= PEOPLE_MIN && it.count < picks.size }
+            .sortedWith(compareBy<P> { if (it.role == "Director") 0 else 1 }.thenByDescending { it.count }.thenBy { it.first })
+            .take(3)
+            .forEach { offer(ChipData.Person(it.id, it.name, it.role)) }
+
+        // Genres: the commonest to keep, and to leave out
+        val left = excludedGenres(chips)
+        val counts = LinkedHashMap<String, Int>()
+        for (it in k) for (g in it.genres.orEmpty().toSet()) counts[g] = (counts[g] ?: 0) + 1
+        val ranked =
+            counts.entries
+                .filter { (g, c) -> g.lowercase() !in left && splits(c) }
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> COLLATOR.compare(a.key, b.key) })
+        ranked.take(3).forEach { offer(ChipData.Genre(listOf(it.key))) }
+        ranked.take(2).forEach { offer(ChipData.NotGenre(listOf(it.key))) }
+
+        // Decades
+        if (chips.of<ChipData.Years>().isEmpty()) {
+            val dec = LinkedHashMap<Int, Int>()
+            for (it in k) it.productionYear?.takeIf { y -> y != 0 }?.let { y -> (y / 10 * 10).let { d -> dec[d] = (dec[d] ?: 0) + 1 } }
+            dec.entries
+                .filter { splits(it.value) }
+                .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
+                .take(2)
+                .forEach { offer(ChipData.Years(it.key, it.key + 9)) }
+        }
+        // Movies vs shows
+        if (chips.of<ChipData.Kind>().isEmpty() && chips.of<ChipData.MaxSeasons>().isEmpty()) {
+            if (splits(k.count { it.type == "Movie" })) offer(ChipData.Kind("Movie"))
+            if (splits(k.count { it.type == "Series" })) offer(ChipData.Kind("Series"))
+        }
+        // Length
+        if (chips.of<ChipData.MaxRuntime>().isEmpty() && chips.of<ChipData.MinRuntime>().isEmpty()) {
+            if (splits(k.count { (runtimeMin(it) ?: Double.POSITIVE_INFINITY) <= 120 })) offer(ChipData.MaxRuntime(120))
+        }
+        // Unwatched (user data present and not played)
+        if (chips.of<ChipData.Unplayed>().isEmpty() && chips.of<ChipData.Played>().isEmpty()) {
+            if (splits(k.count { it.played == false })) offer(ChipData.Unplayed)
+        }
+        return out.take(REFINE_MAX)
     }
 }
