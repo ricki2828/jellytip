@@ -476,6 +476,9 @@ class JellytipIptvPlayback
         /** Where the current open meant to start (ms): a direct stream that turns out unseekable resumes there through the remux. */
         private var openStartMs = 0L
 
+        /** The item's length when a skip began (the stopped player can't say), for saving progress mid-skip. */
+        private var skipDurMs = 0L
+
         /**
          * The recording being played (its times and state), set by the page: a recording's length comes from it when the
          * file can't say (raw TS has no index; an in-progress one grows), so progress is never saved against half of it.
@@ -530,6 +533,7 @@ class JellytipIptvPlayback
             why: String,
         ) {
             JellytipTrace.player("iptv", "$why ${t.channelId} to ${ms / 1000} s (frame held)")
+            durationMs().takeIf { it > 0 }?.let { skipDurMs = it }
             _note.value = "Skipping to ${IptvPlayControls.clock(ms)}…"
             pendingRemuxSeekMs = ms
             remuxAsked = true
@@ -888,6 +892,13 @@ class JellytipIptvPlayback
         fun saveProgress(target: IptvTarget) {
             val item = target.progressItem ?: return
             player ?: return
+            // Leaving mid-skip ("Skipping to 31:20…"): the target is where the person asked to be
+            val pend = pendingRemuxSeekMs
+            if (pend != null && _state.value.target == target && skipDurMs > 0) {
+                val series = target.seriesId?.takeIf { target.episodeId != null }
+                scope.launch { service.saveProgress(item, pend / 1000.0, skipDurMs / 1000.0, series) }
+                return
+            }
             // Only from a stream that is really playing: while recovering / failed the player holds nothing (position 0)
             // and would wipe the resume point
             if (_state.value !is IptvPlayState.Playing || _state.value.target != target || loadedTarget != target) return
