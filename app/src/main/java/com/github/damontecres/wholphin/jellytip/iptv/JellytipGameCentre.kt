@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,7 +30,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -361,6 +369,7 @@ fun JellytipGameCentrePage(
  * The page body (extract-only split of [JellytipGameCentrePage], audit3 shots): everything it draws from plain values, no view
  * model. [listState] is the LazyColumn's, so a test can scroll it.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun JellytipGameCentreContent(
     modifier: Modifier,
@@ -390,12 +399,34 @@ internal fun JellytipGameCentreContent(
     onHeroShown: () -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
 ) {
+    // (audit3) rows draw through the page padding to both screen edges, like Home's: the same bleed (rail 64 + 8 + the page's 16 start
+    // inset, and the page's 16 dp end) and the same scroll rule, so a focused tile rests on the 96 dp line, not under the rail
+    val bleed =
+        remember {
+            com.github.damontecres.wholphin.jellytip.JellytipRowBleed(
+                com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart,
+                16.dp,
+            )
+        }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val platformBringIntoViewSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val rowBringIntoViewSpec =
+        remember(platformBringIntoViewSpec, density, bleed) {
+            with(density) {
+                com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(
+                    platformBringIntoViewSpec,
+                    (bleed.start + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset).toPx(),
+                    bleed.end.toPx(),
+                )
+            }
+        }
     // (audit 22-Nov) rows start 8 dp in (ItemRowTitle + row padding), so the page starts 8 dp early and its own texts take that inset:
     // title, section headers and first tile share one left line; rows run to the page edge, text stops at the safe area
     val inset = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
-    Column(modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed provides bleed) {
+    Column(modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop), verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap)) {
         Row(inset, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+            Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
             if (degraded) {
                 Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, fontSize = 12.sp)
             }
@@ -405,7 +436,29 @@ internal fun JellytipGameCentreContent(
             !loaded -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2, modifier = inset)
             groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
             else ->
-                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    // The list is widened to the screen's edges (so the offscreen layer of the fade does not clip the bleeding rows)
+                    // and padded back by the same amount: items sit exactly where they did
+                    contentPadding = PaddingValues(start = bleed.start, end = bleed.end, bottom = 48.dp),
+                    modifier =
+                        Modifier
+                            .jellytipRowBleed()
+                            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                            .drawWithContent {
+                                drawContent()
+                                // A row scrolled up under the title fades out over its first 12 dp instead of being cut hard
+                                if (listState.canScrollBackward) {
+                                    val fadePx = 12.dp.toPx()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = fadePx),
+                                        size = Size(size.width, fadePx),
+                                        blendMode = BlendMode.DstIn,
+                                    )
+                                }
+                            },
+                ) {
                     hero?.let { h ->
                         item(key = "hero") {
                             LiveMatchHero(
@@ -427,7 +480,8 @@ internal fun JellytipGameCentreContent(
                         item(key = g.id) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 ItemRowTitle("${g.label} (${g.items.size})")
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp), modifier = Modifier.jellytipRowBleed().fillMaxWidth()) {
                                     itemsIndexed(g.items, key = { _, it -> it.fid }) { i, f ->
                                         ColourEdgeFixtureTile(
                                             f,
@@ -451,27 +505,24 @@ internal fun JellytipGameCentreContent(
                                         }
                                     }
                                 }
+                                }
                             }
                         }
                     }
                     if (more.isNotEmpty() && groups.none { it.id == "big" || it.id == "yours" }) {
                         item(key = "more") {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
-                                items(more, key = { "more:${it.key}" }) { m -> MoreTile(m, if (groups.isEmpty()) Modifier.focusRequester(first) else Modifier) { onMoreAlone(m) } }
+                            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp), modifier = Modifier.jellytipRowBleed().fillMaxWidth()) {
+                                    items(more, key = { "more:${it.key}" }) { m -> MoreTile(m, if (groups.isEmpty()) Modifier.focusRequester(first) else Modifier) { onMoreAlone(m) } }
+                                }
                             }
                         }
                     }
                 }
         }
     }
+    }
 }
-
-@Composable
-private fun tileBorder() =
-    ClickableSurfaceDefaults.border(
-        border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)),
-        focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
-    )
 
 @Composable
 private fun tileColors() =
@@ -491,9 +542,14 @@ internal fun MoreTile(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(220.dp),
         colors = tileColors(),
-        border = tileBorder(),
+        border =
+            com.github.damontecres.wholphin.jellytip.jellytipTileBorder(
+                RoundedCornerShape(8.dp),
+                rest = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)),
+            ),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
         modifier = modifier.size(220.dp, 140.dp),
     ) {
         Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center) {

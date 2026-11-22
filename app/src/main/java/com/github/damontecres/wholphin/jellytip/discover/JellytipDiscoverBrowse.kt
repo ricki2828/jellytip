@@ -221,7 +221,7 @@ fun JellytipDiscoverBrowsePage(
                     color = JellytipPalette.Vanilla,
                     fontFamily = JellytipFontFamily,
                     fontWeight = FontWeight.Medium,
-                    fontSize = sizes.sp(JellytipHomeTokens.TITLE_PX),
+                    fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle,
                 )
                 Chip("Films", state.media == "movie") { viewModel.setMedia("movie") }
                 Chip("TV", state.media == "tv") { viewModel.setMedia("tv") }

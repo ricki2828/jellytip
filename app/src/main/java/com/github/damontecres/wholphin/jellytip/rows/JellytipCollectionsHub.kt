@@ -286,9 +286,9 @@ internal fun JellytipCollectionsHubContent(
         }
     }
     // Title, chips, section row and grid all carry their own 8 dp: the extra RowPageStart puts them on the 96 dp left line
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
+            Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
             val journeyChip = remember { FocusRequester() }
             // Nothing else to focus while loading / failed / empty: land here rather than on the drawer

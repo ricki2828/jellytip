@@ -222,8 +222,8 @@ fun JellytipJourneysPage(
             if (back == null || !restore.tryRequestFocus()) first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
-        Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
+        Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         when {
             g == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 240.dp, tileH = 96.dp, rows = 2, perRow = 3)
             g.isEmpty -> {
@@ -303,7 +303,7 @@ fun JellytipJourneyPage(
         onPauseOrDispose { }
     }
     val focus = remember { FocusRequester() }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
         when (val r = state.result) {
             null -> com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
             JourneyResult.Error -> {
@@ -354,7 +354,7 @@ private fun JourneyView(
             entriesState is JourneyEntriesState.Failed -> retryFocus.tryRequestFocus()
         }
     }
-    Text(Journeys.journeyTitle(d), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
+    Text(Journeys.journeyTitle(d), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
     if (p != null) {
         val pct = if (p.playable > 0) p.watched.toFloat() / p.playable else 0f
         Box(Modifier.width(320.dp).height(6.dp).background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(3.dp))) {

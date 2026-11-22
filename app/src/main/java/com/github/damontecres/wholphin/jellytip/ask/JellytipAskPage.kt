@@ -296,7 +296,7 @@ fun JellytipAskPage(
                     }
                 },
     ) {
-        Text("Ask", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
+        Text("Ask", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text("Say what you feel like. Searches your library only, not IPTV or requests.", color = dim, fontFamily = JellytipFontFamily, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             VoiceSearchButton(

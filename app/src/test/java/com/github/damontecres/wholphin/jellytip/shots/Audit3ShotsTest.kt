@@ -97,6 +97,7 @@ import com.github.damontecres.wholphin.jellytip.iptv.IptvPlayState
 import com.github.damontecres.wholphin.jellytip.iptv.IptvQuality
 import com.github.damontecres.wholphin.jellytip.iptv.JellytipGameCentreContent
 import com.github.damontecres.wholphin.jellytip.iptv.LivePreview
+import com.github.damontecres.wholphin.jellytip.iptv.livePreviewShown
 import com.github.damontecres.wholphin.jellytip.iptv.MoreTile
 import com.github.damontecres.wholphin.jellytip.iptv.SportFixtures
 import com.github.damontecres.wholphin.jellytip.iptv.WayTile
@@ -113,7 +114,6 @@ import com.github.damontecres.wholphin.jellytip.specials.TrailerBreakBand
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth
-import com.github.damontecres.wholphin.ui.nav.ExpandedDrawerItemWidth
 import com.github.damontecres.wholphin.ui.nav.IconNavItem
 import com.github.damontecres.wholphin.ui.nav.ModalNavigationDrawer
 import com.github.damontecres.wholphin.ui.nav.NavDrawerItem
@@ -134,6 +134,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.UserItemDataDto
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -270,6 +271,33 @@ class Audit3ShotsTest {
         }.onFailure { println("shot $name: $what not measured (${it.message?.lineSequence()?.firstOrNull()})") }
     }
 
+    // ---- asserts (audit 3, commit 1): bounds are dp from the screen's top-left, on the unmerged tree, tolerance 0.5 dp ----
+
+    private fun bounds(matcher: SemanticsMatcher) = compose.onAllNodes(matcher, useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot()
+
+    private fun allBounds(matcher: SemanticsMatcher) =
+        compose.onAllNodes(matcher, useUnmergedTree = true).let { nodes ->
+            (0 until nodes.fetchSemanticsNodes().size).map { nodes[it].getUnclippedBoundsInRoot() }
+        }
+
+    private fun near(
+        what: String,
+        actual: Float,
+        expected: Float,
+    ) = assertTrue("$what: $actual dp, expected $expected +/- 0.5", kotlin.math.abs(actual - expected) <= 0.5f)
+
+    private fun atMost(
+        what: String,
+        actual: Float,
+        max: Float,
+    ) = assertTrue("$what: $actual dp, expected <= $max", actual <= max)
+
+    private fun atLeast(
+        what: String,
+        actual: Float,
+        min: Float,
+    ) = assertTrue("$what: $actual dp, expected >= $min", actual >= min)
+
     /** Bounds of EVERY node [matcher] finds (unmerged tree), for rows of tiles. */
     private fun logAll(
         name: String,
@@ -405,6 +433,10 @@ class Audit3ShotsTest {
                 logBox(name, "meta", hasText("1995", substring = true))
                 val band = runCatching { compose.onAllNodes(hasTestTag("tb-band"), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot() }.getOrNull()
                 val tile = runCatching { compose.onAllNodes(hasClickAction(), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot() }.getOrNull()
+                // asserts: the band ends inside the safe area; the title area uses its width; the overview line shows
+                atMost("trailer break band right", bounds(hasTestTag("trailer-break-band")).right.value, 912.5f)
+                atLeast("trailer break title area width", bounds(hasTestTag("trailer-break-title")).let { it.right.value - it.left.value }, 200f)
+                atMost("trailer break overview right", bounds(hasText("A crew of thieves", substring = true)).right.value, 912.5f)
                 if (band != null && tile != null) {
                     println("shot $name: band left ${band.left.value} (screen edge to left ${band.left.value}), band right ${band.right.value} (screen edge to right ${960f - band.right.value})")
                     println("shot $name: info column (band left + 12 inset .. tile left) = ${tile.left.value - band.left.value - 12f} dp wide before its own 20 px / 40 px paddings; tile right ${tile.right.value}, gap tile-to-band-right ${band.right.value - tile.right.value}")
@@ -424,6 +456,7 @@ class Audit3ShotsTest {
                     onLongClick = {},
                     onTileFocused = {},
                     modifier = Modifier.testTag("tb-band"),
+                    overview = "A crew of thieves plans one last job in Turin, and nothing about the getaway goes as planned.",
                 )
             }
         }
@@ -463,6 +496,19 @@ class Audit3ShotsTest {
             measure = {
                 logBox(name, "page title", hasText("Game Centre"))
                 logAll(name, "clickable tile", hasClickAction())
+                near("game centre title left", bounds(hasText("Game Centre")).left.value, 96f)
+                atLeast("game centre title top", bounds(hasText("Game Centre")).top.value, 27.5f)
+                // fixture tiles are 320 dp wide: group them by row (top); every row's first tile is on the 96 dp line
+                val tiles = allBounds(hasClickAction()).filter { kotlin.math.abs(it.right.value - it.left.value - 320f) <= 1f }
+                assertTrue("no fixture tiles found", tiles.isNotEmpty())
+                tiles.groupBy { Math.round(it.top.value) }.forEach { (top, row) -> near("first tile of the row at y=$top: left", row.minOf { it.left.value }, 96f) }
+                // the hero's buttons (the other clickable nodes, not tiles) stop at the safe area
+                allBounds(hasClickAction()).filter { kotlin.math.abs(it.right.value - it.left.value - 320f) > 1f && kotlin.math.abs(it.right.value - it.left.value - 220f) > 1f }
+                    .forEach { atMost("hero control right", it.right.value, 912.5f) }
+                // rows bleed to the screen's right edge (the LazyRow itself, not its tiles)
+                val rows = allBounds(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+                assertTrue("no LazyRow found", rows.isNotEmpty())
+                rows.forEach { atLeast("row right edge", it.right.value, 959f) }
             },
         ) {
             val listState = rememberLazyListState()
@@ -658,6 +704,8 @@ class Audit3ShotsTest {
             measure = {
                 logBox(name, "Game Centre title", hasText("Game Centre"))
                 logBox(name, "first line under the title", hasText("No games in the next few days."))
+                near("game centre title left", bounds(hasText("Game Centre")).left.value, 96f)
+                atLeast("game centre title top", bounds(hasText("Game Centre")).top.value, 27.5f)
             },
         ) {
             // loaded, nothing to list: the title row and the empty line show; the title row is the page's real code
@@ -706,6 +754,8 @@ class Audit3ShotsTest {
                 logBox(name, "Movies tab chip", hasText("Movies"))
                 logBox(name, "section title", hasText("COLLECTIONS", ignoreCase = false))
                 logBox(name, "first tile", hasTestTag("hub-tile0"))
+                near("collections title left", bounds(hasText("Collections")).left.value, 96f)
+                atLeast("collections title top", bounds(hasText("Collections")).top.value, 27.5f)
             },
         ) {
             JellytipCollectionsHubContent(
@@ -728,13 +778,17 @@ class Audit3ShotsTest {
             measure = {
                 logBox(name, "preview", hasTestTag("guide-preview"))
                 logBox(name, "focus info hint line", hasText("OK  watch full screen", substring = true))
+                // no preview box (no 224 dp + 20 dp gap): FocusInfo starts at the row's start, the page line 96
+                assertTrue("empty preview must not be drawn", compose.onAllNodes(hasTestTag("guide-preview"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+                near("focus info left", bounds(hasText("OK  watch full screen", substring = true)).left.value, 96f)
             },
         ) {
             // JellytipLiveTvPage.kt:846-851: Column(padding start PageStart, top PageTop, end PageEnd) { Row(spacedBy 20, height PREVIEW_H) { LivePreview, FocusInfo } }
             // (PREVIEW_W 224 x PREVIEW_H 126 are private there: copied)
             Column(Modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(126.dp)) {
-                    LivePreview({ null }, IptvPlayState.Idle, null, Modifier.size(224.dp, 126.dp).testTag("guide-preview"))
+                    // the real decision (livePreviewShown); the Row itself is copied from the page
+                    if (livePreviewShown(IptvPlayState.Idle, null)) LivePreview({ null }, IptvPlayState.Idle, null, Modifier.size(224.dp, 126.dp).testTag("guide-preview"))
                     FocusInfo(null, null, now, null, Modifier.weight(1f))
                 }
             }
@@ -747,7 +801,7 @@ class Audit3ShotsTest {
         shot(name) {
             Column(Modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(126.dp)) {
-                    LivePreview({ null }, IptvPlayState.Idle, ch("c9", "Sky Sport 9"), Modifier.size(224.dp, 126.dp))
+                    if (livePreviewShown(IptvPlayState.Idle, ch("c9", "Sky Sport 9"))) LivePreview({ null }, IptvPlayState.Idle, ch("c9", "Sky Sport 9"), Modifier.size(224.dp, 126.dp))
                     FocusInfo(ch("c9", "Sky Sport 9"), null, now, null, Modifier.weight(1f))
                 }
             }
@@ -762,14 +816,16 @@ class Audit3ShotsTest {
         title: String,
     ) {
         // Copy of SubtitlePreferencesContent.kt:94-116 / UserProfilePreferencesPage.kt:112-124: Column(background surface elevation 1)
-        // { Text(title, headlineSmall, centred, fillMaxWidth, padding vertical 8); LazyColumn(contentPadding 16) { ... } }; no top / end inset
-        Column(modifier.testTag("panel").background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))) {
+        // { Text(title, headlineSmall, centred, fillMaxWidth, padding vertical 8); LazyColumn(contentPadding 16) { ... } }
+        // UPDATED for audit 3 commit 1 to the new geometry the two real panels now have (as PreferencesContent.kt:222-231):
+        // Column padding(top = PageTop, end = 16), title padding(end = 16) then vertical 8. Still a stand-in (Hilt).
+        Column(modifier.testTag("panel").background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)).padding(top = JellytipLayout.PageTop, end = 16.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(end = 16.dp).padding(vertical = 8.dp),
             )
             LazyColumn(
                 horizontalAlignment = Alignment.Start,
@@ -797,6 +853,11 @@ class Audit3ShotsTest {
         logBox(name, "panel", hasTestTag("panel"))
         logBox(name, "panel title", hasText("Subtitle style").or(hasText("Profile settings")))
         for (row in listOf("Font size", "Bold text", "Preferred audio language", "Always show subtitles")) logBox(name, "row '$row'", hasText(row))
+        // asserts (on the stand-in, updated to the new geometry): rows end inside the safe area, the title starts below the overscan
+        atLeast("panel title top", bounds(hasText("Subtitle style").or(hasText("Profile settings"))).top.value, 27.5f)
+        val clickable = allBounds(hasClickAction())
+        assertTrue("no rows found", clickable.isNotEmpty())
+        clickable.forEach { atMost("panel row right", it.right.value, 912.5f) }
     }
 
     @Test
@@ -882,7 +943,13 @@ class Audit3ShotsTest {
                 logAll(name, "hub tile", hasTestTag("hub-tile0").or(hasTestTag("hub-tile1")).or(hasTestTag("hub-tile2")))
                 logBox(name, "Collections title", hasText("Collections"))
                 logBox(name, "Start a journey chip", hasText("Start a journey", substring = true))
-                println("shot $name: page offset = ExpandedDrawerItemWidth - CollapsedDrawerItemWidth = ${ExpandedDrawerItemWidth.value - CollapsedDrawerItemWidth.value} dp; screen width 960, so the page's last ${ExpandedDrawerItemWidth.value - CollapsedDrawerItemWidth.value} dp are off screen")
+                // asserts, drawer OPEN: no 160 dp shift. The page box (72 start / 16 end padding, as NavDrawer.kt DestinationContent) is where
+                // it is with the drawer closed, and its content is still on screen. The page composable is real; NavDrawer needs Hilt,
+                // so the page box is the stand-in with the copied expression (offset removed), inside the REAL ModalNavigationDrawer.
+                val page = bounds(hasTestTag("sidebar-page"))
+                near("page left (drawer open)", page.left.value, 72f)
+                atMost("page right (drawer open)", page.right.value, 944.5f)
+                near("collections title left (drawer open)", bounds(hasText("Collections")).left.value, 96f)
             },
         ) {
             val state = rememberDrawerState(DrawerValue.Open)
@@ -891,13 +958,13 @@ class Audit3ShotsTest {
                 drawerState = state,
                 drawerContent = { v -> DrawerItems(v == DrawerValue.Open) },
             ) {
-                // NavDrawer.kt:660-668 copied: DestinationContent(Modifier.fillMaxSize().offset { IntOffset((openDrawerWidth - closedDrawerWidth), 0) }.padding(start = closedDrawerWidth + 8.dp, end = 16.dp));
-                // the real page here: JellytipCollectionsHubContent (the real NavDrawer needs Hilt, so the offset is the stand-in, not animated)
+                // NavDrawer.kt DestinationContent copied: Modifier.fillMaxSize().padding(start = closedDrawerWidth + 8.dp, end = 16.dp) (audit 3 commit 1: the
+                // offset is gone, the open drawer overlays the page); the real page here: JellytipCollectionsHubContent
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .offset(x = ExpandedDrawerItemWidth - CollapsedDrawerItemWidth)
-                        .padding(start = CollapsedDrawerItemWidth + 8.dp, end = 16.dp),
+                        .padding(start = CollapsedDrawerItemWidth + 8.dp, end = 16.dp)
+                        .testTag("sidebar-page"),
                 ) {
                     JellytipCollectionsHubContent(sections = sections, failed = false, onJourneys = {}, onOpen = {}, modifier = Modifier.fillMaxSize())
                 }

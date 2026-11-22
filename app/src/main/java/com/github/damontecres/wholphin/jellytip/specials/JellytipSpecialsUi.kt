@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -294,6 +295,7 @@ private fun TrailerBreakRow(
         kicker = special.title,
         reason = special.reason,
         meta = meta,
+        overview = item.data.overview,
         owner = owner,
         pick = pick,
         onOk = onOk,
@@ -316,6 +318,7 @@ internal fun TrailerBreakBand(
     onLongClick: () -> Unit,
     onTileFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    overview: String? = null,
 ) {
     val sizes = rememberJellytipSizes()
     val panelHeight = SpecialTokens.BAND_H - BAND_INSET * 2
@@ -324,9 +327,10 @@ internal fun TrailerBreakBand(
         modifier =
             modifier
                 // (start on the row line: the same 8 dp inset as a row title, not the 10 dp tile gap)
-                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = SpecialTokens.SPACING)
+                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
                 .fillMaxWidth()
                 .height(SpecialTokens.BAND_H)
+                .testTag("trailer-break-band")
                 .background(BAND_BG, RoundedCornerShape(8.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
                 .padding(BAND_INSET),
@@ -336,9 +340,15 @@ internal fun TrailerBreakBand(
             modifier = Modifier.weight(1f).padding(start = sizes.px(20), end = sizes.px(40)),
         ) {
             Kicker(kicker.ifBlank { "Trailer break" })
-            LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 100)
+            // Title area: 200-420 dp wide (a logo up to 260 dp), where it was only as wide as the title itself (~170 dp)
+            Box(Modifier.testTag("trailer-break-title").widthIn(min = 200.dp, max = 420.dp)) {
+                LogoOrTitle(item, maxWidthPx = 520, maxHeightPx = 100)
+            }
             if (reason.isNotBlank()) Caption(reason, alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
+            if (!overview.isNullOrBlank()) {
+                Caption(overview.trim(), alpha = 0.75f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3, modifier = Modifier.widthIn(max = 420.dp))
+            }
         }
         SpecialCard(
             width = panelHeight * 16f / 9f,

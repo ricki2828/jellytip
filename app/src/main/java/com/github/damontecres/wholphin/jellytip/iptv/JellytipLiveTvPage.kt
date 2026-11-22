@@ -846,7 +846,10 @@ fun JellytipLiveTvPage(
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         // Top: preview + what's focused
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.height(PREVIEW_H)) {
-            LivePreview({ playback.player }, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
+            // Nothing focused and nothing playing: LivePreview would draw an empty box, so FocusInfo takes the width (the row keeps its height)
+            if (livePreviewShown(playState, focusedChannel)) {
+                LivePreview({ playback.player }, playState, focusedChannel, Modifier.size(PREVIEW_W, PREVIEW_H))
+            }
             FocusInfo(focusedChannel, focusedProg, now, state.message, Modifier.weight(1f))
             // Header action (Up from the group chips): refresh the guide now, with its last-updated status
             val refresh by viewModel.refresh.collectAsState()
@@ -1272,6 +1275,12 @@ private fun RecordingsList(
         )
     }
 }
+
+/** False when [LivePreview] would draw only an empty box: idle, and no channel focused (no text, no player). */
+internal fun livePreviewShown(
+    playState: IptvPlayState,
+    focused: IptvChannel?,
+): Boolean = playState !is IptvPlayState.Idle || focused != null
 
 @Composable
 internal fun LivePreview(
