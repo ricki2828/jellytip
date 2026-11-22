@@ -254,8 +254,11 @@ fun SeriesDetails(
             val series = st.data
             val played = series.data.userData?.played ?: false
             // The person's IPTV copy of this series: asked once per page (10-minute cache); a late answer just appears in the season list
-            val iptvDetail by produceState<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail?>(IptvSeasons.cachedDetail(series), series.id, shows > 1) {
-                value = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.detailFor(series, fresh = shows > 1)
+            val iptvDetail by produceState<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail?>(IptvSeasons.cachedDetail(series), series.id, shows) {
+                val fresh = shows > 1
+                val got = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.detailFor(series, fresh = fresh)
+                // A fresh ask that came back empty keeps what the page shows (a failed ask must not drop the IPTV seasons)
+                if (got != null || !fresh) value = got
             }
             // A split series: next up over library + IPTV needs every library episode's watched state (asked again on each show)
             val hasIptvSeasons = iptvDetail?.seasons?.isNotEmpty() == true

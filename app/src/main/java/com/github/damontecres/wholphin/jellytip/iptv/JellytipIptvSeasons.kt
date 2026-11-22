@@ -136,12 +136,14 @@ object IptvSeasons {
         tmdbId: Int,
         owned: List<String>,
     ): IptvVodDetail? {
-        val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return null
-        if (code != 200) return null
+        // Transport errors and non-200 answers throw (= failed, not cached); only "no such series" is a definite null
+        val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: throw java.io.IOException("vod search: no answer")
+        if (code != 200) throw java.io.IOException("vod search: $code")
         val base = api.companionBase().also { IptvVodParse.imageBase = it }
         val hit = pickSeries(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), tmdbId, owned) ?: return null
-        val (dc, db) = api.userCall("v1/iptv/vod/${URLEncoder.encode(hit.id, "UTF-8")}") ?: return null
-        return if (dc == 200) IptvVodParse.detail(db, base) else null
+        val (dc, db) = api.userCall("v1/iptv/vod/${URLEncoder.encode(hit.id, "UTF-8")}") ?: throw java.io.IOException("vod detail: no answer")
+        if (dc != 200) throw java.io.IOException("vod detail: $dc")
+        return IptvVodParse.detail(db, base)
     }
 
     private fun tmdbOf(series: BaseItem): Int? =
