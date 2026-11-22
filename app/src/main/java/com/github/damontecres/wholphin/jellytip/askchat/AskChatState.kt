@@ -315,6 +315,13 @@ object AskChat {
         }
     }
 
+    /**
+     * "Start over": clears turns, chips, removed, cards, notes and the error. The rev is bumped past anything issued, so a response (or
+     * error) still in flight for the old conversation finds no pending turn / a stale rev and is dropped. Allowed while pending (the
+     * one exception to the pending rule). No server call: the next text starts a fresh conversation (the body carries no history).
+     */
+    fun startOver(s: ChatState): ChatState = ChatState(rev = s.rev + 1)
+
     /** Retry after "unreachable": the same body again (same rev: nothing newer was issued). */
     fun retry(s: ChatState): Issued? {
         val f = s.failed ?: return null

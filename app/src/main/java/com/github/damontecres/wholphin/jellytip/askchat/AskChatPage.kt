@@ -1,7 +1,13 @@
 package com.github.damontecres.wholphin.jellytip.askchat
 
 import android.content.Context
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,6 +52,14 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
+import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.ui.FontAwesome
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,7 +87,6 @@ import com.github.damontecres.wholphin.jellytip.specials.SpecialTokens
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.components.SearchEditTextBox
 import com.github.damontecres.wholphin.ui.components.VoiceInputManager
-import com.github.damontecres.wholphin.ui.components.VoiceSearchButton
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -107,6 +120,8 @@ data class AskChatUi(
     val notice: Boolean = true,
     /** Library items for the current cards (null while they are being fetched). TV cards need no fetch. */
     val fetched: Fetched? = null,
+    /** Press-to-talk: listening / level / last failure. */
+    val voice: ChatVoiceUi = ChatVoiceUi(),
 )
 
 data class Fetched(
@@ -140,12 +155,40 @@ class JellytipAskChatViewModel
         val ui: StateFlow<AskChatUi> = _ui
         private val sender = ChatSender(ChatPost { path, body, timeoutMs -> jellytipApi.postJson(path, body, timeoutMs) })
         private var fetchJob: Job? = null
+        val chatVoice = ChatVoice(context, onText = { t -> _ui.update { it.copy(text = t) } }, onFinal = { t -> submit(t) })
 
         init {
             sender.warm(viewModelScope) // the chat service warms up while the screen is open (fire and forget)
+            viewModelScope.launch { chatVoice.ui.collect { v -> _ui.update { it.copy(voice = v) } } }
         }
 
-        fun setText(v: String) = _ui.update { it.copy(text = v) }
+        fun setText(v: String) {
+            chatVoice.clearError()
+            _ui.update { it.copy(text = v) }
+        }
+
+        /** Press-to-talk: OK down on the mic (not while a turn is pending). */
+        fun micDown() {
+            if (_ui.value.chat.pending != null) return
+            chatVoice.press(_ui.value.text)
+        }
+
+        fun micUp() = chatVoice.release()
+
+        fun micTap() {
+            if (_ui.value.chat.pending != null) return
+            chatVoice.tapOnce(_ui.value.text)
+        }
+
+        /** Start over: drop everything (also what is in flight); no server call. Works while a turn is pending. */
+        fun startOver() {
+            JellytipTrace.log("askchat", "start over")
+            chatVoice.cancel()
+            sender.cancelAll()
+            fetchJob?.cancel()
+            lastOpened = null
+            _ui.update { it.copy(chat = AskChat.startOver(it.chat), text = "", fetched = null) }
+        }
 
         fun submit(v: String) {
             JellytipTrace.log("askchat", "submit '${v.trim()}'")
@@ -167,6 +210,8 @@ class JellytipAskChatViewModel
             send(r.body)
         }
 
+        fun micPermissionDenied() = chatVoice.denied()
+
         fun dismissNotice() {
             AskChat.dismissNotice(noticeStore)
             _ui.update { it.copy(notice = false) }
@@ -178,6 +223,7 @@ class JellytipAskChatViewModel
                     Sent.Aborted -> {}
 
                     is Sent.Ok -> {
+                        if (_ui.value.chat.pending == null || out.resp.rev != _ui.value.chat.rev) return@launch // started over meanwhile
                         // the IPTV copies of the library titles shown: the library hold-OK menu offers "Play from IPTV" for them
                         out.resp.cards.filterIsInstance<ChatTitle.Library>().forEach { c -> JellytipTitleSources.put(c.id, c.sources) }
                         _ui.update { it.copy(chat = AskChat.applyResponse(it.chat, out.resp), fetched = null) }
@@ -271,6 +317,7 @@ class JellytipAskChatViewModel
         }
 
         override fun onCleared() {
+            chatVoice.cancel()
             sender.cancelAll()
         }
 
@@ -290,6 +337,11 @@ internal class AskChatActions(
     val openTv: (ChatTitle.Iptv) -> Unit,
     val voice: VoiceInputManager?,
     val lastOpened: () -> String?,
+    val startOver: () -> Unit = {},
+    val micAvailable: Boolean = false,
+    val micDown: () -> Unit = {},
+    val micUp: () -> Unit = {},
+    val micTap: () -> Unit = {},
 )
 
 @Composable
@@ -298,12 +350,16 @@ fun JellytipAskChatPage(
     viewModel: JellytipAskChatViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsState()
+    val micPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) viewModel.micPermissionDenied()
+        }
     if (ui.chat.error == ChatError.Off) {
         // The server has chat switched off (404): back to Ask with a short notice (no destinations stacking up on repeated taps)
         LaunchedEffect(Unit) { viewModel.chatOff() }
     } else {
         val actions =
-            remember(viewModel) {
+            remember(viewModel, micPermission) {
                 AskChatActions(
                     setText = viewModel::setText,
                     submit = viewModel::submit,
@@ -314,6 +370,11 @@ fun JellytipAskChatPage(
                     openTv = viewModel::openTv,
                     voice = viewModel.voiceInputManager,
                     lastOpened = { viewModel.lastOpened },
+                    startOver = viewModel::startOver,
+                    micAvailable = viewModel.chatVoice.isAvailable,
+                    micDown = { if (viewModel.chatVoice.hasPermission) viewModel.micDown() else micPermission.launch(Manifest.permission.RECORD_AUDIO) },
+                    micUp = viewModel::micUp,
+                    micTap = { if (viewModel.chatVoice.hasPermission) viewModel.micTap() else micPermission.launch(Manifest.permission.RECORD_AUDIO) },
                 )
             }
         AskChatContent(ui = ui, actions = actions, modifier = modifier)
@@ -341,6 +402,7 @@ internal fun AskChatContent(
     val boxFocus = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     var typing by remember { mutableStateOf(false) }
+    var micFocused by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val turnsScroll = rememberScrollState()
     val libKey = AskChat.libraryIds(chat.cards).joinToString(",")
@@ -415,42 +477,61 @@ internal fun AskChatContent(
                     }
                 }
             }
-            // input, Send, Mic (that is the focus order)
+            // input, then Send / Start over / Mic (that is the focus order)
+            SearchEditTextBox(
+                value = ui.text,
+                onValueChange = {
+                    typing = true
+                    actions.setText(it)
+                },
+                onSearchClick = { actions.submit(ui.text) },
+                readOnly = !typing,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("chat-input")
+                        .focusRequester(boxFocus)
+                        .onFocusChanged { if (!it.isFocused) typing = false }
+                        .onPreviewKeyEvent { event ->
+                            val ok = event.key == Key.DirectionCenter || event.key == Key.Enter
+                            if (event.type == KeyEventType.KeyUp && ok && !typing) {
+                                typing = true
+                                keyboard?.show()
+                                true
+                            } else {
+                                false
+                            }
+                        },
+            )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SearchEditTextBox(
-                    value = ui.text,
-                    onValueChange = {
-                        typing = true
-                        actions.setText(it)
-                    },
-                    onSearchClick = { actions.submit(ui.text) },
-                    readOnly = !typing,
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .testTag("chat-input")
-                            .focusRequester(boxFocus)
-                            .onFocusChanged { if (!it.isFocused) typing = false }
-                            .onPreviewKeyEvent { event ->
-                                val ok = event.key == Key.DirectionCenter || event.key == Key.Enter
-                                if (event.type == KeyEventType.KeyUp && ok && !typing) {
-                                    typing = true
-                                    keyboard?.show()
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                )
                 AskButton("Send", primary = true, modifier = Modifier.chatDisabled(pending || ui.text.isBlank())) { actions.submit(ui.text) }
-                VoiceSearchButton(
-                    onSpeechResult = { spoken ->
-                        JellytipTrace.log("askchat", "voice result '$spoken'")
-                        actions.submit(spoken) // refused while pending; VoiceSearchButton acknowledges() the Result itself
-                    },
-                    voiceInputManager = actions.voice,
-                    modifier = Modifier.chatDisabled(pending),
-                )
+                // Start over: the one control that stays live while a turn is pending (it drops the turn in flight)
+                AskButton(
+                    "Start over",
+                    primary = false,
+                    modifier = Modifier.testTag("chat-start-over"),
+                ) {
+                    actions.startOver()
+                    boxFocus.tryRequestFocus()
+                }
+                if (actions.micAvailable) {
+                    ChatMicButton(ui.voice.listening, actions, Modifier.chatDisabled(pending), onFocus = { micFocused = it })
+                }
+            }
+            val hint =
+                when {
+                    ui.voice.listening -> "Listening… release to send"
+                    ui.voice.errorRes != null -> stringResource(ui.voice.errorRes)
+                    actions.micAvailable && !pending -> "Hold OK on the mic to talk"
+                    else -> null
+                }
+            if (hint != null) {
+                Text(hint, color = if (ui.voice.listening) JellytipPalette.Vanilla else dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.MinText, modifier = Modifier.testTag("chat-voice-hint"))
+            }
+            if (ui.voice.listening) {
+                Box(Modifier.fillMaxWidth().height(3.dp).background(JellytipPalette.Vanilla.copy(alpha = 0.12f))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(ui.voice.level.coerceAtLeast(0.06f)).background(JellytipPalette.Jelly))
+                }
             }
             if (ui.notice) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -559,6 +640,66 @@ internal fun AskChatContent(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The press-to-talk mic: hold OK (DPAD_CENTER / ENTER down, repeats ignored) to listen, release to send. Key events are handled in the
+ * preview pass and consumed, so the Surface's own click only ever comes from a pointer (a tap).
+ */
+@Composable
+private fun ChatMicButton(
+    listening: Boolean,
+    actions: AskChatActions,
+    modifier: Modifier = Modifier,
+    onFocus: (Boolean) -> Unit,
+) {
+    val desc = "Hold OK to talk"
+    Surface(
+        onClick = { actions.micTap() },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = if (listening) JellytipPalette.Jelly else JellytipPalette.Vanilla.copy(alpha = 0.12f),
+                focusedContainerColor = if (listening) JellytipPalette.Jelly else com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                contentColor = if (listening) Color.White else JellytipPalette.Vanilla,
+                focusedContentColor = if (listening) Color.White else com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+                pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
+                pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
+            ),
+        modifier =
+            modifier
+                .testTag("chat-mic")
+                .semantics { contentDescription = desc }
+                .onFocusChanged {
+                    onFocus(it.isFocused)
+                    if (!it.isFocused) actions.micUp() // focus left while held: never leave the mic open
+                }.onPreviewKeyEvent { e ->
+                    val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                    if (!ok) {
+                        false
+                    } else {
+                        when (e.type) {
+                            KeyEventType.KeyDown -> {
+                                if (e.nativeKeyEvent.repeatCount == 0) actions.micDown() // auto-repeats while held are swallowed
+                                true
+                            }
+
+                            KeyEventType.KeyUp -> {
+                                actions.micUp()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    }
+                },
+    ) {
+        Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text(stringResource(R.string.fa_microphone), fontFamily = FontAwesome, fontSize = 14.sp)
         }
     }
 }
