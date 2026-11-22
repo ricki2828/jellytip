@@ -30,9 +30,9 @@ class AskChatSourcesTest {
 
     @Test
     fun allCardsOfTheFixtureParse() {
-        assertEquals(8, resp.cards.size)
+        assertEquals(9, resp.cards.size)
         assertEquals(3, resp.cards.filterIsInstance<ChatTitle.Library>().size)
-        assertEquals(5, resp.cards.filterIsInstance<ChatTitle.Iptv>().size)
+        assertEquals(6, resp.cards.filterIsInstance<ChatTitle.Iptv>().size)
     }
 
     @Test
@@ -85,6 +85,17 @@ class AskChatSourcesTest {
         assertEquals(java.util.UUID.fromString("0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"), (d as Destination.MediaItem).itemId)
         assertEquals(Destination.JellytipIptvDetails("p1:m:8", "TV Only"), JellytipTitleOpen.detailsFor(tv("p1:m:8").toVodItem()))
         assertEquals(Destination.JellytipIptvDetails("p1:s:9", "No Sources"), JellytipTitleOpen.detailsFor(tv("p1:s:9").toVodItem()))
+    }
+
+    @Test
+    fun aDashlessLowercaseLibraryIdTheRealWireFormatAlsoOpensTheLibraryPage() {
+        val c = tv("p1:m:12")
+        assertEquals("0a1b2c3d4e5f60718293a4b5c6d7e8f9", c.libraryId)
+        assertEquals(listOf("library", "iptv"), c.sources.map { it.type })
+        val d = JellytipTitleOpen.detailsFor(c.toVodItem())
+        assertTrue(d is Destination.MediaItem)
+        assertEquals(java.util.UUID.fromString("0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"), (d as Destination.MediaItem).itemId)
+        assertEquals(org.jellyfin.sdk.model.api.BaseItemKind.MOVIE, d.type)
     }
 
     @Test

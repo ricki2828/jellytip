@@ -23,6 +23,8 @@
       {"kind": "series", "source": "iptv", "iptvId": "p1:s:9", "title": "No Sources", "year": 2019, "tmdbId": 1004},
       {"kind": "film", "source": "iptv", "iptvId": "p1:m:10", "title": "Junk Sources", "tmdbId": 1005,
        "sources": [{"type": "dvd", "id": "x"}, {"type": "library"}, {"type": "iptv", "id": "p1:m:10", "copies": 0, "quality": "1080p"}, "nope", null]},
+      {"kind": "film", "source": "iptv", "iptvId": "p1:m:12", "title": "Dashless Library Id", "year": 1999, "tmdbId": 1007, "certification": "PG",
+       "sources": [{"type": "library", "id": "0a1b2c3d4e5f60718293a4b5c6d7e8f9"}, {"type": "iptv", "id": "p1:m:12", "quality": ["1080p"], "copies": 2}]},
       {"kind": "series", "source": "iptv", "iptvId": "p1:s:11", "title": "Series With Library Copy", "tmdbId": 1006,
        "sources": [{"type": "library", "id": "aaaabbbbccccddddeeeeffff00001111"}, {"type": "iptv", "id": "p1:s:11"}]}
     ]
