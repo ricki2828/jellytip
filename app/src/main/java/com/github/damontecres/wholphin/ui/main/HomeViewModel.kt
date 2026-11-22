@@ -223,6 +223,8 @@ class HomeViewModel
                                             libraries = libraries,
                                             limit = prefs.maxItemsPerRow,
                                             isRefresh = refresh,
+                                            // Jellytip (Ricki 22-Nov): Favourites rows have no cap; pages load as he scrolls
+                                            usePaging = row.config is HomeRowConfig.Favorite,
                                         )
                                     } catch (ex: InvalidStatusException) {
                                         if (ex.status == 404) {

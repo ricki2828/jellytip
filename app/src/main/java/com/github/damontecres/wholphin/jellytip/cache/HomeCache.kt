@@ -86,7 +86,8 @@ class HomeCache
                             if (loaded.items.isEmpty()) return@mapIndexedNotNull null
                             RowSnapshot(
                                 key = keys[index],
-                                items = loaded.items.filterNotNull().take(SNAPSHOT_ITEMS).map(::slim),
+                                // take first: a paged row (Favourites) would load every page if walked to its end
+                                items = loaded.items.take(SNAPSHOT_ITEMS).filterNotNull().map(::slim),
                                 showViewMore = loaded.showViewMore,
                                 thumbs = prefetcher.thumbsFor(loaded),
                             )
