@@ -130,7 +130,8 @@ fun JellytipSeasonChips(
         horizontalArrangement = Arrangement.spacedBy(sizes.px(14f)),
         modifier = modifier.onFocusChanged { rowFocused = it.hasFocus }.focusRestorer(selectedRequester),
     ) {
-        itemsIndexed(labels) { index, label ->
+        // (keyed by label: a season inserted later, e.g. an IPTV-only one arriving late, must not turn the focused chip into another season)
+        itemsIndexed(labels, key = { i, l -> if (labels.indexOf(l) == i) l else "$l@$i" }) { index, label ->
             val source = remember { MutableInteractionSource() }
             val focused by source.collectIsFocusedAsState()
             val selected = index == selectedIndex
