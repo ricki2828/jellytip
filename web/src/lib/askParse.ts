@@ -78,11 +78,31 @@ const INVERTIBLE = new Set(["Horror", "Animation", "Comedy", "Thriller", "Romanc
 
 const lc = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
 
-/** The mood label for a genre list (same genres as a mood = that mood's label, so ids match the parser's), else the first genre. */
-function moodLabel(genres: string[]): string {
-  const want = [...lc(genres)].sort().join("|");
-  const m = MOODS.find(([, g]) => [...lc(g)].sort().join("|") === want);
-  return m ? m[2] : genres[0];
+/** Case-insensitive order, ordinal on the lower-cased strings (the same in the TV port and the server's Python port). */
+const ciSort = (xs: string[]) => [...xs].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0));
+
+/**
+ * The label for a genre list (chip contract v1, C3; ~/ai/plans/jellytip-chat-search.md 3a), so ids never collide:
+ *  1. the genres are one mood's set (any case): that mood's label ("Comedy", "Sci-fi");
+ *  2. else they are exactly the union of 2+ moods' sets: those moods (each mood whose set is inside the genres, in MOODS
+ *     order, kept when it adds a genre not yet covered), labels sorted and joined " or " ("Adventure or Comedy");
+ *  3. else the genres themselves, sorted and joined " or " (a single refine genre stays as it is: "Adventure").
+ */
+export function moodLabel(genres: string[]): string {
+  const set = lc(genres);
+  const key = (xs: Iterable<string>) => [...xs].sort().join("|");
+  const exact = MOODS.find(([, g]) => key(lc(g)) === key(set));
+  if (exact) return exact[2];
+  const covered = new Set<string>();
+  const kept: string[] = [];
+  for (const [, g, label] of MOODS) {
+    const gs = [...lc(g)];
+    if (!gs.every((x) => set.has(x)) || gs.every((x) => covered.has(x))) continue;
+    gs.forEach((x) => covered.add(x));
+    kept.push(label);
+  }
+  if (kept.length >= 2 && covered.size === set.size) return ciSort(kept).join(" or ");
+  return ciSort([...new Map(genres.map((g) => [g.toLowerCase(), g])).values()]).join(" or ");
 }
 
 /**
@@ -120,6 +140,9 @@ export function chipFor(d: ChipData): Chip {
 
 /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
 export const chipsFromData = (list: ChipData[]): Chip[] => list.map(chipFor).filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
+
+/** The mood table (label + genres, in order) for the chip contract's golden file and the server's port. */
+export const MOOD_TABLE = MOODS.map(([, genres, label]) => ({ label, genres }));
 
 const DECADE_WORDS: Record<string, number> = {
   twenties: 1920, thirties: 1930, forties: 1940, fifties: 1950, sixties: 1960, seventies: 1970, eighties: 1980, nineties: 1990,

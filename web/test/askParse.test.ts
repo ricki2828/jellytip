@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, refineOptions, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
+import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, moodLabel, MOOD_TABLE, refineOptions, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
+import { readFileSync } from "node:fs";
 
 const NOW = new Date("2026-11-06T00:00:00Z");
 const ids = (q: string) => parseAsk(q, NOW).chips.map((c) => c.id);
@@ -365,4 +366,17 @@ test("a person chip asks Jellyfin for that person; refine asks for genres", () =
   assert.equal(buildQuery(parseAsk("funny", NOW).chips, { refine: true }).Fields, "PrimaryImageAspectRatio,Genres");
   assert.equal(buildQuery(parseAsk("funny", NOW).chips).Fields, "PrimaryImageAspectRatio");
   assert.deepEqual(refineOptions([], [], chips), []);
+});
+
+test("chip contract v1 golden file (shared with the TV and the server): chipFor, the mood table, the C3 labels", () => {
+  const g = JSON.parse(readFileSync(new URL("./fixtures/chip-contract-v1.json", import.meta.url), "utf8"));
+  assert.equal(g.v, 1);
+  assert.deepEqual(g.moods, MOOD_TABLE);
+  for (const v of g.variants) assert.deepEqual([chipFor(v.data).id, chipFor(v.data).label], [v.id, v.label], JSON.stringify(v.data));
+  for (const c of g.c3) {
+    assert.equal(moodLabel(c.genres), c.label, JSON.stringify(c.genres));
+    assert.equal(chipFor({ t: "notGenre", genres: c.genres }).label, c.notGenreLabel);
+  }
+  // A merged chip and a later single-genre chip no longer share an id
+  assert.notEqual(chipFor({ t: "genre", genres: ["Adventure", "Action & Adventure", "Comedy"] }).id, chipFor({ t: "genre", genres: ["Adventure"] }).id);
 });
