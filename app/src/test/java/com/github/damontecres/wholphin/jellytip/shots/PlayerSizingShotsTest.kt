@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,6 +24,8 @@ import com.github.damontecres.wholphin.jellytip.iptv.DelayChipText
 import com.github.damontecres.wholphin.jellytip.iptv.FullTimeCard
 import com.github.damontecres.wholphin.jellytip.iptv.FullTimeNext
 import com.github.damontecres.wholphin.jellytip.iptv.IptvMatch
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipLivePanel
+import com.github.damontecres.wholphin.jellytip.iptv.MatchLive
 import com.github.damontecres.wholphin.jellytip.iptv.MatchTeam
 import com.github.damontecres.wholphin.jellytip.iptv.PlayerCornerOverlays
 import com.github.damontecres.wholphin.jellytip.iptv.PlayerToast
@@ -118,8 +121,41 @@ class PlayerSizingShotsTest {
                 toast = PlayerToast(main = "Warriors now favourites · 54%", kicker = "Polymarket flip", sub = "$1.2M traded", edge = Broadcast.Gold),
                 toastProgress = { 1f },
                 fantasy = "🏈  CCP 87.4 – 79.2",
-                hint = "◀  From kick-off   ·   →  Companion   ·   ▼  Other channels   ·   Hold OK: match info",
+                hint = listOf("◀  From kick-off", "→  Companion", "▼  Other channels", "Hold OK: match info"),
                 trackMessage = "Audio: English (AAC 5.1)",
+            )
+        }
+
+    /** Teams with no short name: the scorebug ellipsizes the names inside its 428 dp column, the clock stays. */
+    @Test
+    fun cornerOverlaysLongNames() =
+        shot("player-corners-longnames") {
+            PlayerCornerOverlays(
+                delayChip = null,
+                scorebug = {
+                    ScorebugPill("Penrith Panthers", "New Zealand Warriors", "12", "6", "45:10", "2nd Half", matchPalette(match), holdText = null)
+                },
+                toast = null,
+                toastProgress = { 1f },
+                fantasy = null,
+                hint = listOf("◀  From kick-off", "→  Companion", "▼  Other channels", "Hold OK: match info"),
+                trackMessage = null,
+            )
+        }
+
+    private val live = MatchLive("in", "45:10", "2nd Half", "12", "6", emptyList(), emptyList(), emptyList(), null, null, null, emptyList(), updatedAt = null)
+
+    /** Docked live panel with the delay chip as its first row (the chip never sits on the score strip; P1 insets). */
+    @Test
+    fun cornersWithDockedPanel() =
+        shot("player-corners-panel") {
+            JellytipLivePanel(
+                match,
+                tab = 0,
+                spoilerNotice = false,
+                data = live,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.28f),
+                topRow = { DelayChipText(replay = { false }, hold = { null }, delaySec = { 30 }) },
             )
         }
 }

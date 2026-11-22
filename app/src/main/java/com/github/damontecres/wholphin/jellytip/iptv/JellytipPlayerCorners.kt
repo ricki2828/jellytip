@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -58,7 +60,8 @@ internal fun PlayerCornerOverlays(
     toast: PlayerToast?,
     toastProgress: () -> Float,
     fantasy: String?,
-    hint: String?,
+    /** The banner's key hints, one item each ("◀  From kick-off"); they wrap as whole items, no separators. */
+    hint: List<String>,
     trackMessage: String?,
     modifier: Modifier = Modifier,
 ) {
@@ -70,6 +73,7 @@ internal fun PlayerCornerOverlays(
                 .widthIn(max = PlayerSafeArea.COLUMN_MAX),
             verticalArrangement = Arrangement.spacedBy(PlayerSafeArea.GAP),
         ) {
+            // The scorebug shrinks its team names (ellipsis) before the scores or the clock (ScorebugPill)
             scorebug?.invoke()
             fantasy?.let { PlayerChipText(it, Color.White, 14.sp, Modifier, weight = FontWeight.SemiBold) }
             trackMessage?.let {
@@ -94,7 +98,7 @@ internal fun PlayerCornerOverlays(
             verticalArrangement = Arrangement.spacedBy(PlayerSafeArea.GAP),
         ) {
             delayChip?.invoke()
-            hint?.let { PlayerChipText(it, JellytipPalette.Vanilla.copy(alpha = 0.85f), 14.sp, Modifier) }
+            if (hint.isNotEmpty()) PlayerHintChip(hint)
             toast?.let { t ->
                 PlayerToastView(
                     t,
@@ -110,7 +114,22 @@ internal fun PlayerCornerOverlays(
     }
 }
 
-/** A one-line chip on a 0.6 black pill (fantasy score, banner hint). */
+/** The banner's key hints on one 0.6 black pill; items wrap whole (a gap between them, never a dangling "·"). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlayerHintChip(items: List<String>) {
+    FlowRow(
+        Modifier
+            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items.forEach { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.85f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1) }
+    }
+}
+
+/** A one-line chip on a 0.6 black pill (fantasy score, track message). */
 @Composable
 private fun PlayerChipText(
     text: String,

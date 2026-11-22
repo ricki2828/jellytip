@@ -685,6 +685,8 @@ fun JellytipLivePanel(
     allowWinProb: Boolean = false,
     /** The player's reveal clock (fantasy "in this game" waits for it). */
     reveal: (Double?) -> Boolean = { true },
+    /** Drawn first, end-aligned, above the score strip (the player's delay chip: never over the panel). */
+    topRow: (@Composable () -> Unit)? = null,
 ) {
     val pal = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchPalette(match) }
     val shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape
@@ -712,6 +714,7 @@ fun JellytipLivePanel(
                         // Docked: inside the safe area (24 dp from the right edge, 27 top / bottom; audit P1)
                         .then(if (floating) Modifier.padding(14.dp) else Modifier.padding(start = 16.dp, end = 24.dp, top = 27.dp, bottom = 27.dp)),
             ) {
+                topRow?.let { row -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { row() } }
                 if (match.isEvent || (match.home == null && match.away == null)) {
                     EventStrip(match, pal, if (spoilerNotice) null else flash)
                 } else {

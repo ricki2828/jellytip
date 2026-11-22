@@ -1468,6 +1468,8 @@ fun JellytipLiveTvPlayerPage(
                 closer = closerGame,
                 allowWinProb = me?.sportSpoilers == true,
                 reveal = { revealClock.reveal(it) },
+                // The delay chip rides on the panel's first row (it shows only with the panel open; never over it)
+                topRow = { DelayChipText(replay = { replayShown }, hold = { holdSecs }, delaySec = { delayShown }) },
             )
         }
         // Round 3 cards: full time (bottom), catch me up (centre)
@@ -1551,11 +1553,11 @@ fun JellytipLiveTvPlayerPage(
         val toastShown by remember { derivedStateOf { toastIn.value > 0f } }
         // Banner extras (only while the now/next banner shows): the key hint and the fantasy chip
         val bannerCatchUp = current.takeIf { it.start != null && it.stop != null && it.channelId == channel.id }
-        val hintText =
+        val hintItems: List<String> =
             if (!bannerVisible) {
-                null
+                emptyList()
             } else if (bannerCatchUp != null) {
-                "▶  Right: back to live"
+                listOf("▶  Right: back to live")
             } else {
                 val kick = nowNext?.now?.let { it.canStartOver && it.isOn(now) } == true
                 val info = sourceMatch?.let { !MatchHidden.hides(it.id) } == true && !MatchInfoRoute.missing
@@ -1564,18 +1566,14 @@ fun JellytipLiveTvPlayerPage(
                     if (panelMatch != null) "→  Companion" else null,
                     if (current.isLive && chipChannels.size > 1) "▼  Other channels" else null,
                     if (info) "Hold OK: match info" else null,
-                ).joinToString("   ·   ").ifEmpty { null }
+                )
             }
         // Fantasy chip "🏈 CCP 87.4 – 79.2" (the league with starters in this game, else the first)
         val fantasyText =
             if (!bannerVisible || nflMatch == null) null else JellytipFantasy.leagueFor(fantasyShown.takeUnless { replayShown }, nflMatch?.id)?.let { l -> "🏈  ${l.short} ${l.scoreLine}" }
         PlayerCornerOverlays(
-            delayChip =
-                if (open) {
-                    { DelayChipText(replay = { replayShown }, hold = { holdSecs }, delaySec = { delayShown }) }
-                } else {
-                    null
-                },
+            // Shown on the panel's first row instead (JellytipLivePanel topRow)
+            delayChip = null,
             // Scorebug (web Companion/Scorebug): the newest released score, 8 s after a change; never in the panel's place.
             // Its own composable reading lambdas, so the running clock doesn't recompose this page every second.
             scorebug = {
@@ -1590,7 +1588,7 @@ fun JellytipLiveTvPlayerPage(
             toast = shownToast?.takeIf { toastShown },
             toastProgress = { toastIn.value },
             fantasy = fantasyText,
-            hint = hintText,
+            hint = hintItems,
             trackMessage = trackMessage.takeIf { bannerVisible },
         )
         matchModal?.let { m ->
