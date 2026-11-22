@@ -220,6 +220,10 @@ object JellytipIptvResumeStore {
     private val _next = MutableStateFlow<List<IptvResume>>(emptyList())
     val nextItems: StateFlow<List<IptvResume>> = _next
 
+    /** The server's merged next per split series (`seriesNext`, t5s mergednext): hides Jellyfin NextUp entries it disagrees with. */
+    private val _seriesNext = MutableStateFlow<Map<String, com.github.damontecres.wholphin.jellytip.details.SeriesNextClaim>>(emptyMap())
+    val seriesNext: StateFlow<Map<String, com.github.damontecres.wholphin.jellytip.details.SeriesNextClaim>> = _seriesNext
+
     @Volatile
     private var lastLoad = 0L
 
@@ -236,7 +240,10 @@ object JellytipIptvResumeStore {
                 JellytipTrace.log("iptv", "continue -> $code (${_continue.value.size})")
             }
             api.userCall("v1/me/next", timeoutMs = 6_000)?.let { (code, body) ->
-                if (code == 200) runCatching { IptvResumeParse.items(body, base) }.getOrNull()?.let { _next.value = it }
+                if (code == 200) {
+                    runCatching { IptvResumeParse.items(body, base) }.getOrNull()?.let { _next.value = it }
+                    _seriesNext.value = com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.all(body)
+                }
             }
         }
     }

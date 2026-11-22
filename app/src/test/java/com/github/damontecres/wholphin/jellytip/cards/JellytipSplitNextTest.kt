@@ -115,4 +115,27 @@ class SeriesNextClaimTest {
         assertEquals(4, (com.github.damontecres.wholphin.jellytip.details.claimedNext(bySe, eps) as com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Episode).ep.episode)
         assertNull(com.github.damontecres.wholphin.jellytip.details.claimedNext(p.parse("""{"seriesNext":{"s1":{"source":"iptv","id":"x","season":9,"episode":9}}}""", "s1")!!, eps))
     }
+
+    @Test
+    fun homeNextUpHidesJellyfinsEpisodeWhenTheServerSaysOtherwise() {
+        val f = com.github.damontecres.wholphin.jellytip.details.SplitNextFilter
+        val traitors = UUID.fromString("48fcd920-aa5c-a098-5a16-70879ae1a105")
+        val e6 = UUID.fromString("00000000-0000-0000-0000-000000000006")
+        val claims =
+            com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.all(
+                """{"items":[],"seriesNext":{"48fcd920aa5ca0985a1670879ae1a105":{"source":"iptv","id":"11dd6d87:e:2113330","season":2,"episode":3,"inProgress":true},""" +
+                    """"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"source":"library","id":"00000000000000000000000000000006","season":1,"episode":6},"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"source":null}}}""",
+            )
+        assertEquals(3, claims.size)
+        // Traitors: Jellyfin says E6, the merged next is IPTV E3 -> hidden
+        assertTrue(!f.keepLibraryNext(traitors, e6, 0L, claims))
+        // ...unless it is a resume (Continue entry)
+        assertTrue(f.keepLibraryNext(traitors, e6, 10L, claims))
+        // Same library episode claimed: kept; finished show: hidden; no claim: kept
+        assertTrue(f.keepLibraryNext(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), e6, 0L, claims))
+        assertTrue(!f.keepLibraryNext(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), e6, 0L, claims))
+        assertTrue(f.keepLibraryNext(UUID.randomUUID(), e6, 0L, claims))
+        assertTrue(f.keepLibraryNext(null, e6, 0L, claims))
+        assertEquals(emptyMap<String, Any>(), com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.all("""{"items":[]}"""))
+    }
 }

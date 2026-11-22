@@ -105,6 +105,15 @@ sealed interface ClaimedNext {
 }
 
 object SeriesNextParse {
+    /** Every series' claim in a `GET /v1/me/next` answer, by dashless lowercase series id; empty = none / malformed. */
+    fun all(body: String): Map<String, SeriesNextClaim> =
+        try {
+            val all = org.json.JSONObject(body).optJSONObject("seriesNext") ?: return emptyMap()
+            all.keys().asSequence().mapNotNull { k -> parse(body, k)?.let { k.replace("-", "").lowercase() to it } }.toMap()
+        } catch (e: org.json.JSONException) {
+            emptyMap()
+        }
+
     /** `{seriesNext: {<series id>: {source, id, season, episode, inProgress}}}` -> this series' claim; null = no claim / malformed. */
     fun parse(
         body: String,
@@ -148,4 +157,22 @@ fun claimedNext(
         }
     val hit = byId ?: eps.firstOrNull { it.season == claim.season && it.episode == claim.episode }
     return hit?.let { ClaimedNext.Episode(it) }
+}
+
+/**
+ * Home Next Up / Tonight: a library next-up episode (Jellyfin's NextUp, which knows nothing of IPTV) stays only when the
+ * server's merged next for its series agrees, or when nothing was claimed for it. A started episode (resume point) is a
+ * Continue entry, never hidden here. Claim on IPTV, another library episode, or finished = hidden.
+ */
+object SplitNextFilter {
+    fun keepLibraryNext(
+        seriesId: java.util.UUID?,
+        episodeId: java.util.UUID,
+        positionTicks: Long,
+        claims: Map<String, SeriesNextClaim>,
+    ): Boolean {
+        if (seriesId == null || positionTicks > 0L) return true
+        val c = claims[seriesId.toString().replace("-", "").lowercase()] ?: return true
+        return c.source == "library" && c.id?.replace("-", "")?.lowercase() == episodeId.toString().replace("-", "")
+    }
 }

@@ -1174,9 +1174,28 @@ fun HomePageContent(
                                             emptyList()
                                         }
                                     if (iptvResume.isNotEmpty()) {
+                                        // Split series: Jellyfin's next-up episode the server's merged next disagrees with is left out
+                                        // (null keeps every other item's index for the click / focus positions)
+                                        val claims by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.seriesNext.collectAsState()
+                                        val library =
+                                            if (claims.isEmpty() || !(row.rowType is HomeRowConfig.NextUp || row.rowType is HomeRowConfig.ContinueWatchingCombined)) {
+                                                row.items
+                                            } else {
+                                                row.items.map { it ->
+                                                    it?.takeIf { item ->
+                                                        item.type != org.jellyfin.sdk.model.api.BaseItemKind.EPISODE ||
+                                                            com.github.damontecres.wholphin.jellytip.details.SplitNextFilter.keepLibraryNext(
+                                                                item.data.seriesId,
+                                                                item.id,
+                                                                item.data.userData?.playbackPositionTicks ?: 0L,
+                                                                claims,
+                                                            )
+                                                    }
+                                                }
+                                            }
                                         com.github.damontecres.wholphin.jellytip.iptv.JellytipResumeRow(
                                             title = row.title.getString(),
-                                            library = row.items,
+                                            library = library,
                                             iptv = iptvResume,
                                             viewOptions = jellytipRowOptions(row.viewOptions),
                                             onClickLibrary = { index, item -> onClickItem.invoke(RowColumn(rowIndex, index), item) },
