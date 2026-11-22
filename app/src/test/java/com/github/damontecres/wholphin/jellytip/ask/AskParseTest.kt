@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The TV must read a phrase exactly as the web does. resources/jellytip/ask-vectors.json was made by running the web's own
- * lib/askParse.ts (origin/jellytip-web) under node 24 over the web test phrases, the examples and edge cases; the generator
+ * lib/askParse.ts (jellytip-web-askrefine 29fdfee4) under node 24 over the web test phrases, the examples and edge cases; the generator
  * is ask-vectors.gen.mts.txt next to it. The named tests below are the web's askParse.test.ts, ported.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -236,12 +236,31 @@ class AskParseTest {
 
     @Test
     fun negativesAndContradictions() {
-        for ((text, ign) in listOf("not scary" to "not scary", "no horror" to "no horror", "anything but comedy" to "anything but comedy", "not sad" to "not sad")) {
+        // Negated genres leave those genres out
+        for ((text, id) in listOf("not scary" to "notgenre:Horror", "no horror" to "notgenre:Horror", "anything but comedy" to "notgenre:Comedy", "non-animated" to "notgenre:Animation")) {
+            val r = parse(text)
+            assertEquals(text, listOf(id), r.chips.map { it.id })
+            assertEquals(text, emptyList<String>(), r.ignored)
+        }
+        // Not a genre ("sad" would drop every drama): never guessed
+        for ((text, ign) in listOf("not sad" to "not sad", "without violence" to "without violence")) {
             val r = parse(text)
             assertEquals(text, 0, r.chips.size)
             assertEquals(text, listOf(ign), r.ignored)
-            assertTrue(text, r.notes.joinToString(" ").contains("Negatives like 'not scary' aren't supported yet"))
+            assertTrue(text, r.notes.joinToString(" ").contains("Negatives only work for genres"))
         }
+        assertEquals(emptyList<String>(), ids("none"))
+        // A negation never turns into the genre it rules out (articles, or-lists); "and" does not carry it
+        assertEquals(listOf("kind:Movie", "notgenre:Horror"), ids("not a scary movie").sorted())
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("nothing scary or animated").sorted())
+        assertEquals(listOf("genre:Comedy", "notgenre:Horror"), ids("not scary and funny").sorted())
+        // "not X or Y" is neither, whatever X is
+        assertEquals(listOf("notgenre:Comedy"), ids("not too long or funny"))
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("nothing scary or long or animated").sorted())
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("no horror or sequels or not animated").sorted())
+        assertEquals(listOf("notgenre:Horror"), ids("not too long or too scary"))
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("no horror or any cartoons").sorted())
+        assertEquals(listOf("notgenre:Horror"), ids("nothing for kids or anything scary"))
         val r = parse("funny but not for kids")
         assertEquals(listOf("genre:Comedy"), r.chips.map { it.id })
         assertTrue(r.ignored.contains("but not for kids"))
@@ -253,6 +272,51 @@ class AskParseTest {
         val c = parse("rewatch but unwatched")
         assertEquals(listOf("unplayed"), c.chips.map { it.id })
         assertTrue(c.ignored.contains("rewatch"))
+    }
+
+    @Test
+    fun fromDataMatchesWeb() {
+        // Chips built from filter data (refine chips, an LLM-produced query) read exactly as on the web
+        fun data(o: JSONObject): ChipData =
+            when (o.getString("t")) {
+                "genre" -> ChipData.Genre(o.getJSONArray("genres").strings())
+                "notGenre" -> ChipData.NotGenre(o.getJSONArray("genres").strings())
+                "kind" -> ChipData.Kind(o.getString("kind"))
+                "maxRuntime" -> ChipData.MaxRuntime(o.getInt("min"))
+                "minRuntime" -> ChipData.MinRuntime(o.getInt("min"))
+                "years" -> ChipData.Years(o.getInt("from"), o.getInt("to"))
+                "unplayed" -> ChipData.Unplayed
+                "played" -> ChipData.Played
+                "kids" -> ChipData.Kids(o.getJSONArray("ratings").strings(), o.getJSONArray("genres").strings())
+                "minRating" -> ChipData.MinRating(o.getDouble("value"))
+                "maxSeasons" -> ChipData.MaxSeasons(o.getInt("n"))
+                else -> error(o.toString())
+            }
+        val cases = v.getJSONArray("fromData")
+        assertEquals(3, cases.length())
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val list = c.getJSONArray("list")
+            val chips = AskParse.chipsFromData((0 until list.length()).map { data(list.getJSONObject(it)) })
+            val want = c.getJSONArray("chips")
+            assertEquals("ids $i", (0 until want.length()).map { want.getJSONObject(it).getString("id") }, chips.map { it.id })
+            assertEquals("labels $i", (0 until want.length()).map { want.getJSONObject(it).getString("label") }, chips.map { it.label })
+            assertEquals("query $i", c.getJSONObject("query").map(), AskParse.buildQuery(chips).params())
+            assertEquals("applied $i", c.getJSONArray("applied").strings(), AskParse.appliedNotes(chips))
+        }
+    }
+
+    @Test
+    fun rickiWithTheKidsNothingAnimatedNothingScary() {
+        val r = parse("I'm here with my two kids, want something non animated not scary that would work for all")
+        assertEquals(listOf("kids", "notgenre:Animation", "notgenre:Horror"), r.chips.map { it.id }.sorted())
+        val p = AskParse.buildQuery(r.chips).params()
+        assertEquals("Family|Kids", p["Genres"])
+        assertEquals("PrimaryImageAspectRatio,Genres", p["Fields"])
+        val out = AskParse.filterItems(listOf(It("a", genres = listOf("Family", "Adventure")), It("b", genres = listOf("Family", "Animation")), It("c", genres = listOf("Kids", "Horror")), It("d")), r.chips, view)
+        assertEquals(listOf("a", "d"), out.map { it.id })
+        // Same ids from data as from text, so a refine chip never doubles a parsed one
+        assertEquals(ids("no sci-fi").single(), AskParse.chipFor(ChipData.NotGenre(listOf("Science Fiction", "Sci-Fi & Fantasy"))).id)
     }
 
     @Test
