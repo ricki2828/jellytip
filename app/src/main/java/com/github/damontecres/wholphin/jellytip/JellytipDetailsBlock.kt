@@ -86,6 +86,8 @@ fun JellytipDetailsBlock(
     subtitle: String? = null,
     /** One quiet line under the title / subtitle ("3 seasons  ·  Next: S2 E4"); null (film and episode pages) draws nothing. */
     statusLine: String? = null,
+    /** A small pill at the end of the info line ("Library + IPTV" on a split series); null draws none. */
+    sourceBadge: String? = null,
     bottomPadding: Dp? = null,
     below: @Composable () -> Unit = {},
     viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
@@ -121,6 +123,7 @@ fun JellytipDetailsBlock(
             subtitle = subtitle,
             statusLine = statusLine,
             audienceLine = audienceLine,
+            sourceBadge = sourceBadge,
         )
     JellytipDetailsBlockContent(
         hero = hero,

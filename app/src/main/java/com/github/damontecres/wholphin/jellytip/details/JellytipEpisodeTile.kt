@@ -54,7 +54,7 @@ val JellytipEpisodeTileHeight = 135.dp
  * @param image the still: a url or any Coil model; null (or a failed load) shows the dark placeholder with the number
  * @param progress 0..1, drawn as a bar only while strictly between 0 and 1
  * @param isNext draws the "Next" pill (the episode the series button plays)
- * @param sourceMark small quiet line under the title line ("IPTV"); unused until the library and IPTV rows merge
+ * @param sourceMark small quiet line under the title line ("Library", "IPTV", "IPTV · Failed 2 h ago"); null draws nothing
  */
 @Composable
 fun JellytipEpisodeTile(

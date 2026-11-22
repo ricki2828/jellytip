@@ -49,9 +49,9 @@ import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * IPTV-only seasons on the library series page (web 97458f9a / eb04f1d0): seasons the library lacks but the person's
- * IPTV copy of the same show (same TMDB id, own or shared provider, English copy preferred, foreign dubs skipped) has.
- * Shown as "Season N · via IPTV" chips over an episode card strip; OK plays the episode via IPTV.
+ * IPTV seasons and episodes on the library series page (web 97458f9a / eb04f1d0): the person's IPTV copy of the same show
+ * (same TMDB id, own or shared provider, English copy preferred, foreign dubs skipped). The page merges them into one
+ * season list (see details/JellytipSeasonMerge.kt); OK on an IPTV episode plays it via IPTV.
  */
 object IptvSeasons {
     private val LANG_TOKEN = Regex("""[_\-\s]\(?([a-z]{2,3})\)?$""", RegexOption.IGNORE_CASE)
@@ -142,20 +142,28 @@ object IptvSeasons {
         return if (dc == 200) IptvVodParse.detail(db, base) else null
     }
 
-    /** The person's IPTV copy of a library series and the seasons only it has; null when there are none. */
-    suspend fun forSeries(
-        series: BaseItem,
-        librarySeasons: Collection<Int>,
-    ): Pair<IptvVodDetail, List<IptvSeason>>? {
-        val tmdb =
-            series.data.providerIds
-                ?.entries
-                ?.firstOrNull { it.key.equals("Tmdb", true) }
-                ?.value
-                ?.toIntOrNull() ?: return null
-        val d = lookup(series.name ?: return null, tmdb) ?: return null
-        // The detail comes back even with no IPTV-only season: mixed seasons merge its episodes in (see [interleave])
-        return d to onlySeasons(librarySeasons.toSet(), d.seasons)
+    private fun tmdbOf(series: BaseItem): Int? =
+        series.data.providerIds
+            ?.entries
+            ?.firstOrNull { it.key.equals("Tmdb", true) }
+            ?.value
+            ?.toIntOrNull()
+
+    /** The person's IPTV copy of a library series (matched by TMDB id) with all its seasons; null when there is none. */
+    suspend fun detailFor(series: BaseItem): IptvVodDetail? {
+        val tmdb = tmdbOf(series) ?: return null
+        return lookup(series.name ?: return null, tmdb)
+    }
+
+    /**
+     * The answer [detailFor] already got in the last 10 minutes, without asking: lets a page that is reopened (Back from
+     * playback) draw the merged seasons on its first frame. Null when not cached, or when the cached answer was "none".
+     */
+    fun cachedDetail(series: BaseItem): IptvVodDetail? {
+        val tmdb = tmdbOf(series) ?: return null
+        val api = JellytipApi.shared ?: return null
+        val (at, v) = cache["${api.currentUserKey()}|$tmdb"] ?: return null
+        return if (System.currentTimeMillis() - at < TTL_MS) v else null
     }
 
     /** One season's IPTV episodes, duplicate season blocks merged (first copy of an episode wins), in episode order. */
@@ -208,69 +216,6 @@ object IptvSeasons {
     }
 }
 
-@Composable
-fun JellytipIptvSeasonsSection(
-    series: BaseItem,
-    d: IptvVodDetail,
-    seasons: List<IptvSeason>,
-    modifier: Modifier = Modifier,
-    viewModel: JellytipIptvVodViewModel = hiltViewModel(),
-) {
-    if (seasons.isEmpty()) return
-    var sel by remember(d.item.id) { mutableIntStateOf(0) }
-    val season = seasons[sel.coerceIn(0, seasons.size - 1)]
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.fillMaxWidth()) {
-        Text(
-            "More seasons via IPTV" + (d.item.providerName?.let { " · $it" } ?: ""),
-            color = JellytipPalette.Vanilla.copy(alpha = 0.8f),
-            fontFamily = JellytipFontFamily,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(start = 64.dp),
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 64.dp),
-            modifier = Modifier.focusGroup().focusRestorer(),
-        ) {
-            itemsIndexed(seasons, key = { _, s -> s.season }) { i, s ->
-                Surface(
-                    onClick = { sel = i },
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-                    border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                    colors =
-                        ClickableSurfaceDefaults.colors(
-                            containerColor = if (s == season) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                            focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
-                            contentColor = JellytipPalette.Vanilla,
-                            focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
-                            pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
-                            pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
-                        ),
-                ) {
-                    Text("Season ${s.season} · via IPTV", fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
-                }
-            }
-        }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(horizontal = 64.dp),
-            modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer(),
-        ) {
-            items(season.episodes, key = { it.id }) { e ->
-                IptvEpisodeCard(e) {
-                    val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
-                    JellytipTrace.log("iptv", "series page: IPTV-only S${season.season}E${e.episode} ${e.id}")
-                    viewModel.navigationManager.navigateTo(
-                        Destination.JellytipIptvPlay(title = "${series.name ?: d.item.title} · ${e.title}", seriesId = d.item.id, episodeId = e.id, resumeMs = resume),
-                        "series page IPTV episode OK",
-                    )
-                }
-            }
-        }
-    }
-}
-
 /** An IPTV episode card like the library's: still, "N. Title", progress bar, ✓ when watched (under the card, D-pad reachable). */
 @Composable
 internal fun IptvEpisodeCard(
@@ -294,6 +239,7 @@ internal fun IptvEpisodeCard(
                 color = Color.White,
                 fontFamily = JellytipFontFamily,
                 fontSize = 12.sp,
+                lineHeight = 12.sp * 1.2f,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
@@ -318,28 +264,6 @@ internal fun IptvEpisodeCard(
         val fail = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), System.currentTimeMillis() / 1000)
         if (fail != null) {
             Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 12.sp)
-        }
-    }
-}
-
-/** An IPTV-only episode inside a library season's strip (marked "via IPTV"); OK plays it via IPTV. */
-@Composable
-fun JellytipMixedIptvEpisode(
-    series: BaseItem,
-    d: IptvVodDetail,
-    season: Int,
-    e: IptvEpisode,
-    modifier: Modifier = Modifier,
-    viewModel: JellytipIptvVodViewModel = hiltViewModel(),
-) {
-    Box(modifier) {
-        IptvEpisodeCard(e, viaIptv = true) {
-            val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
-            JellytipTrace.log("iptv", "series page: mixed S${season}E${e.episode} via IPTV ${e.id}")
-            viewModel.navigationManager.navigateTo(
-                Destination.JellytipIptvPlay(title = "${series.name ?: d.item.title} · ${e.title}", seriesId = d.item.id, episodeId = e.id, resumeMs = resume),
-                "series page mixed IPTV episode OK",
-            )
         }
     }
 }

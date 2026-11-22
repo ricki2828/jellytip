@@ -547,6 +547,7 @@ fun JellytipIptvDetailsContent(
     val restartWord = stringResource(R.string.restart)
     val trailerWord = stringResource(R.string.jellytip_trailer)
     val moreWord = stringResource(R.string.jellytip_more)
+    val moreAvailable by com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.collectAsState()
     // Opened from a Home double feature: this film, then the other half (library or IPTV)
     val partner = remember(item?.id) { item?.takeIf { !it.isSeries }?.let { com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.partnerAfterIptv(it.id) } }
     val buttons =
@@ -580,7 +581,8 @@ fun JellytipIptvDetailsContent(
                 }
                 add(JellytipButton(myListLabel(IptvMyList.isOn(item)), { toggleMyList(item) }))
                 if (d.trailer != null) add(JellytipButton(trailerWord, playTrailer))
-                add(JellytipButton(moreWord, { moreOpen = true }))
+                // (More holds the taste actions; without the companion's account service it would be an empty menu)
+                if (moreAvailable) add(JellytipButton(moreWord, { moreOpen = true }))
             }
         }
     val sections =

@@ -139,6 +139,10 @@ class SeriesViewModel
         @Volatile
         var returnToEpisodes = false
 
+        /** The IPTV-only season picked and the IPTV episode last played on the page: Back from IPTV playback lands there. */
+        @Volatile
+        var iptvPosition = com.github.damontecres.wholphin.jellytip.details.IptvSeasonPosition()
+
         private val navPrefs by lazy { context.getSharedPreferences("jellytip_nav", Context.MODE_PRIVATE) }
 
         private fun rememberedSeason(): Int? = navPrefs.getInt("season_$seriesId", -1).takeIf { it >= 0 }

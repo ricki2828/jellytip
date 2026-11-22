@@ -262,6 +262,7 @@ fun JellytipTitledImage(
                     fontFamily = JellytipFontFamily,
                     fontWeight = FontWeight.Medium,
                     fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+                    lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX) * 1.2f,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),

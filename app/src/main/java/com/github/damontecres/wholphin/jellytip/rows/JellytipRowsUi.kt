@@ -387,6 +387,8 @@ private fun PersonRow(
                                 fontFamily = JellytipFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+                                // Two lines at the 12 sp floor: 1.2x, not the body style's looser line height
+                                lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX) * 1.2f,
                                 style = TextStyle(shadow = SoftShadow),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,

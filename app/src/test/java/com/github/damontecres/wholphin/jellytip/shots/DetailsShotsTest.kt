@@ -24,6 +24,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -43,7 +48,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.darkColorScheme
+import androidx.tv.material3.Surface
 import coil3.annotation.ExperimentalCoilApi
 import coil3.asImage
 import coil3.compose.AsyncImagePreviewHandler
@@ -80,6 +85,7 @@ import com.github.damontecres.wholphin.ui.detail.series.EpisodeList
 import com.github.damontecres.wholphin.ui.detail.series.SeriesDetailsContent
 import com.github.damontecres.wholphin.ui.detail.series.SeriesOverviewContent
 import com.github.damontecres.wholphin.ui.detail.series.SeriesOverviewPosition
+import com.github.damontecres.wholphin.ui.theme.colors.PurpleThemeColors
 import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.mockk.every
@@ -98,6 +104,7 @@ import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.jellyfin.sdk.model.api.request.GetEpisodesRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -118,7 +125,7 @@ import java.util.UUID
  * The clock is driven by hand (autoAdvance = false): some pages hold infinite animations (the Down hint) that would
  * keep waitForIdle spinning.
  */
-@OptIn(ExperimentalCoilApi::class, ExperimentalTestApi::class)
+@OptIn(ExperimentalCoilApi::class, ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w960dp-h540dp-land-xhdpi")
@@ -180,6 +187,13 @@ class DetailsShotsTest {
         override fun trailerUrl(trailer: LocalTrailer): String? = null
     }
 
+    private val keyboardMode =
+        object : InputModeManager {
+            override val inputMode = InputMode.Keyboard
+
+            override fun requestInputMode(inputMode: InputMode) = inputMode == InputMode.Keyboard
+        }
+
     @Composable
     private fun Tv(content: @Composable () -> Unit) {
         val handler = AsyncImagePreviewHandler { _ -> photo }
@@ -188,8 +202,13 @@ class DetailsShotsTest {
             LocalAsyncImagePreviewHandler provides handler,
             LocalImageUrlService provides imageUrlService,
             LocalJellytipDetailsSource provides FakeDetailsSource(),
+            // A TV is never in touch mode; Robolectric starts in it, and a foundation `clickable` (the season chips) cannot take
+            // focus in touch mode
+            LocalInputModeManager provides keyboardMode,
         ) {
-            MaterialTheme(colorScheme = darkColorScheme()) { content() }
+            // As MainActivity wraps the app: the app's own dark scheme, and a Surface that supplies the light content colour
+            // (texts with no colour of their own, like person names, take it from here)
+            MaterialTheme(colorScheme = PurpleThemeColors.darkScheme) { Surface(Modifier.fillMaxSize()) { content() } }
         }
     }
 
@@ -388,6 +407,27 @@ class DetailsShotsTest {
         "River Cartwright is given a last chance to prove himself, and a loose thread from an old operation threatens to pull the whole house down. " +
             "Lamb knows more than he is saying, and the slow horses are about to find out how much."
 
+    /** One sentence per episode, so no two tiles repeat each other. */
+    private val libraryOverviews =
+        listOf(
+            "River Cartwright is given a last chance to prove himself after a failed airport operation.",
+            "Lamb sets the house a task nobody can see the point of, and Catherine Standish keeps count.",
+            "A loose thread from an old operation threatens to pull the whole house down.",
+            "Louisa Guy follows a lead that leads straight back to the Park.",
+            "Min Harper discovers what a ten thousand hour rule really costs a man.",
+            "The slow horses learn how much Lamb has known all along.",
+        )
+
+    private val iptvOverviews =
+        listOf(
+            "A hostage video lands on Slough House and the clock starts.",
+            "Roddy Ho is the only one who can read the footage, and he knows it.",
+            "Shirley Dander pulls a favour from a former colleague.",
+            "The Park closes ranks while Diana Taverner makes her own plan.",
+            "Lamb disappears for a night and comes back with a new rule.",
+            "Everything the house believed about the hostage turns out to be wrong.",
+        )
+
     /** Six episodes of season 1: E1 and E2 watched, E3 part-watched (the series button resumes it), E4 is next up (set by the caller via nextUpId). */
     private fun episodes(): List<BaseItem> =
         episodeTitles.mapIndexed { i, title ->
@@ -404,7 +444,7 @@ class DetailsShotsTest {
                     seriesName = "Slow Horses",
                     seasonId = uuid("season:1"),
                     seasonName = "Season 1",
-                    overview = episodeOverview,
+                    overview = libraryOverviews[i],
                     runTimeTicks = minutes(46L + n),
                     primaryImageAspectRatio = 16.0 / 9.0,
                     imageTags = mapOf(ImageType.PRIMARY to "still"),
@@ -521,11 +561,14 @@ class DetailsShotsTest {
         onChangeSeason: (Int) -> Unit = {},
         onPlayEpisode: (BaseItem) -> Unit = {},
         onClickEpisode: (BaseItem) -> Unit = {},
+        librarySeasons: List<BaseItem> = seasons(),
+        iptv: IptvVodDetail? = null,
+        onPlayIptvEpisode: (IptvVodDetail, IptvEpisode) -> Unit = { _, _ -> },
     ) {
         SeriesDetailsContent(
             preferences = prefs,
             series = series(),
-            seasons = seasons(),
+            seasons = librarySeasons,
             similar = similarFilms(),
             trailers = emptyList(),
             extras = emptyList(),
@@ -557,6 +600,8 @@ class DetailsShotsTest {
             onClickDiscoverSeries = {},
             resolved = resolved,
             onPlayEpisode = onPlayEpisode,
+            iptv = iptv,
+            onPlayIptvEpisode = onPlayIptvEpisode,
         )
     }
 
@@ -565,6 +610,10 @@ class DetailsShotsTest {
     private fun SeasonStatefulSeriesPage(
         episodes: EpisodeList,
         changes: MutableList<Int>,
+        librarySeasons: List<BaseItem> = seasons(),
+        iptv: IptvVodDetail? = null,
+        onPlayIptvEpisode: (IptvVodDetail, IptvEpisode) -> Unit = { _, _ -> },
+        onPlayEpisode: (BaseItem) -> Unit = {},
     ) {
         var selected by remember { mutableStateOf(0) }
         SeriesPage(
@@ -574,8 +623,14 @@ class DetailsShotsTest {
                 changes.add(it)
                 selected = it
             },
+            librarySeasons = librarySeasons,
+            iptv = iptv,
+            onPlayIptvEpisode = onPlayIptvEpisode,
+            onPlayEpisode = onPlayEpisode,
         )
     }
+
+    private fun textCount(text: String) = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().size
 
     private val primaryLabel = "Resume S1 E3"
 
@@ -598,7 +653,99 @@ class DetailsShotsTest {
             focusText(name, primaryLabel)
             pressDown(name)
             advance(1500)
+            // A library-only series carries no source marks and no source badge
+            assertEquals("no Library mark on a library-only series", 0, textCount("Library"))
+            assertEquals("no IPTV mark on a library-only series", 0, textCount("IPTV"))
+            assertEquals("no source badge on a library-only series", 0, textCount("Library + IPTV"))
         }) { SeriesPage(list) }
+    }
+
+    // ---- split series: library seasons 1-2 + IPTV-only season 3, and IPTV E4 interleaved into library season 1 ----
+
+    /** Season 1 without E4: the IPTV copy supplies it. */
+    private fun splitLibraryEpisodes() = episodes().filter { it.data.indexNumber != 4 }
+
+    private fun iptvEpisode(
+        s: Int,
+        n: Int,
+    ) = IptvEpisode(
+        id = "p1:s:42:$s:$n",
+        episode = n,
+        title = "IPTV S${s}E$n " + listOf("Hostage", "Ledger", "Dead Drop", "Black Door", "Reckoning")[(n - 1) % 5],
+        runtimeMin = 44 + n,
+        overview = iptvOverviews[(n - 1) % iptvOverviews.size],
+        still = "https://h/s/$s/$n",
+        progress = null,
+    )
+
+    /** The IPTV copy: season 1 E1-E4 (E1-E3 are in the library too and are not shown twice), and a whole season 3. */
+    private fun iptvSplitDetail() =
+        iptvSeriesDetail().copy(
+            seasons =
+                listOf(
+                    IptvSeason(1, (1..4).map { iptvEpisode(1, it) }),
+                    IptvSeason(3, (1..5).map { iptvEpisode(3, it) }),
+                ),
+        )
+
+    @Test
+    fun seriesSplit() {
+        val name = "details-series-split"
+        val list = episodeList(name, splitLibraryEpisodes()) ?: return
+        val changes = mutableListOf<Int>()
+        val libraryPlayed = mutableListOf<UUID>()
+        val iptvPlayed = mutableListOf<String>()
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            assertEquals("the hero says where the series comes from", 1, textCount("Library + IPTV"))
+            assertEquals("three seasons: the IPTV-only one counts", 1, textCount("3 seasons  \u00B7  Next: S1 E3"))
+            pressDown(name)
+            advance(1500)
+            assertEquals("exactly one IPTV episode is shown in season 1", 1, textCount("IPTV"))
+            assertTrue("library tiles carry the Library mark", textCount("Library") >= 1)
+            // OK on the IPTV tile plays it through IPTV and not the library
+            runCatching { compose.onNodeWithTag("jellytip-episode-tile-4").requestFocus() }
+                .onFailure { println("shot $name: IPTV tile focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            advance(500)
+            pressOk(name)
+            advance(500)
+            assertEquals("OK on the IPTV tile plays that IPTV episode", listOf("p1:s:42:1:4"), iptvPlayed)
+            assertEquals("and no library episode", emptyList<UUID>(), libraryPlayed)
+            assertEquals("seasons were not touched", emptyList<Int>(), changes)
+            runCatching { compose.onNodeWithTag("jellytip-episode-tile-3").requestFocus() }
+                .onFailure { println("shot $name: tile focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            advance(500)
+        }) {
+            SeasonStatefulSeriesPage(
+                list,
+                changes,
+                librarySeasons = seasons().take(2),
+                iptv = iptvSplitDetail(),
+                onPlayIptvEpisode = { _, e -> iptvPlayed.add(e.id) },
+                onPlayEpisode = { libraryPlayed.add(it.id) },
+            )
+        }
+    }
+
+    @Test
+    fun seriesSplitIptvSeason() {
+        val name = "details-series-split-iptv-season"
+        val list = episodeList(name, splitLibraryEpisodes()) ?: return
+        val changes = mutableListOf<Int>()
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            pressDown(name)
+            advance(1500)
+            // Chip 2 is Season 3, which only IPTV has
+            runCatching { compose.onNodeWithTag("jellytip-season-chip-2").requestFocus() }
+                .onFailure { println("shot $name: chip focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            advance(800)
+            pressOk(name)
+            advance(1200)
+            assertEquals("an IPTV-only season is not a library season change", emptyList<Int>(), changes)
+            assertTrue("the Season 3 tiles on screen are all IPTV", textCount("IPTV") >= 3)
+            assertEquals("no library tile in Season 3", 0, textCount("Library"))
+        }) { SeasonStatefulSeriesPage(list, changes, librarySeasons = seasons().take(2), iptv = iptvSplitDetail()) }
     }
 
     @Test
@@ -612,9 +759,9 @@ class DetailsShotsTest {
             advance(1500)
             // Focus only moves: Season 1 stays the selected season and the episodes stay put
             // (focus by text did not take on the chip in CI: its tagged, clickable node is the focus target)
-            runCatching { compose.onNodeWithTag("jellytip-season-chip-1").requestFocus() }
-                .onFailure { println("shot $name: chip focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            compose.onNodeWithTag("jellytip-season-chip-1").requestFocus()
             advance(800)
+            compose.onNodeWithTag("jellytip-season-chip-1").assertIsFocused()
             assertEquals("focusing a season chip must not change the season", emptyList<Int>(), changes)
         }) { SeasonStatefulSeriesPage(list, changes) }
     }
@@ -629,9 +776,9 @@ class DetailsShotsTest {
             pressDown(name)
             advance(1500)
             // (focus by text did not take on the chip in CI: its tagged, clickable node is the focus target)
-            runCatching { compose.onNodeWithTag("jellytip-season-chip-1").requestFocus() }
-                .onFailure { println("shot $name: chip focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            compose.onNodeWithTag("jellytip-season-chip-1").requestFocus()
             advance(800)
+            compose.onNodeWithTag("jellytip-season-chip-1").assertIsFocused()
             assertEquals("not before OK", emptyList<Int>(), changes)
             pressOk(name)
             advance(800)
@@ -824,7 +971,7 @@ class DetailsShotsTest {
                                 episode = i + 1,
                                 title = t,
                                 runtimeMin = 46 + i,
-                                overview = episodeOverview,
+                                overview = iptvOverviews[i],
                                 still = "https://h/s/$s/${i + 1}",
                                 // E1 and E2 watched, E3 part-watched (like the library series data)
                                 progress =
