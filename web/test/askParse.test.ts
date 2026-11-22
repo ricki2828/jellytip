@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, moodLabel, MOOD_TABLE, refineOptions, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
+import { activeChips, appliedNotes, buildQuery, chipFor, chipsFromData, KIDS_TRIGGER, moodLabel, MOOD_TABLE, refineOptions, filterItems, FETCH_LIMIT, parseAsk, pickFrom, removeChip, EXAMPLES, PICKS } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
 import { readFileSync } from "node:fs";
 
@@ -379,4 +379,23 @@ test("chip contract v1 golden file (shared with the TV and the server): chipFor,
   }
   // A merged chip and a later single-genre chip no longer share an id
   assert.notEqual(chipFor({ t: "genre", genres: ["Adventure", "Action & Adventure", "Comedy"] }).id, chipFor({ t: "genre", genres: ["Adventure"] }).id);
+});
+
+test("kids trigger v1 (shared with the TV and the server): the module is the fixture, every positive matches, no negative does", () => {
+  const f = JSON.parse(readFileSync(new URL("./fixtures/kids-trigger-v1.json", import.meta.url), "utf8"));
+  assert.equal(f.v, 1);
+  assert.equal(KIDS_TRIGGER.source, f.regex);
+  assert.equal(KIDS_TRIGGER.flags, f.flags);
+  for (const q of f.positives) assert.ok(KIDS_TRIGGER.test(q), `positive: ${q}`);
+  for (const q of f.negatives) assert.ok(!KIDS_TRIGGER.test(q), `negative: ${q}`);
+});
+
+test("'works for everyone' / 'all ages' / 'whole family' alone is no kids chip; with a real trigger it is", () => {
+  for (const q of ["something that works for everyone at the party", "all ages comedy", "whole family, no war"]) {
+    assert.ok(!ids(q).includes("kids"), q);
+    assert.match(parseAsk(q, NOW).notes.join(" "), /no age limit/, q);
+  }
+  assert.ok(ids("I'm here with my two kids, want something non animated not scary that would work for all").includes("kids"));
+  assert.ok(ids("for the kids").includes("kids"));
+  assert.ok(ids("a family movie that works for everyone").includes("kids"));
 });
