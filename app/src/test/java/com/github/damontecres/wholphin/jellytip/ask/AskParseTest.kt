@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The TV must read a phrase exactly as the web does. resources/jellytip/ask-vectors.json was made by running the web's own
- * lib/askParse.ts (jellytip-web-askrefine dedfd2dd) under node 24 over the web test phrases, the examples and edge cases; the generator
+ * lib/askParse.ts (jellytip-web-askrefine 9e5b080f) under node 24 over the web test phrases, the examples and edge cases; the generator
  * is ask-vectors.gen.mts.txt next to it. The named tests below are the web's askParse.test.ts, ported.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -250,6 +250,11 @@ class AskParseTest {
             assertTrue(text, r.notes.joinToString(" ").contains("Negatives only work for genres"))
         }
         assertEquals(emptyList<String>(), ids("none"))
+        // A negation never turns into the genre it rules out (articles, or-lists); "and" does not carry it
+        assertEquals(listOf("kind:Movie", "notgenre:Horror"), ids("not a scary movie").sorted())
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("nothing scary or animated").sorted())
+        assertEquals(listOf("genre:Comedy", "notgenre:Horror"), ids("not scary and funny").sorted())
+        assertEquals(listOf("genre:Comedy"), ids("not too long or funny"))
         val r = parse("funny but not for kids")
         assertEquals(listOf("genre:Comedy"), r.chips.map { it.id })
         assertTrue(r.ignored.contains("but not for kids"))

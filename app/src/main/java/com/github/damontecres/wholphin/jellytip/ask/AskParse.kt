@@ -2,7 +2,7 @@ package com.github.damontecres.wholphin.jellytip.ask
 
 /*
  * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5, plus
- * jellytip-web-askrefine 336ba5ec + dedfd2dd: negated genres, kids without left-out genres, chipFor / chipsFromData).
+ * jellytip-web-askrefine 336ba5ec..9e5b080f: negated genres, kids without left-out genres, chipFor / chipsFromData).
  * Deterministic, no LLM: phrases map to Jellyfin Items params, and what cannot be mapped is reported back as "ignored"
  * rather than guessed. Pure Kotlin (no Android, no SDK types) so other screens can reuse it, e.g. Pick for tonight chips:
  *
@@ -251,7 +251,12 @@ object AskParse {
     ): Int = (if (unit.startsWith("h")) Math.round(n * 60) else Math.round(n)).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() // absurd numbers never wrap negative
 
     private const val UNIT = "(min(?:ute)?s?|mins?|m|hours?|hrs?|hr|h)"
-    private val NEG = Regex("""\b(?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*""")
+    // The negated word may follow an article ("not a scary movie", "nothing that's scary"); group 2 = an "or" / "nor" list after it
+    private val NEG =
+        Regex(
+            """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)""",
+        )
+    private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)""")
     private val NEG_WORD = Regex("""[a-z][a-z0-9'-]*$""")
     private val NEG_FOR = Regex("""\bfor\s""")
     private val NEG_KEEP1 = Regex("""^(?:not|no)\s+(?:more than|seen|watched|played)\b""")
@@ -293,25 +298,41 @@ object AskParse {
                 }
         }
 
-        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out;
-        // anything else ("not too long", "not for kids", "not sad") is left out of the reading (never guessed) and reported
+        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out and
+        // carries through an "or" / "nor" list of moods ("nothing scary or animated"), never through "and" ("not scary and
+        // funny" wants funny); anything else ("not too long", "not for kids", "not sad") is left out (never guessed) and reported
+        fun negMood(w: String) = MOODS.firstOrNull { it.label in INVERTIBLE && it.re.containsMatchIn(" $w ") }
         val whole = t
         t =
             NEG.replace(whole) { m ->
-                val from = whole.substring(m.range.first)
+                val head = m.groupValues[1]
+                val chain = m.groupValues[2]
+                val off = m.range.first
+                val from = whole.substring(off)
                 // Phrases that are supported and are not negations of a filter
                 if (NEG_KEEP1.containsMatchIn(from) || NEG_KEEP2.containsMatchIn(from) || NEG_KEEP3.containsMatchIn(from)) return@replace m.value
-                val word = NEG_WORD.find(m.value)?.value.orEmpty()
-                val mood = if (NEG_FOR.containsMatchIn(m.value)) null else MOODS.firstOrNull { it.label in INVERTIBLE && it.re.containsMatchIn(" $word ") }
-                if (mood != null) {
-                    curPos = m.range.first
-                    curSrc = clean(m.value)
-                    add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
-                } else {
-                    ignored.add(clean(m.value))
+                val word = NEG_WORD.find(head)?.value.orEmpty()
+                val mood = if (NEG_FOR.containsMatchIn(head)) null else negMood(word)
+                if (mood == null) {
+                    ignored.add(clean(head))
                     if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.")
+                    // The words after it are read as usual
+                    return@replace " ".repeat(head.length) + chain
                 }
-                " ".repeat(m.value.length)
+                curPos = off
+                curSrc = clean(head)
+                add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
+                // The list carries the negation while each word is a mood that can be negated
+                var used = 0
+                while (true) {
+                    val cm = NEG_LINK.find(chain.substring(used)) ?: break
+                    val md = negMood(cm.groupValues[1]) ?: break
+                    curPos = off + head.length + used
+                    curSrc = clean(cm.value)
+                    add("notgenre:${md.label}", "no ${md.label.lowercase()}", ChipData.NotGenre(md.genres))
+                    used += cm.value.length
+                }
+                " ".repeat(head.length + used) + chain.substring(used)
             }
 
         // "show me" / "give me" are requests, not the word "show"
@@ -572,7 +593,7 @@ object AskParse {
             notes.add("For kids: rated ${kids.ratings.joinToString(", ")}${if (moods || kg.isEmpty()) "" else ", genres ${kg.joinToString(" or ")}"}. Unrated titles are left out.")
         }
         val left = chips.of<ChipData.NotGenre>().flatMap { it.genres }
-        if (left.isNotEmpty()) notes.add("Left out: titles in ${left.distinct().joinToString(", ")}.")
+        if (left.isNotEmpty()) notes.add("Left out: titles in ${left.distinct().joinToString(", ")} (titles with no genres listed can't be checked and are kept).")
         if (chips.of<ChipData.MaxRuntime>().isNotEmpty() || chips.of<ChipData.MinRuntime>().isNotEmpty()) {
             notes.add("Length: shows are judged by episode length; titles without a known length are left out.")
         }
