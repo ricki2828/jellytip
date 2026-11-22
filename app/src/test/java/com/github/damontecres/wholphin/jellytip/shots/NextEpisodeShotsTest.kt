@@ -23,6 +23,7 @@ import com.github.damontecres.wholphin.jellytip.iptv.IptvPlayOverlay
 import com.github.damontecres.wholphin.jellytip.iptv.JellytipUpNextCard
 import com.github.damontecres.wholphin.jellytip.iptv.NextEpisode
 import com.github.damontecres.wholphin.jellytip.iptv.NextEpisodeLoader
+import com.github.damontecres.wholphin.jellytip.iptv.UP_NEXT_OVER_OVERLAY
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Before
 import org.junit.Rule
@@ -80,9 +81,12 @@ class NextEpisodeShotsTest {
     }
 
     @Composable
-    private fun BoxScope.Overlay(focus: FocusRequester) {
+    private fun BoxScope.Overlay(
+        focus: FocusRequester,
+        title: String = "The Celebrity Traitors · Episode 1",
+    ) {
         IptvPlayOverlay(
-            title = "The Celebrity Traitors · Episode 1",
+            title = title,
             shownMs = 52 * 60_000L,
             durationMs = 58 * 60_000L,
             seeking = false,
@@ -126,8 +130,9 @@ class NextEpisodeShotsTest {
     fun upNextCardOverOverlay() {
         val focus = FocusRequester()
         shot("nextep-card-over-overlay") {
-            Overlay(focus)
-            JellytipUpNextCard(iptvNext, secondsLeft = 9, crossover = false, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 176.dp))
+            // A title long enough to run the full width: the card must sit clear of it
+            Overlay(focus, title = "The Celebrity Traitors · Episode 1 · The Castle Doors Open And Twenty Famous Faces Arrive In The Highlands Tonight")
+            JellytipUpNextCard(iptvNext, secondsLeft = 9, crossover = false, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = UP_NEXT_OVER_OVERLAY))
         }
     }
 

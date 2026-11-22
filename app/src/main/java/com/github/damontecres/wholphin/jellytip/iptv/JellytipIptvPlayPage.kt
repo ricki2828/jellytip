@@ -157,6 +157,8 @@ fun JellytipIptvPlayPage(
     val playFocus = remember { FocusRequester() }
     // The OK that opened the overlay: its key-up must not also press the Play/Pause button it focused
     var swallowOkUp by remember { mutableStateOf(false) }
+    // The Up next card's OK went down (it plays on the key-up)
+    var cardOkDown by remember { mutableStateOf(false) }
     val player0 = playback.player
     DisposableEffect(target, player0) {
         val p = player0
@@ -393,6 +395,13 @@ fun JellytipIptvPlayPage(
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
                 val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                // The Up next card's OK acts on its key-up (consumed here), so a library player opened by it never gets that key-up
+                if (e.type == KeyEventType.KeyUp && isOk && cardOkDown) {
+                    cardOkDown = false
+                    swallowOkUp = false
+                    if (cardShown) playNext("card ok")
+                    return@onPreviewKeyEvent true
+                }
                 if (e.type == KeyEventType.KeyUp && isOk && swallowOkUp) {
                     swallowOkUp = false
                     return@onPreviewKeyEvent true
@@ -447,10 +456,7 @@ fun JellytipIptvPlayPage(
                 if (overlay && !IptvPlayControls.scrubSeeks(overlay, scrubFocused, dir)) return@onPreviewKeyEvent false
                 // The Up next card is showing (overlay hidden): OK plays the next episode now
                 if (!overlay && cardShown && isOk) {
-                    if (e.nativeKeyEvent.repeatCount == 0) {
-                        swallowOkUp = true
-                        playNext("card ok")
-                    }
+                    if (e.nativeKeyEvent.repeatCount == 0) cardOkDown = true
                     return@onPreviewKeyEvent true
                 }
                 // Stream recovery gave up: OK tries again at the same position
@@ -579,7 +585,7 @@ fun JellytipIptvPlayPage(
                     Modifier
                         .align(Alignment.BottomEnd)
                         // Above the overlay / progress strip while they show, else in the bottom safe area
-                        .padding(end = 48.dp, bottom = if (overlay || controlsVisible) 176.dp else 32.dp),
+                        .padding(end = 48.dp, bottom = if (overlay || controlsVisible) UP_NEXT_OVER_OVERLAY else 32.dp),
             )
         }
     }

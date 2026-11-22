@@ -159,7 +159,7 @@ class PlaybackViewModel
         private val imageUrlService: ImageUrlService,
         private val screensaverService: ScreensaverService,
         private val musicService: MusicService,
-        @Assisted private val destination: Destination,
+        @Assisted internal val destination: Destination,
     ) : ViewModel(),
         Player.Listener,
         AnalyticsListener {

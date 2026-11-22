@@ -88,7 +88,8 @@ fun BoxScope.JellytipLibraryIptvUpNext(viewModel: PlaybackViewModel) {
     val focus = remember { FocusRequester() }
     val nav = viewModel.navigationManager
 
-    fun onTop() = nav.backStack.lastOrNull() is Destination.Playback
+    // THIS player's own destination still on top (not just any Playback page)
+    fun onTop() = nav.backStack.lastOrNull() == viewModel.destination
 
     fun go(how: String) {
         if (gone) return

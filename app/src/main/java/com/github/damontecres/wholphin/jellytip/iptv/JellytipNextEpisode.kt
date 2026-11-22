@@ -89,7 +89,7 @@ object NextEpisodeLoader {
         userId: UUID?,
         title: String,
         tmdbId: Int,
-    ): UUID? {
+    ): Pair<UUID, String?>? {
         val clean = UpNextTiming.searchTitle(title)
         return searchSeries(api, userId, clean, tmdbId) ?: if (clean != title.trim()) searchSeries(api, userId, title.trim(), tmdbId) else null
     }
@@ -99,7 +99,7 @@ object NextEpisodeLoader {
         userId: UUID?,
         title: String,
         tmdbId: Int,
-    ): UUID? =
+    ): Pair<UUID, String?>? =
         api.itemsApi
             .getItems(
                 GetItemsRequest(
@@ -113,25 +113,29 @@ object NextEpisodeLoader {
                 ),
             ).content.items
             .firstOrNull { tmdbOf(it.providerIds) == tmdbId }
-            ?.id
+            ?.let { it.id to it.name }
 
-    /** The library's episodes of the same show as this IPTV series; empty when there is none, on timeout or failure. */
+    /**
+     * The library's copy of this IPTV series: its name (the series page's title) and its episodes; (null, empty) when there
+     * is none, on timeout or failure.
+     */
     private suspend fun libraryFor(
         api: ApiClient,
         userId: UUID?,
         d: IptvVodDetail,
-    ): List<NextEpisode.Ep> {
-        val tmdb = d.item.tmdbId ?: return emptyList()
+    ): Pair<String?, List<NextEpisode.Ep>> {
+        val none: Pair<String?, List<NextEpisode.Ep>> = null to emptyList()
+        val tmdb = d.item.tmdbId ?: return none
         return try {
             withTimeoutOrNull(LIBRARY_TIMEOUT_MS) {
-                val id = librarySeries(api, userId, d.item.title, tmdb) ?: return@withTimeoutOrNull emptyList()
-                libraryEpisodes(api, userId, id)
-            } ?: emptyList<NextEpisode.Ep>().also { JellytipTrace.log("player", "next episode: library timed out, IPTV only") }
+                val (id, name) = librarySeries(api, userId, d.item.title, tmdb) ?: return@withTimeoutOrNull none
+                name to libraryEpisodes(api, userId, id)
+            } ?: none.also { JellytipTrace.log("player", "next episode: library timed out, IPTV only") }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Timber.w(e, "next episode: library lookup failed")
-            emptyList()
+            none
         }
     }
 
@@ -156,9 +160,11 @@ object NextEpisodeLoader {
         episodeId: String,
     ): UpNext? {
         val current = NextEpisode.iptvEpisode(d.seasons, episodeId) ?: return null
-        val next = NextEpisode.after(current, libraryFor(api, userId, d), d.seasons) ?: return null
+        val (libName, library) = libraryFor(api, userId, d)
+        val next = NextEpisode.after(current, library, d.seasons) ?: return null
         val resume = if (next.source == NextEpisode.Source.IPTV) resumeOf(d, next.id) else next.resumeMs
-        return UpNext(next, d.item.title, d.item.id, resume)
+        // The series name as the series page shows it: the library's, else the IPTV title without "UK: " / "(2025)"
+        return UpNext(next, libName ?: UpNextTiming.searchTitle(d.item.title), d.item.id, resume)
     }
 
     /**
@@ -184,7 +190,7 @@ object NextEpisodeLoader {
                 NextEpisode
                     .after(current, library, d.seasons)
                     ?.takeIf { it.source == NextEpisode.Source.IPTV }
-                    ?.let { UpNext(it, series.name ?: d.item.title, d.item.id, resumeOf(d, it.id)) }
+                    ?.let { UpNext(it, series.name ?: UpNextTiming.searchTitle(d.item.title), d.item.id, resumeOf(d, it.id)) }
             }
         } catch (e: CancellationException) {
             throw e
@@ -200,6 +206,9 @@ object NextEpisodeLoader {
 
     fun traceCancelled(up: UpNext) = JellytipTrace.log("player", "next cancelled ${up.ep.code}")
 }
+
+/** The card's bottom while the IPTV overlay shows: clear of its title line (a long title runs the full width). */
+internal val UP_NEXT_OVER_OVERLAY = 200.dp
 
 /**
  * The Up next card for both players (wording like the library player's "Next up..." card; spoiler-free, no still): the
