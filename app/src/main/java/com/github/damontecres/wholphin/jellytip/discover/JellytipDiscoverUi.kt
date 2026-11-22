@@ -113,7 +113,7 @@ fun rememberJellytipDiscover(
 }
 
 @Composable
-private fun DiscoverTile(
+internal fun DiscoverTile(
     title: DiscoverTitle,
     state: RequestState?,
     onClick: () -> Unit,

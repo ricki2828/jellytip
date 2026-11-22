@@ -376,7 +376,7 @@ fun JellytipLibraryWaysToWatch(
 }
 
 @Composable
-private fun WayTile(
+internal fun WayTile(
     title: String,
     sub: String,
     onClick: () -> Unit,

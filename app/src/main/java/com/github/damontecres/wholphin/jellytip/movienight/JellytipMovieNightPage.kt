@@ -795,7 +795,7 @@ private fun VoteDots(
 }
 
 @Composable
-private fun Button(
+internal fun Button(
     label: String,
     primary: Boolean = false,
     enabled: Boolean = true,

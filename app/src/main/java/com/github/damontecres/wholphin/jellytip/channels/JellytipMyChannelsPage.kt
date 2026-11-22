@@ -276,7 +276,7 @@ private fun Note(text: String) {
 }
 
 @Composable
-private fun ChannelTile(
+internal fun ChannelTile(
     r: ChannelRow,
     nowMs: Long,
     onClick: () -> Unit,
