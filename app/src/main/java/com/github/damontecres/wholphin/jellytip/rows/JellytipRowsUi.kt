@@ -161,7 +161,9 @@ fun JellytipServerRowView(
                 viewModel.navigationManager.navigateTo(Destination.Playback(item), "server row Play key")
             }
         }
-    val longClick: (BaseItem) -> Unit = onLongClickItem ?: open
+    // No page menu (Search, My list, list pages ...): hold-OK opens the same library menu Home shows
+    val hostedMenu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    val longClick: (BaseItem) -> Unit = onLongClickItem ?: { hostedMenu.open(it) }
     // "See all" (Collections hub): the row id opens as a hub collection; one index request for all rows
     LaunchedEffect(Unit) { JellytipHubIndex.ensureLoaded() }
     val hubIds by JellytipHubIndex.ids.collectAsState()
@@ -193,6 +195,7 @@ fun JellytipServerRowView(
     // The IPTV copies of this row's library titles, for the library hold-OK menu's "Play from IPTV" (nothing is fetched)
     LaunchedEffect(row.sourcesById) { com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources.putAll(row.sourcesById) }
     Box(modifier.fillMaxWidth()) {
+        com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(hostedMenu)
         when {
             row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
                 Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
@@ -736,13 +739,15 @@ fun JellytipCollectionPage(
                         when (entry) {
                             is PartEntry.InLibrary -> {
                                 val item = entry.item
+                                val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+                                com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
                                 val label = listOfNotNull(item.title, item.data.productionYear?.toString()).joinToString("  ·  ")
                                 PosterCard(
                                     item,
                                     onClick = {
                                         viewModel.navigationManager.navigateTo(item.destination(), "collection part OK")
                                     },
-                                    onLongClick = { viewModel.navigationManager.navigateTo(item.destination(), "collection part long-press") },
+                                    onLongClick = { menu.open(item) },
                                     modifier =
                                         first.onFocusChanged {
                                             if (it.isFocused) {

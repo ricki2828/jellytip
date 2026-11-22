@@ -630,11 +630,20 @@ class JellytipApi
             }
         }
 
-        /** Cache key part for per-person answers: the signed-in Jellyfin user (by token), "" when signed out. */
-        /** The library item's resume position (ms) for the signed-in person; 0 when unknown (one GET, only on a tap). */
-        suspend fun libraryResumeMs(id: UUID): Long =
-            runCatching { api.userLibraryApi.getItem(id).content.userData?.playbackPositionTicks?.div(10_000) }.getOrNull() ?: 0L
+        /** The library item's resume position (ms); 0 when it has none; null when the GET FAILED (one GET, only on a tap). */
+        suspend fun libraryResumeMsOrNull(id: UUID): Long? =
+            try {
+                api.userLibraryApi.getItem(id).content.userData?.playbackPositionTicks?.div(10_000) ?: 0L
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
 
+        /** [libraryResumeMsOrNull] with a failure read as 0. */
+        suspend fun libraryResumeMs(id: UUID): Long = libraryResumeMsOrNull(id) ?: 0L
+
+        /** Cache key part for per-person answers: the signed-in Jellyfin user (by token), "" when signed out. */
         fun currentUserKey(): String = api.accessToken?.hashCode()?.toString() ?: ""
 
         /** The companion base URL (no trailing slash); stream links and image paths from IPTV answers are relative to it. */

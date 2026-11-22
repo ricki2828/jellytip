@@ -1061,8 +1061,23 @@ internal fun IptvTileMenu(
                                 // Continue where the library copy was left (a series starts at 0, as the library tile's Play does): one GET, in a scope that outlives the dialog
                                 libraryUuid?.let { uuid ->
                                     menuScope.launch {
-                                        val pos = if (item.isSeries) 0L else com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.libraryResumeMs(uuid) ?: 0L
-                                        nav(Destination.Playback(uuid, pos), "iptv tile menu Play from library")
+                                        // A series starts at 0; a film resumes where the library copy was left. A slow or failed GET must not
+                                        // restart the film (and the nav gate drops a browse -> player jump > 3 s after OK): open its page instead.
+                                        val pos =
+                                            if (item.isSeries) {
+                                                0L
+                                            } else {
+                                                kotlinx.coroutines.withTimeoutOrNull(2_000) {
+                                                    com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.libraryResumeMsOrNull(uuid)
+                                                }
+                                            }
+                                        // The dialog click already marked OK (Dialogs.kt); mark again so the gate's window starts at the navigation
+                                        com.github.damontecres.wholphin.jellytip.debug.JellytipNavGate.markOk()
+                                        if (pos != null) {
+                                            nav(Destination.Playback(uuid, pos), "iptv tile menu Play from library")
+                                        } else {
+                                            nav(Destination.MediaItem(itemId = uuid, type = org.jellyfin.sdk.model.api.BaseItemKind.MOVIE), "iptv tile menu Play from library (no resume position)")
+                                        }
                                     }
                                 }
                             }
@@ -1070,8 +1085,9 @@ internal fun IptvTileMenu(
 
                         else -> null
                     }
-                if (action != null) add(com.github.damontecres.wholphin.ui.components.DialogItem(JellytipTitleMenu.localized(e.label, ctx.resources), dismissOnClick = true) { action() })
+                if (action != null) add(com.github.damontecres.wholphin.ui.components.titleMenuDialogItem(e.id, JellytipTitleMenu.localized(e.label, ctx.resources), inList, played) { action() })
             }
         }
-    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = dialogItems, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)
+    // The library context menu's dialog (same width, icons, focus and dismiss), with the 1 s guard after a long press
+    com.github.damontecres.wholphin.ui.components.DialogPopup(showDialog = true, title = item.title, dialogItems = dialogItems, onDismissRequest = onDismiss, dismissOnClick = false, waitToLoad = fromLongPress)
 }

@@ -384,63 +384,87 @@ private fun titleMenuItems(
             other = JellytipTitleMenu.otherForLibraryTile(iptvCopies, failed),
         )
     return JellytipTitleMenu.common(state).mapNotNull { entry ->
-        val e = entry.copy(label = JellytipTitleMenu.localized(entry.label, resources))
-        when (e.id) {
-            JellytipTitleMenu.Id.PLAY ->
-                DialogItem(e.label, Icons.Default.PlayArrow, dismissOnClick = true) {
-                    actions.navigateTo(Destination.Playback(item.id, item.playbackPosition.inWholeMilliseconds))
+        val label = JellytipTitleMenu.localized(entry.label, resources)
+        val onClick: (() -> Unit)? =
+            when (entry.id) {
+                JellytipTitleMenu.Id.PLAY -> {
+                    { actions.navigateTo(Destination.Playback(item.id, item.playbackPosition.inWholeMilliseconds)) }
                 }
 
-            JellytipTitleMenu.Id.PLAY_FROM_START ->
-                DialogItem(e.label, Icons.Default.Refresh, dismissOnClick = true) {
-                    actions.navigateTo(Destination.Playback(item.id, 0L))
+                JellytipTitleMenu.Id.PLAY_FROM_START -> {
+                    { actions.navigateTo(Destination.Playback(item.id, 0L)) }
                 }
 
-            JellytipTitleMenu.Id.DETAILS ->
-                DialogItem(e.label, Icons.Default.ArrowForward, dismissOnClick = true) {
-                    actions.onClickGoTo(item)
+                JellytipTitleMenu.Id.DETAILS -> {
+                    { actions.onClickGoTo(item) }
                 }
 
-            JellytipTitleMenu.Id.MY_LIST ->
-                DialogItem(
-                    headlineContent = { Text(e.label) },
-                    leadingContent = {
-                        Text(
-                            text = stringResource(R.string.fa_heart),
-                            fontFamily = FontAwesome,
-                            color = if (favorite) Color.Red else Color.Unspecified,
-                        )
-                    },
-                    onClick = { actions.onClickFavorite.invoke(item.id, !favorite) },
-                    dismissOnClick = true,
-                )
-
-            JellytipTitleMenu.Id.WATCHED ->
-                DialogItem(e.label, if (watched) R.string.fa_eye else R.string.fa_eye_slash, dismissOnClick = true) {
-                    actions.onClickWatch.invoke(item.id, !watched)
+                JellytipTitleMenu.Id.MY_LIST -> {
+                    { actions.onClickFavorite.invoke(item.id, !favorite) }
                 }
 
-            JellytipTitleMenu.Id.LIKE ->
-                DialogItem(e.label, R.string.fa_heart, dismissOnClick = true) { me.thumb(item.id, if (thumb == 1) 0 else 1) }
+                JellytipTitleMenu.Id.WATCHED -> {
+                    { actions.onClickWatch.invoke(item.id, !watched) }
+                }
 
-            JellytipTitleMenu.Id.NOT_FOR_ME ->
-                DialogItem(e.label, R.string.fa_eye_slash, dismissOnClick = true) { me.thumb(item.id, if (thumb == -1) 0 else -1) }
+                JellytipTitleMenu.Id.LIKE -> {
+                    { me.thumb(item.id, if (thumb == 1) 0 else 1) }
+                }
 
-            JellytipTitleMenu.Id.NOT_INTERESTED ->
-                DialogItem(e.label, R.string.fa_eye_slash, dismissOnClick = true) { me.setNotInterested(item.id, !off) }
+                JellytipTitleMenu.Id.NOT_FOR_ME -> {
+                    { me.thumb(item.id, if (thumb == -1) 0 else -1) }
+                }
 
-            JellytipTitleMenu.Id.PLAY_OTHER ->
-                bestIptv?.let { best ->
-                    DialogItem(e.label, Icons.Default.PlayArrow, dismissOnClick = true) {
-                        // The same call the IPTV details Play makes for a film (no client-side ranking: the server's order, minus a copy that failed lately)
-                        actions.navigateTo(Destination.JellytipIptvPlay(title = item.title ?: "", vodId = best.id, resumeMs = 0L))
+                JellytipTitleMenu.Id.NOT_INTERESTED -> {
+                    { me.setNotInterested(item.id, !off) }
+                }
+
+                JellytipTitleMenu.Id.PLAY_OTHER ->
+                    bestIptv?.let { best ->
+                        {
+                            // The same call the IPTV details Play makes for a film (the server's order, minus a copy that failed lately); starts at 0
+                            actions.navigateTo(Destination.JellytipIptvPlay(title = item.title ?: "", vodId = best.id, resumeMs = 0L))
+                        }
                     }
-                }
 
-            else -> null
-        }
+                else -> null
+            }
+        onClick?.let { titleMenuDialogItem(entry.id, label, favorite, watched, it) }
     }
 }
+
+/**
+ * One line of the shared title menu as a dialog item, with the icon for its id: the library menu and the IPTV tile menu
+ * both draw their common block through this, so the two look the same.
+ */
+internal fun titleMenuDialogItem(
+    id: String,
+    label: String,
+    favorite: Boolean,
+    watched: Boolean,
+    onClick: () -> Unit,
+): DialogItem =
+    when (id) {
+        JellytipTitleMenu.Id.PLAY, JellytipTitleMenu.Id.PLAY_OTHER -> DialogItem(label, Icons.Default.PlayArrow, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.PLAY_FROM_START -> DialogItem(label, Icons.Default.Refresh, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.DETAILS -> DialogItem(label, Icons.Default.ArrowForward, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.MY_LIST ->
+            DialogItem(
+                headlineContent = { Text(label) },
+                leadingContent = {
+                    Text(
+                        text = stringResource(R.string.fa_heart),
+                        fontFamily = FontAwesome,
+                        color = if (favorite) Color.Red else Color.Unspecified,
+                    )
+                },
+                onClick = onClick,
+                dismissOnClick = true,
+            )
+        JellytipTitleMenu.Id.WATCHED -> DialogItem(label, if (watched) R.string.fa_eye else R.string.fa_eye_slash, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.LIKE -> DialogItem(label, R.string.fa_heart, dismissOnClick = true, onClick = onClick)
+        else -> DialogItem(label, R.string.fa_eye_slash, dismissOnClick = true, onClick = onClick)
+    }
 
 private fun buildContextMenuItems(
     resources: Resources,

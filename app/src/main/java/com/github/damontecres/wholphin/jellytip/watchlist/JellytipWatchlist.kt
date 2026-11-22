@@ -213,6 +213,8 @@ fun JellytipWatchlistPage(
         is WatchlistState.Loaded -> {
             var position by rememberPosition()
             val showLogos = preferences.appPreferences.interfacePreferences.showLogos
+            val watchlistMenu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+            com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(watchlistMenu)
             JellytipHomeTheme {
                 HomePageContent(
                     homeRows = if (state is WatchlistState.Loaded) merged.rows else s.rows,
@@ -226,8 +228,8 @@ fun JellytipWatchlistPage(
                     },
                     onLongClickItem = { clicked, item ->
                         position = clicked
-                        JellytipTrailerControl.stop()
-                        viewModel.navigationManager.navigateTo(item.destination(), "watchlist long-press")
+                        // The same library menu Home shows
+                        watchlistMenu.open(item)
                     },
                     onClickPlay = { _, item ->
                         JellytipTrailerControl.stop()

@@ -534,8 +534,11 @@ internal fun JellytipHubCollectionContent(
                         val m = Modifier.testTag("collection-tile$i").then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                         Box {
                             when (t) {
-                                is TrendTile.Lib ->
-                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = {}, modifier = m)
+                                is TrendTile.Lib -> {
+                                    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+                                    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
+                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = { menu.open(t.item) }, modifier = m)
+                                }
 
                                 is TrendTile.Vod ->
                                     com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
