@@ -82,12 +82,24 @@
   margin: 0;
   width: auto;
   max-width: none;
-  flex: 1 1 160px;
+  flex: 1 1 100%; /* the input takes its own row; Send / Start over / Mic share the next (the TV layout) */
   min-width: 0;
+}
+.ac-form {
+  flex-wrap: wrap;
 }
 .ac-form .btn.on {
   background: var(--vanilla);
   color: var(--night);
+}
+.ac-voice {
+  margin: 0;
+  color: var(--dim);
+  font-size: 13px;
+}
+.ac-form .btn[data-testid="mic"] {
+  touch-action: none;
+  user-select: none;
 }
 .ac-notice {
   margin: 0;

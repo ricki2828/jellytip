@@ -151,6 +151,10 @@ const bodyFor = (s: ChatState, rev: number, extra: { text?: string; op?: Op }): 
   removed: s.removed.slice(-MAX_REMOVED),
 });
 
+/** "Start over": turns, chips, removed, cards, notes and the error are cleared wholesale. The rev moves past anything issued and nothing is
+ *  pending, so a response or error still in flight for the old conversation is dropped. Allowed while a turn is pending. No server call. */
+export const startOver = (s: ChatState): ChatState => ({ ...emptyState(), rev: s.rev + 1 });
+
 /** A typed or spoken turn. null for empty text, and null while another turn is pending (a second send would be built from the old
  *  server state and silently drop the pending one): the screen disables sending, this keeps the rule even if the wiring misses.
  *  The new state is pending: skeleton, no cards, local chips shown dimmed. */
@@ -322,6 +326,15 @@ export class ChatSender {
     } finally {
       if (timer) clearTimeout(timer);
       if (this.cur === me) this.cur = null;
+    }
+  }
+
+  /** Whatever is in flight is no longer wanted (Start over, leaving the screen): it ends as "aborted". */
+  cancel(): void {
+    if (this.cur) {
+      this.cur.superseded = true;
+      this.cur.ctl.abort();
+      this.cur = null;
     }
   }
 
