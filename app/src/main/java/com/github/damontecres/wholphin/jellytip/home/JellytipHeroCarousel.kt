@@ -230,7 +230,8 @@ fun rememberJellytipHeroMix(
                 withContext(Dispatchers.Default) {
                     JellytipHeroCarousel.mix(homeRows, specials, serverRows, { viewModel.rows.peekItems(it) }, java.time.LocalDate.now().dayOfYear)
                 }
-            if (next.map { it.key } != value.map { it.key }) value = next
+            // Whole items, not just keys: a title marked watched or resumed carries its new state (Play / Resume)
+            if (next != value) value = next
         }
     }
     return mix

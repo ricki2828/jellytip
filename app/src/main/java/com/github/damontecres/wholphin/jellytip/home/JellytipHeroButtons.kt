@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +35,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipFocus
 import com.github.damontecres.wholphin.ui.playback.playable
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 
 /**
@@ -127,6 +129,12 @@ fun JellytipHeroActionButtons(
             val isSound = soundOn != null && i == all.lastIndex
             // Keyed by place (Sound: its own key, its label flips): a slide change keeps the focused node
             androidx.compose.runtime.key(if (isSound) "sound" else "b$i") {
+                // Removed while focused: note it here too (the blur may come before or after the removal)
+                if (!isSound) {
+                    DisposableEffect(Unit) {
+                        onDispose { if (focusedAt == i) lostAt[0] = android.os.SystemClock.uptimeMillis() }
+                    }
+                }
                 HeroButton(
                     label,
                     primary = first,
