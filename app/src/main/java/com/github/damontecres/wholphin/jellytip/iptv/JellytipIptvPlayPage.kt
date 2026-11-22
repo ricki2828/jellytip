@@ -142,6 +142,23 @@ fun JellytipIptvPlayPage(
             }
         }
     }
+    // Subtitles (Ricki 22-Nov, Celebrity Traitors: "subtitles don't work"): the menu picked a text track but this page drew no
+    // cues. The stream's cues for THIS page's player, drawn over the picture below; cleared when the target or player changes.
+    var subtitleCues by remember(target, player0) { mutableStateOf(player0?.currentCues?.cues.orEmpty()) }
+    DisposableEffect(target, player0) {
+        val p = player0
+        val listener =
+            object : androidx.media3.common.Player.Listener {
+                override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                    subtitleCues = if (playback.state.value.target == target) cueGroup.cues else emptyList()
+                }
+            }
+        p?.addListener(listener)
+        onDispose {
+            p?.removeListener(listener)
+            subtitleCues = emptyList()
+        }
+    }
     DisposableEffect(target) {
         playback.attach(owner)
         playback.setVolume(1f)
@@ -338,6 +355,17 @@ fun JellytipIptvPlayPage(
             }.focusable(),
     ) {
         playback.player?.let { PlayerSurface(player = it, surfaceType = SURFACE_TYPE_SURFACE_VIEW, modifier = Modifier.fillMaxSize()) }
+        // Text and bitmap (PGS / DVB) cues alike; the person's system caption style and size (as the Live TV player draws them)
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = {
+                androidx.media3.ui.SubtitleView(it).apply {
+                    setUserDefaultStyle()
+                    setUserDefaultTextSize()
+                }
+            },
+            update = { it.setCues(subtitleCues) },
+            modifier = Modifier.fillMaxSize(),
+        )
         val recoveryNote by playback.note.collectAsState()
         val status =
             recoveryNote ?: when (val s = playState) {
