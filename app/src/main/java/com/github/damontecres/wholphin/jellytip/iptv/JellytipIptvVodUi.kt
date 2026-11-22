@@ -128,7 +128,7 @@ fun IptvCornerMark(
                 lineHeight = 14.sp,
                 letterSpacing = 0.6.sp,
                 maxLines = 1,
-                softWrap = false,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }

@@ -331,7 +331,7 @@ internal fun DiscoverBrowseTile(
                     fontFamily = JellytipFontFamily,
                     fontSize = rememberJellytipSizes().sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                     maxLines = 1,
-                    softWrap = false,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier =
                         Modifier
                             .align(Alignment.BottomStart)

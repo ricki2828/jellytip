@@ -391,7 +391,7 @@ private fun PersonRow(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Caption(if (films.size == 1) "1 film" else "${films.size} films", alpha = 0.75f, px = 16)
+                            Caption(if (films.size == 1) "1 film" else "${films.size} films", alpha = 0.75f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
                         }
                     }
                 }

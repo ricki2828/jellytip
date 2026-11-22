@@ -559,7 +559,7 @@ class AuditShotsTest {
                             fontSize = sizes.sp(JellytipLayout.MIN_TEXT_PX),
                             maxLines = 2,
                         )
-                        Caption("Because you watched Heat", alpha = 0.75f, px = 16)
+                        Caption("Because you watched Heat", alpha = 0.75f, px = JellytipLayout.MIN_TEXT_PX)
                     }
                 }
                 // Person card (PersonRow in JellytipRowsUi.kt): name + "N films" Caption at px = 16, as that card draws them
@@ -574,7 +574,7 @@ class AuditShotsTest {
                             fontSize = sizes.sp(JellytipLayout.MIN_TEXT_PX),
                             maxLines = 2,
                         )
-                        Caption("8 films", alpha = 0.75f, px = 16)
+                        Caption("8 films", alpha = 0.75f, px = JellytipLayout.MIN_TEXT_PX)
                     }
                 }
                 // The real "missing part" poster (collection / franchise rows): title text + "Get it"
