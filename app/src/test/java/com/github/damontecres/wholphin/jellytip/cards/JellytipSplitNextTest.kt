@@ -71,6 +71,9 @@ class JellytipSplitNextTest {
         assertEquals("S2E3I", code(eps.single()))
         // Unknown position: no next
         assertNull(nextAfter(eps, null, 3))
+        // Duplicate season blocks: the first copy wins (as the series page's tiles)
+        val dup = splitEpisodes(emptyList(), listOf(IptvSeason(2, listOf(tv(3))), IptvSeason(2, listOf(tv(3).copy(id = "other:e:3")))))
+        assertEquals("p:e:3", dup.single().iptv?.id)
     }
 }
 

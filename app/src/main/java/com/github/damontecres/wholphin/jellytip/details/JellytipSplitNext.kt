@@ -44,7 +44,9 @@ fun splitEpisodes(
     iptv: List<IptvSeason>,
 ): List<SplitEp> {
     val lib = library.filter { !it.virtual && (it.season ?: 0) >= 1 && it.episode != null }.associateBy { it.season!! to it.episode!! }
-    val tv = iptv.filter { it.season >= 1 }.flatMap { s -> s.episodes.map { (s.season to it.episode) to it } }.toMap()
+    // First copy wins on duplicate season blocks, as IptvSeasons.episodesFor / onlySeasons do (same tile as the series page)
+    val tv = LinkedHashMap<Pair<Int, Int>, IptvEpisode>()
+    iptv.filter { it.season >= 1 }.forEach { s -> s.episodes.forEach { tv.putIfAbsent(s.season to it.episode, it) } }
     return (lib.keys + tv.keys)
         .sortedWith(compareBy({ it.first }, { it.second }))
         .map { k ->
