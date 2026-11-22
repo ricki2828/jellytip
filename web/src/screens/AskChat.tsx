@@ -12,15 +12,19 @@ import { EXAMPLES } from "../lib/askParse";
 import { isNative } from "../lib/native";
 import { go } from "../lib/router";
 import {
-  alignCards, applyError, applyResponse, cardKeyOf, ChatSender, dismissNotice, displayChips, emptyState, isIptvCard, libraryIds, noticeSeen, NOTICE_TEXT, refineChat, retry, scopeHint, submitText, tapChip, TOO_LONG_TEXT,
+  alignCards, applyError, applyResponse, cardKeyOf, ChatSender, dismissNotice, displayChips, emptyState, isIptvCard, libraryIds, noticeSeen, NOTICE_TEXT, refineChat, retry, scopeHint, submitText, startOver, tapChip, TOO_LONG_TEXT,
   type Call, type ChatBody, type ChatState, type Op,
 } from "../lib/askChat";
+import { afterEnd, errorText, heardNothing, isQuietError, isTap, joinSpeech, sessionText, TAP_SILENCE_MS } from "../lib/chatVoice";
 import { Ask } from "./Ask";
 import "./Ask.css";
 import "./AskChat.css";
 
 type Fetched = { key: string; items: Item[]; people: Item[] };
-type Speech = { abort(): void; lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void };
+type Speech = {
+  abort(): void; stop(): void; start(): void; lang: string; interimResults: boolean; continuous: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: ((e: { error?: string }) => void) | null;
+};
 const speechCtor = (): (new () => Speech) | null => {
   if (isNative || typeof window === "undefined") return null;
   const w = window as unknown as { SpeechRecognition?: new () => Speech; webkitSpeechRecognition?: new () => Speech };
@@ -34,6 +38,8 @@ export function AskChat() {
   const sender = useRef<ChatSender | null>(null);
   if (!sender.current) sender.current = new ChatSender(companionCall as Call);
   const [text, setText] = useState("");
+  const textRef = useRef("");
+  textRef.current = text;
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [notice, setNotice] = useState(() => {
     try {
@@ -43,6 +49,10 @@ export function AskChat() {
     }
   });
   const [listening, setListening] = useState(false);
+  const [voiceErr, setVoiceErr] = useState<string | null>(null);
+  const [micFocus, setMicFocus] = useState(false);
+  // press-to-talk bookkeeping (refs: the recognizer's callbacks must see the current values)
+  const voice = useRef({ held: false, tap: false, active: false, committed: "", live: "", restarts: 0, downAt: 0, base: "", quiet: null as ReturnType<typeof setTimeout> | null });
   const input = useRef<HTMLInputElement>(null);
   const turnsEnd = useRef<HTMLDivElement>(null);
   const Speech = useMemo(speechCtor, []);
@@ -74,6 +84,122 @@ export function AskChat() {
   };
   const tap = (op: Op) => dispatch(tapChip(stateRef.current, op));
 
+  // ---- press-to-talk ----
+  const stopVoice = () => {
+    const v = voice.current;
+    v.active = v.held = v.tap = false;
+    if (v.quiet) clearTimeout(v.quiet);
+    v.quiet = null;
+    const r = rec.current;
+    rec.current = null;
+    if (r) {
+      r.onresult = r.onend = r.onerror = null; // nothing from a stopped recognizer reaches the screen
+      try {
+        r.abort();
+      } catch {
+        /* already stopped */
+      }
+    }
+    setListening(false);
+  };
+  // the utterance is over: send what was heard (never blank), or say nothing was heard
+  const finishVoice = (send: boolean) => {
+    const text = voice.current.live;
+    stopVoice();
+    if (!send) return;
+    if (heardNothing(voice.current.base, text)) return setVoiceErr("Didn't catch that"); // typed text stays in the box, nothing is sent
+    setText(text);
+    submit(text);
+  };
+  const beginSession = () => {
+    if (!Speech) return;
+    const v = voice.current;
+    const r = new Speech();
+    rec.current = r;
+    r.lang = navigator.language || "en-US";
+    r.continuous = true;
+    r.interimResults = true;
+    r.onresult = (e) => {
+      if (rec.current !== r) return;
+      v.live = joinSpeech(v.committed, sessionText(e.results));
+      setText(v.live);
+      if (v.tap) armQuiet();
+    };
+    r.onerror = (e) => {
+      if (rec.current !== r) return;
+      const code = e?.error ?? "";
+      if (isQuietError(code)) return; // onend follows
+      const text = v.live;
+      stopVoice();
+      if (text.trim()) setText(text);
+      setVoiceErr(errorText(code));
+    };
+    r.onend = () => {
+      if (rec.current !== r) return;
+      v.committed = v.live;
+      if (afterEnd(v.held, v.tap, v.restarts) === "restart") {
+        v.restarts++;
+        beginSession();
+      } else {
+        finishVoice(true);
+      }
+    };
+    try {
+      r.start();
+    } catch {
+      stopVoice();
+      setVoiceErr(errorText(""));
+    }
+  };
+  // tap mode: a pause of TAP_SILENCE_MS after the last words ends it (stop() lets the final result arrive, then onend sends)
+  const armQuiet = () => {
+    const v = voice.current;
+    if (v.quiet) clearTimeout(v.quiet);
+    v.quiet = setTimeout(() => {
+      rec.current?.stop();
+      v.quiet = setTimeout(() => finishVoice(true), 3000); // onend never came: send what we have
+    }, TAP_SILENCE_MS);
+  };
+  const micDown = () => {
+    const v = voice.current;
+    if (!Speech || stateRef.current.pending) return;
+    if (v.active) {
+      if (v.tap) rec.current?.stop(); // a second tap while a tap-listen runs: send now
+      return;
+    }
+    setVoiceErr(null);
+    Object.assign(v, { active: true, held: true, tap: false, restarts: 0, downAt: Date.now(), committed: textRef.current, live: textRef.current, base: textRef.current });
+    setListening(true);
+    beginSession();
+  };
+  const micUp = () => {
+    const v = voice.current;
+    if (!v.active || !v.held) return;
+    v.held = false;
+    if (isTap(Date.now() - v.downAt)) {
+      v.tap = true;
+      armQuiet();
+    } else {
+      rec.current?.stop(); // the final result arrives, then onend sends
+      v.quiet = setTimeout(() => finishVoice(true), 3000); // a recognizer that never answers stop()
+    }
+  };
+
+  // Start over: everything goes (also what is in flight), no server call; works while a turn is pending
+  const doStartOver = () => {
+    stopVoice();
+    sender.current!.cancel();
+    commit(startOver(stateRef.current));
+    setText("");
+    setVoiceErr(null);
+    input.current?.focus();
+  };
+
+  // a turn went pending while a mic session was live (the mic is disabled): drop the session, never leave it "held"
+  useEffect(() => {
+    if (state.pending && voice.current.active) stopVoice();
+  }, [state.pending]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The chat service warms up while the screen is open (fire and forget)
   useEffect(() => {
     sender.current!.warm();
@@ -81,12 +207,8 @@ export function AskChat() {
   // leaving the screen stops a recognition that is still listening
   useEffect(
     () => () => {
-      try {
-        rec.current?.abort();
-      } catch {
-        /* already stopped */
-      }
-      rec.current = null;
+      stopVoice();
+      sender.current?.cancel();
     },
     [],
   );
@@ -130,31 +252,6 @@ export function AskChat() {
   const fresh = state.turns.length === 0 && !pending && state.chips.length === 0 && !state.error;
 
   if (state.error === "off") return <Ask key={userId} />; // chat is switched off on the server: the classic Ask screen
-
-  const listen = () => {
-    if (!Speech || listening || stateRef.current.pending) return;
-    const r = new Speech();
-    rec.current = r;
-    r.lang = navigator.language || "en-US";
-    r.interimResults = false;
-    r.onresult = (e) => {
-      const t = e.results[0]?.[0]?.transcript ?? "";
-      if (t.trim()) {
-        setText(t);
-        submit(t);
-      }
-    };
-    r.onend = () => {
-      rec.current = null;
-      setListening(false);
-    };
-    r.onerror = () => {
-      rec.current = null;
-      setListening(false);
-    };
-    setListening(true);
-    r.start();
-  };
 
   const lastTurn = state.turns.length - 1;
   return (
@@ -221,12 +318,52 @@ export function AskChat() {
             <button type="submit" className="btn primary" data-nav disabled={!text.trim() || pending}>
               Send
             </button>
+            <button type="button" className="btn" data-nav data-testid="start-over" onClick={doStartOver}>
+              Start over
+            </button>
             {Speech && (
-              <button type="button" className={listening ? "btn on" : "btn"} data-nav title="Voice uses your browser's speech service" aria-label="Voice uses your browser's speech service" aria-pressed={listening} disabled={pending && !listening} onClick={listen}>
-                {listening ? "Listening…" : "Mic"}
+              <button
+                type="button"
+                className={listening ? "btn on" : "btn"}
+                data-nav
+                data-testid="mic"
+                title="Hold to talk, release to send (or hold Space). Voice uses your browser's speech service"
+                aria-label="Hold to talk, release to send. Voice uses your browser's speech service"
+                aria-pressed={listening}
+                disabled={pending}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.currentTarget.setPointerCapture?.(e.pointerId); // the release is seen even off the button
+                  micDown();
+                }}
+                onPointerUp={micUp}
+                onPointerCancel={micUp}
+                onKeyDown={(e) => {
+                  if (e.key !== " " && e.key !== "Enter") return;
+                  e.preventDefault(); // no click from the keyboard: the hold is the gesture
+                  if (!e.repeat) micDown();
+                }}
+                onKeyUp={(e) => {
+                  if (e.key !== " " && e.key !== "Enter") return;
+                  e.preventDefault();
+                  micUp();
+                }}
+                onFocus={() => setMicFocus(true)}
+                onBlur={() => {
+                  setMicFocus(false);
+                  micUp(); // focus left while held: never leave the mic open
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {listening ? "Listening…" : "Hold to talk"}
               </button>
             )}
           </form>
+          {(listening || voiceErr || (micFocus && Speech && !pending)) && (
+            <p className="ac-voice" data-testid="voice-hint" role="status" aria-live="polite">
+              {listening ? "Listening… release to send" : (voiceErr ?? "Hold the mic (or Space) to talk")}
+            </p>
+          )}
           {notice && (
             <p className="ac-notice">
               {NOTICE_TEXT}{" "}

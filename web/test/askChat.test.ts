@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   alignCards, applyError, applyResponse, cardKeyOf, ChatSender, isIptvCard, libraryIds, scopeHint, displayChips, dismissNotice, emptyState, isServerChip, MAX_TEXT, MAX_TURNS, noticeSeen, NOTICE_KEY, parseResponse,
-  refineChat, retry, submitText, tapChip, TOO_LONG_TEXT, type ChatBody, type ChatResponse, type ChatState, type Op, type ServerChip,
+  refineChat, retry, startOver, submitText, tapChip, TOO_LONG_TEXT, type Call, type ChatBody, type ChatResponse, type ChatState, type Op, type ServerChip,
 } from "../src/lib/askChat.ts";
 import { chipFor } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
@@ -462,4 +462,39 @@ test("a TV-only turn: no library ids, the live fixtures' library-only answers ar
   const only = parseResponse({ ...(live.headline.resp as object), cards: [tv("p1:m:1"), tv("p1:m:2")], sources: ["iptv"] })!;
   assert.deepEqual(libraryIds(only.cards), []);
   for (const f of Object.values(live)) assert.ok(parseResponse(f.resp)!.cards.every((c) => !isIptvCard(c)), "library-only responses still parse as library cards");
+});
+
+test("startOver: everything cleared wholesale, rev moves past anything issued, no history in the next body", () => {
+  let s = applyResponse(send(emptyState(), "funny").state, resp({ chips: [chipFor({ t: "genre", genres: ["Comedy"] })], cards: [card("a")], notes: [{ code: "no_results", text: "Nothing fits.", actions: [] }] as ChatResponse["notes"] }));
+  s = { ...s, error: "unreachable", failed: s.failed };
+  const o = startOver(s);
+  assert.deepEqual({ ...o, rev: 0 }, emptyState());
+  assert.equal(o.rev, s.rev + 1);
+  const next = send(o, "scary");
+  assert.equal(next.body.rev, s.rev + 2);
+  assert.deepEqual([next.body.turns, next.body.chips, next.body.removed], [[], [], []]);
+});
+
+test("startOver while pending: a late response or error for the old conversation is dropped", () => {
+  const a = send(emptyState(), "funny");
+  const o = startOver(a.state);
+  assert.equal(o.pending, null);
+  assert.equal(applyResponse(o, resp({ rev: a.body.rev, reply: "OLD", cards: [card("old")] })), o, "late response (old rev): dropped, same object");
+  assert.equal(applyResponse(o, resp({ rev: o.rev, reply: "OLD" })), o, "echoing the new rev with nothing pending: dropped");
+  const e = applyError(o, a.body.rev, 500);
+  assert.equal(e.state, o);
+  assert.equal(e.resend, null);
+  const b = send(o, "scary");
+  assert.equal(applyResponse(b.state, resp({ rev: a.body.rev, reply: "OLD" })), b.state, "after a NEW turn the old one is still dropped");
+  assert.equal(applyResponse(b.state, resp({ rev: b.body.rev, reply: "NEW" })).reply, "NEW");
+});
+
+test("ChatSender.cancel: the request in flight ends as aborted (Start over)", async () => {
+  let release: (v: { status: number; data: unknown }) => void = () => {};
+  const call = (() => new Promise((res) => (release = res))) as unknown as Call;
+  const sender = new ChatSender(call);
+  const p = sender.send(send(emptyState(), "funny").body);
+  sender.cancel();
+  release({ status: 200, data: resp({ rev: 1 }) });
+  assert.deepEqual(await p, { kind: "aborted" });
 });
