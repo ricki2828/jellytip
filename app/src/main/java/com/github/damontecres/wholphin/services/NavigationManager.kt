@@ -55,9 +55,12 @@ class NavigationManager
          * JellytipNavGate); a blocked one returns false, so a caller that would start playback for it must not.
          */
         fun navigateToChecked(
-            destination: Destination,
+            requested: Destination,
             reason: String? = null,
         ): Boolean {
+            // Jellytip: an IPTV title the library also has opens the library page (one page per title), wherever it came from
+            val destination = com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.resolve(requested)
+            if (destination !== requested) JellytipTrace.nav("library copy", requested, destination, reason)
             val from = backStack.lastOrNull()
             if (!JellytipNavGate.allow(isBrowsePage(from), opensTitle(destination))) {
                 JellytipTrace.nav("BLOCKED", from, destination, reason)

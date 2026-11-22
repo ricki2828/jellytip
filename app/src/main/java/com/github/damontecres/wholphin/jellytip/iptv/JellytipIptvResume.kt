@@ -208,6 +208,15 @@ object IptvResumeParse {
                 seriesLibraryId = o.str("seriesLibraryId"),
                 seriesSources = IptvVodParse.sources(o.optJSONArray("seriesSources")),
             ).takeIf { kind != "episode" || it.seriesId != null }
+                ?.also {
+                    // "Go to the show" / "Go to the film" (and every other open of the title) lands on the library page
+                    val open = com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
+                    if (it.kind == "episode") {
+                        it.seriesId?.let { s -> open.rememberFrom(s, "series", it.seriesLibraryId, it.seriesSources) }
+                    } else if (it.kind == "movie") {
+                        open.rememberFrom(it.id, "movie", it.libraryId, it.sources)
+                    }
+                }
         }
     }
 }

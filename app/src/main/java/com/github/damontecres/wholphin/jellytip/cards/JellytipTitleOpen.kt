@@ -7,12 +7,13 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import java.util.concurrent.ConcurrentHashMap
 
 /*
- * Source-neutral opening of a title. A title that is in the library AND on IPTV has ONE page: the library's (Play, and
- * "Ways to watch" listing the IPTV copies). Every place that opens IPTV details from a tile goes through [detailsFor].
+ * Source-neutral opening of a title. A title that is in the library AND on IPTV has ONE page: the library's (films: Play and
+ * "Ways to watch"; series: the split merge shows the episodes the library lacks as IPTV tiles). Every place that opens IPTV
+ * details from a tile goes through [detailsFor]; anything else that navigates to an IPTV page is caught by [resolve]
+ * (NavigationManager), from the cross-links the app has already been sent ([remember]).
  *
- * Films only: the library series page has no "Ways to watch" row yet, so an IPTV series keeps opening its own page.
- * An explicit pick of one copy (the library page's "Ways to watch" tile, a copy picker) is NOT an open site: it navigates
- * to `Destination.JellytipIptvDetails` directly, otherwise it would bounce straight back.
+ * An explicit pick of one copy (the library page's "Ways to watch" tile) is NOT an open site: it navigates with
+ * `JellytipIptvDetails(pick = true)`, otherwise it would bounce straight back.
  */
 object JellytipTitleOpen {
     /** A library item id as the server sends it (with or without dashes), or null when blank / malformed. */
@@ -30,7 +31,15 @@ object JellytipTitleOpen {
         sources: List<IptvSource>,
     ): java.util.UUID? = libraryUuid(libraryId) ?: sources.firstOrNull { it.type == "library" }?.let { libraryUuid(it.id) }
 
-    /** Where OK on an IPTV title's tile goes: the library page when it has a library copy (films), else the IPTV page. */
+    /** The library item kind of an IPTV kind (film / series); null = not a title kind. */
+    fun libraryKind(kind: String?): BaseItemKind? =
+        when (kind) {
+            "movie", "film" -> BaseItemKind.MOVIE
+            "series", "tv", "show" -> BaseItemKind.SERIES
+            else -> null
+        }
+
+    /** Where OK on an IPTV title's tile goes: the library page when it has a library copy (films and series), else the IPTV page. */
     fun detailsFor(
         id: String,
         title: String,
@@ -38,13 +47,65 @@ object JellytipTitleOpen {
         libraryId: String?,
         sources: List<IptvSource> = emptyList(),
     ): Destination {
-        if (kind == "movie" || kind == "film") {
-            libraryIdOf(libraryId, sources)?.let { return Destination.MediaItem(itemId = it, type = BaseItemKind.MOVIE) }
+        val k = libraryKind(kind) ?: kindOfId(id)
+        val lib = libraryIdOf(libraryId, sources)
+        if (k != null && lib != null) {
+            remember(id, lib, k)
+            return Destination.MediaItem(itemId = lib, type = k)
         }
         return Destination.JellytipIptvDetails(id, title)
     }
 
     fun detailsFor(item: IptvVodItem): Destination = detailsFor(item.id, item.title, item.kind, item.libraryId, item.sources)
+
+    /** `pid:m:sid` = film, `pid:s:sid` = series (the IPTV id carries its kind). */
+    fun kindOfId(id: String): BaseItemKind? =
+        when (id.split(':').getOrNull(1)) {
+            "m" -> BaseItemKind.MOVIE
+            "s" -> BaseItemKind.SERIES
+            else -> null
+        }
+
+    private const val MAX = 4000
+    private val libraryByIptv = ConcurrentHashMap<String, Pair<java.util.UUID, BaseItemKind>>()
+
+    /** The signed-in person's key (profile switches must not share links); replaceable by a test. */
+    internal var userKey: () -> String = { com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.currentUserKey().orEmpty() }
+
+    /** An IPTV title the server said is also in this person's library (rows, search, My list, Continue watching). */
+    fun remember(
+        iptvId: String,
+        libraryId: java.util.UUID,
+        kind: BaseItemKind,
+    ) {
+        if (kind != BaseItemKind.MOVIE && kind != BaseItemKind.SERIES) return
+        if (libraryByIptv.size >= MAX) libraryByIptv.clear()
+        libraryByIptv["${userKey()}|$iptvId"] = libraryId to kind
+    }
+
+    /** [remember] from a parsed item's own fields (no-op without a usable library id). */
+    fun rememberFrom(
+        iptvId: String,
+        kind: String?,
+        libraryId: String?,
+        sources: List<IptvSource>,
+    ) {
+        val k = libraryKind(kind) ?: kindOfId(iptvId) ?: return
+        libraryIdOf(libraryId, sources)?.let { remember(iptvId, it, k) }
+    }
+
+    /** The library page of an IPTV title the app knows has one; null = none known. */
+    fun libraryPageFor(iptvId: String): Destination.MediaItem? =
+        libraryByIptv["${userKey()}|$iptvId"]?.let { (lib, k) -> Destination.MediaItem(itemId = lib, type = k) }
+
+    /**
+     * The safety net under every IPTV page open: an IPTV title with a known library copy opens the library page instead,
+     * unless the person picked that IPTV copy on purpose ([Destination.JellytipIptvDetails.pick]).
+     */
+    fun resolve(d: Destination): Destination =
+        if (d is Destination.JellytipIptvDetails && !d.pick) libraryPageFor(d.id) ?: d else d
+
+    fun clear() = libraryByIptv.clear()
 }
 
 /**

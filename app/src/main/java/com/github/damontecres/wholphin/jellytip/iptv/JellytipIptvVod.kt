@@ -216,7 +216,10 @@ object IptvVodParse {
             libraryId = o.str("libraryId"),
             sources = sources(o.optJSONArray("sources")),
             genreIds = o.optJSONArray("genreIds")?.let { g -> (0 until g.length()).mapNotNull { (g.opt(it) as? Number)?.toInt() } }.orEmpty(),
-        )
+        ).also {
+            // One page per title: a later open of this IPTV title (from anywhere) lands on its library page
+            com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.rememberFrom(it.id, it.kind, it.libraryId, it.sources)
+        }
     }
 
     /** A value that is a JSON string (a number or object under an expected URL key is malformed, not "42"); blank / "null" = null. */

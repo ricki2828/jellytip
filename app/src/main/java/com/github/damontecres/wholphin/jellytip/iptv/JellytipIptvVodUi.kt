@@ -270,6 +270,8 @@ fun JellytipIptvDetailsPage(
     id: String,
     title: String,
     modifier: Modifier = Modifier,
+    /** Picked on purpose (library "Ways to watch"): stays on this IPTV copy even when the library has the title. */
+    pick: Boolean = false,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
     // Ways to watch: the copy shown can change in place (a pick, or the copy picked last time); Back still leaves the page
@@ -284,6 +286,15 @@ fun JellytipIptvDetailsPage(
             return@produceState
         }
         val it = got?.item
+        // Last net: the detail itself says the library has this title (a path that never saw the cross-link): its page instead
+        if (!pick && it != null && shownId == id) {
+            val lib = com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it)
+            if (lib is com.github.damontecres.wholphin.ui.nav.Destination.MediaItem) {
+                JellytipTrace.log("iptv", "details: ${it.id} is in the library -> ${lib.itemId}")
+                viewModel.navigationManager.replaceTop(lib)
+                return@produceState
+            }
+        }
         if (got != null && it != null && !redirected) {
             redirected = true
             val to =
