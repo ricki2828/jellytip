@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The TV must read a phrase exactly as the web does. resources/jellytip/ask-vectors.json was made by running the web's own
- * lib/askParse.ts (jellytip-web-askrefine 9e5b080f) under node 24 over the web test phrases, the examples and edge cases; the generator
+ * lib/askParse.ts (jellytip-web-askrefine 0b53f604) under node 24 over the web test phrases, the examples and edge cases; the generator
  * is ask-vectors.gen.mts.txt next to it. The named tests below are the web's askParse.test.ts, ported.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -254,7 +254,10 @@ class AskParseTest {
         assertEquals(listOf("kind:Movie", "notgenre:Horror"), ids("not a scary movie").sorted())
         assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("nothing scary or animated").sorted())
         assertEquals(listOf("genre:Comedy", "notgenre:Horror"), ids("not scary and funny").sorted())
-        assertEquals(listOf("genre:Comedy"), ids("not too long or funny"))
+        // "not X or Y" is neither, whatever X is
+        assertEquals(listOf("notgenre:Comedy"), ids("not too long or funny"))
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("nothing scary or long or animated").sorted())
+        assertEquals(listOf("notgenre:Animation", "notgenre:Horror"), ids("no horror or sequels or not animated").sorted())
         val r = parse("funny but not for kids")
         assertEquals(listOf("genre:Comedy"), r.chips.map { it.id })
         assertTrue(r.ignored.contains("but not for kids"))

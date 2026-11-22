@@ -1,4 +1,4 @@
-// Golden vectors for the TV port of web/src/lib/askParse.ts (jellytip-web-askrefine 9e5b080f). Run: node gen.mts > ask-vectors.json
+// Golden vectors for the TV port of web/src/lib/askParse.ts (jellytip-web-askrefine 0b53f604). Run: node gen.mts > ask-vectors.json
 import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, chipsFromData, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
 import { readFileSync } from "node:fs";
 const NOW = new Date(2026, 5, 1);
@@ -26,6 +26,7 @@ const extra = [
   "whole family, no war", "not at all scary", "without romance under 2 hours", "not romantic and not sad", "no cartoons",
   "not a scary movie", "nothing scary or animated", "nothing that's scary", "anything but a horror", "no horror, or cartoons",
   "not scary nor animated nor romantic", "not scary and funny", "nothing scary or long, a comedy", "not too long or funny",
+  "nothing too long or scary", "no sequels or horror", "nothing scary or long or animated", "no horror or sequels or not animated",
 ];
 const queries = [...new Set([...EXAMPLES, ...fromTests, ...extra])];
 const show = (q: Record<string, unknown>) => Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));

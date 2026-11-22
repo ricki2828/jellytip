@@ -2,7 +2,7 @@ package com.github.damontecres.wholphin.jellytip.ask
 
 /*
  * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5, plus
- * jellytip-web-askrefine 336ba5ec..9e5b080f: negated genres, kids without left-out genres, chipFor / chipsFromData).
+ * jellytip-web-askrefine 336ba5ec..0b53f604: negated genres, kids without left-out genres, chipFor / chipsFromData).
  * Deterministic, no LLM: phrases map to Jellyfin Items params, and what cannot be mapped is reported back as "ignored"
  * rather than guessed. Pure Kotlin (no Android, no SDK types) so other screens can reuse it, e.g. Pick for tonight chips:
  *
@@ -257,6 +257,7 @@ object AskParse {
             """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)""",
         )
     private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)""")
+    private val LINK_LEAD = Regex("""^\s*,?\s*""")
     private val NEG_WORD = Regex("""[a-z][a-z0-9'-]*$""")
     private val NEG_FOR = Regex("""\bfor\s""")
     private val NEG_KEEP1 = Regex("""^(?:not|no)\s+(?:more than|seen|watched|played)\b""")
@@ -298,8 +299,8 @@ object AskParse {
                 }
         }
 
-        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out and
-        // carries through an "or" / "nor" list of moods ("nothing scary or animated"), never through "and" ("not scary and
+        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out; the
+        // negation carries through an "or" / "nor" list ("nothing scary or animated"), never through "and" ("not scary and
         // funny" wants funny); anything else ("not too long", "not for kids", "not sad") is left out (never guessed) and reported
         fun negMood(w: String) = MOODS.firstOrNull { it.label in INVERTIBLE && it.re.containsMatchIn(" $w ") }
         val whole = t
@@ -311,28 +312,35 @@ object AskParse {
                 val from = whole.substring(off)
                 // Phrases that are supported and are not negations of a filter
                 if (NEG_KEEP1.containsMatchIn(from) || NEG_KEEP2.containsMatchIn(from) || NEG_KEEP3.containsMatchIn(from)) return@replace m.value
+                fun unsupported(words: String) {
+                    ignored.add(clean(words))
+                    if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.")
+                }
                 val word = NEG_WORD.find(head)?.value.orEmpty()
                 val mood = if (NEG_FOR.containsMatchIn(head)) null else negMood(word)
-                if (mood == null) {
-                    ignored.add(clean(head))
-                    if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.")
-                    // The words after it are read as usual
-                    return@replace " ".repeat(head.length) + chain
+                if (mood != null) {
+                    curPos = off
+                    curSrc = clean(head)
+                    add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
+                } else {
+                    unsupported(head)
                 }
-                curPos = off
-                curSrc = clean(head)
-                add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
-                // The list carries the negation while each word is a mood that can be negated
+                // "not X or Y" is neither: every item of the or-list is negated too; moods leave their genres out, the rest is
+                // left out (never read back as a positive filter)
                 var used = 0
                 while (true) {
                     val cm = NEG_LINK.find(chain.substring(used)) ?: break
-                    val md = negMood(cm.groupValues[1]) ?: break
-                    curPos = off + head.length + used
-                    curSrc = clean(cm.value)
-                    add("notgenre:${md.label}", "no ${md.label.lowercase()}", ChipData.NotGenre(md.genres))
+                    val md = negMood(cm.groupValues[1])
+                    if (md != null) {
+                        curPos = off + head.length + used
+                        curSrc = clean(cm.value)
+                        add("notgenre:${md.label}", "no ${md.label.lowercase()}", ChipData.NotGenre(md.genres))
+                    } else {
+                        unsupported(cm.value.replace(LINK_LEAD, ""))
+                    }
                     used += cm.value.length
                 }
-                " ".repeat(head.length + used) + chain.substring(used)
+                " ".repeat(m.value.length)
             }
 
         // "show me" / "give me" are requests, not the word "show"
