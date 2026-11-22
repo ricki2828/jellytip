@@ -242,6 +242,7 @@ fun JellytipIptvPlayPage(
             }
         JellytipTrace.log("player", "next episode for ${target.label}: ${upNext?.let { "${it.ep.code} via ${it.ep.source.name.lowercase()}" } ?: "none"}")
     }
+    // The library player's next-up choices: auto play next + its seconds; "never show next up" = no card (the button stays)
     val upNextPrefs by androidx.compose.runtime.produceState<Pair<Boolean, Long>?>(null) {
         value =
             runCatching {
@@ -251,12 +252,22 @@ fun JellytipIptvPlayPage(
                     .let { it.autoPlayNext to it.autoPlayNextDelaySeconds.toLong() }
             }.getOrNull() ?: (true to 15L)
     }
+    val upNextNever by androidx.compose.runtime.produceState(false) {
+        value =
+            runCatching {
+                viewModel.appPreferences.data
+                    .first()
+                    .playbackPreferences.showNextUpWhen == com.github.damontecres.wholphin.preferences.ShowNextUpWhen.NEXT_UP_NEVER
+            }.getOrDefault(false)
+    }
 
     /** Leave for the next episode: an IPTV one replaces this page's target, a library one opens the library player. */
     fun playNext(how: String) {
         val up = upNext ?: return
-        // Only while this page still owns the stream (a newer page or a stopped app must not be navigated away from)
+        // Only while this page still owns the stream and is on top (a newer page or a stopped app must not be replaced)
         if (playback.state.value.target != target) return
+        val top = viewModel.navigationManager.backStack.lastOrNull() as? Destination.JellytipIptvPlay
+        if (top == null || top.episodeId != target.episodeId) return
         NextEpisodeLoader.trace(up, how)
         playback.saveProgress(target)
         when (up.ep.source) {
@@ -267,18 +278,24 @@ fun JellytipIptvPlayPage(
 
             NextEpisode.Source.LIBRARY -> {
                 val id = runCatching { java.util.UUID.fromString(up.ep.id) }.getOrNull() ?: return
-                viewModel.navigationManager.replaceTop(Destination.Playback(id, 0L))
+                // The IPTV stream stops now (not after the page's handover), so the library player starts alone
+                playback.stop("next: library")
+                viewModel.navigationManager.replaceTop(Destination.Playback(id, up.ep.resumeMs))
             }
         }
     }
     val ownsStream = playState.target == target && playback.holds(target)
-    val cardShown = UpNextTiming.showCard(upNext != null, upNextCancelled, ownsStream, ended, position, duration)
-    LaunchedEffect(cardShown, upNextPrefs) {
+    val cardShown = UpNextTiming.showCard(upNext != null && !upNextNever, upNextCancelled, ownsStream, ended, position, duration)
+    // Before the end the card counts the episode's time left (OK = play now); auto-advance only at ENDED (never cut the
+    // ending: IPTV has no credit markers). Unknown runtime: the card first shows at ENDED with the library's countdown.
+    var cardSeen by remember(target) { mutableStateOf(false) }
+    LaunchedEffect(cardShown, ended) { if (cardShown && !ended) cardSeen = true }
+    val atEnd = cardShown && ended
+    LaunchedEffect(atEnd, upNextPrefs) {
         countdown = null
-        if (!cardShown) return@LaunchedEffect
+        if (!atEnd) return@LaunchedEffect
         val prefs = upNextPrefs ?: return@LaunchedEffect
-        val start = UpNextTiming.countdownStart(prefs.first, prefs.second) ?: return@LaunchedEffect
-        var left = start
+        var left = UpNextTiming.endCountdown(prefs.first, prefs.second, cardSeen) ?: return@LaunchedEffect
         countdown = left
         while (left > 0) {
             delay(1_000)
@@ -517,7 +534,12 @@ fun JellytipIptvPlayPage(
         if (cardShown && up != null) {
             JellytipUpNextCard(
                 up = up,
-                secondsLeft = countdown,
+                secondsLeft =
+                    if (ended) {
+                        countdown
+                    } else {
+                        upNextPrefs?.let { p -> UpNextTiming.secondsLeft(p.first, position, duration) }
+                    },
                 crossover = up.ep.source == NextEpisode.Source.LIBRARY,
                 modifier =
                     Modifier

@@ -42,6 +42,7 @@ import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.preferences.ShowNextUpWhen
 import com.github.damontecres.wholphin.jellytip.iptv.jellytipOfferIptvNext
+import com.github.damontecres.wholphin.jellytip.iptv.jellytipPrefetchIptvNext
 import com.github.damontecres.wholphin.preferences.SkipSegmentBehavior
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.preferences.enabled
@@ -187,6 +188,10 @@ class PlaybackViewModel
 
         /** Jellytip (t5n 22-Nov): the IPTV-only next episode offered at the end of a split series' library episodes. */
         val jellytipIptvNext = MutableStateFlow<com.github.damontecres.wholphin.jellytip.iptv.NextEpisodeLoader.UpNext?>(null)
+
+        /** Jellytip: that IPTV next, looked up when the episode starts (so the end never waits on the network). */
+        @Volatile internal var jellytipIptvPending: com.github.damontecres.wholphin.jellytip.iptv.NextEpisodeLoader.UpNext? = null
+        internal var jellytipIptvJob: Job? = null
         val state: StateFlow<PlaybackState> = _state
 
         internal lateinit var preferences: UserPreferences
@@ -519,6 +524,7 @@ class PlaybackViewModel
                 }
                 this@PlaybackViewModel.currentItem = playlistItem
                 this@PlaybackViewModel.itemId = item.id
+                jellytipPrefetchIptvNext()
                 // Jellytip taste signals: close the last title's watch, start this one's (intros and trailers say nothing)
                 jellytipEndWatch(false)
                 synchronized(jellytipWatch) {

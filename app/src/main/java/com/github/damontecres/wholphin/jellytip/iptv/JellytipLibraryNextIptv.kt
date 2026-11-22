@@ -1,9 +1,9 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,42 +21,61 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.preferences.ShowNextUpWhen
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.playback.PlaybackViewModel
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 
 /*
  * Library player, split series only (t5n 22-Nov): when Jellyfin has no next episode at the end of an episode and the
- * show's next episode is only on IPTV (the series page's "via IPTV" seasons), offer it through the same Up next card and
- * countdown instead of leaving. Two hooks in upstream code: PlaybackViewModel's "No next up" branch and one call in
- * PlaybackPage.
+ * show's next episode is only on IPTV (the series page's merge: IPTV-only seasons and episodes the library lacks), offer
+ * it through the same Up next card and countdown instead of leaving. Hooks in upstream code: the item start (prefetch),
+ * PlaybackViewModel's "No next up" branch, and one call in PlaybackPage. With no IPTV next nothing changes and nothing waits.
  */
 
+/** When an item starts: forget the last offer, and look up this episode's IPTV next in the background (time-boxed). */
+fun PlaybackViewModel.jellytipPrefetchIptvNext() {
+    jellytipIptvJob?.cancel()
+    jellytipIptvPending = null
+    jellytipIptvNext.value = null
+    val data = runCatching { currentItem.item.data }.getOrNull() ?: return
+    if (data.type != BaseItemKind.EPISODE) return
+    val seriesId = data.seriesId ?: return
+    val season = data.parentIndexNumber ?: return
+    val episode = data.indexNumber ?: return
+    val itemId = data.id
+    jellytipIptvJob =
+        viewModelScope.launch {
+            val up = NextEpisodeLoader.iptvAfterLibrary(api, serverRepository.currentUser?.id, seriesId, season, episode)
+            // Still the same item (a newer start cancels this job, but be sure)
+            if (runCatching { currentItem.item.data.id }.getOrNull() == itemId) jellytipIptvPending = up
+        }
+}
+
 /**
- * At STATE_ENDED with no next playlist item: true when an IPTV next episode is now offered ([PlaybackViewModel.jellytipIptvNext]);
- * false = carry on as before (leave). Respects the person's "never show / never auto play next up" choice.
+ * At STATE_ENDED with no next playlist item: true when the prefetched IPTV next is now offered ([PlaybackViewModel.jellytipIptvNext]);
+ * false = carry on exactly as before (leave). Never waits. Respects "never show next up".
  */
-suspend fun PlaybackViewModel.jellytipOfferIptvNext(): Boolean {
-    val data = runCatching { currentItem.item.data }.getOrNull() ?: return false
-    if (data.type != BaseItemKind.EPISODE) return false
+fun PlaybackViewModel.jellytipOfferIptvNext(): Boolean {
+    val up = jellytipIptvPending ?: return false
     val prefs = preferences.appPreferences.playbackPreferences
-    if (prefs.showNextUpWhen == ShowNextUpWhen.NEXT_UP_NEVER && !prefs.autoPlayNext) return false
-    val seriesId = data.seriesId ?: return false
-    val season = data.parentIndexNumber ?: return false
-    val episode = data.indexNumber ?: return false
-    val up = NextEpisodeLoader.iptvAfterLibrary(api, serverRepository.currentUser?.id, seriesId, season, episode) ?: return false
+    // Same as the library's own next up: "never show" = no card
+    if (prefs.showNextUpWhen == ShowNextUpWhen.NEXT_UP_NEVER) return false
     com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
         .log("player", "library end: next episode ${up.ep.code} only via IPTV")
+    jellytipIptvPending = null
     jellytipIptvNext.value = up
     return true
 }
 
 /**
- * The library player's Up next card for an IPTV next (drawn while [PlaybackViewModel.jellytipIptvNext] is set): OK plays
- * it (the IPTV player replaces this one), the countdown runs out = the same, Back cancels and leaves (the episode ended).
+ * The library player's Up next card for an IPTV next (drawn while [PlaybackViewModel.jellytipIptvNext] is set, i.e. after
+ * the episode ENDED): OK plays it (the IPTV player replaces this one), the countdown runs out = the same, Back cancels and
+ * leaves (the episode ended). It holds focus and takes every key but Back, so nothing reaches the ended player.
  */
 @Composable
 fun BoxScope.JellytipLibraryIptvUpNext(viewModel: PlaybackViewModel) {
@@ -66,15 +85,17 @@ fun BoxScope.JellytipLibraryIptvUpNext(viewModel: PlaybackViewModel) {
     var left by remember(cur) { mutableStateOf(UpNextTiming.countdownStart(prefs.autoPlayNext, prefs.autoPlayNextDelaySeconds.toLong())) }
     var gone by remember(cur) { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
+    val nav = viewModel.navigationManager
+
+    fun onTop() = nav.backStack.lastOrNull() is Destination.Playback
 
     fun go(how: String) {
         if (gone) return
         gone = true
-        NextEpisodeLoader.trace(cur, how)
         viewModel.jellytipIptvNext.value = null
-        viewModel.navigationManager.replaceTop(
-            Destination.JellytipIptvPlay(title = cur.label, seriesId = cur.iptvSeriesId, episodeId = cur.ep.id, resumeMs = cur.resumeMs),
-        )
+        if (!onTop()) return
+        NextEpisodeLoader.trace(cur, how)
+        nav.replaceTop(Destination.JellytipIptvPlay(title = cur.label, seriesId = cur.iptvSeriesId, episodeId = cur.ep.id, resumeMs = cur.resumeMs))
     }
     LaunchedEffect(cur) {
         focus.tryRequestFocus()
@@ -91,7 +112,7 @@ fun BoxScope.JellytipLibraryIptvUpNext(viewModel: PlaybackViewModel) {
         NextEpisodeLoader.traceCancelled(cur)
         gone = true
         viewModel.jellytipIptvNext.value = null
-        viewModel.navigationManager.goBack()
+        if (onTop()) nav.goBack()
     }
     JellytipUpNextCard(
         up = cur,
@@ -103,13 +124,12 @@ fun BoxScope.JellytipLibraryIptvUpNext(viewModel: PlaybackViewModel) {
                 .padding(end = 48.dp, bottom = 32.dp)
                 .focusRequester(focus)
                 .onKeyEvent { e ->
+                    // Back goes on to the BackHandler; everything else stops here (focus can't escape to the player)
+                    if (e.key == Key.Back) return@onKeyEvent false
                     val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                    if (ok && e.type == KeyEventType.KeyUp) {
-                        go("card ok")
-                        true
-                    } else {
-                        ok
-                    }
+                    // OK acts on its key-down, like the IPTV player's card
+                    if (ok && e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0) go("card ok")
+                    true
                 }.focusable(),
     )
 }

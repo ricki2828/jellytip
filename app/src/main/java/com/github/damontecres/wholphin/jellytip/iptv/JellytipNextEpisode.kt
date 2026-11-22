@@ -73,11 +73,26 @@ object NextEpisodeLoader {
             .mapNotNull { e ->
                 val s = e.parentIndexNumber ?: return@mapNotNull null
                 val n = e.indexNumber ?: return@mapNotNull null
-                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n")
+                // Its own resume point (Jellyfin clears it once played): ticks are 100 ns
+                val resume = (e.userData?.playbackPositionTicks ?: 0L).takeIf { e.userData?.played != true }?.div(10_000) ?: 0L
+                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n", resume)
             }
 
-    /** The library series with [tmdbId] (the SDK has no provider-id filter: title search, then TMDB match). */
+    /**
+     * The library series with [tmdbId] (the SDK has no provider-id filter: title search, then TMDB match). The IPTV title
+     * without its decorations first, then as given.
+     */
     private suspend fun librarySeries(
+        api: ApiClient,
+        userId: UUID?,
+        title: String,
+        tmdbId: Int,
+    ): UUID? {
+        val clean = UpNextTiming.searchTitle(title)
+        return searchSeries(api, userId, clean, tmdbId) ?: if (clean != title.trim()) searchSeries(api, userId, title.trim(), tmdbId) else null
+    }
+
+    private suspend fun searchSeries(
         api: ApiClient,
         userId: UUID?,
         title: String,
@@ -140,7 +155,7 @@ object NextEpisodeLoader {
     ): UpNext? {
         val current = NextEpisode.iptvEpisode(d.seasons, episodeId) ?: return null
         val next = NextEpisode.after(current, libraryFor(api, userId, d), d.seasons) ?: return null
-        val resume = if (next.source == NextEpisode.Source.IPTV) resumeOf(d, next.id) else 0L
+        val resume = if (next.source == NextEpisode.Source.IPTV) resumeOf(d, next.id) else next.resumeMs
         return UpNext(next, d.item.title, d.item.id, resume)
     }
 
