@@ -111,10 +111,13 @@ sealed interface AskResult {
         val iptv: List<IptvVodItem> = emptyList(),
         /** What the IPTV half checked / couldn't apply; null = no IPTV searched. */
         val iptvNote: String? = null,
+        /** The IPTV half is still out (no "Nothing fits." yet). */
+        val iptvPending: Boolean = false,
     ) : AskResult {
         /** One grid: the library picks, then the IPTV ones (appended, so nothing moves under focus when they arrive). */
         val tiles: List<AskTile> get() = picks.items.map { AskTile.Lib(it) } + iptv.map { AskTile.Vod(it) }
     }
+}
 
 /** A tile of Ask's grid: a library title or an IPTV one (source-neutral: same tile look, no source mark). */
 sealed interface AskTile {
@@ -131,7 +134,6 @@ sealed interface AskTile {
     ) : AskTile {
         override val key get() = JellytipSourceMerge.iptvKey(item.id)
     }
-}
 }
 
 data class AskState(
@@ -168,6 +170,7 @@ class JellytipAskViewModel
         private val serverRepository: ServerRepository,
         val voiceInputManager: VoiceInputManager,
         val navigationManager: NavigationManager,
+        private val iptvService: com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvService,
     ) : ViewModel() {
         private val _state = MutableStateFlow(AskState())
         val state: StateFlow<AskState> = _state
@@ -249,7 +252,14 @@ class JellytipAskViewModel
                     val done = result as? AskResult.Done ?: return@launch
                     if (!stillMine) return@launch
                     // IPTV alongside (source-neutral): its own request, never an error for the page
-                    launch { loadIptv(seq, chips, s.shuffle, done.picks.items) }
+                    patch(seq) { it.copy(iptvPending = true) }
+                    launch {
+                        try {
+                            loadIptv(seq, chips, s.shuffle, done.picks.items)
+                        } finally {
+                            patch(seq) { it.copy(iptvPending = false) }
+                        }
+                    }
                     // People for the shown picks only (director / actor refine chips); a failure just means none
                     if (done.picks.items.size < 2) return@launch
                     val withPeople =
@@ -285,7 +295,17 @@ class JellytipAskViewModel
             shuffle: Boolean,
             library: List<BaseItem>,
         ) {
-            if (com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value != true) return
+            // Not known yet (Ask can be the first screen that needs it): ask now, at most every 10 min (hasLiveTv caches)
+            val has =
+                com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value
+                    ?: try {
+                        iptvService.hasLiveTv()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        false
+                    }
+            if (!has) return
             val queries = AskVod.vodQueries(chips)
             val note = AskVod.vodNote(chips)
             if (queries.isEmpty()) {
@@ -497,7 +517,7 @@ fun JellytipAskPage(
                 Text(
                     when (r) {
                         AskResult.Error -> "Couldn't reach your library."
-                        is AskResult.Done -> listOfNotNull(if (r.tiles.isEmpty()) "Nothing fits." else null, r.picks.note, r.iptvNote).joinToString(" ")
+                        is AskResult.Done -> listOfNotNull(if (r.tiles.isEmpty() && !r.iptvPending) "Nothing fits." else null, r.picks.note, r.iptvNote).joinToString(" ")
                         else -> "Looking…"
                     },
                     color = dim,
