@@ -156,10 +156,11 @@ fun JellytipReviewsRow(
             LazyRow(
                 state = rememberLazyListState(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(8.dp),
+                contentPadding = PaddingValues(horizontal = JellytipLayout.FocusRoomWide, vertical = 8.dp),
                 modifier =
                     rowFocusModifier
                         .fillMaxWidth()
+                        .jellytipFocusRoom(JellytipLayout.FocusRoomWide - JellytipLayout.RowInset) // (the first card stays on the row title's line)
                         .focusRestorer(firstFocus),
             ) {
                 itemsIndexed(reviews.reviews, key = { _, r -> r.id }) { index, review ->
@@ -179,7 +180,7 @@ fun JellytipReviewsRow(
 }
 
 @Composable
-private fun JellytipReviewCard(
+internal fun JellytipReviewCard(
     review: JellytipReview,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -193,7 +194,7 @@ private fun JellytipReviewCard(
         interactionSource = interactionSource,
         shape = CardDefaults.shape(shape),
         border = JellytipFocus.border(shape),
-        scale = JellytipFocus.scale(),
+        scale = JellytipFocus.scaleFor(300.dp),
         glow = JellytipFocus.glow(),
         colors = CardDefaults.colors(containerColor = Color.Transparent),
         modifier = modifier.size(width = 300.dp, height = 150.dp).jellytipSiblingDim(focused),

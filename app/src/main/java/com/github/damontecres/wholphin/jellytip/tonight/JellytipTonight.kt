@@ -32,6 +32,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
@@ -345,7 +346,7 @@ fun JellytipTonightPage(
             first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 32.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Pick for tonight", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         // Constraint chips: OK toggles one; the picks start fresh for the new set (Up from the picks reaches them)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.onFocusChanged { chipsFocused = it.hasFocus }.focusGroup()) {

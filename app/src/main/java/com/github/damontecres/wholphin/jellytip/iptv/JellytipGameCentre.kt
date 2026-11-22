@@ -240,17 +240,20 @@ fun JellytipGameCentrePage(
         val best = SportFixtures.pickChannel(f, now).channel
         if (f.status == "in" && best != null) viewModel.watch(f, best, false) else menu = f
     }
-    Column(modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    // (audit 22-Nov) rows start 8 dp in (ItemRowTitle + row padding), so the page starts 8 dp early and its own texts take that inset:
+    // title, section headers and first tile share one left line; rows run to the page edge, text stops at the safe area
+    val inset = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
+    Column(modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(inset, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
             if (state.base?.degraded == true) {
-                Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = 0.55f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
+                Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, fontSize = 12.sp)
             }
         }
         when {
-            state.base == null && state.failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
-            state.base == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2)
-            groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
+            state.base == null && state.failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
+            state.base == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2, modifier = inset)
+            groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
             else ->
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
                     hero?.let { h ->
@@ -279,14 +282,14 @@ fun JellytipGameCentrePage(
                                 index = heroIndex,
                                 count = heroPicks.size,
                                 onCycle = { heroIndex = it },
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                modifier = inset.padding(vertical = 8.dp),  // (the hero is text and buttons: it stops at the safe area; tile rows run on)
                                 onShown = { JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1) },
                             )
                         }
                     }
                     groups.forEachIndexed { gi, g ->
                         item(key = g.id) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 ItemRowTitle("${g.label} (${g.items.size})")
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
                                     itemsIndexed(g.items, key = { _, it -> it.fid }) { i, f ->

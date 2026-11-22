@@ -48,6 +48,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
@@ -233,7 +234,7 @@ fun JellytipAskPage(
             modifier
                 .fillMaxSize()
                 .background(JellytipPalette.Night)
-                .padding(start = 24.dp, top = 20.dp, end = 16.dp)
+                .padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)
                 .onPreviewKeyEvent { e ->
                     // The remote's Search / mic key: listen right away
                     if (e.type == KeyEventType.KeyUp && (e.key == Key.Search || e.key == Key.VoiceAssist) && viewModel.voiceInputManager.isAvailable) {

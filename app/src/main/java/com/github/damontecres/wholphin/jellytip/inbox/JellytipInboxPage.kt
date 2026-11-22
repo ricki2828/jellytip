@@ -31,6 +31,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.services.NavigationManager
@@ -97,7 +98,7 @@ fun JellytipInboxPage(
             first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
         Text("Inbox", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
         when {
             events.isEmpty() && viewModel.refreshing -> Text("Looking for anything new…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)

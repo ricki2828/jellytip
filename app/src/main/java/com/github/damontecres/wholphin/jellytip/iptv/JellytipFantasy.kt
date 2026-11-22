@@ -299,7 +299,7 @@ fun FantasyTab(
                     // Your player's last scoring play (web 0d44f288: by player id, else full name + team; never a bare surname)
                     if (st.side == "me") {
                         FantasyGameLogic.lastEvent(live, l, st)?.let { ev ->
-                            BodyText("Last: ${if (ev.delta >= 0) "+" else ""}${pts(ev.delta)}" + (ev.reason?.let { " · $it" } ?: ""), 11.sp, Broadcast.Secondary, modifier = Modifier.padding(start = 9.dp), maxLines = 1)
+                            BodyText("Last: ${if (ev.delta >= 0) "+" else ""}${pts(ev.delta)}" + (ev.reason?.let { " · $it" } ?: ""), 12.sp, Broadcast.Secondary, modifier = Modifier.padding(start = 9.dp), maxLines = 1)
                         }
                     }
                 }
@@ -317,7 +317,7 @@ fun FantasyPill(count: Int) {
         color = Color.Black,
         fontFamily = JellytipFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 9.sp,
+        fontSize = 12.sp,
         maxLines = 1,
         modifier = Modifier.background(Color(0xFFB5E3A1), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
     )
