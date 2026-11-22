@@ -135,9 +135,9 @@ class SeriesViewModel
         @Volatile
         private var nextUp: BaseItemDto? = null
 
-        /** Set when the series page opens an episode so Back lands on the episode row. */
+        /** Set when the series page opens an episode so Back lands on the episode row; also true when the page is opened at a season or episode (`Destination.MediaItem.openAt`). */
         @Volatile
-        var returnToEpisodes = false
+        var returnToEpisodes = seasonEpisodeIds != null && seriesPageType == SeriesPageType.DETAILS
 
         /** The IPTV-only season picked and the IPTV episode last played on the page: Back from IPTV playback lands there. */
         @Volatile
@@ -221,8 +221,9 @@ class SeriesViewModel
                 Timber.v("Done")
 
                 if (resolvedIds != null) {
-                    viewModelScope.launchIO {
-                        val index =
+                    // Inline (not a second coroutine): a page opened at a season must have its season chip right when the first frame shows
+                    val index =
+                        try {
                             (seasons as? ApiRequestPager<*>)?.let {
                                 findIndexByNumberOrIdFast(
                                     targetNum = resolvedIds.seasonNumber,
@@ -232,10 +233,15 @@ class SeriesViewModel
                                     parentIndex = null,
                                 )
                             } ?: 0
-                        Timber.v("Got initial season index: $index")
-                        position.update {
-                            it.copy(seasonTabIndex = index.coerceAtLeast(0))
+                        } catch (ex: CancellationException) {
+                            throw ex
+                        } catch (ex: Exception) {
+                            Timber.w(ex, "Could not find the initial season index for %s", seriesId)
+                            0
                         }
+                    Timber.v("Got initial season index: $index")
+                    position.update {
+                        it.copy(seasonTabIndex = index.coerceAtLeast(0))
                     }
                     if (seriesPageType == SeriesPageType.OVERVIEW) {
                         viewModelScope.launchIO {
@@ -243,6 +249,21 @@ class SeriesViewModel
                             _state.update { it.copy(extras = extras) }
                         }
                     }
+                }
+                // Opened at one episode that is not in its season any more (deleted, never there): open the page normally, hero first
+                val wantedEpisode = seasonEpisodeIds?.episodeId
+                if (wantedEpisode != null && seriesPageType == SeriesPageType.DETAILS) {
+                    val found =
+                        try {
+                            (episodes as? EpisodeList.Success)?.let { ok ->
+                                ok.episodes.getBlocking(ok.initialEpisodeIndex)?.id == wantedEpisode
+                            } ?: false
+                        } catch (ex: CancellationException) {
+                            throw ex
+                        } catch (ex: Exception) {
+                            false
+                        }
+                    if (!found) returnToEpisodes = false
                 }
                 val remoteTrailers = trailerService.getRemoteTrailers(series)
                 this@SeriesViewModel.position.update {
@@ -411,7 +432,7 @@ class SeriesViewModel
                     try {
                         // (the first REAL episode: not a Specials entry, which sorts first as season 0)
                         api.tvShowsApi
-                            .getEpisodes(seriesId, limit = 10)
+                            .getEpisodes(seriesId, isMissing = false, limit = 10)
                             .content.items
                             .let { eps -> eps.firstOrNull { it.parentIndexNumber != 0 } ?: eps.firstOrNull() }
                     } catch (ex: CancellationException) {

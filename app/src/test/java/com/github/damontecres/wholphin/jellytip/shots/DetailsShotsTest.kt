@@ -564,6 +564,8 @@ class DetailsShotsTest {
         librarySeasons: List<BaseItem> = seasons(),
         iptv: IptvVodDetail? = null,
         onPlayIptvEpisode: (IptvVodDetail, IptvEpisode) -> Unit = { _, _ -> },
+        initialEpisodeIndex: Int = 2,
+        consumeReturnToEpisodes: () -> Boolean = { false },
     ) {
         SeriesDetailsContent(
             preferences = prefs,
@@ -581,10 +583,10 @@ class DetailsShotsTest {
             episodes = episodes,
             nextUpId = nextUpId,
             seasonIndex = seasonIndex,
-            initialEpisodeIndex = 2,
+            initialEpisodeIndex = initialEpisodeIndex,
             onChangeSeason = onChangeSeason,
             onClickEpisode = onClickEpisode,
-            consumeReturnToEpisodes = { false },
+            consumeReturnToEpisodes = consumeReturnToEpisodes,
             onClickPerson = {},
             onLongClickItem = { _, _ -> },
             overviewOnClick = {},
@@ -658,6 +660,18 @@ class DetailsShotsTest {
             assertEquals("no IPTV mark on a library-only series", 0, textCount("IPTV"))
             assertEquals("no source badge on a library-only series", 0, textCount("Library + IPTV"))
         }) { SeriesPage(list) }
+    }
+
+    /** The page opened at S1 E4 (a Destination.MediaItem with openAt): Episodes section open, season 1 selected, the E4 tile focused. */
+    @Test
+    fun seriesOpenAtEpisode() {
+        val name = "details-series-open-at-episode"
+        val list = episodeList(name, episodes()) ?: return
+        shot(name, steps = {
+            // No key and no focus request: the page lands on the tile by itself
+            advance(2000)
+            compose.onNodeWithTag("jellytip-episode-tile-4").assertIsFocused()
+        }) { SeriesPage(list, initialEpisodeIndex = 3, consumeReturnToEpisodes = { true }) }
     }
 
     // ---- split series: library seasons 1-2 + IPTV-only season 3, and IPTV E4 interleaved into library season 1 ----

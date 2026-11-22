@@ -104,6 +104,7 @@ import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
+import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.FocusableItemRow
@@ -193,10 +194,14 @@ fun HomePage(
                         }
                         // OK always opens the item. Free the hero player/decoder before the main player or details page starts
                         JellytipTrailerControl.stop()
-                        if (currentHomePrefs.clickToPlay &&
-                            homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true
+                        // Episodes in Continue Watching / Next Up play (resume); films there follow the click-to-play setting
+                        if (homeTileAction(
+                                inContinueOrNextUpRow = homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true,
+                                type = item.type,
+                                clickToPlay = currentHomePrefs.clickToPlay,
+                            ) == HomeTileAction.PLAY
                         ) {
-                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (click-to-play row)")
+                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "home OK (continue / next up row)")
                         } else {
                             viewModel.navigationManager.navigateTo(item.destination(), "home OK")
                         }
@@ -227,6 +232,18 @@ fun HomePage(
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
                                 canRemoveNextUp = canRemoveNextUp,
+                                // OK plays an episode in these rows, so its page (the series page at that episode) is one item away
+                                leadingItems =
+                                    if (homeTileHasDetailsItem(homeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)) {
+                                        listOf(
+                                            DialogItem("Details", dismissOnClick = true) {
+                                                JellytipTrailerControl.stop()
+                                                viewModel.navigationManager.navigateTo(item.destination(), "home Details")
+                                            },
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                                 actions =
                                     ContextMenuActions(
                                         navigateTo = { destination ->
