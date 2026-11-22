@@ -81,7 +81,42 @@ sealed interface IptvPlayState {
         val canRetry: Boolean = false,
         /** The failure already went to the failed-stream memory (so a user report would count it twice). */
         val reported: Boolean = false,
+        /** Why it failed (a catch-up window only goes back to live for some: [CatchUpPolicy.fallsBack]). */
+        val cause: FailCause = FailCause.OTHER,
     ) : IptvPlayState
+}
+
+/** Why a target failed. */
+enum class FailCause {
+    OTHER,
+
+    /** The server: no catch-up for that channel / time (400 no_catchup). */
+    NO_CATCHUP,
+
+    /** Stream recovery gave up after its retries. */
+    GAVE_UP,
+
+    /** All the provider's connections are in use. */
+    BLOCKED,
+    AUTH,
+    DENIED,
+    MISSING,
+    LINK,
+    RATE,
+    ;
+
+    companion object {
+        fun of(d: StreamRecovery.Denied?): FailCause =
+            when (d) {
+                StreamRecovery.Denied.AUTH -> AUTH
+                StreamRecovery.Denied.DENIED -> DENIED
+                StreamRecovery.Denied.MISSING -> MISSING
+                StreamRecovery.Denied.NOCATCHUP -> NO_CATCHUP
+                StreamRecovery.Denied.LINK -> LINK
+                StreamRecovery.Denied.RATE -> RATE
+                null -> OTHER
+            }
+    }
 }
 
 /**
@@ -536,7 +571,13 @@ class JellytipIptvPlayback
                         if (rec.phase == StreamRecovery.Phase.FAILED) reportFail(t, "recovery_gave_up", posSec())
                         if (rec.phase == StreamRecovery.Phase.DENIED) reportFail(t, StreamRecovery.deniedFailReason(rec.reason))
                         val msg = if (rec.phase == StreamRecovery.Phase.BLOCKED) "All connections are in use right now." else copy ?: "The stream stopped."
-                        setState(IptvPlayState.Failed(t, msg, canRetry = true, reported = failReported), "recovery ${rec.phase}")
+                        val cause =
+                            when (rec.phase) {
+                                StreamRecovery.Phase.BLOCKED -> FailCause.BLOCKED
+                                StreamRecovery.Phase.FAILED -> FailCause.GAVE_UP
+                                else -> FailCause.of(rec.reason)
+                            }
+                        setState(IptvPlayState.Failed(t, msg, canRetry = true, reported = failReported, cause = cause), "recovery ${rec.phase}")
                     }
                 }
                 StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED -> {
@@ -691,7 +732,7 @@ class JellytipIptvPlayback
                         is IptvPlayResult.Failed -> {
                             val refusal = StreamRecovery.permanentReason(r.status, r.code)
                             when {
-                                recTarget?.channelId != target.channelId -> fail(target, r.message, IptvStreamFail.reasonForCode(r.code))
+                                recTarget?.channelId != target.channelId -> fail(target, r.message, IptvStreamFail.reasonForCode(r.code), cause = FailCause.of(refusal))
                                 refusal != null -> {
                                     reportFail(target, IptvStreamFail.reasonForCode(r.code))
                                     dispatch(StreamRecovery.Event.Fatal(refusal))
@@ -712,6 +753,7 @@ class JellytipIptvPlayback
             /** Failed-stream memory reason; null = not the stream's fault (nothing reported). */
             reason: String? = "open_failed",
             fromPlayer: Boolean = false,
+            cause: FailCause = FailCause.OTHER,
         ) {
             okJob?.cancel()
             _note.value = null
@@ -720,12 +762,18 @@ class JellytipIptvPlayback
             if (reported) IptvStreamFail.report(target, ok = false, reason = reason)
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
-            setState(IptvPlayState.Failed(target, message, reported = reported), "failed")
+            setState(IptvPlayState.Failed(target, message, reported = reported, cause = cause), "failed")
         }
 
         /** The target whose stream the player holds (set with the media item); errors from any other are stale. */
         @Volatile
         private var loadedTarget: IptvTarget? = null
+
+        /** The player holds [t]'s stream (its STATE_ENDED / READY are [t]'s, not the previous item's). */
+        fun holds(t: IptvTarget): Boolean = loadedTarget == t
+
+        /** Recovery is waiting for the network to come back (no stream is the stream's fault). */
+        val offline: Boolean get() = rec.offline
 
         private fun stopPlayer() {
             loadedTarget = null

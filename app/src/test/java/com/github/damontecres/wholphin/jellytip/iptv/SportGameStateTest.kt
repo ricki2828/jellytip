@@ -25,6 +25,16 @@ class SportGameStateTest {
     ) = MatchLive(status, clock, period, home, away, emptyList(), emptyList(), plays, null, null, null, emptyList(), updatedAt = null, layout = layout)
 
     @Test
+    fun playWallclockParsed() {
+        val json =
+            """{"status":"in","plays":[{"id":"1","text":"Epoch","scoring":true,"wallclock":1795341600},""" +
+                """{"id":"2","text":"Null","scoring":true,"wallclock":null},{"id":"3","text":"Iso","wallclock":"2026-11-22T10:00:00Z"},""" +
+                """{"id":"4","text":"Missing"}]}"""
+        val plays = LiveParse.live(json).plays
+        assertEquals(listOf(1795341600.0, null, 1795341600.0, null), plays.map { it.wallclock })
+    }
+
+    @Test
     fun sportFromLayoutAndLeague() {
         assertEquals("nrl", GameStateLogic.sportOf("rugby", "nrl"))
         assertEquals("rugby", GameStateLogic.sportOf("rugby", "super-rugby"))
