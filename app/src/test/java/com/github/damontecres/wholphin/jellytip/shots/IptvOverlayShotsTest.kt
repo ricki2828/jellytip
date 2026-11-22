@@ -17,6 +17,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.github.damontecres.wholphin.jellytip.iptv.IptvPlayOverlay
 import com.github.damontecres.wholphin.jellytip.iptv.IptvSkipButton
+import com.github.damontecres.wholphin.jellytip.iptv.UP_NEXT_OVER_OVERLAY
 import com.github.damontecres.wholphin.jellytip.iptv.IptvChapterSkip
 import com.github.damontecres.wholphin.jellytip.iptv.IptvChapter
 import com.github.damontecres.wholphin.jellytip.iptv.IptvTitleBlock
@@ -91,7 +92,8 @@ class IptvOverlayShotsTest {
                     scrubbable = scrubbable,
                 )
                 if (skip != null) {
-                    IptvSkipButton(skip, Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 32.dp))
+                    // as the page places it while the seek strip shows
+                    IptvSkipButton(skip, Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = UP_NEXT_OVER_OVERLAY))
                 }
             }
         }

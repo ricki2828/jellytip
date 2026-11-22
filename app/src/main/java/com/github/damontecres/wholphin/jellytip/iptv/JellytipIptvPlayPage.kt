@@ -681,7 +681,8 @@ fun JellytipIptvPlayPage(
         if (skipShown && skipSeg != null) {
             IptvSkipButton(
                 label = IptvChapterSkip.label(skipSeg.kind),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 32.dp),
+                // Above the seek strip while it shows (just after a seek), as the Up next card; else in the bottom safe area
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = if (controlsVisible) UP_NEXT_OVER_OVERLAY else 32.dp),
             )
         }
         val up = upNext
