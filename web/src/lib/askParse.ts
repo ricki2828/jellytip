@@ -76,6 +76,13 @@ const INVERTIBLE = new Set(["Horror", "Animation", "Comedy", "Thriller", "Romanc
 
 const lc = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
 
+/** The mood label for a genre list (same genres as a mood = that mood's label, so ids match the parser's), else the first genre. */
+function moodLabel(genres: string[]): string {
+  const want = [...lc(genres)].sort().join("|");
+  const m = MOODS.find(([, g]) => [...lc(g)].sort().join("|") === want);
+  return m ? m[2] : genres[0];
+}
+
 /**
  * The one way to turn filter data into a chip (id + label): used for chips that don't come from the parsed text (refine
  * options, and a query produced elsewhere, e.g. an LLM, as a list of ChipData). The parser keeps its own labels.
@@ -83,9 +90,9 @@ const lc = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
 export function chipFor(d: ChipData): Chip {
   switch (d.t) {
     case "genre":
-      return { id: `genre:${d.genres[0]}`, label: d.genres[0], data: d };
+      return { id: `genre:${moodLabel(d.genres)}`, label: moodLabel(d.genres), data: d };
     case "notGenre":
-      return { id: `notgenre:${d.genres[0]}`, label: `no ${d.genres[0].toLowerCase()}`, data: d };
+      return { id: `notgenre:${moodLabel(d.genres)}`, label: `no ${moodLabel(d.genres).toLowerCase()}`, data: d };
     case "kind":
       return { id: `kind:${d.kind}`, label: d.kind === "Movie" ? "movies" : "shows", data: d };
     case "maxRuntime":

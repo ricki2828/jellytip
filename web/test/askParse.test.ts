@@ -247,6 +247,9 @@ test("chipFor / chipsFromData: a query made outside the parser (refine chips, an
   assert.equal(q.OfficialRatings, "G|PG");
   // Same id as the parser's, so a parsed chip and a refine chip never double up
   assert.equal(chipFor({ t: "notGenre", genres: ["Horror"] }).id, parseAsk("not scary", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "notGenre", genres: ["Science Fiction", "Sci-Fi & Fantasy"] }).id, parseAsk("no sci-fi", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "genre", genres: ["Comedy"] }).id, parseAsk("funny", NOW).chips[0].id);
+  assert.equal(chipFor({ t: "genre", genres: ["Kids"] }).label, "Kids");
 });
 
 test("several year ranges are unioned", () => {
