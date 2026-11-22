@@ -11,7 +11,10 @@ import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsSection
 import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
 import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTileHeight
 import com.github.damontecres.wholphin.jellytip.details.IptvSeasonPosition
+import com.github.damontecres.wholphin.jellytip.details.ClaimedNext
+import com.github.damontecres.wholphin.jellytip.details.SplitEp
 import com.github.damontecres.wholphin.jellytip.details.SplitLibEp
+import com.github.damontecres.wholphin.jellytip.details.claimedNext
 import com.github.damontecres.wholphin.jellytip.details.splitEpisodes
 import com.github.damontecres.wholphin.jellytip.details.splitNextUp
 import com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef
@@ -264,6 +267,23 @@ fun SeriesDetails(
             val hasIptvSeasons = iptvDetail?.seasons?.isNotEmpty() == true
             LaunchedEffect(hasIptvSeasons, shows) { if (hasIptvSeasons) viewModel.loadAllEpisodes() }
             val allLibraryEpisodes by viewModel.allEpisodes.collectAsState()
+            // The server's merged next for this series (finish times from both sources); null = no claim / no answer: the page's rule
+            val seriesNextClaim by produceState<com.github.damontecres.wholphin.jellytip.details.SeriesNextClaim?>(null, series.id, shows, hasIptvSeasons) {
+                if (!hasIptvSeasons) return@produceState
+                val sid = series.id.toString().replace("-", "")
+                val got =
+                    try {
+                        com.github.damontecres.wholphin.jellytip.JellytipApi.shared
+                            ?.userCall("v1/me/next?seriesId=$sid")
+                            ?.takeIf { it.first == 200 }
+                            ?.let { (_, b) -> com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.parse(b, sid) }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                value = got
+            }
             val openEpisodeDetails: (BaseItem) -> Unit = {
                 viewModel.returnToEpisodes = true
                 // The old Overview page, named explicitly: BaseItem.destination() now points an episode at this series page
@@ -311,6 +331,7 @@ fun SeriesDetails(
                 onClickEpisode = openEpisodeDetails,
                 resolved = playTarget,
                 allLibraryEpisodes = allLibraryEpisodes,
+                seriesNextClaim = seriesNextClaim,
                 iptv = iptvDetail,
                 onPlayIptvEpisode = { d, e ->
                     // Same destination and arguments the old IPTV strips used; Back lands on the episode row like a library tile
@@ -517,6 +538,8 @@ fun SeriesDetailsContent(
     onLongClickEpisode: (Int, BaseItem) -> Unit = { _, _ -> },
     /** Every library episode with its watched state (split series only; null = not asked / not answered). */
     allLibraryEpisodes: List<BaseItem>? = null,
+    /** The server's merged next for this split series; wins over the page's own rule when it can be placed. */
+    seriesNextClaim: com.github.damontecres.wholphin.jellytip.details.SeriesNextClaim? = null,
     /** The person's IPTV copy of this series (null = none, or not answered yet): its seasons and episodes merge into the page. */
     iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail? = null,
     /** OK on an IPTV episode tile: play it through IPTV. The page that owns navigation also sets the return-to-episodes flag. */
@@ -608,14 +631,13 @@ fun SeriesDetailsContent(
 
     // Split series (library + IPTV episodes): next up over BOTH (Jellyfin's next up only knows library episodes, so after
     // library S2E2 it said E6 past IPTV-only E3-E5). Null = not split / not known yet / all watched: the library's answer.
-    val splitNext =
+    val splitEps =
         remember(allLibraryEpisodes, iptv) {
             val seasonsIptv = iptv?.seasons.orEmpty()
             if (seasonsIptv.isEmpty() || allLibraryEpisodes == null) {
                 null
             } else {
-                splitNextUp(
-                    splitEpisodes(
+                splitEpisodes(
                         allLibraryEpisodes.map {
                             SplitLibEp(
                                 id = it.id,
@@ -626,10 +648,18 @@ fun SeriesDetailsContent(
                                 virtual = it.data.locationType == org.jellyfin.sdk.model.api.LocationType.VIRTUAL,
                             )
                         },
-                        seasonsIptv,
-                    ),
+                    seasonsIptv,
                 )
             }
+        }
+    val claimed = remember(seriesNextClaim, splitEps) { if (seriesNextClaim == null || splitEps == null) null else claimedNext(seriesNextClaim, splitEps) }
+    val finished = claimed == ClaimedNext.Finished
+    val splitNext: SplitEp? =
+        when {
+            claimed is ClaimedNext.Episode -> claimed.ep
+            // Finished: no next; the button starts the show again (first episode), nothing is marked Next
+            finished -> splitEps?.firstOrNull()
+            else -> splitEps?.let { splitNextUp(it) }
         }
     // The library episode the button plays: the split answer's library copy, else the library's own answer
     val playLib: BaseItem? = splitNext?.lib?.let { l -> allLibraryEpisodes?.firstOrNull { it.id == l.id } } ?: resolved?.takeIf { splitNext == null }
@@ -644,11 +674,11 @@ fun SeriesDetailsContent(
     val statusLine =
         seriesStatusLine(
             seasonNumbers = merged.map { it.number },
-            nextSeason = splitNext?.season ?: resolved?.data?.parentIndexNumber,
-            nextEpisode = splitNext?.episode ?: resolved?.data?.indexNumber,
+            nextSeason = if (finished) null else splitNext?.season ?: resolved?.data?.parentIndexNumber,
+            nextEpisode = if (finished) null else splitNext?.episode ?: resolved?.data?.indexNumber,
         )
-    val nextEpisodeId = if (splitNext != null) splitNext.lib?.id else resolved?.id ?: nextUpId
-    val nextIptvEpisodeId = playIptv?.id
+    val nextEpisodeId = if (finished) null else if (splitNext != null) splitNext.lib?.id else resolved?.id ?: nextUpId
+    val nextIptvEpisodeId = if (finished) null else playIptv?.id
 
     JellytipDetailsScaffold(
         modifier = modifier,

@@ -82,3 +82,68 @@ fun nextAfter(
     if (season == null || episode == null) return null
     return eps.firstOrNull { it.season > season || (it.season == season && it.episode > episode) }
 }
+
+/**
+ * The server's merged next for one series (GET /v1/me/next?seriesId=…, t5s srcnnext): it has finish TIMES from both sources,
+ * which the TV doesn't, so its answer wins over [splitNextUp]. [source] null = the show is finished (no next).
+ */
+data class SeriesNextClaim(
+    val source: String?,
+    val id: String?,
+    val season: Int?,
+    val episode: Int?,
+    val inProgress: Boolean,
+)
+
+/** What the series page does with a claim: play that episode, or the show is finished. */
+sealed interface ClaimedNext {
+    data class Episode(
+        val ep: SplitEp,
+    ) : ClaimedNext
+
+    data object Finished : ClaimedNext
+}
+
+object SeriesNextParse {
+    /** `{seriesNext: {<series id>: {source, id, season, episode, inProgress}}}` -> this series' claim; null = no claim / malformed. */
+    fun parse(
+        body: String,
+        seriesId: String,
+    ): SeriesNextClaim? =
+        try {
+            val all = org.json.JSONObject(body).optJSONObject("seriesNext") ?: return null
+            val want = seriesId.replace("-", "").lowercase()
+            val key = all.keys().asSequence().firstOrNull { it.replace("-", "").lowercase() == want } ?: return null
+            val o = all.optJSONObject(key) ?: return null
+            val source = (o.opt("source") as? String)?.takeIf { it == "library" || it == "iptv" }
+            if (o.opt("source") != null && o.opt("source") != org.json.JSONObject.NULL && source == null) return null
+            SeriesNextClaim(
+                source = source,
+                id = (o.opt("id") as? String)?.takeIf { it.isNotBlank() },
+                season = (o.opt("season") as? Number)?.toInt()?.takeIf { it > 0 },
+                episode = (o.opt("episode") as? Number)?.toInt()?.takeIf { it > 0 },
+                inProgress = o.opt("inProgress") == true,
+            )
+        } catch (e: org.json.JSONException) {
+            null
+        }
+}
+
+/**
+ * The claim against the page's merged list: the slot with that library / IPTV id, else the same season and episode;
+ * null = the page can't place it (use [splitNextUp]). A finished claim is [ClaimedNext.Finished].
+ */
+fun claimedNext(
+    claim: SeriesNextClaim,
+    eps: List<SplitEp>,
+): ClaimedNext? {
+    if (claim.source == null) return ClaimedNext.Finished
+    val id = claim.id
+    val byId =
+        id?.let { want ->
+            val lib = want.replace("-", "").lowercase()
+            eps.firstOrNull { e -> e.iptv?.id == want || e.lib?.id?.toString()?.replace("-", "") == lib }
+        }
+    val hit = byId ?: eps.firstOrNull { it.season == claim.season && it.episode == claim.episode }
+    return hit?.let { ClaimedNext.Episode(it) }
+}
