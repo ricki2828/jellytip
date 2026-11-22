@@ -51,6 +51,7 @@ import coil3.asImage
 import coil3.compose.AsyncImagePreviewHandler
 import coil3.compose.LocalAsyncImagePreviewHandler
 import com.github.damontecres.wholphin.jellytip.JellytipDetailsPullQuote
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipQuote
 import com.github.damontecres.wholphin.jellytip.JellytipReview
 import com.github.damontecres.wholphin.jellytip.JellytipReviewCard
@@ -92,6 +93,7 @@ import com.github.damontecres.wholphin.jellytip.journeys.JourneySummary
 import com.github.damontecres.wholphin.jellytip.nav.JellytipBreadcrumb
 import com.github.damontecres.wholphin.jellytip.nav.JellytipCrumb
 import com.github.damontecres.wholphin.jellytip.nav.JellytipSeasonChips
+import com.github.damontecres.wholphin.jellytip.jellytipFocusRoom
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
 import com.github.damontecres.wholphin.jellytip.rows.JellytipCollection
 import com.github.damontecres.wholphin.jellytip.rows.MissingPoster
@@ -334,7 +336,8 @@ class AuditShotsTest {
             // JellytipIptvVodUi.kt:635: LazyRow(spacedBy(12.dp)), no contentPadding; the row starts at x = 96 dp
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(start = 96.dp, top = 200.dp).fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = JellytipLayout.FocusRoom),
+                modifier = Modifier.padding(start = 96.dp, top = 200.dp).fillMaxWidth().jellytipFocusRoom(),
             ) {
                 itemsIndexed(episodes, key = { _, e -> e.id }) { _, e -> IptvEpisodeCard(e) {} }
             }
@@ -371,8 +374,8 @@ class AuditShotsTest {
             // JellytipJourneysPage.kt ~244: LazyRow(spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp))
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(end = 24.dp),
-                modifier = Modifier.padding(start = 96.dp, top = 200.dp).fillMaxWidth(),
+                contentPadding = PaddingValues(start = JellytipLayout.FocusRoom, end = 24.dp),
+                modifier = Modifier.padding(start = 96.dp, top = 200.dp).fillMaxWidth().jellytipFocusRoom(),
             ) {
                 itemsIndexed(cards, key = { _, s -> s.id }) { index, s -> JourneyCard(s, modifier = if (index == 0) focus else Modifier) {} }
             }
@@ -412,9 +415,9 @@ class AuditShotsTest {
             Column(Modifier.padding(start = 96.dp, top = 120.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Kicker("Trailer break")
                 Kicker("A very long kicker label that keeps going past the edge")
-                Caption("Because you watched Heat and loved the heist pacing", alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
+                Caption("Because you watched Heat and loved the heist pacing", alpha = 0.9f, px = JellytipLayout.MIN_TEXT_PX)
                 Caption("2021 · 2h 14m · 7.4", alpha = 0.65f)
-                Caption("More picks for tonight ›", alpha = 0.95f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 3)
+                Caption("More picks for tonight ›", alpha = 0.95f, italic = true, px = JellytipLayout.MIN_TEXT_PX, maxLines = 3)
                 Caption("$longTitle (a long caption, one line)", alpha = 0.75f)
             }
         }
@@ -553,7 +556,7 @@ class AuditShotsTest {
                             color = Color.White,
                             fontFamily = JellytipFontFamily,
                             fontWeight = FontWeight.Medium,
-                            fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                            fontSize = sizes.sp(JellytipLayout.MIN_TEXT_PX),
                             maxLines = 2,
                         )
                         Caption("Because you watched Heat", alpha = 0.75f, px = 16)
@@ -568,7 +571,7 @@ class AuditShotsTest {
                             color = Color.White,
                             fontFamily = JellytipFontFamily,
                             fontWeight = FontWeight.Medium,
-                            fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                            fontSize = sizes.sp(JellytipLayout.MIN_TEXT_PX),
                             maxLines = 2,
                         )
                         Caption("8 films", alpha = 0.75f, px = 16)

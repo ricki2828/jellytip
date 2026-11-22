@@ -127,6 +127,8 @@ fun IptvCornerMark(
                 fontSize = 12.sp,
                 lineHeight = 14.sp,
                 letterSpacing = 0.6.sp,
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }
@@ -184,7 +186,8 @@ fun IptvVodTile(
                 modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
             )
         }
-        IptvCornerMark(listOfNotNull(item.qualityLabel, item.audioLabel).joinToString(" · ").ifEmpty { null }, Modifier.align(Alignment.TopEnd).padding(6.dp))
+        IptvCornerMark(listOfNotNull(item.qualityLabel, item.audioLabel.takeIf { width >= 150.dp }).joinToString(" · ").ifEmpty { null },  // (a 100 dp poster holds one label at the 12 sp floor)
+            Modifier.align(Alignment.TopEnd).padding(6.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,

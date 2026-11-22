@@ -330,6 +330,8 @@ internal fun DiscoverBrowseTile(
                     color = Color.White,
                     fontFamily = JellytipFontFamily,
                     fontSize = rememberJellytipSizes().sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+                    maxLines = 1,
+                    softWrap = false,
                     modifier =
                         Modifier
                             .align(Alignment.BottomStart)
