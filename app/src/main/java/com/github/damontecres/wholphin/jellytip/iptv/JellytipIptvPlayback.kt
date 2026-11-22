@@ -287,7 +287,8 @@ class JellytipIptvPlayback
                             skipOpenMs = null
                             skipTicker?.cancel()
                             val queued = pendingRemuxSeekMs
-                            if (queued != null && SkipPolicy.followUp(opened, queued)) {
+                            // (against what THIS open asked for: a recovery reopen already landed at the queued target)
+                            if (queued != null && SkipPolicy.followUp(openStartMs, queued)) {
                                 skipViaRemux(t, queued, "skip follow-up")
                                 return
                             }
@@ -563,7 +564,7 @@ class JellytipIptvPlayback
             if (skipOpenMs != null && s0 is IptvPlayState.Opening && s0.target == t) {
                 JellytipTrace.player("iptv", "skip retarget ${t.channelId} to ${ms / 1000} s (queued behind the open at ${skipOpenMs!! / 1000} s)")
                 pendingRemuxSeekMs = ms
-                _note.value = SkipPolicy.note(ms, (System.currentTimeMillis() - skipStartedAt) / 1000)
+                if (!recovering()) _note.value = SkipPolicy.note(ms, (System.currentTimeMillis() - skipStartedAt) / 1000)
                 return
             }
             JellytipTrace.player("iptv", "$why ${t.channelId} to ${ms / 1000} s (frame held)")
@@ -591,6 +592,9 @@ class JellytipIptvPlayback
         private var skipTicker: kotlinx.coroutines.Job? = null
 
         /** "Skipping to 31:20… 12 s" while the skip converts: the person sees it is working, and how slow this file is. */
+        private fun recovering(): Boolean =
+            rec.phase in setOf(StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED, StreamRecovery.Phase.STALLED)
+
         private fun startSkipTicker(t: IptvTarget) {
             skipTicker?.cancel()
             skipTicker =
@@ -600,7 +604,17 @@ class JellytipIptvPlayback
                         val st = _state.value
                         val pend = pendingRemuxSeekMs
                         if (st !is IptvPlayState.Opening || st.target != t || pend == null || skipOpenMs == null) break
-                        _note.value = SkipPolicy.note(pend, (System.currentTimeMillis() - skipStartedAt) / 1000)
+                        val secs = (System.currentTimeMillis() - skipStartedAt) / 1000
+                        if (secs >= SkipPolicy.GIVE_UP_SEC) {
+                            // Nothing after 90 s: an honest stop instead of an endless count (OK tries again at the target)
+                            JellytipTrace.player("iptv", "skip gave up ${t.channelId} at ${pend / 1000} s after $secs s")
+                            skipOpenMs = null
+                            stopPlayer()
+                            _note.value = null
+                            setState(IptvPlayState.Failed(t, "Skipping in this file is taking too long.", canRetry = true), "skip too slow")
+                            break
+                        }
+                        if (!recovering()) _note.value = SkipPolicy.note(pend, secs) // (recovery's own "Reconnecting…" wins)
                     }
                 }
         }
@@ -1050,6 +1064,9 @@ object SkipPolicy {
 
     /** After a skip plays: another skip only when the target moved meaningfully while it converted. */
     const val FOLLOW_UP_MIN_MS = 10_000L
+
+    /** A skip that hasn't played after this long stops with a message (OK tries again). */
+    const val GIVE_UP_SEC = 90L
 
     fun followUp(
         openedMs: Long,
