@@ -1,6 +1,34 @@
 package com.github.damontecres.wholphin.ui.detail.series
 
 import androidx.compose.runtime.withFrameNanos
+import org.jellyfin.sdk.model.extensions.ticks
+import androidx.compose.ui.platform.LocalDensity
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
+import com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope
+import com.github.damontecres.wholphin.jellytip.jellytipFocusRoom
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsScaffold
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsSection
+import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
+import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTileHeight
+import com.github.damontecres.wholphin.jellytip.details.IptvSeasonPosition
+import com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef
+import com.github.damontecres.wholphin.jellytip.details.SeasonSource
+import com.github.damontecres.wholphin.jellytip.details.episodeSourceMark
+import com.github.damontecres.wholphin.jellytip.details.mergeSeasons
+import com.github.damontecres.wholphin.jellytip.details.seasonTiles
+import com.github.damontecres.wholphin.jellytip.details.selectedMergedIndex
+import com.github.damontecres.wholphin.jellytip.details.seriesIsSplit
+import com.github.damontecres.wholphin.jellytip.details.splitSourceBadge
+import com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons
+import com.github.damontecres.wholphin.jellytip.iptv.IptvStreamFail
+import com.github.damontecres.wholphin.jellytip.details.myListLabel
+import com.github.damontecres.wholphin.jellytip.details.rememberJellytipDetailsScaffoldState
+import com.github.damontecres.wholphin.jellytip.details.seasonChipLabel
+import com.github.damontecres.wholphin.jellytip.details.seriesPlayLabel
+import com.github.damontecres.wholphin.jellytip.details.seriesStatusLine
+import com.github.damontecres.wholphin.ui.LocalImageUrlService
+import com.github.damontecres.wholphin.ui.cards.ItemRowTitle
+import org.jellyfin.sdk.model.api.ImageType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -21,6 +49,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -134,6 +163,7 @@ fun SeriesDetails(
 
     val state by viewModel.state.collectAsState()
     val position by viewModel.position.collectAsState()
+    val playTarget by viewModel.playTarget.collectAsState()
     val playlistState by playlistViewModel.playlistState.collectAsState()
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
@@ -141,21 +171,27 @@ fun SeriesDetails(
 
     var showWatchConfirmation by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
+    // The episode (id, index in its season's list) whose context menu was opened last: lets a watched / favourite change refresh its tile
+    var menuEpisode by remember { mutableStateOf<Pair<UUID, Int>?>(null) }
 
     val contextActions =
         remember {
             ContextMenuActions(
-                navigateTo = viewModel::navigateTo,
+                navigateTo = { dest ->
+                    // Playing from an episode's menu: Back lands on the episode row, like playing from the tile
+                    if (dest is Destination.Playback) viewModel.returnToEpisodes = true
+                    viewModel.navigateTo(dest)
+                },
                 onClickWatch = { itemId, watched ->
                     if (itemId == destination.itemId) {
                         // Confirm if marking whole series
                         showWatchConfirmation = true
                     } else {
-                        viewModel.setWatched(itemId, watched, null)
+                        viewModel.setWatched(itemId, watched, menuEpisode?.takeIf { it.first == itemId }?.second)
                     }
                 },
                 onClickFavorite = { itemId, favorite ->
-                    viewModel.setFavorite(itemId, favorite, null)
+                    viewModel.setFavorite(itemId, favorite, menuEpisode?.takeIf { it.first == itemId }?.second)
                 },
                 onClickAddPlaylist = { itemId ->
                     playlistViewModel.loadPlaylists()
@@ -210,6 +246,14 @@ fun SeriesDetails(
             }
             val series = st.data
             val played = series.data.userData?.played ?: false
+            // The person's IPTV copy of this series: asked once per page (10-minute cache); a late answer just appears in the season list
+            val iptvDetail by produceState<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail?>(IptvSeasons.cachedDetail(series), series.id) {
+                value = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.detailFor(series)
+            }
+            val openEpisodeDetails: (BaseItem) -> Unit = {
+                viewModel.returnToEpisodes = true
+                viewModel.navigateTo(it.destination())
+            }
             SeriesDetailsContent(
                 preferences = preferences,
                 series = series,
@@ -237,9 +281,47 @@ fun SeriesDetails(
                         }
                     }
                 },
-                onClickEpisode = {
+                // The old Overview page for an episode: only the "Details" item of an episode's menu opens it now
+                onClickEpisode = openEpisodeDetails,
+                resolved = playTarget,
+                iptv = iptvDetail,
+                onPlayIptvEpisode = { d, e ->
+                    // Same destination and arguments the old IPTV strips used; Back lands on the episode row like a library tile
+                    val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
+                    com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+                        .log("iptv", "series page: IPTV episode E${e.episode} ${e.id}")
                     viewModel.returnToEpisodes = true
-                    viewModel.navigateTo(it.destination())
+                    viewModel.navigateTo(
+                        Destination.JellytipIptvPlay(title = "${series.name ?: d.item.title} \u00B7 ${e.title}", seriesId = d.item.id, episodeId = e.id, resumeMs = resume),
+                    )
+                },
+                iptvPosition = viewModel.iptvPosition,
+                onIptvPosition = { viewModel.iptvPosition = it },
+                onPlayEpisode = { ep ->
+                    // The episode's own resume position, the same call the Overview page's tile makes
+                    val resumeMs = (ep.data.userData?.playbackPositionTicks ?: 0L).ticks.inWholeMilliseconds
+                    viewModel.navigateTo(Destination.Playback(ep.id, resumeMs))
+                },
+                onEpisodeSelected = { index ->
+                    viewModel.position.update { it.copy(episodeRowIndex = index) }
+                    viewModel.returnToEpisodes = true
+                },
+                onLongClickEpisode = { index, ep ->
+                    menuEpisode = ep.id to index
+                    viewModel.position.update { it.copy(episodeRowIndex = index) }
+                    showContextMenu =
+                        ContextMenu.ForBaseItem(
+                            fromLongClick = true,
+                            item = ep,
+                            chosenStreams = null,
+                            showGoTo = false,
+                            showStreamChoices = true,
+                            canDelete = viewModel.canDelete(ep, preferences.appPreferences),
+                            canRemoveContinueWatching = false,
+                            canRemoveNextUp = false,
+                            actions = contextActions,
+                            leadingItems = listOf(DialogItem("Details", dismissOnClick = true) { openEpisodeDetails(ep) }),
+                        )
                 },
                 consumeReturnToEpisodes = { viewModel.returnToEpisodes.also { viewModel.returnToEpisodes = false } },
                 onClickPerson = {
@@ -356,14 +438,11 @@ fun SeriesDetails(
     }
 }
 
-private const val HEADER_ROW = 0
-private const val SEASONS_ROW = HEADER_ROW + 1
-private const val PEOPLE_ROW = SEASONS_ROW + 1
-private const val TRAILER_ROW = PEOPLE_ROW + 1
-private const val EXTRAS_ROW = TRAILER_ROW + 1
-private const val SIMILAR_ROW = EXTRAS_ROW + 1
-private const val DISCOVER_ROW = SIMILAR_ROW + 1
-private const val REVIEWS_ROW = DISCOVER_ROW + 1
+private const val PEOPLE_ROW = 1
+private const val TRAILER_ROW = 2
+
+/** Key of the first lower section: the page returns here (`openAt`) after playback or the fallback Overview page. */
+private const val EPISODES_SECTION = "episodes"
 
 @Composable
 fun SeriesDetailsContent(
@@ -384,6 +463,7 @@ fun SeriesDetailsContent(
     seasonIndex: Int,
     initialEpisodeIndex: Int,
     onChangeSeason: (Int) -> Unit,
+    /** The old Overview page for an episode (kept one release as a fallback; the page's "Details" menu item calls it). Episode tiles no longer do. */
     onClickEpisode: (BaseItem) -> Unit,
     consumeReturnToEpisodes: () -> Boolean,
     onClickPerson: (Person) -> Unit,
@@ -400,32 +480,43 @@ fun SeriesDetailsContent(
     discoverSeries: DiscoverItem?,
     onClickDiscoverSeries: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The episode the primary button plays and names (see SeriesViewModel.playTarget); null until known. */
+    resolved: BaseItem? = null,
+    /** Plays an episode at its own resume position (the primary button and an episode tile's OK). */
+    onPlayEpisode: (BaseItem) -> Unit = {},
+    /** An episode tile's OK, called with the tile's list index just before [onPlayEpisode]: the page remembers where to land on Back. */
+    onEpisodeSelected: (Int) -> Unit = {},
+    /** Hold OK on an episode tile: the page opens that episode's context menu. */
+    onLongClickEpisode: (Int, BaseItem) -> Unit = { _, _ -> },
+    /** The person's IPTV copy of this series (null = none, or not answered yet): its seasons and episodes merge into the page. */
+    iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail? = null,
+    /** OK on an IPTV episode tile: play it through IPTV. The page that owns navigation also sets the return-to-episodes flag. */
+    onPlayIptvEpisode: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode) -> Unit = { _, _ -> },
+    /** Where the page last was on the IPTV side (the IPTV-only season picked, the IPTV episode played); read once when the page opens. */
+    iptvPosition: IptvSeasonPosition = IptvSeasonPosition(),
+    /** Called whenever that position changes, so the page's owner can keep it across playback. */
+    onIptvPosition: (IptvSeasonPosition) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    var position by rememberInt(0)
+    val playWord = stringResource(R.string.play)
+    val resumeWord = stringResource(R.string.resume)
+    val discoverLabel = stringResource(R.string.discover)
 
-    var position by rememberInt()
-    val focusRequesters = remember { List(REVIEWS_ROW + 1) { FocusRequester() } }
-    val playFocusRequester = remember { FocusRequester() }
-    // Always open hero-first: Play focused, list scrolled to top (never restore a saved cast/extras row).
-    val listState = rememberLazyListState()
-    val episodeRowRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        if (consumeReturnToEpisodes()) {
-            // Back from an episode: land on the episode row, not the hero
-            listState.scrollToItem(1)
-            episodeRowRequester.tryRequestFocus()
-        } else {
-            listState.scrollToItem(0)
-            focusRequesters[HEADER_ROW].tryRequestFocus()
+    // Back from playback / the fallback Overview page: open on the episode row (read once; the flag is consumed)
+    val returned = remember { consumeReturnToEpisodes() }
+    val scaffoldState = rememberJellytipDetailsScaffoldState(if (returned) EPISODES_SECTION else null)
+    // True while the page was opened on the episode row and has not been left for the hero since: focus goes to the tile
+    var landOnTile by remember { mutableStateOf(returned) }
+    var episodesHadFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(scaffoldState.sectionsActive) {
+        if (!scaffoldState.sectionsActive) {
+            landOnTile = false
+            episodesHadFocus = false
         }
     }
-    var buttonRowFocused by remember { mutableStateOf(false) }
-    var topFocused by remember { mutableStateOf(true) }
-    // Sections are not composed at all until the user presses Down from the header, so moving along the
-    // buttons can never scroll to, reveal or flash them.
-    var sectionsActive by remember { mutableStateOf(false) }
+    // Rows are frozen (no data swapped in under focus) once the lower sections are open and focus has settled there
+    val rowsFrozen = scaffoldState.sectionsActive && (!landOnTile || episodesHadFocus)
+
     // Jellytip taste signals: details dwell (8 s or more) when the page goes or moves to another title
     androidx.compose.runtime.DisposableEffect(series.id) {
         val since = System.currentTimeMillis()
@@ -436,9 +527,9 @@ fun SeriesDetailsContent(
                 ?.let(com.github.damontecres.wholphin.jellytip.signals.JellytipSignals::emit)
         }
     }
-    val hasBelow = true
     // Fetched with the page but only composed below the fold (sectionsActive), so it never pops in over the buttons
     val reviews by produceState<JellytipReviews?>(null, series.id) { value = JellytipApi.shared?.getReviews(series) }
+    val hasReviews = reviews?.reviews?.isNotEmpty() == true
     // Jellytip: companion "More like this" (library + IPTV mix); null = Jellyfin's similar list below
     val jtSimilarLoaded by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, series.id) {
         value = com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.queryFor(series)?.let {
@@ -446,330 +537,332 @@ fun SeriesDetailsContent(
         }
     }
     // Taken only while the lower rows are not open, so it never swaps Jellyfin's row out from under focus
-    // Jellytip: seasons only the person's IPTV has; looked up with the page, shown only if known before the rows open
-    val jtIptvSeasonsLoaded by produceState<Pair<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSeason>>?>(null, series.id, seasons.size) {
-        value = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.forSeries(series, seasons.mapNotNull { it?.indexNumber })
-    }
-    var jtIptvSeasons by remember(series.id) { mutableStateOf<Pair<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSeason>>?>(null) }
-    LaunchedEffect(jtIptvSeasonsLoaded, sectionsActive) {
-        if (!sectionsActive) jtIptvSeasons = jtIptvSeasonsLoaded
-    }
     var jtSimilar by remember(series.id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
-    LaunchedEffect(jtSimilarLoaded, sectionsActive) {
-        if (jtSimilarLoaded != null && !sectionsActive) jtSimilar = jtSimilarLoaded
+    LaunchedEffect(jtSimilarLoaded, rowsFrozen) {
+        if (jtSimilarLoaded != null && !rowsFrozen) jtSimilar = jtSimilarLoaded
     }
-    LaunchedEffect(topFocused) { if (topFocused) sectionsActive = false }
-    LaunchedEffect(sectionsActive) {
-        if (sectionsActive) {
-            withFrameNanos { }
-            withFrameNanos { }
-            for (r in listOf(SEASONS_ROW, PEOPLE_ROW, REVIEWS_ROW, EXTRAS_ROW, SIMILAR_ROW, DISCOVER_ROW)) if (focusRequesters[r].tryRequestFocus()) break
-        }
-    }
-    val headerAlpha by animateFloatAsState(if (topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
-    var pageHasFocus by remember { mutableStateOf(false) }
-    RestoreFocusOnResume(focusRequesters[HEADER_ROW], pageHasFocus)
-    Box(
-        modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus },
-    ) {
-        JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = !topFocused)
-        // One review, bottom right, balancing the info block (loaded with the page, fades in once)
-        JellytipDetailsPullQuote(reviews) { headerAlpha }
-        JellytipBreadcrumb(
-            crumbs = listOf(JellytipCrumb(series.name ?: "", {})),
-            modifier =
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 64.dp, top = 24.dp)
-                    .graphicsLayer { alpha = headerAlpha },
+    val chipRequester = remember { FocusRequester() }
+    val episodeRowRequester = remember { FocusRequester() }
+    // OK on a season chip: hand focus to the episode row once that season's episodes are showing
+    var focusEpisodesPending by remember { mutableStateOf(false) }
+
+    // One season list over the library's and the IPTV copy's. The selection is kept by IDENTITY (the library season index, or
+    // the number of the picked IPTV-only season), never by position in the merged list, so a late IPTV answer that inserts
+    // chips cannot move it.
+    var selIptvSeason by remember(series.id) { mutableStateOf(iptvPosition.season) }
+    var iptvFocusEpisode by remember(series.id) { mutableStateOf(iptvPosition.episodeId) }
+    val libNumbers = seasons.map { it?.indexNumber }
+    val merged = remember(libNumbers, iptv) { mergeSeasons(libNumbers.mapIndexed { i, n -> LibrarySeasonRef(i, n) }, iptv?.seasons.orEmpty()) }
+    val mergedSel = selectedMergedIndex(merged, seasonIndex, selIptvSeason)
+    val entry = merged.getOrNull(mergedSel)
+    val libEpisodes = (episodes as? EpisodeList.Success)?.episodes
+    val entryLibraryIndex = entry?.libraryIndex
+    val libEpisodesReady =
+        entryLibraryIndex != null && (episodes as? EpisodeList.Success)?.seasonId == seasons.getOrNull(entryLibraryIndex)?.id
+    // The tiles of the selected season (library episodes with IPTV-only ones interleaved, or an IPTV-only season's episodes)
+    val tiles: List<IptvSeasons.SeasonTile>? =
+        when {
+            entry == null -> null
+            entry.source == SeasonSource.IPTV -> seasonTiles(entry, 0, true, { null }, { false })
+            libEpisodes == null -> null
+            else ->
+                seasonTiles(
+                    entry,
+                    libEpisodes.size,
+                    libEpisodesReady,
+                    { libEpisodes[it]?.data?.indexNumber },
+                    { libEpisodes[it]?.data?.locationType == org.jellyfin.sdk.model.api.LocationType.VIRTUAL },
+                )
+        }
+    val split = seriesIsSplit(merged, tiles.orEmpty())
+
+    val resolvedResumable = (resolved?.data?.userData?.playbackPositionTicks ?: 0L) > 0L
+    val primaryLabel =
+        if (resolved != null) {
+            seriesPlayLabel(resolved.data.parentIndexNumber, resolved.data.indexNumber, resolvedResumable, resumeWord, playWord)
+        } else {
+            playWord
+        }
+    val statusLine =
+        seriesStatusLine(
+            seasonNumbers = merged.map { it.number },
+            nextSeason = resolved?.data?.parentIndexNumber,
+            nextEpisode = resolved?.data?.indexNumber,
         )
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize(),
-        ) {
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier,
-            ) {
-                item {
-                    JellytipDetailsBlock(
-                        item = series,
-                        buttons =
-                            buildList {
-                                add(
-                                    JellytipButton(stringResource(R.string.play), primary = true, onClick = {
-                                        position = HEADER_ROW
-                                        playOnClick.invoke(false)
-                                    }),
-                                )
-                                add(
-                                    JellytipButton(stringResource(R.string.shuffle), {
-                                        position = HEADER_ROW
-                                        playOnClick.invoke(true)
-                                    }),
-                                )
-                                add(
-                                    JellytipButton(
-                                        stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite),
-                                        favoriteOnClick,
+    val nextEpisodeId = resolved?.id ?: nextUpId
+
+    JellytipDetailsScaffold(
+        modifier = modifier,
+        state = scaffoldState,
+        openAt = if (returned) EPISODES_SECTION else null,
+        backdrop = { buttonRowFocused, dimmed ->
+            JellytipDetailsBackground(series, trailers, buttonRowFocused, dimmed = dimmed)
+        },
+        // One review, bottom right, balancing the info block (loaded with the page, fades in once)
+        overlay = { headerAlpha -> JellytipDetailsPullQuote(reviews, headerAlpha) },
+        hero = { slot ->
+            JellytipDetailsBlock(
+                item = series,
+                statusLine = statusLine,
+                sourceBadge = splitSourceBadge(split),
+                buttons =
+                    buildList {
+                        add(
+                            JellytipButton(primaryLabel, primary = true, onClick = {
+                                position = 0
+                                // One resolved episode names the button and is what plays; no answer yet = the old next-up lookup
+                                if (resolved != null) onPlayEpisode(resolved) else playOnClick(false)
+                            }),
+                        )
+                        add(
+                            JellytipButton(stringResource(R.string.shuffle), {
+                                position = 0
+                                playOnClick.invoke(true)
+                            }),
+                        )
+                        add(JellytipButton(myListLabel(favorite), favoriteOnClick))
+                        add(
+                            JellytipButton(stringResource(R.string.jellytip_more), {
+                                onShowContextMenu(
+                                    ContextMenu.ForBaseItem(
+                                        fromLongClick = false,
+                                        item = series,
+                                        chosenStreams = null,
+                                        showGoTo = false,
+                                        showStreamChoices = false,
+                                        canDelete = canDelete,
+                                        canRemoveContinueWatching = false,
+                                        canRemoveNextUp = false,
+                                        actions = actions,
+                                        // "Discover" (open in Seerr) lives here; the Discover row below keeps the name to itself
+                                        trailingItems =
+                                            if (discoverSeries != null) {
+                                                listOf(DialogItem(discoverLabel, dismissOnClick = true) { onClickDiscoverSeries() })
+                                            } else {
+                                                emptyList()
+                                            },
                                     ),
                                 )
-                                if (discoverSeries != null) {
-                                    add(JellytipButton(stringResource(R.string.discover), onClickDiscoverSeries))
-                                }
-                                add(
-                                    JellytipButton(stringResource(R.string.jellytip_more), {
-                                        onShowContextMenu(
-                                            ContextMenu.ForBaseItem(
-                                                fromLongClick = false,
-                                                item = series,
-                                                chosenStreams = null,
-                                                showGoTo = false,
-                                                showStreamChoices = false,
-                                                canDelete = canDelete,
-                                                canRemoveContinueWatching = false,
-                                                canRemoveNextUp = false,
-                                                actions = actions,
-                                            ),
-                                        )
-                                    }),
-                                )
-                            },
-                        trailers = trailers,
-                        onTrailer = {
-                            position = TRAILER_ROW
-                            trailerOnClick.invoke(it)
-                        },
-                        onOverview = overviewOnClick,
-                        buttonRowModifier =
-                            Modifier
-                                .focusRequester(focusRequesters[HEADER_ROW])
-                            .onPreviewKeyEvent {
-                                if (hasBelow && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
-                                    sectionsActive = true
-                                    true
+                            }),
+                        )
+                    },
+                trailers = trailers,
+                onTrailer = {
+                    position = TRAILER_ROW
+                    trailerOnClick.invoke(it)
+                },
+                onOverview = overviewOnClick,
+                buttonRowModifier = slot.buttonRowModifier.onFocusChanged { if (it.hasFocus) position = 0 },
+                modifier = slot.modifier,
+                onFocusWithin = slot.onFocusWithin,
+            )
+        },
+        sections =
+            listOf(
+                JellytipDetailsSection(EPISODES_SECTION, merged.isNotEmpty()) { focus ->
+                    val now = remember(mergedSel) { System.currentTimeMillis() / 1000 }
+                    val tilesReady = tiles != null && (entry?.source == SeasonSource.IPTV || libEpisodesReady)
+                    // The tile the row opens on and focuses: the IPTV episode last played, else the library episode the page remembers
+                    val focusTile =
+                        tiles
+                            ?.let { list ->
+                                val byIptv =
+                                    iptvFocusEpisode?.let { id -> list.indexOfFirst { it is IptvSeasons.SeasonTile.Iptv && it.episode.id == id } } ?: -1
+                                if (byIptv >= 0) {
+                                    byIptv
                                 } else {
-                                    false
+                                    list.indexOfFirst { it is IptvSeasons.SeasonTile.Lib && it.index == initialEpisodeIndex }
                                 }
-                            }
-                                .onFocusChanged {
-                                    buttonRowFocused = it.hasFocus
-                                    if (it.hasFocus) position = HEADER_ROW
-                                },
-                        modifier = Modifier.fillParentMaxSize().graphicsLayer { alpha = headerAlpha },
-                    onFocusWithin = { topFocused = it },
-                    )
-                }
-                if (sectionsActive) item {
-                    val seasonLabels =
-                        remember(seasons.size, seasons.map { it?.indexNumber }) {
-                            seasons.mapIndexed { i, season ->
-                                when (val n = season?.indexNumber) {
-                                    null -> "S${i + 1}"
-                                    0 -> "Specials"
-                                    else -> "S$n"
-                                }
-                            }
+                            }?.takeIf { it >= 0 } ?: 0
+                    // Down (and Back from playback) lands on the episode to watch next, not on a season chip: the tile takes the
+                    // section's focus request whenever tiles exist; while they load, the section itself (its chips) takes it
+                    val tileRequester = focus
+                    LaunchedEffect(focusEpisodesPending, libEpisodes, tilesReady) {
+                        if (focusEpisodesPending && tilesReady) {
+                            withFrameNanos { }
+                            withFrameNanos { }
+                            tileRequester.tryRequestFocus()
+                            focusEpisodesPending = false
                         }
-                    val chipRequester = remember { FocusRequester() }
+                    }
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequesters[SEASONS_ROW]),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .ifElse(!tilesReady, Modifier.focusRequester(focus))
+                                .onFocusChanged { if (it.hasFocus) episodesHadFocus = true },
                     ) {
+                        ItemRowTitle("Episodes")
+                        val seasonLabels =
+                            remember(merged) {
+                                merged.mapIndexed { i, season -> seasonChipLabel(season.number, i) }
+                            }
                         JellytipSeasonChips(
                             labels = seasonLabels,
-                            selectedIndex = seasonIndex,
-                            onSelect = onChangeSeason,
+                            selectedIndex = mergedSel,
+                            onSelect = { i ->
+                                val picked = merged.getOrNull(i)
+                                val libraryIndex = picked?.libraryIndex
+                                if (picked != null) {
+                                    selIptvSeason = if (libraryIndex == null) picked.number else null
+                                    iptvFocusEpisode = null
+                                    onIptvPosition(IptvSeasonPosition(selIptvSeason, null))
+                                    if (libraryIndex != null) onChangeSeason(libraryIndex)
+                                }
+                            },
                             selectedRequester = chipRequester,
-                            onConfirm = { episodeRowRequester.tryRequestFocus() },
-                            modifier = Modifier.padding(start = 64.dp),
+                            onConfirm = { focusEpisodesPending = true },
+                            modifier = Modifier.padding(start = JellytipLayout.RowInset),
                         )
-                        val eps = (episodes as? EpisodeList.Success)?.episodes
-                        // Jellytip: a season partly on IPTV shows its IPTV-only episodes in the strip too (library wins)
-                        val iptvCopy = jtIptvSeasons?.first
-                        val seasonNo = seasons.getOrNull(seasonIndex)?.indexNumber
-                        val iptvEps =
-                            remember(iptvCopy, seasonNo) {
-                                if (iptvCopy == null || seasonNo == null || seasonNo < 1) {
-                                    emptyList()
-                                } else {
-                                    com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.episodesFor(iptvCopy.seasons, seasonNo)
-                                }
-                            }
-                        if (eps != null) {
-                            // Capped: building the merge reads every entry (loads every page of the season)
-                            val tiles =
-                                if (iptvEps.isEmpty() || eps.size > 200) {
-                                    null
-                                } else {
-                                    com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.interleave(
-                                        eps.indices.map { eps[it]?.data?.indexNumber },
-                                        eps.indices.map { eps[it]?.data?.locationType == org.jellyfin.sdk.model.api.LocationType.VIRTUAL },
-                                        iptvEps,
-                                    )
-                                }
-                            val LibraryEpisodeCard: @Composable (Int, BaseItem?) -> Unit = { episodeIndex, episode ->
-                            BannerCardWithTitle(
-                                title =
-                                    episode?.let {
-                                        listOfNotNull(it.data.indexNumber?.let { n -> "E$n" }, it.name)
-                                            .joinToString(" \u00B7 ")
-                                    },
-                                subtitle = episode?.data?.overview?.replace('\n', ' '),
-                                item = episode,
-                                aspectRatio =
-                                    episode?.aspectRatio?.coerceAtLeast(AspectRatios.FOUR_THREE)
-                                        ?: AspectRatios.WIDE,
-                                played = episode?.data?.userData?.played ?: false,
-                                playPercent = episode?.data?.userData?.playedPercentage ?: 0.0,
-                                onClick = {
-                                    position = SEASONS_ROW
-                                    if (episode != null) onClickEpisode(episode)
-                                },
-                                onLongClick = {},
-                                cornerText = if (episode != null && episode.id == nextUpId) "Next" else null,
-                                cardHeight = 150.dp,
-                                useSeriesForPrimary = false,
-                                modifier =
-                                    Modifier.ifElse(
-                                        episodeIndex == initialEpisodeIndex,
-                                        Modifier.focusRequester(episodeRowRequester),
-                                    ),
-                            )
-                            }
-                            // The start position and the focus target count IPTV tiles too in a mixed season
-                            val startTile =
-                                if (tiles == null) {
-                                    initialEpisodeIndex
-                                } else {
-                                    tiles.indexOfFirst { it is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib && it.index == initialEpisodeIndex }.takeIf { it >= 0 } ?: 0
-                                }
-                            val rowState = rememberLazyListState(startTile)
-                            LazyRow(
-                                state = rowState,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                contentPadding = PaddingValues(horizontal = 64.dp),
-                                modifier = Modifier.focusRestorer(episodeRowRequester),
-                            ) {
-                                if (tiles != null && iptvCopy != null && seasonNo != null) {
+                        if (tiles != null) {
+                            // The scroll position restarts on the focus tile whenever another season is picked
+                            val selectionKey = entry?.libraryIndex?.let { "l$it" } ?: "i${entry?.number}"
+                            val rowState = remember(selectionKey) { LazyListState(focusTile) }
+                            JellytipRowFocusScope { rowFocusModifier ->
+                                LazyRow(
+                                    state = rowState,
+                                    horizontalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap),
+                                    // Focus room: the first tile's growth and border are not cut; the row is pulled back so the tile
+                                    // still starts on the row title's line (8 dp, like People and Reviews)
+                                    contentPadding = PaddingValues(horizontal = JellytipLayout.FocusRoomWide, vertical = JellytipLayout.FocusRoom),
+                                    modifier =
+                                        rowFocusModifier
+                                            .fillMaxWidth()
+                                            .jellytipFocusRoom(JellytipLayout.FocusRoomWide - JellytipLayout.RowInset)
+                                            .focusRestorer(tileRequester),
+                                ) {
                                     items(
                                         tiles.size,
                                         key = { i ->
                                             when (val x = tiles[i]) {
-                                                is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib -> "l${x.index}"
-                                                is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Iptv -> "i${x.episode.id}"
+                                                is IptvSeasons.SeasonTile.Lib -> "l${x.index}"
+                                                is IptvSeasons.SeasonTile.Iptv -> "i${x.episode.id}"
                                             }
                                         },
                                     ) { t ->
+                                        val tileFocus = if (t == focusTile) Modifier.focusRequester(tileRequester) else Modifier
                                         when (val tile = tiles[t]) {
-                                            is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Iptv ->
-                                                com.github.damontecres.wholphin.jellytip.iptv.JellytipMixedIptvEpisode(
-                                                    series,
-                                                    iptvCopy,
-                                                    seasonNo,
-                                                    tile.episode,
-                                                    // The strip's focus target when Next Up isn't a library tile (tile 0)
-                                                    modifier = if (t == startTile && tiles.none { it is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib && it.index == initialEpisodeIndex }) Modifier.focusRequester(episodeRowRequester) else Modifier,
+                                            is IptvSeasons.SeasonTile.Iptv -> {
+                                                val e = tile.episode
+                                                IptvEpisodeTile(
+                                                    e = e,
+                                                    mark =
+                                                        episodeSourceMark(
+                                                            split,
+                                                            iptv = true,
+                                                            failNote = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), now),
+                                                        ),
+                                                    onClick = {
+                                                        val copy = iptv
+                                                        if (copy != null) {
+                                                            position = 1
+                                                            iptvFocusEpisode = e.id
+                                                            onIptvPosition(IptvSeasonPosition(selIptvSeason, e.id))
+                                                            onPlayIptvEpisode(copy, e)
+                                                        }
+                                                    },
+                                                    modifier = tileFocus,
                                                 )
+                                            }
 
-                                            is com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.SeasonTile.Lib ->
-                                                LibraryEpisodeCard(tile.index, eps[tile.index])
+                                            is IptvSeasons.SeasonTile.Lib -> {
+                                                val episodeIndex = tile.index
+                                                val episode = libEpisodes?.get(episodeIndex)
+                                                LibraryEpisodeTile(
+                                                    episode = episode,
+                                                    isNext = episode != null && episode.id == nextEpisodeId,
+                                                    sourceMark = episodeSourceMark(split, iptv = false),
+                                                    onClick = {
+                                                        if (episode != null) {
+                                                            position = 1
+                                                            iptvFocusEpisode = null
+                                                            onIptvPosition(IptvSeasonPosition(selIptvSeason, null))
+                                                            onEpisodeSelected(episodeIndex)
+                                                            onPlayEpisode(episode)
+                                                        }
+                                                    },
+                                                    onLongClick = { if (episode != null) onLongClickEpisode(episodeIndex, episode) },
+                                                    modifier = tileFocus,
+                                                )
+                                            }
                                         }
                                     }
-                                } else {
-                                    itemsIndexed(eps) { episodeIndex, episode -> LibraryEpisodeCard(episodeIndex, episode) }
                                 }
                             }
                         }
                     }
-                }
-                // Jellytip: seasons the library lacks but the person's IPTV has (Season N · via IPTV)
-                val iptvOnly = jtIptvSeasons
-                if (sectionsActive && iptvOnly != null && iptvOnly.second.isNotEmpty()) item(key = "jt-iptv-seasons") {
-                    com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvSeasonsSection(series, iptvOnly.first, iptvOnly.second)
-                }
-                if (people.isNotEmpty()) {
-                    if (sectionsActive) item {
-                        PersonRow(
-                            people = people,
-                            onClick = {
-                                position = PEOPLE_ROW
-                                onClickPerson.invoke(it)
-                            },
-                            onLongClick = { index, person ->
-                                position = PEOPLE_ROW
-                                onShowContextMenu.invoke(
-                                    ContextMenu.ForPerson(
-                                        fromLongClick = true,
-                                        person = person,
-                                        actions =
-                                            PersonContextActions(
-                                                navigateTo = actions.navigateTo,
-                                                onClickFavorite = actions.onClickFavorite,
-                                            ),
-                                    ),
-                                )
-                            },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequesters[PEOPLE_ROW]),
-                        )
-                    }
-                }
-                reviews?.takeIf { sectionsActive && it.reviews.isNotEmpty() }?.let { r ->
-                    item {
+                },
+                JellytipDetailsSection("people", people.isNotEmpty()) { focus ->
+                    PersonRow(
+                        people = people,
+                        onClick = {
+                            position = PEOPLE_ROW
+                            onClickPerson.invoke(it)
+                        },
+                        onLongClick = { index, person ->
+                            position = PEOPLE_ROW
+                            onShowContextMenu.invoke(
+                                ContextMenu.ForPerson(
+                                    fromLongClick = true,
+                                    person = person,
+                                    actions =
+                                        PersonContextActions(
+                                            navigateTo = actions.navigateTo,
+                                            onClickFavorite = actions.onClickFavorite,
+                                        ),
+                                ),
+                            )
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focus),
+                    )
+                },
+                JellytipDetailsSection("reviews", hasReviews) { focus ->
+                    reviews?.let { r ->
                         JellytipReviewsRow(
                             reviews = r,
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .focusRequester(focusRequesters[REVIEWS_ROW]),
+                                    .focusRequester(focus),
                         )
                     }
-                }
-                if (extras.isNotEmpty()) {
-                    if (sectionsActive) item {
-                        ExtrasRow(
-                            extras = extras,
-                            onClickItem = { index, item ->
-                                position = EXTRAS_ROW
-                                onClickExtra.invoke(index, item)
-                            },
-                            onLongClickItem = { _, _ -> },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequesters[EXTRAS_ROW]),
-                        )
-                    }
-                }
-                val simRow = jtSimilar
-                if (simRow != null) {
-                    if (sectionsActive) item(key = "jt-similar") {
+                },
+                JellytipDetailsSection("extras", extras.isNotEmpty()) { focus ->
+                    ExtrasRow(
+                        extras = extras,
+                        onClickItem = { index, item ->
+                            onClickExtra.invoke(index, item)
+                        },
+                        onLongClickItem = { _, _ -> },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focus),
+                    )
+                },
+                JellytipDetailsSection("similar", jtSimilar != null || similar.isNotEmpty()) { focus ->
+                    val simRow = jtSimilar
+                    if (simRow != null) {
                         com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
                             row = simRow,
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .focusRequester(focusRequesters[SIMILAR_ROW]),
+                                    .focusRequester(focus),
                         )
-                    }
-                } else if (similar.isNotEmpty()) {
-                    if (sectionsActive) item {
+                    } else {
                         ItemRow(
                             title = stringResource(R.string.more_like_this),
                             items = similar,
                             onClickItem = { index, item ->
-                                position = SIMILAR_ROW
                                 onClickItem.invoke(index, item)
                             },
                             onLongClickItem = { index, item ->
-                                position = SIMILAR_ROW
                                 onShowContextMenu.invoke(
                                     ContextMenu.ForBaseItem(
                                         fromLongClick = true,
@@ -798,36 +891,97 @@ fun SeriesDetailsContent(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .focusRequester(focusRequesters[SIMILAR_ROW]),
+                                    .focusRequester(focus),
                         )
                     }
-                }
-                if (discovered.isNotEmpty()) {
-                    if (sectionsActive) item {
-                        DiscoverRow(
-                            row =
-                                DiscoverRowData(
-                                    ResStringProvider(R.string.discover),
-                                    DataLoadingState.Success(discovered),
-                                    type = DiscoverRequestType.UNKNOWN,
-                                ),
-                            onClickItem = { index: Int, item: DiscoverItem ->
-                                position = DISCOVER_ROW
-                                onClickDiscover.invoke(index, item)
-                            },
-                            onLongClickItem = { _, _ -> },
-                            onCardFocus = {},
-                            focusRequester = focusRequesters[DISCOVER_ROW],
-                        )
-                    }
-                }
+                },
+                JellytipDetailsSection("discover", discovered.isNotEmpty()) { focus ->
+                    DiscoverRow(
+                        row =
+                            DiscoverRowData(
+                                ResStringProvider(R.string.discover),
+                                DataLoadingState.Success(discovered),
+                                type = DiscoverRequestType.UNKNOWN,
+                            ),
+                        onClickItem = { index: Int, item: DiscoverItem ->
+                            onClickDiscover.invoke(index, item)
+                        },
+                        onLongClickItem = { _, _ -> },
+                        onCardFocus = {},
+                        focusRequester = focus,
+                    )
+                },
+            ),
+    )
+}
+
+/** A library episode as the one episode tile: still, number, name, overview line, watched / progress / "Next". */
+@Composable
+private fun LibraryEpisodeTile(
+    episode: BaseItem?,
+    isNext: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    sourceMark: String? = null,
+) {
+    val imageUrlService = LocalImageUrlService.current
+    val density = LocalDensity.current
+    val stillHeightPx = remember(density) { with(density) { JellytipEpisodeTileHeight.roundToPx() } }
+    val url =
+        remember(episode, stillHeightPx) {
+            episode?.let {
+                it.imageUrlOverride
+                    ?: imageUrlService.getItemImageUrl(
+                        it,
+                        ImageType.PRIMARY,
+                        fillWidth = null,
+                        fillHeight = stillHeightPx,
+                        useSeriesForPrimary = false,
+                    )
             }
         }
-        BoxScopeDownHint(
-            visible = topFocused && hasBelow && !sectionsActive,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
-    }
+    val data = episode?.data
+    val user = data?.userData
+    val percent = user?.playedPercentage ?: 0.0
+    val partWatched = percent > 0.0 && percent < 100.0
+    JellytipEpisodeTile(
+        image = url,
+        number = data?.indexNumber,
+        name = episode?.name,
+        overview = data?.overview,
+        played = user?.played == true && !partWatched,
+        progress = if (partWatched) (percent / 100.0).toFloat() else 0f,
+        isNext = isNext,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier,
+        sourceMark = sourceMark,
+    )
+}
+
+/** An IPTV episode as the one episode tile (OK plays it; hold OK does nothing: IPTV episodes have no menu). */
+@Composable
+private fun IptvEpisodeTile(
+    e: com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode,
+    mark: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = e.progress
+    JellytipEpisodeTile(
+        image = e.still,
+        number = e.episode,
+        name = e.title,
+        overview = e.overview,
+        played = p?.played == true,
+        progress = p?.takeIf { it.resumable && it.durationSecs > 0 }?.let { (it.positionSecs / it.durationSecs).toFloat().coerceIn(0f, 1f) } ?: 0f,
+        isNext = false,
+        onClick = onClick,
+        onLongClick = {},
+        modifier = modifier,
+        sourceMark = mark,
+    )
 }
 
 @Composable
