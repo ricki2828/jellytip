@@ -281,6 +281,14 @@ class JellytipTonightViewModel
                 api.tvShowsApi
                     .getNextUp(GetNextUpRequest(userId = userId, fields = fields, enableUserData = true, limit = 8))
                     .toBaseItems()
+            }.filter {
+                // Split series: the server's merged next wins (its IPTV next is already among the IPTV entries above)
+                com.github.damontecres.wholphin.jellytip.details.SplitNextFilter.keepLibraryNext(
+                    it.data.seriesId,
+                    it.id,
+                    it.data.userData?.playbackPositionTicks ?: 0L,
+                    com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.seriesNext.value,
+                )
             }.forEachIndexed { i, it ->
                 val m = (it.data.runTimeTicks ?: 0L) / 600_000_000L
                 out +=
@@ -289,6 +297,18 @@ class JellytipTonightViewModel
                         listOfNotNull(it.data.parentIndexNumber?.let { s -> "S$s E${it.data.indexNumber ?: "?"}" }, it.name).joinToString(" · "),
                         "Next episode of ${it.data.seriesName ?: it.name}", "Play", m.toInt().takeIf { v -> v > 0 }, i, item = it,
                         probe = probe(it, null), rating = it.data.officialRating, started = true,
+                    )
+            }
+            // 2b. Split series whose merged next is an IPTV episode not started yet (the server lists it in /v1/me/next items)
+            val claims = JellytipIptvResumeStore.seriesNext.value
+            JellytipIptvResumeStore.nextItems.value.forEachIndexed { i, r ->
+                val claimedIptv = claims.values.any { it.source == "iptv" && it.id == r.id }
+                if (!claimedIptv || out.any { c -> c.iptv?.key == r.key }) return@forEachIndexed
+                val m = if (r.dur > 0) (r.dur / 60).toInt() else null
+                out +=
+                    Tonight.Cand(
+                        "iptv:${r.key}", 1, r.seriesTitle ?: r.title, r.label, "Next episode of ${r.seriesTitle ?: r.title}", "Play", m, i,
+                        iptv = r, iptvTile = r.asVodItem(), probe = AskItem("Movie", ((m ?: 45) * 600_000_000L).toLong(), null, null), started = true,
                     )
             }
             // 3. Unwatched films from the For-you rows on Home

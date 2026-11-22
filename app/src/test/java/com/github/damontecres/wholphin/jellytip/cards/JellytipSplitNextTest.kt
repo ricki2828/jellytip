@@ -71,5 +71,74 @@ class JellytipSplitNextTest {
         assertEquals("S2E3I", code(eps.single()))
         // Unknown position: no next
         assertNull(nextAfter(eps, null, 3))
+        // Duplicate season blocks: the first copy wins (as the series page's tiles)
+        val dup = splitEpisodes(emptyList(), listOf(IptvSeason(2, listOf(tv(3))), IptvSeason(2, listOf(tv(3).copy(id = "other:e:3")))))
+        assertEquals("p:e:3", dup.single().iptv?.id)
+    }
+}
+
+// org.json needs Robolectric (the android.jar stub throws "not mocked")
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(manifest = org.robolectric.annotation.Config.NONE, sdk = [30])
+class SeriesNextClaimTest {
+    private val tv = { e: Int -> com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode("11dd6d87:e:$e", e, "E$e", 60, null, null, null) }
+    private val libId = UUID.fromString("ff7b098e-b481-1105-eadb-d2f25199f299")
+    private val eps =
+        com.github.damontecres.wholphin.jellytip.details.splitEpisodes(
+            listOf(com.github.damontecres.wholphin.jellytip.details.SplitLibEp(libId, 2, 2, true)),
+            listOf(com.github.damontecres.wholphin.jellytip.iptv.IptvSeason(2, (1..5).map(tv))),
+        )
+
+    @Test
+    fun theLiveTraitorsAnswer() {
+        val body = """{"seriesNext":{"48fcd920aa5ca0985a1670879ae1a105":{"source":"iptv","id":"11dd6d87:e:3","season":2,"episode":3,"inProgress":true}}}"""
+        val c = com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.parse(body, "48fcd920-aa5c-a098-5a16-70879ae1a105")!!
+        assertTrue(c.inProgress)
+        val got = com.github.damontecres.wholphin.jellytip.details.claimedNext(c, eps) as com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Episode
+        assertEquals(3, got.ep.episode)
+        assertEquals("11dd6d87:e:3", got.ep.iptv?.id)
+    }
+
+    @Test
+    fun libraryIdFinishedNoClaimAndFallbacks() {
+        val p = com.github.damontecres.wholphin.jellytip.details.SeriesNextParse
+        val c = p.parse("""{"seriesNext":{"S1":{"source":"library","id":"ff7b098eb4811105eadbd2f25199f299","season":2,"episode":2}}}""", "s1")!!
+        assertEquals(libId, (com.github.damontecres.wholphin.jellytip.details.claimedNext(c, eps) as com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Episode).ep.lib?.id)
+        // finished
+        assertEquals(com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Finished, com.github.damontecres.wholphin.jellytip.details.claimedNext(p.parse("""{"seriesNext":{"s1":{"source":null}}}""", "s1")!!, eps))
+        // {} / another series / junk source / not JSON: no claim
+        assertNull(p.parse("""{"seriesNext":{}}""", "s1"))
+        assertNull(p.parse("""{"seriesNext":{"s2":{"source":"iptv"}}}""", "s1"))
+        assertNull(p.parse("""{"seriesNext":{"s1":{"source":"plex"}}}""", "s1"))
+        assertNull(p.parse("nope", "s1"))
+        // no "source" key at all: malformed, not finished
+        assertNull(p.parse("""{"seriesNext":{"s1":{"id":"x"}}}""", "s1"))
+        // unknown id: matched by season / episode; not on the page at all: null (the page's own rule)
+        val bySe = p.parse("""{"seriesNext":{"s1":{"source":"iptv","id":"x:e:99","season":2,"episode":4}}}""", "s1")!!
+        assertEquals(4, (com.github.damontecres.wholphin.jellytip.details.claimedNext(bySe, eps) as com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Episode).ep.episode)
+        assertNull(com.github.damontecres.wholphin.jellytip.details.claimedNext(p.parse("""{"seriesNext":{"s1":{"source":"iptv","id":"x","season":9,"episode":9}}}""", "s1")!!, eps))
+    }
+
+    @Test
+    fun homeNextUpHidesJellyfinsEpisodeWhenTheServerSaysOtherwise() {
+        val f = com.github.damontecres.wholphin.jellytip.details.SplitNextFilter
+        val traitors = UUID.fromString("48fcd920-aa5c-a098-5a16-70879ae1a105")
+        val e6 = UUID.fromString("00000000-0000-0000-0000-000000000006")
+        val claims =
+            com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.all(
+                """{"items":[],"seriesNext":{"48fcd920aa5ca0985a1670879ae1a105":{"source":"iptv","id":"11dd6d87:e:2113330","season":2,"episode":3,"inProgress":true},""" +
+                    """"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"source":"library","id":"00000000000000000000000000000006","season":1,"episode":6},"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"source":null}}}""",
+            )
+        assertEquals(3, claims.size)
+        // Traitors: Jellyfin says E6, the merged next is IPTV E3 -> hidden
+        assertTrue(!f.keepLibraryNext(traitors, e6, 0L, claims))
+        // ...unless it is a resume (Continue entry)
+        assertTrue(f.keepLibraryNext(traitors, e6, 10L, claims))
+        // Same library episode claimed: kept; finished show: hidden; no claim: kept
+        assertTrue(f.keepLibraryNext(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), e6, 0L, claims))
+        assertTrue(!f.keepLibraryNext(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), e6, 0L, claims))
+        assertTrue(f.keepLibraryNext(UUID.randomUUID(), e6, 0L, claims))
+        assertTrue(f.keepLibraryNext(null, e6, 0L, claims))
+        assertEquals(emptyMap<String, Any>(), com.github.damontecres.wholphin.jellytip.details.SeriesNextParse.all("""{"items":[]}"""))
     }
 }
