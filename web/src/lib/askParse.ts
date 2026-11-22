@@ -144,6 +144,15 @@ export const chipsFromData = (list: ChipData[]): Chip[] => list.map(chipFor).fil
 /** The mood table (label + genres, in order) for the chip contract's golden file and the server's port. */
 export const MOOD_TABLE = MOODS.map(([, genres, label]) => ({ label, genres }));
 
+/**
+ * The kids trigger (shared with the server and the TV: kids-trigger-v1.json, t5q askchat 0a373fd; ported verbatim, tests
+ * assert the module equals the fixture). Case-insensitive search over the raw text. askParse's own kids phrases still make
+ * the chip, except the weak ones (works for all / everyone, all ages, whole family): a chip with only those is dropped
+ * unless this matches too.
+ */
+export const KIDS_TRIGGER = /\b(?:(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:an?|my|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds?|me and (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:kids?|children|toddler|grandkids?) and (?:i|me)|for (?:(?:the )?(?:kids|family|children)|(?:my|our) (?:family|little ones|kids?|children|toddler|grandkids?|(?:son|daughter)(?!-in-law)))|(?:kids|children) are watching|(?:my|our|the) (?:kids|children) are here|(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds? (?:is|are) watching|family (?:movie|night|film))\b/i;
+const WEAK_KIDS = /^(?:(?:that )?(?:would |will |can )?works? for |all ages|whole family)/;
+
 const DECADE_WORDS: Record<string, number> = {
   twenties: 1920, thirties: 1930, forties: 1940, fifties: 1950, sixties: 1960, seventies: 1970, eighties: 1980, nineties: 1990,
 };
@@ -162,6 +171,8 @@ function toMinutes(n: number, unit: string): number {
 
 /** Parse plain language. `now` is injectable so "recent" is testable. */
 export function parseAsk(raw: string, now = new Date()): Reading {
+  // Set when a kids phrase other than a weak one made the kids chip
+  let kidsStrong = false;
   let t = " " + raw.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9'.+\- ]+/g, " ") + " ";
   const chips: Chip[] = [];
   const notes: string[] = [];
@@ -249,9 +260,10 @@ export function parseAsk(raw: string, now = new Date()): Reading {
   take(/\b(?:rewatch|re-watch|seen before|watched before|already seen|already watched)\b/, () => add({ id: "played", label: "already watched", data: { t: "played" } }));
 
   // ----- kids -----
-  take(/\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b/, () =>
-    add({ id: "kids", label: "for kids (rated G, PG)", data: { t: "kids", ratings: KIDS_RATINGS, genres: KIDS_GENRES } }),
-  );
+  take(/\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b/, () => {
+    if (!WEAK_KIDS.test(cur.src)) kidsStrong = true;
+    add({ id: "kids", label: "for kids (rated G, PG)", data: { t: "kids", ratings: KIDS_RATINGS, genres: KIDS_GENRES } });
+  });
 
   // ----- rating -----
   take(/\b(?:rated|rating|score(?:d)?)\s*(?:over|above|at least|of|>=?)?\s*(\d(?:\.\d)?)(?!\d)\s*\+?(?:\s*(?:\/\s*10|or (?:higher|more|better)))?/, (m) => {
@@ -322,6 +334,12 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     ignored.push(drop.src ?? drop.label);
     notes.push(`${what} contradict each other: kept “${keep.label}”, ignored “${drop.src ?? drop.label}”.`);
   };
+  // "works for everyone" / "all ages" / "whole family" alone is not a kids request (kids-trigger v1): no PG cap
+  const kids = chips.findIndex((c) => c.id === "kids");
+  if (kids >= 0 && !kidsStrong && !KIDS_TRIGGER.test(raw)) {
+    chips.splice(kids, 1);
+    notes.push("Read “works for everyone” / “all ages” as no age limit; say “for the kids” to keep it to kids' ratings.");
+  }
   clash("kind:Movie", "kind:Series", "Movies and shows");
   for (const [, , label] of MOODS) clash(`genre:${label}`, `notgenre:${label}`, `“${label}” and “no ${label.toLowerCase()}”`);
   clash("unplayed", "played", "Unwatched and rewatch");
