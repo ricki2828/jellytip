@@ -157,8 +157,9 @@ export function parseAsk(raw: string, now = new Date()): Reading {
   // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out;
   // anything else ("not too long", "not for kids", "not sad") is left out of the reading (never guessed) and reported
   // The negated word may follow an article ("not a scary movie", "nothing that's scary"); the negation carries through an
-  // "or" / "nor" list ("nothing scary or animated"), never through "and" ("not scary and funny" wants funny)
-  const NEG = /\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)/g;
+  // "or" / "nor" list ("nothing scary or animated", "no horror or any cartoons"; items skip the same lead-in words), never
+  // through "and" ("not scary and funny" wants funny)
+  const NEG = /\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)*)/g;
   const negMood = (w: string) => MOODS.find(([re, , label]) => INVERTIBLE.has(label) && new RegExp(re.source).test(` ${w} `));
   t = t.replace(NEG, (m: string, head: string, chain: string, off: number, whole: string) => {
     const rest = whole.slice(off + head.length);
@@ -178,7 +179,7 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     }
     // "not X or Y" is neither: every item of the or-list is negated too; moods leave their genres out, the rest is left out
     // (never read back as a positive filter)
-    const link = /^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)/;
+    const link = /^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?([a-z][a-z0-9'-]*)/;
     let used = 0;
     for (;;) {
       const cm = link.exec(chain.slice(used));

@@ -240,6 +240,10 @@ test("a negation never turns into the genre it rules out (articles, or-lists)", 
   assert.deepEqual(sorted("no sequels or horror"), ["notgenre:Horror"]);
   assert.deepEqual(sorted("nothing scary or long or animated"), ["notgenre:Animation", "notgenre:Horror"]);
   assert.deepEqual(sorted("no horror or sequels or not animated"), ["notgenre:Animation", "notgenre:Horror"]);
+  // List items skip the same lead-in words as the first one
+  assert.deepEqual(sorted("not too long or too scary"), ["notgenre:Horror"]);
+  assert.deepEqual(sorted("no horror or any cartoons"), ["notgenre:Animation", "notgenre:Horror"]);
+  assert.deepEqual(sorted("nothing for kids or anything scary"), ["notgenre:Horror"]);
   const r = parseAsk("nothing scary or long or animated", NOW);
   assert.deepEqual(r.ignored, ["or long"]);
   assert.match(r.notes.join(" "), /Negatives only work for genres/);
