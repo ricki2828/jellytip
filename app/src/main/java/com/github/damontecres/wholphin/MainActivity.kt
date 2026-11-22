@@ -246,6 +246,12 @@ class MainActivity : AppCompatActivity() {
                 Timber.e(ex, "Error with settings flag secure")
             }.launchIn(lifecycleScope)
 
+        // Blank-text hunt: the in-app screensaver's end is a wake with no lifecycle event
+        screensaverService.state
+            .onEach { com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.screensaver(it.show) }
+            .catch { ex -> Timber.e(ex, "Error tracing the screensaver") }
+            .launchIn(lifecycleScope)
+
         screensaverService.keepScreenOn
             .onEach { keepScreenOn ->
                 Timber.v("keepScreenOn: %s", keepScreenOn)
@@ -416,7 +422,7 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         com.github.damontecres.wholphin.jellytip.debug.JellytipPerf.setForeground(true)
         Timber.d("onStart")
-        com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.started()
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.started(this)
 
         lifecycleScope.launchDefault {
             val appPreferences = userPreferencesDataStore.data.first()
@@ -464,6 +470,11 @@ class MainActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         Timber.d("onConfigurationChanged: newConfig=%s", newConfig)
         com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.config(newConfig)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbe.focus(hasFocus)
     }
 
     override fun onTrimMemory(level: Int) {
