@@ -25,6 +25,9 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.jellytip.JellytipAdmin
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleMenu
+import com.github.damontecres.wholphin.ui.FontAwesome
+import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.jellytip.delete.jellytipDeleteLabel
 import com.github.damontecres.wholphin.jellytip.subtitles.JellytipSeasonSubtitles
 import com.github.damontecres.wholphin.preferences.PlayerBackend
@@ -338,6 +341,131 @@ fun ContextMenu(
     }
 }
 
+/**
+ * Jellytip: the common block of the title menu (Play / Resume, Play from start, Details, My list, watched, taste, Play from
+ * the other source) as dialog items, from the pure [JellytipTitleMenu] model. The library-only extras follow in the caller.
+ */
+private fun titleMenuItems(
+    contextMenu: ContextMenu.ForBaseItem,
+    item: BaseItem,
+    watched: Boolean,
+    favorite: Boolean,
+    actions: ContextMenuActions,
+    resources: Resources,
+): List<DialogItem> {
+    val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+    val tasteOk = me.available.value && item.type in setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE)
+    val thumb = if (tasteOk) me.thumbOf(item.id) else 0
+    val off = tasteOk && me.isNotInterested(item.id)
+    // The title's IPTV copies, when the app has been told about them (a row's sourcesById); films only (an IPTV series cannot start without its page)
+    val now = System.currentTimeMillis() / 1000
+    val iptvCopies =
+        if (item.type == BaseItemKind.MOVIE) {
+            com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources
+                .iptvFor(item.id.toString())
+        } else {
+            emptyList()
+        }
+    val failed: (String) -> Boolean = { id ->
+        com.github.damontecres.wholphin.jellytip.iptv.IptvStreamFail
+            .failedLately(com.github.damontecres.wholphin.jellytip.iptv.IptvStreamFail.failOf(id, null), now)
+    }
+    val bestIptv = JellytipTitleMenu.bestIptv(iptvCopies, failed)
+    val state =
+        JellytipTitleMenu.State(
+            canPlay = item.type in supportedPlayableTypes,
+            inProgress = item.playbackPosition > Duration.ZERO,
+            inMyList = favorite,
+            watched = watched,
+            showDetails = contextMenu.showGoTo && item.type != BaseItemKind.AUDIO,
+            tasteAvailable = tasteOk,
+            thumb = thumb,
+            notInterested = off,
+            other = JellytipTitleMenu.otherForLibraryTile(iptvCopies, failed),
+        )
+    return JellytipTitleMenu.common(state).mapNotNull { entry ->
+        val label = JellytipTitleMenu.localized(entry.label, resources)
+        val onClick: (() -> Unit)? =
+            when (entry.id) {
+                JellytipTitleMenu.Id.PLAY -> {
+                    { actions.navigateTo(Destination.Playback(item.id, item.playbackPosition.inWholeMilliseconds)) }
+                }
+
+                JellytipTitleMenu.Id.PLAY_FROM_START -> {
+                    { actions.navigateTo(Destination.Playback(item.id, 0L)) }
+                }
+
+                JellytipTitleMenu.Id.DETAILS -> {
+                    { actions.onClickGoTo(item) }
+                }
+
+                JellytipTitleMenu.Id.MY_LIST -> {
+                    { actions.onClickFavorite.invoke(item.id, !favorite) }
+                }
+
+                JellytipTitleMenu.Id.WATCHED -> {
+                    { actions.onClickWatch.invoke(item.id, !watched) }
+                }
+
+                JellytipTitleMenu.Id.LIKE -> {
+                    { me.thumb(item.id, if (thumb == 1) 0 else 1) }
+                }
+
+                JellytipTitleMenu.Id.NOT_FOR_ME -> {
+                    { me.thumb(item.id, if (thumb == -1) 0 else -1) }
+                }
+
+                JellytipTitleMenu.Id.NOT_INTERESTED -> {
+                    { me.setNotInterested(item.id, !off) }
+                }
+
+                JellytipTitleMenu.Id.PLAY_OTHER ->
+                    bestIptv?.let { best ->
+                        {
+                            // The same call the IPTV details Play makes for a film (the server's order, minus a copy that failed lately); starts at 0
+                            actions.navigateTo(Destination.JellytipIptvPlay(title = item.title ?: "", vodId = best.id, resumeMs = 0L))
+                        }
+                    }
+
+                else -> null
+            }
+        onClick?.let { titleMenuDialogItem(entry.id, label, favorite, watched, it) }
+    }
+}
+
+/**
+ * One line of the shared title menu as a dialog item, with the icon for its id: the library menu and the IPTV tile menu
+ * both draw their common block through this, so the two look the same.
+ */
+internal fun titleMenuDialogItem(
+    id: String,
+    label: String,
+    favorite: Boolean,
+    watched: Boolean,
+    onClick: () -> Unit,
+): DialogItem =
+    when (id) {
+        JellytipTitleMenu.Id.PLAY, JellytipTitleMenu.Id.PLAY_OTHER -> DialogItem(label, Icons.Default.PlayArrow, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.PLAY_FROM_START -> DialogItem(label, Icons.Default.Refresh, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.DETAILS -> DialogItem(label, Icons.Default.ArrowForward, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.MY_LIST ->
+            DialogItem(
+                headlineContent = { Text(label) },
+                leadingContent = {
+                    Text(
+                        text = stringResource(R.string.fa_heart),
+                        fontFamily = FontAwesome,
+                        color = if (favorite) Color.Red else Color.Unspecified,
+                    )
+                },
+                onClick = onClick,
+                dismissOnClick = true,
+            )
+        JellytipTitleMenu.Id.WATCHED -> DialogItem(label, if (watched) R.string.fa_eye else R.string.fa_eye_slash, dismissOnClick = true, onClick = onClick)
+        JellytipTitleMenu.Id.LIKE -> DialogItem(label, R.string.fa_heart, dismissOnClick = true, onClick = onClick)
+        else -> DialogItem(label, R.string.fa_eye_slash, dismissOnClick = true, onClick = onClick)
+    }
+
 private fun buildContextMenuItems(
     resources: Resources,
     contextMenu: ContextMenu.ForBaseItem,
@@ -357,65 +485,8 @@ private fun buildContextMenuItems(
 ): List<DialogItem> =
     buildList {
         addAll(contextMenu.leadingItems)
-        // Songs should not show Go to
-        if (contextMenu.showGoTo && item.type != BaseItemKind.AUDIO) {
-            add(
-                DialogItem(
-                    resources.getString(R.string.go_to),
-                    Icons.Default.ArrowForward,
-                    dismissOnClick = true,
-                ) {
-                    actions.onClickGoTo(item)
-                },
-            )
-        }
-        if (item.type in supportedPlayableTypes) {
-            if (item.playbackPosition > Duration.ZERO) {
-                add(
-                    DialogItem(
-                        resources.getString(R.string.resume),
-                        Icons.Default.PlayArrow,
-                        dismissOnClick = true,
-                    ) {
-                        actions.navigateTo(
-                            Destination.Playback(
-                                item.id,
-                                item.playbackPosition.inWholeMilliseconds,
-                            ),
-                        )
-                    },
-                )
-                add(
-                    DialogItem(
-                        resources.getString(R.string.restart),
-                        Icons.Default.Refresh,
-                        dismissOnClick = true,
-                    ) {
-                        actions.navigateTo(
-                            Destination.Playback(
-                                item.id,
-                                0L,
-                            ),
-                        )
-                    },
-                )
-            } else {
-                add(
-                    DialogItem(
-                        resources.getString(R.string.play),
-                        Icons.Default.PlayArrow,
-                        dismissOnClick = true,
-                    ) {
-                        actions.navigateTo(
-                            Destination.Playback(
-                                item.id,
-                                0L,
-                            ),
-                        )
-                    },
-                )
-            }
-        }
+        // Jellytip: the block every title's hold-OK menu shares (library and IPTV tiles), built by JellytipTitleMenu
+        addAll(titleMenuItems(contextMenu, item, watched, favorite, actions, resources))
         if (item.type in supportedShufflableTypes) {
             add(
                 DialogItem(
@@ -559,35 +630,6 @@ private fun buildContextMenuItems(
                 },
             )
         }
-        // Jellytip personalisation: reactions feed Tonight's Pick / "because you loved" and filter rows (server side)
-        if (com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.value &&
-            item.type in setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE)
-        ) {
-            val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
-            val thumb = me.thumbOf(item.id)
-            add(
-                DialogItem(
-                    if (thumb == 1) "Liked · undo" else "I like this",
-                    R.string.fa_heart,
-                    dismissOnClick = true,
-                ) { me.thumb(item.id, if (thumb == 1) 0 else 1) },
-            )
-            add(
-                DialogItem(
-                    if (thumb == -1) "Not for me · undo" else "Not for me",
-                    R.string.fa_eye_slash,
-                    dismissOnClick = true,
-                ) { me.thumb(item.id, if (thumb == -1) 0 else -1) },
-            )
-            val off = me.isNotInterested(item.id)
-            add(
-                DialogItem(
-                    if (off) "Show it in my rows again" else "Not interested (hide from rows)",
-                    R.string.fa_eye_slash,
-                    dismissOnClick = true,
-                ) { me.setNotInterested(item.id, !off) },
-            )
-        }
         if (contextMenu.canDelete) {
             add(
                 DialogItem(
@@ -622,25 +664,6 @@ private fun buildContextMenuItems(
                 },
             )
         }
-        add(
-            DialogItem(
-                text = if (watched) R.string.mark_unwatched else R.string.mark_watched,
-                iconStringRes = if (watched) R.string.fa_eye else R.string.fa_eye_slash,
-                dismissOnClick = true,
-            ) {
-                actions.onClickWatch.invoke(item.id, !watched)
-            },
-        )
-        add(
-            DialogItem(
-                text = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-                dismissOnClick = true,
-            ) {
-                actions.onClickFavorite.invoke(item.id, !favorite)
-            },
-        )
         item.data.albumId?.let { albumId ->
             add(
                 DialogItem(

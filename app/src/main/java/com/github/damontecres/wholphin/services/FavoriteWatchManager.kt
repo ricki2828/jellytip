@@ -25,23 +25,31 @@ class FavoriteWatchManager
         ): UserItemDataDto {
             datePlayedService.invalidate(itemId)
             // Jellytip server rows holding this item reload their watched state on their next draw
+            val result =
+                if (played) {
+                    api.playStateApi.markPlayedItem(itemId).content
+                } else {
+                    api.playStateApi.markUnplayedItem(itemId).content
+                }
+            // After the server has it: the rows' reload (the bump) must see the new state
             com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(itemId)
-            return if (played) {
-                api.playStateApi.markPlayedItem(itemId).content
-            } else {
-                api.playStateApi.markUnplayedItem(itemId).content
-            }
+            return result
         }
 
         suspend fun setFavorite(
             itemId: UUID,
             favorite: Boolean,
-        ): UserItemDataDto =
-            if (favorite) {
-                api.userLibraryApi.markFavoriteItem(itemId).content
-            } else {
-                api.userLibraryApi.unmarkFavoriteItem(itemId).content
-            }
+        ): UserItemDataDto {
+            val result =
+                if (favorite) {
+                    api.userLibraryApi.markFavoriteItem(itemId).content
+                } else {
+                    api.userLibraryApi.unmarkFavoriteItem(itemId).content
+                }
+            // Jellytip server rows holding this item reload their heart (after the server has the change)
+            com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(itemId)
+            return result
+        }
 
         suspend fun removeContinueWatching(item: BaseItem) {
         }

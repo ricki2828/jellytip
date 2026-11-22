@@ -157,13 +157,13 @@ fun JellytipSportSettingsPage(modifier: Modifier = Modifier) {
 
     val p = prefs
     Column(modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Live sport", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Live sport", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text(
             message ?: "Teams, leagues and sports you follow come first in Live TV, Game Centre and on Home.",
             color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
             fontFamily = JellytipFontFamily,
             fontSize = 13.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
         if (p == null) {
             com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)

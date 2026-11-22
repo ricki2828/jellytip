@@ -173,7 +173,29 @@ object Tonight {
     /** Each title once, in the order given (sources already in priority order). */
     fun dedupe(cands: List<Cand>): List<Cand> {
         val seen = HashSet<String>()
-        return cands.filter { seen.add(it.key) }
+        return dropIptvTwins(cands).filter { seen.add(it.key) }
+    }
+
+    private fun norm(id: String) = id.replace("-", "").lowercase()
+
+    /**
+     * An IPTV candidate whose library twin is also a candidate goes (library wins): a film with `libraryId` equal to a library
+     * candidate's id, an episode whose `seriesLibraryId` is the `seriesId` of a library episode candidate. Unknown = kept.
+     */
+    fun dropIptvTwins(cands: List<Cand>): List<Cand> {
+        val libIds = cands.mapNotNull { c -> c.item?.id?.toString()?.let(::norm) }.toSet()
+        val libSeries = cands.mapNotNull { c -> c.item?.data?.seriesId?.toString()?.let(::norm) }.toSet()
+        if (libIds.isEmpty() && libSeries.isEmpty()) return cands
+        return cands.filterNot { c ->
+            val r = c.iptv ?: return@filterNot false
+            val film = (r.libraryId ?: r.sources.firstOrNull { it.type == "library" }?.id)?.takeIf { it.isNotBlank() }?.let(::norm)
+            val show = (r.seriesLibraryId ?: r.seriesSources.firstOrNull { it.type == "library" }?.id)?.takeIf { it.isNotBlank() }?.let(::norm)
+            when (r.kind) {
+                "movie" -> film != null && film in libIds
+                "episode" -> show != null && show in libSeries
+                else -> false
+            }
+        }
     }
 }
 
@@ -346,8 +368,8 @@ fun JellytipTonightPage(
             first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Pick for tonight", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
+        Text("Pick for tonight", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         // Constraint chips: OK toggles one; the picks start fresh for the new set (Up from the picks reaches them)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.onFocusChanged { chipsFocused = it.hasFocus }.focusGroup()) {
             Tonight.CONSTRAINTS.forEach { c ->

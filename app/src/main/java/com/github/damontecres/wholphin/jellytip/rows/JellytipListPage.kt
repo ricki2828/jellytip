@@ -67,7 +67,7 @@ fun JellytipListPage(
             color = JellytipPalette.Vanilla,
             fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.Medium,
-            fontSize = 26.sp,
+            fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle,
         )
         when (s) {
             ListState.Loading -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 188.dp, tileH = 106.dp, rows = 1, perRow = 4, title = false)  // (the loaded tiles' size: no jump)
@@ -78,7 +78,7 @@ fun JellytipListPage(
                     color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
                     fontFamily = JellytipFontFamily,
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
                 )
                 val chunks = s.list.itemIds.chunked(PER_ROW)
                 if (chunks.isEmpty()) {

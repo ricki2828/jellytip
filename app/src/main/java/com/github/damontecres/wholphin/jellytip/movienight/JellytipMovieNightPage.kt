@@ -473,9 +473,9 @@ private fun Header(
     sub: String,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(start = 64.dp, top = 28.dp, end = 24.dp)) {
+    Column(modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
         Text("MOVIE NIGHT", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 1.5.sp)
-        Text(title, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 34.sp)
+        Text(title, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text(sub, color = JellytipPalette.Vanilla.copy(alpha = 0.75f), fontFamily = JellytipFontFamily, fontSize = 16.sp, maxLines = 2)
     }
 }
@@ -502,7 +502,7 @@ private fun PickScreen(
                 }
             }
         }
-        Row(Modifier.padding(start = 64.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             val n = p.on.size
             Button(if (state.busy) "Starting…" else "Start movie night ($n film${if (n == 1) "" else "s"})", primary = true, enabled = n >= MovieNight.MIN_FILMS && !state.busy) { vm.create() }
             state.error?.let { Text(it, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 14.sp) }
@@ -555,7 +555,7 @@ private fun NightScreen(
                     }
                 }
             }
-            Row(Modifier.padding(start = 64.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (s.host && s.open) {
                     Button(if (state.busy) "Closing…" else "Close voting and reveal", primary = true, enabled = !state.busy, modifier = Modifier.focusRequester(close)) { vm.close() }
                     Button("Cancel") { vm.finish() }
@@ -569,7 +569,7 @@ private fun NightScreen(
                 color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
                 fontFamily = JellytipFontFamily,
                 fontSize = 12.sp,
-                modifier = Modifier.padding(start = 64.dp, top = 8.dp),
+                modifier = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = 8.dp),
             )
         }
     }
@@ -630,13 +630,10 @@ internal fun VotePoster(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(w),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1A1A1A), focusedContainerColor = Color(0xFF1A1A1A)),
-        border =
-            ClickableSurfaceDefaults.border(
-                border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp)),
-                focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = RoundedCornerShape(10.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(10.dp), rest = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp))),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
         modifier = modifier.size(w, w * 1.5f),
     ) {
         Box(Modifier.fillMaxSize()) {
@@ -670,7 +667,7 @@ private fun PosterRow(
     n: Int,
     content: @Composable (androidx.compose.ui.unit.Dp) -> Unit,
 ) {
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 64.dp, top = 16.dp, end = 32.dp)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = 16.dp, end = 32.dp)) {
         val gap = 16.dp
         val count = n.coerceAtLeast(1)
         val w = ((maxWidth - gap * (count - 1)) / count).coerceAtMost(140.dp)
@@ -737,13 +734,10 @@ private fun Poster(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(w),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1A1A1A), focusedContainerColor = Color(0xFF1A1A1A)),
-        border =
-            ClickableSurfaceDefaults.border(
-                border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp)),
-                focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = RoundedCornerShape(10.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(10.dp), rest = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)), shape = RoundedCornerShape(10.dp))),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
         modifier = modifier.size(w, w * 1.5f),
     ) {
         PosterArt(f, dim)
@@ -795,7 +789,7 @@ private fun VoteDots(
 }
 
 @Composable
-private fun Button(
+internal fun Button(
     label: String,
     primary: Boolean = false,
     enabled: Boolean = true,
@@ -805,7 +799,7 @@ private fun Button(
     Surface(
         onClick = { if (enabled) onClick() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        scale = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.scale(),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = if (primary) Color(0xFFEDEDED) else Color(0xFF242424),
@@ -815,10 +809,7 @@ private fun Button(
                 pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
                 pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
             ),
-        border =
-            ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, JellytipPalette.Jelly), shape = RoundedCornerShape(8.dp)),
-            ),
+        border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
         modifier = modifier.height(48.dp),
     ) {
         Box(Modifier.padding(horizontal = 22.dp).height(48.dp), contentAlignment = Alignment.Center) {

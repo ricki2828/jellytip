@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.search
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -344,9 +345,9 @@ private fun SearchContent(
                     if (answer.liveFirst) liveRows()
                     if (answer.results != null) {
                         // Newer server: the top hit, one ranked row of films and shows, then people, collections, not available
-                        answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top, viewModel) } }
+                        answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top) { openResult(top, viewModel) } } }
                         val ranked = answer.rankedGroups
-                        val libraryRows = ranked.takeWhile { it.type == "results-library" }
+                        val libraryRows = ranked.takeWhile { it.type == "results" }
                         libraryRows.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
                         if (!answer.liveFirst) liveRows()
                         ranked.drop(libraryRows.size).forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
@@ -407,8 +408,6 @@ private fun groupTitle(g: SearchGroup): String {
             "collections" -> "Collections"
             "iptv" -> "On your IPTV"
             "results" -> "Results"
-            "results-library" -> "In your library"
-            "results-iptv" -> "On IPTV"
             "discover" -> "Not in the library"
             "lists" -> "Letterboxd lists"
             else -> g.type
@@ -439,18 +438,21 @@ private fun ResultGroup(
                             collection = null,
                         )
                     }
-                JellytipServerRowView(
-                    row = row,
-                    onFocusItem = { _, _ -> },
-                    onLongClickItem = null,
-                    focusModifier = Modifier.focusGroup(),
-                )
+                // Tiles only: LocalJellytipHome is what makes a library card the Jellytip tile (titled art, pills, the Jellytip bar) instead of the stock card
+                androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome provides true) {
+                    JellytipServerRowView(
+                        row = row,
+                        onFocusItem = { _, _ -> },
+                        onLongClickItem = null,
+                        focusModifier = Modifier.focusGroup(),
+                    )
+                }
             }
 
         "people" -> PeopleRow(g, viewModel)
 
-        "results", "results-library", "results-iptv" -> {
-            // Films and shows in rank order (library and IPTV in separate rows; IPTV tiles carry the quality cue)
+        "results" -> {
+            // Films and shows in the server's rank order, library and IPTV tiles in ONE row (a title in both shows once)
             val row =
                 remember(q, g.ids, g.iptv, g.order) {
                     JellytipServerRow(
@@ -466,13 +468,15 @@ private fun ResultGroup(
                         order = g.order,
                     )
                 }
-            JellytipServerRowView(
-                row = row,
-                onFocusItem = { _, _ -> },
-                onLongClickItem = null,
-                focusModifier = Modifier.focusGroup(),
-                onOpened = { id -> viewModel.clickedId(id) },
-            )
+            androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome provides true) {
+                JellytipServerRowView(
+                    row = row,
+                    onFocusItem = { _, _ -> },
+                    onLongClickItem = null,
+                    focusModifier = Modifier.focusGroup(),
+                    onOpened = { id -> viewModel.clickedId(id) },
+                )
+            }
         }
 
         else ->
@@ -504,7 +508,7 @@ private fun ResultGroup(
                     items(g.iptv, key = { "i${it.id}" }) { i ->
                         PosterCard(i.poster, listOfNotNull(i.name, i.year?.toString()).joinToString(" · ")) {
                             viewModel.opened("iptv")
-                            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(i.id, i.name), "search iptv OK")
+                            viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(i.id, i.name, i.kind, i.libraryId, i.sources), "search iptv OK")
                         }
                     }
                     items(g.discover, key = { "d${it.key}" }) { t ->
@@ -561,10 +565,7 @@ internal fun PosterCard(
             onClick = onClick,
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-            border =
-                ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, com.github.damontecres.wholphin.jellytip.JellytipFocus.Cream), shape = RoundedCornerShape(8.dp)),
-                ),
+            border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
             scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(120.dp),
             modifier = Modifier.size(120.dp, 180.dp),
         ) {
@@ -648,13 +649,15 @@ private fun SearchIptv.toVodItem() =
         progress = null,
         tech = tech,
         audio = audio,
+        libraryId = libraryId,
+        sources = sources,
     )
 
 /** The best hit as a wide card: its art, title, facts (kind · year · seasons · rating · where), OK opens it. */
 @Composable
-private fun TopHit(
+internal fun TopHit(
     r: SearchResult,
-    viewModel: JellytipSearchViewModel,
+    onOpen: () -> Unit,
 ) {
     val images = LocalImageUrlService.current
     val density = LocalDensity.current
@@ -693,14 +696,12 @@ private fun TopHit(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp)) {
         ItemRowTitle("Top hit")
         Surface(
-            onClick = { openResult(r, viewModel) },
+            onClick = onOpen,
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+            scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(TOP_W),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-            border =
-                ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
-                ),
+            border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(8.dp)),
+            glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
             modifier = Modifier.size(TOP_W, TOP_H),
         ) {
             var failed by remember(image) { mutableStateOf(false) }
@@ -750,7 +751,7 @@ private fun openResult(
         r.kind == "collection" && r.collectionId != null -> nav.navigateTo(Destination.JellytipCollection(r.collectionId, r.title), "search top collection")
         r.source == "library" && r.id != null ->
             nav.navigateTo(Destination.MediaItem(r.id, if (r.kind == "series") BaseItemKind.SERIES else BaseItemKind.MOVIE), "search top library")
-        r.source == "iptv" && r.iptvId != null -> nav.navigateTo(Destination.JellytipIptvDetails(r.iptvId, r.title), "search top iptv")
+        r.source == "iptv" && r.iptvId != null -> nav.navigateTo(JellytipTitleOpen.detailsFor(r.iptvId, r.title, if (r.kind == "film") "movie" else r.kind, r.libraryId, r.sources), "search top iptv")
         r.source == "discover" && r.tmdbId != null ->
             nav.navigateTo(
                 Destination.JellytipDiscover(

@@ -105,6 +105,9 @@ class JellytipJourneysViewModel
         private var entriesJob: Job? = null
         private var journeyId: String? = null
 
+        /** An IPTV film was opened from the path: on return the journey is rebuilt (IPTV watched state rides in it). */
+        private var iptvOpened = false
+
         fun loadGroups() {
             if (groupsJob?.isActive == true) return
             _state.update { it.copy(retrying = it.groupsFailed) }
@@ -135,10 +138,22 @@ class JellytipJourneysViewModel
 
         /** Fresh watched state (on open, and on every resume: the page sits under the player). */
         fun refreshEntries(again: Boolean = false) {
-            val def = (_state.value.result as? JourneyResult.Ok)?.def ?: return
+            var def = (_state.value.result as? JourneyResult.Ok)?.def ?: return
+            val rebuild = iptvOpened
+            iptvOpened = false
             entriesJob?.cancel()
             entriesJob =
                 viewModelScope.launch {
+                    // Back from an IPTV film: its watched / progress state lives in the journey itself, so build it again
+                    if (rebuild) {
+                        journeyId?.let { id ->
+                            service.forget(id)
+                            (service.result(id) as? JourneyResult.Ok)?.let { ok ->
+                                _state.update { it.copy(result = ok) }
+                                def = ok.def
+                            }
+                        }
+                    }
                     // The list (or the Failed line with its focused Retry) stays on screen while this runs
                     fetchEntries(def)
                     // Back from the player: its "stopped" report is sent without waiting, so ask once more a little later
@@ -181,6 +196,13 @@ class JellytipJourneysViewModel
         }
 
         fun play(entry: JourneyEntry) {
+            // On IPTV only: its details page (its own Play / Resume there; an IPTV title the library has opens the library page)
+            entry.vod?.let {
+                lastFilm = entry.n
+                iptvOpened = true
+                navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film")
+                return
+            }
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
             lastFilm = null // back from the player: Play next (which has moved on) takes focus
             JellytipTrailerControl.stop()
@@ -188,6 +210,12 @@ class JellytipJourneysViewModel
         }
 
         fun details(entry: JourneyEntry) {
+            entry.vod?.let {
+                lastFilm = entry.n
+                iptvOpened = true
+                navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film OK")
+                return
+            }
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
             lastFilm = entry.n
             val kind = BaseItemKind.entries.firstOrNull { it.serialName == entry.type } ?: BaseItemKind.MOVIE
@@ -222,8 +250,8 @@ fun JellytipJourneysPage(
             if (back == null || !restore.tryRequestFocus()) first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
-        Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
+        Text("Journeys", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         when {
             g == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 240.dp, tileH = 96.dp, rows = 2, perRow = 3)
             g.isEmpty -> {
@@ -303,7 +331,7 @@ fun JellytipJourneyPage(
         onPauseOrDispose { }
     }
     val focus = remember { FocusRequester() }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = 24.dp, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)) {
         when (val r = state.result) {
             null -> com.github.damontecres.wholphin.jellytip.JellytipSkeletonList(lines = 6)
             JourneyResult.Error -> {
@@ -354,7 +382,7 @@ private fun JourneyView(
             entriesState is JourneyEntriesState.Failed -> retryFocus.tryRequestFocus()
         }
     }
-    Text(Journeys.journeyTitle(d), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
+    Text(Journeys.journeyTitle(d), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
     if (p != null) {
         val pct = if (p.playable > 0) p.watched.toFloat() / p.playable else 0f
         Box(Modifier.width(320.dp).height(6.dp).background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(3.dp))) {

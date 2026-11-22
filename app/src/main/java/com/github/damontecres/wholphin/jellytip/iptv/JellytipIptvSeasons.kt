@@ -376,7 +376,7 @@ fun JellytipLibraryWaysToWatch(
 }
 
 @Composable
-private fun WayTile(
+internal fun WayTile(
     title: String,
     sub: String,
     onClick: () -> Unit,
@@ -385,7 +385,7 @@ private fun WayTile(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        scale = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.scale(),
         colors =
             ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.06f),

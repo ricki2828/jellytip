@@ -4,12 +4,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
 
 /**
  * One layout spec for every Jellytip page (sizing audit, 22-Nov-2026: ~/ai/state/jellytip-tv-design-audit-20261122.md).
@@ -62,9 +64,16 @@ object JellytipLayout {
 fun jellytipTileScale(width: Dp) =
     ClickableSurfaceDefaults.scale(focusedScale = if (width >= JellytipFocus.WIDE_CARD_WIDTH) JellytipFocus.WIDE_SCALE else JellytipFocus.SCALE)
 
-/** The shared 3 dp cream focus border, for Surface tiles. */
+/** The shared 3 dp cream focus border, for Surface tiles. [rest] is the unfocused border (none by default). */
 @Composable
-fun jellytipTileBorder(shape: Shape) = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(3.dp, JellytipFocus.Cream), shape = shape))
+fun jellytipTileBorder(
+    shape: Shape,
+    rest: Border = Border.None,
+) = ClickableSurfaceDefaults.border(border = rest, focusedBorder = Border(BorderStroke(3.dp, JellytipFocus.Cream), shape = shape))
+
+/** The shared soft white glow ([JellytipFocus.glow]) for Surface tiles. */
+@Composable
+fun jellytipTileGlow() = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.45f), 12.dp))
 
 /**
  * For a row that must line up with text above it: give the LazyRow `contentPadding(start = room)` so the first tile's focus

@@ -480,6 +480,11 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.ask.JellytipAskPage(modifier = modifier)
         }
 
+        Destination.JellytipAskChat -> {
+            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
+            com.github.damontecres.wholphin.jellytip.askchat.JellytipAskChatPage(modifier = modifier)
+        }
+
         Destination.JellytipJourneys -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneysPage(modifier = modifier)

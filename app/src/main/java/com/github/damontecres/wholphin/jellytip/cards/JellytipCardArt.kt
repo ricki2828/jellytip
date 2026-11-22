@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -166,7 +167,6 @@ fun JellytipTitledImage(
 ) {
     val service = LocalImageUrlService.current
     val density = LocalDensity.current
-    val sizes = rememberJellytipSizes()
     val widthPx = remember(cardWidth, density) { with(density) { cardWidth.roundToPx() } }
     val heightPx = remember(cardHeight, density) { with(density) { cardHeight.roundToPx() } }
     // Photo-ranked backdrop: wait up to 300 ms for the companion before first paint, then settle on index 0 and upgrade if it arrives late
@@ -197,17 +197,38 @@ fun JellytipTitledImage(
                 JellytipCardArt(null, false, null)
             }
         }
+    // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
+    val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
+    val info = LocalJellytipTileInfo.current?.invoke(item)
+    JellytipTitledArt(art = art, title = item.title, tech = tech, cardWidth = cardWidth, cardHeight = cardHeight, modifier = modifier, info = info)
+}
+
+/**
+ * The drawing half of [JellytipTitledImage], from plain values (no BaseItem): the base image, then the 60% scrim with the
+ * [art]'s logo, or the [title] as text when the art carries none, and the [tech] pills. Source-neutral: library tiles and
+ * IPTV tiles both draw through this. Extract-only: the library path is the same code it was.
+ */
+@Composable
+fun JellytipTitledArt(
+    art: JellytipCardArt,
+    title: String?,
+    tech: List<String>,
+    cardWidth: Dp,
+    cardHeight: Dp,
+    modifier: Modifier = Modifier,
+    /** Continue Watching / Next Up info line ("23 min left"); null = none. A pill bottom-end above the tech pills / progress bar. */
+    info: String? = null,
+) {
+    val sizes = rememberJellytipSizes()
     var baseError by remember(art.baseUrl) { mutableStateOf(false) }
     var logoError by remember(art.logoUrl) { mutableStateOf(false) }
     val showLogo = !art.titledAlready && art.logoUrl != null && !logoError
     val showText = !art.titledAlready && !showLogo
-    // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
-    val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
     Box(modifier = modifier.fillMaxSize().background(Color(0xFF141414))) {
         if (art.baseUrl != null && !baseError) {
             AsyncImage(
                 model = art.baseUrl,
-                contentDescription = item.title,
+                contentDescription = title,
                 contentScale = ContentScale.Crop,
                 onError = {
                     logCoilError(art.baseUrl, it.result)
@@ -256,14 +277,15 @@ fun JellytipTitledImage(
                         .padding(start = pad, end = if (tech.isEmpty()) pad else TECH_INSET, bottom = pad),
             ) {
                 Text(
-                    text = item.title ?: "",
+                    text = title ?: "",
                     color = Color.White,
                     style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 2f), 8f)),
                     fontFamily = JellytipFontFamily,
                     fontWeight = FontWeight.Medium,
                     fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                     lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX) * 1.2f,
-                    maxLines = 2,
+                    // One line when the info pill shares the corner above it
+                    maxLines = if (info != null) 1 else 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -272,6 +294,26 @@ fun JellytipTitledImage(
         }
         if (!showText && tech.isNotEmpty()) {
             TechBadges(tech, Modifier.align(Alignment.BottomEnd).padding(end = TECH_INSET, bottom = TECH_INSET))
+        }
+        if (info != null) {
+            Text(
+                text = info,
+                color = Color.White.copy(alpha = 0.9f),
+                fontFamily = JellytipFontFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.MinText,
+                lineHeight = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = TECH_INSET, bottom = TECH_INSET + 22.dp)
+                        .widthIn(max = cardWidth * 0.9f)
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                        .testTag(JellytipTileTags.INFO),
+            )
         }
     }
 }

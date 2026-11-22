@@ -175,7 +175,7 @@ fun JellytipMePage(
     }
     val p = prefs
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Personalise", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Personalise", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text(
             message ?: "These follow you on every device.",
             color = JellytipPalette.Vanilla.copy(alpha = 0.6f),
@@ -350,7 +350,7 @@ fun JellytipTastePage(
         if (taste == null) failed = true
     }
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Your taste", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Your taste", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         val t = taste
         if (t == null) {
             Text(if (failed) "Not available right now." else "Loading…", color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily)
@@ -456,7 +456,7 @@ fun JellytipHomeEditPage(
         )
     }
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Edit Home", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Edit Home", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text(
             message ?: "Pin keeps a row every day; hide drops it; ↑ ↓ set the order.",
             color = JellytipPalette.Vanilla.copy(alpha = 0.6f),

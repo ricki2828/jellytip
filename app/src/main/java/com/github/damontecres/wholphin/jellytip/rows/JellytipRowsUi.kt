@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.rows
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -129,14 +130,20 @@ fun JellytipServerRowView(
     onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
-    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) {
+    // Set when the retry has failed too: mixed rows then show their IPTV tiles on their own (they never wait on the library forever)
+    var loadFailed by remember(row.id, row.itemIds) { mutableStateOf(false) }
+    // A watched / My list change anywhere: rows whose cached items changed reload IN PLACE (the old items stay until the new ones arrive)
+    val bump by com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.changes
+        .collectAsState()
+    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds, bump) {
         // A failed load keeps the placeholder and retries once; still failing = placeholder stays (no collapse)
         val first = viewModel.rows.items(row)
         if (first != null) {
             value = first
         } else {
             delay(RETRY_MS)
-            viewModel.rows.items(row)?.let { value = it }
+            val second = viewModel.rows.items(row)
+            if (second != null) value = second else loadFailed = true
         }
     }
     val open: (BaseItem) -> Unit =
@@ -157,7 +164,9 @@ fun JellytipServerRowView(
                 viewModel.navigationManager.navigateTo(Destination.Playback(item), "server row Play key")
             }
         }
-    val longClick: (BaseItem) -> Unit = onLongClickItem ?: open
+    // No page menu (Search, My list, list pages ...): hold-OK opens the same library menu Home shows
+    val hostedMenu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    val longClick: (BaseItem) -> Unit = onLongClickItem ?: { hostedMenu.open(it) }
     // "See all" (Collections hub): the row id opens as a hub collection; one index request for all rows
     LaunchedEffect(Unit) { JellytipHubIndex.ensureLoaded() }
     val hubIds by JellytipHubIndex.ids.collectAsState()
@@ -186,7 +195,10 @@ fun JellytipServerRowView(
             else -> StandardOptions
         }
     val loaded = items
+    // The IPTV copies of this row's library titles, for the library hold-OK menu's "Play from IPTV" (nothing is fetched)
+    LaunchedEffect(row.sourcesById) { com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources.putAll(row.sourcesById) }
     Box(modifier.fillMaxWidth()) {
+        com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(hostedMenu)
         when {
             row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
                 Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
@@ -211,6 +223,14 @@ fun JellytipServerRowView(
                 FranchiseRow(row, row.collection!!, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
             }
 
+            row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() && loaded == null && !loadFailed -> {
+                // Mixed rows wait for the FIRST library load (a title in both would flash twice, then lose its IPTV copy); after a failed retry they fall through to the IPTV tiles
+                Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
+                    ItemRowTitle(row.title, subtitle = row.reason)
+                    Spacer(Modifier.height(options.heightDp.dp + 16.dp))
+                }
+            }
+
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
                 MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel, onOpened, seeAll)
@@ -221,7 +241,8 @@ fun JellytipServerRowView(
                 com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
                     title = row.title,
                     subtitle = row.reason,
-                    items = row.iptvItems,
+                    // Two copies of one title (same kind + TMDB id) show once
+                    items = com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.iptvOnly(emptyList(), row.iptvItems),
                     poster = row.isPoster,
                     heightDp = options.heightDp,
                     onFocusTile = { onFocusItem(null, false) },
@@ -471,7 +492,7 @@ private fun FranchiseRow(
         }
     val openIptv: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem) -> Unit = { iptv ->
         JellytipTrailerControl.stop()
-        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(iptv.id, iptv.title), "franchise row OK (iptv)")
+        viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(iptv), "franchise row OK (iptv)")
     }
     val openCollection = {
         JellytipTrailerControl.stop()
@@ -613,6 +634,9 @@ fun JellytipCollectionPage(
 ) {
     val sizes = rememberJellytipSizes()
     val isAdmin by rememberIsJellytipAdmin()
+    // One hold-OK menu host for the page (not one per lazy tile)
+    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
     val state by produceState<CollectionPageState>(CollectionPageState.Loading, tmdbId) {
         value = viewModel.rows.collection(tmdbId)?.let { CollectionPageState.Loaded(it.first, it.second) } ?: CollectionPageState.Failed
     }
@@ -727,7 +751,7 @@ fun JellytipCollectionPage(
                                     onClick = {
                                         viewModel.navigationManager.navigateTo(item.destination(), "collection part OK")
                                     },
-                                    onLongClick = { viewModel.navigationManager.navigateTo(item.destination(), "collection part long-press") },
+                                    onLongClick = { menu.open(item) },
                                     modifier =
                                         first.onFocusChanged {
                                             if (it.isFocused) {
@@ -757,7 +781,7 @@ fun JellytipCollectionPage(
                                         poster = true,
                                         onClick = {
                                             viewModel.navigationManager.navigateTo(
-                                                Destination.JellytipIptvDetails(iptv.id, iptv.title),
+                                                JellytipTitleOpen.detailsFor(iptv),
                                                 "collection part OK (iptv)",
                                             )
                                         },
@@ -879,20 +903,23 @@ private fun MixedRow(
     seeAll: (() -> Unit)? = null,
 ) {
     val tiles =
-        remember(row.id, row.order, library, row.iptvItems) {
-            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse
-                .ordered<MixedTile>(row.order, library, row.iptvItems, { MixedTile.Lib(it) }, { MixedTile.Vod(it) })
+        remember(row.id, row.order, library, row.iptvItems, row.sourcesById) {
+            // One tile per title: an IPTV copy of a library title in this row is left out (the library tile wins)
+            com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
+                .orderedMerged<MixedTile>(row.order, library, row.iptvItems, row.sourcesById, { MixedTile.Lib(it) }, { MixedTile.Vod(it) })
+                .entries
         }
     if (tiles.isEmpty()) return
     val h = options.heightDp.dp
     val w = if (row.isPoster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason)), modifier = focusModifier) {
         ItemRowTitle(row.title, subtitle = row.reason)
+        com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope { rowFocusModifier ->
         androidx.compose.foundation.lazy.LazyRow(
             horizontalArrangement = Arrangement.spacedBy(options.spacing.dp),
             contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(options.spacing.dp, 8.dp),
             modifier =
-                Modifier
+                rowFocusModifier
                     .jellytipRowBleed()
                     .fillMaxWidth()
                     .focusGroup()
@@ -919,13 +946,45 @@ private fun MixedRow(
                             onClick = {
                                 JellytipTrailerControl.stop()
                                 onOpened?.invoke(t.item.id)
-                                viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "my list IPTV OK")
+                                viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "my list IPTV OK")
                             },
                             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
                         )
                 }
             }
             if (seeAll != null) item(key = "see-all") { SeeAllCard(w, h, onClick = seeAll) }
+        }
+        }
+    }
+}
+
+/**
+ * The Top 10 / hub tiles in display order with an IPTV copy of a library title left out. A library tile the server gave no
+ * rank takes its dropped IPTV twin's rank (the server may rank either side).
+ */
+internal fun mergedTrendTiles(
+    row: JellytipServerRow,
+    library: List<BaseItem>,
+): List<TrendTile> {
+    val merged =
+        com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.orderedMerged<TrendTile>(
+            row.order,
+            library,
+            row.iptvItems,
+            row.sourcesById,
+            { TrendTile.Lib(it, row.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
+            { TrendTile.Vod(it, row.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
+        )
+    return merged.entries.map { t ->
+        if (t is TrendTile.Lib && t.rank == 0) {
+            val twinRank =
+                merged
+                    .otherSources(com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.libKey(t.item.id.toString()))
+                    .mapNotNull { s -> row.ranks[JellytipServerRow.rankKey(s.id)]?.takeIf { it > 0 } }
+                    .minOrNull()
+            if (twinRank != null) t.copy(rank = twinRank) else t
+        } else {
+            t
         }
     }
 }
@@ -975,15 +1034,8 @@ private fun TrendingTop10Row(
 ) {
     val isAdmin by rememberIsJellytipAdmin()
     val tiles =
-        remember(row.id, row.order, row.ranks, row.missing, library, row.iptvItems) {
-            val shown =
-                com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<TrendTile>(
-                    row.order,
-                    library,
-                    row.iptvItems,
-                    { TrendTile.Lib(it, row.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
-                    { TrendTile.Vod(it, row.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
-                )
+        remember(row.id, row.order, row.ranks, row.missing, library, row.iptvItems, row.sourcesById) {
+            val shown = mergedTrendTiles(row, library)
             val all = shown + row.missing.map { TrendTile.Missing(it) }
             val (ranked, unranked) = all.partition { it.rank > 0 }
             (ranked.sortedBy { it.rank } + unranked).distinctBy { it.key }
@@ -998,7 +1050,7 @@ private fun TrendingTop10Row(
                 is TrendTile.Lib -> click(t.item)
                 is TrendTile.Vod -> {
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "trending IPTV OK")
+                    viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "trending IPTV OK")
                 }
                 is TrendTile.Missing ->
                     if (isAdmin && t.m.tmdbId > 0) {

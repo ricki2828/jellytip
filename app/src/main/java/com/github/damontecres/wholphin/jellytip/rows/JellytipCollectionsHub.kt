@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.rows
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -286,9 +287,9 @@ internal fun JellytipCollectionsHubContent(
         }
     }
     // Title, chips, section row and grid all carry their own 8 dp: the extra RowPageStart puts them on the 96 dp left line
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
+            Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
             val journeyChip = remember { FocusRequester() }
             // Nothing else to focus while loading / failed / empty: land here rather than on the drawer
@@ -457,7 +458,7 @@ fun JellytipHubCollectionPage(
             JellytipTrailerControl.stop()
             viewModel.navigationManager.navigateTo(item.destination(), "hub collection OK")
         },
-        onOpenVod = { item -> viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "hub collection IPTV OK") },
+        onOpenVod = { item -> viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(item), "hub collection IPTV OK") },
         onOpenMissing = { m ->
             viewModel.navigationManager.navigateTo(
                 Destination.JellytipDiscover(
@@ -490,19 +491,15 @@ internal fun JellytipHubCollectionContent(
     onOpenMissing: (JellytipServerRow.Missing) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // One hold-OK menu host for the grid (not one per lazy tile)
+    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
     val tiles =
         remember(r, library) {
             if (r == null || library == null) {
                 null
             } else {
-                val shown =
-                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<TrendTile>(
-                        r.order,
-                        library.orEmpty(),
-                        r.iptvItems,
-                        { TrendTile.Lib(it, r.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
-                        { TrendTile.Vod(it, r.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
-                    )
+                val shown = mergedTrendTiles(r, library.orEmpty())
                 val all = shown + r.missing.map { TrendTile.Missing(it) }
                 if (r.ranks.isEmpty() && r.missing.none { it.rank > 0 }) all else all.sortedBy { if (it.rank > 0) it.rank else Int.MAX_VALUE }
             }
@@ -540,8 +537,9 @@ internal fun JellytipHubCollectionContent(
                         val m = Modifier.testTag("collection-tile$i").then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                         Box {
                             when (t) {
-                                is TrendTile.Lib ->
-                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = {}, modifier = m)
+                                is TrendTile.Lib -> {
+                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = { menu.open(t.item) }, modifier = m)
+                                }
 
                                 is TrendTile.Vod ->
                                     com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
@@ -570,21 +568,7 @@ internal fun JellytipHubCollectionContent(
                                         ) { MissingTrendArt(t.m) }
                                     }
                             }
-                            if (t is TrendTile.Lib && t.item.data.userData?.played == true) {
-                                Text(
-                                    "✓",
-                                    color = Color.White,
-                                    fontFamily = JellytipFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    modifier =
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                            .background(JellytipPalette.Jelly, RoundedCornerShape(50))
-                                            .padding(horizontal = 5.dp, vertical = 1.dp),
-                                )
-                            }
+                            // (the watched tick is drawn by PosterCard / IptvVodTile themselves, as on every tile)
                             if (ranked && t.rank > 0) {
                                 Text(
                                     t.rank.toString(),
@@ -594,8 +578,9 @@ internal fun JellytipHubCollectionContent(
                                     fontSize = 13.sp,
                                     modifier =
                                         Modifier
-                                            .align(Alignment.TopStart)
-                                            .padding(6.dp)
+                                            // (bottom-left: the heart now sits top-left on every tile; clear of the progress bar)
+                                            .align(Alignment.BottomStart)
+                                            .padding(start = 6.dp, bottom = 9.dp)
                                             .background(JellytipPalette.Vanilla, RoundedCornerShape(4.dp))
                                             .padding(horizontal = 6.dp, vertical = 1.dp),
                                 )

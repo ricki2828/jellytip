@@ -29,6 +29,7 @@ class NavigationManager
     constructor() {
         init {
             val n = instances.incrementAndGet()
+            shared = this
             if (n > 1) {
                 // Never again silently: a second instance means navigations can go to a back stack nobody shows
                 JellytipTrace.log("nav", "ERROR NavigationManager instance #$n (must be a singleton)")
@@ -166,6 +167,11 @@ class NavigationManager
 
         companion object {
             private val instances = java.util.concurrent.atomic.AtomicInteger(0)
+
+            /** Jellytip: the singleton, for menus drawn from plain values (an IPTV tile's Play / Play from library). */
+            @Volatile
+            var shared: NavigationManager? = null
+                private set
         }
 
         private fun log() {

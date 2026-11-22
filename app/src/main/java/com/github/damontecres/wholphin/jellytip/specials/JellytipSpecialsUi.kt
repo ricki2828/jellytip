@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.specials
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -259,7 +262,6 @@ private fun TrailerBreakRow(
     // Never the hero's image: the hero shows heroIndex for this film, so the panel takes the next-best still
     val pick = rememberDistinctStill(item)
     val heroItem = if (hasDistinctStill(item)) item else null
-    val sizes = rememberJellytipSizes()
     val meta =
         remember(item.id) {
             listOfNotNull(
@@ -290,16 +292,47 @@ private fun TrailerBreakRow(
     // As on the web: one framed near-black band, no row title above (the kicker is the title), info on the left and
     // a fixed 16:9 panel on the right (the still until the trailer has a picture, then the trailer, letterboxed).
     // Height fits under the hero text with the row spacing, so nothing is cut at the bottom of the screen.
+    TrailerBreakBand(
+        item = item,
+        kicker = special.title,
+        reason = special.reason,
+        meta = meta,
+        overview = item.data.overview,
+        owner = owner,
+        pick = pick,
+        onOk = onOk,
+        onLongClick = { actions.open(item) },
+        onTileFocused = { onFocusItem(heroItem, false) },
+        modifier = focusModifier.onFocusChanged { active = it.hasFocus },
+    )
+}
+
+/** The Trailer Break band itself (extract-only split of [TrailerBreakRow], audit3 shots: plain values, no view model). */
+@Composable
+internal fun TrailerBreakBand(
+    item: BaseItem,
+    kicker: String,
+    reason: String,
+    meta: String,
+    owner: String,
+    pick: com.github.damontecres.wholphin.jellytip.cache.ImagePick,
+    onOk: () -> Unit,
+    onLongClick: () -> Unit,
+    onTileFocused: () -> Unit,
+    modifier: Modifier = Modifier,
+    overview: String? = null,
+) {
+    val sizes = rememberJellytipSizes()
     val panelHeight = SpecialTokens.BAND_H - BAND_INSET * 2
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
-            focusModifier
-                .onFocusChanged { active = it.hasFocus }
+            modifier
                 // (start on the row line: the same 8 dp inset as a row title, not the 10 dp tile gap)
-                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = SpecialTokens.SPACING)
+                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
                 .fillMaxWidth()
                 .height(SpecialTokens.BAND_H)
+                .testTag("trailer-break-band")
                 .background(BAND_BG, RoundedCornerShape(8.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
                 .padding(BAND_INSET),
@@ -308,17 +341,23 @@ private fun TrailerBreakRow(
             verticalArrangement = Arrangement.spacedBy(5.dp),
             modifier = Modifier.weight(1f).padding(start = sizes.px(20), end = sizes.px(40)),
         ) {
-            Kicker(special.title.ifBlank { "Trailer break" })
-            LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 100)
-            if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
+            Kicker(kicker.ifBlank { "Trailer break" })
+            // Title area: 200-420 dp wide (a logo up to 260 dp), where it was only as wide as the title itself (~170 dp)
+            Box(Modifier.testTag("trailer-break-title").widthIn(min = 200.dp, max = 420.dp)) {
+                LogoOrTitle(item, maxWidthPx = 520, maxHeightPx = 100)
+            }
+            if (reason.isNotBlank()) Caption(reason, alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
+            if (!overview.isNullOrBlank()) {
+                Caption(overview.trim(), alpha = 0.75f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3, modifier = Modifier.widthIn(max = 420.dp).weight(1f, fill = false))  // (takes what height is left: never past the panel)
+            }
         }
         SpecialCard(
             width = panelHeight * 16f / 9f,
             height = panelHeight,
             onClick = onOk,
-            onLongClick = { actions.open(item) },
-            modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(heroItem, false) },
+            onLongClick = onLongClick,
+            modifier = Modifier.onFocusChanged { if (it.isFocused) onTileFocused() },
             corner = 6.dp,
             focusScale = LARGE_CARD_SCALE,
         ) {
@@ -379,7 +418,7 @@ private fun PersonSpotlightRow(
             when (entry) {
                 PersonEntry.Portrait -> actions.navigate(Destination.MediaItem(special.personId, BaseItemKind.PERSON))
                 is PersonEntry.Film -> actions.click(entry.item)
-                is PersonEntry.Vod -> actions.navigate(Destination.JellytipIptvDetails(entry.item.id, entry.item.title))
+                is PersonEntry.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(entry.item))
             }
         },
         onLongClickItem = { _, entry -> if (entry is PersonEntry.Film) actions.open(entry.item) },
@@ -547,7 +586,7 @@ private fun IptvTonightsPick(
     actions: SpecialActions,
 ) {
     val sizes = rememberJellytipSizes()
-    val open = { actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title)) }
+    val open = { actions.navigate(JellytipTitleOpen.detailsFor(iptv)) }
     ItemRow(
         title = special.title,
         items = listOf(iptv),
@@ -689,7 +728,7 @@ private fun DoubleFeatureRow(
         JellytipDoubleBill.pair = JellytipDoubleBill.Bill(film.bill, other.bill)
         when (film) {
             is PairHalf.Lib -> actions.navigate(film.item.destination())
-            is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+            is PairHalf.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(film.item))
         }
     }
     fun half(
@@ -732,7 +771,7 @@ private fun DoubleFeatureRow(
                                     onLongClick()
                                     when (film) {
                                         is PairHalf.Lib -> actions.open(film.item)
-                                        is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+                                        is PairHalf.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(film.item))
                                     }
                                 },
                                 modifier =
@@ -1022,7 +1061,7 @@ private fun ClosetPicksRow(
                     } else if (iptv != null) {
                         // four_favourites: the IPTV copy of a film the library lacks
                         JellytipTrailerControl.stop()
-                        actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title))
+                        actions.navigate(JellytipTitleOpen.detailsFor(iptv))
                     } else if (canRequest && tmdb != null) {
                         actions.navigate(
                             Destination.JellytipDiscover(
@@ -1366,6 +1405,15 @@ internal fun PosterCard(
         } else {
             Caption(item.title ?: "", alpha = 0.9f, maxLines = 4, modifier = Modifier.align(Alignment.Center).padding(8.dp))
         }
+        // The same badges as every tile: watched tick, heart, progress bar (no corner pill on posters)
+        val userData = item.data.userData
+        JellytipTileBadges(
+            played = userData?.played == true,
+            favorite = item.favorite,
+            playPercent = userData?.playedPercentage ?: 0.0,
+            cornerText = null,
+            titled = true,
+        )
     }
 }
 

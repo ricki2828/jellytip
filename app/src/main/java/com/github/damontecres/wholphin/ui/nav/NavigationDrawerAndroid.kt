@@ -30,6 +30,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -94,10 +95,20 @@ fun ModalNavigationDrawer(
     // Jellytip (t5n): whether the page holds focus, so an arrow move from the page can be told from initial-focus
     // search (nothing focused), which must be let in
     var contentHasFocus by remember { mutableStateOf(false) }
+    // Jellytip: the open drawer is drawn OVER the page (no push) with a light scrim on the page. Only what is drawn changes:
+    // the scrim fades with the spring the page offset used; while open or fading the drawer is raised above page and scrim
+    // (zIndex changes draw order only, not composition or focus order); closed, draw order is as before.
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (drawerState.currentValue == DrawerValue.Open) DRAWER_SCRIM_ALPHA else 0f,
+        animationSpec = spring(stiffness = DrawerAnimationStiffness),
+        label = "drawerScrim",
+    )
+    val raised = drawerState.currentValue == DrawerValue.Open || scrimAlpha > 0f
     Box(modifier = modifier) {
         DrawerSheet(
             modifier =
                 Modifier
+                    .zIndex(if (raised) 1f else 0f)
                     .align(Alignment.CenterStart),
             drawerState = drawerState,
             contentHasFocus = { contentHasFocus },
@@ -107,8 +118,20 @@ fun ModalNavigationDrawer(
         Box(Modifier.onFocusChanged { contentHasFocus = it.hasFocus }) {
             content()
         }
+        if (scrimAlpha > 0f) {
+            // Draw-only: no pointer, key or focus handling, so it cannot intercept anything
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .zIndex(0.5f)
+                    .drawBehind { drawRect(color = Color.Black, alpha = scrimAlpha) },
+            )
+        }
     }
 }
+
+/** Black over the page while the drawer is open. */
+private const val DRAWER_SCRIM_ALPHA = 0.35f
 
 @Composable
 private fun DrawerSheet(

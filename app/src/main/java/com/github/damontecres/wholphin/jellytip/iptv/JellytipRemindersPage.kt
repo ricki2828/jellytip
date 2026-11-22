@@ -123,7 +123,7 @@ fun JellytipRemindersPage(
     val zone = ZoneId.systemDefault()
     val gameList = games?.let { RemindersPageLogic.upcoming(it, now) }
     Column(modifier.fillMaxSize().background(JellytipPalette.Night).padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd)) {
-        Text("Reminders", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
+        Text("Reminders", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
         Text(
             message ?: "OK on a reminder removes it.",
             color = JellytipPalette.Vanilla.copy(alpha = 0.6f),

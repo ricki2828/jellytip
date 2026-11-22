@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cards.libRef
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.ui.cards.ItemRow
@@ -51,6 +52,20 @@ data class IptvResume(
     val poster: String?,
     val backdrop: String?,
     val tech: List<String>,
+    /** Optional (absent = today's tile): title logo, text-free backdrop, "the backdrop has no text", TMDB ids (later commits). */
+    val logo: String? = null,
+    val textlessBackdrop: String? = null,
+    val backdropTextless: Boolean = false,
+    /** Movies: `tmdbId`. */
+    val tmdbId: Int? = null,
+    /** Episodes: `seriesTmdbId`. */
+    val seriesTmdbId: Int? = null,
+    /** Films: the library item this title is also in (`libraryId`) and every source (`sources`). Absent = unknown. */
+    val libraryId: String? = null,
+    val sources: List<IptvSource> = emptyList(),
+    /** Episodes: the library series the person can open (`seriesLibraryId`) and its sources (`seriesSources`). */
+    val seriesLibraryId: String? = null,
+    val seriesSources: List<IptvSource> = emptyList(),
 ) {
     /** Tile text: "Series · S1 E2 · Title" for episodes. */
     val label: String
@@ -79,6 +94,21 @@ data class IptvResume(
             providerName = null,
             progress = IptvProgress(pos, dur, false).takeIf { pos > 0 },
             tech = tech,
+        )
+
+    /**
+     * The source-neutral Continue Watching tile: an episode is its SERIES title with the library's "E5" corner pill (what the
+     * library's episode tile shows), a film is its title; the bar comes from [pos] / [dur] like the library's.
+     */
+    fun asTileItem() =
+        asVodItem().copy(
+            title = if (kind == "episode") (seriesTitle ?: title) else title,
+            tmdbId = if (kind == "episode") seriesTmdbId else tmdbId,
+            logo = logo,
+            textlessBackdrop = textlessBackdrop,
+            backdropTextless = backdropTextless,
+            episodeNumber = if (kind == "episode") episode else null,
+            infoLine = com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo.forIptv(this),
         )
 
     /** Where OK goes: the IPTV player at the saved position. */
@@ -168,6 +198,15 @@ object IptvResumeParse {
                 poster = IptvVodParse.image(base, o.str("poster")),
                 backdrop = IptvVodParse.image(base, o.str("backdrop")),
                 tech = o.optJSONArray("tech")?.let { t -> (0 until t.length()).mapNotNull { t.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
+                logo = IptvVodParse.image(base, IptvVodParse.strictString(o, "logo")),
+                textlessBackdrop = IptvVodParse.image(base, IptvVodParse.strictString(o, "textlessBackdrop")),
+                backdropTextless = o.opt("backdropTextless") == true,
+                tmdbId = (o.opt("tmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
+                seriesTmdbId = (o.opt("seriesTmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
+                libraryId = o.str("libraryId"),
+                sources = IptvVodParse.sources(o.optJSONArray("sources")),
+                seriesLibraryId = o.str("seriesLibraryId"),
+                seriesSources = IptvVodParse.sources(o.optJSONArray("seriesSources")),
             ).takeIf { kind != "episode" || it.seriesId != null }
         }
     }
@@ -267,8 +306,13 @@ fun JellytipResumeRow(
     var hideTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var menuFor by remember { androidx.compose.runtime.mutableStateOf<IptvResume?>(null) }
     val shownIptv =
-        remember(iptv, hideTick) {
-            iptv.filter { r ->
+        remember(iptv, hideTick, library) {
+            // One tile per title, library wins: an IPTV film the row also has as a library film (same TMDB id) is left out; an episode
+            // would need its series' TMDB id on the library episode, which the item does not carry, so only films are matched today
+            com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.filterResume(
+                library.filterNotNull().map { it.libRef() },
+                iptv,
+            ).filter { r ->
                 !(r.pos > 0 && IptvContinueRules.nearlyDone(r.pos, r.dur)) &&
                     !IptvContinueRules.stillHidden(r, IptvContinueRules.hiddenAt(ctx, user, r.key))
             }
@@ -317,6 +361,10 @@ fun JellytipResumeRow(
             (lib + shownIptv.map { ResumeTile.Iptv(it) }).sortedByDescending { it.at }
         }
     val h = viewOptions.heightDp.dp
+    // The library tiles of this row draw the same info line the IPTV tiles do ("23 min left", "S2 E5 · 23 min left", "Next: S2 E6")
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.github.damontecres.wholphin.jellytip.cards.LocalJellytipTileInfo provides com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo::forLibrary,
+    ) {
     ItemRow(
         title = title,
         items = tiles,
@@ -352,7 +400,8 @@ fun JellytipResumeRow(
 
                 is ResumeTile.Iptv ->
                     IptvVodTile(
-                        item = t.r.asVodItem().let { v -> v.copy(title = "${IptvContinueRules.rowLabel(t.r)}\n${v.title}") },
+                        // As the library's Continue Watching tile: the title set in the art, "E5" in the corner pill, the bar
+                        item = t.r.asTileItem(),
                         width = h * 16f / 9f,
                         height = h,
                         poster = false,
@@ -365,4 +414,5 @@ fun JellytipResumeRow(
             }
         },
     )
+    }
 }

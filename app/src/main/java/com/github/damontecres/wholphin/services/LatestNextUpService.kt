@@ -21,6 +21,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.SortOrder
@@ -58,7 +59,7 @@ class LatestNextUpService
             val request =
                 GetResumeItemsRequest(
                     userId = userId,
-                    fields = SlimItemFields,
+                    fields = SlimItemFields + ItemFields.PROVIDER_IDS, // PROVIDER_IDS: TMDB id to match a library film with its IPTV copy
                     limit = limit,
                     mediaTypes = listOf(MediaType.VIDEO),
                     excludeItemTypes = if (!includeEpisodes) listOf(BaseItemKind.EPISODE) else null,
@@ -90,7 +91,7 @@ class LatestNextUpService
             val request =
                 GetNextUpRequest(
                     userId = userId,
-                    fields = SlimItemFields,
+                    fields = SlimItemFields + ItemFields.PROVIDER_IDS, // PROVIDER_IDS: TMDB id to match a library film with its IPTV copy
                     imageTypeLimit = 1,
                     parentId = null,
                     limit = limit,

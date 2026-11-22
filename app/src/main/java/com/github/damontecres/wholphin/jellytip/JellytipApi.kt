@@ -29,6 +29,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
 import java.util.UUID
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -629,6 +630,19 @@ class JellytipApi
             }
         }
 
+        /** The library item's resume position (ms); 0 when it has none; null when the GET FAILED (one GET, only on a tap). */
+        suspend fun libraryResumeMsOrNull(id: UUID): Long? =
+            try {
+                api.userLibraryApi.getItem(id).content.userData?.playbackPositionTicks?.div(10_000) ?: 0L
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+
+        /** [libraryResumeMsOrNull] with a failure read as 0. */
+        suspend fun libraryResumeMs(id: UUID): Long = libraryResumeMsOrNull(id) ?: 0L
+
         /** Cache key part for per-person answers: the signed-in Jellyfin user (by token), "" when signed out. */
         fun currentUserKey(): String = api.accessToken?.hashCode()?.toString() ?: ""
 
@@ -689,6 +703,8 @@ class JellytipApi
         suspend fun postJson(
             path: String,
             body: String,
+            /** Per-call timeout (chat search waits up to 12 s for its answer); the default is the usual short companion timeout. */
+            timeoutMs: Long = TIMEOUT_MS,
         ): Pair<Int, String>? =
             withContext(WholphinDispatchers.IO) {
                 try {
@@ -705,7 +721,7 @@ class JellytipApi
                                     header("Authorization", "MediaBrowser Token=\"$it\"")
                                 }
                             }.build()
-                    client.newCall(request).execute().use { it.code to it.body.string() }
+                    client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { it.code to it.body.string() }
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip API %s unavailable", path)
                     null

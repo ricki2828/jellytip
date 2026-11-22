@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,7 +30,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import com.github.damontecres.wholphin.jellytip.jellytipRowBleed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -242,103 +250,62 @@ fun JellytipGameCentrePage(
     }
     // (audit 22-Nov) rows start 8 dp in (ItemRowTitle + row padding), so the page starts 8 dp early and its own texts take that inset:
     // title, section headers and first tile share one left line; rows run to the page edge, text stops at the safe area
-    val inset = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
-    Column(modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(inset, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 26.sp)
-            if (state.base?.degraded == true) {
-                Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, fontSize = 12.sp)
-            }
-        }
-        when {
-            state.base == null && state.failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
-            state.base == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2, modifier = inset)
-            groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
-            else ->
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 48.dp)) {
-                    hero?.let { h ->
-                        item(key = "hero") {
-                            val best = SportFixtures.pickChannel(h, now).channel
-                            val fromStart = best?.takeIf { h.status != "pre" && it.startOver && it.start != null && it.stop != null && !it.dormant }
-                            LiveMatchHero(
-                                f = h,
-                                now = now,
-                                onWatch =
-                                    best?.takeIf { h.status == "in" }?.let { ch ->
-                                        {
-                                            viewModel.lastFid = null
-                                            viewModel.watch(h, ch, false)
-                                        }
-                                    },
-                                onFromStart =
-                                    fromStart?.let { ch ->
-                                        {
-                                            viewModel.lastFid = null
-                                            viewModel.watch(h, ch, true)
-                                        }
-                                    },
-                                onMore = { menu = h },
-                                focusRequester = heroFocus,
-                                index = heroIndex,
-                                count = heroPicks.size,
-                                onCycle = { heroIndex = it },
-                                modifier = inset.padding(vertical = 8.dp),  // (the hero is text and buttons: it stops at the safe area; tile rows run on)
-                                onShown = { JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1) },
-                            )
-                        }
-                    }
-                    groups.forEachIndexed { gi, g ->
-                        item(key = g.id) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ItemRowTitle("${g.label} (${g.items.size})")
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
-                                    itemsIndexed(g.items, key = { _, it -> it.fid }) { i, f ->
-                                        ColourEdgeFixtureTile(
-                                            f,
-                                            now,
-                                            reminder = state.reminderOverride[f.fid] ?: (f.reminderId != null),
-                                            revealed = f.fid in revealed.value,
-                                            onClick = {
-                                                JellytipSportEvents.log(SportEventRules.OPENED, f, SportEventRules.GAMECENTRE, g.id, i + 1)
-                                                open(f)
-                                            },
-                                            onLongClick = {
-                                                viewModel.lastFid = f.fid
-                                                menu = f
-                                            },
-                                            modifier =
-                                                when {
-                                                    f.fid == viewModel.lastFid -> Modifier.focusRequester(restore)
-                                                    gi == 0 && f === g.items.first() -> Modifier.focusRequester(first)
-                                                    else -> Modifier
-                                                }.sportShown(f, SportEventRules.GAMECENTRE, g.id, i + 1),
-                                        )
-                                    }
-                                    // "+N more NBA games today · Show all" ends the Upcoming row (web d47d3b77)
-                                    if (g.id == "big" || (g.id == "yours" && groups.none { it.id == "big" })) {
-                                        items(more, key = { "more:${it.key}" }) { m ->
-                                            MoreTile(m) {
-                                                // Show all removes this tile: keep focus in the row on the game before it
-                                                viewModel.lastFid = g.items.lastOrNull()?.fid
-                                                viewModel.showAll(m.key)
-                                                focusTick++
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (more.isNotEmpty() && groups.none { it.id == "big" || it.id == "yours" }) {
-                        item(key = "more") {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
-                                items(more, key = { "more:${it.key}" }) { m -> MoreTile(m, if (groups.isEmpty()) Modifier.focusRequester(first) else Modifier) { viewModel.showAll(m.key) } }
-                            }
-                        }
+    val heroBest = hero?.let { SportFixtures.pickChannel(it, now).channel }
+    val heroFromStart = hero?.let { h -> heroBest?.takeIf { h.status != "pre" && it.startOver && it.start != null && it.stop != null && !it.dormant } }
+    JellytipGameCentreContent(
+        modifier = modifier,
+        degraded = state.base?.degraded == true,
+        loaded = state.base != null,
+        failed = state.failed,
+        groups = groups,
+        more = more,
+        hero = hero,
+        heroIndex = heroIndex,
+        heroCount = heroPicks.size,
+        now = now,
+        reminderOverride = state.reminderOverride,
+        revealed = revealed.value,
+        lastFid = viewModel.lastFid,
+        heroFocus = heroFocus,
+        restore = restore,
+        first = first,
+        onOpen = { f, section, pos ->
+            JellytipSportEvents.log(SportEventRules.OPENED, f, SportEventRules.GAMECENTRE, section, pos)
+            open(f)
+        },
+        onLongClick = { f ->
+            viewModel.lastFid = f.fid
+            menu = f
+        },
+        onMoreInRow = { m, lastOfGroup ->
+            // Show all removes this tile: keep focus in the row on the game before it
+            viewModel.lastFid = lastOfGroup?.fid
+            viewModel.showAll(m.key)
+            focusTick++
+        },
+        onMoreAlone = { m -> viewModel.showAll(m.key) },
+        onHeroWatch =
+            hero?.let { h ->
+                heroBest?.takeIf { h.status == "in" }?.let { ch ->
+                    {
+                        viewModel.lastFid = null
+                        viewModel.watch(h, ch, false)
                     }
                 }
-        }
-    }
+            },
+        onHeroFromStart =
+            hero?.let { h ->
+                heroFromStart?.let { ch ->
+                    {
+                        viewModel.lastFid = null
+                        viewModel.watch(h, ch, true)
+                    }
+                }
+            },
+        onHeroMore = { menu = hero },
+        onHeroCycle = { heroIndex = it },
+        onHeroShown = { hero?.let { h -> JellytipSportEvents.log(SportEventRules.SHOWN, h, SportEventRules.GAMECENTRE, "hero", heroIndex + 1) } },
+    )
     val teamItems by viewModel.teamReminders.items.collectAsState()
     val teamsAvailable by viewModel.teamReminders.available.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -398,12 +365,165 @@ fun JellytipGameCentrePage(
     }
 }
 
+/**
+ * The page body (extract-only split of [JellytipGameCentrePage], audit3 shots): everything it draws from plain values, no view
+ * model. [listState] is the LazyColumn's, so a test can scroll it.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun tileBorder() =
-    ClickableSurfaceDefaults.border(
-        border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)),
-        focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(8.dp)),
-    )
+internal fun JellytipGameCentreContent(
+    modifier: Modifier,
+    degraded: Boolean,
+    loaded: Boolean,
+    failed: Boolean,
+    groups: List<FxGroup>,
+    more: List<SportFixtures.MoreRow>,
+    hero: FxItem?,
+    heroIndex: Int,
+    heroCount: Int,
+    now: Long,
+    reminderOverride: Map<String, Boolean>,
+    revealed: Set<String>,
+    lastFid: String?,
+    heroFocus: FocusRequester,
+    restore: FocusRequester,
+    first: FocusRequester,
+    onOpen: (FxItem, String, Int) -> Unit,
+    onLongClick: (FxItem) -> Unit,
+    onMoreInRow: (SportFixtures.MoreRow, FxItem?) -> Unit,
+    onMoreAlone: (SportFixtures.MoreRow) -> Unit,
+    onHeroWatch: (() -> Unit)?,
+    onHeroFromStart: (() -> Unit)?,
+    onHeroMore: () -> Unit,
+    onHeroCycle: (Int) -> Unit,
+    onHeroShown: () -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
+) {
+    // (audit3) rows draw through the page padding to both screen edges, like Home's: the same bleed (rail 64 + 8 + the page's 16 start
+    // inset, and the page's 16 dp end) and the same scroll rule, so a focused tile rests on the 96 dp line, not under the rail
+    val bleed =
+        remember {
+            com.github.damontecres.wholphin.jellytip.JellytipRowBleed(
+                com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart,
+                16.dp,
+            )
+        }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val platformBringIntoViewSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val rowBringIntoViewSpec =
+        remember(platformBringIntoViewSpec, density, bleed) {
+            with(density) {
+                com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(
+                    platformBringIntoViewSpec,
+                    (bleed.start + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset).toPx(),
+                    bleed.end.toPx(),
+                )
+            }
+        }
+    // (audit 22-Nov) rows start 8 dp in (ItemRowTitle + row padding), so the page starts 8 dp early and its own texts take that inset:
+    // title, section headers and first tile share one left line; rows run to the page edge, text stops at the safe area
+    val inset = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd)
+    androidx.compose.runtime.CompositionLocalProvider(com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed provides bleed) {
+    Column(modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTop), verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TitleGap)) {
+        Row(inset, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Game Centre", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageTitle)
+            if (degraded) {
+                Text("Some games may be missing right now", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, fontSize = 12.sp)
+            }
+        }
+        when {
+            !loaded && failed -> Text("Couldn't load games. Trying again…", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
+            !loaded -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 320.dp, tileH = 140.dp, rows = 2, perRow = 2, modifier = inset)
+            groups.isEmpty() && more.isEmpty() -> Text("No games in the next few days.", color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA), fontFamily = JellytipFontFamily, modifier = inset)
+            else ->
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    // The list is widened to the screen's edges (so the offscreen layer of the fade does not clip the bleeding rows)
+                    // and padded back by the same amount: items sit exactly where they did
+                    contentPadding = PaddingValues(start = bleed.start, end = bleed.end, bottom = 48.dp),
+                    modifier =
+                        Modifier
+                            .jellytipRowBleed()
+                            // (an offscreen layer only while the fade is drawn: none while the list is at its top)
+                            .graphicsLayer { compositingStrategy = if (listState.canScrollBackward) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
+                            .drawWithContent {
+                                drawContent()
+                                // A row scrolled up under the title fades out over its first 12 dp instead of being cut hard
+                                if (listState.canScrollBackward) {
+                                    val fadePx = 12.dp.toPx()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = fadePx),
+                                        size = Size(size.width, fadePx),
+                                        blendMode = BlendMode.DstIn,
+                                    )
+                                }
+                            },
+                ) {
+                    hero?.let { h ->
+                        item(key = "hero") {
+                            LiveMatchHero(
+                                f = h,
+                                now = now,
+                                onWatch = onHeroWatch,
+                                onFromStart = onHeroFromStart,
+                                onMore = onHeroMore,
+                                focusRequester = heroFocus,
+                                index = heroIndex,
+                                count = heroCount,
+                                onCycle = onHeroCycle,
+                                modifier = inset.padding(vertical = 8.dp),  // (the hero is text and buttons: it stops at the safe area; tile rows run on)
+                                onShown = onHeroShown,
+                            )
+                        }
+                    }
+                    groups.forEachIndexed { gi, g ->
+                        item(key = g.id) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ItemRowTitle("${g.label} (${g.items.size})")
+                                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp), modifier = Modifier.jellytipRowBleed().fillMaxWidth()) {
+                                    itemsIndexed(g.items, key = { _, it -> it.fid }) { i, f ->
+                                        ColourEdgeFixtureTile(
+                                            f,
+                                            now,
+                                            reminder = reminderOverride[f.fid] ?: (f.reminderId != null),
+                                            revealed = f.fid in revealed,
+                                            onClick = { onOpen(f, g.id, i + 1) },
+                                            onLongClick = { onLongClick(f) },
+                                            modifier =
+                                                when {
+                                                    f.fid == lastFid -> Modifier.focusRequester(restore)
+                                                    gi == 0 && f === g.items.first() -> Modifier.focusRequester(first)
+                                                    else -> Modifier
+                                                }.sportShown(f, SportEventRules.GAMECENTRE, g.id, i + 1),
+                                        )
+                                    }
+                                    // "+N more NBA games today · Show all" ends the Upcoming row (web d47d3b77)
+                                    if (g.id == "big" || (g.id == "yours" && groups.none { it.id == "big" })) {
+                                        items(more, key = { "more:${it.key}" }) { m ->
+                                            MoreTile(m) { onMoreInRow(m, g.items.lastOrNull()) }
+                                        }
+                                    }
+                                }
+                                }
+                            }
+                        }
+                    }
+                    if (more.isNotEmpty() && groups.none { it.id == "big" || it.id == "yours" }) {
+                        item(key = "more") {
+                            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = com.github.damontecres.wholphin.jellytip.jellytipRowPadding(8.dp, 8.dp), modifier = Modifier.jellytipRowBleed().fillMaxWidth()) {
+                                    items(more, key = { "more:${it.key}" }) { m -> MoreTile(m, if (groups.isEmpty()) Modifier.focusRequester(first) else Modifier) { onMoreAlone(m) } }
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+    }
+}
 
 @Composable
 private fun tileColors() =
@@ -415,7 +535,7 @@ private fun tileColors() =
     )
 
 @Composable
-private fun MoreTile(
+internal fun MoreTile(
     m: SportFixtures.MoreRow,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -423,9 +543,14 @@ private fun MoreTile(
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
+        scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(220.dp),
         colors = tileColors(),
-        border = tileBorder(),
+        border =
+            com.github.damontecres.wholphin.jellytip.jellytipTileBorder(
+                RoundedCornerShape(8.dp),
+                rest = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp)),
+            ),
+        glow = com.github.damontecres.wholphin.jellytip.jellytipTileGlow(),
         modifier = modifier.size(220.dp, 140.dp),
     ) {
         Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center) {

@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.search
 
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
 import com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle
 import com.github.damontecres.wholphin.jellytip.iptv.IptvChannel
 import com.github.damontecres.wholphin.jellytip.iptv.IptvOnNow
@@ -66,6 +67,10 @@ data class SearchIptv(
     val tmdbId: Int? = null,
     val rating: Double? = null,
     val audio: String? = null,
+    /** The library item this IPTV title is also in (`libraryId`); null = none or unknown. */
+    val libraryId: String? = null,
+    /** Every place the title can be played from (`sources`); empty = unknown. */
+    val sources: List<com.github.damontecres.wholphin.jellytip.iptv.IptvSource> = emptyList(),
 )
 
 /**
@@ -104,6 +109,10 @@ data class SearchResult(
     val total: Int = 0,
     /** A Collections-hub row (TV collections). */
     val hubId: String? = null,
+    /** An IPTV result that is also in the library (`libraryId`, a Jellyfin id). */
+    val libraryId: String? = null,
+    /** `sources` (library first, then IPTV copies); empty = the server sent none. */
+    val sources: List<com.github.damontecres.wholphin.jellytip.iptv.IptvSource> = emptyList(),
 ) {
     val isTitle get() = kind == "film" || kind == "series"
 
@@ -155,19 +164,22 @@ data class SearchAnswer(
     val rankedGroups: List<SearchGroup>
         get() {
             val r = results ?: return emptyList()
-            val media = r.filter { it.isTitle && it.source != "discover" && it.key != top?.key }
+            // One tile per title: the top hit's twin (library or IPTV copy) is not in the row again, and a title in both sources shows once
+            val media = SearchRules.mergeResults(r.filter { it.isTitle && it.source != "discover" && it.key != top?.key }, top)
             val people = r.filter { it.kind == "person" && it.personId != null }
             val collections = r.filter { it.kind == "collection" && (it.collectionId != null || it.hubId != null) }
             val discover = r.filter { it.isTitle && it.source == "discover" && (it.tmdbId ?: 0) > 0 && it.key != top?.key }
-            // Library and IPTV shown separately (plan "D"), each in rank order; an empty one is left out
-            val lib = media.filter { it.source == "library" && it.id != null }
-            val iptv = media.filter { it.source == "iptv" && it.iptvId != null }
+            // ONE row, the server's rank order across both sources (no "In your library" / "On IPTV" split)
+            val shown = media.filter { (it.source == "library" && it.id != null) || (it.source == "iptv" && it.iptvId != null) }
             return listOfNotNull(
-                lib.takeIf { it.isNotEmpty() }?.let { m ->
-                    SearchGroup(type = "results-library", total = m.size, ids = m.mapNotNull { it.id }, order = m.mapNotNull { it.id?.toString()?.replace("-", "") })
-                },
-                iptv.takeIf { it.isNotEmpty() }?.let { m ->
-                    SearchGroup(type = "results-iptv", total = m.size, iptv = m.map { it.toIptv() }, order = m.mapNotNull { it.iptvId })
+                shown.takeIf { it.isNotEmpty() }?.let { m ->
+                    SearchGroup(
+                        type = "results",
+                        total = m.size,
+                        ids = m.filter { it.source == "library" }.mapNotNull { it.id },
+                        iptv = m.filter { it.source == "iptv" }.map { it.toIptv() },
+                        order = m.mapNotNull { if (it.source == "library") it.id?.toString()?.replace("-", "") else it.iptvId },
+                    )
                 },
                 people.takeIf { it.isNotEmpty() }?.let { p ->
                     SearchGroup("people", p.size, people = p.map { SearchPerson(it.personId!!, it.title, it.role ?: "actor", it.imageTag, it.filmCount) })
@@ -199,6 +211,8 @@ fun SearchResult.toIptv() =
         tmdbId = tmdbId,
         rating = rating,
         audio = audio,
+        libraryId = libraryId,
+        sources = sources,
     )
 
 /** A channel whose name matched (`channels`, plan jellytip-search-10x "E"): OK tunes it. */
@@ -450,6 +464,8 @@ object SearchParse {
                 inLibrary = o.optInt("inLibrary", 0),
                 total = o.optInt("total", 0),
                 hubId = o.str("hubId"),
+                libraryId = o.str("libraryId"),
+                sources = com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.sources(o.optJSONArray("sources")),
             )
         // An entry the client can't open is dropped
         val openable =
@@ -484,6 +500,44 @@ object SearchRules {
                 else -> 0
             }
         }
+
+    /** A title result as the merge sees it: library (Jellyfin id) or IPTV; anything else is not mergeable (null). */
+    private fun SearchResult.mergeEntry(): JellytipSourceMerge.Entry<SearchResult>? {
+        val k =
+            when (kind) {
+                "film" -> "movie"
+                "series" -> "series"
+                else -> null
+            }
+        return when {
+            source == "library" && id != null -> JellytipSourceMerge.Entry(this, lib = JellytipSourceMerge.LibRef(id.toString(), k, tmdbId))
+            source == "iptv" && iptvId != null ->
+                JellytipSourceMerge.Entry(this, iptv = JellytipSourceMerge.IptvRef(iptvId, k, tmdbId, libraryId, sources, quality, tech))
+            else -> null
+        }
+    }
+
+    /** True when [a] and [b] are the same title in two sources (or two IPTV copies): merging the pair drops one of them. */
+    fun sameTitle(
+        a: SearchResult,
+        b: SearchResult,
+    ): Boolean {
+        val ea = a.mergeEntry() ?: return false
+        val eb = b.mergeEntry() ?: return false
+        return JellytipSourceMerge.merge(listOf(ea, eb)).entries.size == 1
+    }
+
+    /**
+     * The title results of the ranked list ([media], rank order, top hit already removed by key) without the [top] hit's
+     * twins (the same title in either source). Library <-> IPTV twins inside the row are NOT dropped here: the row's merge does
+     * that against the library items that actually loaded, so a failed library load never hides an IPTV title.
+     */
+    fun mergeResults(
+        media: List<SearchResult>,
+        top: SearchResult? = null,
+    ): List<SearchResult> {
+        return if (top == null) media else media.filterNot { sameTitle(top, it) }
+    }
 
     private val decadeWords = Regex("""\b(?:19|20)?\d0'?s\b""", RegexOption.IGNORE_CASE)
     private val techWords = Regex("""\b(?:4k|uhd|dolby atmos|atmos|dolby vision|dv|hdr10\+?|hdr|imax)\b""", RegexOption.IGNORE_CASE)

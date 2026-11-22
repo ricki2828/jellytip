@@ -48,6 +48,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTitledImage
 import com.github.damontecres.wholphin.jellytip.cards.jellytipTitledCard
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
@@ -169,61 +170,7 @@ fun BannerCard(
                             .align(Alignment.Center),
                 )
             }
-            if (played || cornerText != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(4.dp),
-                ) {
-                    if (played && (playPercent <= 0 || playPercent >= 100)) {
-                        WatchedIcon(Modifier.size(24.dp))
-                    }
-                    if (cornerText != null) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .background(
-                                        AppColors.TransparentBlack50,
-                                        shape = RoundedCornerShape(25),
-                                    ),
-                        ) {
-                            Text(
-                                text = cornerText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(4.dp),
-                            )
-                        }
-                    }
-                }
-            }
-            if (favorite) {
-                Text(
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp),
-                    color = colorResource(android.R.color.holo_red_light),
-                    text = stringResource(R.string.fa_heart),
-                    fontSize = 16.sp,
-                    fontFamily = FontAwesome,
-                )
-            }
-            if (playPercent > 0 && playPercent < 100) {
-                Box(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomStart)
-                            .background(
-                                if (titled) JellytipPalette.Jelly else MaterialTheme.colorScheme.tertiary,
-                            ).clip(RectangleShape)
-                            .height(if (titled) 3.dp else Cards.playedPercentHeight)
-                            .fillMaxWidth((playPercent / 100).toFloat()),
-                )
-            }
+            JellytipTileBadges(played, favorite, playPercent, cornerText, titled)
         }
     }
 }

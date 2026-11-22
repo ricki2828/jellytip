@@ -41,10 +41,12 @@ fun JellytipPersonIptvRow(
         }
         JellytipTrace.log("iptv", "person $personId on IPTV: ${value.size}")
     }
-    if (items.isEmpty()) return
+    // Titles with a library copy are already in the filmography above: only the library-less ones stay
+    val shown = items.filter { com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.libraryIdOf(it.libraryId, it.sources) == null }
+    if (shown.isEmpty()) return
     IptvVodRow(
         title = "On IPTV",
-        items = items,
+        items = shown,
         poster = false,
         heightDp = ROW_HEIGHT_DP,
         onFocusTile = {},
