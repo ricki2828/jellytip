@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  alignCards, applyError, applyResponse, ChatSender, displayChips, dismissNotice, emptyState, isServerChip, MAX_TEXT, MAX_TURNS, noticeSeen, NOTICE_KEY, parseResponse,
+  alignCards, applyError, applyResponse, cardKeyOf, ChatSender, isIptvCard, libraryIds, scopeHint, displayChips, dismissNotice, emptyState, isServerChip, MAX_TEXT, MAX_TURNS, noticeSeen, NOTICE_KEY, parseResponse,
   refineChat, retry, submitText, tapChip, TOO_LONG_TEXT, type ChatBody, type ChatResponse, type ChatState, type Op, type ServerChip,
 } from "../src/lib/askChat.ts";
 import { chipFor } from "../src/lib/askParse.ts";
@@ -414,4 +414,52 @@ test("every terminal path leaves pending null (no request can freeze the screen)
     const end = await settle(mk);
     assert.equal(end.pending, null, name);
   }
+});
+
+// ---------- stage 4: TV (IPTV) cards ----------
+const tv = (iptvId: string, o: Record<string, unknown> = {}) => ({ kind: "film" as const, source: "iptv" as const, iptvId, title: `TV ${iptvId}`, year: 2001, tmdbId: 1, rating: 7.1, poster: "https://image.tmdb.org/t/p/w342/p.jpg", backdrop: null, quality: ["1080p"], tech: ["ATMOS"], catalog: false, certification: "PG", runtime: 98, audio: "atmos", ...o });
+const mixed = () => [card("a"), tv("p1:m:1"), card("b"), tv("p1:s:2", { kind: "series" }), card("c")];
+
+test("mixed response: library and TV cards parse and keep the server's order", () => {
+  const raw = { ...(live.headline.resp as object), rev: 1, sources: ["library", "iptv"], cards: mixed() };
+  const r = parseResponse(raw)!;
+  assert.deepEqual(r.cards.map(cardKeyOf), ["a", "iptv:p1:m:1", "b", "iptv:p1:s:2", "c"]);
+  assert.deepEqual(r.sources, ["library", "iptv"]);
+  const s = applyResponse(submitText(emptyState(), "x")!.state, r);
+  assert.deepEqual(s.cards.map(cardKeyOf), ["a", "iptv:p1:m:1", "b", "iptv:p1:s:2", "c"]);
+  assert.equal(isIptvCard(s.cards[1]), true);
+  assert.equal(isIptvCard(s.cards[0]), false);
+});
+
+test("TV cards need an iptvId; malformed ones are dropped, library cards still need an id", () => {
+  const r = parseResponse({ ...(live.headline.resp as object), cards: [tv("p1:m:1"), { ...tv("x"), iptvId: undefined }, { ...tv("y"), iptvId: "" }, { source: "iptv", kind: "film" }, { kind: "film", source: "library" }, { ...tv("z"), kind: "show" }, card("a")] })!;
+  assert.deepEqual(r.cards.map(cardKeyOf), ["iptv:p1:m:1", "a"]);
+});
+
+test("alignCards: a library id the fetch drops is a gap; TV cards are never dropped and need no Item; order kept", () => {
+  const it = (id: string) => ({ Id: id, Name: id, Type: "Movie" }) as Item;
+  const got = alignCards(mixed() as never, [it("c"), it("a")]);
+  assert.deepEqual(got.map((g) => cardKeyOf(g.card)), ["a", "iptv:p1:m:1", "iptv:p1:s:2", "c"], "b is a gap; the TV cards stay at their places");
+  assert.deepEqual(got.map((g) => !!g.item), [true, false, false, true]);
+  assert.deepEqual(alignCards(mixed() as never, []).map((g) => cardKeyOf(g.card)), ["iptv:p1:m:1", "iptv:p1:s:2"], "nothing fetched: only the TV cards (never a substitute for the library ones)");
+  assert.deepEqual(alignCards([tv("p1:m:9")] as never, []).length, 1);
+});
+
+test("libraryIds: only library ids are fetched from Jellyfin", () => {
+  assert.deepEqual(libraryIds(mixed() as never), ["a", "b", "c"]);
+  assert.deepEqual(libraryIds([tv("p1:m:1")] as never), []);
+});
+
+test("scope hint from the sources actually searched", () => {
+  assert.equal(scopeHint(["library"]), "Library");
+  assert.equal(scopeHint(["library", "iptv"]), "Library + TV");
+  assert.equal(scopeHint(["iptv"]), "TV");
+  assert.equal(scopeHint([]), "");
+  assert.equal(scopeHint(["iptv", "library"]), "Library + TV");
+});
+
+test("a TV-only turn: no library ids, the live fixtures' library-only answers are unchanged", () => {
+  const only = parseResponse({ ...(live.headline.resp as object), cards: [tv("p1:m:1"), tv("p1:m:2")], sources: ["iptv"] })!;
+  assert.deepEqual(libraryIds(only.cards), []);
+  for (const f of Object.values(live)) assert.ok(parseResponse(f.resp)!.cards.every((c) => !isIptvCard(c)), "library-only responses still parse as library cards");
 });

@@ -45,7 +45,8 @@ export interface Turn {
   user: string;
   reply: string;
 }
-export interface ChatCard {
+/** A library title: fetched from Jellyfin by `id`. */
+export interface LibraryCard {
   kind: "film" | "series";
   source: "library";
   id: string;
@@ -55,6 +56,37 @@ export interface ChatCard {
   runtime?: number | null;
   [k: string]: unknown;
 }
+/** A TV (IPTV) title: the /v1/search IPTV entry shape, drawn straight from these fields (never fetched from Jellyfin). */
+export interface IptvChatCard {
+  kind: "film" | "series";
+  source: "iptv";
+  iptvId: string;
+  title?: string;
+  year?: number | null;
+  tmdbId?: number | null;
+  rating?: number | null;
+  poster?: string | null;
+  backdrop?: string | null;
+  quality?: string[];
+  tech?: string[];
+  catalog?: boolean;
+  certification?: string | null;
+  runtime?: number | null;
+  [k: string]: unknown;
+}
+export type ChatCard = LibraryCard | IptvChatCard;
+export const isIptvCard = (c: ChatCard): c is IptvChatCard => c.source === "iptv";
+/** The key that identifies a card in React and in "did the result change". */
+export const cardKeyOf = (c: ChatCard): string => (isIptvCard(c) ? `iptv:${c.iptvId}` : c.id);
+/** Library ids only: those are the ones fetched from Jellyfin. */
+export const libraryIds = (cards: ChatCard[]): string[] => cards.filter((c): c is LibraryCard => c.source === "library").map((c) => c.id);
+/** The scope hint under the reading: "Library", "Library + TV" or "TV", from the sources the server actually searched. */
+export function scopeHint(sources: string[]): string {
+  const lib = sources.includes("library");
+  const tv = sources.includes("iptv");
+  return lib && tv ? "Library + TV" : tv ? "TV" : lib ? "Library" : "";
+}
+
 export interface ChatNote {
   text: string;
   code: string;
@@ -217,7 +249,8 @@ export function parseResponse(d: unknown): ChatResponse | null {
   if (!isObj(d) || d.v !== 1 || typeof d.rev !== "number" || (d.mode !== "llm" && d.mode !== "fallback") || typeof d.reply !== "string") return null;
   const chips = (Array.isArray(d.chips) ? d.chips : []).filter((c): c is ChatChip => isObj(c) && typeof c.id === "string" && typeof c.label === "string" && isObj(c.data) && typeof c.data.t === "string");
   const cards = (Array.isArray(d.cards) ? d.cards : []).filter(
-    (c): c is ChatCard => isObj(c) && typeof c.id === "string" && c.source === "library" && (c.kind === "film" || c.kind === "series"),
+    (c): c is ChatCard =>
+      isObj(c) && (c.kind === "film" || c.kind === "series") && ((c.source === "library" && typeof c.id === "string") || (c.source === "iptv" && typeof c.iptvId === "string" && c.iptvId !== "")),
   );
   const notes: ChatNote[] = (Array.isArray(d.notes) ? d.notes : [])
     .filter((n): n is Record<string, unknown> => isObj(n) && typeof n.text === "string" && typeof n.code === "string")
@@ -302,11 +335,16 @@ export class ChatSender {
 
 export const normId = (id: string) => id.toLowerCase().replace(/-/g, "");
 
-/** The server's cards in the server's order, each with its fetched Item. An id the fetch dropped is a gap (no tile): never a substitute. */
-export function alignCards(cards: ChatCard[], items: Item[]): { card: ChatCard; item: Item }[] {
+/** The server's cards in the server's order. A library card carries its fetched Item; an id the fetch dropped is a gap (no tile), never a
+ *  substitute. A TV card has no Item: it is drawn from its own fields and is never dropped by the fetch. */
+export function alignCards(cards: ChatCard[], items: Item[]): { card: ChatCard; item?: Item }[] {
   const by = new Map(items.map((i) => [normId(i.Id), i]));
-  const out: { card: ChatCard; item: Item }[] = [];
+  const out: { card: ChatCard; item?: Item }[] = [];
   for (const card of cards) {
+    if (isIptvCard(card)) {
+      out.push({ card });
+      continue;
+    }
     const item = by.get(normId(card.id));
     if (item) out.push({ card, item });
   }
