@@ -73,12 +73,22 @@ fun JellytipIptvPlayPage(
     var seekHeld by remember(target) { mutableStateOf(false) }
     // The overlay's scrub bar has focus (Left / Right seek there, Ricki 22-Nov)
     var scrubFocused by remember(target) { mutableStateOf(false) }
+    var lastSeekRefusedAt by remember(target) { androidx.compose.runtime.mutableLongStateOf(0L) }
+    val playingThis = (playState as? IptvPlayState.Playing)?.target == target
+    LaunchedEffect(playingThis) {
+        if (playingThis) {
+            delay(3_000) // (a container's seek index can arrive a moment after READY)
+            val p = playback.player
+            JellytipTrace.player("iptv", "seekable ${target.channelId}: exo=${p?.isCurrentMediaItemSeekable} remux=${playback.isRemux} dur=${playback.durationMs() / 1000} s")
+        }
+    }
     LaunchedEffect(pendingSeek != null) {
         while (pendingSeek != null) {
             delay(100)
             val s = pendingSeek ?: break
             if (SeekRamp.commitDue(s, System.currentTimeMillis(), seekHeld)) {
                 val to = (s.target * 1000).toLong()
+                JellytipTrace.player("iptv", "seek ${target.channelId} ${(to - playback.positionMs()) / 1000} s -> ${to / 1000} s (${if (playback.isRemux) "remux" else "direct"})")
                 playback.seekTo(to)
                 watch.seeked()
                 position = to
@@ -105,6 +115,21 @@ fun JellytipIptvPlayPage(
     DisposableEffect(Unit) { onDispose { playback.recordingMeta = null } }
     val inProgress = recMeta?.state == "recording"
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // A seek key on a stream that can't seek (Ricki 22-Nov, Celebrity Traitors S2E2: Right x15, nothing happened and nothing in
+    // the trace): say so, and trace why, once per burst (presses within 3 s count as one)
+    fun seekRefused() {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastSeekRefusedAt > 3_000) {
+            val p = playback.player
+            JellytipTrace.player(
+                "iptv",
+                "seek ignored ${target.channelId}: not seekable (exo=${p?.isCurrentMediaItemSeekable} remux=${playback.isRemux} dur=${playback.durationMs() / 1000} s)",
+            )
+            android.widget.Toast.makeText(context, "This stream can't be skipped through yet", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        lastSeekRefusedAt = nowMs
+    }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // One owner per page: a copy swap (old page fading out while the new one opens) must not detach the new page
@@ -300,9 +325,11 @@ fun JellytipIptvPlayPage(
                     }
 
                     Key.MediaRewind, Key.MediaFastForward -> {
+                        if (!seekable && e.nativeKeyEvent.repeatCount == 0) seekRefused()
                         if (seekable) {
                             val back = e.key == Key.MediaRewind
                             val to = (playback.positionMs() + if (back) -10_000 else 30_000).coerceAtLeast(0)
+                            JellytipTrace.player("iptv", "seek ${target.channelId} ${if (back) -10 else 30} s -> ${to / 1000} s (media key, ${if (playback.isRemux) "remux" else "direct"})")
                             playback.seekTo(to)
                             watch.seeked()
                             position = to
@@ -342,6 +369,7 @@ fun JellytipIptvPlayPage(
 
                     IptvPlayControls.Hidden.SEEK -> {
                         // Ramped seek (lane B) on t5j's remux-aware position/seek; the progress strip shows, not the buttons
+                        if (!seekable && e.nativeKeyEvent.repeatCount == 0) seekRefused()
                         if (seekable) {
                             seekHeld = true
                             pendingSeek =
