@@ -451,6 +451,8 @@ fun HomePageContent(
     var reminders by remember { mutableStateOf(remindersNow) }
     // Jellytip: his live games (starred teams / followed leagues only) lead the hero carousel (Ricki 22-Nov: a slide, not a takeover row)
     val liveHeroNow = if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.iptv.rememberHomeLiveHero() else null
+    // Blank-text-after-wake hunt (22-Nov): Home leaves a text measurement in the trace on every resume
+    if (specialsPage == "home") com.github.damontecres.wholphin.jellytip.debug.JellytipTextProbeOnResume("home")
     // Jellytip IPTV (8h Block 1): IPTV-only Continue Watching / Next Up rows when Jellyfin has none here (Home only),
     // decided once every row has loaded so the layout doesn't jump
     val iptvResumeCont by com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvResumeStore.continueItems.collectAsState()
