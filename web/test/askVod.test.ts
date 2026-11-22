@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chipsFromData, parseAsk } from "../src/lib/askParse.ts";
-import { TMDB_GENRES, vodKeep, vodNote, vodQueries, VOD_LIMIT, type VodView } from "../src/lib/askVod.ts";
+import { askIptvPicks, TMDB_GENRES, vodKeep, vodNote, vodQueries, VOD_LIMIT, type VodView } from "../src/lib/askVod.ts";
+import { parseVodItems } from "../src/lib/iptvVod.ts";
 
 const NOW = new Date("2026-11-06T00:00:00Z");
 const chips = (q: string) => parseAsk(q, NOW).chips;
@@ -69,4 +70,17 @@ test("notes: what IPTV can't know", () => {
   assert.match(vodNote(chips("for the kids")) ?? "", /without a known age rating/);
   assert.match(vodNote(chips("under 90 minutes")) ?? "", /without a known length/);
   assert.equal(vodNote(chips("funny")), null);
+});
+
+test("Ask's IPTV half: checked again, twins of a library pick left out, capped; genreIds parsed from the list route", () => {
+  const v = (id: string, tmdbId: number | null, genreIds: number[], kind: "movie" | "series" = "movie") => ({ id, kind, tmdbId, year: 2001, genreIds, played: false });
+  const c = chips("not scary");
+  const fetched = [v("p:m:1", 1, [35]), v("p:m:2", 2, [27]), v("p:m:3", 3, [35]), v("p:m:1", 1, [35]), v("p:s:4", 3, [35], "series")];
+  const r = askIptvPicks(fetched, c, new Set(["movie:3"]), 24);
+  // Horror dropped, duplicate id dropped, movie 3 is a library pick (the series with tmdb 3 is a different title)
+  assert.deepEqual(r.shown.map((x) => x.id), ["p:m:1", "p:s:4"]);
+  assert.equal(r.kept, 3);
+  assert.equal(askIptvPicks(fetched, c, new Set(), 1).shown.length, 1);
+  assert.deepEqual(parseVodItems([{ id: "abc:m:1", title: "T", kind: "movie", genreIds: [35, "x", 18] }])[0].genreIds, [35, 18]);
+  assert.equal(parseVodItems([{ id: "abc:m:1", title: "T", kind: "movie" }])[0].genreIds, undefined);
 });

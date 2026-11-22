@@ -121,5 +121,30 @@ export function vodNote(chips: Chip[]): string | null {
   return parts.length ? `${parts.join("; ")}.` : null;
 }
 
+/** What the checks see of a list item (the route already applied ratings / lengths; it doesn't send them back). */
+export function vodViewOf(v: { kind: "movie" | "series"; year?: number | null; genreIds?: number[]; played?: boolean }): VodView {
+  return { kind: v.kind, year: v.year ?? null, genreIds: v.genreIds ?? [], certification: null, runtime: null, played: v.played ?? null };
+}
+
+/**
+ * Ask's IPTV half: the route's answers (already rating / length / genre-filtered), checked again here, minus titles the
+ * library picks already show (same TMDB id), at most `cap` (the library picks come first; IPTV fills after them).
+ */
+export function askIptvPicks<V extends { id: string; kind: "movie" | "series"; tmdbId?: number | null; year?: number | null; genreIds?: number[]; played?: boolean }>(
+  fetched: V[],
+  chips: Chip[],
+  libraryTmdb: ReadonlySet<string>,
+  cap: number,
+): { shown: V[]; kept: number } {
+  const seen = new Set<string>();
+  const kept = fetched.filter((v) => {
+    if (seen.has(v.id) || !vodKeep(vodViewOf(v), chips)) return false;
+    seen.add(v.id);
+    return true;
+  });
+  const shown = kept.filter((v) => v.tmdbId == null || !libraryTmdb.has(`${v.kind}:${v.tmdbId}`)).slice(0, Math.max(0, cap));
+  return { shown, kept: kept.length };
+}
+
 /** Re-exported for the parity vectors. */
 export { KIDS_RATINGS };
