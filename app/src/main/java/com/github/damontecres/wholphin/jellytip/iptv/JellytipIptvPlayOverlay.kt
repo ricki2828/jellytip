@@ -147,6 +147,8 @@ internal fun IptvPlayOverlay(
     /** "Next: S2 E2" when the series has a next episode (t5n 22-Nov); null = no Next button. */
     nextLabel: String? = null,
     onNext: () -> Unit = {},
+    /** "S2 E5 · Episode title" (episodes) or the year (films) under the title: [IptvTitleBlock]; null = none. */
+    subtitle: String? = null,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -156,15 +158,28 @@ internal fun IptvPlayOverlay(
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
                 .padding(start = 48.dp, end = 48.dp, top = 64.dp, bottom = 28.dp),
     ) {
-        Text(
-            text = title,
-            color = JellytipPalette.Vanilla,
-            fontFamily = JellytipFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 22.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                color = JellytipPalette.Vanilla,
+                fontFamily = JellytipFontFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = 22.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    color = JellytipPalette.Vanilla.copy(alpha = 0.72f),
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("iptv-subtitle"),
+                )
+            }
+        }
         val frac = if (durationMs > 0) (shownMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
         val scrubSource = remember { MutableInteractionSource() }
         val scrubF by scrubSource.collectIsFocusedAsState()

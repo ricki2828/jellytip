@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.github.damontecres.wholphin.jellytip.iptv.IptvPlayOverlay
+import com.github.damontecres.wholphin.jellytip.iptv.IptvTitleBlock
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.requestFocus
@@ -49,12 +50,14 @@ class IptvOverlayShotsTest {
         playing: Boolean,
         focus: FocusRequester,
         scrubbable: Boolean = false,
+        titleBlock: Boolean = false,
     ) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             // A stand-in picture behind the overlay
             Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3B4A5A), Color(0xFF1B1E24), Color(0xFF5A3B2E))))) {
                 IptvPlayOverlay(
-                    title = "Black Doves · S01E01 · To Love Then",
+                    title = if (titleBlock) "Black Doves" else "Black Doves · S01E01 · To Love Then",
+                    subtitle = if (titleBlock) IptvTitleBlock.episodeLine(1, 1, "To Love Then") else null,
                     shownMs = if (seeking) 31 * 60_000L else 23 * 60_000L + 14_000,
                     durationMs = 58 * 60_000L,
                     seeking = seeking,
@@ -82,9 +85,10 @@ class IptvOverlayShotsTest {
         playing: Boolean = true,
         scrubbable: Boolean = false,
         scrubFocused: Boolean = false,
+        titleBlock: Boolean = false,
     ) {
         val focus = FocusRequester()
-        compose.setContent { Frame(buttons, seeking, playing, focus, scrubbable) }
+        compose.setContent { Frame(buttons, seeking, playing, focus, scrubbable, titleBlock) }
         compose.waitForIdle()
         if (buttons) compose.runOnIdle { focus.tryRequestFocus() }
         if (scrubFocused) {
@@ -116,4 +120,8 @@ class IptvOverlayShotsTest {
 
     @Test
     fun seekStripOnly() = shot("iptv-overlay-seek-strip", buttons = false, seeking = true)
+
+    /** Parity §5: the show as the title, "S1 E1 · To Love Then" under it (the logo is drawn by the page, not in this shot). */
+    @Test
+    fun overlayTitleBlock() = shot("iptv-overlay-title-block", buttons = true, seeking = false, scrubbable = true, titleBlock = true)
 }

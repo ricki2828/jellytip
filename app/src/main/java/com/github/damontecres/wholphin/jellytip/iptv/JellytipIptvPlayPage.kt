@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -256,12 +258,24 @@ fun JellytipIptvPlayPage(
     var upNextCancelled by remember(target) { mutableStateOf(false) }
     var ended by remember(target) { mutableStateOf(false) }
     var countdown by remember(target) { mutableStateOf<Long?>(null) }
+    // The film / series detail, loaded once: the title block (logo, "S2 E5 · title") and the next episode both read it
+    var detail by remember(target) { mutableStateOf<IptvVodDetail?>(null) }
     LaunchedEffect(target) {
+        val did = target.seriesId ?: target.vodId ?: return@LaunchedEffect
+        detail =
+            try {
+                viewModel.vod.detail(did)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                JellytipTrace.log("player", "detail: lookup failed ${e.javaClass.simpleName}")
+                null
+            }
         val sid = target.seriesId ?: return@LaunchedEffect
         val eid = target.episodeId ?: return@LaunchedEffect
         upNext =
             try {
-                viewModel.vod.detail(sid)?.let { d ->
+                detail?.takeIf { sid == did }?.let { d ->
                     NextEpisodeLoader.afterIptv(viewModel.jellyfin, viewModel.serverRepository.currentUser?.id, d, eid)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -541,8 +555,25 @@ fun JellytipIptvPlayPage(
         }
         if (overlay || controlsVisible) {
             val tp2 = playback.player
+            val block = remember(target, detail) { IptvTitleBlock.of(target.label, detail, target.episodeId) }
+            block.logo?.let { logo ->
+                // The library player's logo, top-left (240x120) inside the 5 % safe area
+                coil3.compose.AsyncImage(
+                    model = logo,
+                    contentDescription = null,
+                    alignment = Alignment.TopStart,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 48.dp, top = 27.dp)
+                            .size(width = 240.dp, height = 120.dp)
+                            .testTag("iptv-logo"),
+                )
+            }
             IptvPlayOverlay(
-                title = target.label,
+                title = block.title,
+                subtitle = block.subtitle,
                 shownMs = pendingSeek?.let { (it.target * 1000).toLong() } ?: position,
                 durationMs = duration,
                 seeking = pendingSeek != null,
