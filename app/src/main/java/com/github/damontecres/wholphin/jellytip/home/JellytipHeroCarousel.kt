@@ -3,7 +3,7 @@ package com.github.damontecres.wholphin.jellytip.home
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.github.damontecres.wholphin.data.model.BaseItem
@@ -15,6 +15,9 @@ import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecial
 import com.github.damontecres.wholphin.jellytip.specials.JellytipSpecialsPage
 import com.github.damontecres.wholphin.ui.main.isContinueWatchingNextUp
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.model.api.BaseItemKind
 
 /*
@@ -218,7 +221,17 @@ fun rememberJellytipHeroMix(
     specials: JellytipSpecialsPage?,
     serverRows: JellytipRowsAnswer?,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
-): List<HeroSlide.Title> =
-    remember(homeRows, specials, serverRows) {
-        JellytipHeroCarousel.mix(homeRows, specials, serverRows, { viewModel.rows.peekItems(it) }, java.time.LocalDate.now().dayOfYear)
+): List<HeroSlide.Title> {
+    // Server-row items load after the rows answer and aren't observable: build now, then again as they land
+    val mix by produceState(emptyList<HeroSlide.Title>(), homeRows, specials, serverRows) {
+        for (wait in listOf(0L, 3_000L, 15_000L)) {
+            delay(wait)
+            val next =
+                withContext(Dispatchers.Default) {
+                    JellytipHeroCarousel.mix(homeRows, specials, serverRows, { viewModel.rows.peekItems(it) }, java.time.LocalDate.now().dayOfYear)
+                }
+            if (next.map { it.key } != value.map { it.key }) value = next
+        }
     }
+    return mix
+}

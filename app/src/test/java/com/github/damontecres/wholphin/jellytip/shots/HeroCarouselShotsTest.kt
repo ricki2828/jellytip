@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -23,7 +24,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -189,6 +192,42 @@ class HeroCarouselShotsTest {
         compose.setContent { Tv { Carousel(2, first) {} } }
         settle()
         compose.onRoot().captureRoboImage(out("hero-sport-slide-noart"))
+    }
+
+    @Test
+    fun focusOnAMiddleButtonSurvivesAShorterSlide() {
+        // A game slide (Watch / From kick-off / More) turns into a film slide (Play / More info) under focus on "More":
+        // focus moves to the last button left, not into nowhere
+        val first = FocusRequester()
+        var game by mutableStateOf(true)
+        compose.setContent {
+            Tv {
+                Box(Modifier.fillMaxSize().background(JellytipPalette.Night)) {
+                    JellytipHeroActionButtons(
+                        buttons =
+                            if (game) {
+                                listOf("▶  Watch" to {}, "From kick-off" to {}, "More" to {})
+                            } else {
+                                listOf("▶  Play" to {}, "More info" to {})
+                            },
+                        soundOn = false,
+                        firstRequester = first,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+            }
+        }
+        compose.runOnIdle { first.requestFocus() }
+        settle()
+        repeat(2) { press(Key.DirectionRight) }
+        compose.onNodeWithText("More").assertIsFocused()
+        game = false
+        settle()
+        compose.onNodeWithText("More info").assertIsFocused()
+        // Same place, other label: focus stays put
+        game = true
+        settle()
+        compose.onNodeWithText("From kick-off").assertIsFocused()
     }
 
     @Test

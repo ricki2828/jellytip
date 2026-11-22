@@ -581,6 +581,9 @@ fun HomePageContent(
     var slideKey by rememberSaveable { mutableStateOf<String?>(null) }
     // A rebuild (game starts / ends, rows refresh) keeps the slide on screen by key
     LaunchedEffect(heroSlides) {
+        // Back on Home: the slides start empty and the games arrive later; don't lose a saved game slide meanwhile
+        if (heroSlides.isEmpty()) return@LaunchedEffect
+        if (liveHeroNow == null && slideKey?.startsWith("m:") == true && heroSlides.none { it.key == slideKey }) return@LaunchedEffect
         slideIndex = com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.keep(heroSlides, slideKey, slideIndex)
         slideKey = heroSlides.getOrNull(slideIndex)?.key
     }
@@ -611,10 +614,13 @@ fun HomePageContent(
             resumed = homeResumed,
             pageFocused = hasFocus,
         )
-    LaunchedEffect(carouselActive, carouselPaused, slideIndex, heroSlides.size) {
+    val latestGoSlide by rememberUpdatedState(goSlide)
+    val latestSlides by rememberUpdatedState(heroSlides)
+    // Restarts on every step and when the buttons take focus (a full slide before anything moves under him)
+    LaunchedEffect(carouselActive, carouselPaused, slideIndex, heroSlides.size, heroButtonsFocused) {
         if (!carouselActive || carouselPaused || heroSlides.size < 2) return@LaunchedEffect
         delay(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.SLIDE_MS)
-        goSlide(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.step(slideIndex, heroSlides.size, 1), "auto")
+        latestGoSlide(com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.step(slideIndex, latestSlides.size, 1), "auto")
     }
     val onHeroEdge: ((Boolean) -> Boolean)? =
         if (carouselActive && heroSlides.size > 1) {
@@ -768,9 +774,12 @@ fun HomePageContent(
         focusedItem?.let { onUpdateBackdrop.invoke(it) }
     }
     Box(modifier = modifier.onFocusChanged { hasFocus = it.hasFocus }) {
-        heroComposable?.invoke(heroItem, hasFocus)
+        // Hero trailers wait while the carousel turns by itself (each would start, then be cut at the next slide); once
+        // he holds the buttons the slide stays and its trailer plays (Sound pauses the carousel)
+        heroComposable?.invoke(heroItem, hasFocus && !(carouselActive && heroSlides.size > 1 && !heroButtonsHeld))
         // Jellytip: a live-game slide of the hero carousel (the film hero skips its still underneath)
         val shownMatch = heroMatch
+        val shownGames = remember { HashSet<String>() }
         DisposableEffect(shownMatch != null) {
             com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = shownMatch != null
             onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = false }
@@ -786,12 +795,15 @@ fun HomePageContent(
                     motion = !com.github.damontecres.wholphin.jellytip.rememberReducedMotion(),
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens.HERO_HEIGHT_FRACTION),
                     onShown = {
-                        com.github.damontecres.wholphin.jellytip.iptv.JellytipSportEvents.log(
-                            com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.SHOWN,
-                            shownMatch,
-                            com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.HOME_HERO,
-                            pos = heroSlides.indexOfFirst { it.key == "m:" + shownMatch.fid }.takeIf { it >= 0 }?.plus(1),
-                        )
+                        // Once per game per visit: the slide comes round every cycle
+                        if (shownGames.add(shownMatch.fid)) {
+                            com.github.damontecres.wholphin.jellytip.iptv.JellytipSportEvents.log(
+                                com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.SHOWN,
+                                shownMatch,
+                                com.github.damontecres.wholphin.jellytip.iptv.SportEventRules.HOME_HERO,
+                                pos = heroSlides.indexOfFirst { it.key == "m:" + shownMatch.fid }.takeIf { it >= 0 }?.plus(1),
+                            )
+                        }
                     },
                 )
             }

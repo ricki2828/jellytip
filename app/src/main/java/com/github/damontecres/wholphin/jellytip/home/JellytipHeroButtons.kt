@@ -9,6 +9,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.Key
@@ -77,7 +83,7 @@ fun heroPlayButtons(
 
 /**
  * The hero button row for any slide (a film's Play / More info, a live game's Watch / From kick-off / More): the first
- * is primary and takes [firstRequester]; Sound last. Keyed by label, so a slide with fewer buttons keeps the focused one.
+ * is primary and takes [firstRequester]; Sound last. Keyed by place, so a slide change keeps focus where it was.
  */
 @Composable
 fun JellytipHeroActionButtons(
@@ -91,6 +97,23 @@ fun JellytipHeroActionButtons(
     pager: String? = null,
 ) {
     val canFocus = Modifier.focusProperties { this.canFocus = focusable }
+    // Which action button holds focus (-1 = none / Sound). Buttons are keyed by position, so a slide with other labels
+    // keeps focus in place; a slide (or rebuild) with fewer buttons moves it to the last one left instead of dropping it
+    var focusedAt by remember { mutableIntStateOf(-1) }
+    // When the last focused action button lost focus: a removed button loses it just before the list shrinks; long ago =
+    // focus went elsewhere on purpose (the rows), and it is never pulled back
+    val lostAt = remember { longArrayOf(0L) }
+    val requesters = remember { ArrayList<FocusRequester>() }
+    while (requesters.size < buttons.size) requesters.add(FocusRequester())
+    fun requesterAt(i: Int) = if (i == 0) firstRequester ?: requesters[0] else requesters[i]
+    LaunchedEffect(buttons.size) {
+        val justLost = android.os.SystemClock.uptimeMillis() - lostAt[0] < REFOCUS_WINDOW_MS
+        if (buttons.isNotEmpty() && focusedAt >= buttons.size && justLost) {
+            val to = buttons.size - 1
+            focusedAt = to
+            requesterAt(to).tryRequestFocus()
+        }
+    }
     val all =
         buttons +
             listOfNotNull(
@@ -101,16 +124,23 @@ fun JellytipHeroActionButtons(
         all.forEachIndexed { i, (label, action) ->
             val first = i == 0
             val last = i == all.lastIndex
-            // Keyed by place for the first (Play / Watch: focus stays on it when a slide changes) and Sound (its label
-            // flips), by label for the rest
-            androidx.compose.runtime.key(if (first) "first" else if (soundOn != null && last) "sound" else label) {
+            val isSound = soundOn != null && i == all.lastIndex
+            // Keyed by place (Sound: its own key, its label flips): a slide change keeps the focused node
+            androidx.compose.runtime.key(if (isSound) "sound" else "b$i") {
                 HeroButton(
                     label,
                     primary = first,
                     onClick = action,
                     modifier =
                         canFocus
-                            .let { m -> if (first) firstRequester?.let { m.focusRequester(it) } ?: m else m }
+                            .let { m -> if (isSound) m else m.focusRequester(requesterAt(i)) }
+                            .onFocusChanged {
+                                if (it.isFocused) {
+                                    focusedAt = if (isSound) -1 else i
+                                } else if (focusedAt == i && !isSound) {
+                                    lostAt[0] = android.os.SystemClock.uptimeMillis()
+                                }
+                            }
                             .onPreviewKeyEvent { e ->
                                 if (onEdge == null || e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 when {
@@ -161,3 +191,5 @@ private fun HeroButton(
         Text(label, fontFamily = JellytipFontFamily, fontSize = 15.sp, fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
     }
 }
+
+private const val REFOCUS_WINDOW_MS = 500L
