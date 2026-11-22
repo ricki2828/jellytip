@@ -255,6 +255,10 @@ sealed class Destination(
     @Serializable
     data object JellytipAsk : Destination(false)
 
+    /** Jellytip: Chat search (web #/ask/chat): talk to it, it turns each turn into chips and picks titles ("Chat" next to Ask on the Ask page). */
+    @Serializable
+    data object JellytipAskChat : Destination(false)
+
     /** Jellytip: Journeys, short ordered film paths (franchise, director, Letterboxd list) ("Start a journey" on Collections). */
     @Serializable
     data object JellytipJourneys : Destination(false)

@@ -689,6 +689,8 @@ class JellytipApi
         suspend fun postJson(
             path: String,
             body: String,
+            /** Per-call timeout (chat search waits up to 12 s for its answer); the default is the usual short companion timeout. */
+            timeoutMs: Long = TIMEOUT_MS,
         ): Pair<Int, String>? =
             withContext(WholphinDispatchers.IO) {
                 try {
@@ -705,7 +707,7 @@ class JellytipApi
                                     header("Authorization", "MediaBrowser Token=\"$it\"")
                                 }
                             }.build()
-                    client.newCall(request).execute().use { it.code to it.body.string() }
+                    client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { it.code to it.body.string() }
                 } catch (e: Exception) {
                     Timber.w(e, "Jellytip API %s unavailable", path)
                     null

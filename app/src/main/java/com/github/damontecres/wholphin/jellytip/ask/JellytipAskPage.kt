@@ -333,6 +333,7 @@ fun JellytipAskPage(
                         },
             )
             AskButton("Ask", primary = true) { viewModel.submit(state.text) }
+            AskButton("Chat", primary = false) { viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipAskChat, "ask -> chat") }
         }
 
         if (!state.hasAsk) {
