@@ -82,6 +82,16 @@ object ChatVoiceText {
         glitchUsed: Boolean,
     ): Boolean = held && !tap && restarts > 0 && !glitchUsed && (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER)
 
+    /**
+     * The tolerated glitch is spent by a glitch and only refilled by a partial / final result (proof the recognizer works). Two glitches
+     * with no result between them fail fast with the real error instead of looping to the restart cap.
+     */
+    fun glitchUsedAfter(
+        used: Boolean,
+        glitch: Boolean,
+        resultArrived: Boolean,
+    ): Boolean = if (resultArrived) false else used || glitch
+
     /** A silent press: nothing was added to what was in the box at press time, so there is nothing new to send (never re-send typed text). */
     fun heardNothing(
         base: String,
@@ -120,7 +130,7 @@ class ChatVoice(
     private var pressBase = ""
     private var partial = ""
     private var restarts = 0
-    private var glitchUsed = false // the one tolerated post-restart ERROR_CLIENT / ERROR_SERVER of this restart
+    private var glitchUsed = false // the tolerated post-restart ERROR_CLIENT / ERROR_SERVER is spent; refilled only by a result
     private var downAt = 0L
 
     private val restartRun = Runnable { if (active && held && !tap) begin() }
@@ -309,7 +319,6 @@ class ChatVoice(
         when (ChatVoiceText.afterEnd(held, tap, restarts)) {
             ChatVoiceText.Next.Restart -> {
                 restarts++
-                glitchUsed = false
                 destroyRecognizer()
                 handler.postDelayed(restartRun, RESTART_DELAY_MS)
             }
@@ -340,6 +349,7 @@ class ChatVoice(
                 if (!valid()) return
                 val p = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() } ?: return
                 partial = p
+                glitchUsed = ChatVoiceText.glitchUsedAfter(glitchUsed, glitch = false, resultArrived = true)
                 onText(ChatVoiceText.join(committed, partial))
             }
 
@@ -347,6 +357,7 @@ class ChatVoice(
                 if (!valid()) return
                 val seg = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() } ?: partial
                 committed = ChatVoiceText.join(committed, seg)
+                glitchUsed = ChatVoiceText.glitchUsedAfter(glitchUsed, glitch = false, resultArrived = true)
                 partial = ""
                 onText(committed)
                 ended()
@@ -356,7 +367,7 @@ class ChatVoice(
                 if (!valid()) return
                 Timber.w("Chat voice: recognizer error $error")
                 val glitch = ChatVoiceText.isGlitchAfterRestart(error, held, tap, restarts, glitchUsed)
-                if (glitch) glitchUsed = true
+                glitchUsed = ChatVoiceText.glitchUsedAfter(glitchUsed, glitch, resultArrived = false)
                 if (glitch || ChatVoiceText.isQuietError(error)) {
                     committed = ChatVoiceText.join(committed, partial) // keep what the cut-off window had heard
                     partial = ""

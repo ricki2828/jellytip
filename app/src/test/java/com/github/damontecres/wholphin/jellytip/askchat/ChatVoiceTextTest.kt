@@ -88,4 +88,22 @@ class ChatVoiceTextTest {
         assertFalse(ChatVoiceText.heardNothing("", "something funny"))
         assertFalse("the same words spoken again are new speech", ChatVoiceText.heardNothing("funny", ChatVoiceText.join("funny", "funny")))
     }
+
+    @Test
+    fun twoGlitchesWithoutAResultFailFast() {
+        val c = SpeechRecognizer.ERROR_CLIENT
+        var used = false
+        // restart 1: first glitch is tolerated
+        assertTrue(ChatVoiceText.isGlitchAfterRestart(c, held = true, tap = false, restarts = 1, glitchUsed = used))
+        used = ChatVoiceText.glitchUsedAfter(used, glitch = true, resultArrived = false)
+        // restart 2, still no result: the second glitch is a real failure
+        assertFalse(ChatVoiceText.isGlitchAfterRestart(c, held = true, tap = false, restarts = 2, glitchUsed = used))
+        // a result proves the recognizer works: the allowance is refilled
+        used = ChatVoiceText.glitchUsedAfter(used, glitch = false, resultArrived = true)
+        assertFalse(used)
+        assertTrue(ChatVoiceText.isGlitchAfterRestart(c, held = true, tap = false, restarts = 3, glitchUsed = used))
+        // no event leaves it as it was
+        assertTrue(ChatVoiceText.glitchUsedAfter(true, glitch = false, resultArrived = false))
+        assertFalse(ChatVoiceText.glitchUsedAfter(false, glitch = false, resultArrived = false))
+    }
 }
