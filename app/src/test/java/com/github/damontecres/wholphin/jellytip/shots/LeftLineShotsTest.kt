@@ -280,8 +280,9 @@ class LeftLineShotsTest {
         after()
     }
 
-    /** The left edge, in dp from the screen edge, of the first node [matcher] finds (layout bounds, graphicsLayer scale not counted). */
-    private fun leftOf(matcher: SemanticsMatcher): Float = compose.onAllNodes(matcher).onFirst().getUnclippedBoundsInRoot().left.value
+    /** The left edge, in dp from the screen edge, of the first node [matcher] finds (layout bounds, graphicsLayer scale not counted;
+     *  the unmerged tree, so a label inside a clickable (a tab) is measured itself, not its padded container). */
+    private fun leftOf(matcher: SemanticsMatcher): Float = compose.onAllNodes(matcher, useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().left.value
 
     /** [what] must start on the left line (96 dp) within half a dp; the measured value goes to the CI log. */
     private fun assertOnLeftLine(
