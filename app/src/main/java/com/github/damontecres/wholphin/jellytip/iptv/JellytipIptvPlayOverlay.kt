@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -173,6 +174,7 @@ internal fun IptvPlayOverlay(
                         .fillMaxWidth()
                         .height(16.dp)
                         .testTag("iptv-scrub")
+                        .focusProperties { down = playFocus } // (2D search from a full-width bar would land on the rightmost button)
                         .onFocusChanged { onScrubFocus(it.isFocused) }
                         .focusable(interactionSource = scrubSource)
                         .then(if (scrubF) Modifier.border(2.dp, JellytipPalette.Vanilla, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp) else Modifier),
@@ -194,11 +196,19 @@ internal fun IptvPlayOverlay(
             }
             Text(IptvPlayControls.left(shownMs, durationMs) ?: "--:--", color = dim, fontFamily = JellytipFontFamily, fontSize = 14.sp)
         }
-        when {
-            buttons && scrubbable && scrubF -> "◀ ▶  Seek  ·  hold to go faster"
-            buttons && !scrubbable && durationMs > 0 -> "This stream can't be skipped through"
-            else -> null
-        }?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 13.sp) }
+        if (buttons) {
+            // One line always reserved while the buttons show, so the bar doesn't jump when it takes focus
+            Text(
+                when {
+                    scrubbable && scrubF -> "◀ ▶  Seek  ·  hold to go faster"
+                    !scrubbable && durationMs > 0 -> "This stream can't be skipped through"
+                    else -> ""
+                },
+                color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
+                fontFamily = JellytipFontFamily,
+                fontSize = 13.sp,
+            )
+        }
         if (buttons) {
             val playSource = remember { MutableInteractionSource() }
             val tracksSource = remember { MutableInteractionSource() }

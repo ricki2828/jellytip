@@ -73,7 +73,6 @@ fun JellytipIptvPlayPage(
     var seekHeld by remember(target) { mutableStateOf(false) }
     // The overlay's scrub bar has focus (Left / Right seek there, Ricki 22-Nov)
     var scrubFocused by remember(target) { mutableStateOf(false) }
-    LaunchedEffect(overlay) { if (!overlay) scrubFocused = false }
     LaunchedEffect(pendingSeek != null) {
         while (pendingSeek != null) {
             delay(100)
@@ -200,6 +199,7 @@ fun JellytipIptvPlayPage(
             androidx.compose.runtime.withFrameNanos { }
             playFocus.tryRequestFocus()
         } else {
+            scrubFocused = false
             swallowOkUp = false
             focus.tryRequestFocus()
         }
