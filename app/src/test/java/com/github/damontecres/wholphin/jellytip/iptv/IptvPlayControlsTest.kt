@@ -49,4 +49,15 @@ class IptvPlayControlsTest {
         assertEquals("Ends 20:50", IptvPlayControls.endsAt(now, 10 * 60_000L, 60 * 60_000L, ZoneId.of("UTC")))
         assertNull(IptvPlayControls.endsAt(now, 0, 0, ZoneId.of("UTC")))
     }
+
+    @Test
+    fun scrubBarSeeksOnlyWhenFocused() {
+        // Ricki 22-Nov: with the overlay up, Left / Right moved between buttons and nothing reached the seek bar
+        assertEquals(true, IptvPlayControls.scrubSeeks(overlay = true, scrubFocused = true, dir = Dir.LEFT))
+        assertEquals(true, IptvPlayControls.scrubSeeks(overlay = true, scrubFocused = true, dir = Dir.RIGHT))
+        assertFalse(IptvPlayControls.scrubSeeks(overlay = true, scrubFocused = true, dir = Dir.OK))
+        assertFalse(IptvPlayControls.scrubSeeks(overlay = true, scrubFocused = true, dir = Dir.UP))
+        assertFalse(IptvPlayControls.scrubSeeks(overlay = true, scrubFocused = false, dir = Dir.RIGHT))
+        assertFalse(IptvPlayControls.scrubSeeks(overlay = false, scrubFocused = true, dir = Dir.RIGHT))
+    }
 }

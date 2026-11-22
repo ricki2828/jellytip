@@ -71,6 +71,8 @@ fun JellytipIptvPlayPage(
     // Ramped seeking (web b662f0bc): a pending target that grows while Left/Right are pressed or held, seeked once settled
     var pendingSeek by remember(target) { mutableStateOf<SeekRamp.State?>(null) }
     var seekHeld by remember(target) { mutableStateOf(false) }
+    // The overlay's scrub bar has focus (Left / Right seek there, Ricki 22-Nov)
+    var scrubFocused by remember(target) { mutableStateOf(false) }
     LaunchedEffect(pendingSeek != null) {
         while (pendingSeek != null) {
             delay(100)
@@ -197,6 +199,7 @@ fun JellytipIptvPlayPage(
             androidx.compose.runtime.withFrameNanos { }
             playFocus.tryRequestFocus()
         } else {
+            scrubFocused = false
             swallowOkUp = false
             focus.tryRequestFocus()
         }
@@ -310,14 +313,6 @@ fun JellytipIptvPlayPage(
 
                     else -> {}
                 }
-                // The overlay's buttons have focus: the D-pad and OK are theirs (Back is the BackHandler)
-                if (overlay) return@onPreviewKeyEvent false
-                // Stream recovery gave up: OK tries again at the same position
-                val failedNow = playState as? IptvPlayState.Failed
-                if (failedNow != null && failedNow.canRetry && isOk) {
-                    if (e.nativeKeyEvent.repeatCount == 0) playback.retry()
-                    return@onPreviewKeyEvent true
-                }
                 val dir =
                     when {
                         isOk -> IptvPlayControls.Dir.OK
@@ -327,6 +322,15 @@ fun JellytipIptvPlayPage(
                         e.key == Key.DirectionRight -> IptvPlayControls.Dir.RIGHT
                         else -> IptvPlayControls.Dir.OTHER
                     }
+                // The overlay's buttons have focus: the D-pad and OK are theirs (Back is the BackHandler); on the scrub bar
+                // Left / Right seek as below
+                if (overlay && !IptvPlayControls.scrubSeeks(overlay, scrubFocused, dir)) return@onPreviewKeyEvent false
+                // Stream recovery gave up: OK tries again at the same position
+                val failedNow = playState as? IptvPlayState.Failed
+                if (failedNow != null && failedNow.canRetry && isOk) {
+                    if (e.nativeKeyEvent.repeatCount == 0) playback.retry()
+                    return@onPreviewKeyEvent true
+                }
                 when (IptvPlayControls.hidden(dir)) {
                     IptvPlayControls.Hidden.SHOW -> {
                         if (e.nativeKeyEvent.repeatCount == 0) {
@@ -425,6 +429,8 @@ fun JellytipIptvPlayPage(
                 onMore = { moreOpen = true },
                 onInteraction = { overlayTick++ },
                 modifier = Modifier.align(Alignment.BottomStart),
+                scrubbable = tp2 != null && (tp2.isCurrentMediaItemSeekable || playback.isRemux) && duration > 0,
+                onScrubFocus = { scrubFocused = it },
             )
         }
     }
