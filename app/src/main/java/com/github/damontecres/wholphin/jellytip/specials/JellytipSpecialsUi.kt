@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.specials
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -1405,7 +1406,7 @@ internal fun PosterCard(
         }
         // The same badges as every tile: watched tick, heart, progress bar (no corner pill on posters)
         val userData = item.data.userData
-        com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges(
+        JellytipTileBadges(
             played = userData?.played == true,
             favorite = item.favorite,
             playPercent = userData?.playedPercentage ?: 0.0,
