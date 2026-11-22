@@ -55,6 +55,21 @@ class TrailerOkSoundTest {
     }
 
     @Test
+    fun aSoundTrailerOutlivesOnlyTheCarouselHold() {
+        val c = JellytipTrailerControl
+        // Carousel hold (he went Down to the row): his trailer with sound stays
+        assertTrue(c.keepHeroTrailer(mine = true, sound = true, mayPlay = c.heroMayPlay(pageFocused = true, resumed = true, specialFocused = false)))
+        // TV Home button / screensaver, the drawer, a video special: it stops
+        assertFalse(c.heroMayPlay(pageFocused = true, resumed = false, specialFocused = false))
+        assertFalse(c.heroMayPlay(pageFocused = false, resumed = true, specialFocused = false))
+        assertFalse(c.heroMayPlay(pageFocused = true, resumed = true, specialFocused = true))
+        assertFalse(c.keepHeroTrailer(mine = true, sound = true, mayPlay = false))
+        // A muted preview, or another item's trailer: not kept
+        assertFalse(c.keepHeroTrailer(mine = true, sound = false, mayPlay = true))
+        assertFalse(c.keepHeroTrailer(mine = false, sound = true, mayPlay = true))
+    }
+
+    @Test
     fun heroTrailerButtonAsksForTheTrailerWithSound() {
         // Nothing playing: the hero is asked to start this slide's trailer with sound
         assertNull(JellytipTrailerControl.heroTrailerRequest)

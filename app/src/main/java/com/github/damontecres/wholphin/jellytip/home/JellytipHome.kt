@@ -231,11 +231,13 @@ fun JellytipHomeHero(
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
     val trailerWanted =
         hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused && !JellytipHeroCarousel.holdAutoplay
-    LaunchedEffect(item?.id, trailerWanted) {
-        // This item's trailer with sound (Trailer button, Sound) outlives only the carousel's autoplay hold; Home hidden,
-        // focus off the page (drawer) or a video special still stop it
+    // Home hidden, focus off the page (drawer) or a video special: the hero trailer stops, whatever else holds
+    val canKeep = JellytipTrailerControl.heroMayPlay(hasFocus, resumed, JellytipTrailerControl.specialVideoFocused)
+    LaunchedEffect(canKeep) { if (!canKeep) JellytipTrailerControl.stopIfOwner(null) }
+    LaunchedEffect(item?.id, trailerWanted, canKeep) {
+        // This item's trailer with sound (Trailer button, Sound) outlives only the carousel's autoplay hold
         val mine = item != null && JellytipTrailerControl.isHeroPlaying && JellytipTrailerControl.itemId == item.id
-        if (mine && JellytipTrailerControl.sound && hasFocus && resumed && !JellytipTrailerControl.specialVideoFocused) return@LaunchedEffect
+        if (JellytipTrailerControl.keepHeroTrailer(mine, JellytipTrailerControl.sound, canKeep)) return@LaunchedEffect
         // A special's video (Trailer Break, Closet Picks) is not the hero's to stop
         JellytipTrailerControl.stopIfOwner(null)
         if (item == null) return@LaunchedEffect

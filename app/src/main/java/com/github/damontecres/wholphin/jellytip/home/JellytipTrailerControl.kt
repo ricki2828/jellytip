@@ -83,6 +83,20 @@ object JellytipTrailerControl {
         return answer
     }
 
+    /** The hero's trailer may play at all: the page has focus (no drawer), Home is resumed, no video special has the player. */
+    fun heroMayPlay(
+        pageFocused: Boolean,
+        resumed: Boolean,
+        specialFocused: Boolean,
+    ): Boolean = pageFocused && resumed && !specialFocused
+
+    /** A playing hero trailer of this item ([mine]) with sound stays when the autoplay rule flips (the carousel's hold). */
+    fun keepHeroTrailer(
+        mine: Boolean,
+        sound: Boolean,
+        mayPlay: Boolean,
+    ): Boolean = mine && sound && mayPlay
+
     /** The hero found a trailer for this item (its Trailer button shows). */
     var heroTrailerFor by mutableStateOf<UUID?>(null)
 
