@@ -64,4 +64,5 @@ fun IptvVodItem.toTileModel(
         playPercent = tilePercent,
         cornerText = tileCornerText(poster),
         poster = poster,
+        info = if (poster) null else infoLine,
     )

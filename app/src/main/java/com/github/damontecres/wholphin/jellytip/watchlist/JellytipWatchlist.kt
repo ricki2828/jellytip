@@ -3,8 +3,11 @@ package com.github.damontecres.wholphin.jellytip.watchlist
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -19,7 +22,14 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
+import com.github.damontecres.wholphin.jellytip.cards.libRef
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvVodViewModel
 import com.github.damontecres.wholphin.ui.HomeItemFields
+import com.github.damontecres.wholphin.ui.cards.ItemRow
+import com.github.damontecres.wholphin.ui.main.HomePageCardContent
+import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.main.HomePageContent
 import com.github.damontecres.wholphin.ui.rememberPosition
@@ -169,23 +179,24 @@ fun JellytipWatchlistPage(
     val state by viewModel.state.collectAsState()
     val iptv by viewModel.iptv.collectAsState()
     val (iptvFilms, iptvShows) = iptv
-    // IPTV favourites (plan "My list") as rows after the library ones, with the IPTV dot on each tile
+    // IPTV favourites (plan "My list") join the library's Films / Shows rows (one tile per title); a kind the library has no row
+    // for gets a row of its own with the same label
+    val baseRows = (state as? WatchlistState.Loaded)?.rows.orEmpty()
+    val merged = remember(baseRows, iptvFilms, iptvShows) { mergeWatchlist(baseRows, iptvFilms, iptvShows) }
     val iptvRows: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? =
-        if (iptvFilms.isEmpty() && iptvShows.isEmpty()) {
+        if (merged.iptvRows.isEmpty()) {
             null
         } else {
             {
-                listOf("Films via IPTV" to iptvFilms, "Shows via IPTV" to iptvShows).forEach { (label, list) ->
-                    if (list.isNotEmpty()) {
-                        item(key = "iptv-$label") {
-                            com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
-                                title = "$label (${list.size})",
-                                items = list,
-                                poster = false,
-                                heightDp = com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions(HomeRowViewOptions()).heightDp,
-                                onFocusTile = {},
-                            )
-                        }
+                merged.iptvRows.forEach { (label, list) ->
+                    item(key = "iptv-$label") {
+                        com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
+                            title = "$label (${list.size})",
+                            items = list,
+                            poster = false,
+                            heightDp = com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions(HomeRowViewOptions()).heightDp,
+                            onFocusTile = {},
+                        )
                     }
                 }
             }
@@ -199,7 +210,8 @@ fun JellytipWatchlistPage(
             val showLogos = preferences.appPreferences.interfacePreferences.showLogos
             JellytipHomeTheme {
                 HomePageContent(
-                    homeRows = s.rows,
+                    homeRows = if (state is WatchlistState.Loaded) merged.rows else s.rows,
+                    iptvAppended = merged.appended,
                     position = position,
                     onFocusPosition = { position = it },
                     onClickItem = { clicked, item ->
@@ -231,4 +243,124 @@ fun JellytipWatchlistPage(
             }
         }
     }
+}
+
+/** The watchlist rows with IPTV favourites folded in (pure, unit tested). */
+internal data class WatchlistMerged(
+    /** The library rows; Films / Shows carry the combined count in their title when IPTV-only titles join them. */
+    val rows: List<HomeRowLoadingState>,
+    /** Row index -> IPTV-only titles drawn after that row's library tiles (no library twin, first of each title). */
+    val appended: Map<Int, List<IptvVodItem>>,
+    /** Kinds with no library row: label ("Films" / "Shows") -> the IPTV titles, drawn as a row of their own. */
+    val iptvRows: List<Pair<String, List<IptvVodItem>>>,
+)
+
+internal fun mergeWatchlist(
+    rows: List<HomeRowLoadingState>,
+    iptvFilms: List<IptvVodItem>,
+    iptvShows: List<IptvVodItem>,
+): WatchlistMerged {
+    val out = rows.toMutableList()
+    val appended = LinkedHashMap<Int, List<IptvVodItem>>()
+    val own = ArrayList<Pair<String, List<IptvVodItem>>>()
+    listOf(Triple(BaseItemKind.MOVIE, "Films", iptvFilms), Triple(BaseItemKind.SERIES, "Shows", iptvShows)).forEach { (kind, label, list) ->
+        if (list.isEmpty()) return@forEach
+        val idx = out.indexOfFirst { r -> r is HomeRowLoadingState.Success && r.items.firstOrNull { it != null }?.type == kind }
+        val row = out.getOrNull(idx) as? HomeRowLoadingState.Success
+        if (row == null) {
+            val only = JellytipSourceMerge.iptvOnly(emptyList(), list)
+            if (only.isNotEmpty()) own += label to only
+        } else {
+            val extra = JellytipSourceMerge.iptvOnly(row.items.filterNotNull().map { it.libRef() }, list)
+            if (extra.isNotEmpty()) {
+                out[idx] = row.copy(title = StringStringProvider("$label (${row.items.size + extra.size})"))
+                appended[idx] = extra
+            }
+        }
+    }
+    return WatchlistMerged(out, appended, own)
+}
+
+private sealed interface WatchlistTile {
+    data class Lib(
+        val item: BaseItem,
+        val index: Int,
+    ) : WatchlistTile
+
+    data class Vod(
+        val item: IptvVodItem,
+    ) : WatchlistTile
+}
+
+/**
+ * A watchlist row of library tiles followed by the IPTV-only titles of the same kind: one row, one tile per title. Library
+ * tiles behave as in the plain row (they drive the hero); IPTV tiles open the title.
+ */
+@Composable
+fun JellytipWatchlistMixedRow(
+    title: String,
+    library: List<BaseItem?>,
+    iptv: List<IptvVodItem>,
+    viewOptions: HomeRowViewOptions,
+    onClickLibrary: (Int, BaseItem) -> Unit,
+    onLongClickLibrary: (Int, BaseItem) -> Unit,
+    onFocusLibrary: (Int) -> Unit,
+    onFocusIptv: () -> Unit,
+    modifier: Modifier,
+    viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+) {
+    val tiles =
+        remember(library, iptv) {
+            library.mapIndexedNotNull { i, item -> item?.let { WatchlistTile.Lib(it, i) } } + iptv.map { WatchlistTile.Vod(it) }
+        }
+    val h = viewOptions.heightDp.dp
+    ItemRow(
+        title = title,
+        items = tiles,
+        onClickItem = { _, t ->
+            when (t) {
+                is WatchlistTile.Lib -> onClickLibrary(t.index, t.item)
+                is WatchlistTile.Vod -> {
+                    JellytipTrailerControl.stop()
+                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "watchlist IPTV OK")
+                }
+            }
+        },
+        onLongClickItem = { _, t ->
+            when (t) {
+                is WatchlistTile.Lib -> onLongClickLibrary(t.index, t.item)
+                is WatchlistTile.Vod -> {
+                    JellytipTrailerControl.stop()
+                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "watchlist IPTV long-press")
+                }
+            }
+        },
+        horizontalPadding = viewOptions.spacing.dp,
+        modifier = modifier,
+        cardContent = { index, t, cardModifier, onClick, onLongClick ->
+            when (t) {
+                is WatchlistTile.Lib ->
+                    HomePageCardContent(
+                        index = index,
+                        item = t.item,
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        viewOptions = viewOptions,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusLibrary(t.index) },
+                    )
+
+                is WatchlistTile.Vod ->
+                    IptvVodTile(
+                        item = t.item,
+                        width = h * 16f / 9f,
+                        height = h,
+                        poster = false,
+                        onClick = onClick,
+                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusIptv() },
+                    )
+
+                null -> androidx.compose.foundation.layout.Box(Modifier)
+            }
+        },
+    )
 }

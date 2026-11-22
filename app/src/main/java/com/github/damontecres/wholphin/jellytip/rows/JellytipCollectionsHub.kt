@@ -495,14 +495,7 @@ internal fun JellytipHubCollectionContent(
             if (r == null || library == null) {
                 null
             } else {
-                val shown =
-                    com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<TrendTile>(
-                        r.order,
-                        library.orEmpty(),
-                        r.iptvItems,
-                        { TrendTile.Lib(it, r.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
-                        { TrendTile.Vod(it, r.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
-                    )
+                val shown = mergedTrendTiles(r, library.orEmpty())
                 val all = shown + r.missing.map { TrendTile.Missing(it) }
                 if (r.ranks.isEmpty() && r.missing.none { it.rank > 0 }) all else all.sortedBy { if (it.rank > 0) it.rank else Int.MAX_VALUE }
             }

@@ -62,19 +62,30 @@ import com.github.damontecres.wholphin.jellytip.cards.JellytipTech
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTileTags
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
+import com.github.damontecres.wholphin.jellytip.home.LocalJellytipHome
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.jellytipRowOptions
 import com.github.damontecres.wholphin.jellytip.iptv.IPTV_CORNER_MARK_TAG
 import com.github.damontecres.wholphin.jellytip.iptv.IptvProgress
 import com.github.damontecres.wholphin.jellytip.iptv.IptvResume
+import com.github.damontecres.wholphin.jellytip.iptv.IptvSource
 import com.github.damontecres.wholphin.jellytip.iptv.IptvTileMenu
 import com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem
 import com.github.damontecres.wholphin.jellytip.iptv.IptvVodRowContent
 import com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile
+import com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvVodViewModel
 import com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow
 import com.github.damontecres.wholphin.jellytip.rows.JellytipServerRowView
+import com.github.damontecres.wholphin.jellytip.search.SearchAnswer
+import com.github.damontecres.wholphin.jellytip.search.SearchResult
 import com.github.damontecres.wholphin.jellytip.specials.PosterCard
+import com.github.damontecres.wholphin.jellytip.watchlist.JellytipWatchlistMixedRow
+import com.github.damontecres.wholphin.jellytip.watchlist.mergeWatchlist
+import com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo
+import com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
+import com.github.damontecres.wholphin.jellytip.cards.LocalJellytipTileInfo
+import com.github.damontecres.wholphin.jellytip.cards.libRef
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
@@ -84,6 +95,8 @@ import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
 import com.github.damontecres.wholphin.ui.main.HomePageCardContent
 import com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth
+import com.github.damontecres.wholphin.ui.util.StringStringProvider
+import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.ui.theme.colors.PurpleThemeColors
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -443,6 +456,7 @@ class SourceNeutralShotsTest {
                 name = t.name,
                 productionYear = t.year,
                 runTimeTicks = minutes(130),
+                providerIds = mapOf("Tmdb" to t.tmdb.toString()),
                 // Heat has a clearlogo (logo over the backdrop); Collateral and Ronin do not (title text set in the art)
                 imageTags = if (t.name == "Heat") mapOf(ImageType.PRIMARY to "poster", ImageType.LOGO to "logo") else mapOf(ImageType.PRIMARY to "poster"),
                 backdropImageTags = listOf("backdrop"),
@@ -461,6 +475,8 @@ class SourceNeutralShotsTest {
         )
     }
 
+    private fun seriesTmdb(name: String) = if (name == "Slow Horses") 95_000 else 95_001
+
     private fun libSeries(
         name: String,
         unplayed: Int,
@@ -473,6 +489,7 @@ class SourceNeutralShotsTest {
                 type = BaseItemKind.SERIES,
                 name = name,
                 productionYear = 2022,
+                providerIds = mapOf("Tmdb" to seriesTmdb(name).toString()),
                 imageTags = mapOf(ImageType.PRIMARY to "poster"),
                 backdropImageTags = listOf("backdrop"),
                 userData =
@@ -557,11 +574,13 @@ class SourceNeutralShotsTest {
     private fun vodSeries(
         name: String,
         unplayedCount: Int? = null,
+        tmdb: Int? = null,
+        libraryId: String? = null,
     ) =
         IptvVodItem(
             id = "vod-series-${name.lowercase()}",
             kind = "series",
-            tmdbId = null,
+            tmdbId = tmdb,
             title = name,
             year = 2022,
             quality = listOf("4k"),
@@ -574,6 +593,7 @@ class SourceNeutralShotsTest {
             tech = listOf("4k"),
             favourite = true,
             unplayedCount = unplayedCount,
+            libraryId = libraryId,
         )
 
     private val wide = jellytipRowOptions(HomeRowViewOptions())
@@ -712,6 +732,8 @@ class SourceNeutralShotsTest {
         tiles: List<CwTile>,
     ) {
         val h = wide.heightDp.dp
+        // As JellytipResumeRow: the library tiles of this row draw the info line too
+        CompositionLocalProvider(LocalJellytipTileInfo provides JellytipContinueInfo::forLibrary) {
         ItemRow<CwTile>(
             title = title,
             items = tiles,
@@ -738,6 +760,40 @@ class SourceNeutralShotsTest {
                 }
             },
         )
+        }
+    }
+
+    /** The info pill's right / bottom distance to its tile's right / bottom edge (it is anchored bottom-end), and its text. */
+    private fun infoInside(tile: DpRect): List<Triple<Float, Float, String>> =
+        compose
+            .onAllNodes(hasTestTag(JellytipTileTags.INFO), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .mapNotNull { n ->
+                val d = ApplicationProvider.getApplicationContext<android.content.Context>().resources.displayMetrics.density
+                val b = n.boundsInRoot
+                val cx = (b.left + b.right) / 2 / d
+                val cy = (b.top + b.bottom) / 2 / d
+                if (cx < tile.left.value || cx > tile.right.value || cy < tile.top.value || cy > tile.bottom.value) return@mapNotNull null
+                Triple(tile.right.value - b.right / d, tile.bottom.value - b.bottom / d, n.config.getOrNull(SemanticsProperties.Text)?.joinToString("|") { it.text }.orEmpty())
+            }
+
+    /** Each (library, IPTV) pair shows ONE info line, at the same offset from the tile's bottom-end corner. */
+    private fun assertInfoMatches(
+        name: String,
+        tiles: List<DpRect>,
+        pairs: List<Pair<Int, Int>>,
+    ) {
+        for ((l, i) in pairs) {
+            val a = infoInside(tiles[l])
+            val b = infoInside(tiles[i])
+            println("shot $name: info line tile $l (library) $a vs tile $i (IPTV) $b")
+            assertEquals("$name: info line count in library tile $l", 1, a.size)
+            assertEquals("$name: info line count in IPTV tile $i", 1, b.size)
+            assertTrue("$name: info text library tile $l blank", a[0].third.isNotBlank())
+            assertTrue("$name: info text IPTV tile $i blank", b[0].third.isNotBlank())
+            assertEquals("$name: info right offset tile $i vs $l", a[0].first, b[0].first, tol)
+            assertEquals("$name: info bottom offset tile $i vs $l", a[0].second, b[0].second, tol)
+        }
     }
 
     @Test
@@ -753,6 +809,7 @@ class SourceNeutralShotsTest {
             assertSameInside(n, "corner pill (episode E5)", tiles, listOf(0 to 1), hasTestTag(JellytipTileTags.PILL))
             assertSomewhere(n, "corner pill", hasTestTag(JellytipTileTags.PILL), 2)
             assertSomewhere(n, "progress bar", hasTestTag(JellytipTileTags.BAR), 4)
+            assertInfoMatches(n, tiles, listOf(0 to 1, 2 to 3))
             assertNoCornerMark(n)
             // The old two-line label under the IPTV tile is gone: no text starts at or just under an IPTV tile's bottom edge
             val ignore = listOf("Continue watching", "Same show")
@@ -857,55 +914,138 @@ class SourceNeutralShotsTest {
         return vm
     }
 
-    // ---- 4. Search results (the page's own rows: JellytipSearchPage.ResultGroup is private and takes a view model) ----
+    // ---- 4. Search results: ONE row, the server's rank order, a title in both sources once ----
+
+    private fun assertNoSourceWording(name: String) {
+        compose.onAllNodes(hasText("On IPTV", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("In your library", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("via IPTV", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        println("shot $name: no 'On IPTV' / 'In your library' / 'via IPTV' text")
+    }
 
     @Test
     fun search() =
-        shot("srcneutral-search") {
-            // JellytipSearchPage is NOT wrapped in JellytipHomeTheme (LocalJellytipHome = false): no HomeStyle here, as on the TV.
-            val lib = listOf(libFilm(ttls[0], 0), libFilm(ttls[1], 2))
-            val vm = vmFor(lib)
+        shot("srcneutral-search", measure = {
+            val n = "srcneutral-search"
+            measureTiles(n)
+            // Heat (library + IPTV via libraryId / sources), Collateral (IPTV first, library second: TMDB ids only), Ronin (IPTV only) = 3 tiles
+            tilesOf(n, 3)
+            assertNoSourceWording(n)
+            assertNoCornerMark(n)
+        }) {
+            // JellytipSearchPage is NOT wrapped in JellytipHomeTheme: no HomeStyle here, as on the TV; ResultGroup provides LocalJellytipHome for the tiles.
+            val libHeat = libFilm(ttls[0], 0)
+            val libCollateral = libFilm(ttls[1], 2)
+            val vodById = ttls.map { vodFilm(it, 0) }.associateBy { it.id }
+            val results =
+                listOf(
+                    SearchResult(kind = "film", source = "library", title = "Heat", tmdbId = 949, id = libHeat.id),
+                    // both sources know the link: libraryId + sources
+                    SearchResult(
+                        kind = "film",
+                        source = "iptv",
+                        title = "Heat",
+                        tmdbId = 949,
+                        iptvId = "vod-heat",
+                        libraryId = libHeat.id.toString(),
+                        sources = listOf(IptvSource("library", libHeat.id.toString()), IptvSource("iptv", "vod-heat", listOf("4k"), copies = 2)),
+                    ),
+                    // an older server: only TMDB ids (the IPTV copy ranks first, the library copy after it)
+                    SearchResult(kind = "film", source = "iptv", title = "Collateral", tmdbId = 1538, iptvId = "vod-collateral"),
+                    SearchResult(kind = "film", source = "library", title = "Collateral", tmdbId = 1538, id = libCollateral.id),
+                    SearchResult(kind = "film", source = "iptv", title = "Ronin", tmdbId = 1000, iptvId = "vod-ronin"),
+                )
+            // The page's own grouping (SearchAnswer.rankedGroups) -> ResultGroup's JellytipServerRow
+            val group = SearchAnswer("heat", "", emptyList(), emptyList(), emptyList(), results = results).rankedGroups.single()
+            assertEquals("results", group.type)
+            val vm = vmFor(listOf(libHeat, libCollateral))
             Column(
                 Modifier.fillMaxSize().padding(start = 24.dp, top = JellytipLayout.PageTop),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Cap("Search results for \"heat collateral\": reconstruction of ResultGroup (results-library via JellytipServerRowView, results-iptv via IptvVodRow's row)")
-                // ResultGroup "results-library": a JellytipServerRow of library ids, onLongClickItem = null, focusModifier = focusGroup
-                JellytipServerRowView(
-                    row =
-                        JellytipServerRow(
-                            id = "search:results-library:1",
-                            source = "search",
-                            family = "search",
-                            title = "In your library",
-                            layout = "standard",
-                            mediaType = "movie",
-                            itemIds = lib.map { it.id },
-                            collection = null,
-                        ),
-                    onFocusItem = { _, _ -> },
-                    onLongClickItem = null,
-                    focusModifier = Modifier.focusGroup(),
-                    viewModel = vm,
-                )
-                // ResultGroup "results-iptv": a JellytipServerRow with iptvItems only -> JellytipServerRowView's IptvVodRow branch
-                IptvRow("On IPTV", listOf(vodFilm(ttls[0], 0), vodFilm(ttls[1], 2)), poster = false, heightDp = wide.heightDp)
+                Cap("Search results for \"heat\": ONE row (ResultGroup \"results\" via JellytipServerRowView): library + IPTV tiles in rank order, a title in both once")
+                CompositionLocalProvider(LocalJellytipHome provides true) {
+                    JellytipServerRowView(
+                        row =
+                            JellytipServerRow(
+                                id = "search:results:1",
+                                source = "search",
+                                family = "search",
+                                title = "Results",
+                                layout = "standard",
+                                mediaType = "movie",
+                                itemIds = group.ids,
+                                collection = null,
+                                iptvItems = group.iptv.map { vodById.getValue(it.id) },
+                                order = group.order,
+                            ),
+                        onFocusItem = { _, _ -> },
+                        onLongClickItem = null,
+                        focusModifier = Modifier.focusGroup(),
+                        viewModel = vm,
+                    )
+                }
             }
         }
 
-    // ---- 5. Watchlist (a reconstruction without the hero: JellytipWatchlistPage = HomePageContent + extraRows, needs Hilt) ----
+    // ---- 5. Watchlist (a reconstruction without the hero: JellytipWatchlistPage = HomePageContent + mergeWatchlist, needs Hilt) ----
 
     @Test
     fun watchlist() =
-        shot("srcneutral-watchlist") {
+        shot("srcneutral-watchlist", measure = {
+            val n = "srcneutral-watchlist"
+            measureTiles(n)
+            // Films: library Heat + Collateral, IPTV Heat (TMDB id only), IPTV Collateral (libraryId), IPTV Ronin -> 3 tiles.
+            // Shows: library Slow Horses, IPTV Slow Horses (TMDB), IPTV Severance -> 2 tiles
+            tilesOf(n, 5)
+            assertNoSourceWording(n)
+            assertNoCornerMark(n)
+            compose.onAllNodes(hasText("Films (3)"), useUnmergedTree = true).assertCountEquals(1)
+            compose.onAllNodes(hasText("Shows (2)"), useUnmergedTree = true).assertCountEquals(1)
+        }) {
+            val libHeat = libFilm(ttls[0], 0, favourite = true)
+            val libCollateral = libFilm(ttls[1], 2, favourite = true)
+            val libSlow = libSeries("Slow Horses", 4)
+            val rows =
+                listOf<HomeRowLoadingState>(
+                    HomeRowLoadingState.Success(StringStringProvider("Films (2)"), listOf(libHeat, libCollateral), HomeRowViewOptions(), showViewMore = false),
+                    HomeRowLoadingState.Success(StringStringProvider("Shows (1)"), listOf(libSlow), HomeRowViewOptions(), showViewMore = false),
+                )
+            val films =
+                listOf(
+                    vodFilm(ttls[0], 0, favourite = true), // TMDB id only
+                    vodFilm(ttls[1], 2, favourite = true).copy(libraryId = libCollateral.id.toString()), // libraryId
+                    vodFilm(ttls[2], 0, favourite = true), // IPTV only
+                )
+            val shows = listOf(vodSeries("Slow Horses", unplayedCount = 4, tmdb = seriesTmdb("Slow Horses")), vodSeries("Severance", tmdb = seriesTmdb("Severance")))
+            val merged = mergeWatchlist(rows, films, shows)
+            val vm = mockk<JellytipIptvVodViewModel>()
+            every { vm.navigationManager } returns mockk<NavigationManager>(relaxed = true)
             HomeStyle {
                 Column(Modifier.fillMaxSize().padding(top = 28.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    // The library rows: HomeRowLoadingState.Success rows with stock HomeRowViewOptions (-> wide titled tiles), all favourites
-                    LibRow("Films (3)", ttls.mapIndexed { i, t -> libFilm(t, i, favourite = true) })
-                    LibRow("Shows (2)", listOf(libSeries("Slow Horses", 4), libSeries("Severance", 0)))
-                    // extraRows: IptvVodRow "Films via IPTV (n)", landscape, jellytipRowOptions heightDp
-                    IptvRow("Films via IPTV (3)", ttls.mapIndexed { i, t -> vodFilm(t, i, favourite = true) }, poster = false, heightDp = wide.heightDp)
-                    Cap("All favourites. Page has no hero here (it needs Hilt); rows are the real ones.")
+                    merged.rows.forEachIndexed { i, r ->
+                        val row = r as HomeRowLoadingState.Success
+                        val extra = merged.appended[i].orEmpty()
+                        if (extra.isEmpty()) {
+                            LibRow(row.title.let { (it as StringStringProvider).str }, row.items.filterNotNull())
+                        } else {
+                            // HomePageContent's Success branch for a row with IPTV-only titles joined
+                            JellytipWatchlistMixedRow(
+                                title = (row.title as StringStringProvider).str,
+                                library = row.items,
+                                iptv = extra,
+                                viewOptions = wide,
+                                onClickLibrary = { _, _ -> },
+                                onLongClickLibrary = { _, _ -> },
+                                onFocusLibrary = {},
+                                onFocusIptv = {},
+                                modifier = Modifier.fillMaxWidth().focusGroup(),
+                                viewModel = vm,
+                            )
+                        }
+                    }
+                    merged.iptvRows.forEach { (label, list) -> IptvRow("$label (${list.size})", list, poster = false, heightDp = wide.heightDp) }
+                    Cap("All favourites. Films (3) / Shows (2) are one row each: library tiles, then the IPTV-only ones. No hero (needs Hilt).")
                 }
             }
         }
@@ -914,42 +1054,101 @@ class SourceNeutralShotsTest {
 
     @Test
     fun mixedRow() =
-        shot("srcneutral-mixed-row") {
+        shot("srcneutral-mixed-row", measure = {
+            val n = "srcneutral-mixed-row"
+            measureTiles(n)
+            // Heat (libraryId + sources), Collateral (IPTV tile first, library tile later: TMDB ids only) and Ronin once each, Thief IPTV-only
+            tilesOf(n, 4)
+            assertNoCornerMark(n)
+            // Heat: one tile with the library's logo art, not two
+            compose.onAllNodes(hasTestTag(JellytipTileTags.BAR), useUnmergedTree = true).assertCountEquals(1) // only Ronin (40%) has a bar
+        }) {
             val libHeat = libFilm(ttls[0], 1)
             val libRonin = libFilm(ttls[2], 2)
-            val lib = listOf(libHeat, libRonin)
+            val libCollateral = libFilm(ttls[1], 0)
+            val lib = listOf(libHeat, libRonin, libCollateral)
             val vm = vmFor(lib)
+            val thief = Ttl("Thief", 1981, 1234)
             val vodCollateral = vodFilm(ttls[1], 0)
-            val vodHeat = vodFilm(ttls[0], 1)
+            val vodHeat = vodFilm(ttls[0], 1).copy(libraryId = libHeat.id.toString(), sources = listOf(IptvSource("library", libHeat.id.toString()), IptvSource("iptv", "vod-heat")))
+            val vodThief = vodFilm(thief, 0)
             HomeStyle {
                 Column(Modifier.fillMaxSize().padding(top = 36.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     JellytipServerRowView(
                         row =
                             JellytipServerRow(
-                                id = "mylist:movie",
+                                // (not the "mylist" family: that one adds a See all card, which is a 5th clickable node)
+                                id = "foryou:movie",
                                 source = "server",
-                                family = "mylist",
-                                title = "My list",
+                                family = "foryou",
+                                title = "For you",
                                 layout = "standard",
                                 mediaType = "movie",
                                 itemIds = lib.map { it.id },
                                 collection = null,
-                                iptvItems = listOf(vodCollateral, vodHeat),
-                                // display order: library Heat, IPTV Collateral, library Ronin, IPTV Heat (the duplicate)
+                                iptvItems = listOf(vodCollateral, vodHeat, vodThief),
+                                // display order: library Heat, IPTV Collateral, library Ronin, IPTV Heat (the duplicate), library Collateral, IPTV Thief
                                 order =
                                     listOf(
                                         libHeat.id.toString().replace("-", ""),
                                         vodCollateral.id,
                                         libRonin.id.toString().replace("-", ""),
                                         vodHeat.id,
+                                        libCollateral.id.toString().replace("-", ""),
+                                        vodThief.id,
                                     ),
+                                sourcesById = mapOf(JellytipSourceMerge.norm(libHeat.id.toString()) to listOf(IptvSource("iptv", "vod-heat", listOf("4k"), copies = 2))),
                             ),
                         onFocusItem = { _, _ -> },
                         onLongClickItem = null,
                         focusModifier = Modifier.focusGroup(),
                         viewModel = vm,
                     )
-                    Cap("One row, 2 library + 2 IPTV tiles: Heat is in both (tile 1 library, tile 4 IPTV).")
+                    Cap("One row of 4 tiles: Heat, Collateral (its IPTV slot), Ronin, Thief. Heat and Collateral are in both sources, shown once.")
+                }
+            }
+        }
+
+    // ---- 6b. Continue Watching: the same film in both sources is one tile ----
+
+    @Test
+    fun continueSameFilm() =
+        shot("srcneutral-continue-same-film", measure = {
+            val n = "srcneutral-continue-same-film"
+            measureTiles(n)
+            // Heat (library 40%) + the IPTV resume of the same film (TMDB id 949) -> the library tile only; Ronin (IPTV only) stays
+            tilesOf(n, 2)
+            assertNoCornerMark(n)
+        }) {
+            fun resume(
+                id: String,
+                title: String,
+                tmdb: Int?,
+            ) = IptvResume(
+                kind = "movie",
+                id = id,
+                seriesId = null,
+                title = title,
+                seriesTitle = null,
+                season = null,
+                episode = null,
+                pos = 3120.0,
+                dur = 7800.0,
+                at = 1_800_000_000L,
+                poster = "https://h/p/$title",
+                backdrop = "https://h/b/$title",
+                tech = listOf("4k"),
+                tmdbId = tmdb,
+            )
+            val libHeat = libFilm(ttls[0], 2, favourite = false)
+            val iptv = listOf(resume("vod-heat", "Heat", 949), resume("vod-ronin", "Ronin", 1000))
+            // JellytipResumeRow's own step: the library row's films filter the IPTV entries
+            val kept = JellytipSourceMerge.filterResume(listOf(libHeat.libRef()), iptv)
+            assertEquals(listOf("vod-ronin"), kept.map { it.id })
+            HomeStyle {
+                Column(Modifier.fillMaxSize().padding(top = 36.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CwRow("Continue watching: same film in both sources", listOf<CwTile>(CwTile.Lib(libHeat)) + kept.map { CwTile.Iptv(it) })
+                    Cap("Heat is in the library and on IPTV (same TMDB id): one tile. Ronin is IPTV only: kept.")
                 }
             }
         }

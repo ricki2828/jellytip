@@ -346,7 +346,7 @@ private fun SearchContent(
                         // Newer server: the top hit, one ranked row of films and shows, then people, collections, not available
                         answer.top?.let { top -> item(key = "${answer.q}:top") { TopHit(top) { openResult(top, viewModel) } } }
                         val ranked = answer.rankedGroups
-                        val libraryRows = ranked.takeWhile { it.type == "results-library" }
+                        val libraryRows = ranked.takeWhile { it.type == "results" }
                         libraryRows.forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
                         if (!answer.liveFirst) liveRows()
                         ranked.drop(libraryRows.size).forEach { g -> item(key = "${answer.q}:r:${g.type}") { ResultGroup(answer.q, g, viewModel) } }
@@ -407,8 +407,6 @@ private fun groupTitle(g: SearchGroup): String {
             "collections" -> "Collections"
             "iptv" -> "On your IPTV"
             "results" -> "Results"
-            "results-library" -> "In your library"
-            "results-iptv" -> "On IPTV"
             "discover" -> "Not in the library"
             "lists" -> "Letterboxd lists"
             else -> g.type
@@ -452,8 +450,8 @@ private fun ResultGroup(
 
         "people" -> PeopleRow(g, viewModel)
 
-        "results", "results-library", "results-iptv" -> {
-            // Films and shows in rank order (library and IPTV in separate rows; IPTV tiles carry the quality cue)
+        "results" -> {
+            // Films and shows in the server's rank order, library and IPTV tiles in ONE row (a title in both shows once)
             val row =
                 remember(q, g.ids, g.iptv, g.order) {
                     JellytipServerRow(
@@ -650,6 +648,8 @@ private fun SearchIptv.toVodItem() =
         progress = null,
         tech = tech,
         audio = audio,
+        libraryId = libraryId,
+        sources = sources,
     )
 
 /** The best hit as a wide card: its art, title, facts (kind · year · seasons · rating · where), OK opens it. */

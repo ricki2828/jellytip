@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -198,7 +199,8 @@ fun JellytipTitledImage(
         }
     // Premium formats (4K/DV/HDR, ATMOS/DTS:X) from what the companion's payloads already carried; no request here
     val tech = JellytipTech.tileBadges(JellytipTech.of(item.id, item.data.seriesId?.takeIf { item.type == BaseItemKind.EPISODE }))
-    JellytipTitledArt(art = art, title = item.title, tech = tech, cardWidth = cardWidth, cardHeight = cardHeight, modifier = modifier)
+    val info = LocalJellytipTileInfo.current?.invoke(item)
+    JellytipTitledArt(art = art, title = item.title, tech = tech, cardWidth = cardWidth, cardHeight = cardHeight, modifier = modifier, info = info)
 }
 
 /**
@@ -214,6 +216,8 @@ fun JellytipTitledArt(
     cardWidth: Dp,
     cardHeight: Dp,
     modifier: Modifier = Modifier,
+    /** Continue Watching / Next Up info line ("23 min left"); null = none. A pill bottom-end above the tech pills / progress bar. */
+    info: String? = null,
 ) {
     val sizes = rememberJellytipSizes()
     var baseError by remember(art.baseUrl) { mutableStateOf(false) }
@@ -289,6 +293,26 @@ fun JellytipTitledArt(
         }
         if (!showText && tech.isNotEmpty()) {
             TechBadges(tech, Modifier.align(Alignment.BottomEnd).padding(end = TECH_INSET, bottom = TECH_INSET))
+        }
+        if (info != null) {
+            Text(
+                text = info,
+                color = Color.White.copy(alpha = 0.9f),
+                fontFamily = JellytipFontFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.MinText,
+                lineHeight = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = TECH_INSET, bottom = TECH_INSET + 22.dp)
+                        .widthIn(max = cardWidth * 0.6f)
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                        .testTag(JellytipTileTags.INFO),
+            )
         }
     }
 }

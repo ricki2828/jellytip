@@ -53,6 +53,7 @@ object JellytipTileTags {
     const val HEART = "jt-tile-heart"
     const val BAR = "jt-tile-progress"
     const val PILL = "jt-tile-corner-pill"
+    const val INFO = "jt-tile-info"
 }
 
 /**
@@ -72,6 +73,8 @@ data class JellytipTileModel(
     val cornerText: String? = null,
     /** 2:3 poster tile (the art is a poster that carries its own title) instead of the 16:9 titled tile. */
     val poster: Boolean = false,
+    /** Continue Watching / Next Up info line ("S2 E5 · 23 min left"); null = none. Landscape only. */
+    val info: String? = null,
 )
 
 /**
@@ -199,7 +202,7 @@ fun JellytipTile(
         glow = JellytipFocus.glow(),
     ) {
         Box(Modifier.fillMaxSize()) {
-            JellytipTitledArt(art = model.art, title = model.title, tech = model.tech, cardWidth = width, cardHeight = height)
+            JellytipTitledArt(art = model.art, title = model.title, tech = model.tech, cardWidth = width, cardHeight = height, info = model.info)
             JellytipTileBadges(model.played, model.favorite, model.playPercent, model.cornerText, titled = true)
         }
     }

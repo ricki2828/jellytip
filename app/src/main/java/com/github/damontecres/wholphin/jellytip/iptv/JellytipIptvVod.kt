@@ -59,6 +59,8 @@ data class IptvVodItem(
     val sources: List<IptvSource> = emptyList(),
     /** Continue Watching episodes: the episode number, drawn as the library's "E5" corner pill; null = not an episode tile. */
     val episodeNumber: Int? = null,
+    /** Continue Watching / Next Up info line (set by [IptvResume.asTileItem]); null = none. */
+    val infoLine: String? = null,
 ) {
     /** "ATMOS" / "5.1" / "7.1"; nothing for stereo or unknown. */
     val audioLabel: String?

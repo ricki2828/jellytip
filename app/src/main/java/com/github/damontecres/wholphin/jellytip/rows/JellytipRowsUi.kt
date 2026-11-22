@@ -129,6 +129,8 @@ fun JellytipServerRowView(
     onOpened: ((String) -> Unit)? = null,
     viewModel: JellytipHomeViewModel = hiltViewModel(),
 ) {
+    // Set when the retry has failed too: mixed rows then show their IPTV tiles on their own (they never wait on the library forever)
+    var loadFailed by remember(row.id, row.itemIds) { mutableStateOf(false) }
     val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) {
         // A failed load keeps the placeholder and retries once; still failing = placeholder stays (no collapse)
         val first = viewModel.rows.items(row)
@@ -136,7 +138,8 @@ fun JellytipServerRowView(
             value = first
         } else {
             delay(RETRY_MS)
-            viewModel.rows.items(row)?.let { value = it }
+            val second = viewModel.rows.items(row)
+            if (second != null) value = second else loadFailed = true
         }
     }
     val open: (BaseItem) -> Unit =
@@ -211,6 +214,14 @@ fun JellytipServerRowView(
                 FranchiseRow(row, row.collection!!, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel)
             }
 
+            row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() && loaded == null && !loadFailed -> {
+                // Mixed rows wait for the FIRST library load (a title in both would flash twice, then lose its IPTV copy); after a failed retry they fall through to the IPTV tiles
+                Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(row.reason))) {
+                    ItemRowTitle(row.title, subtitle = row.reason)
+                    Spacer(Modifier.height(options.heightDp.dp + 16.dp))
+                }
+            }
+
             row.iptvItems.isNotEmpty() && row.itemIds.isNotEmpty() -> {
                 // My list rows: library and IPTV titles in one row, in the server's order (newest favourite first)
                 MixedRow(row, loaded.orEmpty(), options, onFocusItem, click, longClick, play, focusModifier, viewModel, onOpened, seeAll)
@@ -221,7 +232,8 @@ fun JellytipServerRowView(
                 com.github.damontecres.wholphin.jellytip.iptv.IptvVodRow(
                     title = row.title,
                     subtitle = row.reason,
-                    items = row.iptvItems,
+                    // Two copies of one title (same kind + TMDB id) show once
+                    items = com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.iptvOnly(emptyList(), row.iptvItems),
                     poster = row.isPoster,
                     heightDp = options.heightDp,
                     onFocusTile = { onFocusItem(null, false) },
@@ -879,9 +891,11 @@ private fun MixedRow(
     seeAll: (() -> Unit)? = null,
 ) {
     val tiles =
-        remember(row.id, row.order, library, row.iptvItems) {
-            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse
-                .ordered<MixedTile>(row.order, library, row.iptvItems, { MixedTile.Lib(it) }, { MixedTile.Vod(it) })
+        remember(row.id, row.order, library, row.iptvItems, row.sourcesById) {
+            // One tile per title: an IPTV copy of a library title in this row is left out (the library tile wins)
+            com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
+                .orderedMerged<MixedTile>(row.order, library, row.iptvItems, row.sourcesById, { MixedTile.Lib(it) }, { MixedTile.Vod(it) })
+                .entries
         }
     if (tiles.isEmpty()) return
     val h = options.heightDp.dp
@@ -932,6 +946,37 @@ private fun MixedRow(
     }
 }
 
+/**
+ * The Top 10 / hub tiles in display order with an IPTV copy of a library title left out. A library tile the server gave no
+ * rank takes its dropped IPTV twin's rank (the server may rank either side).
+ */
+internal fun mergedTrendTiles(
+    row: JellytipServerRow,
+    library: List<BaseItem>,
+): List<TrendTile> {
+    val merged =
+        com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.orderedMerged<TrendTile>(
+            row.order,
+            library,
+            row.iptvItems,
+            row.sourcesById,
+            { TrendTile.Lib(it, row.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
+            { TrendTile.Vod(it, row.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
+        )
+    return merged.entries.map { t ->
+        if (t is TrendTile.Lib && t.rank == 0) {
+            val twinRank =
+                merged
+                    .otherSources(com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.libKey(t.item.id.toString()))
+                    .mapNotNull { s -> row.ranks[JellytipServerRow.rankKey(s.id)]?.takeIf { it > 0 } }
+                    .minOrNull()
+            if (twinRank != null) t.copy(rank = twinRank) else t
+        } else {
+            t
+        }
+    }
+}
+
 internal sealed interface TrendTile {
     val rank: Int
     val key: String
@@ -977,15 +1022,8 @@ private fun TrendingTop10Row(
 ) {
     val isAdmin by rememberIsJellytipAdmin()
     val tiles =
-        remember(row.id, row.order, row.ranks, row.missing, library, row.iptvItems) {
-            val shown =
-                com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<TrendTile>(
-                    row.order,
-                    library,
-                    row.iptvItems,
-                    { TrendTile.Lib(it, row.ranks[JellytipServerRow.rankKey(it.id.toString())] ?: 0) },
-                    { TrendTile.Vod(it, row.ranks[JellytipServerRow.rankKey(it.id)] ?: 0) },
-                )
+        remember(row.id, row.order, row.ranks, row.missing, library, row.iptvItems, row.sourcesById) {
+            val shown = mergedTrendTiles(row, library)
             val all = shown + row.missing.map { TrendTile.Missing(it) }
             val (ranked, unranked) = all.partition { it.rank > 0 }
             (ranked.sortedBy { it.rank } + unranked).distinctBy { it.key }

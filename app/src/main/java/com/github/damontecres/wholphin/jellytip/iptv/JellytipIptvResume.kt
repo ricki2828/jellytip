@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipApi
+import com.github.damontecres.wholphin.jellytip.cards.libRef
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
 import com.github.damontecres.wholphin.ui.cards.ItemRow
@@ -101,6 +102,7 @@ data class IptvResume(
             textlessBackdrop = textlessBackdrop,
             backdropTextless = backdropTextless,
             episodeNumber = if (kind == "episode") episode else null,
+            infoLine = com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo.forIptv(this),
         )
 
     /** Where OK goes: the IPTV player at the saved position. */
@@ -294,8 +296,13 @@ fun JellytipResumeRow(
     var hideTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var menuFor by remember { androidx.compose.runtime.mutableStateOf<IptvResume?>(null) }
     val shownIptv =
-        remember(iptv, hideTick) {
-            iptv.filter { r ->
+        remember(iptv, hideTick, library) {
+            // One tile per title, library wins: an IPTV film the row also has as a library film (same TMDB id) is left out; an episode
+            // would need its series' TMDB id on the library episode, which the item does not carry, so only films are matched today
+            com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge.filterResume(
+                library.filterNotNull().map { it.libRef() },
+                iptv,
+            ).filter { r ->
                 !(r.pos > 0 && IptvContinueRules.nearlyDone(r.pos, r.dur)) &&
                     !IptvContinueRules.stillHidden(r, IptvContinueRules.hiddenAt(ctx, user, r.key))
             }
@@ -344,6 +351,10 @@ fun JellytipResumeRow(
             (lib + shownIptv.map { ResumeTile.Iptv(it) }).sortedByDescending { it.at }
         }
     val h = viewOptions.heightDp.dp
+    // The library tiles of this row draw the same info line the IPTV tiles do ("23 min left", "S2 E5 · 23 min left", "Next: S2 E6")
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.github.damontecres.wholphin.jellytip.cards.LocalJellytipTileInfo provides com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo::forLibrary,
+    ) {
     ItemRow(
         title = title,
         items = tiles,
@@ -393,4 +404,5 @@ fun JellytipResumeRow(
             }
         },
     )
+    }
 }

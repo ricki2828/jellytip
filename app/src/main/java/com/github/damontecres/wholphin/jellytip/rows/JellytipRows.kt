@@ -65,6 +65,11 @@ data class JellytipServerRow(
     val missing: List<Missing> = emptyList(),
     /** For you only: why these titles ("Because you like Martin Scorsese and 2010s drama"); null when the server sends none. */
     val reason: String? = null,
+    /**
+     * Library tiles of this row that also have an IPTV copy (`sourcesById`: library id -> sources), ids dashless lowercase.
+     * Empty = the server sent none (unknown). Used by [com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge].
+     */
+    val sourcesById: Map<String, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSource>> = emptyMap(),
 ) {
     data class Missing(
         val tmdbId: Int,
@@ -195,6 +200,17 @@ object JellytipRowsParser {
         return out
     }
 
+    /** `sourcesById: {<library id>: [{type, id, ...}]}`; malformed entries are dropped, absent = empty. */
+    internal fun sourcesById(o: JSONObject?): Map<String, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSource>> {
+        o ?: return emptyMap()
+        val out = LinkedHashMap<String, List<com.github.damontecres.wholphin.jellytip.iptv.IptvSource>>()
+        o.keys().forEach { k ->
+            val list = com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.sources(o.optJSONArray(k))
+            if (list.isNotEmpty()) out[JellytipServerRow.rankKey(k)] = list
+        }
+        return out
+    }
+
     private fun missing(a: org.json.JSONArray?): List<JellytipServerRow.Missing> =
         if (a == null) {
             emptyList()
@@ -232,6 +248,7 @@ object JellytipRowsParser {
             iptvItems = iptv,
             order = o.optJSONArray("order")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty(),
             ranks = ranks(o),
+            sourcesById = sourcesById(o.optJSONObject("sourcesById")),
             missing = missing,
             collection = o.optJSONObject("collection")?.let { collection(it) },
             person =

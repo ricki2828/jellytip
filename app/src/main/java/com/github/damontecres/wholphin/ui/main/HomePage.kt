@@ -414,6 +414,8 @@ fun HomePageContent(
     rowConfigs: List<HomeRowConfig>? = null,
     /** Long press on a server-row tile (context menu); null = open details. */
     onLongClickExtraItem: ((BaseItem) -> Unit)? = null,
+    /** Jellytip watchlist: row index -> IPTV-only titles drawn in that row after its library tiles (one tile per title). */
+    iptvAppended: Map<Int, List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem>> = emptyMap(),
 ) {
     var hasFocus by remember { mutableStateOf(false) }
     val rowFocusedItem =
@@ -1209,6 +1211,29 @@ fun HomePageContent(
                                                     .focusGroup()
                                                     .focusRequester(rowFocusRequesters[rowIndex]),
                                         )
+                                    } else if (row.items.isNotEmpty() && iptvAppended[rowIndex].orEmpty().isNotEmpty()) {
+                                        com.github.damontecres.wholphin.jellytip.watchlist.JellytipWatchlistMixedRow(
+                                            title = row.title.getString(),
+                                            library = row.items,
+                                            iptv = iptvAppended[rowIndex].orEmpty(),
+                                            viewOptions = jellytipRowOptions(row.viewOptions),
+                                            onClickLibrary = { index, item -> onClickItem.invoke(RowColumn(rowIndex, index), item) },
+                                            onLongClickLibrary = { index, item -> onLongClickItem.invoke(RowColumn(rowIndex, index), item) },
+                                            onFocusLibrary = { index ->
+                                                specialFocus = null
+                                                savedSpecialId = null
+                                                currentOnFocusPosition(RowColumn(rowIndex, index))
+                                            },
+                                            onFocusIptv = {
+                                                currentOnFocusPosition(RowColumn(rowIndex, IPTV_TILE_COLUMN))
+                                                specialFocus = JellytipSpecialFocus("iptv-resume-$rowIndex", null, false)
+                                            },
+                                            modifier =
+                                                rowModifier
+                                                    .fillMaxWidth()
+                                                    .focusGroup()
+                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                        )
                                     } else if (row.items.isNotEmpty()) {
                                         val viewOptions =
                                             if (LocalJellytipHome.current) {
@@ -1216,6 +1241,15 @@ fun HomePageContent(
                                             } else {
                                                 row.viewOptions
                                             }
+                                        // Continue Watching / Next Up (no IPTV entries): the same info line as the merged row, library tiles only here
+                                        CompositionLocalProvider(
+                                            com.github.damontecres.wholphin.jellytip.cards.LocalJellytipTileInfo provides
+                                                (if (LocalJellytipHome.current && row.rowType.let { t -> t is HomeRowConfig.ContinueWatching || t is HomeRowConfig.NextUp || t is HomeRowConfig.ContinueWatchingCombined }) {
+                                                    com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo::forLibrary
+                                                } else {
+                                                    null
+                                                }),
+                                        ) {
                                         ItemRow(
                                             title = row.title.getString(),
                                             items = row.items,
@@ -1322,6 +1356,7 @@ fun HomePageContent(
                                                 )
                                             },
                                         )
+                                        }
                                     } else if (showEmptyRows) {
                                         FocusableItemRow(
                                             title = r.title.getString(),
