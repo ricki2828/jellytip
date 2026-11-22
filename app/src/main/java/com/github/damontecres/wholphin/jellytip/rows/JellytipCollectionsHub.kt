@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -285,7 +286,8 @@ internal fun JellytipCollectionsHubContent(
             firstChip.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
+    // Title, chips, section row and grid all carry their own 8 dp: the extra RowPageStart puts them on the 96 dp left line
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, top = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
@@ -348,7 +350,7 @@ internal fun JellytipCollectionsHubContent(
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 ) {
                     items(section.items, key = { "${section.key}:${it.id}" }) { c ->
-                        HubCard(c) { onOpen(c) }
+                        HubCard(c, modifier = if (c === section.items.first()) Modifier.testTag("hub-tile0") else Modifier) { onOpen(c) }
                     }
                 }
             }
@@ -387,6 +389,7 @@ internal fun HubChip(
 @Composable
 private fun HubCard(
     c: HubCollection,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val images = com.github.damontecres.wholphin.ui.LocalImageUrlService.current
@@ -400,7 +403,7 @@ private fun HubCard(
                     ?: c.personId?.let { images.getItemImageUrl(itemId = it, imageType = org.jellyfin.sdk.model.api.ImageType.PRIMARY, fillWidth = 220.dp.roundToPx(), tag = c.personImageTag) }
             }
         }
-    SpecialCard(width = 220.dp, height = 124.dp, onClick = onClick, onLongClick = onClick, modifier = Modifier) {
+    SpecialCard(width = 220.dp, height = 124.dp, onClick = onClick, onLongClick = onClick, modifier = modifier) {
         var failed by remember(art) { mutableStateOf(false) }
         if (art != null && !failed) {
             AsyncImage(

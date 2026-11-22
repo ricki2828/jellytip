@@ -56,6 +56,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.layout
@@ -824,7 +825,9 @@ fun HomePageContent(
                                 rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
                             }
                         }
-                    }.fillMaxSize(),
+                    }.fillMaxSize()
+                    // Header text, row titles and first tiles share one left line at 96 dp (72 inset + 16 + 8)
+                    .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart),
         ) {
             Box(
                 modifier =
@@ -935,13 +938,20 @@ fun HomePageContent(
             // Rows bleed through the drawer's page padding: their scroll rule works on the visible part only
             val bleed =
                 com.github.damontecres.wholphin.jellytip.JellytipRowBleed(
-                    com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp,
+                    // The page's 72 dp inset plus the 16 dp the rows and header are shifted by (JellytipLayout.RowPageStart):
+                    // title 72 + 16 + 8 = 96, first tile 88 + 8 = 96
+                    com.github.damontecres.wholphin.ui.nav.CollapsedDrawerItemWidth + 8.dp + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart,
                     16.dp,
                 )
             val defaultBringIntoViewSpec =
                 remember(platformBringIntoViewSpec, density, bleed) {
                     with(density) {
-                        com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(platformBringIntoViewSpec, bleed.start.toPx(), bleed.end.toPx())
+                        // A focused tile comes to rest on the left line (the row's own 8 dp inset past the bleed), like the first tile
+                        com.github.damontecres.wholphin.jellytip.JellytipBleedBringIntoViewSpec(
+                            platformBringIntoViewSpec,
+                            (bleed.start + com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset).toPx(),
+                            bleed.end.toPx(),
+                        )
                     }
                 }
             CompositionLocalProvider(
@@ -1250,6 +1260,8 @@ fun HomePageContent(
                                                     viewOptions = viewOptions,
                                                     modifier =
                                                         cardModifier
+                                                            // (test hook: shots assert the first tile's left edge)
+                                                            .then(if (index == 0) Modifier.testTag("row-$rowIndex-tile0") else Modifier)
                                                             .onFocusChanged { onFocus(it.isFocused) }
                                                             .onKeyEvent { onKey(it) },
                                                 )

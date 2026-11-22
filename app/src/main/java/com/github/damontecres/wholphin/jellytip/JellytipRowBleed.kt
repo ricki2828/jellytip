@@ -41,14 +41,20 @@ fun Modifier.jellytipRowBleed(): Modifier {
     }
 }
 
-/** A lazy row's content padding: [horizontal] plus the page's side padding the row bleeds through. */
+/**
+ * A lazy row's content padding. [horizontal] governs the end. With a bleed the start is [JellytipLayout.RowInset] plus the
+ * bleed, so the first tile sits on the line of the row title ([com.github.damontecres.wholphin.ui.cards.ItemRowTitle]
+ * adds the same 8 dp) whatever the row's tile spacing. Without a bleed (details pages, Search, Discover, Game Centre) the
+ * start stays [horizontal], exactly as before: those pages are laid out around it.
+ */
 @Composable
 fun jellytipRowPadding(
     horizontal: Dp,
     vertical: Dp,
 ): PaddingValues {
     val b = LocalJellytipRowBleed.current
-    return PaddingValues(start = horizontal + b.start, end = horizontal + b.end, top = vertical, bottom = vertical)
+    val start = if (b.start == 0.dp) horizontal else JellytipLayout.RowInset + b.start
+    return PaddingValues(start = start, end = horizontal + b.end, top = vertical, bottom = vertical)
 }
 
 /**

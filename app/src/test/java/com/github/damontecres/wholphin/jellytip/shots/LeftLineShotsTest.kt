@@ -43,7 +43,10 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.test.core.app.ApplicationProvider
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -65,6 +69,7 @@ import coil3.compose.LocalAsyncImagePreviewHandler
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.fillFullBleed
@@ -106,6 +111,7 @@ import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.UserItemDataDto
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -260,6 +266,7 @@ class LeftLineShotsTest {
     private fun shot(
         name: String,
         steps: () -> Unit = {},
+        after: () -> Unit = {},
         content: @Composable () -> Unit,
     ) {
         compose.mainClock.autoAdvance = false
@@ -269,7 +276,25 @@ class LeftLineShotsTest {
         advance(1800)
         logFocus(name)
         compose.onRoot().captureRoboImage(out(name))
+        // Asserts run after the PNG is written, so a failing line is still readable off the picture
+        after()
     }
+
+    /** The left edge, in dp from the screen edge, of the first node [matcher] finds (layout bounds, graphicsLayer scale not counted). */
+    private fun leftOf(matcher: SemanticsMatcher): Float = compose.onAllNodes(matcher).onFirst().getUnclippedBoundsInRoot().left.value
+
+    /** [what] must start on the left line (96 dp) within half a dp; the measured value goes to the CI log. */
+    private fun assertOnLeftLine(
+        shot: String,
+        what: String,
+        matcher: SemanticsMatcher,
+    ) {
+        val left = leftOf(matcher)
+        println("shot $shot: $what left = $left dp")
+        assertEquals("$shot: $what must start at the left line", 96f, left, 0.5f)
+    }
+
+    private fun titleText(t: String) = hasText(t.uppercase())
 
     // ---- synthetic data ----
 
@@ -431,7 +456,11 @@ class LeftLineShotsTest {
         }
     }
 
-    /** The header block of JellytipHomeHeader: bottom-left, START_PAD_PX / BOTTOM_PAD_PX from the page, 900 px wide. */
+    /**
+     * The header block of JellytipHomeHeader: bottom-left, START_PAD_PX / BOTTOM_PAD_PX from where HomePageContent puts it,
+     * 900 px wide. HomePageContent shifts its whole body by RowPageStart (16 dp), so the text lands on 72 + 16 + 8 = 96 dp;
+     * the stand-in itself is unchanged (the token is still 16 px: it also pads the logo inside tile art).
+     */
     @Composable
     private fun HeaderStandIn(item: BaseItem?) {
         val screenHeight = LocalConfiguration.current.screenHeightDp
@@ -517,6 +546,8 @@ class LeftLineShotsTest {
             updateSelectedTabIndex = {},
             isShowClock = true,
             modifier = Modifier.fillMaxSize(),
+            // As CollectionFolderMovie / CollectionFolderTv pass it
+            tabsStartPadding = JellytipLayout.PageStart - 16.dp,
         ) { _, _ -> HomeLike(rows) }
     }
 
@@ -535,7 +566,16 @@ class LeftLineShotsTest {
 
     @Test
     fun homeRowsFocused() {
-        shot("leftline-home-rows", steps = { toFirstTile("leftline-home-rows") }) { HomeLike(homeRows()) }
+        val name = "leftline-home-rows"
+        shot(
+            name,
+            steps = { toFirstTile(name) },
+            after = {
+                assertOnLeftLine(name, "Continue watching title", titleText("Continue watching"))
+                // Row 0's first tile holds focus (zoomed): the unfocused row below it is the one that can be measured
+                assertOnLeftLine(name, "My list first tile", hasTestTag("row-1-tile0"))
+            },
+        ) { HomeLike(homeRows()) }
     }
 
     @Test
@@ -548,6 +588,17 @@ class LeftLineShotsTest {
                 repeat(5) { pressKey("leftline-home-rows-scrolled", Key.DirectionRight) }
             },
         ) { HomeLike(homeRows()) }
+    }
+
+    /** Movies / Shows: the first tab's label, the first row's title and its first tile (unfocused: the hero button holds focus). */
+    private fun assertHomeRowsAndTab(
+        shot: String,
+        firstRow: String,
+    ) {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        assertOnLeftLine(shot, "first tab label", hasText(context.getString(R.string.recommended)))
+        assertOnLeftLine(shot, "$firstRow title", titleText(firstRow))
+        assertOnLeftLine(shot, "$firstRow first tile", hasTestTag("row-0-tile0"))
     }
 
     @Test
@@ -563,6 +614,7 @@ class LeftLineShotsTest {
         shot(
             "leftline-movies",
             steps = { focusHeroButton("leftline-movies") },
+            after = { assertHomeRowsAndTab("leftline-movies", "Continue watching") },
         ) { TabbedHome(tabs(R.string.recommended, R.string.library, R.string.collections, R.string.genres), rows) }
     }
 
@@ -578,6 +630,7 @@ class LeftLineShotsTest {
         shot(
             "leftline-shows",
             steps = { focusHeroButton("leftline-shows") },
+            after = { assertHomeRowsAndTab("leftline-shows", "Continue watching") },
         ) { TabbedHome(tabs(R.string.recommended, R.string.library, R.string.genres, R.string.studios), rows) }
     }
 
@@ -585,7 +638,14 @@ class LeftLineShotsTest {
     fun watchlist() {
         // JellytipWatchlist: HomePageContent, showViewMore = false, rows titled "Films (n)" / "Shows (n)", stock view options
         val rows = listOf(row("Films (8)", filmItems()), row("Shows (6)", showEpisodes()))
-        shot("leftline-watchlist", steps = { focusHeroButton("leftline-watchlist") }) { HomeLike(rows, showViewMore = false) }
+        shot(
+            "leftline-watchlist",
+            steps = { focusHeroButton("leftline-watchlist") },
+            after = {
+                assertOnLeftLine("leftline-watchlist", "Films title", titleText("Films (8)"))
+                assertOnLeftLine("leftline-watchlist", "Films first tile", hasTestTag("row-0-tile0"))
+            },
+        ) { HomeLike(rows, showViewMore = false) }
     }
 
     @Test
@@ -616,7 +676,14 @@ class LeftLineShotsTest {
                 HubSection("franchises", "Franchises", listOf(c(7, "Alien", 7), c(8, "Mad Max", 5, 1))),
                 HubSection("decades", "Decades", listOf(c(9, "The 1970s", 60), c(10, "The 1980s", 75))),
             )
-        shot("leftline-collections") {
+        shot(
+            "leftline-collections",
+            after = {
+                // "Collections" exactly = the page title (the section chip reads "Collections  6")
+                assertOnLeftLine("leftline-collections", "page title", hasText("Collections"))
+                assertOnLeftLine("leftline-collections", "first tile", hasTestTag("hub-tile0"))
+            },
+        ) {
             JellytipCollectionsHubContent(sections = sections, failed = false, onJourneys = {}, onOpen = {}, modifier = Modifier.fillMaxSize())
         }
     }
@@ -702,7 +769,7 @@ class LeftLineShotsTest {
     fun rowPartsWithPageBleed() {
         val vm = serverRowViewModel()
         // Exactly as HomePageContent provides it
-        val bleed = JellytipRowBleed(CollapsedDrawerItemWidth + 8.dp, 16.dp)
+        val bleed = JellytipRowBleed(CollapsedDrawerItemWidth + 8.dp + JellytipLayout.RowPageStart, 16.dp)
         shot("leftline-row-parts") { RowParts("LocalJellytipRowBleed = ${bleed.start} / ${bleed.end} (as HomePageContent provides)", bleed, vm) }
     }
 
