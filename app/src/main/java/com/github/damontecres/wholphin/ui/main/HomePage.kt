@@ -154,6 +154,9 @@ fun HomePage(
     val loading = state.loadingState
     val refreshing = state.refreshState
     val homeRows = state.homeRows
+    // The click lambdas below are remembered once: they must read the rows as they are NOW (rows load after the page first
+    // composes; a stale list would class a Continue Watching tile as an ordinary one)
+    val currentHomeRows by rememberUpdatedState(homeRows)
     val homeSettings = state.settings
     val rowConfigs = remember(homeSettings) { homeSettings.rows.map { it.config } }
 
@@ -196,7 +199,7 @@ fun HomePage(
                         JellytipTrailerControl.stop()
                         // Episodes in Continue Watching / Next Up play (resume); films there follow the click-to-play setting
                         if (homeTileAction(
-                                inContinueOrNextUpRow = homeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true,
+                                inContinueOrNextUpRow = currentHomeRows.getOrNull(clickedPosition.row)?.isContinueWatchingNextUp == true,
                                 type = item.type,
                                 clickToPlay = currentHomePrefs.clickToPlay,
                             ) == HomeTileAction.PLAY
@@ -213,7 +216,7 @@ fun HomePage(
                         // row -1 = a server-row tile: keep the remembered row position as it is
                         if (clickedPosition.row >= 0) position = clickedPosition
                         val row =
-                            (homeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
+                            (currentHomeRows.getOrNull(clickedPosition.row) as? HomeRowLoadingState.Success)
                         val canRemoveContinueWatching =
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
@@ -234,7 +237,7 @@ fun HomePage(
                                 canRemoveNextUp = canRemoveNextUp,
                                 // OK plays an episode in these rows, so its page (the series page at that episode) is one item away
                                 leadingItems =
-                                    if (homeTileHasDetailsItem(homeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)) {
+                                    if (homeTileHasDetailsItem(currentHomeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)) {
                                         listOf(
                                             DialogItem("Details", dismissOnClick = true) {
                                                 JellytipTrailerControl.stop()
