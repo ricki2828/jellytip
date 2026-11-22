@@ -551,4 +551,40 @@ class AskChatStateTest {
         AskChat.dismissNotice(blocked) // never throws
         assertEquals("What you type is sent to Claude (Anthropic) to understand it.", CHAT_NOTICE_TEXT)
     }
+
+    // ---------- start over ----------
+
+    @Test
+    fun startOverClearsEverythingAndBumpsTheRev() {
+        var s = settled("funny", resp(chips = listOf(comedy, kids), cards = listOf(lib("a")), notes = listOf(ChatNote("Nothing fits.", "no_results"))))
+        s = tap(s, ChatOp.Remove("genre:Comedy")).state
+        s = s.copy(error = ChatError.Unreachable, failed = s.pending!!.body)
+        val o = AskChat.startOver(s)
+        assertTrue(o.turns.isEmpty() && o.chips.isEmpty() && o.removed.isEmpty() && o.cards.isEmpty() && o.notes.isEmpty())
+        assertNull(o.pending)
+        assertNull(o.error)
+        assertNull(o.failed)
+        assertEquals("", o.reply)
+        assertEquals(s.rev + 1, o.rev)
+        // the next turn is a fresh conversation: no history in the body, rev past everything issued
+        val next = send(o, "scary")
+        assertEquals(s.rev + 2, next.body.rev)
+        assertTrue(next.body.turns.isEmpty() && next.body.chips.isEmpty() && next.body.removed.isEmpty())
+    }
+
+    @Test
+    fun startOverWhilePendingDropsALateResponseAndALateError() {
+        val a = send(ChatState(), "funny")
+        val o = AskChat.startOver(a.state) // allowed while pending
+        assertNull(o.pending)
+        assertSame("late response for the old rev: dropped", o, AskChat.applyResponse(o, resp(rev = a.body.rev, reply = "OLD", cards = listOf(lib("old")))))
+        assertSame("late response echoing the new rev with nothing pending: dropped", o, AskChat.applyResponse(o, resp(rev = o.rev, reply = "OLD")))
+        val e = AskChat.applyError(o, a.body.rev, 500)
+        assertSame("late error: dropped", o, e.state)
+        assertNull(e.resend)
+        // and after a NEW turn is issued, the old turn's response is still dropped
+        val b = send(o, "scary")
+        assertSame(b.state, AskChat.applyResponse(b.state, resp(rev = a.body.rev, reply = "OLD")))
+        assertEquals("NEW", AskChat.applyResponse(b.state, resp(rev = b.body.rev, reply = "NEW")).reply)
+    }
 }
