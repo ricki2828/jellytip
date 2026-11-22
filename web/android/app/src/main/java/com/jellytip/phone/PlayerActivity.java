@@ -133,6 +133,11 @@ public class PlayerActivity extends AppCompatActivity {
     private long programmeStop;
     /** Watching the programme on now from its start (a catch-up link); "Back to live" returns. */
     private boolean fromKickOff;
+    /** Going back to live after From kick-off failed: one request at a time. */
+    private boolean kickOffFailing;
+    static final String CATCHUP_FAILED = "Catch-up isn't working on this channel right now";
+    /** A kick-off catch-up that "ends" before this far in never really played (the provider's empty archive). */
+    private static final long KICKOFF_PLAYED_MS = 5_000;
     private TextView kickOffButton;
     /** In-event drawer (plan "In-event panel"); null when the web app passed no match / base. */
     private LiveStatsDrawer liveDrawer;
@@ -634,7 +639,10 @@ public class PlayerActivity extends AppCompatActivity {
                     jumpToLive();
                 }
                 // From kick-off caught up (the catch-up ends where the button was pressed): back to live
-                else if (state == Player.STATE_ENDED && live && fromKickOff && !closing) backToLiveAfterKickOff();
+                else if (state == Player.STATE_ENDED && live && fromKickOff && !closing) {
+                    if (player.getCurrentPosition() < KICKOFF_PLAYED_MS) kickOffFailed("ended at once");
+                    else backToLiveAfterKickOff("Back to live");
+                }
                 else if (state == Player.STATE_ENDED && !live) close("ended", null);
             }
 
@@ -709,6 +717,11 @@ public class PlayerActivity extends AppCompatActivity {
             );
             return;
         }
+        // From kick-off that broke: back to the live channel with an honest note, not a closed player
+        if (live && fromKickOff) {
+            kickOffFailed("error " + error.getErrorCodeName());
+            return;
+        }
         // Live: a fatal error moves to the event's next channel before giving up
         if (live && !fromKickOff && failover("error " + error.getErrorCodeName())) return;
         close("error", error);
@@ -726,6 +739,10 @@ public class PlayerActivity extends AppCompatActivity {
                     stalledSince = 0;
                 } else if (stalledSince == 0) {
                     stalledSince = now;
+                } else if (now - stalledSince >= STALL_MS && fromKickOff) {
+                    // From kick-off buffering for 10 s (a dead archive): back to live, not an endless spinner
+                    stalledSince = now;
+                    kickOffFailed("stalled 10 s");
                 } else if (now - stalledSince >= STALL_MS && !fromKickOff) {
                     stalledSince = now;
                     // No other channel to move to: reload this one (the live edge), a few times, before waiting it out
@@ -836,13 +853,22 @@ public class PlayerActivity extends AppCompatActivity {
         return true;
     }
 
-    private void backToLiveAfterKickOff() {
+    /** From kick-off could not play: back to live with the honest note (once per failure). */
+    private void kickOffFailed(String why) {
+        if (kickOffFailing || closing) return;
+        kickOffFailing = true;
+        emitEvent("failover", "{\"from\":\"" + channelId + "\",\"to\":\"" + channelId + "\",\"why\":\"catch-up failed: " + why + "\"}");
+        backToLiveAfterKickOff(CATCHUP_FAILED);
+    }
+
+    private void backToLiveAfterKickOff(String note) {
         requestUrl(
             "live",
             channelId,
             0,
             0,
             (url, mime, error) -> {
+                kickOffFailing = false;
                 if (url == null) {
                     close("ended", null);
                     return;
@@ -851,9 +877,16 @@ public class PlayerActivity extends AppCompatActivity {
                 if (kickOffButton != null) kickOffButton.setText("From kick-off");
                 switchTo(url, mime, false);
                 updatePip();
-                android.widget.Toast.makeText(this, "Back to live", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(this, note, android.widget.Toast.LENGTH_LONG).show();
             }
         );
+    }
+
+    /** The note when /play refused From kick-off: the server's own text when it sent one (the web app passes it), else the honest line. */
+    static String kickOffRefusal(String error) {
+        if ("full".equals(error)) return "Every connection to this provider is in use.";
+        if (error == null || error.isEmpty() || "unreachable".equals(error) || "timeout".equals(error) || "no web app".equals(error) || error.startsWith("Server said")) return CATCHUP_FAILED;
+        return error;
     }
 
     /** "From kick-off" (catch-up from the programme's start) or "Back to live". */
@@ -868,7 +901,7 @@ public class PlayerActivity extends AppCompatActivity {
             (url, mime, error) -> {
                 kickOffButton.setEnabled(true);
                 if (url == null) {
-                    android.widget.Toast.makeText(this, toStart ? "Can't start from kick-off" : "Can't go back to live", android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(this, toStart ? kickOffRefusal(error) : "Can't go back to live", android.widget.Toast.LENGTH_LONG).show();
                     return;
                 }
                 fromKickOff = toStart;
