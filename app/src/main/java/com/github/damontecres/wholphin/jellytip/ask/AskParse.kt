@@ -2,7 +2,7 @@ package com.github.damontecres.wholphin.jellytip.ask
 
 /*
  * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5, plus
- * jellytip-web-askrefine 336ba5ec..0b53f604: negated genres, kids without left-out genres, chipFor / chipsFromData).
+ * jellytip-web-askrefine 336ba5ec..29fdfee4: negated genres, kids without left-out genres, chipFor / chipsFromData).
  * Deterministic, no LLM: phrases map to Jellyfin Items params, and what cannot be mapped is reported back as "ignored"
  * rather than guessed. Pure Kotlin (no Android, no SDK types) so other screens can reuse it, e.g. Pick for tonight chips:
  *
@@ -254,9 +254,9 @@ object AskParse {
     // The negated word may follow an article ("not a scary movie", "nothing that's scary"); group 2 = an "or" / "nor" list after it
     private val NEG =
         Regex(
-            """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?[a-z][a-z0-9'-]*)*)""",
+            """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)*)""",
         )
-    private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?([a-z][a-z0-9'-]*)""")
+    private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?([a-z][a-z0-9'-]*)""")
     private val LINK_LEAD = Regex("""^\s*,?\s*""")
     private val NEG_WORD = Regex("""[a-z][a-z0-9'-]*$""")
     private val NEG_FOR = Regex("""\bfor\s""")
