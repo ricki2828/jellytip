@@ -172,7 +172,7 @@ export function applyError(s: ChatState, rev: number, status: number): { state: 
       const body: ChatBody = { ...b, turns: b.turns.slice(b.turns.length - Math.floor(b.turns.length / 2)) };
       return { state: { ...s, pending: { body, trimmed: true } }, resend: body };
     }
-    return { state: { ...s, pending: null, error: "tooLong" }, resend: null };
+    return { state: { ...s, pending: null, error: "tooLong", cards: [], notes: [], matched: 0 }, resend: null };
   }
   // the superseded reading's cards, notes and count are not shown any more: only a newer response brings cards back
   return { state: { ...s, pending: null, error: "unreachable", failed: s.pending.body, cards: [], notes: [], matched: 0 }, resend: null };
@@ -244,25 +244,52 @@ export function parseResponse(d: unknown): ChatResponse | null {
 export type Call = (method: "POST", path: string, body: unknown, opts: { signal?: AbortSignal }) => Promise<{ status: number; data: unknown }>;
 export type Sent = { kind: "ok"; resp: ChatResponse } | { kind: "error"; status: number } | { kind: "aborted" };
 
-/** One in-flight turn at a time: sending a newer request aborts the previous one (its answer is never applied). */
+export const SEND_TIMEOUT_MS = 12_000;
+
+/** One in-flight turn at a time: sending a newer request aborts the previous one (its answer is never applied). A request that does
+ *  not answer within the timeout (12 s) ends as `{kind:"error", status:0}` (unreachable + Retry), so a hung connection can never leave
+ *  the screen waiting: every call resolves to ok, error or aborted (aborted only when superseded). A 200 for another rev than the
+ *  body that was sent is an error too (never a silent drop that would leave the turn pending). */
 export class ChatSender {
-  private ctl: AbortController | null = null;
+  private cur: { ctl: AbortController; superseded: boolean } | null = null;
   private call: Call;
-  constructor(call: Call) {
+  private timeoutMs: number;
+  constructor(call: Call, timeoutMs = SEND_TIMEOUT_MS) {
     this.call = call;
+    this.timeoutMs = timeoutMs;
   }
 
   async send(body: ChatBody): Promise<Sent> {
-    this.ctl?.abort();
-    const ctl = (this.ctl = new AbortController());
-    const r = await this.call("POST", "v1/ask/chat", body, { signal: ctl.signal });
-    if (ctl.signal.aborted) return { kind: "aborted" };
-    if (this.ctl === ctl) this.ctl = null;
-    if (r.status === 200) {
-      const resp = parseResponse(r.data);
-      return resp ? { kind: "ok", resp } : { kind: "error", status: 500 };
+    if (this.cur) {
+      this.cur.superseded = true;
+      this.cur.ctl.abort();
     }
-    return { kind: "error", status: r.status };
+    const me = (this.cur = { ctl: new AbortController(), superseded: false });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const dead = new Promise<"timeout">((res) => {
+      timer = setTimeout(() => {
+        me.ctl.abort(); // a setTimeout, not AbortSignal.timeout / .any: older WebViews lack those
+        res("timeout");
+      }, this.timeoutMs);
+    });
+    try {
+      let got: { status: number; data: unknown } | "timeout";
+      try {
+        got = await Promise.race([this.call("POST", "v1/ask/chat", body, { signal: me.ctl.signal }), dead]);
+      } catch {
+        got = { status: 0, data: null };
+      }
+      if (me.superseded) return { kind: "aborted" };
+      if (got === "timeout") return { kind: "error", status: 0 };
+      if (got.status === 200) {
+        const resp = parseResponse(got.data);
+        return resp && resp.rev === body.rev ? { kind: "ok", resp } : { kind: "error", status: 500 };
+      }
+      return { kind: "error", status: got.status };
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (this.cur === me) this.cur = null;
+    }
   }
 
   /** Fire and forget: tells the server a chat is starting so it can warm up. Never throws. */

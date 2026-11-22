@@ -187,9 +187,15 @@ test("400 / 413: the oldest turns are trimmed and the request re-sent once; then
     assert.equal(second.resend, null, "only one re-send");
     assert.equal(second.state.error, "tooLong");
     assert.equal(second.state.pending, null);
-    assert.equal(second.state.cards, state.cards, "a message problem keeps the last good state");
+    assert.deepEqual([second.state.cards, second.state.notes, second.state.matched], [[], [], 0], "cards of the superseded reading are hidden here too");
+    assert.equal(second.state.reply, state.reply, "the last good chips / reply stay");
     assert.equal(retry(second.state), null, "no Retry of the same body");
   }
+  // one turn: dropping it is fine, and the re-send still carries the current text and chips
+  const oneTurn = applyResponse(send(emptyState(), "first").state, resp({ rev: 1, reply: "r1", chips: [chipFor({ t: "genre", genres: ["Comedy"] })] }));
+  const q = send(oneTurn, "second");
+  const rs = err(q.state, 2, 413).resend!;
+  assert.deepEqual([rs.turns, rs.text, ids(rs.chips), rs.rev], [[], "second", ["genre:Comedy"], 2]);
   // nothing to trim: straight to the message
   const bare = send(emptyState(), "x");
   assert.equal(err(bare.state, 1, 413).state.error, "tooLong");
@@ -340,4 +346,72 @@ test("routes: #/ask/chat is the chat screen, #/ask stays classic Ask", () => {
   assert.equal(parseHash("#/ask").name, "ask");
   assert.equal(parseHash("#/ask?x=1").name, "ask");
   assert.equal(parseHash("#/ask/other").name, "ask");
+});
+
+test("ChatSender: a call that never answers times out as error 0 (pending can clear), the signal is aborted", async () => {
+  let sig: AbortSignal | undefined;
+  const sender = new ChatSender((_m, _p, _b, o) => { sig = o.signal; return new Promise(() => {}); }, 30);
+  const body = send(emptyState(), "x");
+  const t0 = Date.now();
+  const out = await sender.send(body.body);
+  assert.deepEqual(out, { kind: "error", status: 0 });
+  assert.ok(Date.now() - t0 >= 25 && Date.now() - t0 < 1000);
+  assert.equal(sig!.aborted, true);
+  const s = applyError(body.state, 1, (out as { status: number }).status).state;
+  assert.equal(s.pending, null);
+  assert.equal(s.error, "unreachable");
+  assert.ok(retry(s), "Retry is offered after a timeout");
+});
+
+test("ChatSender: a superseded request is 'aborted' (never an error), even if it would later time out; a throwing call is error 0", async () => {
+  const sender = new ChatSender(() => new Promise(() => {}), 40);
+  const b1 = send(emptyState(), "one").body;
+  const p1 = sender.send(b1);
+  const p2 = sender.send({ ...b1, rev: 2 });
+  assert.deepEqual(await p1, { kind: "aborted" });
+  assert.deepEqual(await p2, { kind: "error", status: 0 });
+  assert.deepEqual(await new ChatSender(async () => { throw new Error("net"); }).send(b1), { kind: "error", status: 0 });
+});
+
+test("ChatSender: a 200 for another rev than the body that was sent is an error, not a silent drop", async () => {
+  const body = send(emptyState(), "x");
+  const good = live.headline.resp as ChatResponse;
+  const mk = (rev: number) => new ChatSender(async () => ({ status: 200, data: { ...good, rev } }));
+  assert.equal((await mk(body.body.rev).send(body.body)).kind, "ok");
+  const bad = await mk(99).send(body.body);
+  assert.deepEqual(bad, { kind: "error", status: 500 });
+  const st = applyError(body.state, 1, 500).state;
+  assert.equal(st.pending, null);
+  assert.equal(st.error, "unreachable");
+});
+
+test("every terminal path leaves pending null (no request can freeze the screen)", async () => {
+  const good = live.headline.resp as ChatResponse;
+  const base = applyResponse(send(emptyState(), "first").state, resp({ rev: 1, reply: "r", chips: [chipFor({ t: "genre", genres: ["Comedy"] })], cards: [card("a")] }));
+  // what the screen does with a Sent: apply, and re-send once on a resend
+  const settle = async (mkCall: () => ConstructorParameters<typeof ChatSender>[0]) => {
+    let { state, body } = send(base, "second");
+    for (let i = 0; i < 3; i++) {
+      const out = await new ChatSender(mkCall(), 30).send(body);
+      if (out.kind === "aborted") throw new Error("a single request is never superseded");
+      if (out.kind === "ok") return applyResponse(state, out.resp);
+      const e = applyError(state, body.rev, out.status);
+      state = e.state;
+      if (!e.resend) return state;
+      body = e.resend;
+    }
+    throw new Error("re-sent more than once");
+  };
+  const classes: [string, () => ConstructorParameters<typeof ChatSender>[0]][] = [
+    ["200 ok", () => async () => ({ status: 200, data: { ...good, rev: 2 } })],
+    ["200 wrong rev", () => async () => ({ status: 200, data: { ...good, rev: 7 } })],
+    ["200 garbage", () => async () => ({ status: 200, data: { nope: 1 } })],
+    ["never answers", () => () => new Promise(() => {})],
+    ["throws", () => async () => { throw new Error("x"); }],
+    ...[0, 400, 401, 403, 404, 413, 429, 500, 502, 503, 504].map((st): [string, () => ConstructorParameters<typeof ChatSender>[0]] => [`status ${st}`, () => async () => ({ status: st, data: null })]),
+  ];
+  for (const [name, mk] of classes) {
+    const end = await settle(mk);
+    assert.equal(end.pending, null, name);
+  }
 });
