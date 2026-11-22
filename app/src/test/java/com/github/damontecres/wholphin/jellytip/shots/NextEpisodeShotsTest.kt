@@ -97,6 +97,7 @@ class NextEpisodeShotsTest {
             onMore = {},
             onInteraction = {},
             modifier = Modifier.align(Alignment.BottomStart),
+            scrubbable = true,
             nextLabel = "Next: S2 E2",
             onNext = {},
         )
@@ -106,6 +107,13 @@ class NextEpisodeShotsTest {
     fun overlayNextFocused() {
         val focus = FocusRequester()
         shot("nextep-overlay-next-focused", focusTag = "iptv-next") { Overlay(focus) }
+    }
+
+    /** The scrub bar (integrate) above the buttons, focused, with the Next episode button in the row. */
+    @Test
+    fun overlayScrubFocusedWithNext() {
+        val focus = FocusRequester()
+        shot("nextep-overlay-scrub-focused", focusTag = "iptv-scrub") { Overlay(focus) }
     }
 
     @Test
