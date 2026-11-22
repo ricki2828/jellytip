@@ -1,7 +1,8 @@
 package com.github.damontecres.wholphin.jellytip.ask
 
 /*
- * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5).
+ * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5, plus
+ * jellytip-web-askrefine 336ba5ec..29fdfee4: negated genres, kids without left-out genres, chipFor / chipsFromData).
  * Deterministic, no LLM: phrases map to Jellyfin Items params, and what cannot be mapped is reported back as "ignored"
  * rather than guessed. Pure Kotlin (no Android, no SDK types) so other screens can reuse it, e.g. Pick for tonight chips:
  *
@@ -51,6 +52,11 @@ sealed interface ChipData {
 
     data class MaxSeasons(
         val n: Int,
+    ) : ChipData
+
+    /** "not scary", "non-animated": titles in any of these genres are left out (checked client-side over the fetched page). */
+    data class NotGenre(
+        val genres: List<String>,
     ) : ChipData
 }
 
@@ -170,6 +176,45 @@ object AskParse {
             Mood(Regex("""\b(?:family)\b"""), listOf("Family", "Kids"), "Family"),
         )
 
+    /** Moods that can be negated ("not scary" = no Horror). Others stay unsupported: "not sad" would drop every drama. */
+    private val INVERTIBLE =
+        setOf("Horror", "Animation", "Comedy", "Thriller", "Romance", "Action", "Sci-fi", "Mystery", "Crime", "Documentary", "War", "Western", "Fantasy", "Adventure", "Music", "History")
+
+    private fun lcSet(xs: List<String>) = xs.map { it.lowercase() }.toSet()
+
+    /** The mood label for a genre list (same genres as a mood = its label, so ids match the parser's), else the first genre. */
+    private fun moodLabel(genres: List<String>): String {
+        val want = lcSet(genres).sorted().joinToString("|")
+        return MOODS.firstOrNull { lcSet(it.genres).sorted().joinToString("|") == want }?.label ?: genres.first()
+    }
+
+    /**
+     * The one way to turn filter data into a chip (id + label): for chips that don't come from the parsed text (refine
+     * options, and a query produced elsewhere, e.g. an LLM, as a list of ChipData). The parser keeps its own labels.
+     */
+    fun chipFor(d: ChipData): AskChip =
+        when (d) {
+            is ChipData.Genre -> moodLabel(d.genres).let { AskChip("genre:$it", it, d) }
+            is ChipData.NotGenre -> moodLabel(d.genres).let { AskChip("notgenre:$it", "no ${it.lowercase()}", d) }
+            is ChipData.Kind -> AskChip("kind:${d.kind}", if (d.kind == "Movie") "movies" else "shows", d)
+            is ChipData.MaxRuntime -> AskChip("maxrt:${d.min}", "under ${fmtMin(d.min)}", d)
+            is ChipData.MinRuntime -> AskChip("minrt:${d.min}", "over ${fmtMin(d.min)}", d)
+            is ChipData.Years ->
+                AskChip(
+                    "years:${d.from}-${d.to}",
+                    if (d.from == d.to) "${d.from}" else if (d.to - d.from == 9 && d.from % 10 == 0) "${d.from}s" else "${d.from}-${d.to}",
+                    d,
+                )
+            ChipData.Unplayed -> AskChip("unplayed", "unwatched", d)
+            ChipData.Played -> AskChip("played", "already watched", d)
+            is ChipData.Kids -> AskChip("kids", "for kids (rated G, PG)", d)
+            is ChipData.MinRating -> AskChip("minrating:${num(d.value)}", "rated ${num(d.value)}+", d)
+            is ChipData.MaxSeasons -> AskChip("maxseasons:${d.n}", if (d.n == 1) "1 season" else "up to ${d.n} seasons", d)
+        }
+
+    /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
+    fun chipsFromData(list: List<ChipData>): List<AskChip> = list.map { chipFor(it) }.distinctBy { it.id }
+
     private val DECADE_WORDS =
         mapOf(
             "twenties" to 1920,
@@ -206,7 +251,15 @@ object AskParse {
     ): Int = (if (unit.startsWith("h")) Math.round(n * 60) else Math.round(n)).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() // absurd numbers never wrap negative
 
     private const val UNIT = "(min(?:ute)?s?|mins?|m|hours?|hrs?|hr|h)"
-    private val NEG = Regex("""\b(?:not|no|non[- ]?|without|except|excluding|nothing|anything but|but not)\s+(?:(?:too|very|so|really)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*""")
+    // The negated word may follow an article ("not a scary movie", "nothing that's scary"); group 2 = an "or" / "nor" list after it
+    private val NEG =
+        Regex(
+            """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)*)""",
+        )
+    private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?([a-z][a-z0-9'-]*)""")
+    private val LINK_LEAD = Regex("""^\s*,?\s*""")
+    private val NEG_WORD = Regex("""[a-z][a-z0-9'-]*$""")
+    private val NEG_FOR = Regex("""\bfor\s""")
     private val NEG_KEEP1 = Regex("""^(?:not|no)\s+(?:more than|seen|watched|played)\b""")
     private val NEG_KEEP2 = Regex("""^no more than\b""")
     private val NEG_KEEP3 = Regex("""^(?:not|no)\s+(?:seen|watched|played)\b""")
@@ -246,15 +299,47 @@ object AskParse {
                 }
         }
 
-        // Negatives are not supported: left out of the reading (never inverted into a filter) and reported
+        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out; the
+        // negation carries through an "or" / "nor" list ("nothing scary or animated"), never through "and" ("not scary and
+        // funny" wants funny); anything else ("not too long", "not for kids", "not sad") is left out (never guessed) and reported
+        fun negMood(w: String) = MOODS.firstOrNull { it.label in INVERTIBLE && it.re.containsMatchIn(" $w ") }
         val whole = t
         t =
             NEG.replace(whole) { m ->
-                val from = whole.substring(m.range.first)
+                val head = m.groupValues[1]
+                val chain = m.groupValues[2]
+                val off = m.range.first
+                val from = whole.substring(off)
                 // Phrases that are supported and are not negations of a filter
                 if (NEG_KEEP1.containsMatchIn(from) || NEG_KEEP2.containsMatchIn(from) || NEG_KEEP3.containsMatchIn(from)) return@replace m.value
-                ignored.add(clean(m.value))
-                if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives like 'not scary' aren't supported yet.")
+                fun unsupported(words: String) {
+                    ignored.add(clean(words))
+                    if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.")
+                }
+                val word = NEG_WORD.find(head)?.value.orEmpty()
+                val mood = if (NEG_FOR.containsMatchIn(head)) null else negMood(word)
+                if (mood != null) {
+                    curPos = off
+                    curSrc = clean(head)
+                    add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
+                } else {
+                    unsupported(head)
+                }
+                // "not X or Y" is neither: every item of the or-list is negated too; moods leave their genres out, the rest is
+                // left out (never read back as a positive filter)
+                var used = 0
+                while (true) {
+                    val cm = NEG_LINK.find(chain.substring(used)) ?: break
+                    val md = negMood(cm.groupValues[1])
+                    if (md != null) {
+                        curPos = off + head.length + used
+                        curSrc = clean(cm.value)
+                        add("notgenre:${md.label}", "no ${md.label.lowercase()}", ChipData.NotGenre(md.genres))
+                    } else {
+                        unsupported(cm.value.replace(LINK_LEAD, ""))
+                    }
+                    used += cm.value.length
+                }
                 " ".repeat(m.value.length)
             }
 
@@ -283,7 +368,11 @@ object AskParse {
         take(Regex("""\b(?:rewatch|re-watch|seen before|watched before|already seen|already watched)\b""")) { add("played", "already watched", ChipData.Played) }
 
         // ----- kids -----
-        take(Regex("""\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly)\b""")) {
+        take(
+            Regex(
+                """\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b""",
+            ),
+        ) {
             add("kids", "for kids (rated G, PG)", ChipData.Kids(KIDS_RATINGS, KIDS_GENRES))
         }
 
@@ -362,6 +451,7 @@ object AskParse {
             notes.add("$what contradict each other: kept “${keep.label}”, ignored “${drop.src.ifEmpty { drop.label }}”.")
         }
         clash("kind:Movie", "kind:Series", "Movies and shows")
+        for (mood in MOODS) clash("genre:${mood.label}", "notgenre:${mood.label}", "“${mood.label}” and “no ${mood.label.lowercase()}”")
         clash("unplayed", "played", "Unwatched and rewatch")
 
         for (w in clean(t).split(" ")) {
@@ -385,6 +475,16 @@ object AskParse {
 
     private inline fun <reified T : ChipData> List<AskChip>.of(): List<T> = mapNotNull { it.data as? T }
 
+    /** Genres left out by "not ..." chips (lower case). */
+    fun excludedGenres(chips: List<AskChip>): Set<String> = chips.of<ChipData.NotGenre>().flatMap { it.genres }.map { it.lowercase() }.toSet()
+
+    /** The kids rule's genres, minus any left out ("for the kids, nothing animated" = Family or Kids). */
+    fun kidsGenres(chips: List<AskChip>): List<String> {
+        val kids = chips.of<ChipData.Kids>().firstOrNull() ?: return emptyList()
+        val out = excludedGenres(chips)
+        return kids.genres.filter { it.lowercase() !in out }
+    }
+
     /** Jellyfin Items params for the chips. Runtime, season counts and "each mood matches" are checked client-side (see pickFrom). */
     fun buildQuery(
         chips: List<AskChip>,
@@ -395,8 +495,10 @@ object AskParse {
         val genres = LinkedHashSet<String>()
         for (c in chips.of<ChipData.Genre>()) genres.addAll(c.genres)
         val kids = chips.of<ChipData.Kids>().firstOrNull()
-        // "for kids" adds Family/Animation only when no mood already chose genres
-        if (kids != null && genres.isEmpty()) genres.addAll(kids.genres)
+        // "for kids" adds Family/Animation only when no mood already chose genres; genres left out by "not ..." never go in
+        if (kids != null && genres.isEmpty()) genres.addAll(kidsGenres(chips))
+        val out = excludedGenres(chips)
+        genres.removeAll { it.lowercase() in out }
         val years = sortedSetOf<Int>()
         for (c in chips.of<ChipData.Years>()) for (y in c.from..c.to) years.add(y)
         val flags = mutableListOf<String>()
@@ -410,7 +512,7 @@ object AskParse {
             sortOrder = if (shuffle) null else listOf("Descending", "Ascending"),
             limit = limit ?: fetchLimit(chips),
             // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 }, "ChildCount".takeIf { wantSeasons }),
+            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 || out.isNotEmpty() }, "ChildCount".takeIf { wantSeasons }),
             genres = genres.toList(),
             years = years.toList(),
             filters = flags,
@@ -424,7 +526,7 @@ object AskParse {
 
     /** True when some of the chips can only be checked over the fetched page. */
     fun needsClientFilter(chips: List<AskChip>): Boolean =
-        chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size + chips.of<ChipData.MaxSeasons>().size > 0 ||
+        chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size + chips.of<ChipData.MaxSeasons>().size + chips.of<ChipData.NotGenre>().size > 0 ||
             chips.of<ChipData.Genre>().size > 1
 
     private fun runtimeMin(it: AskItem): Double? = it.runTimeTicks?.takeIf { t -> t != 0L }?.let { t -> t / 600_000_000.0 }
@@ -439,6 +541,7 @@ object AskParse {
         val minRt = (chips.of<ChipData.MinRuntime>().map { it.min.toDouble() } + 0.0).max()
         val maxSeasons = chips.of<ChipData.MaxSeasons>().minOfOrNull { it.n }
         val moods = chips.of<ChipData.Genre>()
+        val out = excludedGenres(chips)
         return items.filter { raw ->
             val it = view(raw)
             if (maxRt != Double.POSITIVE_INFINITY || minRt > 0) {
@@ -449,6 +552,8 @@ object AskParse {
                 if (it.type != "Series" || it.childCount == null || it.childCount > maxSeasons) return@filter false
             }
             val have = it.genres.orEmpty().map { g -> g.lowercase() }.toSet()
+            // A title in a left-out genre is out (no genres known = kept: nothing to say it is one)
+            if (have.any { g -> g in out }) return@filter false
             moods.all { c -> c.genres.any { g -> g.lowercase() in have } }
         }
     }
@@ -470,6 +575,7 @@ object AskParse {
                 "length".takeIf { chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size > 0 },
                 "season".takeIf { chips.of<ChipData.MaxSeasons>().isNotEmpty() },
                 "all-moods".takeIf { chips.of<ChipData.Genre>().size > 1 },
+                "left-out-genre".takeIf { chips.of<ChipData.NotGenre>().isNotEmpty() },
             )
         var note =
             if (!partial) {
@@ -491,8 +597,11 @@ object AskParse {
         val notes = mutableListOf<String>()
         chips.of<ChipData.Kids>().firstOrNull()?.let { kids ->
             val moods = chips.of<ChipData.Genre>().isNotEmpty()
-            notes.add("For kids: rated ${kids.ratings.joinToString(", ")}${if (moods) "" else ", genres ${kids.genres.joinToString(" or ")}"}. Unrated titles are left out.")
+            val kg = kidsGenres(chips)
+            notes.add("For kids: rated ${kids.ratings.joinToString(", ")}${if (moods || kg.isEmpty()) "" else ", genres ${kg.joinToString(" or ")}"}. Unrated titles are left out.")
         }
+        val left = chips.of<ChipData.NotGenre>().flatMap { it.genres }
+        if (left.isNotEmpty()) notes.add("Left out: titles in ${left.distinct().joinToString(", ")} (titles with no genres listed can't be checked and are kept).")
         if (chips.of<ChipData.MaxRuntime>().isNotEmpty() || chips.of<ChipData.MinRuntime>().isNotEmpty()) {
             notes.add("Length: shows are judged by episode length; titles without a known length are left out.")
         }
