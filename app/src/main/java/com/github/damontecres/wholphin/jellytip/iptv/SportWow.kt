@@ -236,9 +236,16 @@ object CatchUpPolicy {
             }
         }
         for (p in rel) if (seen.add(p.key)) out += p
-        // Newest first by event time; plays with no wallclock keep their (server) order after the stamped ones
-        return out.sortedWith(compareBy<LivePlay, Double?>(nullsLast(reverseOrder<Double>())) { it.wallclock })
+        // Newest first by event time. Plays with no wallclock come after the stamped ones (older), latest period
+        // first; within a period they keep the server's order (newest first), so the cards show them oldest first.
+        return out.sortedWith(
+            compareBy<LivePlay, Double?>(nullsLast(reverseOrder<Double>())) { it.wallclock }
+                .thenBy(nullsLast(reverseOrder<Int>())) { if (it.wallclock == null) periodNumber(it.period) else null },
+        )
     }
+
+    /** "2" / "Q3" / "2nd Half" -> 2 / 3 / 2; null when it has no number. */
+    internal fun periodNumber(period: String?): Int? = period?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
 
     /** The choice card's options: 0 From kick-off, 1 Catch me up, 2 Live. Empty = Live alone, so no prompt at all. */
     fun options(

@@ -1062,17 +1062,21 @@ fun JellytipLiveTvPlayerPage(
         var playedMs = 0L
         while (true) {
             delay(500)
-            // App in the background (stream stopped) or paused: nothing is judged, no time is counted
-            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || playback.player?.playWhenReady == false) continue
-            // Offline: our network, not the catch-up (recovery waits for it to come back)
-            if (playback.offline) continue
+            // App in the background (stream stopped) or offline (our network, recovery waits): nothing is judged
+            val away = !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || playback.offline
+            if (away) continue
+            // Paused on this window: no time is counted, but a failure is still a failure. (The one player can keep
+            // playWhenReady = false from a paused film, so it only counts while it holds this window's stream.)
+            val paused = playback.holds(t) && playback.player?.playWhenReady == false
             val s = playback.state.value
             val mine = s.target == t
-            if (mine && s is IptvPlayState.Playing) {
+            if (mine && s is IptvPlayState.Playing && !paused) {
                 everPlayed = true
                 playedMs += 500
             }
-            if (mine && s is IptvPlayState.Opening) openingMs += 500
+            if (mine && s is IptvPlayState.Opening && !paused) openingMs += 500
+            // A failure screen (all connections in use…) ends that attempt: an OK retry gets the whole start window
+            if (mine && s is IptvPlayState.Failed) openingMs = 0L
             val failed = mine && s is IptvPlayState.Failed && CatchUpPolicy.fallsBack(s.cause)
             // ENDED only counts once the player holds this window's stream (not the previous item's ENDED)
             val endedUnplayed = mine && !everPlayed && playback.holds(t) && playback.player?.playbackState == androidx.media3.common.Player.STATE_ENDED

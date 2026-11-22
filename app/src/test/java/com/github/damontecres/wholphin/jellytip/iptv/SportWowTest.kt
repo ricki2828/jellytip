@@ -167,6 +167,26 @@ class SportWowTest {
     }
 
     @Test
+    fun catchUpPlaysWithoutWallclockOldestFirst() {
+        fun np(
+            id: String,
+            period: String?,
+        ) = LivePlay("10:00", period, "Play $id", true, "home", 3, id = id)
+        // Released, no wallclocks, listed oldest period first: the cards still run 1st half, then 2nd half
+        val rel = answer(listOf(np("h1", "1"), np("h2", "2")), updatedAt = 900)
+        assertEquals(listOf("Play h1", "Play h2"), CatchUpPolicy.cards(rel, rel, rel) { true }.map { it.text })
+        // Same period: the server's newest-first order, shown oldest first
+        val same = answer(listOf(np("b", "2nd Half"), np("a", "2nd Half"), np("q1", "Q1")), updatedAt = 900)
+        assertEquals(listOf("Play q1", "Play a", "Play b"), CatchUpPolicy.cards(same, same, same) { true }.map { it.text })
+        // Stamped plays are newer than unstamped ones
+        val newest = answer(listOf(play("s", 100.0)))
+        assertEquals(listOf("Play h1", "Play h2", "Play s"), CatchUpPolicy.cards(rel, newest, newest) { true }.map { it.text })
+        assertEquals(2, CatchUpPolicy.periodNumber("2nd Half"))
+        assertEquals(3, CatchUpPolicy.periodNumber("Q3"))
+        assertNull(CatchUpPolicy.periodNumber("OT"))
+    }
+
+    @Test
     fun catchUpCardsCapKeepsTheNewest() {
         val plays = (20 downTo 1).map { play("p$it", it.toDouble()) }
         val full = answer(plays)
