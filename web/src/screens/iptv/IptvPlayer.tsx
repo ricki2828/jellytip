@@ -586,7 +586,10 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         if (recRef.current.phase !== "blocked") return false; // one delayed retry scheduled
       } else dispatchRef.current({ t: "blocked" });
     }
-    if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
+    // a second "every connection is in use" after stopping another stream stays the busy message (not an error: a kick-off
+    // target would read that as "catch-up isn't working")
+    if (retry && what === "full") setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection });
+    else if (retry) setState({ kind: "error", text: a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`) });
     else if (what === "full") {
       const b = parseBlocker(a.data);
       // Only a blocker we can say something useful about gets the pop-up; older servers keep today's message
@@ -932,6 +935,8 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extras?.matchId]);
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  /** From kick-off as decided when the card opened: frozen, so the card cannot lose an option while it is up. */
+  const [catchKick, setCatchKick] = useState(false);
   // ---- Full time (TV port): when the released state says the game is over, the score and what's next (the next game, else Pick for tonight)
   const [fullTime, setFullTime] = useState<{ score: { home: number; away: number } | null; next: FxItem | null } | null>(null);
   const fullTimeRef = useRef(false);
@@ -978,6 +983,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
       if (ask && !show) debugEvent("iptv-player", "catch-up not offered", { kickoff: canKick, cards: cs.length }, "info");
       if (ask) markOffered(id);
       setCatchCards(cs);
+      setCatchKick(canKick);
       setCatchPhase(show ? "choice" : "done");
     };
     const off = feedSource.subscribe(() => {
@@ -1398,12 +1404,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
         <CatchUpChoice
           fixture={feedSource.get().fixture}
           joining={joiningLine(catchStartsAt, Date.now() / 1000)}
-          canKickOff={!!kickoff}
+          canKickOff={catchKick}
           plays={catchCards.length}
           onChoose={(c) => {
-            if (c === "kickoff" && kickoff) {
+            const ko = extras?.kickoff;
+            if (c === "kickoff" && catchKick && ko) {
               // the hold stays until the route change unmounts this player (no frame with the live score)
-              go(`${targetPath({ channel: target.channel, start: kickoff.start, stop: kickoff.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+              go(`${targetPath({ channel: target.channel, start: ko.start, stop: ko.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
             } else if (c === "catchup") {
               // fresh cards when the feed has as many by now, else the ones the card was offered with (never an empty recap)
               const f = feedSource.get();
@@ -1676,6 +1683,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
     isLive && !extras?.replay && extras?.matchId && catchStartsAt && Date.now() / 1000 - catchStartsAt >= LATE_SEC && !wasOffered(extras.matchId) && shouldShowLiveExtras(extras) ? "deciding" : "done",
   );
   const [catchCards, setCatchCards] = useState<CatchCard[]>([]);
+  /** From kick-off as decided when the card opened: frozen, so the card cannot lose an option while it is up. */
+  const [catchKick, setCatchKick] = useState(false);
   const spoilers = !!userPrefs?.sport.spoilers;
   const { source: feedSource } = useLiveFeed({ matchId: extras?.matchId, enabled: catchPhase === "deciding" || catchPhase === "choice", liveNow: true, spoilers, reveal: revealClock.reveal, noteMoment: revealClock.noteMoment });
   useEffect(() => {
@@ -1695,6 +1704,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       if (ask && !show) debugEvent("iptv-player", "catch-up not offered", { kickoff: canKick, cards: cs.length }, "info");
       if (ask) markOffered(id);
       setCatchCards(cs);
+      setCatchKick(canKick);
       setCatchPhase(show ? "choice" : "done");
     };
     const off = feedSource.subscribe(() => {
@@ -1982,7 +1992,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         return false;
       }
       const text = a.data?.error ?? (a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`);
-      if (retry) setState({ kind: "error", text });
+      if (retry && what === "full") setState({ kind: "full", text: a.data?.error ?? "Every connection to this provider is in use.", connection: a.data?.connection });
+      else if (retry) setState({ kind: "error", text });
       else if (what === "full") {
         const b = parseBlocker(a.data);
         const popup = b && (canStop(b) || (b.kind === "viewer" && (b.title || b.channel))) ? b : undefined;
@@ -2016,11 +2027,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         <CatchUpChoice
           fixture={feedSource.get().fixture}
           joining={joiningLine(catchStartsAt, Date.now() / 1000)}
-          canKickOff={!!(isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop)}
+          canKickOff={catchKick}
           plays={catchCards.length}
           onChoose={(c) => {
             const k = extras?.kickoff;
-            if (c === "kickoff" && k) go(`${targetPath({ channel: target.channel, start: k.start, stop: k.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
+            if (c === "kickoff" && catchKick && k) go(`${targetPath({ channel: target.channel, start: k.start, stop: k.stop })}&t=${encodeURIComponent(title)}${liveExtrasQuery(extrasIn)}`, true);
             else if (c === "catchup") {
               // fresh cards when the feed has as many by now, else the ones the card was offered with (never an empty recap)
               const f = feedSource.get();
