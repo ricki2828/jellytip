@@ -74,6 +74,22 @@ fun PlaybackViewModel.jellytipOfferIptvNext(): Boolean {
 }
 
 /**
+ * The player's skip-next control (onSeekToNext -> playNextUp) on a split series whose next episode is an IPTV one (the
+ * prefetched one, the same split list as the end card and the series page): open that IPTV episode instead of the playlist's
+ * next (Jellyfin's next up skips IPTV episodes: S2E2 -> E6 over IPTV E3-E5; t3x 22-Nov). True = handled; false = carry on as
+ * before (not split, library next, the lookup not back yet, or this player is no longer on top).
+ */
+fun PlaybackViewModel.jellytipSkipToIptvNext(): Boolean {
+    val up = jellytipIptvPending ?: return false
+    if (navigationManager.backStack.lastOrNull() != destination) return false
+    jellytipIptvPending = null
+    jellytipIptvNext.value = null
+    NextEpisodeLoader.trace(up, "skip next")
+    navigationManager.replaceTop(Destination.JellytipIptvPlay(title = up.label, seriesId = up.iptvSeriesId, episodeId = up.ep.id, resumeMs = up.resumeMs))
+    return true
+}
+
+/**
  * The library player's Up next card for an IPTV next (drawn while [PlaybackViewModel.jellytipIptvNext] is set, i.e. after
  * the episode ENDED): OK plays it (the IPTV player replaces this one), the countdown runs out = the same, Back cancels and
  * leaves (the episode ended). It holds focus and takes every key but Back, so nothing reaches the ended player.

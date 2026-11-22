@@ -4,6 +4,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
+import com.github.damontecres.wholphin.jellytip.iptv.jellytipSkipToIptvNext
 import com.github.damontecres.wholphin.jellytip.iptv.JellytipLibraryIptvUpNext
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -284,7 +285,8 @@ fun PlaybackPageContent(
                 },
                 onDpadSeek = onDpadSeek,
                 dpadSeekMode = prefs.dpadSeekMode,
-                onSeekToNext = viewModel::playNextUp,
+                // Jellytip: on a split series the next episode may be an IPTV one (the merged list, not Jellyfin's next up)
+                onSeekToNext = { if (!viewModel.jellytipSkipToIptvNext()) viewModel.playNextUp() },
                 onPSeekToPrevious = viewModel::playPrevious,
             )
         }
@@ -336,7 +338,7 @@ fun PlaybackPageContent(
 
             PlaybackAction.Next -> {
                 // TODO focus is lost
-                viewModel.playNextUp()
+                if (!viewModel.jellytipSkipToIptvNext()) viewModel.playNextUp()
             }
 
             PlaybackAction.Previous -> {
