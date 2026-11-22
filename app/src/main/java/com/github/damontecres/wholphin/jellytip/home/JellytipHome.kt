@@ -118,8 +118,9 @@ fun JellytipHomeTheme(content: @Composable () -> Unit) {
 
 /** Design tokens for the home hero. Sizes are in physical px at 1080p; edit here only. */
 object JellytipHomeTokens {
-    const val TEXT_PX = 22
-    const val QUOTE_PX = 20 // hero pull-quote, a touch smaller than the other hero lines
+    // 12 sp floor (design audit 22-Nov, approved): px tokens render at px / 2 sp on the 2x TVs
+    const val TEXT_PX = 24
+    const val QUOTE_PX = 24 // hero pull-quote (was a touch smaller; now at the 12 sp floor like the other lines)
     const val TITLE_PX = 34
     const val LOGO_MAX_W_PX = 380
     const val LOGO_MAX_H_PX = 150
@@ -131,7 +132,7 @@ object JellytipHomeTokens {
 
     /** Landscape tile height in dp (~20% smaller than the previous 132) and the gap between tiles; card image requests derive from these. */
     const val LANDSCAPE_CARD_HEIGHT_DP = 106
-    const val LANDSCAPE_CARD_SPACING_DP = 10
+    const val LANDSCAPE_CARD_SPACING_DP = 12 // 4 dp grid (design audit G3; was 10)
     /** Hero/details clearlogo drawn as a solid off-white silhouette so it never repeats the coloured logo on the tile. Flip to false to restore. */
     const val WHITE_LOGO = true
     val LOGO_TINT = Color(0xFFF2F2F0)
@@ -145,8 +146,8 @@ object JellytipHomeTokens {
     const val HOME_TRAILER_DELAY_MS = 2_500L
 
     // Details page (shares TEXT_PX / TITLE-less logo box above)
-    const val BADGE_PX = 19
-    const val CARD_SUBTITLE_PX = 18
+    const val BADGE_PX = 24
+    const val CARD_SUBTITLE_PX = 24
     const val DETAILS_TITLE_PX = 64
     const val DETAILS_GAP_PX = 14
     const val DETAILS_LEFT_PX = 96
@@ -229,17 +230,36 @@ fun JellytipHomeHero(
     }
 
     // Trailer: only after focus has rested on the same card. State lives in JellytipTrailerControl so OK presses can drive it.
-    val trailerWanted = hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused
-    LaunchedEffect(item?.id, trailerWanted) {
+    val trailerWanted =
+        hasFocus && resumed && settings.trailerAutoplay && !JellytipTrailerControl.specialVideoFocused && !JellytipHeroCarousel.holdAutoplay
+    // Home hidden, focus off the page (drawer) or a video special: the hero trailer stops, whatever else holds
+    val canKeep = JellytipTrailerControl.heroMayPlay(hasFocus, resumed, JellytipTrailerControl.specialVideoFocused)
+    LaunchedEffect(canKeep) { if (!canKeep) JellytipTrailerControl.stopIfOwner(null) }
+    LaunchedEffect(item?.id, trailerWanted, canKeep) {
+        // This item's trailer with sound (Trailer button, Sound) outlives only the carousel's autoplay hold
+        val mine = item != null && JellytipTrailerControl.isHeroPlaying && JellytipTrailerControl.itemId == item.id
+        if (JellytipTrailerControl.keepHeroTrailer(mine, JellytipTrailerControl.sound, canKeep)) return@LaunchedEffect
         // A special's video (Trailer Break, Closet Picks) is not the hero's to stop
         JellytipTrailerControl.stopIfOwner(null)
-        if (!trailerWanted || item == null) return@LaunchedEffect
+        if (item == null) return@LaunchedEffect
         delay(JellytipHomeTokens.HOME_TRAILER_DELAY_MS)
-        viewModel.localTrailer(item)?.let { (url, trailerId) ->
-            // Sound: only the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
-            val sound = JellytipTrailerControl.heroSoundChoice ?: JellytipTrailerControl.heroSoundSetting
-            JellytipTrailerControl.start(item, url, trailerId, sound = sound)
-        }
+        // Looked up after the rest either way: the hero's Trailer button shows only when there is one
+        val found = viewModel.localTrailer(item) ?: return@LaunchedEffect
+        JellytipTrailerControl.heroTrailerFor = item.id
+        if (!trailerWanted || JellytipTrailerControl.isHeroPlaying) return@LaunchedEffect
+        // Autoplay (a preview): the ui.heroSound / trailer-sound settings; the hero Sound button flips it for this trailer alone
+        val sound = JellytipTrailerControl.heroSoundChoice ?: JellytipTrailerControl.heroSoundSetting
+        JellytipTrailerControl.start(item, found.first, found.second, sound = sound)
+    }
+    // The Trailer button (an explicit OK): this item's trailer with sound, whatever the autoplay rule says
+    val trailerRequest = JellytipTrailerControl.heroTrailerRequest
+    LaunchedEffect(trailerRequest) {
+        val wanted = trailerRequest ?: return@LaunchedEffect
+        val target = item?.takeIf { it.id == wanted }
+        val found = target?.let { viewModel.localTrailer(it) }
+        if (target != null && found != null) JellytipTrailerControl.start(target, found.first, found.second, sound = true)
+        // Cleared last: clearing first would cancel this effect if the lookup suspended
+        if (JellytipTrailerControl.heroTrailerRequest == wanted) JellytipTrailerControl.heroTrailerRequest = null
     }
     DisposableEffect(Unit) { onDispose { JellytipTrailerControl.stop() } }
     val trailerUrl = JellytipTrailerControl.url

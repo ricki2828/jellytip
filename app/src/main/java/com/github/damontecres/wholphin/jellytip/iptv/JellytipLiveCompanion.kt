@@ -165,9 +165,10 @@ fun ScorebugPill(
             return@Row
         }
         Box(Modifier.width(6.dp).fillMaxHeight().background(if (pal.known) pal.home else Broadcast.Gold))
-        Cond(home, 18.sp, Color.White, modifier = Modifier.padding(start = 10.dp, end = 8.dp))
+        // In a narrow slot the team names ellipsize first; the score and the clock keep their room
+        Cond(home, 18.sp, Color.White, modifier = Modifier.weight(1f, fill = false).padding(start = 10.dp, end = 8.dp))
         Cond("${scoreHome ?: "–"}  –  ${scoreAway ?: "–"}", 20.sp, Broadcast.Gold)
-        Cond(away, 18.sp, Color.White, modifier = Modifier.padding(start = 8.dp, end = 10.dp))
+        Cond(away, 18.sp, Color.White, modifier = Modifier.weight(1f, fill = false).padding(start = 8.dp, end = 10.dp))
         Box(Modifier.width(6.dp).fillMaxHeight().background(if (pal.known) pal.away else Broadcast.Gold))
         val whenText = listOfNotNull(period, clock).joinToString(" ")
         if (whenText.isNotBlank()) Cond(whenText, 14.sp, Broadcast.Secondary, modifier = Modifier.padding(horizontal = 10.dp))
@@ -286,7 +287,7 @@ fun DelayChipText(
         color = Color.White,
         fontFamily = JellytipFontFamily,
         fontSize = 13.sp,
-        modifier = modifier.background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = modifier.background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 

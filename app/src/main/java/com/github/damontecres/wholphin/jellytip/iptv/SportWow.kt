@@ -244,8 +244,23 @@ object CatchUpPolicy {
         )
     }
 
-    /** "2" / "Q3" / "2nd Half" -> 2 / 3 / 2; null when it has no number. */
-    internal fun periodNumber(period: String?): Int? = period?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+    /**
+     * Order of a period: "2" / "Q3" / "2nd Half" -> 2 / 3 / 2. Overtime and extra time come after every numbered period
+     * (100 + their own number: "OT" 100, "2OT" 102, "Extra Time 1st" 101); penalties and shoot-outs after those (200 + n:
+     * "Penalties", "Shootout", hockey "SO"). Null when it has none of these.
+     */
+    internal fun periodNumber(period: String?): Int? {
+        val p = period?.lowercase(java.util.Locale.ROOT) ?: return null
+        val n = Regex("""\d+""").find(p)?.value?.toIntOrNull()
+        return when {
+            SHOOTOUT_PERIOD.containsMatchIn(p) -> 200 + (n ?: 0)
+            EXTRA_PERIOD.containsMatchIn(p) -> 100 + (n ?: 0)
+            else -> n
+        }
+    }
+
+    private val SHOOTOUT_PERIOD = Regex("""(^|[^a-z])so([^a-z]|$)|shoot|penalt""")
+    private val EXTRA_PERIOD = Regex("""(^|[^a-z])(ot|et|aet)([^a-z]|$)|overtime|extra|golden|super over""")
 
     /** The choice card's options: 0 From kick-off, 1 Catch me up, 2 Live. Empty = Live alone, so no prompt at all. */
     fun options(

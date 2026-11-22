@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import coil3.compose.AsyncImage
@@ -685,6 +686,8 @@ fun JellytipLivePanel(
     allowWinProb: Boolean = false,
     /** The player's reveal clock (fantasy "in this game" waits for it). */
     reveal: (Double?) -> Boolean = { true },
+    /** Drawn first, end-aligned, above the score strip (the player's delay chip: never over the panel). */
+    topRow: (@Composable () -> Unit)? = null,
 ) {
     val pal = remember(match.home?.color, match.away?.color, match.away?.altColor) { matchPalette(match) }
     val shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape
@@ -709,8 +712,10 @@ fun JellytipLivePanel(
                     Modifier
                         .fillMaxSize()
                         .then(if (floating) Modifier.border(2.dp, Broadcast.Gold.copy(alpha = 0.6f), shape) else Modifier)
-                        .padding(14.dp),
+                        // Docked: inside the safe area (24 dp from the right edge, 27 top / bottom; audit P1)
+                        .then(if (floating) Modifier.padding(14.dp) else Modifier.padding(start = 16.dp, end = 24.dp, top = 27.dp, bottom = 27.dp)),
             ) {
+                topRow?.let { row -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { row() } }
                 if (match.isEvent || (match.home == null && match.away == null)) {
                     EventStrip(match, pal, if (spoilerNotice) null else flash)
                 } else {
@@ -766,15 +771,42 @@ private fun ScoreStrip(
     val wiping = remember { booleanArrayOf(false) }
     LaunchedEffect(flash?.seq) { if (flash != null) wiping[0] = true }
     LaunchedEffect(target) { if (!wiping[0]) shown = target }
-    Box(Modifier.fillMaxWidth().height(56.dp).clipToBounds()) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(56.dp).clipToBounds()) {
+        // A narrow strip (docked panel, long names): the names fall back so both teams read; the score keeps its room
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val stripDp = maxWidth.value
+        val fit =
+            remember(stripDp, m.home, m.away, shown) {
+                val nameStyle =
+                    androidx.compose.ui.text.TextStyle(
+                        fontFamily = BarlowCondensed,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        letterSpacing = 0.02f.em,
+                    )
+                val scoreStyle = nameStyle.copy(fontSize = 34.sp)
+                fun widthDp(
+                    text: String,
+                    style: androidx.compose.ui.text.TextStyle,
+                ): Float =
+                    if (text.isEmpty()) {
+                        0f
+                    } else {
+                        with(density) { measurer.measure(text.uppercase(java.util.Locale.ROOT), style, maxLines = 1, softWrap = false).size.width.toDp().value }
+                    }
+                val scoreDp = maxOf(widthDp(shown.first, scoreStyle), widthDp(shown.second, scoreStyle))
+                val room = ScoreStripFit.nameRoom(stripDp, scoreDp)
+                ScoreStripFit.fit(m.home?.short, m.home?.name, m.away?.short, m.away?.name, { widthDp(it, nameStyle) }, room)
+            }
         Row(Modifier.fillMaxSize()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f).fillMaxHeight().clip(SlabLeft).background(pal.home).padding(horizontal = 9.dp),
             ) {
-                Crest(m.home, 28.dp)
-                Cond(m.home?.short ?: m.home?.name ?: "", 17.sp, pal.onHome, modifier = Modifier.weight(1f))
+                if (fit.crests) Crest(m.home, 28.dp)
+                Cond(fit.home, 17.sp, pal.onHome, modifier = Modifier.weight(1f))
                 if (shown.first.isNotEmpty()) Odometer(shown.first, 34.sp, pal.onHome)
             }
             Row(
@@ -790,8 +822,8 @@ private fun ScoreStrip(
                         .padding(start = 15.dp, end = 2.dp),
             ) {
                 if (shown.second.isNotEmpty()) Odometer(shown.second, 34.sp, pal.onAway)
-                Cond(m.away?.short ?: m.away?.name ?: "", 17.sp, pal.onAway, modifier = Modifier.weight(1f), caps = true)
-                Crest(m.away, 28.dp)
+                Cond(fit.away, 17.sp, pal.onAway, modifier = Modifier.weight(1f), caps = true)
+                if (fit.crests) Crest(m.away, 28.dp)
             }
         }
         MomentWipe(
@@ -803,6 +835,61 @@ private fun ScoreStrip(
                 shown = latest
             },
         )
+    }
+}
+
+/**
+ * Team names on the live panel's score strip when it is narrow (docked panel, long names; t5n 22-Nov): the short name
+ * if it fits, else a 3-letter code (first three letters of the short name, upper case); the crests go first so the
+ * names can stay whole, and only when both sides fit with them do they come back. The score is never squeezed: its
+ * width comes off the room before any name is placed. Pure; ScoreStripFitTest.
+ */
+object ScoreStripFit {
+    /** A crest (28 dp) and its 6 dp gap. */
+    const val CREST_DP = 34f
+
+    /** Per side: slab padding (9 + 9; the away side 15 + 2 plus its 7 dp slant overlap) and a little slack. */
+    const val SIDE_FIXED_DP = 26f
+
+    /** The score and its 6 dp gap. */
+    const val SCORE_GAP_DP = 6f
+
+    data class Fit(
+        val home: String,
+        val away: String,
+        val crests: Boolean,
+    )
+
+    /** Room for one side's name without its crest: half the strip less padding and the score. */
+    fun nameRoom(
+        stripDp: Float,
+        scoreDp: Float,
+    ): Float = stripDp / 2f - SIDE_FIXED_DP - (if (scoreDp > 0f) scoreDp + SCORE_GAP_DP else 0f)
+
+    /** "Panthers" -> "PAN", "New Zealand Warriors" -> "NEW"; letters only. */
+    fun code(
+        short: String?,
+        name: String?,
+    ): String = (short ?: name ?: "").filter { it.isLetter() }.take(3).uppercase(java.util.Locale.ROOT)
+
+    fun fit(
+        homeShort: String?,
+        homeName: String?,
+        awayShort: String?,
+        awayName: String?,
+        widthDp: (String) -> Float,
+        room: Float,
+    ): Fit {
+        val h = homeShort ?: homeName ?: ""
+        val a = awayShort ?: awayName ?: ""
+        fun fits(
+            s: String,
+            r: Float,
+        ) = widthDp(s) <= r
+        if (fits(h, room - CREST_DP) && fits(a, room - CREST_DP)) return Fit(h, a, true)
+        val home = if (fits(h, room)) h else code(homeShort, homeName)
+        val away = if (fits(a, room)) a else code(awayShort, awayName)
+        return Fit(home, away, fits(home, room - CREST_DP) && fits(away, room - CREST_DP))
     }
 }
 

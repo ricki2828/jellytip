@@ -77,6 +77,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl
+import com.github.damontecres.wholphin.jellytip.home.TrailerOk
 import com.github.damontecres.wholphin.jellytip.jellytipSiblingDim
 import com.github.damontecres.wholphin.jellytip.rememberIsJellytipAdmin
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
@@ -268,8 +269,24 @@ private fun TrailerBreakRow(
                 item.data.genres?.take(3)?.takeIf { it.isNotEmpty() }?.joinToString(", "),
             ).joinToString("  \u00B7  ")
         }
-    // OK opens details; the trailer only autoplays (muted unless the sound settings are on)
-    val onOk: () -> Unit = { actions.open(item) }
+    // Focus preview: muted (unless the sound settings are on). OK = the trailer with sound (Ricki 22-Nov); OK again with
+    // sound on = details; long press = details. No trailer to be found = details.
+    val onOk: () -> Unit = {
+        when (JellytipTrailerControl.specialOk(owner)) {
+            TrailerOk.SOUND_ON -> {}
+            TrailerOk.OPEN_DETAILS -> actions.open(item)
+            TrailerOk.START_WITH_SOUND ->
+                scope.launch {
+                    val url = resolve()
+                    if (url == null) {
+                        actions.open(item)
+                    } else if (JellytipTrailerControl.focusedSpecial == owner) {
+                        // Still on the tile (focus may have moved while the link was fetched)
+                        JellytipTrailerControl.startSpecial(owner, url, sound = true, itemId = item.id)
+                    }
+                }
+        }
+    }
     // As on the web: one framed near-black band, no row title above (the kicker is the title), info on the left and
     // a fixed 16:9 panel on the right (the still until the trailer has a picture, then the trailer, letterboxed).
     // Height fits under the hero text with the row spacing, so nothing is cut at the bottom of the screen.
@@ -1193,8 +1210,10 @@ private fun SpecialVideoDriver(
         if (!autoplay || JellytipTrailerControl.isPlayingForOwner(owner)) return@LaunchedEffect
         delay(SpecialTokens.VIDEO_DELAY_MS)
         val url = currentResolve() ?: return@LaunchedEffect
-        // Focus may have moved on while the URL was resolved
-        if (JellytipTrailerControl.focusedSpecial == owner) JellytipTrailerControl.startSpecial(owner, url, sound = currentAutoSound(), itemId = itemId)
+        // Focus may have moved on while the URL was resolved; an OK may have started it with sound meanwhile (keep that)
+        if (JellytipTrailerControl.focusedSpecial == owner && !JellytipTrailerControl.isPlayingForOwner(owner)) {
+            JellytipTrailerControl.startSpecial(owner, url, sound = currentAutoSound(), itemId = itemId)
+        }
     }
     DisposableEffect(owner) {
         onDispose {
