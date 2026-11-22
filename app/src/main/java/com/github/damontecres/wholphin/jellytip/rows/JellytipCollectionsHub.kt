@@ -249,6 +249,30 @@ fun JellytipCollectionsHubPage(
         failed = got == null
         value = got.orEmpty()
     }
+    JellytipCollectionsHubContent(
+        sections = sections,
+        failed = failed,
+        onJourneys = {
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
+        },
+        onOpen = { c ->
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(c.id, c.title), "collections hub OK")
+        },
+        modifier = modifier,
+    )
+}
+
+/** The hub's layout with its data and actions passed in (the loader above keeps the page's signature; shots draw this). */
+@Composable
+internal fun JellytipCollectionsHubContent(
+    sections: List<HubSection>?,
+    failed: Boolean,
+    onJourneys: () -> Unit,
+    onOpen: (HubCollection) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var selected by remember { mutableIntStateOf(0) }
     val firstChip = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -273,10 +297,7 @@ fun JellytipCollectionsHubPage(
                     journeyChip.tryRequestFocus()
                 }
             }
-            HubChip("Start a journey  ›", selected = false, modifier = Modifier.focusRequester(journeyChip), onClick = {
-                JellytipTrailerControl.stop()
-                viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
-            })
+            HubChip("Start a journey  ›", selected = false, modifier = Modifier.focusRequester(journeyChip), onClick = onJourneys)
         }
         when {
             list == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 220.dp, tileH = 124.dp, rows = 2, perRow = 4, modifier = Modifier.padding(8.dp))
@@ -327,10 +348,7 @@ fun JellytipCollectionsHubPage(
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 ) {
                     items(section.items, key = { "${section.key}:${it.id}" }) { c ->
-                        HubCard(c) {
-                            JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(c.id, c.title), "collections hub OK")
-                        }
+                        HubCard(c) { onOpen(c) }
                     }
                 }
             }
