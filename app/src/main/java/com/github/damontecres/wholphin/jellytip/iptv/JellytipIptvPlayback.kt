@@ -605,10 +605,13 @@ class JellytipIptvPlayback
                         val pend = pendingRemuxSeekMs
                         if (st !is IptvPlayState.Opening || st.target != t || pend == null || skipOpenMs == null) break
                         val secs = (System.currentTimeMillis() - skipStartedAt) / 1000
-                        if (secs >= SkipPolicy.GIVE_UP_SEC) {
+                        if (secs >= SkipPolicy.GIVE_UP_SEC && !recovering()) { // (recovery has its own attempt limit)
                             // Nothing after 90 s: an honest stop instead of an endless count (OK tries again at the target)
                             JellytipTrace.player("iptv", "skip gave up ${t.channelId} at ${pend / 1000} s after $secs s")
                             skipOpenMs = null
+                            job?.cancel() // (the /play still in flight must not start playing behind the card)
+                            okJob?.cancel()
+                            recTimer?.cancel()
                             stopPlayer()
                             _note.value = null
                             setState(IptvPlayState.Failed(t, "Skipping in this file is taking too long.", canRetry = true), "skip too slow")
