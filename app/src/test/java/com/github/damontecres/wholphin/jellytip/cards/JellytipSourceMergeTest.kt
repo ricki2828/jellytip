@@ -293,7 +293,7 @@ class JellytipSourceMergeTest {
     }
 
     @Test
-    fun searchRowKeepsRankOrderAndShowsATitleOnce() {
+    fun searchRowKeepsRankOrderAndOnlyTheTopHitTwinsGo() {
         val rows =
             listOf(
                 sr("iptv", "Collateral", tmdb = 2, iptvId = "p:m:2"),
@@ -301,11 +301,12 @@ class JellytipSourceMergeTest {
                 sr("iptv", "Heat", tmdb = 949, iptvId = "p:m:1"),
                 sr("library", "Ronin", id = otherId),
             )
-        assertEquals(listOf("Collateral", "Heat", "Ronin"), SearchRules.mergeResults(rows).map { it.title })
-        assertEquals(listOf("library"), SearchRules.mergeResults(rows).filter { it.title == "Heat" }.map { it.source })
-        // nothing known to match on: unchanged
-        val plain = listOf(sr("library", "A", id = heatId), sr("iptv", "A", iptvId = "p:m:1"))
-        assertEquals(plain, SearchRules.mergeResults(plain))
+        // No top hit: nothing is dropped here (the row's merge drops a twin only when its library item loaded), rank order kept
+        assertEquals(rows, SearchRules.mergeResults(rows))
+        // The row's merge against the library items that DID load: Heat once; if the library failed to load every IPTV title stays
+        val entries = rows.map { r -> if (r.source == "library") Entry(r.title, lib = LibRef(r.id.toString(), "movie", r.tmdbId)) else Entry(r.title, iptv = IptvRef(r.iptvId!!, "movie", r.tmdbId)) }
+        assertEquals(listOf("Collateral", "Heat", "Ronin"), JellytipSourceMerge.merge(entries).entries)
+        assertEquals(listOf("Collateral", "Heat"), JellytipSourceMerge.merge(entries.filter { it.iptv != null }).entries)
     }
 
     @Test

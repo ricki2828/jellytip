@@ -936,7 +936,11 @@ class SourceNeutralShotsTest {
             // JellytipSearchPage is NOT wrapped in JellytipHomeTheme: no HomeStyle here, as on the TV; ResultGroup provides LocalJellytipHome for the tiles.
             val libHeat = libFilm(ttls[0], 0)
             val libCollateral = libFilm(ttls[1], 2)
-            val vodById = ttls.map { vodFilm(it, 0) }.associateBy { it.id }
+            // Heat's IPTV copy carries libraryId + sources (server S1); Collateral's only its TMDB id
+            val vodById =
+                ttls.map { vodFilm(it, 0) }.associateBy { it.id }.toMutableMap().also { m ->
+                    m["vod-heat"] = m.getValue("vod-heat").copy(libraryId = libHeat.id.toString(), sources = listOf(IptvSource("library", libHeat.id.toString()), IptvSource("iptv", "vod-heat")))
+                }
             val results =
                 listOf(
                     SearchResult(kind = "film", source = "library", title = "Heat", tmdbId = 949, id = libHeat.id),
@@ -958,6 +962,9 @@ class SourceNeutralShotsTest {
             // The page's own grouping (SearchAnswer.rankedGroups) -> ResultGroup's JellytipServerRow
             val group = SearchAnswer("heat", "", emptyList(), emptyList(), emptyList(), results = results).rankedGroups.single()
             assertEquals("results", group.type)
+            // the row's own merge (MixedRow, against the loaded library items) removes the twins, not rankedGroups
+            assertEquals(2, group.ids.size)
+            assertEquals(3, group.iptv.size)
             val vm = vmFor(listOf(libHeat, libCollateral))
             Column(
                 Modifier.fillMaxSize().padding(start = 24.dp, top = JellytipLayout.PageTop),

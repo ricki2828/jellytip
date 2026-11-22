@@ -7,6 +7,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.testTag
+import com.github.damontecres.wholphin.ui.playback.isPlayKeyUp
+import com.github.damontecres.wholphin.ui.playback.playable
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -308,6 +312,10 @@ fun JellytipWatchlistMixedRow(
     onFocusIptv: () -> Unit,
     modifier: Modifier,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
+    /** The plain row's Play key (media play / play-pause on a playable library tile). */
+    onPlay: ((BaseItem) -> Unit)? = null,
+    /** Row index in the page: the first tile gets the plain row's `row-<n>-tile0` test tag. */
+    rowIndex: Int = 0,
 ) {
     val tiles =
         remember(library, iptv) {
@@ -346,7 +354,18 @@ fun JellytipWatchlistMixedRow(
                         onClick = onClick,
                         onLongClick = onLongClick,
                         viewOptions = viewOptions,
-                        modifier = cardModifier.onFocusChanged { if (it.isFocused) onFocusLibrary(t.index) },
+                        modifier =
+                            cardModifier
+                                .then(if (index == 0) Modifier.testTag("row-$rowIndex-tile0") else Modifier)
+                                .onFocusChanged { if (it.isFocused) onFocusLibrary(t.index) }
+                                .onKeyEvent { event ->
+                                    if (onPlay != null && isPlayKeyUp(event) && t.item.type.playable) {
+                                        onPlay(t.item)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
                     )
 
                 is WatchlistTile.Vod ->

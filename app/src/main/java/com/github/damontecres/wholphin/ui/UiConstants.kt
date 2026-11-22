@@ -79,6 +79,8 @@ val HomeItemFields =
     listOf(
         ItemFields.OVERVIEW,
         ItemFields.CAN_DELETE,
+        // Needed to match a library title with its IPTV copy (TMDB id in providerIds): Jellytip one-tile-per-title
+        ItemFields.PROVIDER_IDS,
     )
 
 val PhotoItemFields =

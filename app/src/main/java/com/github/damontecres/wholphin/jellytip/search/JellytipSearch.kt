@@ -528,17 +528,15 @@ object SearchRules {
     }
 
     /**
-     * The title results of the ranked list ([media], rank order, top hit already removed by key) with duplicates removed:
-     * anything that is the same title as the [top] hit goes, then a title in both sources shows once (library wins, at the
-     * earlier position). Entries the merge cannot read (unopenable) keep their place. Nothing changes when no ids match.
+     * The title results of the ranked list ([media], rank order, top hit already removed by key) without the [top] hit's
+     * twins (the same title in either source). Library <-> IPTV twins inside the row are NOT dropped here: the row's merge does
+     * that against the library items that actually loaded, so a failed library load never hides an IPTV title.
      */
     fun mergeResults(
         media: List<SearchResult>,
         top: SearchResult? = null,
     ): List<SearchResult> {
-        val rest = if (top == null) media else media.filterNot { sameTitle(top, it) }
-        val entries = rest.map { r -> r.mergeEntry() ?: JellytipSourceMerge.Entry(r) }
-        return JellytipSourceMerge.merge(entries).entries
+        return if (top == null) media else media.filterNot { sameTitle(top, it) }
     }
 
     private val decadeWords = Regex("""\b(?:19|20)?\d0'?s\b""", RegexOption.IGNORE_CASE)

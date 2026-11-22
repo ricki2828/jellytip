@@ -1233,6 +1233,8 @@ fun HomePageContent(
                                                     .fillMaxWidth()
                                                     .focusGroup()
                                                     .focusRequester(rowFocusRequesters[rowIndex]),
+                                            onPlay = { item -> currentOnClickPlay(currentPosition, item) },
+                                            rowIndex = rowIndex,
                                         )
                                     } else if (row.items.isNotEmpty()) {
                                         val viewOptions =

@@ -8,9 +8,14 @@ import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.util.UUID
 
 /** The Continue Watching / Next Up info line: same text from a library item and an IPTV resume entry. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class JellytipContinueInfoTest {
     private fun min(m: Long) = m * 600_000_000L
 

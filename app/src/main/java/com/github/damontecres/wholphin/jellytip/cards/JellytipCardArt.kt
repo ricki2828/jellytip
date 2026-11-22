@@ -284,7 +284,8 @@ fun JellytipTitledArt(
                     fontWeight = FontWeight.Medium,
                     fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                     lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX) * 1.2f,
-                    maxLines = 2,
+                    // One line when the info pill shares the corner above it
+                    maxLines = if (info != null) 1 else 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -308,7 +309,7 @@ fun JellytipTitledArt(
                     Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = TECH_INSET, bottom = TECH_INSET + 22.dp)
-                        .widthIn(max = cardWidth * 0.6f)
+                        .widthIn(max = cardWidth * 0.5f)
                         .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
                         .padding(horizontal = 4.dp, vertical = 1.dp)
                         .testTag(JellytipTileTags.INFO),
