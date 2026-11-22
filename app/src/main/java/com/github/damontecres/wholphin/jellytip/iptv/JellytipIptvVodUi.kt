@@ -260,6 +260,33 @@ fun IptvVodRow(
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
     subtitle: String? = null,
 ) {
+    IptvVodRowContent(
+        title = title,
+        items = items,
+        poster = poster,
+        heightDp = heightDp,
+        onFocusTile = onFocusTile,
+        onOpen = { item ->
+            onOpened?.invoke(item.id)
+            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "iptv row OK")
+        },
+        modifier = modifier,
+        subtitle = subtitle,
+    )
+}
+
+/** The row of [IptvVodRow] with plain values (extract-only split: source-neutral shots draw this; the view model only supplied navigation). */
+@Composable
+internal fun IptvVodRowContent(
+    title: String,
+    items: List<IptvVodItem>,
+    poster: Boolean,
+    heightDp: Int,
+    onFocusTile: () -> Unit,
+    onOpen: (IptvVodItem) -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+) {
     val h = heightDp.dp
     val w = if (poster) h * 2f / 3f else h * 16f / 9f
     Column(verticalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.ui.cards.itemRowTitleGap(subtitle)), modifier = modifier) {
@@ -275,10 +302,7 @@ fun IptvVodRow(
                     width = w,
                     height = h,
                     poster = poster,
-                    onClick = {
-                        onOpened?.invoke(item.id)
-                        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "iptv row OK")
-                    },
+                    onClick = { onOpen(item) },
                     modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusTile() },
                 )
             }
@@ -973,7 +997,7 @@ object IptvMyList {
 
 /** An IPTV tile's long-press menu: the same reactions as the library tiles and IPTV details. */
 @Composable
-private fun IptvTileMenu(
+internal fun IptvTileMenu(
     item: IptvVodItem,
     onDismiss: () -> Unit,
     /** The tile's "Open" line; null (the details page's More menu) leaves it out. */
