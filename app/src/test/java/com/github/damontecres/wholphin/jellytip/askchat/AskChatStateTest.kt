@@ -55,18 +55,18 @@ class AskChatStateTest {
     private val comedy get() = chip(ChipData.Genre(listOf("Comedy")))
     private val kids get() = chip(ChipData.Kids(listOf("G", "PG"), listOf("Family")), protectedChip = true)
 
-    private fun lib(id: String) = ChatCard.Library("film", id, id, null, null, null)
+    private fun lib(id: String) = ChatTitle.Library("film", id, id, null, null, null)
 
     private fun tv(
         iptvId: String,
         kind: String = "film",
-    ) = ChatCard.Iptv(kind, iptvId, "TV $iptvId", 2001, 1, 7.1, "https://image.tmdb.org/t/p/w342/p.jpg", null, listOf("1080p"), listOf("ATMOS"), false, "PG", 98, "atmos")
+    ) = ChatTitle.Iptv(kind, iptvId, "TV $iptvId", 2001, 1, 7.1, "https://image.tmdb.org/t/p/w342/p.jpg", null, listOf("1080p"), listOf("ATMOS"), false, "PG", 98, "atmos")
 
     private fun resp(
         rev: Int = 1,
         reply: String = "r",
         chips: List<ChatChip> = emptyList(),
-        cards: List<ChatCard> = emptyList(),
+        cards: List<ChatTitle> = emptyList(),
         notes: List<ChatNote> = emptyList(),
         sources: List<String> = listOf("library"),
         mode: String = "fallback",
@@ -85,7 +85,7 @@ class AskChatStateTest {
 
     private fun ids(cs: List<ChatChip>) = cs.map { it.id }
 
-    private fun keys(cs: List<ChatCard>) = cs.map { AskChat.cardKey(it) }
+    private fun keys(cs: List<ChatTitle>) = cs.map { AskChat.cardKey(it) }
 
     private fun settled(
         text: String,
@@ -403,7 +403,7 @@ class AskChatStateTest {
             assertEquals("$name mode", rawResp.getString("mode"), out.mode)
             assertEquals("$name sources", (0 until rawResp.getJSONArray("sources").length()).map { rawResp.getJSONArray("sources").getString(it) }, out.sources)
             assertEquals("$name reply", rawResp.getString("reply"), out.reply)
-            assertTrue("$name every card is a library card", out.cards.all { it is ChatCard.Library })
+            assertTrue("$name every card is a library card", out.cards.all { it is ChatTitle.Library })
         }
     }
 
@@ -482,7 +482,7 @@ class AskChatStateTest {
         val r = AskChat.parseResponse(raw.toString())!!
         assertEquals(listOf("a", "iptv:p1:m:1", "b", "iptv:p1:s:2"), keys(r.cards))
         assertEquals(listOf("library", "iptv"), r.sources)
-        val tvCard = r.cards[1] as ChatCard.Iptv
+        val tvCard = r.cards[1] as ChatTitle.Iptv
         assertEquals(listOf("1080p"), tvCard.quality)
         assertEquals("atmos", tvCard.audio)
         assertEquals("PG", tvCard.certification)

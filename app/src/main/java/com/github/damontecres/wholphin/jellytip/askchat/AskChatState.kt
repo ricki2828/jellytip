@@ -65,7 +65,7 @@ data class ChatTurn(
     val reply: String,
 )
 
-sealed interface ChatCard {
+sealed interface ChatTitle {
     val kind: String
 
     /** A library title: fetched from Jellyfin by [id]. */
@@ -76,7 +76,7 @@ sealed interface ChatCard {
         val year: Int?,
         val certification: String?,
         val runtime: Int?,
-    ) : ChatCard
+    ) : ChatTitle
 
     /** A TV (IPTV) title: drawn straight from these fields, never fetched from Jellyfin. */
     data class Iptv(
@@ -94,7 +94,7 @@ sealed interface ChatCard {
         val certification: String?,
         val runtime: Int?,
         val audio: String?,
-    ) : ChatCard
+    ) : ChatTitle
 }
 
 data class NoteAction(
@@ -135,7 +135,7 @@ data class ChatResponse(
     val mode: String,
     val reply: String,
     val chips: List<ChatChip>,
-    val cards: List<ChatCard>,
+    val cards: List<ChatTitle>,
     val notes: List<ChatNote>,
     /** The sources actually searched this turn (strings): ["library"], ["library","iptv"], ["iptv"]. */
     val sources: List<String>,
@@ -163,7 +163,7 @@ data class ChatState(
     val pending: ChatPending? = null,
     /** The server's one-line reading of the current state. */
     val reply: String = "",
-    val cards: List<ChatCard> = emptyList(),
+    val cards: List<ChatTitle> = emptyList(),
     val notes: List<ChatNote> = emptyList(),
     val mode: String? = null,
     val sources: List<String> = emptyList(),
@@ -452,18 +452,18 @@ object AskChat {
 
     private fun strList(a: JSONArray?): List<String> = a?.let { (0 until it.length()).mapNotNull { i -> it.opt(i) as? String } } ?: emptyList()
 
-    private fun parseCard(o: JSONObject): ChatCard? {
+    private fun parseCard(o: JSONObject): ChatTitle? {
         val kind = o.optString("kind")
         if (kind != "film" && kind != "series") return null
         return when (o.optString("source")) {
             "library" -> {
                 val id = o.optString("id", "").ifEmpty { return null }
-                ChatCard.Library(kind, id, optStr(o, "title"), optInt(o, "year"), optStr(o, "certification"), optInt(o, "runtime"))
+                ChatTitle.Library(kind, id, optStr(o, "title"), optInt(o, "year"), optStr(o, "certification"), optInt(o, "runtime"))
             }
 
             "iptv" -> {
                 val id = o.optString("iptvId", "").ifEmpty { return null }
-                ChatCard.Iptv(
+                ChatTitle.Iptv(
                     kind, id, optStr(o, "title"), optInt(o, "year"), optInt(o, "tmdbId"), optDouble(o, "rating"), optStr(o, "poster"), optStr(o, "backdrop"),
                     strList(o.optJSONArray("quality")), strList(o.optJSONArray("tech")), o.optBoolean("catalog", false), optStr(o, "certification"),
                     optInt(o, "runtime"), optStr(o, "audio"),
@@ -522,18 +522,18 @@ object AskChat {
 
     fun normId(id: String) = id.lowercase().replace("-", "")
 
-    fun cardKey(c: ChatCard): String =
+    fun cardKey(c: ChatTitle): String =
         when (c) {
-            is ChatCard.Iptv -> "iptv:${c.iptvId}"
-            is ChatCard.Library -> c.id
+            is ChatTitle.Iptv -> "iptv:${c.iptvId}"
+            is ChatTitle.Library -> c.id
         }
 
     /** Library ids only: those are the ones fetched from Jellyfin. */
-    fun libraryIds(cards: List<ChatCard>): List<String> = cards.filterIsInstance<ChatCard.Library>().map { it.id }
+    fun libraryIds(cards: List<ChatTitle>): List<String> = cards.filterIsInstance<ChatTitle.Library>().map { it.id }
 
     /** A card in the server's order with its fetched item (library) or none (TV). */
     data class Placed<T>(
-        val card: ChatCard,
+        val card: ChatTitle,
         val item: T?,
     )
 
@@ -542,7 +542,7 @@ object AskChat {
      * tile), never a substitute. A TV card has no item: it is drawn from its own fields and is never dropped by the fetch.
      */
     fun <T> alignCards(
-        cards: List<ChatCard>,
+        cards: List<ChatTitle>,
         items: List<T>,
         idOf: (T) -> String,
     ): List<Placed<T>> {
@@ -550,8 +550,8 @@ object AskChat {
         val out = mutableListOf<Placed<T>>()
         for (c in cards) {
             when (c) {
-                is ChatCard.Iptv -> out.add(Placed(c, null))
-                is ChatCard.Library -> by[normId(c.id)]?.let { out.add(Placed(c, it)) }
+                is ChatTitle.Iptv -> out.add(Placed(c, null))
+                is ChatTitle.Library -> by[normId(c.id)]?.let { out.add(Placed(c, it)) }
             }
         }
         return out
