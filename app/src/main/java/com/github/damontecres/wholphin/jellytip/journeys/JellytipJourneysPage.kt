@@ -181,6 +181,12 @@ class JellytipJourneysViewModel
         }
 
         fun play(entry: JourneyEntry) {
+            // On IPTV only: its details page (its own Play / Resume there; an IPTV title the library has opens the library page)
+            entry.vod?.let {
+                lastFilm = entry.n
+                navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film")
+                return
+            }
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
             lastFilm = null // back from the player: Play next (which has moved on) takes focus
             JellytipTrailerControl.stop()
@@ -188,6 +194,11 @@ class JellytipJourneysViewModel
         }
 
         fun details(entry: JourneyEntry) {
+            entry.vod?.let {
+                lastFilm = entry.n
+                navigationManager.navigateTo(com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it), "journey iptv film OK")
+                return
+            }
             val uuid = entry.itemId?.let { runCatching { it.toUUID() }.getOrNull() } ?: return
             lastFilm = entry.n
             val kind = BaseItemKind.entries.firstOrNull { it.serialName == entry.type } ?: BaseItemKind.MOVIE

@@ -47,7 +47,8 @@ class JellytipJourneysService
                     if (Journeys.isNotFoundStatus(r.first)) return null
                     if (r.first != 200) throw IOException("collection $tmdbId: ${r.first}")
                     val c = JellytipRowsParser.collection(JSONObject(r.second)) ?: throw IOException("collection $tmdbId: unreadable")
-                    return FranchisePage(c.name, c.parts.map { JourneyPart(it.itemId?.let { id -> Journeys.norm(id.toString()) }, it.title, it.year) })
+                    // A part the library lacks carries its IPTV copy (collection_hook): the path plays it from there
+                    return FranchisePage(c.name, c.parts.map { JourneyPart(it.itemId?.let { id -> Journeys.norm(id.toString()) }, it.title, it.year, vod = it.iptv) })
                 }
 
                 override suspend fun directorFilms(personId: String): Pair<List<JourneyItem>, Int?> {
@@ -78,7 +79,7 @@ class JellytipJourneysService
 
                 override suspend fun list(slug: String): JourneyList? {
                     val m = carousels.manifest() ?: throw IOException("carousels manifest unavailable")
-                    return m.letterboxd.firstOrNull { it.slug == slug }?.let { l -> JourneyList(l.slug, l.name, l.itemIds.map { Journeys.norm(it.toString()) }) }
+                    return m.letterboxd.firstOrNull { it.slug == slug }?.let { l -> l.journeyList() }
                 }
             }
 
@@ -106,7 +107,7 @@ class JellytipJourneysService
             val lists =
                 manifest
                     ?.letterboxd
-                    ?.map { l -> JourneyList(l.slug, l.name, l.itemIds.map { Journeys.norm(it.toString()) }) }
+                    ?.map { l -> l.journeyList() }
             if (hub == null && lists == null) return null
             return Journeys.summaries(hub, lists)
         }
@@ -143,3 +144,15 @@ private fun BaseItemDto.journeyItem() =
         played = userData?.played == true,
         positionTicks = userData?.playbackPositionTicks ?: 0,
     )
+
+/** A manifest Letterboxd row as a journey list: library ids normalised, the S8 `order` (library ids normalised, IPTV ids as they are) and IPTV titles. */
+private fun com.github.damontecres.wholphin.jellytip.home.JellytipLetterboxdRow.journeyList(): JourneyList {
+    val vod = iptvItems.associateBy { it.id }
+    return JourneyList(
+        slug,
+        name,
+        itemIds.map { Journeys.norm(it.toString()) },
+        order = order.map { if (it in vod) it else Journeys.norm(it) },
+        iptv = vod,
+    )
+}

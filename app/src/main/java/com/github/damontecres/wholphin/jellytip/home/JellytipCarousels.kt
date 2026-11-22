@@ -36,6 +36,10 @@ data class JellytipLetterboxdRow(
     val slug: String,
     val name: String,
     val itemIds: List<UUID>,
+    /** S8 (full accounts with IPTV): library ids and IPTV ids interleaved in list order; empty = library only. */
+    val order: List<String> = emptyList(),
+    /** S8: the list's IPTV titles (catalogue items). */
+    val iptvItems: List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem> = emptyList(),
 )
 
 data class JellytipCarouselManifest(
@@ -69,7 +73,14 @@ data class JellytipCarouselManifest(
                                     ?.let { a ->
                                         (0 until a.length()).map { a.optString(it).toUUID() }
                                     }.orEmpty()
-                            JellytipLetterboxdRow(o.optString("slug"), o.optString("name"), ids)
+                            val order = o.optJSONArray("order")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { s -> s.isNotBlank() } } }.orEmpty()
+                            val iptv =
+                                o.optJSONArray("iptvItems")?.let { a ->
+                                    (0 until a.length()).mapNotNull {
+                                        com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.item(a.optJSONObject(it), com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse.imageBase)
+                                    }
+                                }.orEmpty()
+                            JellytipLetterboxdRow(o.optString("slug"), o.optString("name"), ids, order, iptv)
                         }
                     }.orEmpty()
             return JellytipCarouselManifest(carousels, letterboxd)

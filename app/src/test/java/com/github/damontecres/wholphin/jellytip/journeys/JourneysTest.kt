@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.journeys
 
+import com.github.damontecres.wholphin.jellytip.iptv.IptvProgress
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem
 import com.github.damontecres.wholphin.jellytip.rows.HubCollection
 import com.github.damontecres.wholphin.jellytip.rows.HubSection
 import kotlinx.coroutines.runBlocking
@@ -21,6 +23,51 @@ class JourneysTest {
         year: Int?,
         itemId: String?,
     ) = JourneyPart(itemId, title, year)
+
+    private fun vod(
+        id: String,
+        title: String,
+        year: Int?,
+        played: Boolean = false,
+        progress: IptvProgress? = null,
+    ) = IptvVodItem(id, "movie", null, title, year, emptyList(), null, null, "", null, null, progress, played = played)
+
+    @Test
+    fun iptvPartsPlayFromIptv() {
+        // A franchise part the library lacks but IPTV has: playable, its own watched / progress state, no library id
+        val d =
+            Journeys.franchiseDef(
+                "10",
+                FranchisePage("Alien", listOf(part("Alien", 1979, "a"), JourneyPart(null, "Aliens", 1986, vod = vod("v:aliens", "Aliens", 1986, progress = IptvProgress(600.0, 8000.0, false))), part("Alien 3", 1992, "c"))),
+            )!!
+        val e = Journeys.buildEntries(d, listOf(JourneyItem("a", played = true), JourneyItem("c")))
+        assertEquals(listOf(true, true, true), e.map { it.playable })
+        assertEquals("v:aliens", e[1].vod?.id)
+        assertNull(e[1].itemId)
+        assertTrue(e[1].inProgress)
+        // Next up: the IPTV film (the first unwatched playable one)
+        assertEquals("Aliens", Journeys.nextUp(e)?.first?.title)
+        // A library copy that turned up wins over the IPTV one
+        val withLib = Journeys.buildEntries(d.copy(parts = d.parts.mapIndexed { i, p -> if (i == 1) p.copy(itemId = "b") else p }), listOf(JourneyItem("b")))
+        assertNull(withLib[1].vod)
+        assertEquals("b", withLib[1].itemId)
+    }
+
+    @Test
+    fun listFollowsTheServersMixedOrder() {
+        val v = vod("11dd6d87:m:1", "Safety Last!", 1923, played = true)
+        val l = JourneyList("best", "Best", itemIds = listOf("x", "y"), order = listOf("11dd6d87:m:1", "x", "y"), iptv = mapOf(v.id to v))
+        val d = Journeys.listDef(l)!!
+        assertEquals(listOf(null, "x", "y"), d.parts.map { it.itemId })
+        assertEquals("Safety Last!", d.parts[0].title)
+        assertEquals(3, d.total)
+        val e = Journeys.buildEntries(d, listOf(JourneyItem("x"), JourneyItem("y")))
+        assertTrue(e[0].playable && e[0].watched)
+        // An older server (no order): the library ids as before
+        assertEquals(listOf("x", "y"), Journeys.listDef(JourneyList("best", "Best", listOf("x", "y")))!!.parts.map { it.itemId })
+        // The journeys page counts the IPTV films too
+        assertEquals(3, Journeys.summaries(null, listOf(l)).list.single().films)
+    }
 
     @Test
     fun franchiseOrder() {
