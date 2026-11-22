@@ -365,18 +365,34 @@ private fun Suggestions(
     viewModel: JellytipSearchViewModel,
 ) {
     val s = state.suggest ?: return
+    SuggestionsContent(
+        recent = s.recent,
+        suggested = s.suggested,
+        onPick = { q -> viewModel.setQuery(q, immediate = true) },
+        onClearRecent = { viewModel.clearRecent() },
+    )
+}
+
+/** The Recent / Try chip rows with their data and actions passed in (extract-only: [Suggestions] above keeps the page's wiring; shots draw this). */
+@Composable
+internal fun SuggestionsContent(
+    recent: List<String>,
+    suggested: List<String>,
+    onPick: (String) -> Unit,
+    onClearRecent: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (s.recent.isNotEmpty()) {
+        if (recent.isNotEmpty()) {
             ItemRowTitle("Recent")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
-                items(s.recent) { q -> Chip(q) { viewModel.setQuery(q, immediate = true) } }
-                item { Chip("Clear") { viewModel.clearRecent() } }
+                items(recent) { q -> Chip(q) { onPick(q) } }
+                item { Chip("Clear") { onClearRecent() } }
             }
         }
-        if (s.suggested.isNotEmpty()) {
+        if (suggested.isNotEmpty()) {
             ItemRowTitle("Try")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
-                items(s.suggested) { q -> Chip(q) { viewModel.setQuery(q, immediate = true) } }
+                items(suggested) { q -> Chip(q) { onPick(q) } }
             }
         }
     }
@@ -593,7 +609,7 @@ private fun TextCard(
 }
 
 @Composable
-private fun Chip(
+internal fun Chip(
     label: String,
     onClick: () -> Unit,
 ) {

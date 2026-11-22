@@ -445,6 +445,50 @@ fun JellytipHubCollectionPage(
         value = if (r == null) null else viewModel.rows.items(r) ?: emptyList()
     }
     val isAdmin by rememberIsJellytipAdmin()
+    JellytipHubCollectionContent(
+        id = id,
+        title = title,
+        r = r,
+        library = library,
+        failed = failed,
+        isAdmin = isAdmin,
+        onOpenLib = { item ->
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(item.destination(), "hub collection OK")
+        },
+        onOpenVod = { item -> viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "hub collection IPTV OK") },
+        onOpenMissing = { m ->
+            viewModel.navigationManager.navigateTo(
+                Destination.JellytipDiscover(
+                    com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
+                        tmdbId = m.tmdbId,
+                        mediaType = if (r?.mediaType == "tv") "tv" else "movie",
+                        title = m.title,
+                        year = m.year,
+                        posterUrl = m.poster,
+                    ),
+                ),
+                "hub collection missing OK",
+            )
+        },
+        modifier = modifier,
+    )
+}
+
+/** The collection page's layout with its data and actions passed in (extract-only: the loader above keeps the page's signature; shots draw this). */
+@Composable
+internal fun JellytipHubCollectionContent(
+    id: String,
+    title: String,
+    r: JellytipServerRow?,
+    library: List<BaseItem>?,
+    failed: Boolean,
+    isAdmin: Boolean,
+    onOpenLib: (BaseItem) -> Unit,
+    onOpenVod: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem) -> Unit,
+    onOpenMissing: (JellytipServerRow.Missing) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val tiles =
         remember(r, library) {
             if (r == null || library == null) {
@@ -496,10 +540,7 @@ fun JellytipHubCollectionPage(
                         Box {
                             when (t) {
                                 is TrendTile.Lib ->
-                                    PosterCard(t.item, onClick = {
-                                        JellytipTrailerControl.stop()
-                                        viewModel.navigationManager.navigateTo(t.item.destination(), "hub collection OK")
-                                    }, onLongClick = {}, modifier = m)
+                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = {}, modifier = m)
 
                                 is TrendTile.Vod ->
                                     com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
@@ -507,7 +548,7 @@ fun JellytipHubCollectionPage(
                                         width = SpecialTokens.POSTER_W,
                                         height = SpecialTokens.POSTER_H,
                                         poster = true,
-                                        onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "hub collection IPTV OK") },
+                                        onClick = { onOpenVod(t.item) },
                                         modifier = m,
                                     )
 
@@ -516,20 +557,7 @@ fun JellytipHubCollectionPage(
                                         SpecialCard(
                                             width = SpecialTokens.POSTER_W,
                                             height = SpecialTokens.POSTER_H,
-                                            onClick = {
-                                                viewModel.navigationManager.navigateTo(
-                                                    Destination.JellytipDiscover(
-                                                        com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
-                                                            tmdbId = t.m.tmdbId,
-                                                            mediaType = if (r?.mediaType == "tv") "tv" else "movie",
-                                                            title = t.m.title,
-                                                            year = t.m.year,
-                                                            posterUrl = t.m.poster,
-                                                        ),
-                                                    ),
-                                                    "hub collection missing OK",
-                                                )
-                                            },
+                                            onClick = { onOpenMissing(t.m) },
                                             onLongClick = {},
                                             modifier = m,
                                         ) { MissingTrendArt(t.m) }
