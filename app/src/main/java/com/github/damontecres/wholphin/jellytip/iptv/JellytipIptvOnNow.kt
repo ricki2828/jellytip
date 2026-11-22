@@ -142,7 +142,8 @@ fun OnNowCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    QualityChips(o.channel.quality)
+                    // (audit 22-Nov) at the 12 sp floor a narrow card has no room for two chips and a name: the audio chip goes first
+                    QualityChips(o.channel.quality?.let { if (width < 300.dp) it.copy(audio = null) else it })
                     // NFL games with your fantasy starters (plan "Fantasy live scoring for NFL")
                     if (isNfl(o.match)) {
                         val fantasy by JellytipFantasy.live.collectAsState()

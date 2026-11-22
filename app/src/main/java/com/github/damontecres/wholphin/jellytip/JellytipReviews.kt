@@ -160,6 +160,7 @@ fun JellytipReviewsRow(
                 modifier =
                     rowFocusModifier
                         .fillMaxWidth()
+                        .jellytipFocusRoom(JellytipLayout.FocusRoomWide - JellytipLayout.RowInset) // (the first card stays on the row title's line)
                         .focusRestorer(firstFocus),
             ) {
                 itemsIndexed(reviews.reviews, key = { _, r -> r.id }) { index, review ->
