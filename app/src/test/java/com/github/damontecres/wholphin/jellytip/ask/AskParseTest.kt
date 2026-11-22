@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The TV must read a phrase exactly as the web does. resources/jellytip/ask-vectors.json was made by running the web's own
- * lib/askParse.ts (jellytip-web-askchips 3cc845f7) under node 24 over the web test phrases, the examples and edge cases; the generator
+ * lib/askParse.ts (jellytip-web-askchips 44b8d671) under node 24 over the web test phrases, the examples and edge cases; the generator
  * is ask-vectors.gen.mts.txt next to it. The named tests below are the web's askParse.test.ts, ported.
  */
 @RunWith(RobolectricTestRunner::class)

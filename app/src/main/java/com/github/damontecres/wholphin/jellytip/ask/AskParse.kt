@@ -102,8 +102,10 @@ data class AskQuery(
     val filters: List<String>,
     val officialRatings: List<String>,
     val minCommunityRating: Double?,
-    /** Refine chips: titles with any of these people. */
+    /** Refine chips: titles with any of these people... */
     val personIds: List<String> = emptyList(),
+    /** ...in these roles ("directed by X" = as director). */
+    val personTypes: List<String> = emptyList(),
 ) {
     /** The web's wire form (comma / pipe joined), for parity tests and logs. */
     fun params(): Map<String, String> =
@@ -121,6 +123,7 @@ data class AskQuery(
             if (officialRatings.isNotEmpty()) put("OfficialRatings", officialRatings.joinToString("|"))
             minCommunityRating?.let { put("MinCommunityRating", AskParse.num(it)) }
             if (personIds.isNotEmpty()) put("PersonIds", personIds.joinToString(","))
+            if (personTypes.isNotEmpty()) put("PersonTypes", personTypes.joinToString(","))
         }
 }
 
@@ -543,6 +546,7 @@ object AskParse {
             officialRatings = kids?.ratings.orEmpty(),
             minCommunityRating = minRating.takeIf { it > 0 },
             personIds = chips.of<ChipData.Person>().map { it.id },
+            personTypes = chips.of<ChipData.Person>().map { it.role }.distinct(),
         )
     }
 

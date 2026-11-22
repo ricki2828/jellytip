@@ -43,6 +43,7 @@ fun AskQuery.toGetItemsRequest(
         officialRatings = officialRatings.ifEmpty { null },
         minCommunityRating = minCommunityRating,
         personIds = personIds.mapNotNull { runCatching { it.toUUID() }.getOrNull() }.ifEmpty { null },
+        personTypes = personTypes.ifEmpty { null },
         enableTotalRecordCount = true,
         enableUserData = true,
     )

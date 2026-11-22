@@ -155,7 +155,8 @@ class JellytipAskViewModel
 
         fun addRefine(c: AskChip) {
             JellytipTrace.log("ask", "refine + ${c.id}")
-            _state.update { it.copy(added = it.added + c) }
+            // Something he removed earlier comes back as asked, not as a no-op
+            _state.update { it.copy(added = it.added + c, removed = it.removed - c.id) }
             load()
         }
 
