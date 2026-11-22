@@ -150,7 +150,9 @@ object IptvStreamFail {
             ?.substringAfterLast('/')
             ?.substringAfterLast('.', "")
             ?.lowercase()
-            ?.takeIf { Regex("^[a-z0-9]{2,6}$").matches(it) }
+            ?.takeIf { CONTAINER_RE.matches(it) }
+
+    private val CONTAINER_RE = Regex("^[a-z0-9]{2,6}$")
 
     fun outcomeBody(
         id: String,

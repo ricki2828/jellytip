@@ -278,7 +278,7 @@ class JellytipIptvPlayback
                         val p = player
                         if (!isRemux && p != null && !p.isCurrentMediaItemSeekable && film(t) && !unseekableReported) {
                             unseekableReported = true
-                            IptvStreamFail.report(t, ok = false, reason = IptvStreamFail.UNSEEKABLE, traits = streamTraits())
+                            IptvStreamFail.report(t, ok = false, reason = IptvStreamFail.UNSEEKABLE, traits = streamTraits(t))
                         }
                         // A resume on a direct stream ExoPlayer can't seek (it started at 0): the remux, from the saved position
                         if (!isRemux && p != null && SkipPolicy.resumeViaRemux(film(t), p.isCurrentMediaItemSeekable, remuxAsked, openStartMs)) {
@@ -330,7 +330,7 @@ class JellytipIptvPlayback
                                     if (p.isPlaying && moved) playedS += OK_TICK_MS / 1000
                                     lastPos = pos
                                 }
-                                IptvStreamFail.report(t, ok = true, posSec = playedS, traits = streamTraits())
+                                IptvStreamFail.report(t, ok = true, posSec = playedS, traits = streamTraits(t))
                             }
                     }
                 }
@@ -630,6 +630,7 @@ class JellytipIptvPlayback
 
         private fun resetRecovery(target: IptvTarget) {
             unseekableReported = false
+            loadedContainer = null
             skipOpenMs = null
             skipTicker?.cancel()
             recTimer?.cancel()
@@ -656,19 +657,27 @@ class JellytipIptvPlayback
             if (rec.offline) return
             // A device decode note is logged but doesn't use the one counted report of the viewing
             if (reason != "decode") failReported = true
-            IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec, traits = streamTraits())
+            IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec, traits = streamTraits(t))
         }
 
         /** The loaded stream's traits for the outcome report (S4); the container from the stream link's extension. */
         private var loadedContainer: String? = null
         private var unseekableReported = false
 
-        private fun streamTraits(): IptvStreamFail.StreamTraits =
-            IptvStreamFail.StreamTraits(
-                seekable = player?.isCurrentMediaItemSeekable?.takeIf { player?.playbackState == Player.STATE_READY || it },
-                remuxed = isRemux,
+        /**
+         * Null unless the player holds [t]'s stream (a refused open of a new copy must not carry the previous copy's traits).
+         * Through the server remux only remuxed = true: the fMP4 says nothing about the file's container or seekability.
+         */
+        private fun streamTraits(t: IptvTarget): IptvStreamFail.StreamTraits? {
+            if (loadedTarget != t) return null
+            if (isRemux) return IptvStreamFail.StreamTraits(remuxed = true)
+            val p = player
+            return IptvStreamFail.StreamTraits(
+                seekable = p?.isCurrentMediaItemSeekable?.takeIf { p.playbackState == Player.STATE_READY || it },
+                remuxed = false,
                 container = loadedContainer,
             )
+        }
 
         private fun posSec(): Long = positionMs() / 1000
 
@@ -910,7 +919,7 @@ class JellytipIptvPlayback
             _note.value = null
             // Player errors are only the target's own when the player holds its stream (else: the previous channel's)
             val reported = reason != null && (!fromPlayer || loadedTarget == target)
-            if (reported) IptvStreamFail.report(target, ok = false, reason = reason)
+            if (reported) IptvStreamFail.report(target, ok = false, reason = reason, traits = streamTraits(target))
             stopPlayer()
             JellytipTrace.player("iptv", "failed ${target.channelId}: $message")
             setState(IptvPlayState.Failed(target, message, reported = reported, cause = cause), "failed")
@@ -928,6 +937,7 @@ class JellytipIptvPlayback
 
         private fun stopPlayer() {
             loadedTarget = null
+            loadedContainer = null
             player?.run {
                 stop()
                 clearMediaItems()
