@@ -78,8 +78,15 @@ export function Ask() {
   async function loadIptv(seq: number, libraryPicks: Item[], alive: () => boolean) {
     const queries = vodQueries(chips);
     const note = vodNote(chips);
-    if (!queries.length || !(await hasLiveTv().catch(() => false)) || !alive()) return;
+    // Pending before the IPTV check too: no "Nothing fits." flash while it answers
     setIptv({ key: seq, items: [], note: null, pending: true });
+    const has = await hasLiveTv().catch(() => false);
+    if (!alive()) return;
+    // No IPTV, or nothing IPTV can be asked (a person chip, kids with no known rating): the note says why, when he has IPTV
+    if (!has || !queries.length) {
+      setIptv(has && note ? { key: seq, items: [], note, pending: false } : null);
+      return;
+    }
     try {
       const answers = await Promise.all(
         queries.map((vq) =>
@@ -90,7 +97,7 @@ export function Ask() {
       );
       if (!alive()) return;
       const fetched = answers.flat();
-      const ordered = shuffle ? [...fetched].sort(() => Math.random() - 0.5) : fetched;
+      const ordered = shuffle ? shuffled(fetched) : fetched;
       const lib = new Set(
         libraryPicks.flatMap((it) => {
           const t = it.ProviderIds?.Tmdb;
@@ -287,4 +294,14 @@ export function Ask() {
       )}
     </div>
   );
+}
+
+/** Fisher-Yates (unbiased). */
+function shuffled<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
