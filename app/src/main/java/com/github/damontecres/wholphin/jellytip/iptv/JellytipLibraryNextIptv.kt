@@ -85,6 +85,8 @@ fun PlaybackViewModel.jellytipSkipToIptvNext(): Boolean {
     jellytipIptvPending = null
     jellytipIptvNext.value = null
     NextEpisodeLoader.trace(up, "skip next")
+    // Mid-episode (unlike the end card): silence the library episode now, not when this page is disposed after the fade
+    runCatching { player.pause() }
     navigationManager.replaceTop(Destination.JellytipIptvPlay(title = up.label, seriesId = up.iptvSeriesId, episodeId = up.ep.id, resumeMs = up.resumeMs))
     return true
 }
