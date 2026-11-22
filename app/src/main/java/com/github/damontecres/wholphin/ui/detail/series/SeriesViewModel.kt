@@ -132,6 +132,33 @@ class SeriesViewModel
          */
         val playTarget: StateFlow<BaseItem?> = _playTarget
 
+        /**
+         * Every library episode of the series with its watched state (Jellytip split series: next up is worked out over the
+         * library AND the IPTV episodes, see JellytipSplitNext); null until asked / when the ask failed.
+         */
+        private val _allEpisodes = MutableStateFlow<List<BaseItem>?>(null)
+        val allEpisodes: StateFlow<List<BaseItem>?> = _allEpisodes
+        private var allEpisodesJob: Job? = null
+
+        /** Ask for [allEpisodes] (the page does, once it knows the series has an IPTV copy, and again after playback). */
+        fun loadAllEpisodes() {
+            allEpisodesJob?.cancel()
+            allEpisodesJob =
+                viewModelScope.launchIO {
+                    try {
+                        _allEpisodes.value =
+                            api.tvShowsApi
+                                .getEpisodes(seriesId, isMissing = false, enableUserData = true, limit = 2000)
+                                .content.items
+                                .map { BaseItem(it) }
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Could not fetch all episodes for %s", seriesId)
+                    }
+                }
+        }
+
         @Volatile
         private var nextUp: BaseItemDto? = null
 

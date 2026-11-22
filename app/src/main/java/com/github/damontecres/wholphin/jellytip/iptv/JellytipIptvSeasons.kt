@@ -103,16 +103,19 @@ object IptvSeasons {
     suspend fun lookup(
         title: String,
         tmdbId: Int,
+        /** Ask again even when cached (back from playback: an episode's watched / progress state moved). */
+        fresh: Boolean = false,
     ): IptvVodDetail? {
         val api = JellytipApi.shared ?: return null
         val key = "${api.currentUserKey()}|$tmdbId"
-        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
+        if (!fresh) cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         var failed = false
         val got =
             try {
                 // Providers this person owns or has shared with them (same as the web's season lookup)
                 val owned =
-                    api.userCall("v1/iptv/providers").also { if (it == null) failed = true }?.takeIf { it.first == 200 }?.let { (_, b) ->
+                    // No answer or a non-200 is a failure (not cached as "no IPTV"), not "owns no providers"
+                    api.userCall("v1/iptv/providers").also { if (it == null || it.first != 200) failed = true }?.takeIf { it.first == 200 }?.let { (_, b) ->
                         val a = JSONObject(b).optJSONArray("providers")
                         (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                     }
@@ -134,12 +137,14 @@ object IptvSeasons {
         tmdbId: Int,
         owned: List<String>,
     ): IptvVodDetail? {
-        val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: return null
-        if (code != 200) return null
+        // Transport errors and non-200 answers throw (= failed, not cached); only "no such series" is a definite null
+        val (code, body) = api.userCall("v1/iptv/vod?kind=series&includeLibrary=1&q=${URLEncoder.encode(title, "UTF-8")}&limit=50") ?: throw java.io.IOException("vod search: no answer")
+        if (code != 200) throw java.io.IOException("vod search: $code")
         val base = api.companionBase().also { IptvVodParse.imageBase = it }
         val hit = pickSeries(IptvVodParse.items(JSONObject(body).optJSONArray("items"), base), tmdbId, owned) ?: return null
-        val (dc, db) = api.userCall("v1/iptv/vod/${URLEncoder.encode(hit.id, "UTF-8")}") ?: return null
-        return if (dc == 200) IptvVodParse.detail(db, base) else null
+        val (dc, db) = api.userCall("v1/iptv/vod/${URLEncoder.encode(hit.id, "UTF-8")}") ?: throw java.io.IOException("vod detail: no answer")
+        if (dc != 200) throw java.io.IOException("vod detail: $dc")
+        return IptvVodParse.detail(db, base)
     }
 
     private fun tmdbOf(series: BaseItem): Int? =
@@ -150,9 +155,12 @@ object IptvSeasons {
             ?.toIntOrNull()
 
     /** The person's IPTV copy of a library series (matched by TMDB id) with all its seasons; null when there is none. */
-    suspend fun detailFor(series: BaseItem): IptvVodDetail? {
+    suspend fun detailFor(
+        series: BaseItem,
+        fresh: Boolean = false,
+    ): IptvVodDetail? {
         val tmdb = tmdbOf(series) ?: return null
-        return lookup(series.name ?: return null, tmdb)
+        return lookup(series.name ?: return null, tmdb, fresh)
     }
 
     /**

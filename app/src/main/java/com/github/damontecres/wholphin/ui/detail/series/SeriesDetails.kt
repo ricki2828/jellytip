@@ -11,6 +11,9 @@ import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsSection
 import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
 import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTileHeight
 import com.github.damontecres.wholphin.jellytip.details.IptvSeasonPosition
+import com.github.damontecres.wholphin.jellytip.details.SplitLibEp
+import com.github.damontecres.wholphin.jellytip.details.splitEpisodes
+import com.github.damontecres.wholphin.jellytip.details.splitNextUp
 import com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef
 import com.github.damontecres.wholphin.jellytip.details.SeasonSource
 import com.github.damontecres.wholphin.jellytip.details.episodeSourceMark
@@ -58,6 +61,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -239,17 +243,27 @@ fun SeriesDetails(
         }
 
         is DataLoadingState.Success<BaseItem> -> {
+            // Shows of the page: the first one uses the cached IPTV copy, every later one (back from playback) asks again
+            var shows by remember(destination.itemId) { mutableIntStateOf(0) }
             LifecycleResumeEffect(destination.itemId) {
                 viewModel.onResumePage()
+                shows++
 
                 onPauseOrDispose {}
             }
             val series = st.data
             val played = series.data.userData?.played ?: false
             // The person's IPTV copy of this series: asked once per page (10-minute cache); a late answer just appears in the season list
-            val iptvDetail by produceState<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail?>(IptvSeasons.cachedDetail(series), series.id) {
-                value = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.detailFor(series)
+            val iptvDetail by produceState<com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail?>(IptvSeasons.cachedDetail(series), series.id, shows) {
+                val fresh = shows > 1
+                val got = com.github.damontecres.wholphin.jellytip.iptv.IptvSeasons.detailFor(series, fresh = fresh)
+                // A fresh ask that came back empty keeps what the page shows (a failed ask must not drop the IPTV seasons)
+                if (got != null || !fresh) value = got
             }
+            // A split series: next up over library + IPTV needs every library episode's watched state (asked again on each show)
+            val hasIptvSeasons = iptvDetail?.seasons?.isNotEmpty() == true
+            LaunchedEffect(hasIptvSeasons, shows) { if (hasIptvSeasons) viewModel.loadAllEpisodes() }
+            val allLibraryEpisodes by viewModel.allEpisodes.collectAsState()
             val openEpisodeDetails: (BaseItem) -> Unit = {
                 viewModel.returnToEpisodes = true
                 // The old Overview page, named explicitly: BaseItem.destination() now points an episode at this series page
@@ -296,6 +310,7 @@ fun SeriesDetails(
                 // The old Overview page for an episode: only the "Details" item of an episode's menu opens it now
                 onClickEpisode = openEpisodeDetails,
                 resolved = playTarget,
+                allLibraryEpisodes = allLibraryEpisodes,
                 iptv = iptvDetail,
                 onPlayIptvEpisode = { d, e ->
                     // Same destination and arguments the old IPTV strips used; Back lands on the episode row like a library tile
@@ -500,6 +515,8 @@ fun SeriesDetailsContent(
     onEpisodeSelected: (Int) -> Unit = {},
     /** Hold OK on an episode tile: the page opens that episode's context menu. */
     onLongClickEpisode: (Int, BaseItem) -> Unit = { _, _ -> },
+    /** Every library episode with its watched state (split series only; null = not asked / not answered). */
+    allLibraryEpisodes: List<BaseItem>? = null,
     /** The person's IPTV copy of this series (null = none, or not answered yet): its seasons and episodes merge into the page. */
     iptv: com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail? = null,
     /** OK on an IPTV episode tile: play it through IPTV. The page that owns navigation also sets the return-to-episodes flag. */
@@ -589,20 +606,49 @@ fun SeriesDetailsContent(
         }
     val split = seriesIsSplit(merged, tiles.orEmpty())
 
-    val resolvedResumable = (resolved?.data?.userData?.playbackPositionTicks ?: 0L) > 0L
+    // Split series (library + IPTV episodes): next up over BOTH (Jellyfin's next up only knows library episodes, so after
+    // library S2E2 it said E6 past IPTV-only E3-E5). Null = not split / not known yet / all watched: the library's answer.
+    val splitNext =
+        remember(allLibraryEpisodes, iptv) {
+            val seasonsIptv = iptv?.seasons.orEmpty()
+            if (seasonsIptv.isEmpty() || allLibraryEpisodes == null) {
+                null
+            } else {
+                splitNextUp(
+                    splitEpisodes(
+                        allLibraryEpisodes.map {
+                            SplitLibEp(
+                                id = it.id,
+                                season = it.data.parentIndexNumber,
+                                episode = it.data.indexNumber,
+                                played = it.data.userData?.played == true,
+                                positionTicks = it.data.userData?.playbackPositionTicks ?: 0L,
+                                virtual = it.data.locationType == org.jellyfin.sdk.model.api.LocationType.VIRTUAL,
+                            )
+                        },
+                        seasonsIptv,
+                    ),
+                )
+            }
+        }
+    // The library episode the button plays: the split answer's library copy, else the library's own answer
+    val playLib: BaseItem? = splitNext?.lib?.let { l -> allLibraryEpisodes?.firstOrNull { it.id == l.id } } ?: resolved?.takeIf { splitNext == null }
+    val splitIptv = splitNext?.takeIf { it.lib == null && it.iptv != null }
+    val playIptv = splitIptv?.iptv
     val primaryLabel =
-        if (resolved != null) {
-            seriesPlayLabel(resolved.data.parentIndexNumber, resolved.data.indexNumber, resolvedResumable, resumeWord, playWord)
-        } else {
-            playWord
+        when {
+            splitIptv != null -> seriesPlayLabel(splitIptv.season, splitIptv.episode, splitIptv.inProgress, resumeWord, playWord)
+            playLib != null -> seriesPlayLabel(playLib.data.parentIndexNumber, playLib.data.indexNumber, (playLib.data.userData?.playbackPositionTicks ?: 0L) > 0L, resumeWord, playWord)
+            else -> playWord
         }
     val statusLine =
         seriesStatusLine(
             seasonNumbers = merged.map { it.number },
-            nextSeason = resolved?.data?.parentIndexNumber,
-            nextEpisode = resolved?.data?.indexNumber,
+            nextSeason = splitNext?.season ?: resolved?.data?.parentIndexNumber,
+            nextEpisode = splitNext?.episode ?: resolved?.data?.indexNumber,
         )
-    val nextEpisodeId = resolved?.id ?: nextUpId
+    val nextEpisodeId = if (splitNext != null) splitNext.lib?.id else resolved?.id ?: nextUpId
+    val nextIptvEpisodeId = playIptv?.id
 
     JellytipDetailsScaffold(
         modifier = modifier,
@@ -624,7 +670,12 @@ fun SeriesDetailsContent(
                             JellytipButton(primaryLabel, primary = true, onClick = {
                                 position = 0
                                 // One resolved episode names the button and is what plays; no answer yet = the old next-up lookup
-                                if (resolved != null) onPlayEpisode(resolved) else playOnClick(false)
+                                val copy = iptv
+                                when {
+                                    playIptv != null && copy != null -> onPlayIptvEpisode(copy, playIptv)
+                                    playLib != null -> onPlayEpisode(playLib)
+                                    else -> playOnClick(false)
+                                }
                             }),
                         )
                         add(
@@ -760,6 +811,7 @@ fun SeriesDetailsContent(
                                                 val e = tile.episode
                                                 IptvEpisodeTile(
                                                     e = e,
+                                                    isNext = e.id == nextIptvEpisodeId,
                                                     mark =
                                                         episodeSourceMark(
                                                             split,
@@ -977,6 +1029,7 @@ private fun LibraryEpisodeTile(
 private fun IptvEpisodeTile(
     e: com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode,
     mark: String?,
+    isNext: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -988,7 +1041,7 @@ private fun IptvEpisodeTile(
         overview = e.overview,
         played = p?.played == true,
         progress = p?.takeIf { it.resumable && it.durationSecs > 0 }?.let { (it.positionSecs / it.durationSecs).toFloat().coerceIn(0f, 1f) } ?: 0f,
-        isNext = false,
+        isNext = isNext,
         onClick = onClick,
         onLongClick = {},
         modifier = modifier,
