@@ -54,6 +54,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.test.core.app.ApplicationProvider
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.MaterialTheme
@@ -643,7 +644,7 @@ class Audit2ShotsTest {
             inset = false,
             measure = {
                 for (t in listOf("t-guide", "t-home", "t-upcoming", "t-recording")) logBox("audit2-event-tiles", t, hasTestTag(t))
-                fun size(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().let { it.width.value to it.height.value }
+                fun size(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot().let { (it.right - it.left).value to (it.bottom - it.top).value }
                 for ((tag, w, h) in listOf(Triple("t-guide", 230f, 56f), Triple("t-home", 300f, 84f), Triple("t-upcoming", 300f, 84f), Triple("t-recording", 300f, 84f))) {
                     val (mw, mh) = size(tag)
                     assertEquals("audit2-event-tiles: $tag width (dp)", w, mw, 0.5f)
