@@ -445,7 +445,8 @@ internal fun JellytipGameCentreContent(
                     modifier =
                         Modifier
                             .jellytipRowBleed()
-                            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                            // (an offscreen layer only while the fade is drawn: none while the list is at its top)
+                            .graphicsLayer { compositingStrategy = if (listState.canScrollBackward) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
                             .drawWithContent {
                                 drawContent()
                                 // A row scrolled up under the title fades out over its first 12 dp instead of being cut hard

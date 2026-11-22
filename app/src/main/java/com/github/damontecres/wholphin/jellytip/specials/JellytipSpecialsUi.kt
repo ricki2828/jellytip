@@ -347,7 +347,7 @@ internal fun TrailerBreakBand(
             if (reason.isNotBlank()) Caption(reason, alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
             if (!overview.isNullOrBlank()) {
-                Caption(overview.trim(), alpha = 0.75f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3, modifier = Modifier.widthIn(max = 420.dp))
+                Caption(overview.trim(), alpha = 0.75f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3, modifier = Modifier.widthIn(max = 420.dp).weight(1f, fill = false))  // (takes what height is left: never past the panel)
             }
         }
         SpecialCard(
