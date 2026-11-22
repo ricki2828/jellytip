@@ -305,6 +305,39 @@ fun JellytipIptvDetailsPage(
         kotlinx.coroutines.delay(10_000)
         if (detail == null) failed = true
     }
+    val trailerSettings by viewModel.trailerSettings.collectAsState(com.github.damontecres.wholphin.jellytip.JellytipSettings())
+    JellytipIptvDetailsContent(
+        id = id,
+        title = title,
+        detail = detail,
+        failed = failed,
+        trailerSettings = trailerSettings,
+        httpClient = viewModel.httpClient,
+        onShowCopy = { shownId = it },
+        onNavigate = { dest, why -> viewModel.navigationManager.navigateTo(dest, why) },
+        setFavourite = { vodId, on -> viewModel.vod.setFavourite(vodId, on) },
+        modifier = modifier,
+    )
+}
+
+/**
+ * The IPTV details page itself, from plain values: [detail] null = loading (or [failed]); every action is a lambda.
+ * Split from [JellytipIptvDetailsPage] so a test can render it without Hilt.
+ */
+@Composable
+fun JellytipIptvDetailsContent(
+    id: String,
+    title: String,
+    detail: IptvVodDetail?,
+    failed: Boolean,
+    trailerSettings: com.github.damontecres.wholphin.jellytip.JellytipSettings,
+    httpClient: okhttp3.OkHttpClient,
+    onShowCopy: (String) -> Unit,
+    onNavigate: (Destination, String?) -> Unit,
+    setFavourite: suspend (String, Boolean) -> Boolean?,
+    modifier: Modifier = Modifier,
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val focus = remember { FocusRequester() }
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(detail != null) {
@@ -345,17 +378,17 @@ fun JellytipIptvDetailsPage(
         if (alt != null) {
             android.widget.Toast.makeText(ctx, "Skipped ${it.providerName ?: "this copy"}: failed earlier", android.widget.Toast.LENGTH_SHORT).show()
             JellytipTrace.log("iptv", "play vod ${alt.id} (skipped failed ${it.id})")
-            viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = alt.id, resumeMs = 0L), "iptv details Play (skip failed)")
+            onNavigate(Destination.JellytipIptvPlay(title = it.title, vodId = alt.id, resumeMs = 0L), "iptv details Play (skip failed)")
             return
         }
         JellytipTrace.log("iptv", "play vod ${it.id} resume=$resume")
-        viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = it.id, resumeMs = resume), "iptv details Play")
+        onNavigate(Destination.JellytipIptvPlay(title = it.title, vodId = it.id, resumeMs = resume), "iptv details Play")
     }
 
     fun playEpisode(e: IptvEpisode) {
         val it = item ?: return
         val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
-        viewModel.navigationManager.navigateTo(
+        onNavigate(
             Destination.JellytipIptvPlay(title = "${it.title} · ${e.title}", seriesId = it.id, episodeId = e.id, resumeMs = resume),
             "iptv episode OK",
         )
@@ -380,7 +413,7 @@ fun JellytipIptvDetailsPage(
                 com.github.damontecres.wholphin.services.TrailerService.onClick(
                     context,
                     com.github.damontecres.wholphin.data.model.RemoteTrailer("${item?.title ?: title} trailer", url, null),
-                ) { dest -> viewModel.navigationManager.navigateTo(dest, "iptv details trailer") }
+                ) { dest -> onNavigate(dest, "iptv details trailer") }
             } else {
                 trailerPlaying = !trailerPlaying
             }
@@ -388,7 +421,6 @@ fun JellytipIptvDetailsPage(
     }
     // Passive preview (web de81df8e, library details' rule): after a rest on the buttons or season chips, the cached
     // trailer plays behind the text; once per visit to that zone, never over the Trailer button's own playback
-    val trailerSettings by viewModel.trailerSettings.collectAsState(com.github.damontecres.wholphin.jellytip.JellytipSettings())
     var resumed by remember { mutableStateOf(true) }
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
         resumed = true
@@ -422,7 +454,7 @@ fun JellytipIptvDetailsPage(
                 com.github.damontecres.wholphin.jellytip.TrailerLayer(
                     url = trailerUrl,
                     sound = trailerSettings.trailerSound,
-                    httpClient = viewModel.httpClient,
+                    httpClient = httpClient,
                     onEnded = {
                         autoDone = true
                         autoTrailer = false
@@ -580,7 +612,7 @@ fun JellytipIptvDetailsPage(
                         ) { Text("Play both") }
                     }
                     TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
-                    MyListButton(item, viewModel)
+                    MyListButton(item, setFavourite)
                     IptvTasteButtons(item)
                 }
             } else {
@@ -589,7 +621,7 @@ fun JellytipIptvDetailsPage(
                     modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
                 ) {
                     TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
-                    MyListButton(item, viewModel)
+                    MyListButton(item, setFavourite)
                     IptvTasteButtons(item)
                 }
             }
@@ -598,7 +630,7 @@ fun JellytipIptvDetailsPage(
                     IptvStreamFail.rememberPick(ctx, IptvStreamFail.pickKey(item.kind, item.tmdbId, item.title, item.year), c.id)
                     if (c.id != item.id) {
                         JellytipTrace.log("iptv", "ways to watch: pick ${c.id}")
-                        shownId = c.id
+                        onShowCopy(c.id)
                     } else if (!item.isSeries) {
                         playMovie(fromStart = false, manual = true)
                     }
@@ -650,7 +682,7 @@ fun JellytipIptvDetailsPage(
             }
         }
         if (trailerPlaying && trailerUrl != null) {
-            IptvFullScreenTrailer(trailerUrl, viewModel.httpClient) {
+            IptvFullScreenTrailer(trailerUrl, httpClient) {
                 trailerPlaying = false
                 autoDone = true // just watched it: no passive replay until focus leaves and comes back
             }
@@ -838,7 +870,7 @@ private const val MAX_CAST = 12
 @Composable
 private fun MyListButton(
     item: IptvVodItem,
-    viewModel: JellytipIptvVodViewModel,
+    setFavourite: suspend (String, Boolean) -> Boolean?,
 ) {
     val on = IptvMyList.isOn(item)
     var busy by remember(item.id) { mutableStateOf(false) }
@@ -863,7 +895,7 @@ private fun MyListButton(
                 note = null
                 JellytipTrace.log("iptv", "my list ${item.id} on=$want")
                 scope.launch {
-                    val result = viewModel.vod.setFavourite(item.id, want)
+                    val result = setFavourite(item.id, want)
                     if (result == null) {
                         IptvMyList.set(item.id, !want)
                         note = "Couldn't update My list"

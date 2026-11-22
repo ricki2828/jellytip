@@ -37,9 +37,9 @@ class JellytipDetailsViewModel
         private val imageUrlService: ImageUrlService,
         private val stillStore: JellytipStillStore,
         preferences: DataStore<AppPreferences>,
-        @param:AuthOkHttpClient val httpClient: OkHttpClient,
-    ) : ViewModel() {
-        val settings: Flow<JellytipSettings> =
+        @param:AuthOkHttpClient override val httpClient: OkHttpClient,
+    ) : ViewModel(), JellytipDetailsSource {
+        override val settings: Flow<JellytipSettings> =
             preferences.data
                 .map {
                     JellytipSettings(
@@ -48,12 +48,12 @@ class JellytipDetailsViewModel
                     )
                 }.distinctUntilChanged()
 
-        suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
+        override suspend fun getExtras(item: BaseItem): JellytipExtras? = jellytipApi.getExtras(item)
 
-        suspend fun getAudience(item: BaseItem): JellytipAudience? = jellytipApi.getAudience(item)
+        override suspend fun getAudience(item: BaseItem): JellytipAudience? = jellytipApi.getAudience(item)
 
         /** Details-page backdrop (second-best, tile-distinct) with its focal point; null for episodes (own still). */
-        suspend fun detailsPick(item: BaseItem): ImagePick? {
+        override suspend fun detailsPick(item: BaseItem): ImagePick? {
             if (item.type == BaseItemKind.EPISODE) return null
             JellytipImagePick.load(item)
             return JellytipImagePick.forDetails(imageUrlService, item).takeIf { it.url != null }
@@ -63,13 +63,13 @@ class JellytipDetailsViewModel
          * [detailsPick] without waiting: only when the companion's ranking for the item (the series for a series page)
          * is already cached from Home, else null.
          */
-        fun cachedDetailsPick(item: BaseItem): ImagePick? {
+        override fun cachedDetailsPick(item: BaseItem): ImagePick? {
             if (item.type == BaseItemKind.EPISODE) return null
             JellytipApi.shared?.peekInfo(com.github.damontecres.wholphin.jellytip.cache.jellytipHeroItemId(item)) ?: return null
             return JellytipImagePick.forDetails(imageUrlService, item).takeIf { it.url != null }
         }
 
-        fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
+        override fun stillChoice(id: UUID): Flow<Int> = stillStore.choice(id)
 
         /** "Change still": advance to the next still (or back to automatic) for this item, locally only. */
         fun cycleStill(item: BaseItem) {
@@ -79,7 +79,7 @@ class JellytipDetailsViewModel
         /**
          * Companion stills first, then every Jellyfin backdrop at original size, then the usual fallback
          */
-        fun stillUrls(
+        override fun stillUrls(
             item: BaseItem,
             extras: JellytipExtras?,
         ): List<String> {
@@ -120,7 +120,7 @@ class JellytipDetailsViewModel
             return (companion + jellyfin + fallback).distinct()
         }
 
-        fun trailerUrl(trailer: LocalTrailer): String? =
+        override fun trailerUrl(trailer: LocalTrailer): String? =
             try {
                 api.videosApi.getVideoStreamUrl(itemId = trailer.baseItem.id, static = true)
             } catch (e: Exception) {

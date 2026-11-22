@@ -82,7 +82,7 @@ fun JellytipDetailsBlock(
     subtitle: String? = null,
     bottomPadding: Dp? = null,
     below: @Composable () -> Unit = {},
-    viewModel: JellytipDetailsViewModel = hiltViewModel(),
+    viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
     val sizes = rememberJellytipSizes()
     val extras by produceState<JellytipExtras?>(null, item.id) {

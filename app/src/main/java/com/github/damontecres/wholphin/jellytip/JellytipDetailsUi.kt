@@ -101,7 +101,7 @@ fun JellytipDetailsBackground(
     buttonRowFocused: Boolean,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
-    viewModel: JellytipDetailsViewModel = hiltViewModel(),
+    viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
     val settings by viewModel.settings.collectAsState(JellytipSettings())
     val extras by produceState<JellytipExtras?>(null, item.id) {
@@ -325,7 +325,7 @@ internal fun TrailerLayer(
 fun JellytipScoreRow(
     item: BaseItem,
     modifier: Modifier = Modifier,
-    viewModel: JellytipDetailsViewModel = hiltViewModel(),
+    viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
 ) {
     val extras by produceState<JellytipExtras?>(null, item.id) {
         value = viewModel.getExtras(item)
