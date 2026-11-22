@@ -700,7 +700,8 @@ fun JellytipLivePanel(
         Row(
             Modifier
                 .fillMaxSize()
-                .padding(if (floating) 12.dp else 0.dp)
+                // Floating: the card's 14 dp inner padding lands its text on the safe area (48 right, 27 top / bottom)
+                .then(if (floating) Modifier.padding(start = 12.dp, end = 34.dp, top = 13.dp, bottom = 13.dp) else Modifier)
                 .clip(shape)
                 // The wash: home colour left, away right, 22% into #0D1015 (a static brush), at 95%
                 .background(pal.wash, alpha = 0.95f),
@@ -712,8 +713,8 @@ fun JellytipLivePanel(
                     Modifier
                         .fillMaxSize()
                         .then(if (floating) Modifier.border(2.dp, Broadcast.Gold.copy(alpha = 0.6f), shape) else Modifier)
-                        // Docked: inside the safe area (24 dp from the right edge, 27 top / bottom; audit P1)
-                        .then(if (floating) Modifier.padding(14.dp) else Modifier.padding(start = 16.dp, end = 24.dp, top = 27.dp, bottom = 27.dp)),
+                        // Docked: all text and the delay chip row inside the 5% safe area (48 dp from the right, 27 top / bottom)
+                        .then(if (floating) Modifier.padding(14.dp) else Modifier.padding(start = 16.dp, end = 48.dp, top = 27.dp, bottom = 27.dp)),
             ) {
                 topRow?.let { row -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { row() } }
                 if (match.isEvent || (match.home == null && match.away == null)) {

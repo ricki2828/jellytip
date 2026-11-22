@@ -159,6 +159,21 @@ class PlayerSizingShotsTest {
             )
         }
 
+    /** Floating live panel: its text and the delay chip row inside 48 / 27 too. */
+    @Test
+    fun floatingPanel() =
+        shot("player-panel-floating") {
+            JellytipLivePanel(
+                match,
+                tab = 0,
+                spoilerNotice = false,
+                data = live,
+                floating = true,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.32f),
+                topRow = { DelayChipText(replay = { false }, hold = { null }, delaySec = { 30 }) },
+            )
+        }
+
     /** Docked live panel with the delay chip as its first row (the chip never sits on the score strip; P1 insets). */
     @Test
     fun cornersWithDockedPanel() =
