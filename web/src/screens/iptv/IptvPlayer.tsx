@@ -764,7 +764,7 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     const check = () => {
       if (firstFrame.current) kickoffPlayed.current = true;
       const v = videoRef.current;
-      const k = { state: state.kind, phase: recRef.current.phase, played: kickoffPlayed.current, sinceMs: Date.now() - kickoffSince.current, paused: !!v?.paused && state.kind === "playing", hidden: document.hidden };
+      const k = { state: state.kind, phase: recRef.current.phase, played: kickoffPlayed.current, sinceMs: Date.now() - kickoffSince.current, paused: !!v?.paused && state.kind === "playing" && recRef.current.phase === "playing" && linkRef.current != null, hidden: document.hidden };
       if (kickoffClockHeld(k)) kickoffSince.current = Date.now();
       if (kickoffFailed(k)) kickoffFail(`${k.state}/${k.phase}${k.played ? "" : " no picture"}`, k.played);
     };
@@ -1908,6 +1908,13 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         return;
       }
       if (r.reason === "ended") watch.end(true);
+      // From kick-off played to its end (it ends where the programme was when it opened): on to live, as the web player does
+      if (r.reason === "ended" && kickoffRun.current && target.channel && !kickoffBack.current) {
+        kickoffBack.current = true;
+        flashNote("Back to live");
+        go(livePath(target.channel, title, extrasIn), true);
+        return;
+      }
       if (r.reason === "ended" && channelId) {
         // The film finished: on to what the clock says is next on the channel
         void nextChannelPath(channelId, curId, (Date.now() - openedAt.current) / 1000, resume).then((path) => {

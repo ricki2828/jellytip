@@ -160,6 +160,10 @@ test("kickoffFailed: paused (autoplay refused) or a hidden page holds the no-pic
   assert.equal(kickoffClockHeld({ ...k, hidden: true }), true);
   assert.equal(kickoffClockHeld({ ...k, state: "full" }), true);
   assert.equal(kickoffClockHeld(k), false);
+  // a recovery's teardown empties the element (reads as paused): the clock keeps running, a dead archive must not spin on
+  assert.equal(kickoffClockHeld({ ...k, paused: true, phase: "reconnecting" }), false);
+  assert.equal(kickoffFailed({ ...k, paused: true, phase: "reconnecting" }), true);
+  assert.equal(kickoffFailed({ ...k, paused: true, phase: "stalled" }), true);
   assert.equal(kickoffFailed({ ...k, paused: true, state: "error" }), true);
   assert.equal(kickoffFailed({ ...k, hidden: true, phase: "failed" }), true);
 });

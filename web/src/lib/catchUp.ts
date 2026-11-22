@@ -132,8 +132,11 @@ export interface KickoffIn {
   hidden?: boolean;
 }
 
-/** Restart the no-picture clock: "every connection is in use" is up, or the video is paused / the page hidden (not the archive's fault). */
-export const kickoffClockHeld = (i: KickoffIn): boolean => i.state === "full" || !!i.paused || !!i.hidden;
+/**
+ * Restart the no-picture clock: "every connection is in use" is up, or the video is paused / the page hidden (not the archive's
+ * fault). Paused counts only while no recovery runs: a recovery's teardown empties the element, which reads as paused too.
+ */
+export const kickoffClockHeld = (i: KickoffIn): boolean => i.state === "full" || (!!i.paused && i.phase === "playing") || !!i.hidden;
 
 /**
  * Has a From kick-off (catch-up) target failed? Refused or errored (the server's 400 no_catchup, a dead link, recovery gave up),
