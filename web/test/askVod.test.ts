@@ -13,12 +13,24 @@ test("one IPTV query per kind; the route gets ratings, length, rating floor and 
   assert.deepEqual(q.map((x) => x.kind), ["movie", "series"]);
   assert.deepEqual(q[0].params, {
     kind: "movie", limit: String(VOD_LIMIT), sort: "rating", certifications: "G|PG|TV-Y|TV-Y7|TV-G|TV-PG",
-    maxRuntime: "120", minRating: "7", year: "1990-1999",
+    maxRuntime: "120", minRating: "7", year: "1990-1999", genreIds: "10751,16",
   });
   assert.deepEqual(vodQueries(chips("a funny movie")).map((x) => x.kind), ["movie"]);
   assert.deepEqual(vodQueries(chips("a short series")).map((x) => x.kind), ["series"]);
   // Two year chips: the route gets their span, the exact years are checked here
   assert.equal(vodQueries(chips("80s or 2010 to 2015"))[0].params.year, "1980-2015");
+});
+
+test("genres on the route (any-of, ids of that kind): one mood, kids genres, left-out genres; a kind that can't match is skipped", () => {
+  // One mood: its genres; Horror has no TV id, so 'scary' searches films only
+  assert.deepEqual(vodQueries(chips("scary")).map((q) => [q.kind, q.params.genreIds]), [["movie", "27"]]);
+  // Sci-fi: the movie id for films, the TV one for series
+  assert.deepEqual(vodQueries(chips("sci-fi")).map((q) => [q.kind, q.params.genreIds]), [["movie", "878"], ["series", "10765"]]);
+  // Ricki's sentence: kids genres minus the left-out ones on the route, Animation / Horror excluded (Horror only for films)
+  const r = vodQueries(chips("I'm here with my two kids, want something non animated not scary that would work for all"));
+  assert.deepEqual(r.map((q) => [q.kind, q.params.genreIds, q.params.excludeGenreIds]), [["movie", "10751", "16,27"], ["series", "10751,10762", "16"]]);
+  // Several moods: none on the route (each must match, checked here)
+  assert.equal(vodQueries(chips("funny and scary"))[0].params.genreIds, undefined);
 });
 
 test("a person chip: IPTV isn't searched (no cast in the catalogue), and the note says so", () => {

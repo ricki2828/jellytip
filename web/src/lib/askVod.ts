@@ -12,6 +12,12 @@ export const TMDB_GENRES: Record<string, number> = {
   "sci-fi & fantasy": 10765, soap: 10766, talk: 10767, "war & politics": 10768,
 };
 
+/** TMDB's movie genre ids and TV genre ids differ (TV has no Horror / Thriller; Kids, Sci-Fi & Fantasy are TV-only). */
+export const MOVIE_GENRE_IDS = new Set([28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 10770, 53, 10752, 37]);
+export const TV_GENRE_IDS = new Set([10759, 16, 35, 80, 99, 18, 10751, 10762, 9648, 10763, 10764, 10765, 10766, 10767, 10768, 37]);
+/** The route takes at most this many ids per genre param (else 400). */
+export const MAX_GENRE_IDS = 30;
+
 /** The slice of an IPTV vod item the checks need. */
 export interface VodView {
   kind: "movie" | "series";
@@ -63,7 +69,24 @@ export function vodQueries(chips: Chip[]): VodQuery[] {
   if (minRating > 0) p.minRating = String(minRating);
   const years = of(chips, "years");
   if (years.length) p.year = `${Math.min(...years.map((c) => c.data.from))}-${Math.max(...years.map((c) => c.data.to))}`;
-  return list.map((kind) => ({ kind, params: { kind, ...p } }));
+  // Genres on the route (vodgenre, live 22-Nov; any-of, ids of THAT kind): one mood chip = its genres; no mood but kids = the
+  // kids genres; several moods = none on the route (each must match: the device checks). Left-out genres: excludeGenreIds.
+  // A kind that has none of the one mood's genres can't match it: no query for that kind.
+  const moods = of(chips, "genre");
+  const want = moods.length === 1 ? moods[0].data.genres : moods.length === 0 && of(chips, "kids").length ? kidsGenres(chips) : [];
+  const out = of(chips, "notGenre").flatMap((c) => c.data.genres);
+  const forKind = (genres: string[], kind: "movie" | "series") => ids(genres).filter((g) => (kind === "movie" ? MOVIE_GENRE_IDS : TV_GENRE_IDS).has(g)).slice(0, MAX_GENRE_IDS);
+  return list.flatMap((kind) => {
+    const q: Record<string, string> = { kind, ...p };
+    if (want.length) {
+      const g = forKind(want, kind);
+      if (!g.length) return [];
+      q.genreIds = g.join(",");
+    }
+    const x = forKind(out, kind);
+    if (x.length) q.excludeGenreIds = x.join(",");
+    return [{ kind, params: q }];
+  });
 }
 
 /**
