@@ -491,6 +491,9 @@ internal fun JellytipHubCollectionContent(
     onOpenMissing: (JellytipServerRow.Missing) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // One hold-OK menu host for the grid (not one per lazy tile)
+    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
     val tiles =
         remember(r, library) {
             if (r == null || library == null) {
@@ -535,8 +538,6 @@ internal fun JellytipHubCollectionContent(
                         Box {
                             when (t) {
                                 is TrendTile.Lib -> {
-                                    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
-                                    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
                                     PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = { menu.open(t.item) }, modifier = m)
                                 }
 

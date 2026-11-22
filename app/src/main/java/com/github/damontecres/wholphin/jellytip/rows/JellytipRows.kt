@@ -548,8 +548,16 @@ class JellytipRowsService
 
             /** Called when [itemId] starts playing or its watched state is toggled. */
             fun markChanged(itemId: UUID?) {
-                if (itemId != null) changedAt[itemId] = System.currentTimeMillis()
+                if (itemId != null) {
+                    val now = System.currentTimeMillis()
+                    changedAt[itemId] = now
+                    // Drawn server rows watch this and reload (in place) when one of their items changed; reloading never calls markChanged
+                    changes.value = maxOf(changes.value + 1, now)
+                }
             }
+
+            /** Bumped by [markChanged]. */
+            val changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
 
             private val snapshotJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             private const val PREFETCH_ROWS = 6

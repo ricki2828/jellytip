@@ -50,8 +50,6 @@ class JellytipLibraryMenuViewModel
             favorite: Boolean,
         ) = viewModelScope.launch(ExceptionHandler() + WholphinDispatchers.IO) {
             favoriteWatchManager.setFavorite(id, favorite)
-            // Server rows holding this item reload their state on their next draw (as for watched)
-            com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(id)
         }
     }
 

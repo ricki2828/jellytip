@@ -132,7 +132,10 @@ fun JellytipServerRowView(
 ) {
     // Set when the retry has failed too: mixed rows then show their IPTV tiles on their own (they never wait on the library forever)
     var loadFailed by remember(row.id, row.itemIds) { mutableStateOf(false) }
-    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds) {
+    // A watched / My list change anywhere: rows whose cached items changed reload IN PLACE (the old items stay until the new ones arrive)
+    val bump by com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.changes
+        .collectAsState()
+    val items by produceState(viewModel.rows.peekItems(row), row.id, row.itemIds, bump) {
         // A failed load keeps the placeholder and retries once; still failing = placeholder stays (no collapse)
         val first = viewModel.rows.items(row)
         if (first != null) {
@@ -631,6 +634,9 @@ fun JellytipCollectionPage(
 ) {
     val sizes = rememberJellytipSizes()
     val isAdmin by rememberIsJellytipAdmin()
+    // One hold-OK menu host for the page (not one per lazy tile)
+    val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
+    com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
     val state by produceState<CollectionPageState>(CollectionPageState.Loading, tmdbId) {
         value = viewModel.rows.collection(tmdbId)?.let { CollectionPageState.Loaded(it.first, it.second) } ?: CollectionPageState.Failed
     }
@@ -739,8 +745,6 @@ fun JellytipCollectionPage(
                         when (entry) {
                             is PartEntry.InLibrary -> {
                                 val item = entry.item
-                                val menu = com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu()
-                                com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf(menu)
                                 val label = listOfNotNull(item.title, item.data.productionYear?.toString()).joinToString("  ·  ")
                                 PosterCard(
                                     item,
