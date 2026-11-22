@@ -4,6 +4,8 @@ import com.github.damontecres.wholphin.jellytip.ask.AskChip
 import com.github.damontecres.wholphin.jellytip.ask.AskItem
 import com.github.damontecres.wholphin.jellytip.ask.AskParse
 import com.github.damontecres.wholphin.jellytip.ask.ChipData
+import com.github.damontecres.wholphin.jellytip.iptv.IptvSource
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -76,6 +78,8 @@ sealed interface ChatTitle {
         val year: Int?,
         val certification: String?,
         val runtime: Int?,
+        /** Where else this title can be played (`sources`, library first); the IPTV copy of a library title feeds the library menu's "Play from IPTV". */
+        val sources: List<IptvSource> = emptyList(),
     ) : ChatTitle
 
     /** A TV (IPTV) title: drawn straight from these fields, never fetched from Jellyfin. */
@@ -94,6 +98,10 @@ sealed interface ChatTitle {
         val certification: String?,
         val runtime: Int?,
         val audio: String?,
+        /** Every place the title can be played from (`sources`, library first; a library entry is present only when the caller can open a library copy). */
+        val sources: List<IptvSource> = emptyList(),
+        /** The library copy's id (the library entry of [sources]); null = none. OK then opens the library page. */
+        val libraryId: String? = null,
     ) : ChatTitle
 }
 
@@ -458,15 +466,17 @@ object AskChat {
         return when (o.optString("source")) {
             "library" -> {
                 val id = o.optString("id", "").ifEmpty { return null }
-                ChatTitle.Library(kind, id, optStr(o, "title"), optInt(o, "year"), optStr(o, "certification"), optInt(o, "runtime"))
+                ChatTitle.Library(kind, id, optStr(o, "title"), optInt(o, "year"), optStr(o, "certification"), optInt(o, "runtime"), IptvVodParse.sources(o.optJSONArray("sources")))
             }
 
             "iptv" -> {
                 val id = o.optString("iptvId", "").ifEmpty { return null }
+                val sources = IptvVodParse.sources(o.optJSONArray("sources"))
                 ChatTitle.Iptv(
                     kind, id, optStr(o, "title"), optInt(o, "year"), optInt(o, "tmdbId"), optDouble(o, "rating"), optStr(o, "poster"), optStr(o, "backdrop"),
                     strList(o.optJSONArray("quality")), strList(o.optJSONArray("tech")), o.optBoolean("catalog", false), optStr(o, "certification"),
                     optInt(o, "runtime"), optStr(o, "audio"),
+                    sources, sources.firstOrNull { it.type == "library" }?.id,
                 )
             }
 

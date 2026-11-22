@@ -18,12 +18,13 @@ internal fun ChatCard(
     placed: AskChat.Placed<BaseItem>,
     onOpenLibrary: (BaseItem) -> Unit,
     onOpenTv: (ChatTitle.Iptv) -> Unit,
+    onLongClickLibrary: (BaseItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val item = placed.item
     val card = placed.card
     if (item != null) {
-        PosterCard(item, onClick = { onOpenLibrary(item) }, onLongClick = {}, modifier = modifier)
+        PosterCard(item, onClick = { onOpenLibrary(item) }, onLongClick = { onLongClickLibrary(item) }, modifier = modifier)
     } else if (card is ChatTitle.Iptv) {
         IptvVodTile(
             item = card.toVodItem(),
@@ -53,4 +54,6 @@ internal fun ChatTitle.Iptv.toVodItem(): IptvVodItem =
         progress = null,
         tech = tech,
         audio = audio,
+        libraryId = libraryId,
+        sources = sources,
     )

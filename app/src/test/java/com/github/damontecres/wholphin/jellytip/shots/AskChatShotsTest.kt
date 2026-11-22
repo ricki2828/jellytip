@@ -44,6 +44,7 @@ import com.github.damontecres.wholphin.jellytip.askchat.ChatState
 import com.github.damontecres.wholphin.jellytip.askchat.ChatTitle
 import com.github.damontecres.wholphin.jellytip.askchat.Fetched
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.iptv.IptvSource
 import com.github.damontecres.wholphin.services.ImageUrlService
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -279,7 +280,12 @@ class AskChatShotsTest {
         title: String,
         kind: String = "film",
         cert: String = "PG",
-    ) = ChatTitle.Iptv(kind, "p1:${if (kind == "film") "m" else "s"}:$n", title, 2018, 1000 + n, 7.8, "https://image.tmdb.org/t/p/w342/p$n.jpg", null, listOf("1080p"), emptyList(), false, cert, 95, null)
+        libraryId: String? = null,
+    ): ChatTitle.Iptv {
+        val id = "p1:${if (kind == "film") "m" else "s"}:$n"
+        val sources = listOfNotNull(libraryId?.let { IptvSource("library", it) }, IptvSource("iptv", id, listOf("1080p"), emptyList(), 1))
+        return ChatTitle.Iptv(kind, id, title, 2018, 1000 + n, 7.8, "https://image.tmdb.org/t/p/w342/p$n.jpg", null, listOf("1080p"), emptyList(), false, cert, 95, null, sources, libraryId)
+    }
 
     // ---- the shots ----
 
@@ -338,7 +344,7 @@ class AskChatShotsTest {
             lib.forEachIndexed { i, c ->
                 add(c)
                 when (i) {
-                    1 -> add(tv(1, "Toy Story", cert = "G"))
+                    1 -> add(tv(1, "Toy Story", cert = "G", libraryId = "0a1b2c3d4e5f60718293a4b5c6d7e8f9"))
                     4 -> add(tv(2, "Paddington 2"))
                     6 -> add(tv(3, "Bluey", kind = "series", cert = "TV-Y"))
                     9 -> add(tv(4, "Moana 2"))

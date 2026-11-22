@@ -58,6 +58,10 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipSkeleton
+import com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources
+import com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu
 import com.github.damontecres.wholphin.jellytip.ask.AskButton
 import com.github.damontecres.wholphin.jellytip.ask.AskChipButton
 import com.github.damontecres.wholphin.jellytip.ask.AskParse
@@ -70,7 +74,6 @@ import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.components.SearchEditTextBox
 import com.github.damontecres.wholphin.ui.components.VoiceInputManager
 import com.github.damontecres.wholphin.ui.components.VoiceSearchButton
-import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -175,6 +178,8 @@ class JellytipAskChatViewModel
                     Sent.Aborted -> {}
 
                     is Sent.Ok -> {
+                        // the IPTV copies of the library titles shown: the library hold-OK menu offers "Play from IPTV" for them
+                        out.resp.cards.filterIsInstance<ChatTitle.Library>().forEach { c -> JellytipTitleSources.put(c.id, c.sources) }
                         _ui.update { it.copy(chat = AskChat.applyResponse(it.chat, out.resp), fetched = null) }
                         fetchFor(_ui.value.chat)
                     }
@@ -255,7 +260,8 @@ class JellytipAskChatViewModel
 
         fun openTv(card: ChatTitle.Iptv) {
             lastOpened = "iptv:${card.iptvId}"
-            navigationManager.navigateTo(Destination.JellytipIptvDetails(card.iptvId, card.title.orEmpty()), "chat TV pick OK")
+            // A TV film that is also in the library opens the library page (one page per title); otherwise its own IPTV page
+            navigationManager.navigateTo(JellytipTitleOpen.detailsFor(card.toVodItem()), "chat TV pick OK")
         }
 
         /** Chat is switched off on the server (404): tell the person and pop back to the Ask page they came from. */
@@ -330,6 +336,8 @@ internal fun AskChatContent(
     val chat = ui.chat
     val pending = chat.pending != null
     val keyboard = LocalSoftwareKeyboardController.current
+    // the library tile's hold-OK menu (page-level state, never inside a lazy item); the host is composed once, below
+    val menu = rememberJellytipLibraryMenu()
     val boxFocus = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     var typing by remember { mutableStateOf(false) }
@@ -384,6 +392,7 @@ internal fun AskChatContent(
                 },
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        JellytipLibraryMenuHostOf(menu) // the library tile's hold-OK menu, once on the page (composes nothing until a tile asks)
         // ---- the conversation ----
         Column(Modifier.width(CHAT_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap)) {
             Text("Ask", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = JellytipLayout.PageTitle)
@@ -528,6 +537,7 @@ internal fun AskChatContent(
                             placed = p,
                             onOpenLibrary = actions.openLibrary,
                             onOpenTv = actions.openTv,
+                            onLongClickLibrary = { menu.open(it) },
                             modifier = Modifier.testTag("chat-card").then(if (actions.lastOpened().let { l -> l != null && (l == k || l == AskChat.normId(k)) }) Modifier.focusRequester(restore) else Modifier),
                         )
                     }
