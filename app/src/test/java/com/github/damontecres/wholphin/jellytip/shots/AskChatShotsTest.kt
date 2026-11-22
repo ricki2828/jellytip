@@ -175,11 +175,28 @@ class AskChatShotsTest {
         }.onFailure { println("shot $name: not measured (${it.message?.lineSequence()?.firstOrNull()})") }
     }
 
+    /** Every removable chip is laid out (a node each) and inside the page: right edge <= 912 dp (PageEnd). */
+    private fun assertChips(
+        name: String,
+        expected: Int,
+    ) {
+        val prefix = SemanticsMatcher("test tag starts with chat-chip:") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("chat-chip:") == true }
+        val nodes = compose.onAllNodes(prefix, useUnmergedTree = true)
+        val n = nodes.fetchSemanticsNodes().size
+        assertTrue("$name: expected $expected chips, found $n", n == expected)
+        for (i in 0 until n) {
+            val b = nodes[i].getUnclippedBoundsInRoot()
+            println("shot $name: chip $i left=${b.left.value} right=${b.right.value} top=${b.top.value}")
+            assertTrue("$name: chip $i right edge ${b.right.value} dp must be <= 912", b.right.value <= 912f)
+        }
+    }
+
     private fun shot(
         name: String,
         ui: AskChatUi,
         steps: () -> Unit = {},
         lastOpened: String? = null,
+        expectChips: Int? = null,
     ) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -199,6 +216,7 @@ class AskChatShotsTest {
         advance(1800)
         logFocus(name)
         logBounds(name)
+        if (expectChips != null) assertChips(name, expectChips)
         compose.onRoot().captureRoboImage(out(name))
     }
 
@@ -281,7 +299,7 @@ class AskChatShotsTest {
     @Test
     fun kidsHeadline() {
         val chat = settled("headline")
-        shot("askchat-3-headline", uiOf(chat), steps = { focusNode("askchat-3-headline", hasSetTextAction()) })
+        shot("askchat-3-headline", uiOf(chat), steps = { focusNode("askchat-3-headline", hasSetTextAction()) }, expectChips = 3)
     }
 
     @Test
@@ -294,7 +312,7 @@ class AskChatShotsTest {
             settled("paul_rudd") { j ->
                 j.put("notes", JSONArray().put(JSONObject().put("code", "no_results").put("text", "Nothing fits all of that. Try dropping one:").put("actions", acts)))
             }
-        shot("askchat-4-paul-rudd-no-results", uiOf(chat), steps = { focusNode("askchat-4-paul-rudd-no-results", hasSetTextAction()) })
+        shot("askchat-4-paul-rudd-no-results", uiOf(chat), steps = { focusNode("askchat-4-paul-rudd-no-results", hasSetTextAction()) }, expectChips = 4)
     }
 
     @Test

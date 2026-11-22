@@ -423,6 +423,15 @@ class AskChatStateTest {
     }
 
     @Test
+    fun thePaulRuddAnswerHoldsAllFourChips() {
+        val f = live.getJSONObject("paul_rudd")
+        val out = AskChat.applyResponse(AskChat.submitText(ChatState(rev = 1), "something with Paul Rudd")!!.state, AskChat.parseResponse(f.getJSONObject("resp").toString())!!)
+        assertEquals(listOf("notgenre:Animation", "kids", "noscary", "person:3e909596adb405578ff2191e296d5826"), ids(out.chips))
+        assertEquals(4, AskChat.displayChips(out, year).size)
+        assertEquals("with Paul Rudd", out.chips[3].label)
+    }
+
+    @Test
     fun thePaulRuddNoResultsCaseThenTheEchoedStateGoesBackVerbatim() {
         val head = live.getJSONObject("headline")
         val headState = AskChat.applyResponse(AskChat.submitText(ChatState(), head.getJSONObject("body").getString("text"))!!.state, AskChat.parseResponse(head.getJSONObject("resp").toString())!!)

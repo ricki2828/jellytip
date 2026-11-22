@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -317,6 +320,7 @@ private val CHAT_W = 326.dp
 /** A control that cannot be used while a turn is pending: dimmed and not focusable (focus parks on the input meanwhile). */
 private fun Modifier.chatDisabled(off: Boolean): Modifier = if (off) alpha(0.45f).focusProperties { canFocus = false } else this
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AskChatContent(
     ui: AskChatUi,
@@ -457,22 +461,25 @@ internal fun AskChatContent(
         // ---- the reading and the results ----
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap)) {
             if (chips.isNotEmpty()) {
-                LazyRow(
+                // the chips wrap onto further lines inside the pane (a one-line LazyRow ran past the right edge and hid the later chips)
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(JellytipLayout.FocusRoom),
-                    modifier = Modifier.focusGroup().focusRestorer(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(JellytipLayout.FocusRoom).focusGroup().focusRestorer(),
                 ) {
-                    items(chips.distinctBy { it.chip.id }, key = { it.chip.id }) { s ->
-                        val c = s.chip
-                        if (s.provisional || !c.removable) {
-                            // the local reading while pending: dimmed, not focusable ("reading…")
-                            AskChipButton(c.label, on = true, modifier = Modifier.alpha(0.55f).focusProperties { canFocus = false }) {}
-                        } else {
-                            AskChipButton(
-                                "${c.label}${if (c.applied == false) " (not applied)" else ""}  ✕",
-                                on = c.applied != false,
-                                modifier = Modifier.testTag("chat-chip:${c.id}").chatDisabled(pending),
-                            ) { actions.tap(ChatOp.Remove(c.id)) }
+                    chips.distinctBy { it.chip.id }.forEach { s ->
+                        key(s.chip.id) {
+                            val c = s.chip
+                            if (s.provisional || !c.removable) {
+                                // the local reading while pending: dimmed, not focusable ("reading…")
+                                AskChipButton(c.label, on = true, modifier = Modifier.alpha(0.55f).focusProperties { canFocus = false }) {}
+                            } else {
+                                AskChipButton(
+                                    "${c.label}${if (c.applied == false) " (not applied)" else ""}  \u2715",
+                                    on = c.applied != false,
+                                    modifier = Modifier.testTag("chat-chip:${c.id}").chatDisabled(pending),
+                                ) { actions.tap(ChatOp.Remove(c.id)) }
+                            }
                         }
                     }
                 }
