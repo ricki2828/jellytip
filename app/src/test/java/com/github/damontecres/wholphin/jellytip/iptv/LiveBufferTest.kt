@@ -66,7 +66,8 @@ class LiveBufferTest {
     @Test
     fun filmProfileIsDeepAndNotALiveMode() {
         val p = LiveBuffer.Profile.FILM
-        assertTrue(p.maxBufferMs >= 180_000 && p.afterRebufferMs >= 30_000 && p.startMs <= 5_000)
+        assertTrue(p.maxBufferMs >= 180_000 && p.afterRebufferMs >= 30_000 && p.startMs <= 3_000)
+        assertTrue("memory capped below ExoPlayer's ~144 MB default", p.targetBytes in 1..(100 * 1024 * 1024))
         assertTrue("never offered as a live buffer mode", "film" !in LiveBuffer.MODES)
         assertTrue("auto stepping never reaches it", LiveBuffer.AUTO_MAX.ordinal < p.ordinal)
     }

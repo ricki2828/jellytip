@@ -11,7 +11,7 @@ import org.json.JSONObject
  * applies some of it at once. On the TV, Auto = Low (the buffers the TV used before; see [AUTO_STEPS]). The web's Auto
  * (start at Normal, step up after a stall to High at most, per channel, back down after 10 quiet minutes) is kept below
  * behind [AUTO_STEPS].
- * Films, episodes, recordings and catch-up always use Low (unchanged).
+ * Films and episodes use [Profile.FILM] (a deep buffer, 22-Nov); recordings and catch-up use Low (unchanged).
  */
 object LiveBuffer {
     enum class Profile(
@@ -24,6 +24,8 @@ object LiveBuffer {
         val startMs: Int,
         /** Cushion rebuilt after a rebuffer. */
         val afterRebufferMs: Int,
+        /** Memory cap of the buffer (bytes); unset = ExoPlayer's default (~144 MB for video + audio). */
+        val targetBytes: Int = androidx.media3.common.C.LENGTH_UNSET,
     ) {
         LOW("Low", 3_000, 2_000, 20_000, 700, 1_500),
         NORMAL("Normal", 8_000, 6_000, 30_000, 700, 6_000),
@@ -35,7 +37,7 @@ object LiveBuffer {
          * after a skip cycled 30 s play / 21 s buffering on the live Low buffers): a deep buffer, a quick start, and a 30 s
          * cushion after a rebuffer so stalls are rare and long rather than every half minute. Not a live mode (not in MODES).
          */
-        FILM("Film", 0, 60_000, 180_000, 5_000, 30_000),
+        FILM("Film", 0, 60_000, 180_000, 3_000, 30_000, 96 * 1024 * 1024), // (96 MB ~ 128 s at 6 Mbps)
     }
 
     const val AUTO = "auto"
@@ -139,7 +141,7 @@ object LiveBuffer {
             JSONObject().put("level", s.level.name).put("lastStall", s.lastStall).put("lastChange", s.lastChange).put("startedAt", s.startedAt).toString(),
         ).apply()
 
-    /** The profile to build the player with for [target] (live channels only; everything else is Low). */
+    /** The profile to build the player with for [target]: live channels by mode, films / episodes FILM, the rest Low. */
     fun profileFor(
         context: Context,
         target: IptvTarget,

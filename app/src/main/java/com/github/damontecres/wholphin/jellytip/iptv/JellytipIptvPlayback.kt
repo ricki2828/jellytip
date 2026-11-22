@@ -427,6 +427,7 @@ class JellytipIptvPlayback
                     DefaultLoadControl
                         .Builder()
                         .setBufferDurationsMs(profile.minBufferMs, profile.maxBufferMs, profile.startMs, profile.afterRebufferMs)
+                        .setTargetBufferBytes(profile.targetBytes)
                         .build()
                 ExoPlayer
                     .Builder(context)
