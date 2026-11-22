@@ -24,6 +24,7 @@ import androidx.tv.material3.darkColorScheme
 import com.github.damontecres.wholphin.jellytip.ask.AskChipButton
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.iptv.CatchUpChoiceCard
+import com.github.damontecres.wholphin.jellytip.iptv.CatchUpPolicy
 import com.github.damontecres.wholphin.jellytip.iptv.ColourEdgeFixtureTile
 import com.github.damontecres.wholphin.jellytip.iptv.FullTimeCard
 import com.github.damontecres.wholphin.jellytip.iptv.FullTimeNext
@@ -154,7 +155,7 @@ class PolishShotsTest {
     @Test
     fun cardCatchUp() =
         shot("cards-catchup", focused = false) {
-            CatchUpChoiceCard(match, "You're joining 27 minutes in", canKickOff = true, cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp))
+            CatchUpChoiceCard(match, "You're joining 27 minutes in", options = listOf(0, 1, 2), catchUpLine = CatchUpPolicy.catchUpLine(5), cursor = 2, secondsLeft = { 19L }, modifier = Modifier.width(900.dp))
         }
 
     @Test

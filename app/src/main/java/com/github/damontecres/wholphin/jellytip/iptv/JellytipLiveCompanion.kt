@@ -100,6 +100,9 @@ class LiveSnapshots(
     /** The newest answer, released or not (status, timeline and moments are filtered by the caller). */
     fun latest(): MatchLive? = snaps.lastOrNull()?.d
 
+    /** The newest full answer (plays, timeline), released or not: the caller gates each entry on its own stamp. */
+    fun latestFull(): MatchLive? = snaps.lastOrNull { it.full }?.d
+
     /** The newest answer's stamp, for "Live info in N s". */
     fun newestAt(): Long? = snaps.lastOrNull()?.at
 }

@@ -165,6 +165,15 @@ object CatchUpPolicy {
     /** Twelve cards at 5 s: the "60 s of key plays". */
     const val MAX_CARDS = 12
 
+    /**
+     * ESPN's play `wallclock` is the real event time, earlier than the moment stamps the spoiler delay is calibrated
+     * to: a play is released only once wallclock + this has been.
+     */
+    const val WALLCLOCK_SLACK_SEC = 60.0
+
+    /** The full /live answer fetched while deciding the card may take this long (it runs during the 2.5 s wait). */
+    const val DECIDE_FETCH_MS = 5_000L
+
     fun offer(
         live: Boolean,
         replay: Boolean,
@@ -183,23 +192,105 @@ object CatchUpPolicy {
 
     /**
      * Key plays before now, oldest first, only what the reveal clock has released: the rugby league timeline (each
-     * entry gated on its time), else the scoring plays of a released answer, else the released key moments.
+     * entry gated on its time), else scoring plays, else the released key moments.
+     *
+     * Plays: the scoring plays of [newestFull] (the newest full /live answer, released or not) whose own `wallclock`
+     * the reveal clock releases, plus every scoring play of [released] (already released as a whole). A play of an
+     * unreleased answer with no wallclock is never shown (it could be a spoiler). De-duped by play key; at most
+     * [MAX_CARDS], the newest ones. Plays arrive newest first (server order); a released play missing from the newest
+     * answer is older than all of it.
      */
     fun cards(
         released: MatchLive?,
         latest: MatchLive?,
+        newestFull: MatchLive?,
         reveal: (Double?) -> Boolean,
     ): List<Card> {
-        val tl = (latest?.timeline ?: emptyList()).filter { it.at != null && reveal(it.at) }
+        val tl = (newestFull?.timeline?.takeIf { it.isNotEmpty() } ?: latest?.timeline ?: emptyList()).filter { it.at != null && reveal(it.at) }
         if (tl.isNotEmpty()) {
             val pts = mapOf("try" to 4, "conversion" to 2, "penalty_goal" to 2, "field_goal" to 1)
             return tl.takeLast(MAX_CARDS).map { Card(it.clock ?: "", it.text, it.team, pts[it.kind]) }
         }
-        val plays = released?.plays?.filter { it.scoring }.orEmpty()
+        val plays = playsBefore(released, newestFull, reveal)
         if (plays.isNotEmpty()) return plays.take(MAX_CARDS).reversed().map { Card(listOfNotNull(it.period, it.clock).joinToString(" "), it.text, it.team, it.points) }
         val moments = (latest?.moments ?: emptyList()).filter { m -> stampSec(m.at)?.let(reveal) == true }
         return moments.takeLast(MAX_CARDS).map { Card("", it.detail?.let { d -> "${it.label} · $d" } ?: it.label, it.team, null) }
     }
+
+    /** Released scoring plays, newest first (see [cards]). */
+    internal fun playsBefore(
+        released: MatchLive?,
+        newestFull: MatchLive?,
+        reveal: (Double?) -> Boolean,
+    ): List<LivePlay> {
+        val rel = released?.plays?.filter { it.scoring }.orEmpty()
+        val relKeys = rel.mapTo(HashSet()) { it.key }
+        val seen = HashSet<String>()
+        val out = ArrayList<LivePlay>()
+        if (newestFull != null && newestFull !== released) {
+            for (p in newestFull.plays) {
+                if (!p.scoring) continue
+                val wc = p.wallclock
+                val ok = p.key in relKeys || (wc != null && reveal(wc + WALLCLOCK_SLACK_SEC))
+                if (ok && seen.add(p.key)) out += p
+            }
+        }
+        for (p in rel) if (seen.add(p.key)) out += p
+        // Newest first by event time. Plays with no wallclock come after the stamped ones (older), latest period
+        // first; within a period they keep the server's order (newest first), so the cards show them oldest first.
+        return out.sortedWith(
+            compareBy<LivePlay, Double?>(nullsLast(reverseOrder<Double>())) { it.wallclock }
+                .thenBy(nullsLast(reverseOrder<Int>())) { if (it.wallclock == null) periodNumber(it.period) else null },
+        )
+    }
+
+    /** "2" / "Q3" / "2nd Half" -> 2 / 3 / 2; null when it has no number. */
+    internal fun periodNumber(period: String?): Int? = period?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+
+    /** The choice card's options: 0 From kick-off, 1 Catch me up, 2 Live. Empty = Live alone, so no prompt at all. */
+    fun options(
+        canKickOff: Boolean,
+        cardCount: Int,
+    ): List<Int> {
+        val o = listOfNotNull(if (canKickOff) 0 else null, if (cardCount > 0) 1 else null)
+        return if (o.isEmpty()) emptyList() else o + 2
+    }
+
+    /** "5 key plays, then live" under Catch me up. */
+    fun catchUpLine(cardCount: Int): String = if (cardCount == 1) "1 key play, then live" else "$cardCount key plays, then live"
+
+    /** A catch-up window (From kick-off, Watch from the start) that never starts within this long goes back to live. */
+    const val START_TIMEOUT_MS = StreamRecovery.VOD_IDLE_MS
+
+    const val FAILED_TOAST = "Catch-up isn't working on this channel right now"
+    const val STOPPED_TOAST = "Catch-up stopped — back to live"
+
+    /** A window that played this long before failing worked: it "stopped", it isn't "not working". */
+    const val PLAYED_OK_MS = 5_000L
+
+    /**
+     * Failures that send a catch-up window back to live: the server's no_catchup, recovery giving up, a missing stream or
+     * an unclassified failure. All connections in use, sign-in / permission, a stale link and rate limits keep their
+     * own screens (live wouldn't play either, and their copy says what to do).
+     */
+    fun fallsBack(cause: FailCause): Boolean =
+        when (cause) {
+            FailCause.NO_CATCHUP, FailCause.GAVE_UP, FailCause.MISSING, FailCause.OTHER -> true
+            FailCause.BLOCKED, FailCause.AUTH, FailCause.DENIED, FailCause.LINK, FailCause.RATE -> false
+        }
+
+    /** The toast when a catch-up window gives up after playing [playedMs]. */
+    fun gaveUpToast(playedMs: Long): String = if (playedMs >= PLAYED_OK_MS) STOPPED_TOAST else FAILED_TOAST
+
+    /**
+     * A catch-up target of a live channel gave up: it failed (no_catchup refusal, recovery gave up), or it has been
+     * opening for [openingMs] without ever playing. Then the player goes back to the channel's live stream.
+     */
+    fun catchUpGaveUp(
+        failed: Boolean,
+        everPlayed: Boolean,
+        openingMs: Long,
+    ): Boolean = failed || (!everPlayed && openingMs >= START_TIMEOUT_MS)
 
     /** "YOU'RE JOINING 25 MINUTES IN". */
     fun joiningLine(

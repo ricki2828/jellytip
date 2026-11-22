@@ -100,7 +100,10 @@ fun FullTimeCard(
 fun CatchUpChoiceCard(
     match: IptvMatch,
     joining: String,
-    canKickOff: Boolean,
+    /** [CatchUpPolicy.options]: 0 From kick-off, 1 Catch me up, 2 Live. */
+    options: List<Int>,
+    /** Under Catch me up ("5 key plays, then live"). */
+    catchUpLine: String,
     cursor: Int,
     /** Read here only, so the countdown recomposes just this card. */
     secondsLeft: () -> Long,
@@ -119,9 +122,9 @@ fun CatchUpChoiceCard(
                 val opts =
                     listOf(
                         Triple(0, "From kick-off", "Watch the whole game"),
-                        Triple(1, "Catch me up", "60 s of key plays, then live"),
+                        Triple(1, "Catch me up", catchUpLine),
                         Triple(2, "Live", "Jump straight in"),
-                    ).filter { it.first != 0 || canKickOff }
+                    ).filter { it.first in options }
                 opts.forEach { (i, title, sub) ->
                     val f = i == cursor
                     Column(

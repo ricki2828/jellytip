@@ -108,6 +108,8 @@ data class LivePlay(
     /** Points the play scored ("+3"); null = unknown. */
     val points: Int? = null,
     val id: String? = null,
+    /** Epoch s the play happened (server `wallclock`, ESPN); null = unknown (never shown early by catch-up). */
+    val wallclock: Double? = null,
 ) {
     val key get() = id ?: listOfNotNull(period, clock, text).joinToString("|")
 }
@@ -387,6 +389,7 @@ object LiveParse {
                     team = p.str("team"),
                     points = p.int("points") ?: p.int("delta"),
                     id = p.str("id"),
+                    wallclock = p.dbl("wallclock") ?: stampSec(p.str("wallclock")),
                 )
             }
         val market =

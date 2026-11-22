@@ -86,14 +86,166 @@ class SportWowTest {
 
         val tl = listOf(TimelineEntry("1", "try", "home", "Try Warriors", "12'", 900.0), TimelineEntry("2", "try", "away", "Try Panthers", "27'", 1900.0))
         val latest = MatchLive("in", null, null, "4", "4", emptyList(), emptyList(), emptyList(), null, null, null, emptyList(), updatedAt = 2000, timeline = tl)
-        val cards = CatchUpPolicy.cards(null, latest) { (it ?: 0.0) <= 1000 }
+        val cards = CatchUpPolicy.cards(null, latest, null) { (it ?: 0.0) <= 1000 }
         assertEquals(1, cards.size)
         assertEquals(4, cards[0].points)
         // no timeline: scoring plays of the released answer, oldest first
         val plays = listOf(LivePlay("40:00", "2", "Second", true, "away", 6), LivePlay("10:00", "1", "Not scoring", false), LivePlay("05:00", "1", "First", true, "home", 6))
         val rel = latest.copy(timeline = emptyList(), plays = plays)
-        assertEquals(listOf("First", "Second"), CatchUpPolicy.cards(rel, rel.copy()) { true }.map { it.text })
+        assertEquals(listOf("First", "Second"), CatchUpPolicy.cards(rel, rel.copy(), rel) { true }.map { it.text })
         // nothing released: no cards
-        assertTrue(CatchUpPolicy.cards(null, rel) { false }.isEmpty())
+        assertTrue(CatchUpPolicy.cards(null, rel, rel) { false }.isEmpty())
+    }
+
+    private fun answer(
+        plays: List<LivePlay> = emptyList(),
+        timeline: List<TimelineEntry> = emptyList(),
+        updatedAt: Long = 2000,
+    ) = MatchLive("in", null, null, "0", "0", emptyList(), emptyList(), plays, null, null, null, emptyList(), updatedAt = updatedAt, timeline = timeline)
+
+    private fun play(
+        id: String,
+        wallclock: Double?,
+        scoring: Boolean = true,
+    ) = LivePlay("10:00", "1", "Play $id", scoring, "home", 3, id = id, wallclock = wallclock)
+
+    // Reveal released up to t = 1000; null is "released" too, so the wallclock != null rule is what hides it
+    private val upTo1000: (Double?) -> Boolean = { (it ?: 0.0) <= 1000 }
+
+    // Plays are gated on wallclock + slack: these wallclocks sit [CatchUpPolicy.WALLCLOCK_SLACK_SEC] before the stamps
+    private fun wc(t: Double) = t - CatchUpPolicy.WALLCLOCK_SLACK_SEC
+
+    @Test
+    fun catchUpCardsFromAnUnreleasedFullAnswer() {
+        // Newest first, as the server sends them: c not yet released, b released by its own wallclock, n has none
+        val full = answer(listOf(play("c", wc(1500.0)), play("n", null), play("b", wc(900.0)), play("x", wc(800.0), scoring = false), play("a", wc(500.0))))
+        val cards = CatchUpPolicy.cards(null, full, full, upTo1000)
+        assertEquals(listOf("Play a", "Play b"), cards.map { it.text })
+        // Reveal off (replay): nothing
+        assertTrue(CatchUpPolicy.cards(null, full, full) { false }.isEmpty())
+        // Only plays with no wallclock in an unreleased answer: nothing (spoiler-safe)
+        assertTrue(CatchUpPolicy.cards(null, answer(listOf(play("n", null))), answer(listOf(play("n", null))), upTo1000).isEmpty())
+    }
+
+    @Test
+    fun catchUpCardsMergeReleasedAndNewestDeDuped() {
+        // The released full answer (older) has a and z; the newest one has b (released stamp), a again, and c (held)
+        val released = answer(listOf(play("a", null), play("z", null)), updatedAt = 900)
+        val newest = answer(listOf(play("c", wc(1500.0)), play("b", wc(950.0)), play("a", wc(500.0))))
+        val cards = CatchUpPolicy.cards(released, newest, newest, upTo1000)
+        // a once; z (only in the released one) counts as older; oldest first
+        assertEquals(listOf("Play z", "Play a", "Play b"), cards.map { it.text })
+        // A play with no wallclock in the newest answer still shows when the released answer already had it
+        val rel2 = answer(listOf(play("n", null)), updatedAt = 900)
+        val new2 = answer(listOf(play("m", null), play("n", null)))
+        assertEquals(listOf("Play n"), CatchUpPolicy.cards(rel2, new2, new2, upTo1000).map { it.text })
+        // Released answer alone (no newer full one)
+        assertEquals(listOf("Play z", "Play a"), CatchUpPolicy.cards(released, released, released, upTo1000).map { it.text })
+    }
+
+    @Test
+    fun catchUpPlaysWaitForWallclockPlusSlack() {
+        // Event at 970: its moment stamp is later, so at reveal 1000 (970 + 60 = 1030 not yet released) it is held
+        val full = answer(listOf(play("late", 970.0), play("early", 900.0)))
+        assertEquals(listOf("Play early"), CatchUpPolicy.cards(null, full, full, upTo1000).map { it.text })
+        assertEquals(listOf("Play early", "Play late"), CatchUpPolicy.cards(null, full, full) { (it ?: 0.0) <= 1030 }.map { it.text })
+    }
+
+    @Test
+    fun catchUpPlaysSortedByWallclockNotServerOrder() {
+        // Oldest first from the server this time: the cards still come out oldest first, the cap keeps the newest
+        val full = answer(listOf(play("a", 100.0), play("c", 300.0), play("b", 200.0)))
+        assertEquals(listOf("Play a", "Play b", "Play c"), CatchUpPolicy.cards(null, full, full) { true }.map { it.text })
+        val many = answer((1..20).map { play("p$it", it.toDouble()) })
+        val cards = CatchUpPolicy.cards(null, many, many) { true }
+        assertEquals("Play p9", cards.first().text)
+        assertEquals("Play p20", cards.last().text)
+        // Released plays with no wallclock count as older than stamped ones
+        val rel = answer(listOf(play("old", null)), updatedAt = 900)
+        val newest = answer(listOf(play("new", 100.0)))
+        assertEquals(listOf("Play old", "Play new"), CatchUpPolicy.cards(rel, newest, newest) { true }.map { it.text })
+    }
+
+    @Test
+    fun catchUpPlaysWithoutWallclockOldestFirst() {
+        fun np(
+            id: String,
+            period: String?,
+        ) = LivePlay("10:00", period, "Play $id", true, "home", 3, id = id)
+        // Released, no wallclocks, listed oldest period first: the cards still run 1st half, then 2nd half
+        val rel = answer(listOf(np("h1", "1"), np("h2", "2")), updatedAt = 900)
+        assertEquals(listOf("Play h1", "Play h2"), CatchUpPolicy.cards(rel, rel, rel) { true }.map { it.text })
+        // Same period: the server's newest-first order, shown oldest first
+        val same = answer(listOf(np("b", "2nd Half"), np("a", "2nd Half"), np("q1", "Q1")), updatedAt = 900)
+        assertEquals(listOf("Play q1", "Play a", "Play b"), CatchUpPolicy.cards(same, same, same) { true }.map { it.text })
+        // Stamped plays are newer than unstamped ones
+        val newest = answer(listOf(play("s", 100.0)))
+        assertEquals(listOf("Play h1", "Play h2", "Play s"), CatchUpPolicy.cards(rel, newest, newest) { true }.map { it.text })
+        assertEquals(2, CatchUpPolicy.periodNumber("2nd Half"))
+        assertEquals(3, CatchUpPolicy.periodNumber("Q3"))
+        assertNull(CatchUpPolicy.periodNumber("OT"))
+    }
+
+    @Test
+    fun catchUpCardsCapKeepsTheNewest() {
+        val plays = (20 downTo 1).map { play("p$it", it.toDouble()) }
+        val full = answer(plays)
+        val cards = CatchUpPolicy.cards(null, full, full) { true }
+        assertEquals(CatchUpPolicy.MAX_CARDS, cards.size)
+        assertEquals("Play p9", cards.first().text)
+        assertEquals("Play p20", cards.last().text)
+    }
+
+    @Test
+    fun catchUpCardsNrlTimelineUnchanged() {
+        val tl = listOf(TimelineEntry("1", "try", "home", "Try Warriors", "12'", 900.0), TimelineEntry("2", "conversion", "home", "Conversion", "13'", 1100.0))
+        // The timeline wins over plays; each entry gated on its own time
+        val full = answer(listOf(play("a", wc(500.0))), timeline = tl)
+        val cards = CatchUpPolicy.cards(null, full, full, upTo1000)
+        assertEquals(listOf("Try Warriors"), cards.map { it.text })
+        assertEquals(4, cards[0].points)
+        // Timeline only on a light latest answer (no full one): still used
+        assertEquals(listOf("Try Warriors"), CatchUpPolicy.cards(null, answer(timeline = tl), null, upTo1000).map { it.text })
+    }
+
+    @Test
+    fun catchUpOptions() {
+        assertEquals(listOf(0, 1, 2), CatchUpPolicy.options(true, 5))
+        assertEquals(listOf(0, 2), CatchUpPolicy.options(true, 0))
+        assertEquals(listOf(1, 2), CatchUpPolicy.options(false, 3))
+        // Only Live left: no prompt
+        assertTrue(CatchUpPolicy.options(false, 0).isEmpty())
+        assertEquals("5 key plays, then live", CatchUpPolicy.catchUpLine(5))
+        assertEquals("1 key play, then live", CatchUpPolicy.catchUpLine(1))
+    }
+
+    @Test
+    fun catchUpWindowGivesUp() {
+        // Failed (no_catchup, recovery gave up): at once, even after it played
+        assertTrue(CatchUpPolicy.catchUpGaveUp(failed = true, everPlayed = true, openingMs = 0))
+        // Never started within the catch-up stall window
+        assertFalse(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = false, openingMs = CatchUpPolicy.START_TIMEOUT_MS - 500))
+        assertTrue(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = false, openingMs = CatchUpPolicy.START_TIMEOUT_MS))
+        // Played once: a later reconnect is the recovery machine's (it ends in Failed if it gives up)
+        assertFalse(CatchUpPolicy.catchUpGaveUp(failed = false, everPlayed = true, openingMs = 60_000))
+        // Honest copy: never worked vs worked then stopped
+        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(0))
+        assertEquals(CatchUpPolicy.FAILED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS - 500))
+        assertEquals(CatchUpPolicy.STOPPED_TOAST, CatchUpPolicy.gaveUpToast(CatchUpPolicy.PLAYED_OK_MS))
+        assertEquals("Catch-up stopped — back to live", CatchUpPolicy.gaveUpToast(60_000))
+        assertEquals("Catch-up isn't working on this channel right now", CatchUpPolicy.gaveUpToast(0))
+    }
+
+    @Test
+    fun catchUpFailureClassification() {
+        // Back to live: the server's no_catchup, recovery gave up, a missing stream, anything unclassified
+        listOf(FailCause.NO_CATCHUP, FailCause.GAVE_UP, FailCause.MISSING, FailCause.OTHER).forEach { assertTrue(it.name, CatchUpPolicy.fallsBack(it)) }
+        // Their own screens: all connections in use, sign-in / permission, a stale link, rate limited
+        listOf(FailCause.BLOCKED, FailCause.AUTH, FailCause.DENIED, FailCause.LINK, FailCause.RATE).forEach { assertFalse(it.name, CatchUpPolicy.fallsBack(it)) }
+        // The recovery machine's refusals map over
+        assertEquals(FailCause.NO_CATCHUP, FailCause.of(StreamRecovery.permanentReason(400, "no_catchup")))
+        assertEquals(FailCause.AUTH, FailCause.of(StreamRecovery.permanentReason(401, "provider_auth")))
+        assertEquals(FailCause.RATE, FailCause.of(StreamRecovery.permanentReason(429, null)))
+        assertEquals(FailCause.OTHER, FailCause.of(StreamRecovery.permanentReason(500, null)))
     }
 }

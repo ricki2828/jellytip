@@ -76,6 +76,7 @@ import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -247,10 +248,13 @@ fun JellytipLiveTvPlayerPage(
     LaunchedEffect(current) {
         val t = current
         if (t.isLive || t.start == null || (t.stop ?: 0L) < startedAt) return@LaunchedEffect
+        // Only a window that played: one that ends before ever playing is the catch-up give-up effect's (honest toast)
+        var played = false
         while (true) {
             delay(1_000)
             val p = playback.player ?: continue
-            if (playback.state.value.target == t && p.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+            if (playback.state.value.let { it is IptvPlayState.Playing && it.target == t }) played = true
+            if (played && playback.state.value.target == t && playback.holds(t) && p.playbackState == androidx.media3.common.Player.STATE_ENDED) {
                 JellytipTrace.player("iptv", "kick-off caught up ${t.channelId}: back to live")
                 current = IptvTarget(t.channelId, channel.name)
                 playback.play(current, "kick-off ended: back to live")
@@ -330,10 +334,13 @@ fun JellytipLiveTvPlayerPage(
     // From the page opening until the catch-up offer is decided: nothing live shows (the card promises a hidden score)
     var catchPending by remember { mutableStateOf(true) }
     var catchRequest by remember { mutableIntStateOf(0) }
-    var catchLoading by remember { mutableStateOf(false) }
     var catchCursor by remember { mutableIntStateOf(2) }
     var catchLeft by remember { mutableStateOf(CatchUpPolicy.CHOICE_TIMEOUT_MS / 1000) }
     var catchCards by remember { mutableStateOf<List<CatchUpPolicy.Card>?>(null) }
+    // Decided before the card opens (spec C): the recap it promises and the options it may show
+    var catchReady by remember { mutableStateOf<List<CatchUpPolicy.Card>>(emptyList()) }
+    var catchOptions by remember { mutableStateOf(listOf(2)) }
+    var catchDeciding by remember { mutableStateOf(false) }
     var catchIndex by remember { mutableIntStateOf(0) }
     val catchOffered = remember { HashSet<String>() }
     /** The viewer closed the panel: a break stays closed for the rest of that break, moments stay quiet 2 min. */
@@ -672,7 +679,7 @@ fun JellytipLiveTvPlayerPage(
     }
     /** Break mode on a released key moment: open for 6 s with the moment's wipe; false = not now (toast instead). */
     fun tryMomentOpen(mo: LiveMoment): Boolean {
-        if (panelMatch == null || catchPending || catchLoading || catchOpen || catchCards != null || ftCard != null || overlaysUp()) return false
+        if (panelMatch == null || catchPending || catchOpen || catchCards != null || ftCard != null || overlaysUp()) return false
         val r = BreakModePolicy.autoOpen(breakModeOn, replayShown, panelOpen, lastKindRef[0], lastBreakRef[0], closedBreak, userClosedAt, System.currentTimeMillis(), freshMoment = true)
         if (r != BreakModePolicy.Reason.MOMENT) return false
         openAuto(r)
@@ -808,7 +815,7 @@ fun JellytipLiveTvPlayerPage(
                 val sh = shownSnap?.scoreHome?.toIntOrNull()
                 val sa = shownSnap?.scoreAway?.toIntOrNull()
                 val blowout = AlertPolicy.isBlowout(shownSnap?.layout, sh, sa, AlertPolicy.isLateGame(shownSnap?.layout, shownSnap?.period, shownSnap?.clock))
-                if (catchPending || catchLoading || catchOpen || catchCards != null) {
+                if (catchPending || catchOpen || catchCards != null) {
                     // Catch me up is deciding / showing: alerts wait (still gated by the delay afterwards)
                     delay(1_000)
                     continue
@@ -892,7 +899,7 @@ fun JellytipLiveTvPlayerPage(
                     JellytipTrace.player("iptv", "companion tucked away ($openedBy, now $kind)")
                     openedBy = BreakModePolicy.Reason.USER
                 }
-            } else if (!panelOpen && m != null && !catchPending && !catchLoading && !catchOpen && catchCards == null && ftCard == null && !overlaysUp()) {
+            } else if (!panelOpen && m != null && !catchPending && !catchOpen && catchCards == null && ftCard == null && !overlaysUp()) {
                 if (BreakModePolicy.autoOpen(breakModeOn, replayShown, false, kind, lastBreakRef[0], closedBreak, userClosedAt, nowMs, false) == BreakModePolicy.Reason.BREAK) {
                     openAuto(BreakModePolicy.Reason.BREAK)
                 }
@@ -923,7 +930,11 @@ fun JellytipLiveTvPlayerPage(
             ftCard = null
         }
     }
-    // Catch me up (8): joining a live game 10+ min in offers From kick-off / Catch me up / Live (default, 20 s)
+    // Catch me up (8): joining a live game 10+ min in offers From kick-off / Catch me up / Live (default, 20 s).
+    // Decided before offering (spec jellytip-catchup-client-spec-20261122 C): one full /live answer is fetched during the
+    // wait, so Catch me up is only offered with plays to show and From kick-off only when the server allows it; with
+    // only Live left there is no card at all.
+    val spoilerNoticeNow by androidx.compose.runtime.rememberUpdatedState(spoilerNotice)
     LaunchedEffect(panelMatch?.id, current.isLive) {
         val m = panelMatch
         if (m == null || m.id in catchOffered || !current.isLive) {
@@ -931,22 +942,58 @@ fun JellytipLiveTvPlayerPage(
             return@LaunchedEffect
         }
         catchPending = true
-        delay(2_500) // the first /live answer says whether it's under way
-        val now = nowSec()
-        val st = snaps.latest()?.status ?: m.status?.let { if (it == "pre" && (m.startsAt ?: now) <= now) "in" else it }
-        if (CatchUpPolicy.offer(current.isLive, replayShown, spoilerNotice, st, m.startsAt, now)) {
+        catchDeciding = true
+        try {
+            val id = liveId
+            val fullJob = id?.let { i -> async { kotlinx.coroutines.withTimeoutOrNull(CatchUpPolicy.DECIDE_FETCH_MS) { fetchLive(i, light = false)?.second } } }
+            delay(2_500) // the first /live answer says whether it's under way
+            val now = nowSec()
+            val st = snaps.latest()?.status ?: m.status?.let { if (it == "pre" && (m.startsAt ?: now) <= now) "in" else it }
+            if (!CatchUpPolicy.offer(current.isLive, replayShown, spoilerNoticeNow, st, m.startsAt, now)) {
+                fullJob?.cancel()
+                catchPending = false
+                return@LaunchedEffect
+            }
+            val full = fullJob?.await()
+            if (full != null) snaps.add(full, full = true, arrivedSec = nowSec())
+            // The programme guide answer may still be on its way: give it a moment (it decides From kick-off)
+            var waited = 0
+            while (nowNext == null && waited < 4) {
+                delay(500)
+                waited++
+            }
+            // The waits may have changed things (replay, a spoiler programme, zapped off live): ask again
+            if (!CatchUpPolicy.offer(current.isLive, replayShown, spoilerNoticeNow, st, m.startsAt, nowSec())) {
+                catchPending = false
+                return@LaunchedEffect
+            }
+            val reveal: (Double?) -> Boolean = { revealClock.reveal(it) }
+            val cs = CatchUpPolicy.cards(snaps.releasedFull(reveal), snaps.latest(), snaps.latestFull(), reveal)
+            val kick = current.isLive && nowNext?.now?.let { it.canStartOver && it.isOn(nowSec()) } == true
+            val opts = CatchUpPolicy.options(kick, cs.size)
+            if (opts.isEmpty()) {
+                // A full answer that never came (timeout / error) is not "nothing to catch up on": a later visit may ask again
+                if (full != null) catchOffered += m.id
+                JellytipTrace.player("iptv", "catch-up not offered ${m.id}: kickoff=false cards=0 (full answer ${full != null})")
+                catchPending = false
+                return@LaunchedEffect
+            }
             catchOffered += m.id
+            catchReady = cs
+            catchOptions = opts
             catchCursor = 2
             catchOpen = true
             catchPending = false
-            JellytipTrace.player("iptv", "catch-up offered ${m.id} ${(now - (m.startsAt ?: now)) / 60} min in")
+            JellytipTrace.player("iptv", "catch-up offered ${m.id} ${(now - (m.startsAt ?: now)) / 60} min in: kickoff=$kick cards=${cs.size}")
+        } finally {
+            catchDeciding = false
         }
     }
-    LaunchedEffect(panelMatch?.id, catchOffered.size, catchOpen) {
+    LaunchedEffect(panelMatch?.id, catchOffered.size, catchOpen, catchDeciding) {
         // Not offered (on time, replay…): live info flows as normal
-        if (!catchOpen) {
+        if (!catchOpen && !catchDeciding) {
             delay(3_000)
-            if (!catchOpen) catchPending = false
+            if (!catchOpen && !catchDeciding) catchPending = false
         }
     }
     LaunchedEffect(catchOpen) {
@@ -970,26 +1017,21 @@ fun JellytipLiveTvPlayerPage(
             bugChangedAt = System.currentTimeMillis() // into live with the score showing
         }
     }
-    // Catch me up: one full /live answer (plays, timeline) into the store, then the recap from what the delay released
+    // Catch me up: the recap decided before the card opened, or a fresher one if more has been released since
     LaunchedEffect(catchRequest) {
         if (catchRequest == 0) return@LaunchedEffect
-        catchLoading = true
-        val id = liveId
-        val full = id?.let { fetchLive(it, light = false)?.second }
-        if (full != null) snaps.add(full, full = true, arrivedSec = nowSec())
         val reveal: (Double?) -> Boolean = { revealClock.reveal(it) }
-        val cs = CatchUpPolicy.cards(snaps.releasedFull(reveal), snaps.latest(), reveal)
-        JellytipTrace.player("iptv", "catch-up: recap ${cs.size} cards (full answer ${full != null})")
-        catchLoading = false
+        val fresh = CatchUpPolicy.cards(snaps.releasedFull(reveal), snaps.latest(), snaps.latestFull(), reveal)
+        val cs = if (fresh.size >= catchReady.size) fresh else catchReady
+        JellytipTrace.player("iptv", "catch-up: recap ${cs.size} cards (decided ${catchReady.size})")
         if (cs.isEmpty()) {
-            android.widget.Toast.makeText(context, "Nothing to catch up on yet", android.widget.Toast.LENGTH_SHORT).show()
+            // Not reachable (the option needs cards); never an empty recap
             bugChangedAt = System.currentTimeMillis()
         } else {
             catchIndex = 0
             catchCards = cs
         }
     }
-    val canKickOff = current.isLive && nowNext?.now?.let { it.canStartOver && it.isOn(nowSec()) } == true
     fun chooseCatchUp(c: Int) {
         catchOpen = false
         when (c) {
@@ -1004,6 +1046,51 @@ fun JellytipLiveTvPlayerPage(
             else -> {
                 JellytipTrace.player("iptv", "catch-up: live")
                 bugChangedAt = System.currentTimeMillis()
+            }
+        }
+    }
+    // From kick-off / Watch from the start (spec D, E): a catch-up window of this channel that fails (the server's
+    // no_catchup refusal, recovery giving up), ends without ever playing, or never starts within the catch-up stall
+    // window goes back to the channel's live stream with an honest toast: never a dead "try again" screen or an endless
+    // spinner. Every entry point (guide, Game Centre, live hero, banner Left, the choice card) lands on this page with
+    // [current] set to the window. Recordings and IPTV films have their own failure screens.
+    LaunchedEffect(current) {
+        val t = current
+        if (t.start == null || t.recordingId != null || t.vodId != null || t.seriesId != null || t.episodeId != null) return@LaunchedEffect
+        var everPlayed = false
+        var openingMs = 0L
+        var playedMs = 0L
+        while (true) {
+            delay(500)
+            // App in the background (stream stopped) or offline (our network, recovery waits): nothing is judged
+            val away = !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || playback.offline
+            if (away) continue
+            // Paused on this window: no time is counted, but a failure is still a failure. (The one player can keep
+            // playWhenReady = false from a paused film, so it only counts while it holds this window's stream.)
+            val paused = playback.holds(t) && playback.player?.playWhenReady == false
+            val s = playback.state.value
+            val mine = s.target == t
+            if (mine && s is IptvPlayState.Playing && !paused) {
+                everPlayed = true
+                playedMs += 500
+            }
+            if (mine && s is IptvPlayState.Opening && !paused) openingMs += 500
+            // A failure screen (all connections in use…) ends that attempt: an OK retry gets the whole start window
+            if (mine && s is IptvPlayState.Failed) openingMs = 0L
+            val failed = mine && s is IptvPlayState.Failed && CatchUpPolicy.fallsBack(s.cause)
+            // ENDED only counts once the player holds this window's stream (not the previous item's ENDED)
+            val endedUnplayed = mine && !everPlayed && playback.holds(t) && playback.player?.playbackState == androidx.media3.common.Player.STATE_ENDED
+            if (CatchUpPolicy.catchUpGaveUp(failed || endedUnplayed, everPlayed, openingMs)) {
+                val why = if (failed) (s as IptvPlayState.Failed).message else if (endedUnplayed) "ended before playing" else "never started"
+                JellytipTrace.player("iptv", "catch-up gave up ${t.channelId} ($why, played ${playedMs / 1000} s): back to live")
+                // Back on live: the catch-up card must not pop up and offer the same broken window again
+                sourceMatch?.id?.let { catchOffered += it }
+                val name = if (channel.id == t.channelId) channel.name else t.label
+                current = IptvTarget(t.channelId, name)
+                playback.play(current, "catch-up failed: back to live")
+                bannerTick++
+                android.widget.Toast.makeText(context, CatchUpPolicy.gaveUpToast(playedMs), android.widget.Toast.LENGTH_LONG).show()
+                return@LaunchedEffect
             }
         }
     }
@@ -1065,7 +1152,7 @@ fun JellytipLiveTvPlayerPage(
                     return@onPreviewKeyEvent true
                 }
                 if (catchOpen) {
-                    val opts = listOfNotNull(if (canKickOff) 0 else null, 1, 2)
+                    val opts = catchOptions
                     val i = opts.indexOf(catchCursor).coerceAtLeast(0)
                     when {
                         e.key == Key.DirectionLeft -> catchCursor = opts[(i - 1).coerceAtLeast(0)]
@@ -1398,7 +1485,7 @@ fun JellytipLiveTvPlayerPage(
             bug = { bugData },
             clock = { bugClock },
             changedAt = { bugChangedAt },
-            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchLoading && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
+            allowed = { !replayShown && !delaySheetOpen && !panelOpen && !catchPending && !catchOpen && catchCards == null && ftCard == null && !(bannerVisible && nflMatch != null) },
             modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp),
         )
         // Round 3 cards: full time (bottom), catch me up (centre)
@@ -1407,7 +1494,7 @@ fun JellytipLiveTvPlayerPage(
         }
         if (catchOpen) {
             panelMatch?.let { m ->
-                CatchUpChoiceCard(m, CatchUpPolicy.joiningLine(m.startsAt ?: nowSec(), nowSec()), canKickOff, catchCursor, { catchLeft }, Modifier.align(Alignment.Center))
+                CatchUpChoiceCard(m, CatchUpPolicy.joiningLine(m.startsAt ?: nowSec(), nowSec()), catchOptions, CatchUpPolicy.catchUpLine(catchReady.size), catchCursor, { catchLeft }, Modifier.align(Alignment.Center))
             }
         }
         catchCards?.let { cs ->
