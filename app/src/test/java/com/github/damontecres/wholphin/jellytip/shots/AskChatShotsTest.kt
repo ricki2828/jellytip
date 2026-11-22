@@ -39,6 +39,7 @@ import com.github.damontecres.wholphin.jellytip.askchat.AskChatActions
 import com.github.damontecres.wholphin.jellytip.askchat.AskChatContent
 import com.github.damontecres.wholphin.jellytip.askchat.AskChatUi
 import com.github.damontecres.wholphin.jellytip.askchat.ChatError
+import com.github.damontecres.wholphin.jellytip.askchat.ChatVoiceUi
 import com.github.damontecres.wholphin.jellytip.askchat.ChatResponse
 import com.github.damontecres.wholphin.jellytip.askchat.ChatState
 import com.github.damontecres.wholphin.jellytip.askchat.ChatTitle
@@ -206,7 +207,7 @@ class AskChatShotsTest {
                     Box(Modifier.fillMaxSize().padding(start = 72.dp, end = 16.dp)) {
                         AskChatContent(
                             ui = ui,
-                            actions = AskChatActions({}, {}, {}, {}, {}, {}, {}, null) { lastOpened },
+                            actions = AskChatActions({}, {}, {}, {}, {}, {}, {}, null, { lastOpened }, micAvailable = true),
                         )
                     }
                 }
@@ -329,6 +330,25 @@ class AskChatShotsTest {
     @Test
     fun focusOnACard() {
         shot("askchat-6-focus-card", uiOf(settled("headline")), steps = { focusNode("askchat-6-focus-card", hasTestTag("chat-card")) })
+    }
+
+    @Test
+    fun listeningWithPartialText() {
+        // OK held on the mic: the partial text is live in the input, the hint says release to send, the level bar moves
+        val ui = uiOf(settled("headline"), text = "something funny for the kids and then maybe").copy(voice = ChatVoiceUi(listening = true, level = 0.5f))
+        shot("askchat-10-listening", ui, steps = { focusNode("askchat-10-listening", hasTestTag("chat-mic")) })
+    }
+
+    @Test
+    fun startOverControlFocused() {
+        shot("askchat-11-start-over", uiOf(settled("headline")), steps = { focusNode("askchat-11-start-over", hasTestTag("chat-start-over")) })
+    }
+
+    @Test
+    fun startOverWhilePending() {
+        // a turn is out: Send and the mic are dimmed, Start over stays live
+        val p = AskChat.submitText(settled("headline"), "something with Paul Rudd")!!.state
+        shot("askchat-12-start-over-while-pending", AskChatUi(chat = p, notice = false, fetched = null), steps = { focusNode("askchat-12-start-over-while-pending", hasTestTag("chat-start-over")) })
     }
 
     @Test
