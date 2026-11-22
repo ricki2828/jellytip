@@ -56,6 +56,28 @@ class FixtureArtTest {
     }
 
     @Test
+    fun homeHeroMatchSlideTextReadsBottomLeft() {
+        // The slide's text block (Home hero, bottom left) runs from ~4 % to ~50 % of the width; all of it is held to the
+        // small-text 4.5:1, on a white photo and on the plain wash, with the lightest team colours the guard lets through
+        for (team in listOf(lightGrey, gold)) {
+            for (x in listOf(0f, 0.04f, 0.15f, 0.3f, 0.4f, 0.5f)) {
+                for (art in listOf(white, null)) {
+                    val c = FixtureArt.contrast(Broadcast.Text, FixtureArt.slideTextBehind(x, art, team, team))
+                    assertTrue("slide text at $x on $team art=${art != null}: $c", c >= 4.5)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun withoutTheTextScrimTheWashWouldNotRead() {
+        // Why the scrim is there: white on the bare light-grey wash
+        assertTrue(FixtureArt.contrast(Broadcast.Text, FixtureArt.washBehind(0.04f, lightGrey, lightGrey)) < 4.5)
+        assertEquals(0f, FixtureArt.textScrim(0.7f), 0f)
+        assertEquals(FixtureArt.TEXT_SCRIM_ALPHA, FixtureArt.textScrim(0.1f), 0f)
+    }
+
+    @Test
     fun theGreySecondaryWouldNotHaveReadOnAPhoto() {
         // Why the hero / tile switch to white on art
         assertTrue(FixtureArt.contrast(Broadcast.Secondary, FixtureArt.tileBehind(0.06f, white, lightGrey)) < 4.5)

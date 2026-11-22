@@ -30,10 +30,16 @@ jobs:
         run: git fetch --tags https://github.com/damontecres/Wholphin.git || true
       - name: Setup
         uses: ./.github/actions/setup
+      - name: Cache Robolectric android-all jars (Maven Central 429s, 22-Nov)
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: robolectric-${{ runner.os }}-
       - name: "Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)"
         run: bash .github/scripts/jellytip-fixture-scan.sh
       - name: Jellytip unit tests
-        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --tests 'com.github.damontecres.wholphin.jellytip.channels.*' --tests 'com.github.damontecres.wholphin.jellytip.movienight.*' --tests 'com.github.damontecres.wholphin.jellytip.ask.*' --tests 'com.github.damontecres.wholphin.jellytip.journeys.*' --tests 'com.github.damontecres.wholphin.jellytip.shots.*' --no-daemon
+        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --tests 'com.github.damontecres.wholphin.jellytip.channels.*' --tests 'com.github.damontecres.wholphin.jellytip.movienight.*' --tests 'com.github.damontecres.wholphin.jellytip.ask.*' --tests 'com.github.damontecres.wholphin.jellytip.journeys.*' --tests 'com.github.damontecres.wholphin.jellytip.home.*' --tests 'com.github.damontecres.wholphin.jellytip.shots.*' --no-daemon
       # t5n (21-Nov): design screenshots from jellytip.shots.* (Roborazzi, synthetic data): for eyes, not compared
       - name: Upload Jellytip screenshots
         if: always()

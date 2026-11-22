@@ -41,6 +41,14 @@ object FixtureArt {
     /** The tile wash fades out over this much of the width from each edge. */
     const val TILE_WASH_SPAN = 0.35f
     const val PAN_MS = 30_000
+
+    /** Home hero match slide: a dark scrim behind the bottom-left text block, full to [TEXT_SCRIM_HOLD], gone at [TEXT_SCRIM_END]. */
+    const val TEXT_SCRIM_ALPHA = 0.7f
+    const val TEXT_SCRIM_HOLD = 0.3f
+    const val TEXT_SCRIM_END = 0.6f
+
+    /** The plain team wash (no art) meets its dark centre here (from each edge). */
+    const val WASH_CENTRE = 0.46f
     const val PAN_ZOOM = 1.08f
 
     /** Sized art link (the art proxy scales like the logo proxy: s=96|192|480|960). */
@@ -81,6 +89,37 @@ object FixtureArt {
                 else -> Broadcast.Base to CENTRE_ALPHA
             }
         return over(c, a, dimmed)
+    }
+
+    /** The no-art wash at [x]: home colour from the left, away from the right, a dark centre. */
+    fun washBehind(
+        x: Float,
+        home: Color,
+        away: Color,
+    ): Color =
+        when {
+            x <= WASH_CENTRE -> mix(home, Broadcast.Base, x / WASH_CENTRE)
+            x >= 1f - WASH_CENTRE -> mix(away, Broadcast.Base, (1f - x) / WASH_CENTRE)
+            else -> Broadcast.Base
+        }
+
+    /** The text scrim's alpha at [x]. */
+    fun textScrim(x: Float): Float =
+        when {
+            x <= TEXT_SCRIM_HOLD -> TEXT_SCRIM_ALPHA
+            x >= TEXT_SCRIM_END -> 0f
+            else -> TEXT_SCRIM_ALPHA * (TEXT_SCRIM_END - x) / (TEXT_SCRIM_END - TEXT_SCRIM_HOLD)
+        }
+
+    /** Behind the Home match slide's text at [x]: the art backdrop ([art]) or the plain wash (null), then the text scrim. */
+    fun slideTextBehind(
+        x: Float,
+        art: Color?,
+        home: Color,
+        away: Color,
+    ): Color {
+        val under = if (art != null) heroBehind(x, art, home, away) else washBehind(x, home, away)
+        return over(Broadcast.Base, textScrim(x), under)
     }
 
     /** The colour behind tile text at [x] from the home edge (0..1), above the photo pixel [art]. */
