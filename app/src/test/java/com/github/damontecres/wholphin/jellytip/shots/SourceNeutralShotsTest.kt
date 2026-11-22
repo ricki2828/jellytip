@@ -58,6 +58,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.jellytip.JellytipLayout
 import com.github.damontecres.wholphin.jellytip.JellytipRowBleed
 import com.github.damontecres.wholphin.jellytip.LocalJellytipRowBleed
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTech
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTileTags
 import com.github.damontecres.wholphin.jellytip.home.JellytipHomeTheme
@@ -917,9 +918,9 @@ class SourceNeutralShotsTest {
     // ---- 4. Search results: ONE row, the server's rank order, a title in both sources once ----
 
     private fun assertNoSourceWording(name: String) {
-        compose.onAllNodes(hasText("On IPTV", substring = true), useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("In your library", substring = true), useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodes(hasText("via IPTV", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("On IPTV", substring = true, ignoreCase = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("In your library", substring = true, ignoreCase = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("via IPTV", substring = true, ignoreCase = true), useUnmergedTree = true).assertCountEquals(0)
         println("shot $name: no 'On IPTV' / 'In your library' / 'via IPTV' text")
     }
 
@@ -1007,8 +1008,8 @@ class SourceNeutralShotsTest {
             tilesOf(n, 5)
             assertNoSourceWording(n)
             assertNoCornerMark(n)
-            compose.onAllNodes(hasText("Films (3)"), useUnmergedTree = true).assertCountEquals(1)
-            compose.onAllNodes(hasText("Shows (2)"), useUnmergedTree = true).assertCountEquals(1)
+            compose.onAllNodes(hasText("Films (3)", ignoreCase = true), useUnmergedTree = true).assertCountEquals(1)
+            compose.onAllNodes(hasText("Shows (2)", ignoreCase = true), useUnmergedTree = true).assertCountEquals(1)
         }) {
             val libHeat = libFilm(ttls[0], 0, favourite = true)
             val libCollateral = libFilm(ttls[1], 2, favourite = true)
@@ -1166,6 +1167,10 @@ class SourceNeutralShotsTest {
         name: String,
         caption: String,
         focusLabel: String,
+        /** The common block the dialog must show, top to bottom (each label exactly once, in this order). */
+        expected: List<String>,
+        /** Labels the dialog must NOT show (the old per-source wording). */
+        absent: List<String> = emptyList(),
         dialog: @Composable () -> Unit,
     ) {
         compose.setContent {
@@ -1186,44 +1191,118 @@ class SourceNeutralShotsTest {
             }
         println("shot $name: menu texts=$labels")
         captureScreenRoboImage(out(name))
+        // The common block: every label once (exact text), top to bottom in the model's order
+        val tops =
+            expected.map { label ->
+                val nodes = compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
+                assertEquals("$name: exactly one '$label' (menu texts=$labels)", 1, nodes.size)
+                nodes.first().boundsInRoot.top
+            }
+        assertTrue("$name: $expected must read top to bottom (tops=$tops)", tops == tops.sorted() && tops.distinct().size == tops.size)
+        absent.forEach { label ->
+            assertEquals("$name: no '$label' (menu texts=$labels)", 0, compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes().size)
+        }
     }
+
+    /**
+     * Runs [block] with the person's taste service switched on (its flag is private; a shot has no server): both menus then
+     * show Mark as watched and the three taste lines, as they do for a signed-in person.
+     */
+    private fun <T> tasteOn(block: () -> T): T {
+        val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
+        @Suppress("UNCHECKED_CAST")
+        val flow =
+            me.javaClass
+                .getDeclaredField("_available")
+                .apply { isAccessible = true }
+                .get(me) as kotlinx.coroutines.flow.MutableStateFlow<Boolean>
+        val before = flow.value
+        flow.value = true
+        try {
+            return block()
+        } finally {
+            flow.value = before
+        }
+    }
+
+    private fun tasteLines(): List<String> = listOf("I like this", "Not for me", "Not interested (hide from rows)")
+
+    /** The common block for a film in progress (40%) that is in My list and unwatched, with [other] as the last line. */
+    private fun commonBlock(other: String? = null) =
+        listOf("Resume", "Play from start", "Details", "Remove from My list") +
+            listOf("Mark as watched") + tasteLines() + listOfNotNull(other)
+
+    private fun libraryMenu(item: BaseItem) =
+        ContextMenu.ForBaseItem(
+            fromLongClick = true,
+            item = item,
+            chosenStreams = null,
+            showGoTo = true,
+            showStreamChoices = false,
+            canDelete = false,
+            canRemoveContinueWatching = false,
+            canRemoveNextUp = false,
+            actions =
+                ContextMenuActions(
+                    navigateTo = {},
+                    onShowOverview = {},
+                    onClickWatch = { _, _ -> },
+                    onClickFavorite = { _, _ -> },
+                    onClickAddPlaylist = {},
+                    onSendMediaInfo = {},
+                    onDeleteItem = {},
+                    onChooseVersion = { _, _ -> },
+                    onChooseTracks = {},
+                    onClearChosenStreams = {},
+                    onClickRemoveFromNextUp = {},
+                ),
+        )
+
+    /** A title id the way the server sends it (`provider:m:id`): the tile menu only exists for film / series ids, "vod-heat" is not one. */
+    private fun vodHeat() = vodFilm(ttls[0], 2).copy(id = "p1:m:949")
 
     @Test
     fun menuLibrary() {
-        // As HomePage.onLongClickItem builds it for a film tile in an ordinary row (not Continue Watching): Go to, Resume / Restart, ...
-        val menu =
-            ContextMenu.ForBaseItem(
-                fromLongClick = true,
-                item = libFilm(ttls[0], 2),
-                chosenStreams = null,
-                showGoTo = true,
-                showStreamChoices = false,
-                canDelete = false,
-                canRemoveContinueWatching = false,
-                canRemoveNextUp = false,
-                actions =
-                    ContextMenuActions(
-                        navigateTo = {},
-                        onShowOverview = {},
-                        onClickWatch = { _, _ -> },
-                        onClickFavorite = { _, _ -> },
-                        onClickAddPlaylist = {},
-                        onSendMediaInfo = {},
-                        onDeleteItem = {},
-                        onChooseVersion = { _, _ -> },
-                        onChooseTracks = {},
-                        onClearChosenStreams = {},
-                        onClickRemoveFromNextUp = {},
-                    ),
-            )
-        menuShot("srcneutral-menu-library", "Hold OK on a library film tile: Home (Heat, 40%, in My list)", "Resume") {
-            ContextMenuDialog(onDismissRequest = {}, getMediaSource = null, contextMenu = menu, preferredSubtitleLanguage = null)
+        // As HomePage.onLongClickItem builds it for a film tile in an ordinary row: the shared common block, then the library extras
+        JellytipTitleSources.clear()
+        val menu = libraryMenu(libFilm(ttls[0], 2))
+        // (the IPTV menu below shows the same lines: Heat, 40%, in My list, unwatched)
+        tasteOn {
+            menuShot("srcneutral-menu-library", "Hold OK on a library film tile: Home (Heat, 40%, in My list)", "Resume", commonBlock(), listOf("Go To", "Restart", "Favorite", "Unfavorite", "Play from IPTV", "Play from library")) {
+                ContextMenuDialog(onDismissRequest = {}, getMediaSource = null, contextMenu = menu, preferredSubtitleLanguage = null)
+            }
         }
     }
 
     @Test
+    fun menuLibraryTwoSources() {
+        // The library film is also on IPTV (the row's sourcesById): the last common line plays the best IPTV copy, with its quality
+        val film = libFilm(ttls[0], 2)
+        JellytipTitleSources.clear()
+        JellytipTitleSources.put(film.id.toString(), listOf(IptvSource("iptv", "p1:m:949", listOf("4k"))))
+        val menu = libraryMenu(film)
+        tasteOn {
+            menuShot("srcneutral-menu-library-2src", "Hold OK on a library film tile that is also on IPTV (Heat, 40%, in My list)", "Resume", commonBlock("Play from IPTV · 4K"), listOf("Play from library")) {
+                ContextMenuDialog(onDismissRequest = {}, getMediaSource = null, contextMenu = menu, preferredSubtitleLanguage = null)
+            }
+        }
+        JellytipTitleSources.clear()
+    }
+
+    @Test
     fun menuIptv() =
-        menuShot("srcneutral-menu-iptv", "Hold OK on an IPTV film tile: IptvTileMenu (Heat, 40%, in My list)", "Open") {
-            IptvTileMenu(item = vodFilm(ttls[0], 2), onDismiss = {}, onOpen = {})
+        tasteOn {
+            menuShot("srcneutral-menu-iptv", "Hold OK on an IPTV film tile: IptvTileMenu (Heat, 40%, in My list)", "Details", commonBlock(), listOf("Open", "Add to My list", "Play from IPTV", "Play from library")) {
+                IptvTileMenu(item = vodHeat(), onDismiss = {}, onOpen = {})
+            }
+        }
+
+    @Test
+    fun menuIptvTwoSources() =
+        // The IPTV tile whose library twin did not fold away (not in the row): the last common line plays the library copy
+        tasteOn {
+            menuShot("srcneutral-menu-iptv-2src", "Hold OK on an IPTV film tile that is also in the library (Heat, 40%, in My list)", "Details", commonBlock("Play from library"), listOf("Open", "Play from IPTV")) {
+                IptvTileMenu(item = vodHeat().copy(libraryId = uuid("movie:Heat").toString()), onDismiss = {}, onOpen = {})
+            }
         }
 }

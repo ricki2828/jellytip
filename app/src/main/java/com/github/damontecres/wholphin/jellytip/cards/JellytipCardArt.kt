@@ -309,7 +309,7 @@ fun JellytipTitledArt(
                     Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = TECH_INSET, bottom = TECH_INSET + 22.dp)
-                        .widthIn(max = cardWidth * 0.5f)
+                        .widthIn(max = cardWidth * 0.9f)
                         .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
                         .padding(horizontal = 4.dp, vertical = 1.dp)
                         .testTag(JellytipTileTags.INFO),

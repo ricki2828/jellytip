@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.rows
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -189,6 +190,8 @@ fun JellytipServerRowView(
             else -> StandardOptions
         }
     val loaded = items
+    // The IPTV copies of this row's library titles, for the library hold-OK menu's "Play from IPTV" (nothing is fetched)
+    LaunchedEffect(row.sourcesById) { com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources.putAll(row.sourcesById) }
     Box(modifier.fillMaxWidth()) {
         when {
             row.isTop10 && row.itemIds.isNotEmpty() && loaded == null -> {
@@ -483,7 +486,7 @@ private fun FranchiseRow(
         }
     val openIptv: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem) -> Unit = { iptv ->
         JellytipTrailerControl.stop()
-        viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(iptv.id, iptv.title), "franchise row OK (iptv)")
+        viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(iptv), "franchise row OK (iptv)")
     }
     val openCollection = {
         JellytipTrailerControl.stop()
@@ -769,7 +772,7 @@ fun JellytipCollectionPage(
                                         poster = true,
                                         onClick = {
                                             viewModel.navigationManager.navigateTo(
-                                                Destination.JellytipIptvDetails(iptv.id, iptv.title),
+                                                JellytipTitleOpen.detailsFor(iptv),
                                                 "collection part OK (iptv)",
                                             )
                                         },
@@ -934,7 +937,7 @@ private fun MixedRow(
                             onClick = {
                                 JellytipTrailerControl.stop()
                                 onOpened?.invoke(t.item.id)
-                                viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "my list IPTV OK")
+                                viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "my list IPTV OK")
                             },
                             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocusItem(null, false) },
                         )
@@ -1038,7 +1041,7 @@ private fun TrendingTop10Row(
                 is TrendTile.Lib -> click(t.item)
                 is TrendTile.Vod -> {
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "trending IPTV OK")
+                    viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "trending IPTV OK")
                 }
                 is TrendTile.Missing ->
                     if (isAdmin && t.m.tmdbId > 0) {

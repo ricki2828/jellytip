@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleMenu
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -217,7 +219,7 @@ fun IptvVodRow(
         onFocusTile = onFocusTile,
         onOpen = { item ->
             onOpened?.invoke(item.id)
-            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "iptv row OK")
+            viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(item), "iptv row OK")
         },
         modifier = modifier,
         subtitle = subtitle,
@@ -657,7 +659,7 @@ fun JellytipIptvDetailsContent(
             )
         }
         if (moreOpen && item != null) {
-            IptvTileMenu(item, onDismiss = { moreOpen = false }, withMyList = false, provider = item.providerName, fromLongPress = false)
+            IptvTileMenu(item, onDismiss = { moreOpen = false }, withMyList = false, provider = item.providerName, fromLongPress = false, withPlay = false, onNavigate = onNavigate)
         }
         if (trailerPlaying && trailerUrl != null) {
             IptvFullScreenTrailer(trailerUrl, httpClient) {
@@ -947,12 +949,15 @@ object IptvMyList {
     }
 }
 
-/** An IPTV tile's long-press menu: the same reactions as the library tiles and IPTV details. */
+/**
+ * An IPTV tile's long-press menu: the same list, order and words as a library tile's (the common block of
+ * [com.github.damontecres.wholphin.jellytip.cards.JellytipTitleMenu]), each line doing the IPTV action.
+ */
 @Composable
 internal fun IptvTileMenu(
     item: IptvVodItem,
     onDismiss: () -> Unit,
-    /** The tile's "Open" line; null (the details page's More menu) leaves it out. */
+    /** The tile's "Details" line; null (the details page's More menu) leaves it out. */
     onOpen: (() -> Unit)? = null,
     /** The tile menu's My list line; the details page has a My list button of its own. */
     withMyList: Boolean = true,
@@ -960,6 +965,10 @@ internal fun IptvTileMenu(
     provider: String? = null,
     /** Opened by a long press (the key is still down: items wait a moment) or by OK on a button (ready at once). */
     fromLongPress: Boolean = true,
+    /** Play / Resume / Play from start: the details page has its own Play button, so its More menu leaves them out. */
+    withPlay: Boolean = true,
+    /** Navigation for Play and Play from library; null = the app's navigation manager. */
+    onNavigate: ((Destination, String?) -> Unit)? = null,
 ) {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -967,30 +976,91 @@ internal fun IptvTileMenu(
     val kind = if (item.isSeries) "series" else "movie"
     val key = me.iptvTasteKey(item.id, kind, item.tmdbId)
     val thumb = me.thumbOfKey(key)
+    val ni = me.isNotInterestedKey(key)
     val toast: (String?) -> Unit = { err -> if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show() }
     val inList = IptvMyList.isOn(item)
-    val items =
+    val played = item.played || item.progress?.played == true
+    val nav: (Destination, String?) -> Unit = onNavigate ?: { d, why -> com.github.damontecres.wholphin.services.NavigationManager.shared?.navigateTo(d, why) }
+    // The copy Play starts: the shown copy, else the server's next one when this one failed lately (the details page's rule)
+    val now = System.currentTimeMillis() / 1000
+    val failed: (String) -> Boolean = { id -> IptvStreamFail.failedLately(IptvStreamFail.failOf(id, null), now) }
+    val playCopy =
+        JellytipTitleMenu
+            .bestIptv(listOf(IptvSource("iptv", item.id)) + item.sources.filter { it.type == "iptv" && it.id != item.id }, failed)
+            ?.id ?: item.id
+    val nextUp = item.nextUp
+    val libraryUuid = JellytipTitleOpen.libraryIdOf(item.libraryId, item.sources)
+    val state =
+        JellytipTitleMenu.State(
+            // A film plays at once; a series plays its next episode when the server named it (no network call here)
+            canPlay = withPlay && IptvVodParse.isTitleId(item.id) && (!item.isSeries || nextUp != null),
+            inProgress = item.progress?.resumable == true,
+            inMyList = inList,
+            watched = played,
+            showWatched = available,
+            showDetails = onOpen != null,
+            showMyList = withMyList,
+            tasteAvailable = available,
+            thumb = thumb,
+            notInterested = ni,
+            other = libraryUuid?.let { JellytipTitleMenu.Other(JellytipTitleMenu.Direction.TO_LIBRARY) },
+        )
+    fun play(fromStart: Boolean) {
+        val resume = if (fromStart) 0L else item.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
+        if (item.isSeries) {
+            val ep = nextUp ?: return
+            nav(Destination.JellytipIptvPlay(title = item.title, seriesId = item.id, episodeId = ep.id, resumeMs = resume), "iptv tile menu Play")
+        } else {
+            nav(Destination.JellytipIptvPlay(title = item.title, vodId = playCopy, resumeMs = if (playCopy == item.id) resume else 0L), "iptv tile menu Play")
+        }
+    }
+    val dialogItems =
         buildList {
             if (provider != null) {
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(headlineContent = { Text("Provider: $provider") }, onClick = {}, enabled = false))
             }
-            if (onOpen != null) add(com.github.damontecres.wholphin.ui.components.DialogItem("Open", dismissOnClick = true) { onOpen() })
-            if (withMyList) {
-                add(
-                    com.github.damontecres.wholphin.ui.components.DialogItem(if (inList) "♥  In My list — remove" else "♡  Add to My list", dismissOnClick = true) {
+            JellytipTitleMenu.forIptv(state).forEach { e ->
+                val action: (() -> Unit)? =
+                    when (e.id) {
+                        JellytipTitleMenu.Id.PLAY -> {
+                            { play(false) }
+                        }
+
+                        JellytipTitleMenu.Id.PLAY_FROM_START -> {
+                            { play(true) }
+                        }
+
+                        JellytipTitleMenu.Id.DETAILS -> onOpen
+
                         // Fire and forget in a scope that outlives the menu (it closes on this click)
-                        IptvMyList.toggle(item.id, !inList, toast)
-                    },
-                )
-            }
-            if (available) {
-                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == 1) "Liked ✓ — undo" else "Like", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) })
-                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == -1) "Not for me ✓ — undo" else "Not for me", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) })
-                val ni = me.isNotInterestedKey(key)
-                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (ni) "Not interested ✓ — undo" else "Not interested", dismissOnClick = true) { me.setIptvNotInterested(item.id, kind, item.tmdbId, !ni, toast) })
-                val played = item.played || item.progress?.played == true
-                add(com.github.damontecres.wholphin.ui.components.DialogItem(if (played) "Mark unwatched" else "Mark watched", dismissOnClick = true) { me.setIptvPlayed(item.id, !played, toast) })
+                        JellytipTitleMenu.Id.MY_LIST -> {
+                            { IptvMyList.toggle(item.id, !inList, toast) }
+                        }
+
+                        JellytipTitleMenu.Id.WATCHED -> {
+                            { me.setIptvPlayed(item.id, !played, toast) }
+                        }
+
+                        JellytipTitleMenu.Id.LIKE -> {
+                            { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) }
+                        }
+
+                        JellytipTitleMenu.Id.NOT_FOR_ME -> {
+                            { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) }
+                        }
+
+                        JellytipTitleMenu.Id.NOT_INTERESTED -> {
+                            { me.setIptvNotInterested(item.id, kind, item.tmdbId, !ni, toast) }
+                        }
+
+                        JellytipTitleMenu.Id.PLAY_OTHER -> {
+                            { libraryUuid?.let { nav(Destination.Playback(it, 0L), "iptv tile menu Play from library") } }
+                        }
+
+                        else -> null
+                    }
+                if (action != null) add(com.github.damontecres.wholphin.ui.components.DialogItem(e.label, dismissOnClick = true) { action() })
             }
         }
-    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = dialogItems, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)
 }

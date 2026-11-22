@@ -60,6 +60,12 @@ data class IptvResume(
     val tmdbId: Int? = null,
     /** Episodes: `seriesTmdbId`. */
     val seriesTmdbId: Int? = null,
+    /** Films: the library item this title is also in (`libraryId`) and every source (`sources`). Absent = unknown. */
+    val libraryId: String? = null,
+    val sources: List<IptvSource> = emptyList(),
+    /** Episodes: the library series the person can open (`seriesLibraryId`) and its sources (`seriesSources`). */
+    val seriesLibraryId: String? = null,
+    val seriesSources: List<IptvSource> = emptyList(),
 ) {
     /** Tile text: "Series · S1 E2 · Title" for episodes. */
     val label: String
@@ -197,6 +203,10 @@ object IptvResumeParse {
                 backdropTextless = o.opt("backdropTextless") == true,
                 tmdbId = (o.opt("tmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
                 seriesTmdbId = (o.opt("seriesTmdbId") as? Number)?.toInt()?.takeIf { it > 0 },
+                libraryId = o.str("libraryId"),
+                sources = IptvVodParse.sources(o.optJSONArray("sources")),
+                seriesLibraryId = o.str("seriesLibraryId"),
+                seriesSources = IptvVodParse.sources(o.optJSONArray("seriesSources")),
             ).takeIf { kind != "episode" || it.seriesId != null }
         }
     }

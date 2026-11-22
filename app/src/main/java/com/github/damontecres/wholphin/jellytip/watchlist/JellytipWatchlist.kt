@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.watchlist
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -330,7 +331,7 @@ fun JellytipWatchlistMixedRow(
                 is WatchlistTile.Lib -> onClickLibrary(t.index, t.item)
                 is WatchlistTile.Vod -> {
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "watchlist IPTV OK")
+                    viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "watchlist IPTV OK")
                 }
             }
         },
@@ -339,7 +340,7 @@ fun JellytipWatchlistMixedRow(
                 is WatchlistTile.Lib -> onLongClickLibrary(t.index, t.item)
                 is WatchlistTile.Vod -> {
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "watchlist IPTV long-press")
+                    viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(t.item), "watchlist IPTV long-press")
                 }
             }
         },

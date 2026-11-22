@@ -104,7 +104,6 @@ import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.FocusableItemRow
@@ -221,15 +220,14 @@ fun HomePage(
                             row?.rowType is HomeRowConfig.ContinueWatching || row?.rowType is HomeRowConfig.ContinueWatchingCombined
                         val canRemoveNextUp =
                             row?.rowType is HomeRowConfig.NextUp || row?.rowType is HomeRowConfig.ContinueWatchingCombined
-                        // "Details" and the stock "Go To" open the same page: show only one
-                        val hasDetails =
-                            homeTileHasDetailsItem(currentHomeRows.getOrNull(clickedPosition.row).isContinueWatchingNextUp, item.type)
+                        // "Details" and the stock "Go To" open the same page: one "Details" line, drawn by the shared title menu
+                        // (JellytipTitleMenu) in the same place as on an IPTV tile's menu
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
                                 chosenStreams = null,
-                                showGoTo = !hasDetails,
+                                showGoTo = true,
                                 showStreamChoices = false,
                                 canDelete =
                                     viewModel.canDelete(
@@ -238,18 +236,6 @@ fun HomePage(
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
                                 canRemoveNextUp = canRemoveNextUp,
-                                // OK plays an episode or film in these rows, so its page is one item away
-                                leadingItems =
-                                    if (hasDetails) {
-                                        listOf(
-                                            DialogItem("Details", dismissOnClick = true) {
-                                                JellytipTrailerControl.stop()
-                                                viewModel.navigationManager.navigateTo(item.destination(), "home Details")
-                                            },
-                                        )
-                                    } else {
-                                        emptyList()
-                                    },
                                 actions =
                                     ContextMenuActions(
                                         navigateTo = { destination ->

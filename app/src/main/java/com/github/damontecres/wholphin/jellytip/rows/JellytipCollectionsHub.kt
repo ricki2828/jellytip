@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.rows
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -457,7 +458,7 @@ fun JellytipHubCollectionPage(
             JellytipTrailerControl.stop()
             viewModel.navigationManager.navigateTo(item.destination(), "hub collection OK")
         },
-        onOpenVod = { item -> viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "hub collection IPTV OK") },
+        onOpenVod = { item -> viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(item), "hub collection IPTV OK") },
         onOpenMissing = { m ->
             viewModel.navigationManager.navigateTo(
                 Destination.JellytipDiscover(

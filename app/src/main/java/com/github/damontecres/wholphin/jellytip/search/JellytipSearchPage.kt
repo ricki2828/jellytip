@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.search
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -507,7 +508,7 @@ private fun ResultGroup(
                     items(g.iptv, key = { "i${it.id}" }) { i ->
                         PosterCard(i.poster, listOfNotNull(i.name, i.year?.toString()).joinToString(" · ")) {
                             viewModel.opened("iptv")
-                            viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(i.id, i.name), "search iptv OK")
+                            viewModel.navigationManager.navigateTo(JellytipTitleOpen.detailsFor(i.id, i.name, i.kind, i.libraryId, i.sources), "search iptv OK")
                         }
                     }
                     items(g.discover, key = { "d${it.key}" }) { t ->
@@ -750,7 +751,7 @@ private fun openResult(
         r.kind == "collection" && r.collectionId != null -> nav.navigateTo(Destination.JellytipCollection(r.collectionId, r.title), "search top collection")
         r.source == "library" && r.id != null ->
             nav.navigateTo(Destination.MediaItem(r.id, if (r.kind == "series") BaseItemKind.SERIES else BaseItemKind.MOVIE), "search top library")
-        r.source == "iptv" && r.iptvId != null -> nav.navigateTo(Destination.JellytipIptvDetails(r.iptvId, r.title), "search top iptv")
+        r.source == "iptv" && r.iptvId != null -> nav.navigateTo(JellytipTitleOpen.detailsFor(r.iptvId, r.title, if (r.kind == "film") "movie" else r.kind, r.libraryId, r.sources), "search top iptv")
         r.source == "discover" && r.tmdbId != null ->
             nav.navigateTo(
                 Destination.JellytipDiscover(

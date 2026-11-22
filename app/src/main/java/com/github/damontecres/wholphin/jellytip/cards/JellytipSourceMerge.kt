@@ -36,6 +36,8 @@ object JellytipSourceMerge {
         val tmdbId: Int? = null,
         /** Episodes only: the TMDB id of the episode's series (Continue Watching). Library episode items do not carry it, so callers pass null. */
         val seriesTmdbId: Int? = null,
+        /** Episodes: the library series' id (the episode's `seriesId`), matched against an IPTV entry's `seriesLibraryId`. */
+        val seriesId: String? = null,
     )
 
     /** An IPTV entry as the merge sees it. */
@@ -160,11 +162,18 @@ object JellytipSourceMerge {
     ): List<IptvResume> {
         val films = library.filter { it.kind == "movie" }.mapNotNull { it.tmdbId }.toSet()
         val shows = library.filter { it.kind == "episode" }.mapNotNull { it.seriesTmdbId }.toSet()
-        if (films.isEmpty() && shows.isEmpty()) return iptv
+        // By library id first (dashes / case ignored): a library film's own id, a library episode's series id
+        val filmIds = library.filter { it.kind == "movie" }.map { norm(it.id) }.toSet()
+        val showIds = library.filter { it.kind == "episode" }.mapNotNull { it.seriesId?.let(::norm) }.toSet()
+        if (films.isEmpty() && shows.isEmpty() && filmIds.isEmpty() && showIds.isEmpty()) return iptv
+        fun libIdOf(
+            direct: String?,
+            sources: List<IptvSource>,
+        ): String? = direct?.takeIf { it.isNotBlank() }?.let(::norm) ?: sources.firstOrNull { it.type == "library" && it.id.isNotBlank() }?.let { norm(it.id) }
         return iptv.filterNot { r ->
             when (r.kind) {
-                "movie" -> r.tmdbId != null && r.tmdbId in films
-                "episode" -> r.seriesTmdbId != null && r.seriesTmdbId in shows
+                "movie" -> libIdOf(r.libraryId, r.sources)?.let { it in filmIds } == true || (r.tmdbId != null && r.tmdbId in films)
+                "episode" -> libIdOf(r.seriesLibraryId, r.seriesSources)?.let { it in showIds } == true || (r.seriesTmdbId != null && r.seriesTmdbId in shows)
                 else -> false
             }
         }
@@ -187,17 +196,22 @@ object JellytipSourceMerge {
         sourcesById: Map<String, List<IptvSource>>,
         lib: (BaseItem) -> T,
         vod: (IptvVodItem) -> T,
-    ): Merged<T> =
-        merge(
-            com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<Entry<T>>(
-                order,
-                library,
-                iptv,
-                { Entry(lib(it), lib = it.libRef()) },
-                { Entry(vod(it), iptv = it.iptvRef()) },
-            ),
-            sourcesById,
-        )
+    ): Merged<T> {
+        val merged =
+            merge(
+                com.github.damontecres.wholphin.jellytip.mylist.JellytipMyListParse.ordered<Entry<T>>(
+                    order,
+                    library,
+                    iptv,
+                    { Entry(lib(it), lib = it.libRef()) },
+                    { Entry(vod(it), iptv = it.iptvRef()) },
+                ),
+                sourcesById,
+            )
+        // The library hold-OK menu offers "Play from IPTV" for these (it has no row at hand): remember each library tile's IPTV copies
+        merged.others.forEach { (key, list) -> if (key.startsWith("l:")) JellytipTitleSources.put(key.removePrefix("l:"), list) }
+        return merged
+    }
 }
 
 /** A library item as the merge sees it: films and series carry their TMDB id (providerIds "Tmdb"); an episode has none to match by. */
@@ -220,7 +234,7 @@ fun BaseItem.libRef(): JellytipSourceMerge.LibRef {
         } else {
             null
         }
-    return JellytipSourceMerge.LibRef(id.toString(), kind, tmdb)
+    return JellytipSourceMerge.LibRef(id.toString(), kind, tmdb, seriesId = if (kind == "episode") data.seriesId?.toString() else null)
 }
 
 fun IptvVodItem.iptvRef(): JellytipSourceMerge.IptvRef =

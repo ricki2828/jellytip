@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.jellytip.specials
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTileBadges
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -417,7 +418,7 @@ private fun PersonSpotlightRow(
             when (entry) {
                 PersonEntry.Portrait -> actions.navigate(Destination.MediaItem(special.personId, BaseItemKind.PERSON))
                 is PersonEntry.Film -> actions.click(entry.item)
-                is PersonEntry.Vod -> actions.navigate(Destination.JellytipIptvDetails(entry.item.id, entry.item.title))
+                is PersonEntry.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(entry.item))
             }
         },
         onLongClickItem = { _, entry -> if (entry is PersonEntry.Film) actions.open(entry.item) },
@@ -585,7 +586,7 @@ private fun IptvTonightsPick(
     actions: SpecialActions,
 ) {
     val sizes = rememberJellytipSizes()
-    val open = { actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title)) }
+    val open = { actions.navigate(JellytipTitleOpen.detailsFor(iptv)) }
     ItemRow(
         title = special.title,
         items = listOf(iptv),
@@ -727,7 +728,7 @@ private fun DoubleFeatureRow(
         JellytipDoubleBill.pair = JellytipDoubleBill.Bill(film.bill, other.bill)
         when (film) {
             is PairHalf.Lib -> actions.navigate(film.item.destination())
-            is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+            is PairHalf.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(film.item))
         }
     }
     fun half(
@@ -770,7 +771,7 @@ private fun DoubleFeatureRow(
                                     onLongClick()
                                     when (film) {
                                         is PairHalf.Lib -> actions.open(film.item)
-                                        is PairHalf.Vod -> actions.navigate(Destination.JellytipIptvDetails(film.item.id, film.item.title))
+                                        is PairHalf.Vod -> actions.navigate(JellytipTitleOpen.detailsFor(film.item))
                                     }
                                 },
                                 modifier =
@@ -1060,7 +1061,7 @@ private fun ClosetPicksRow(
                     } else if (iptv != null) {
                         // four_favourites: the IPTV copy of a film the library lacks
                         JellytipTrailerControl.stop()
-                        actions.navigate(Destination.JellytipIptvDetails(iptv.id, iptv.title))
+                        actions.navigate(JellytipTitleOpen.detailsFor(iptv))
                     } else if (canRequest && tmdb != null) {
                         actions.navigate(
                             Destination.JellytipDiscover(
