@@ -115,6 +115,8 @@ object SeriesNextParse {
             val want = seriesId.replace("-", "").lowercase()
             val key = all.keys().asSequence().firstOrNull { it.replace("-", "").lowercase() == want } ?: return null
             val o = all.optJSONObject(key) ?: return null
+            // Only an explicit JSON null means "finished"; a claim without the key is malformed (no claim)
+            if (!o.has("source")) return null
             val source = (o.opt("source") as? String)?.takeIf { it == "library" || it == "iptv" }
             if (o.opt("source") != null && o.opt("source") != org.json.JSONObject.NULL && source == null) return null
             SeriesNextClaim(

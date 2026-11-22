@@ -74,6 +74,9 @@ class JellytipSplitNextTest {
     }
 }
 
+// org.json needs Robolectric (the android.jar stub throws "not mocked")
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(manifest = org.robolectric.annotation.Config.NONE, sdk = [30])
 class SeriesNextClaimTest {
     private val tv = { e: Int -> com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode("11dd6d87:e:$e", e, "E$e", 60, null, null, null) }
     private val libId = UUID.fromString("ff7b098e-b481-1105-eadb-d2f25199f299")
@@ -105,6 +108,8 @@ class SeriesNextClaimTest {
         assertNull(p.parse("""{"seriesNext":{"s2":{"source":"iptv"}}}""", "s1"))
         assertNull(p.parse("""{"seriesNext":{"s1":{"source":"plex"}}}""", "s1"))
         assertNull(p.parse("nope", "s1"))
+        // no "source" key at all: malformed, not finished
+        assertNull(p.parse("""{"seriesNext":{"s1":{"id":"x"}}}""", "s1"))
         // unknown id: matched by season / episode; not on the page at all: null (the page's own rule)
         val bySe = p.parse("""{"seriesNext":{"s1":{"source":"iptv","id":"x:e:99","season":2,"episode":4}}}""", "s1")!!
         assertEquals(4, (com.github.damontecres.wholphin.jellytip.details.claimedNext(bySe, eps) as com.github.damontecres.wholphin.jellytip.details.ClaimedNext.Episode).ep.episode)
