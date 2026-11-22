@@ -1,5 +1,5 @@
-// Golden vectors for the TV port of web/src/lib/askParse.ts (origin/jellytip-web). Run: node gen.mts > ask-vectors.json
-import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
+// Golden vectors for the TV port of web/src/lib/askParse.ts (jellytip-web-askrefine dedfd2dd). Run: node gen.mts > ask-vectors.json
+import { parseAsk, buildQuery, fetchLimit, needsClientFilter, appliedNotes, pickFrom, filterItems, chipsFromData, EXAMPLES, FETCH_LIMIT } from "./askParse.ts";
 import { readFileSync } from "node:fs";
 const NOW = new Date(2026, 5, 1);
 const fromTests = readFileSync(new URL("./queries.txt", import.meta.url), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -20,6 +20,10 @@ const extra = [
   "children's animated movie from the 90s","a 4.5 star western","spooky sci fi series under 50 minutes","gangster flicks 1970-1979",
   "short tv shows","heist movie no more than 2 hours","musicals","historical war drama","up to 3 hrs","max of 100 minutes","at most 2h",
   "anything but", "no", "not", "123", "''", "- + .", "rated 8.5/10", "score 9", "scored above 7", "rating of 6.5",
+  // 22-Nov: negated genres, kids without left-out genres, "works for everyone"
+  "I'm here with my two kids, want something non animated not scary that would work for all", "non-animated", "non animated",
+  "none", "no sci-fi", "nothing animated for the kids", "feel-good but not animated", "not scary, scary", "all ages comedy",
+  "whole family, no war", "not at all scary", "without romance under 2 hours", "not romantic and not sad", "no cartoons",
 ];
 const queries = [...new Set([...EXAMPLES, ...fromTests, ...extra])];
 const show = (q: Record<string, unknown>) => Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
@@ -38,7 +42,7 @@ const items: any[] = [];
 const G = [["Comedy"],["Horror"],["Comedy","Horror"],["Science Fiction"],["Sci-Fi & Fantasy","Action & Adventure"],["Drama"],[],["comedy"],["Thriller","Mystery"],["Family","Animation"]];
 for (let i = 0; i < 40; i++) items.push({ Id: `i${i}`, Type: i % 3 === 0 ? "Series" : "Movie", RunTimeTicks: i % 7 === 0 ? undefined : (30 + i * 4) * 600_000_000, ChildCount: i % 3 === 0 ? (i % 5) : undefined, Genres: G[i % G.length] });
 const big = Array.from({ length: FETCH_LIMIT }, (_, i) => ({ Id: `b${i}`, Type: "Movie", RunTimeTicks: 80 * 600_000_000, Genres: ["Comedy", "Horror"] }));
-const pickQs = ["funny under 90 minutes","scary comedy","short series","over 2 hours","sci-fi action","funny","under 100 minutes","something","scary comedy well rated","a miniseries"];
+const pickQs = ["not scary", "nothing animated for the kids", "funny but not scary", "funny under 90 minutes","scary comedy","short series","over 2 hours","sci-fi action","funny","under 100 minutes","something","scary comedy well rated","a miniseries"];
 const picks = pickQs.flatMap((q) => {
   const chips = parseAsk(q, NOW).chips;
   return [
@@ -51,4 +55,11 @@ const picks = pickQs.flatMap((q) => {
     return { ...c, keptCount: kept.length, kept: c.page === "big" ? kept.slice(0, 30) : kept, ids: p.items.map((x) => x.Id), note: p.note };
   });
 });
-console.log(JSON.stringify({ year: 2026, cases, items, picks }));
+// Chips built from filter data (refine chips, an LLM query): ids, labels and the query they make
+const fromDataLists: any[] = [
+  [{ t: "kids", ratings: ["G", "PG"], genres: ["Family", "Kids"] }, { t: "notGenre", genres: ["Animation"] }, { t: "notGenre", genres: ["Animation"] }, { t: "years", from: 1990, to: 1999 }, { t: "maxRuntime", min: 100 }],
+  [{ t: "genre", genres: ["Science Fiction", "Sci-Fi & Fantasy"] }, { t: "notGenre", genres: ["Horror"] }, { t: "kind", kind: "Series" }, { t: "maxSeasons", n: 1 }, { t: "minRating", value: 7.5 }],
+  [{ t: "genre", genres: ["Kids"] }, { t: "years", from: 2001, to: 2001 }, { t: "years", from: 2010, to: 2015 }, { t: "unplayed" }, { t: "minRuntime", min: 120 }, { t: "maxSeasons", n: 3 }],
+];
+const fromData = fromDataLists.map((list) => { const chips = chipsFromData(list); return { list, chips: chips.map((c) => ({ id: c.id, label: c.label })), query: show(buildQuery(chips)), applied: appliedNotes(chips) }; });
+console.log(JSON.stringify({ year: 2026, cases, items, picks, fromData }));
