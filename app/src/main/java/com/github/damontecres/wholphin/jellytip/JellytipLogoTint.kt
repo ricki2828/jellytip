@@ -91,9 +91,14 @@ object JellytipLogoTint {
     fun filter(
         url: String?,
         item: BaseItem? = null,
+    ): ColorFilter? = filterForIds(url, item?.let { i -> listOfNotNull(i.id, i.data.seriesId, i.data.parentLogoItemId) }.orEmpty())
+
+    /** [filter] for a source-neutral caller: [styleIds] are the ids the companion's per-item style is looked up by, in order. */
+    fun filterForIds(
+        url: String?,
+        styleIds: List<UUID>,
     ): ColorFilter? {
-        val style =
-            item?.let { i -> listOfNotNull(i.id, i.data.seriesId, i.data.parentLogoItemId).firstNotNullOfOrNull { styles[it] } }
+        val style = styleIds.firstNotNullOfOrNull { styles[it] }
         return when {
             style == STYLE_ORIGINAL -> null
             style == STYLE_MONO -> mono

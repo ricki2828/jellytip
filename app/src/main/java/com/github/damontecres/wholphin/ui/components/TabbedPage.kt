@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -123,6 +124,7 @@ fun TabbedPage(
     tabs: List<TabDetails>,
     modifier: Modifier = Modifier,
     showTabs: Boolean = true,
+    tabsStartPadding: Dp = 0.dp,
     viewModel: TabViewModel =
         hiltViewModel<TabViewModel, TabViewModel.Factory>(
             key = "$itemId-${tabs.size}",
@@ -139,6 +141,7 @@ fun TabbedPage(
         isShowClock = isShowClock,
         modifier = modifier,
         showTabs = showTabs,
+        tabsStartPadding = tabsStartPadding,
         tabContent = tabContent,
     )
 }
@@ -151,6 +154,8 @@ fun TabbedPage(
     isShowClock: Boolean,
     modifier: Modifier = Modifier,
     showTabs: Boolean = true,
+    /** Space before the first tab (its label also has the tab's own 16 dp); Jellytip pages pass 8 dp for the 96 dp left line. */
+    tabsStartPadding: Dp = 0.dp,
     tabContent: @Composable (Int, TabDetails) -> Unit,
 ) {
     val endPadding =
@@ -173,7 +178,7 @@ fun TabbedPage(
                 selectedTabIndex = selectedTabIndex,
                 modifier =
                     Modifier
-                        .padding(top = 16.dp, bottom = 16.dp, end = endPadding),
+                        .padding(start = tabsStartPadding, top = 16.dp, bottom = 16.dp, end = endPadding),
                 tabs = tabs,
                 onClick = updateSelectedTabIndex,
             )

@@ -1,7 +1,8 @@
 package com.github.damontecres.wholphin.jellytip.ask
 
 /*
- * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5).
+ * Plain-language discovery ("Ask"): port of web/src/lib/askParse.ts (origin/jellytip-web 69fc43f6 + f126b5d5, plus
+ * jellytip-web-askrefine 336ba5ec..29fdfee4: negated genres, kids without left-out genres, chipFor / chipsFromData).
  * Deterministic, no LLM: phrases map to Jellyfin Items params, and what cannot be mapped is reported back as "ignored"
  * rather than guessed. Pure Kotlin (no Android, no SDK types) so other screens can reuse it, e.g. Pick for tonight chips:
  *
@@ -52,6 +53,18 @@ sealed interface ChipData {
     data class MaxSeasons(
         val n: Int,
     ) : ChipData
+
+    /** "not scary", "non-animated": titles in any of these genres are left out (checked client-side over the fetched page). */
+    data class NotGenre(
+        val genres: List<String>,
+    ) : ChipData
+
+    /** A director or actor (refine chips): Jellyfin PersonIds. [role] = "Director" or "Actor". */
+    data class Person(
+        val id: String,
+        val name: String,
+        val role: String,
+    ) : ChipData
 }
 
 data class AskChip(
@@ -89,6 +102,10 @@ data class AskQuery(
     val filters: List<String>,
     val officialRatings: List<String>,
     val minCommunityRating: Double?,
+    /** Refine chips: titles with any of these people... */
+    val personIds: List<String> = emptyList(),
+    /** ...in these roles ("directed by X" = as director). */
+    val personTypes: List<String> = emptyList(),
 ) {
     /** The web's wire form (comma / pipe joined), for parity tests and logs. */
     fun params(): Map<String, String> =
@@ -105,16 +122,29 @@ data class AskQuery(
             if (filters.isNotEmpty()) put("Filters", filters.joinToString(","))
             if (officialRatings.isNotEmpty()) put("OfficialRatings", officialRatings.joinToString("|"))
             minCommunityRating?.let { put("MinCommunityRating", AskParse.num(it)) }
+            if (personIds.isNotEmpty()) put("PersonIds", personIds.joinToString(","))
+            if (personTypes.isNotEmpty()) put("PersonTypes", personTypes.joinToString(","))
         }
 }
 
-/** The slice of an item the client-side checks need. */
+/** The slice of an item the client-side checks (and the refine chips) need. */
 data class AskItem(
     /** "Movie", "Series", ... */
     val type: String?,
     val runTimeTicks: Long?,
     val childCount: Int?,
     val genres: List<String>?,
+    val productionYear: Int? = null,
+    /** null = no user data. */
+    val played: Boolean? = null,
+    val people: List<AskPerson> = emptyList(),
+)
+
+/** A person on an item; [type] = "Director", "Actor", ... */
+data class AskPerson(
+    val id: String,
+    val name: String,
+    val type: String,
 )
 
 data class AskPicks<T>(
@@ -170,6 +200,78 @@ object AskParse {
             Mood(Regex("""\b(?:family)\b"""), listOf("Family", "Kids"), "Family"),
         )
 
+    /** Moods that can be negated ("not scary" = no Horror). Others stay unsupported: "not sad" would drop every drama. */
+    private val INVERTIBLE =
+        setOf("Horror", "Animation", "Comedy", "Thriller", "Romance", "Action", "Sci-fi", "Mystery", "Crime", "Documentary", "War", "Western", "Fantasy", "Adventure", "Music", "History")
+
+    private fun lcSet(xs: List<String>) = xs.map { it.lowercase() }.toSet()
+
+    /** Case-insensitive order, ordinal on the lower-cased strings (the same on the web and in the server's Python port). */
+    private fun ciSort(xs: List<String>) = xs.sortedWith { a, b -> a.lowercase().compareTo(b.lowercase()) }
+
+    /**
+     * The label for a genre list (chip contract v1, C3; ~/ai/plans/jellytip-chat-search.md 3a), so ids never collide:
+     *  1. the genres are one mood's set (any case): that mood's label;
+     *  2. else exactly the union of 2+ moods' sets: those moods (each mood inside the genres, in MOODS order, kept when it
+     *     adds a genre not yet covered), labels sorted and joined " or ";
+     *  3. else the genres themselves, sorted and joined " or ".
+     */
+    fun moodLabel(genres: List<String>): String {
+        val set = lcSet(genres)
+        val key = set.sorted().joinToString("|")
+        MOODS.firstOrNull { lcSet(it.genres).sorted().joinToString("|") == key }?.let { return it.label }
+        val covered = HashSet<String>()
+        val kept = mutableListOf<String>()
+        for (m in MOODS) {
+            val gs = m.genres.map { it.lowercase() }.distinct()
+            if (!gs.all { it in set } || gs.all { it in covered }) continue
+            covered.addAll(gs)
+            kept.add(m.label)
+        }
+        if (kept.size >= 2 && covered.size == set.size) return ciSort(kept).joinToString(" or ")
+        return ciSort(genres.associateBy { it.lowercase() }.values.toList()).joinToString(" or ")
+    }
+
+    /** The mood table (label + genres, in order), as in the chip contract's golden file. */
+    val MOOD_TABLE: List<Pair<String, List<String>>> get() = MOODS.map { it.label to it.genres }
+
+    /**
+     * The one way to turn filter data into a chip (id + label): for chips that don't come from the parsed text (refine
+     * options, and a query produced elsewhere, e.g. an LLM, as a list of ChipData). The parser keeps its own labels.
+     */
+    fun chipFor(d: ChipData): AskChip =
+        when (d) {
+            is ChipData.Genre -> moodLabel(d.genres).let { AskChip("genre:$it", it, d) }
+            is ChipData.NotGenre -> moodLabel(d.genres).let { AskChip("notgenre:$it", "no ${it.lowercase()}", d) }
+            is ChipData.Kind -> AskChip("kind:${d.kind}", if (d.kind == "Movie") "movies" else "shows", d)
+            is ChipData.MaxRuntime -> AskChip("maxrt:${d.min}", "under ${fmtMin(d.min)}", d)
+            is ChipData.MinRuntime -> AskChip("minrt:${d.min}", "over ${fmtMin(d.min)}", d)
+            is ChipData.Years ->
+                AskChip(
+                    "years:${d.from}-${d.to}",
+                    if (d.from == d.to) "${d.from}" else if (d.to - d.from == 9 && d.from % 10 == 0) "${d.from}s" else "${d.from}-${d.to}",
+                    d,
+                )
+            ChipData.Unplayed -> AskChip("unplayed", "unwatched", d)
+            ChipData.Played -> AskChip("played", "already watched", d)
+            is ChipData.Kids -> AskChip("kids", "for kids (rated G, PG)", d)
+            is ChipData.MinRating -> AskChip("minrating:${num(d.value)}", "rated ${num(d.value)}+", d)
+            is ChipData.MaxSeasons -> AskChip("maxseasons:${d.n}", if (d.n == 1) "1 season" else "up to ${d.n} seasons", d)
+            is ChipData.Person -> AskChip("person:${d.id}", if (d.role == "Director") "directed by ${d.name}" else "with ${d.name}", d)
+        }
+
+    /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
+    fun chipsFromData(list: List<ChipData>): List<AskChip> = list.map { chipFor(it) }.distinctBy { it.id }
+
+    /**
+     * The kids trigger (shared with the server and the web: kids-trigger-v1.json, t5q askchat 0a373fd; ported verbatim,
+     * AskParseTest asserts it equals the fixture). Case-insensitive search over the raw text. A kids chip made only by a
+     * weak phrase (works for all / everyone, all ages, whole family) is dropped unless this matches too.
+     */
+    const val KIDS_TRIGGER_PATTERN = """\b(?:(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:an?|my|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds?|me and (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:kids?|children|toddler|grandkids?) and (?:i|me)|for (?:(?:the )?(?:kids|family|children)|(?:my|our) (?:family|little ones|kids?|children|toddler|grandkids?|(?:son|daughter)(?!-in-law)))|(?:kids|children) are watching|(?:my|our|the) (?:kids|children) are here|(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds? (?:is|are) watching|family (?:movie|night|film))\b"""
+    val KIDS_TRIGGER = Regex(KIDS_TRIGGER_PATTERN, RegexOption.IGNORE_CASE)
+    private val WEAK_KIDS = Regex("""^(?:(?:that )?(?:would |will |can )?works? for |all ages|whole family)""")
+
     private val DECADE_WORDS =
         mapOf(
             "twenties" to 1920,
@@ -206,7 +308,15 @@ object AskParse {
     ): Int = (if (unit.startsWith("h")) Math.round(n * 60) else Math.round(n)).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt() // absurd numbers never wrap negative
 
     private const val UNIT = "(min(?:ute)?s?|mins?|m|hours?|hrs?|hr|h)"
-    private val NEG = Regex("""\b(?:not|no|non[- ]?|without|except|excluding|nothing|anything but|but not)\s+(?:(?:too|very|so|really)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*""")
+    // The negated word may follow an article ("not a scary movie", "nothing that's scary"); group 2 = an "or" / "nor" list after it
+    private val NEG =
+        Regex(
+            """\b((?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:(?:a|an|any|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)((?:\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?[a-z][a-z0-9'-]*)*)""",
+        )
+    private val NEG_LINK = Regex("""^\s*,?\s+(?:or|nor)\s+(?:no\s+|not\s+)?(?:(?:too|very|so|really|at all)\s+)?(?:(?:a|an|any|anything|the|my|that'?s|that is)\s+)?([a-z][a-z0-9'-]*)""")
+    private val LINK_LEAD = Regex("""^\s*,?\s*""")
+    private val NEG_WORD = Regex("""[a-z][a-z0-9'-]*$""")
+    private val NEG_FOR = Regex("""\bfor\s""")
     private val NEG_KEEP1 = Regex("""^(?:not|no)\s+(?:more than|seen|watched|played)\b""")
     private val NEG_KEEP2 = Regex("""^no more than\b""")
     private val NEG_KEEP3 = Regex("""^(?:not|no)\s+(?:seen|watched|played)\b""")
@@ -223,6 +333,8 @@ object AskParse {
         val ignored = mutableListOf<String>()
         var curPos = 0
         var curSrc = ""
+        // Set when a kids phrase other than a weak one made the kids chip
+        var kidsStrong = false
 
         fun add(
             id: String,
@@ -246,15 +358,47 @@ object AskParse {
                 }
         }
 
-        // Negatives are not supported: left out of the reading (never inverted into a filter) and reported
+        // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out; the
+        // negation carries through an "or" / "nor" list ("nothing scary or animated"), never through "and" ("not scary and
+        // funny" wants funny); anything else ("not too long", "not for kids", "not sad") is left out (never guessed) and reported
+        fun negMood(w: String) = MOODS.firstOrNull { it.label in INVERTIBLE && it.re.containsMatchIn(" $w ") }
         val whole = t
         t =
             NEG.replace(whole) { m ->
-                val from = whole.substring(m.range.first)
+                val head = m.groupValues[1]
+                val chain = m.groupValues[2]
+                val off = m.range.first
+                val from = whole.substring(off)
                 // Phrases that are supported and are not negations of a filter
                 if (NEG_KEEP1.containsMatchIn(from) || NEG_KEEP2.containsMatchIn(from) || NEG_KEEP3.containsMatchIn(from)) return@replace m.value
-                ignored.add(clean(m.value))
-                if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives like 'not scary' aren't supported yet.")
+                fun unsupported(words: String) {
+                    ignored.add(clean(words))
+                    if (notes.none { it.startsWith("Negatives") }) notes.add("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.")
+                }
+                val word = NEG_WORD.find(head)?.value.orEmpty()
+                val mood = if (NEG_FOR.containsMatchIn(head)) null else negMood(word)
+                if (mood != null) {
+                    curPos = off
+                    curSrc = clean(head)
+                    add("notgenre:${mood.label}", "no ${mood.label.lowercase()}", ChipData.NotGenre(mood.genres))
+                } else {
+                    unsupported(head)
+                }
+                // "not X or Y" is neither: every item of the or-list is negated too; moods leave their genres out, the rest is
+                // left out (never read back as a positive filter)
+                var used = 0
+                while (true) {
+                    val cm = NEG_LINK.find(chain.substring(used)) ?: break
+                    val md = negMood(cm.groupValues[1])
+                    if (md != null) {
+                        curPos = off + head.length + used
+                        curSrc = clean(cm.value)
+                        add("notgenre:${md.label}", "no ${md.label.lowercase()}", ChipData.NotGenre(md.genres))
+                    } else {
+                        unsupported(cm.value.replace(LINK_LEAD, ""))
+                    }
+                    used += cm.value.length
+                }
                 " ".repeat(m.value.length)
             }
 
@@ -283,7 +427,12 @@ object AskParse {
         take(Regex("""\b(?:rewatch|re-watch|seen before|watched before|already seen|already watched)\b""")) { add("played", "already watched", ChipData.Played) }
 
         // ----- kids -----
-        take(Regex("""\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly)\b""")) {
+        take(
+            Regex(
+                """\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b""",
+            ),
+        ) {
+            if (!WEAK_KIDS.containsMatchIn(curSrc)) kidsStrong = true
             add("kids", "for kids (rated G, PG)", ChipData.Kids(KIDS_RATINGS, KIDS_GENRES))
         }
 
@@ -361,7 +510,14 @@ object AskParse {
             ignored.add(drop.src.ifEmpty { drop.label })
             notes.add("$what contradict each other: kept “${keep.label}”, ignored “${drop.src.ifEmpty { drop.label }}”.")
         }
+        // "works for everyone" / "all ages" / "whole family" alone is not a kids request (kids-trigger v1): no PG cap
+        val kidsAt = chips.indexOfFirst { it.id == "kids" }
+        if (kidsAt >= 0 && !kidsStrong && !KIDS_TRIGGER.containsMatchIn(raw)) {
+            chips.removeAt(kidsAt)
+            notes.add("Read “works for everyone” / “all ages” as no age limit; say “for the kids” to keep it to kids' ratings.")
+        }
         clash("kind:Movie", "kind:Series", "Movies and shows")
+        for (mood in MOODS) clash("genre:${mood.label}", "notgenre:${mood.label}", "“${mood.label}” and “no ${mood.label.lowercase()}”")
         clash("unplayed", "played", "Unwatched and rewatch")
 
         for (w in clean(t).split(" ")) {
@@ -385,18 +541,32 @@ object AskParse {
 
     private inline fun <reified T : ChipData> List<AskChip>.of(): List<T> = mapNotNull { it.data as? T }
 
+    /** Genres left out by "not ..." chips (lower case). */
+    fun excludedGenres(chips: List<AskChip>): Set<String> = chips.of<ChipData.NotGenre>().flatMap { it.genres }.map { it.lowercase() }.toSet()
+
+    /** The kids rule's genres, minus any left out ("for the kids, nothing animated" = Family or Kids). */
+    fun kidsGenres(chips: List<AskChip>): List<String> {
+        val kids = chips.of<ChipData.Kids>().firstOrNull() ?: return emptyList()
+        val out = excludedGenres(chips)
+        return kids.genres.filter { it.lowercase() !in out }
+    }
+
     /** Jellyfin Items params for the chips. Runtime, season counts and "each mood matches" are checked client-side (see pickFrom). */
     fun buildQuery(
         chips: List<AskChip>,
         shuffle: Boolean = false,
         limit: Int? = null,
+        /** Also ask for genres: the screen offers refine chips drawn from what was found. */
+        refine: Boolean = false,
     ): AskQuery {
         val kinds = chips.of<ChipData.Kind>().map { it.kind }
         val genres = LinkedHashSet<String>()
         for (c in chips.of<ChipData.Genre>()) genres.addAll(c.genres)
         val kids = chips.of<ChipData.Kids>().firstOrNull()
-        // "for kids" adds Family/Animation only when no mood already chose genres
-        if (kids != null && genres.isEmpty()) genres.addAll(kids.genres)
+        // "for kids" adds Family/Animation only when no mood already chose genres; genres left out by "not ..." never go in
+        if (kids != null && genres.isEmpty()) genres.addAll(kidsGenres(chips))
+        val out = excludedGenres(chips)
+        genres.removeAll { it.lowercase() in out }
         val years = sortedSetOf<Int>()
         for (c in chips.of<ChipData.Years>()) for (y in c.from..c.to) years.add(y)
         val flags = mutableListOf<String>()
@@ -410,12 +580,14 @@ object AskParse {
             sortOrder = if (shuffle) null else listOf("Descending", "Ascending"),
             limit = limit ?: fetchLimit(chips),
             // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 }, "ChildCount".takeIf { wantSeasons }),
+            fields = listOfNotNull("PrimaryImageAspectRatio", "Genres".takeIf { chips.of<ChipData.Genre>().size > 1 || out.isNotEmpty() || refine }, "ChildCount".takeIf { wantSeasons }),
             genres = genres.toList(),
             years = years.toList(),
             filters = flags,
             officialRatings = kids?.ratings.orEmpty(),
             minCommunityRating = minRating.takeIf { it > 0 },
+            personIds = chips.of<ChipData.Person>().map { it.id },
+            personTypes = chips.of<ChipData.Person>().map { it.role }.distinct(),
         )
     }
 
@@ -424,7 +596,7 @@ object AskParse {
 
     /** True when some of the chips can only be checked over the fetched page. */
     fun needsClientFilter(chips: List<AskChip>): Boolean =
-        chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size + chips.of<ChipData.MaxSeasons>().size > 0 ||
+        chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size + chips.of<ChipData.MaxSeasons>().size + chips.of<ChipData.NotGenre>().size > 0 ||
             chips.of<ChipData.Genre>().size > 1
 
     private fun runtimeMin(it: AskItem): Double? = it.runTimeTicks?.takeIf { t -> t != 0L }?.let { t -> t / 600_000_000.0 }
@@ -439,6 +611,7 @@ object AskParse {
         val minRt = (chips.of<ChipData.MinRuntime>().map { it.min.toDouble() } + 0.0).max()
         val maxSeasons = chips.of<ChipData.MaxSeasons>().minOfOrNull { it.n }
         val moods = chips.of<ChipData.Genre>()
+        val out = excludedGenres(chips)
         return items.filter { raw ->
             val it = view(raw)
             if (maxRt != Double.POSITIVE_INFINITY || minRt > 0) {
@@ -449,6 +622,8 @@ object AskParse {
                 if (it.type != "Series" || it.childCount == null || it.childCount > maxSeasons) return@filter false
             }
             val have = it.genres.orEmpty().map { g -> g.lowercase() }.toSet()
+            // A title in a left-out genre is out (no genres known = kept: nothing to say it is one)
+            if (have.any { g -> g in out }) return@filter false
             moods.all { c -> c.genres.any { g -> g.lowercase() in have } }
         }
     }
@@ -470,6 +645,7 @@ object AskParse {
                 "length".takeIf { chips.of<ChipData.MaxRuntime>().size + chips.of<ChipData.MinRuntime>().size > 0 },
                 "season".takeIf { chips.of<ChipData.MaxSeasons>().isNotEmpty() },
                 "all-moods".takeIf { chips.of<ChipData.Genre>().size > 1 },
+                "left-out-genre".takeIf { chips.of<ChipData.NotGenre>().isNotEmpty() },
             )
         var note =
             if (!partial) {
@@ -491,13 +667,110 @@ object AskParse {
         val notes = mutableListOf<String>()
         chips.of<ChipData.Kids>().firstOrNull()?.let { kids ->
             val moods = chips.of<ChipData.Genre>().isNotEmpty()
-            notes.add("For kids: rated ${kids.ratings.joinToString(", ")}${if (moods) "" else ", genres ${kids.genres.joinToString(" or ")}"}. Unrated titles are left out.")
+            val kg = kidsGenres(chips)
+            notes.add("For kids: rated ${kids.ratings.joinToString(", ")}${if (moods || kg.isEmpty()) "" else ", genres ${kg.joinToString(" or ")}"}. Unrated titles are left out.")
         }
+        val left = chips.of<ChipData.NotGenre>().flatMap { it.genres }
+        if (left.isNotEmpty()) notes.add("Left out: titles in ${left.distinct().joinToString(", ")} (titles with no genres listed can't be checked and are kept).")
         if (chips.of<ChipData.MaxRuntime>().isNotEmpty() || chips.of<ChipData.MinRuntime>().isNotEmpty()) {
             notes.add("Length: shows are judged by episode length; titles without a known length are left out.")
         }
         if (chips.of<ChipData.Genre>().size > 1) notes.add("Several moods: a title must match each one (any of that mood's genres).")
         if (chips.of<ChipData.MinRating>().isNotEmpty()) notes.add("Rating: titles without a community rating are left out.")
         return notes
+    }
+
+    // ---------- refine chips (web refineOptions) ----------
+
+    const val REFINE_MAX = 8
+    const val REFINE_MIN = 3
+    const val PEOPLE_MIN = 2
+
+    /** JavaScript's default localeCompare order (ICU root collation). */
+    private val COLLATOR = java.text.Collator.getInstance(java.util.Locale.ROOT)
+
+    /**
+     * Ways to narrow what was found, from the titles themselves ([kept]: the fetched page after the client checks; [picks]:
+     * the shown picks with their people): directors / actors shared by several picks, the commonest genres to keep or leave
+     * out, decades, movies vs shows, "under 2 h", unwatched. Never one already applied, nothing that matches none or all.
+     * Chips come from [chipFor], so a tapped one is the same filter the parser (or an LLM) would make.
+     */
+    fun <T> refineOptions(
+        kept: List<T>,
+        picks: List<T>,
+        chips: List<AskChip>,
+        view: (T) -> AskItem,
+    ): List<AskChip> {
+        val have = chips.map { it.id }.toSet()
+        val k = kept.map(view)
+        val n = k.size
+        val out = mutableListOf<AskChip>()
+
+        fun offer(d: ChipData) {
+            val c = chipFor(d)
+            if (c.id !in have && out.none { it.id == c.id }) out.add(c)
+        }
+
+        fun splits(count: Int) = count >= REFINE_MIN && count < n
+
+        // People shared by several of the picks (directors first)
+        class P(
+            val id: String,
+            val name: String,
+            var role: String,
+            var count: Int,
+            val first: Int,
+        )
+        val people = LinkedHashMap<String, P>()
+        picks.map(view).forEachIndexed { i, it ->
+            val seen = HashSet<String>()
+            for (p in it.people) {
+                if (p.id.isEmpty() || p.name.isEmpty() || (p.type != "Director" && p.type != "Actor") || !seen.add(p.id)) continue
+                val cur = people.getOrPut(p.id) { P(p.id, p.name, p.type, 0, i) }
+                if (p.type == "Director") cur.role = "Director"
+                cur.count++
+            }
+        }
+        people.values
+            .filter { it.count >= PEOPLE_MIN && it.count < picks.size }
+            .sortedWith(compareBy<P> { if (it.role == "Director") 0 else 1 }.thenByDescending { it.count }.thenBy { it.first })
+            .take(3)
+            .forEach { offer(ChipData.Person(it.id, it.name, it.role)) }
+
+        // Genres: the commonest to keep, and to leave out
+        val left = excludedGenres(chips)
+        val counts = LinkedHashMap<String, Int>()
+        for (it in k) for (g in it.genres.orEmpty().toSet()) counts[g] = (counts[g] ?: 0) + 1
+        val ranked =
+            counts.entries
+                .filter { (g, c) -> g.lowercase() !in left && splits(c) }
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenComparator { a, b -> COLLATOR.compare(a.key, b.key) })
+        ranked.take(3).forEach { offer(ChipData.Genre(listOf(it.key))) }
+        ranked.take(2).forEach { offer(ChipData.NotGenre(listOf(it.key))) }
+
+        // Decades
+        if (chips.of<ChipData.Years>().isEmpty()) {
+            val dec = LinkedHashMap<Int, Int>()
+            for (it in k) it.productionYear?.takeIf { y -> y != 0 }?.let { y -> (y / 10 * 10).let { d -> dec[d] = (dec[d] ?: 0) + 1 } }
+            dec.entries
+                .filter { splits(it.value) }
+                .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
+                .take(2)
+                .forEach { offer(ChipData.Years(it.key, it.key + 9)) }
+        }
+        // Movies vs shows
+        if (chips.of<ChipData.Kind>().isEmpty() && chips.of<ChipData.MaxSeasons>().isEmpty()) {
+            if (splits(k.count { it.type == "Movie" })) offer(ChipData.Kind("Movie"))
+            if (splits(k.count { it.type == "Series" })) offer(ChipData.Kind("Series"))
+        }
+        // Length
+        if (chips.of<ChipData.MaxRuntime>().isEmpty() && chips.of<ChipData.MinRuntime>().isEmpty()) {
+            if (splits(k.count { (runtimeMin(it) ?: Double.POSITIVE_INFINITY) <= 120 })) offer(ChipData.MaxRuntime(120))
+        }
+        // Unwatched (user data present and not played)
+        if (chips.of<ChipData.Unplayed>().isEmpty() && chips.of<ChipData.Played>().isEmpty()) {
+            if (splits(k.count { it.played == false })) offer(ChipData.Unplayed)
+        }
+        return out.take(REFINE_MAX)
     }
 }

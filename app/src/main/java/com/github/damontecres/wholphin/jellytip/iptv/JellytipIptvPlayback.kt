@@ -274,6 +274,12 @@ class JellytipIptvPlayback
                     }
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
+                        // A resume on a direct stream ExoPlayer can't seek (it started at 0): the remux, from the saved position
+                        val p = player
+                        if (!isRemux && p != null && SkipPolicy.resumeViaRemux(film(t), p.isCurrentMediaItemSeekable, remuxAsked, openStartMs)) {
+                            skipViaRemux(t, openStartMs, "resume via remux")
+                            return
+                        }
                         setState(IptvPlayState.Playing(t), "ready")
                         pendingRemuxSeekMs = null
                         if (recTarget == t) {
@@ -393,6 +399,16 @@ class JellytipIptvPlayback
                         .setAllowCrossProtocolRedirects(true)
                         .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
                         .setReadTimeoutMs(READ_TIMEOUT_MS)
+                // The server's remux sends nothing until ffmpeg has its first bytes: a seek on an mkv with no Cues took 23-38 s
+                // (Celebrity Traitors S2E2, 22-Nov); the 15 s read timeout would cut every skip and loop. Remux items only.
+                val remuxHttp =
+                    DefaultHttpDataSource
+                        .Factory()
+                        .setUserAgent("Jellytip")
+                        .setAllowCrossProtocolRedirects(true)
+                        .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+                        .setReadTimeoutMs(REMUX_READ_TIMEOUT_MS)
+                remuxSources = DefaultMediaSourceFactory(remuxHttp, extractors)
                 // Live buffer profile (Low = the old small buffers: a zap shows the new channel in about a second)
                 val load =
                     DefaultLoadControl
@@ -467,6 +483,15 @@ class JellytipIptvPlayback
         @Volatile
         private var pendingRemuxSeekMs: Long? = null
 
+        /** Media sources for the server's remux (a long read timeout: see [buildPlayer]). */
+        private var remuxSources: DefaultMediaSourceFactory? = null
+
+        /** Where the current open meant to start (ms): a direct stream that turns out unseekable resumes there through the remux. */
+        private var openStartMs = 0L
+
+        /** The item's length when a skip began (the stopped player can't say), for saving progress mid-skip. */
+        private var skipDurMs = 0L
+
         /**
          * The recording being played (its times and state), set by the page: a recording's length comes from it when the
          * file can't say (raw TS has no index; an in-progress one grows), so progress is never saved against half of it.
@@ -487,16 +512,53 @@ class JellytipIptvPlayback
         /** Seek a film / episode; a remux reopens from [ms] (the server starts the conversion there). */
         fun seekTo(ms: Long) {
             val t = _state.value.target ?: return
-            if (isRemux) {
-                JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
-                _note.value = "Converting…"
-                pendingRemuxSeekMs = ms
-                // The old conversion must not report READY (and clear the pending seek) while the new one starts
-                stopPlayer()
-                launchOpen(t, "remux seek", remux = true, seekMs = ms)
-            } else {
-                player?.seekTo(ms)
+            val p = player
+            when {
+                isRemux -> skipViaRemux(t, ms, "remux seek")
+                pendingRemuxSeekMs != null -> skipViaRemux(t, ms, "skip retarget") // (a press while a skip is under way: one new target)
+                p != null && p.isCurrentMediaItemSeekable -> p.seekTo(ms)
+                // A film / episode ExoPlayer can't seek (an mkv with no Cues, Celebrity Traitors S2E2 22-Nov): the server's
+                // conversion starts at [ms] (ffmpeg seeks the file itself, ~10 s)
+                SkipPolicy.viaRemux(film(t), false, p?.isCurrentMediaItemSeekable == true, remuxAsked) -> skipViaRemux(t, ms, "skip via remux")
+                else -> p?.seekTo(ms)
             }
+        }
+
+        /** A seek can work here: the player can, the stream is the remux, or it's a film / episode the remux can start anywhere. */
+        fun canSkip(): Boolean {
+            val t = _state.value.target ?: return false
+            val p = player ?: return false
+            // Only while this target plays (or a skip is under way): not on Failed / Full, not while the previous stream is still up
+            if (!(_state.value is IptvPlayState.Playing && loadedTarget == t) && pendingRemuxSeekMs == null) return false
+            return p.isCurrentMediaItemSeekable || isRemux || SkipPolicy.viaRemux(film(t), false, false, remuxAsked)
+        }
+
+        private fun film(t: IptvTarget) = t.vodId != null || t.episodeId != null
+
+        /**
+         * Reopen through the remux at [ms] with the current frame held ("Skipping to 31:20…"): no stop / clear, so the picture
+         * stays; the old stream's late READY / errors are ignored (loadedTarget cleared) and the server drops its provider
+         * connection when the new one is asked for. A second seek meanwhile counts from [ms] ([pendingRemuxSeekMs]).
+         */
+        private fun skipViaRemux(
+            t: IptvTarget,
+            ms: Long,
+            why: String,
+        ) {
+            JellytipTrace.player("iptv", "$why ${t.channelId} to ${ms / 1000} s (frame held)")
+            durationMs().takeIf { it > 0 }?.let { skipDurMs = it }
+            _note.value = "Skipping to ${IptvPlayControls.clock(ms)}…"
+            pendingRemuxSeekMs = ms
+            remuxAsked = true
+            recTimer?.cancel() // (a pending recovery reopen must not undo the skip)
+            loadedTarget = null
+            // stop() without clearMediaItems(): the old stream's connection closes (a provider-direct one too, which the server
+            // can't cut) and nothing replays it, while the surface keeps its last frame
+            player?.stop()
+            // Mid-recovery (a skip's remux open failed and is backing off): the reopen counts as the recovery's own, so the
+            // machine sees Opened then Recovered and doesn't leave "Reconnecting…" over a playing picture
+            val recovering = recTarget == t && rec.phase in setOf(StreamRecovery.Phase.RECONNECTING, StreamRecovery.Phase.SWITCHED)
+            launchOpen(t, why, recovering = recovering, remux = true, seekMs = ms)
         }
 
         private fun resetRecovery(target: IptvTarget) {
@@ -510,6 +572,7 @@ class JellytipIptvPlayback
             remuxStartMs = 0L
             remuxDurationMs = null
             pendingRemuxSeekMs = null
+            skipDurMs = 0L
             _note.value = null
         }
 
@@ -673,6 +736,7 @@ class JellytipIptvPlayback
             seekMs: Long? = null,
         ) {
             val startMs = seekMs ?: target.resumeMs
+            openStartMs = startMs
             job?.cancel()
             okJob?.cancel()
             setState(IptvPlayState.Opening(target), reason)
@@ -714,7 +778,12 @@ class JellytipIptvPlayback
                             remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null
                             if (remux && !r.answer.remux) JellytipTrace.player("iptv", "remux asked but the server sent the file as is (${target.channelId})")
                             // A remux already begins at the asked position
-                            if (startMs > 0 && !r.answer.remux) p.setMediaItem(item, startMs) else p.setMediaItem(item)
+                            val rs = remuxSources
+                            when {
+                                r.answer.remux && rs != null -> p.setMediaSource(rs.createMediaSource(item))
+                                startMs > 0 && !r.answer.remux -> p.setMediaItem(item, startMs)
+                                else -> p.setMediaItem(item)
+                            }
                             p.playWhenReady = true
                             p.prepare()
                             if (recovering && recTarget?.channelId == target.channelId) dispatch(StreamRecovery.Event.Opened)
@@ -845,6 +914,13 @@ class JellytipIptvPlayback
         fun saveProgress(target: IptvTarget) {
             val item = target.progressItem ?: return
             player ?: return
+            // Leaving mid-skip ("Skipping to 31:20…"): the target is where the person asked to be
+            val pend = pendingRemuxSeekMs
+            if (pend != null && _state.value.target == target && skipDurMs > 0) {
+                val series = target.seriesId?.takeIf { target.episodeId != null }
+                scope.launch { service.saveProgress(item, pend / 1000.0, skipDurMs / 1000.0, series) }
+                return
+            }
             // Only from a stream that is really playing: while recovering / failed the player holds nothing (position 0)
             // and would wipe the resume point
             if (_state.value !is IptvPlayState.Playing || _state.value.target != target || loadedTarget != target) return
@@ -906,5 +982,30 @@ class JellytipIptvPlayback
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000
+            private const val REMUX_READ_TIMEOUT_MS = 75_000
         }
     }
+
+/** When a seek / resume goes through the server remux (pure; tested). */
+object SkipPolicy {
+    /** Resumes this close to the start just play from the top. */
+    const val RESUME_MIN_MS = 5_000L
+
+    /**
+     * A film / episode whose stream the player can't seek, not already the remux, and the remux not already asked for (a server
+     * that sent the file as is anyway would otherwise be asked again on every key / READY: an endless reopen loop).
+     */
+    fun viaRemux(
+        film: Boolean,
+        remux: Boolean,
+        seekable: Boolean,
+        remuxAsked: Boolean,
+    ): Boolean = film && !remux && !seekable && !remuxAsked
+
+    fun resumeViaRemux(
+        film: Boolean,
+        seekable: Boolean,
+        remuxAsked: Boolean,
+        startMs: Long,
+    ): Boolean = viaRemux(film, false, seekable, remuxAsked) && startMs >= RESUME_MIN_MS
+}

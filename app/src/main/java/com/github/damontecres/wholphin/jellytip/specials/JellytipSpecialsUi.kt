@@ -296,7 +296,8 @@ private fun TrailerBreakRow(
         modifier =
             focusModifier
                 .onFocusChanged { active = it.hasFocus }
-                .padding(horizontal = SpecialTokens.SPACING)
+                // (start on the row line: the same 8 dp inset as a row title, not the 10 dp tile gap)
+                .padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset, end = SpecialTokens.SPACING)
                 .fillMaxWidth()
                 .height(SpecialTokens.BAND_H)
                 .background(BAND_BG, RoundedCornerShape(8.dp))
@@ -439,6 +440,7 @@ private fun PersonSpotlightRow(
                                 fontFamily = JellytipFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+                                lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX) * 1.2f,
                                 style = TextStyle(shadow = SoftShadow),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -1455,6 +1457,8 @@ internal fun Caption(
         fontFamily = JellytipFontFamily,
         fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
         fontSize = sizes.sp(px),
+        // A caption that can wrap (titled-image title, reason, quote) uses 1.2x; a one-line caption keeps its height
+        lineHeight = if (maxLines > 1) sizes.sp(px) * 1.2f else androidx.compose.ui.unit.TextUnit.Unspecified,
         style = TextStyle(shadow = SoftShadow),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,

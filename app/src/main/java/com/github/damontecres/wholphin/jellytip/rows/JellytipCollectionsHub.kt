@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -249,6 +249,30 @@ fun JellytipCollectionsHubPage(
         failed = got == null
         value = got.orEmpty()
     }
+    JellytipCollectionsHubContent(
+        sections = sections,
+        failed = failed,
+        onJourneys = {
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
+        },
+        onOpen = { c ->
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(c.id, c.title), "collections hub OK")
+        },
+        modifier = modifier,
+    )
+}
+
+/** The hub's layout with its data and actions passed in (the loader above keeps the page's signature; shots draw this). */
+@Composable
+internal fun JellytipCollectionsHubContent(
+    sections: List<HubSection>?,
+    failed: Boolean,
+    onJourneys: () -> Unit,
+    onOpen: (HubCollection) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var selected by remember { mutableIntStateOf(0) }
     val firstChip = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -261,7 +285,8 @@ fun JellytipCollectionsHubPage(
             firstChip.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
+    // Title, chips, section row and grid all carry their own 8 dp: the extra RowPageStart puts them on the 96 dp left line
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Collections", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, modifier = Modifier.padding(start = 8.dp))
             // t5n (21-Nov): web 7cc13de9 "Start a journey", beside the title so it shows even when the hub is empty or failed
@@ -273,10 +298,7 @@ fun JellytipCollectionsHubPage(
                     journeyChip.tryRequestFocus()
                 }
             }
-            HubChip("Start a journey  ›", selected = false, modifier = Modifier.focusRequester(journeyChip), onClick = {
-                JellytipTrailerControl.stop()
-                viewModel.navigationManager.navigateTo(Destination.JellytipJourneys, "collections hub -> journeys")
-            })
+            HubChip("Start a journey  ›", selected = false, modifier = Modifier.focusRequester(journeyChip), onClick = onJourneys)
         }
         when {
             list == null -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 220.dp, tileH = 124.dp, rows = 2, perRow = 4, modifier = Modifier.padding(8.dp))
@@ -323,14 +345,13 @@ fun JellytipCollectionsHubPage(
                     columns = GridCells.Adaptive(220.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(),
                 ) {
-                    items(section.items, key = { "${section.key}:${it.id}" }) { c ->
-                        HubCard(c) {
-                            JellytipTrailerControl.stop()
-                            viewModel.navigationManager.navigateTo(Destination.JellytipHubCollection(c.id, c.title), "collections hub OK")
-                        }
+                    items(section.items.size, key = { "${section.key}:${section.items[it].id}" }) { i ->
+                        val c = section.items[i]
+                        // "hub-tile0" = the first card (left line); every card is tagged so the right edge can be measured
+                        HubCard(c, modifier = Modifier.testTag("hub-tile$i")) { onOpen(c) }
                     }
                 }
             }
@@ -369,6 +390,7 @@ internal fun HubChip(
 @Composable
 private fun HubCard(
     c: HubCollection,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val images = com.github.damontecres.wholphin.ui.LocalImageUrlService.current
@@ -382,7 +404,7 @@ private fun HubCard(
                     ?: c.personId?.let { images.getItemImageUrl(itemId = it, imageType = org.jellyfin.sdk.model.api.ImageType.PRIMARY, fillWidth = 220.dp.roundToPx(), tag = c.personImageTag) }
             }
         }
-    SpecialCard(width = 220.dp, height = 124.dp, onClick = onClick, onLongClick = onClick, modifier = Modifier) {
+    SpecialCard(width = 220.dp, height = 124.dp, onClick = onClick, onLongClick = onClick, modifier = modifier) {
         var failed by remember(art) { mutableStateOf(false) }
         if (art != null && !failed) {
             AsyncImage(
@@ -424,6 +446,50 @@ fun JellytipHubCollectionPage(
         value = if (r == null) null else viewModel.rows.items(r) ?: emptyList()
     }
     val isAdmin by rememberIsJellytipAdmin()
+    JellytipHubCollectionContent(
+        id = id,
+        title = title,
+        r = r,
+        library = library,
+        failed = failed,
+        isAdmin = isAdmin,
+        onOpenLib = { item ->
+            JellytipTrailerControl.stop()
+            viewModel.navigationManager.navigateTo(item.destination(), "hub collection OK")
+        },
+        onOpenVod = { item -> viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(item.id, item.title), "hub collection IPTV OK") },
+        onOpenMissing = { m ->
+            viewModel.navigationManager.navigateTo(
+                Destination.JellytipDiscover(
+                    com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
+                        tmdbId = m.tmdbId,
+                        mediaType = if (r?.mediaType == "tv") "tv" else "movie",
+                        title = m.title,
+                        year = m.year,
+                        posterUrl = m.poster,
+                    ),
+                ),
+                "hub collection missing OK",
+            )
+        },
+        modifier = modifier,
+    )
+}
+
+/** The collection page's layout with its data and actions passed in (extract-only: the loader above keeps the page's signature; shots draw this). */
+@Composable
+internal fun JellytipHubCollectionContent(
+    id: String,
+    title: String,
+    r: JellytipServerRow?,
+    library: List<BaseItem>?,
+    failed: Boolean,
+    isAdmin: Boolean,
+    onOpenLib: (BaseItem) -> Unit,
+    onOpenVod: (com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem) -> Unit,
+    onOpenMissing: (JellytipServerRow.Missing) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val tiles =
         remember(r, library) {
             if (r == null || library == null) {
@@ -449,7 +515,7 @@ fun JellytipHubCollectionPage(
             first.tryRequestFocus()
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(top = 24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = modifier.fillMaxSize().padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowPageStart, end = com.github.damontecres.wholphin.jellytip.JellytipLayout.PageEnd, top = 24.dp)) {
         ItemRowTitle(r?.title?.ifBlank { null } ?: title)
         when {
             tiles == null && !failed -> com.github.damontecres.wholphin.jellytip.JellytipSkeleton(tileW = 100.dp, tileH = 150.dp, rows = 2, perRow = 6, title = false, modifier = Modifier.padding(8.dp))
@@ -466,19 +532,16 @@ fun JellytipHubCollectionPage(
                     columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 48.dp),
                     modifier = Modifier.fillMaxSize().focusGroup().focusRestorer(first),
                 ) {
                     items(tiles.size, key = { tiles[it].key }) { i ->
                         val t = tiles[i]
-                        val m = if (i == 0) Modifier.focusRequester(first) else Modifier
+                        val m = Modifier.testTag("collection-tile$i").then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                         Box {
                             when (t) {
                                 is TrendTile.Lib ->
-                                    PosterCard(t.item, onClick = {
-                                        JellytipTrailerControl.stop()
-                                        viewModel.navigationManager.navigateTo(t.item.destination(), "hub collection OK")
-                                    }, onLongClick = {}, modifier = m)
+                                    PosterCard(t.item, onClick = { onOpenLib(t.item) }, onLongClick = {}, modifier = m)
 
                                 is TrendTile.Vod ->
                                     com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile(
@@ -486,7 +549,7 @@ fun JellytipHubCollectionPage(
                                         width = SpecialTokens.POSTER_W,
                                         height = SpecialTokens.POSTER_H,
                                         poster = true,
-                                        onClick = { viewModel.navigationManager.navigateTo(Destination.JellytipIptvDetails(t.item.id, t.item.title), "hub collection IPTV OK") },
+                                        onClick = { onOpenVod(t.item) },
                                         modifier = m,
                                     )
 
@@ -495,20 +558,7 @@ fun JellytipHubCollectionPage(
                                         SpecialCard(
                                             width = SpecialTokens.POSTER_W,
                                             height = SpecialTokens.POSTER_H,
-                                            onClick = {
-                                                viewModel.navigationManager.navigateTo(
-                                                    Destination.JellytipDiscover(
-                                                        com.github.damontecres.wholphin.jellytip.discover.DiscoverTitle(
-                                                            tmdbId = t.m.tmdbId,
-                                                            mediaType = if (r?.mediaType == "tv") "tv" else "movie",
-                                                            title = t.m.title,
-                                                            year = t.m.year,
-                                                            posterUrl = t.m.poster,
-                                                        ),
-                                                    ),
-                                                    "hub collection missing OK",
-                                                )
-                                            },
+                                            onClick = { onOpenMissing(t.m) },
                                             onLongClick = {},
                                             modifier = m,
                                         ) { MissingTrendArt(t.m) }

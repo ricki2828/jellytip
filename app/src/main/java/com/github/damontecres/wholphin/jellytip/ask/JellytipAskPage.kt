@@ -1,5 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.ask
 
+import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +79,9 @@ import javax.inject.Inject
 /*
  * Ask (web #/ask, 69fc43f6 + f126b5d5): "something funny under 90 minutes" -> removable chips -> up to 24 library picks.
  * Deterministic (AskParse), no LLM, no companion route: one Jellyfin Items call per reading, like the web. Library only:
- * IPTV and requests are not searched here. Entry: "Not sure? Ask" on Search.
+ * IPTV and requests are not searched here. Entry: "Not sure? Ask" on Search. "Narrow it down" (web askchips 3cc845f7) offers
+ * refine chips drawn from what was found: people shared by the picks, genres to keep / leave out, decades, kind, length,
+ * unwatched; a tapped one is a removable chip like the others.
  */
 
 sealed interface AskResult {
@@ -89,6 +93,10 @@ sealed interface AskResult {
 
     data class Done(
         val picks: AskPicks<BaseItem>,
+        /** The fetched titles that pass every check: what the refine chips are drawn from. */
+        val kept: List<BaseItem> = emptyList(),
+        /** The shown picks with their people (a second, small request; empty until it answers or when it fails). */
+        val withPeople: List<BaseItem> = emptyList(),
     ) : AskResult
 }
 
@@ -98,10 +106,23 @@ data class AskState(
     val asked: String = "",
     val reading: AskReading = AskReading(emptyList(), emptyList(), emptyList()),
     val removed: List<String> = emptyList(),
+    /** Refine chips he tapped (after the reading's own; removable like them). */
+    val added: List<AskChip> = emptyList(),
     val shuffle: Boolean = false,
     val result: AskResult = AskResult.Idle,
 ) {
-    val chips: List<AskChip> get() = AskParse.activeChips(reading, removed)
+    val chips: List<AskChip>
+        get() {
+            val read = AskParse.activeChips(reading, removed)
+            return read + added.filter { a -> a.id !in removed && read.none { it.id == a.id } }
+        }
+
+    /** Ways to narrow what was found (empty until results are in). */
+    val refine: List<AskChip>
+        get() {
+            val r = result as? AskResult.Done ?: return emptyList()
+            return AskParse.refineOptions(r.kept, r.withPeople, chips) { it.data.askItem() }
+        }
     val hasAsk: Boolean get() = asked.isNotEmpty()
 }
 
@@ -123,12 +144,19 @@ class JellytipAskViewModel
         fun submit(v: String) {
             val q = v.trim()
             JellytipTrace.log("ask", "ask '$q'")
-            _state.update { it.copy(text = v, asked = q, reading = AskParse.parse(q), removed = emptyList(), shuffle = false) }
+            _state.update { it.copy(text = v, asked = q, reading = AskParse.parse(q), removed = emptyList(), added = emptyList(), shuffle = false) }
             load()
         }
 
         fun remove(id: String) {
             _state.update { it.copy(removed = AskParse.removeChip(it.removed, id)) }
+            load()
+        }
+
+        fun addRefine(c: AskChip) {
+            JellytipTrace.log("ask", "refine + ${c.id}")
+            // Something he removed earlier comes back as asked, not as a no-op
+            _state.update { it.copy(added = it.added + c, removed = it.removed - c.id) }
             load()
         }
 
@@ -159,10 +187,11 @@ class JellytipAskViewModel
                 viewModelScope.launch {
                     val result =
                         try {
-                            val req = AskParse.buildQuery(chips, shuffle = s.shuffle).toGetItemsRequest(user)
+                            val req = AskParse.buildQuery(chips, shuffle = s.shuffle, refine = true).toGetItemsRequest(user)
                             val page = api.itemsApi.getItems(req).content
                             val items = page.items.map { BaseItem(it, false) }
-                            AskResult.Done(AskParse.pickFrom(items, page.totalRecordCount, chips, s.shuffle) { it.data.askItem() })
+                            val picks = AskParse.pickFrom(items, page.totalRecordCount, chips, s.shuffle) { it.data.askItem() }
+                            AskResult.Done(picks, kept = AskParse.filterItems(items, chips) { it.data.askItem() })
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -172,6 +201,28 @@ class JellytipAskViewModel
                     // A different person signed in while this was out: never show them another's picks
                     val stillMine = serverRepository.currentUser?.id == user
                     _state.update { it.copy(result = if (stillMine) result else AskResult.Idle) }
+                    // People for the shown picks only (director / actor refine chips); a failure just means none
+                    val done = result as? AskResult.Done ?: return@launch
+                    if (!stillMine || done.picks.items.size < 2) return@launch
+                    val withPeople =
+                        try {
+                            api.itemsApi
+                                .getItems(
+                                    GetItemsRequest(
+                                        userId = user,
+                                        ids = done.picks.items.map { it.id },
+                                        fields = listOf(ItemFields.PEOPLE),
+                                        limit = done.picks.items.size,
+                                    ),
+                                ).content.items
+                                .map { BaseItem(it, false) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Timber.w(e, "Ask people failed")
+                            return@launch
+                        }
+                    _state.update { st -> if (st.result === done) st.copy(result = done.copy(withPeople = withPeople)) else st }
                 }
         }
 
@@ -296,7 +347,7 @@ fun JellytipAskPage(
                 }
             }
         } else {
-            if (state.reading.chips.isNotEmpty()) {
+            if (chips.isNotEmpty() || state.reading.chips.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
                     itemsIndexed(chips, key = { _, c -> c.id }) { i, c ->
                         AskChipButton("${c.label}  ✕", on = true, modifier = Modifier.focusRequester(chipFocus[i])) {
@@ -346,6 +397,22 @@ fun JellytipAskPage(
                     fontSize = 13.sp,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+            }
+        }
+        val refine = state.refine
+        if (refine.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Narrow it down", color = dim, fontFamily = JellytipFontFamily, fontSize = 13.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
+                    items(refine.size, key = { refine[it].id }) { i ->
+                        val c = refine[i]
+                        AskChipButton("+ ${c.label}", on = false) {
+                            // The tapped chip leaves this row: land on the reading's chips (the new one is last)
+                            refocusChip = chips.size
+                            viewModel.addRefine(c)
+                        }
+                    }
+                }
             }
         }
         if (r is AskResult.Done && r.picks.items.isNotEmpty()) {

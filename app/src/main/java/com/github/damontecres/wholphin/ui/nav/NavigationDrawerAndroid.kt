@@ -67,6 +67,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.DrawerState
@@ -274,6 +275,12 @@ internal val JellytipDrawerAccent = Color(0xFFE2264D)
 internal val DrawerIconPadding = (ListItemDefaults.IconSize - DrawerIconSize) / 2
 internal val DrawerAnimationStiffness = Spring.StiffnessMedium
 
+/** Room kept free at the open drawer's right edge, so a long label or sub-line ends before it (and shows an ellipsis). */
+internal val DrawerItemEndPadding = 16.dp
+
+/** Open drawer: one-line labels end in an ellipsis. Closed rail: clipped as before (the label is hidden there, an ellipsis must not peek out). */
+internal fun drawerTextOverflow(drawerOpen: Boolean): TextOverflow = if (drawerOpen) TextOverflow.Ellipsis else TextOverflow.Clip
+
 @Composable
 internal fun NavigationDrawerScope.NavigationDrawerItem(
     selected: Boolean,
@@ -306,10 +313,12 @@ internal fun NavigationDrawerScope.NavigationDrawerItem(
             NavigationDrawerItemDefaults.ContainerHeightTwoLine
         }
 
+    // The same 16 dp at the end of the headline and the sub-line while the drawer is open
+    val endPad = if (hasFocus) DrawerItemEndPadding else 0.dp
     ListItem(
         selected = selected,
         onClick = onClick,
-        headlineContent = content,
+        headlineContent = { Box(Modifier.padding(end = endPad)) { content() } },
         leadingContent = {
             Box(
                 Modifier
@@ -318,7 +327,7 @@ internal fun NavigationDrawerScope.NavigationDrawerItem(
             ) { leadingContent() }
         },
         trailingContent = trailingContent,
-        supportingContent = supportingContent,
+        supportingContent = supportingContent?.let { sc -> { Box(Modifier.padding(end = endPad)) { sc() } } },
         modifier =
             modifier
                 .layout { measurable, constraints ->

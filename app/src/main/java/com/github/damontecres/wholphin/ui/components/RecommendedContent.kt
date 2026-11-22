@@ -48,6 +48,9 @@ import com.github.damontecres.wholphin.ui.detail.music.addToQueue
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.main.HomePageContent
+import com.github.damontecres.wholphin.ui.main.HomeTileAction
+import com.github.damontecres.wholphin.ui.main.homeTileAction
+import com.github.damontecres.wholphin.ui.main.homeTileHasDetailsItem
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberPosition
 import com.github.damontecres.wholphin.ui.toBaseItems
@@ -510,21 +513,39 @@ fun RecommendedContent(
                     extraRows = discoverRows,
                     homeRows = state.rows,
                     position = position,
-                    onClickItem = { _, item ->
+                    onClickItem = { clicked, item ->
                         JellytipTrailerControl.stop()
-                        viewModel.navigationManager.navigateTo(item.destination())
+                        // The leading Continue Watching / Next Up rows: an episode or film there plays (resume), like on Home
+                        val inResumeRow = clicked.row in 0 until viewModel.jellytipLeadingRows
+                        if (homeTileAction(inResumeRow, item.type, clickToPlay = false) == HomeTileAction.PLAY) {
+                            viewModel.navigationManager.navigateTo(Destination.Playback(item), "recommended OK (continue / next up row)")
+                        } else {
+                            viewModel.navigationManager.navigateTo(item.destination())
+                        }
                     },
                     onLongClickItem = longClick@{ position, item ->
+                        // "Details" and the stock "Go To" open the same page: show only one
+                        val hasDetails = homeTileHasDetailsItem(position.row in 0 until viewModel.jellytipLeadingRows, item.type)
                         val menu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
                                 item = item,
                                 chosenStreams = null,
-                                showGoTo = true,
+                                showGoTo = !hasDetails,
                                 showStreamChoices = false,
                                 canDelete = viewModel.canDelete(item, preferences.appPreferences),
                                 canRemoveContinueWatching = false,
                                 canRemoveNextUp = false,
+                                leadingItems =
+                                    if (hasDetails) {
+                                        listOf(
+                                            DialogItem("Details", dismissOnClick = true) {
+                                                viewModel.navigationManager.navigateTo(item.destination())
+                                            },
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                                 actions = contextActions,
                             )
                         JellytipInputGuard.afterRelease { showContextMenu = menu }

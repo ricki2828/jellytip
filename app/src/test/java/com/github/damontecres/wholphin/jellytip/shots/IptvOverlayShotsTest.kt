@@ -15,6 +15,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.github.damontecres.wholphin.jellytip.iptv.IptvPlayOverlay
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.requestFocus
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Before
 import org.junit.Rule
@@ -28,6 +30,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w960dp-h540dp-land-xhdpi")
+@OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 class IptvOverlayShotsTest {
     @get:Rule
     val compose = createComposeRule()
@@ -45,6 +48,7 @@ class IptvOverlayShotsTest {
         seeking: Boolean,
         playing: Boolean,
         focus: FocusRequester,
+        scrubbable: Boolean = false,
     ) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             // A stand-in picture behind the overlay
@@ -65,6 +69,7 @@ class IptvOverlayShotsTest {
                     onMore = {},
                     onInteraction = {},
                     modifier = Modifier.align(Alignment.BottomStart),
+                    scrubbable = scrubbable,
                 )
             }
         }
@@ -75,11 +80,17 @@ class IptvOverlayShotsTest {
         buttons: Boolean,
         seeking: Boolean,
         playing: Boolean = true,
+        scrubbable: Boolean = false,
+        scrubFocused: Boolean = false,
     ) {
         val focus = FocusRequester()
-        compose.setContent { Frame(buttons, seeking, playing, focus) }
+        compose.setContent { Frame(buttons, seeking, playing, focus, scrubbable) }
         compose.waitForIdle()
         if (buttons) compose.runOnIdle { focus.tryRequestFocus() }
+        if (scrubFocused) {
+            compose.waitForIdle()
+            compose.onNodeWithTag("iptv-scrub").requestFocus()
+        }
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(400)
         compose.waitForIdle()
@@ -91,6 +102,17 @@ class IptvOverlayShotsTest {
 
     @Test
     fun overlayPaused() = shot("iptv-overlay-paused", buttons = true, seeking = false, playing = false)
+
+    /** Ricki 22-Nov: Up from the buttons reaches the scrub bar; Left / Right seek there. */
+    @Test
+    fun overlayScrubFocused() = shot("iptv-overlay-scrub-focused", buttons = true, seeking = false, scrubbable = true, scrubFocused = true)
+
+    @Test
+    fun overlayScrubSeeking() = shot("iptv-overlay-scrub-seeking", buttons = true, seeking = true, scrubbable = true, scrubFocused = true)
+
+    /** A stream that can't seek says so instead of a bar that silently does nothing. */
+    @Test
+    fun overlayNotSeekable() = shot("iptv-overlay-not-seekable", buttons = true, seeking = false, scrubbable = false)
 
     @Test
     fun seekStripOnly() = shot("iptv-overlay-seek-strip", buttons = false, seeking = true)

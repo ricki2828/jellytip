@@ -282,10 +282,11 @@ data class BaseItem(
                     val seasonId = data.seasonId
                     val seriesId = data.seriesId
                     if (seasonId != null && seriesId != null) {
-                        Destination.SeriesOverview(
-                            seriesId,
-                            BaseItemKind.SERIES,
-                            SeasonEpisodeIds(seasonId, data.parentIndexNumber, id, indexNumber),
+                        // The series page, opened on this episode (the old Overview page is only reached by explicit navigations)
+                        Destination.MediaItem(
+                            itemId = seriesId,
+                            type = BaseItemKind.SERIES,
+                            openAt = SeasonEpisodeIds(seasonId, data.parentIndexNumber, id, indexNumber),
                         )
                     } else {
                         Destination.MediaItem(this)
@@ -295,10 +296,10 @@ data class BaseItem(
                 BaseItemKind.SEASON -> {
                     val seriesId = data.seriesId
                     if (seriesId != null) {
-                        Destination.SeriesOverview(
-                            seriesId,
-                            BaseItemKind.SERIES,
-                            SeasonEpisodeIds(id, indexNumber, null, null),
+                        Destination.MediaItem(
+                            itemId = seriesId,
+                            type = BaseItemKind.SERIES,
+                            openAt = SeasonEpisodeIds(id, indexNumber, null, null),
                         )
                     } else {
                         Destination.MediaItem(this)

@@ -3,6 +3,8 @@ package com.github.damontecres.wholphin.jellytip.ask
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.PersonKind
+import org.jellyfin.sdk.model.serializer.toUUID
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -40,6 +42,8 @@ fun AskQuery.toGetItemsRequest(
         isPlayed = if ("IsUnplayed" in filters) false else if ("IsPlayed" in filters) true else null,
         officialRatings = officialRatings.ifEmpty { null },
         minCommunityRating = minCommunityRating,
+        personIds = personIds.mapNotNull { runCatching { it.toUUID() }.getOrNull() }.ifEmpty { null },
+        personTypes = personTypes.ifEmpty { null },
         enableTotalRecordCount = true,
         enableUserData = true,
     )
@@ -56,4 +60,17 @@ fun BaseItemDto.askItem(): AskItem =
         runTimeTicks = runTimeTicks,
         childCount = childCount,
         genres = genres,
+        productionYear = productionYear,
+        played = userData?.played,
+        people =
+            people.orEmpty().mapNotNull { p ->
+                val kind =
+                    when (p.type) {
+                        PersonKind.DIRECTOR -> "Director"
+                        PersonKind.ACTOR -> "Actor"
+                        else -> return@mapNotNull null
+                    }
+                // Jellyfin's dashless lowercase hex, as on the web and in the chip contract (person:<32 hex>)
+                AskPerson(p.id.toString().replace("-", "").lowercase(), p.name.orEmpty(), kind)
+            },
     )

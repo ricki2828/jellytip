@@ -76,6 +76,11 @@ sealed class Destination(
         val type: BaseItemKind,
         val collectionType: CollectionType? = null,
         val initialSongId: UUID? = null,
+        /**
+         * Series page only: open on its Episodes section with this season selected and (when [SeasonEpisodeIds.episodeId] is set)
+         * that episode's tile focused. Null = the page opens normally (hero first).
+         */
+        val openAt: SeasonEpisodeIds? = null,
     ) : Destination() {
         constructor(item: BaseItem) : this(item.id, item.type, item.data.collectionType)
     }

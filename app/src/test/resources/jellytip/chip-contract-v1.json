@@ -1,0 +1,664 @@
+{
+ "v": 1,
+ "sort": "case-insensitive: ordinal compare of the lower-cased strings",
+ "moods": [
+  {
+   "label": "Feel-good",
+   "genres": [
+    "Comedy",
+    "Family",
+    "Animation",
+    "Kids"
+   ]
+  },
+  {
+   "label": "Mind-bending",
+   "genres": [
+    "Science Fiction",
+    "Sci-Fi & Fantasy",
+    "Mystery"
+   ]
+  },
+  {
+   "label": "Comedy",
+   "genres": [
+    "Comedy"
+   ]
+  },
+  {
+   "label": "Horror",
+   "genres": [
+    "Horror"
+   ]
+  },
+  {
+   "label": "Thriller",
+   "genres": [
+    "Thriller"
+   ]
+  },
+  {
+   "label": "Romance",
+   "genres": [
+    "Romance"
+   ]
+  },
+  {
+   "label": "Action",
+   "genres": [
+    "Action",
+    "Action & Adventure"
+   ]
+  },
+  {
+   "label": "Sci-fi",
+   "genres": [
+    "Science Fiction",
+    "Sci-Fi & Fantasy"
+   ]
+  },
+  {
+   "label": "Mystery",
+   "genres": [
+    "Mystery"
+   ]
+  },
+  {
+   "label": "Crime",
+   "genres": [
+    "Crime"
+   ]
+  },
+  {
+   "label": "Animation",
+   "genres": [
+    "Animation"
+   ]
+  },
+  {
+   "label": "Documentary",
+   "genres": [
+    "Documentary"
+   ]
+  },
+  {
+   "label": "War",
+   "genres": [
+    "War",
+    "War & Politics"
+   ]
+  },
+  {
+   "label": "Western",
+   "genres": [
+    "Western"
+   ]
+  },
+  {
+   "label": "Fantasy",
+   "genres": [
+    "Fantasy",
+    "Sci-Fi & Fantasy"
+   ]
+  },
+  {
+   "label": "Drama",
+   "genres": [
+    "Drama"
+   ]
+  },
+  {
+   "label": "Adventure",
+   "genres": [
+    "Adventure",
+    "Action & Adventure"
+   ]
+  },
+  {
+   "label": "Music",
+   "genres": [
+    "Music"
+   ]
+  },
+  {
+   "label": "History",
+   "genres": [
+    "History"
+   ]
+  },
+  {
+   "label": "Family",
+   "genres": [
+    "Family",
+    "Kids"
+   ]
+  }
+ ],
+ "variants": [
+  {
+   "data": {
+    "t": "genre",
+    "genres": [
+     "Comedy"
+    ]
+   },
+   "id": "genre:Comedy",
+   "label": "Comedy"
+  },
+  {
+   "data": {
+    "t": "genre",
+    "genres": [
+     "Science Fiction",
+     "Sci-Fi & Fantasy"
+    ]
+   },
+   "id": "genre:Sci-fi",
+   "label": "Sci-fi"
+  },
+  {
+   "data": {
+    "t": "genre",
+    "genres": [
+     "Adventure"
+    ]
+   },
+   "id": "genre:Adventure",
+   "label": "Adventure"
+  },
+  {
+   "data": {
+    "t": "notGenre",
+    "genres": [
+     "Horror"
+    ]
+   },
+   "id": "notgenre:Horror",
+   "label": "no horror"
+  },
+  {
+   "data": {
+    "t": "notGenre",
+    "genres": [
+     "Animation"
+    ]
+   },
+   "id": "notgenre:Animation",
+   "label": "no animation"
+  },
+  {
+   "data": {
+    "t": "kind",
+    "kind": "Movie"
+   },
+   "id": "kind:Movie",
+   "label": "movies"
+  },
+  {
+   "data": {
+    "t": "kind",
+    "kind": "Series"
+   },
+   "id": "kind:Series",
+   "label": "shows"
+  },
+  {
+   "data": {
+    "t": "maxRuntime",
+    "min": 90
+   },
+   "id": "maxrt:90",
+   "label": "under 90 min"
+  },
+  {
+   "data": {
+    "t": "maxRuntime",
+    "min": 120
+   },
+   "id": "maxrt:120",
+   "label": "under 2 h"
+  },
+  {
+   "data": {
+    "t": "maxRuntime",
+    "min": 150
+   },
+   "id": "maxrt:150",
+   "label": "under 150 min"
+  },
+  {
+   "data": {
+    "t": "minRuntime",
+    "min": 60
+   },
+   "id": "minrt:60",
+   "label": "over 60 min"
+  },
+  {
+   "data": {
+    "t": "minRuntime",
+    "min": 180
+   },
+   "id": "minrt:180",
+   "label": "over 3 h"
+  },
+  {
+   "data": {
+    "t": "years",
+    "from": 1990,
+    "to": 1999
+   },
+   "id": "years:1990-1999",
+   "label": "1990s"
+  },
+  {
+   "data": {
+    "t": "years",
+    "from": 1994,
+    "to": 1994
+   },
+   "id": "years:1994-1994",
+   "label": "1994"
+  },
+  {
+   "data": {
+    "t": "years",
+    "from": 2010,
+    "to": 2015
+   },
+   "id": "years:2010-2015",
+   "label": "2010-2015"
+  },
+  {
+   "data": {
+    "t": "years",
+    "from": 1995,
+    "to": 2004
+   },
+   "id": "years:1995-2004",
+   "label": "1995-2004"
+  },
+  {
+   "data": {
+    "t": "unplayed"
+   },
+   "id": "unplayed",
+   "label": "unwatched"
+  },
+  {
+   "data": {
+    "t": "played"
+   },
+   "id": "played",
+   "label": "already watched"
+  },
+  {
+   "data": {
+    "t": "kids",
+    "ratings": [
+     "G",
+     "PG",
+     "TV-Y",
+     "TV-Y7",
+     "TV-G",
+     "TV-PG",
+     "U"
+    ],
+    "genres": [
+     "Family",
+     "Animation",
+     "Kids"
+    ]
+   },
+   "id": "kids",
+   "label": "for kids (rated G, PG)"
+  },
+  {
+   "data": {
+    "t": "minRating",
+    "value": 7
+   },
+   "id": "minrating:7",
+   "label": "rated 7+"
+  },
+  {
+   "data": {
+    "t": "minRating",
+    "value": 7.5
+   },
+   "id": "minrating:7.5",
+   "label": "rated 7.5+"
+  },
+  {
+   "data": {
+    "t": "maxSeasons",
+    "n": 1
+   },
+   "id": "maxseasons:1",
+   "label": "1 season"
+  },
+  {
+   "data": {
+    "t": "maxSeasons",
+    "n": 3
+   },
+   "id": "maxseasons:3",
+   "label": "up to 3 seasons"
+  },
+  {
+   "data": {
+    "t": "person",
+    "id": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+    "name": "Chris Columbus",
+    "role": "Director"
+   },
+   "id": "person:0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+   "label": "directed by Chris Columbus"
+  },
+  {
+   "data": {
+    "t": "person",
+    "id": "f0e1d2c3b4a5968778695a4b3c2d1e0f",
+    "name": "Robin Williams",
+    "role": "Actor"
+   },
+   "id": "person:f0e1d2c3b4a5968778695a4b3c2d1e0f",
+   "label": "with Robin Williams"
+  }
+ ],
+ "moodRoundTrip": [
+  {
+   "label": "Feel-good",
+   "genreId": "genre:Feel-good",
+   "genreLabel": "Feel-good",
+   "notGenreId": "notgenre:Feel-good",
+   "notGenreLabel": "no feel-good"
+  },
+  {
+   "label": "Mind-bending",
+   "genreId": "genre:Mind-bending",
+   "genreLabel": "Mind-bending",
+   "notGenreId": "notgenre:Mind-bending",
+   "notGenreLabel": "no mind-bending"
+  },
+  {
+   "label": "Comedy",
+   "genreId": "genre:Comedy",
+   "genreLabel": "Comedy",
+   "notGenreId": "notgenre:Comedy",
+   "notGenreLabel": "no comedy"
+  },
+  {
+   "label": "Horror",
+   "genreId": "genre:Horror",
+   "genreLabel": "Horror",
+   "notGenreId": "notgenre:Horror",
+   "notGenreLabel": "no horror"
+  },
+  {
+   "label": "Thriller",
+   "genreId": "genre:Thriller",
+   "genreLabel": "Thriller",
+   "notGenreId": "notgenre:Thriller",
+   "notGenreLabel": "no thriller"
+  },
+  {
+   "label": "Romance",
+   "genreId": "genre:Romance",
+   "genreLabel": "Romance",
+   "notGenreId": "notgenre:Romance",
+   "notGenreLabel": "no romance"
+  },
+  {
+   "label": "Action",
+   "genreId": "genre:Action",
+   "genreLabel": "Action",
+   "notGenreId": "notgenre:Action",
+   "notGenreLabel": "no action"
+  },
+  {
+   "label": "Sci-fi",
+   "genreId": "genre:Sci-fi",
+   "genreLabel": "Sci-fi",
+   "notGenreId": "notgenre:Sci-fi",
+   "notGenreLabel": "no sci-fi"
+  },
+  {
+   "label": "Mystery",
+   "genreId": "genre:Mystery",
+   "genreLabel": "Mystery",
+   "notGenreId": "notgenre:Mystery",
+   "notGenreLabel": "no mystery"
+  },
+  {
+   "label": "Crime",
+   "genreId": "genre:Crime",
+   "genreLabel": "Crime",
+   "notGenreId": "notgenre:Crime",
+   "notGenreLabel": "no crime"
+  },
+  {
+   "label": "Animation",
+   "genreId": "genre:Animation",
+   "genreLabel": "Animation",
+   "notGenreId": "notgenre:Animation",
+   "notGenreLabel": "no animation"
+  },
+  {
+   "label": "Documentary",
+   "genreId": "genre:Documentary",
+   "genreLabel": "Documentary",
+   "notGenreId": "notgenre:Documentary",
+   "notGenreLabel": "no documentary"
+  },
+  {
+   "label": "War",
+   "genreId": "genre:War",
+   "genreLabel": "War",
+   "notGenreId": "notgenre:War",
+   "notGenreLabel": "no war"
+  },
+  {
+   "label": "Western",
+   "genreId": "genre:Western",
+   "genreLabel": "Western",
+   "notGenreId": "notgenre:Western",
+   "notGenreLabel": "no western"
+  },
+  {
+   "label": "Fantasy",
+   "genreId": "genre:Fantasy",
+   "genreLabel": "Fantasy",
+   "notGenreId": "notgenre:Fantasy",
+   "notGenreLabel": "no fantasy"
+  },
+  {
+   "label": "Drama",
+   "genreId": "genre:Drama",
+   "genreLabel": "Drama",
+   "notGenreId": "notgenre:Drama",
+   "notGenreLabel": "no drama"
+  },
+  {
+   "label": "Adventure",
+   "genreId": "genre:Adventure",
+   "genreLabel": "Adventure",
+   "notGenreId": "notgenre:Adventure",
+   "notGenreLabel": "no adventure"
+  },
+  {
+   "label": "Music",
+   "genreId": "genre:Music",
+   "genreLabel": "Music",
+   "notGenreId": "notgenre:Music",
+   "notGenreLabel": "no music"
+  },
+  {
+   "label": "History",
+   "genreId": "genre:History",
+   "genreLabel": "History",
+   "notGenreId": "notgenre:History",
+   "notGenreLabel": "no history"
+  },
+  {
+   "label": "Family",
+   "genreId": "genre:Family",
+   "genreLabel": "Family",
+   "notGenreId": "notgenre:Family",
+   "notGenreLabel": "no family"
+  }
+ ],
+ "c3": [
+  {
+   "genres": [
+    "Comedy"
+   ],
+   "label": "Comedy",
+   "genreId": "genre:Comedy",
+   "notGenreId": "notgenre:Comedy",
+   "notGenreLabel": "no comedy"
+  },
+  {
+   "genres": [
+    "comedy"
+   ],
+   "label": "Comedy",
+   "genreId": "genre:Comedy",
+   "notGenreId": "notgenre:Comedy",
+   "notGenreLabel": "no comedy"
+  },
+  {
+   "genres": [
+    "Sci-Fi & Fantasy",
+    "Science Fiction"
+   ],
+   "label": "Sci-fi",
+   "genreId": "genre:Sci-fi",
+   "notGenreId": "notgenre:Sci-fi",
+   "notGenreLabel": "no sci-fi"
+  },
+  {
+   "genres": [
+    "Kids",
+    "Family"
+   ],
+   "label": "Family",
+   "genreId": "genre:Family",
+   "notGenreId": "notgenre:Family",
+   "notGenreLabel": "no family"
+  },
+  {
+   "genres": [
+    "Adventure",
+    "Action & Adventure",
+    "Comedy"
+   ],
+   "label": "Adventure or Comedy",
+   "genreId": "genre:Adventure or Comedy",
+   "notGenreId": "notgenre:Adventure or Comedy",
+   "notGenreLabel": "no adventure or comedy"
+  },
+  {
+   "genres": [
+    "Horror",
+    "Comedy"
+   ],
+   "label": "Comedy or Horror",
+   "genreId": "genre:Comedy or Horror",
+   "notGenreId": "notgenre:Comedy or Horror",
+   "notGenreLabel": "no comedy or horror"
+  },
+  {
+   "genres": [
+    "Western",
+    "Horror",
+    "Thriller"
+   ],
+   "label": "Horror or Thriller or Western",
+   "genreId": "genre:Horror or Thriller or Western",
+   "notGenreId": "notgenre:Horror or Thriller or Western",
+   "notGenreLabel": "no horror or thriller or western"
+  },
+  {
+   "genres": [
+    "Comedy",
+    "Family",
+    "Animation",
+    "Kids",
+    "Horror"
+   ],
+   "label": "Feel-good or Horror",
+   "genreId": "genre:Feel-good or Horror",
+   "notGenreId": "notgenre:Feel-good or Horror",
+   "notGenreLabel": "no feel-good or horror"
+  },
+  {
+   "genres": [
+    "Family",
+    "Kids",
+    "Comedy"
+   ],
+   "label": "Comedy or Family",
+   "genreId": "genre:Comedy or Family",
+   "notGenreId": "notgenre:Comedy or Family",
+   "notGenreLabel": "no comedy or family"
+  },
+  {
+   "genres": [
+    "Adventure"
+   ],
+   "label": "Adventure",
+   "genreId": "genre:Adventure",
+   "notGenreId": "notgenre:Adventure",
+   "notGenreLabel": "no adventure"
+  },
+  {
+   "genres": [
+    "Drama",
+    "Adventure"
+   ],
+   "label": "Adventure or Drama",
+   "genreId": "genre:Adventure or Drama",
+   "notGenreId": "notgenre:Adventure or Drama",
+   "notGenreLabel": "no adventure or drama"
+  },
+  {
+   "genres": [
+    "Kids"
+   ],
+   "label": "Kids",
+   "genreId": "genre:Kids",
+   "notGenreId": "notgenre:Kids",
+   "notGenreLabel": "no kids"
+  },
+  {
+   "genres": [
+    "Science Fiction"
+   ],
+   "label": "Science Fiction",
+   "genreId": "genre:Science Fiction",
+   "notGenreId": "notgenre:Science Fiction",
+   "notGenreLabel": "no science fiction"
+  },
+  {
+   "genres": [
+    "Comedy",
+    "Anime"
+   ],
+   "label": "Anime or Comedy",
+   "genreId": "genre:Anime or Comedy",
+   "notGenreId": "notgenre:Anime or Comedy",
+   "notGenreLabel": "no anime or comedy"
+  },
+  {
+   "genres": [
+    "Action & Adventure",
+    "Mystery"
+   ],
+   "label": "Action & Adventure or Mystery",
+   "genreId": "genre:Action & Adventure or Mystery",
+   "notGenreId": "notgenre:Action & Adventure or Mystery",
+   "notGenreLabel": "no action & adventure or mystery"
+  }
+ ]
+}

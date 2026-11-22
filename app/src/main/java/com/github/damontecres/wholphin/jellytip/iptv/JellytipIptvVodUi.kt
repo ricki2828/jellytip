@@ -1,6 +1,32 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.key
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.JellytipButton
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsBlockContent
+import com.github.damontecres.wholphin.jellytip.JellytipDetailsStill
+import com.github.damontecres.wholphin.jellytip.details.IptvPlayTarget
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsHero
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsScaffold
+import com.github.damontecres.wholphin.jellytip.details.JellytipDetailsSection
+import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
+import com.github.damontecres.wholphin.jellytip.details.iptvHeroOf
+import com.github.damontecres.wholphin.jellytip.details.myListLabel
+import com.github.damontecres.wholphin.jellytip.details.rememberJellytipDetailsScaffoldState
+import com.github.damontecres.wholphin.jellytip.details.resolveIptvSeriesPlay
+import com.github.damontecres.wholphin.jellytip.details.seasonChipLabel
+import com.github.damontecres.wholphin.jellytip.details.seriesPlayLabel
+import com.github.damontecres.wholphin.jellytip.details.seriesStatusLine
+import com.github.damontecres.wholphin.jellytip.nav.JellytipSeasonChips
+import com.github.damontecres.wholphin.ui.cards.personRowCardWidth
+import com.github.damontecres.wholphin.ui.ifElse
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.Key
@@ -148,7 +174,7 @@ fun IptvVodTile(
 ) {
     // Long-press: the title's menu (web 6d8398bd): My list, Like / Not for me, Not interested, Mark watched
     var menu by remember(item.id) { mutableStateOf(false) }
-    if (menu) IptvTileMenu(item, onOpen = onClick) { menu = false }
+    if (menu) IptvTileMenu(item, onDismiss = { menu = false }, onOpen = onClick)
     val titleMenu = IptvVodParse.isTitleId(item.id) && (item.kind == "movie" || item.kind == "series")
     Surface(
         onClick = onClick,
@@ -305,17 +331,56 @@ fun JellytipIptvDetailsPage(
         kotlinx.coroutines.delay(10_000)
         if (detail == null) failed = true
     }
-    val focus = remember { FocusRequester() }
+    val trailerSettings by viewModel.trailerSettings.collectAsState(com.github.damontecres.wholphin.jellytip.JellytipSettings())
+    JellytipIptvDetailsContent(
+        id = id,
+        title = title,
+        detail = detail,
+        failed = failed,
+        trailerSettings = trailerSettings,
+        httpClient = viewModel.httpClient,
+        onShowCopy = { shownId = it },
+        onNavigate = { dest, why -> viewModel.navigationManager.navigateTo(dest, why) },
+        setFavourite = { vodId, on -> viewModel.vod.setFavourite(vodId, on) },
+        modifier = modifier,
+    )
+}
+
+/**
+ * The IPTV details page itself, from plain values: [detail] null = loading (or [failed]); every action is a lambda.
+ * Split from [JellytipIptvDetailsPage] so a test can render it without Hilt.
+ *
+ * Built on the same scaffold as the library pages: the hero (title / logo, info line, one-line synopsis, buttons) and the
+ * sections that Down reveals (Episodes, Ways to watch, People, More like this).
+ */
+@Composable
+fun JellytipIptvDetailsContent(
+    id: String,
+    title: String,
+    detail: IptvVodDetail?,
+    failed: Boolean,
+    trailerSettings: com.github.damontecres.wholphin.jellytip.JellytipSettings,
+    httpClient: okhttp3.OkHttpClient,
+    onShowCopy: (String) -> Unit,
+    onNavigate: (Destination, String?) -> Unit,
+    setFavourite: suspend (String, Boolean) -> Boolean?,
+    modifier: Modifier = Modifier,
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val d = detail
+    val item = d?.item
+    val scaffoldState = rememberJellytipDetailsScaffoldState()
+    // Focus on the buttons row (its restorer lands on the primary button): once the detail has arrived, and again when the
+    // full-screen trailer closes
+    val rowReq = remember { FocusRequester() }
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(detail != null) {
         if (detail != null && !placed) {
             placed = true
             withFrameNanos { }
-            focus.tryRequestFocus()
+            rowReq.tryRequestFocus()
         }
     }
-    val d = detail
-    val item = d?.item
     // Taste signals: details dwell on this IPTV title
     androidx.compose.runtime.DisposableEffect(item?.id) {
         val since = System.currentTimeMillis()
@@ -345,30 +410,70 @@ fun JellytipIptvDetailsPage(
         if (alt != null) {
             android.widget.Toast.makeText(ctx, "Skipped ${it.providerName ?: "this copy"}: failed earlier", android.widget.Toast.LENGTH_SHORT).show()
             JellytipTrace.log("iptv", "play vod ${alt.id} (skipped failed ${it.id})")
-            viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = alt.id, resumeMs = 0L), "iptv details Play (skip failed)")
+            onNavigate(Destination.JellytipIptvPlay(title = it.title, vodId = alt.id, resumeMs = 0L), "iptv details Play (skip failed)")
             return
         }
         JellytipTrace.log("iptv", "play vod ${it.id} resume=$resume")
-        viewModel.navigationManager.navigateTo(Destination.JellytipIptvPlay(title = it.title, vodId = it.id, resumeMs = resume), "iptv details Play")
+        onNavigate(Destination.JellytipIptvPlay(title = it.title, vodId = it.id, resumeMs = resume), "iptv details Play")
     }
 
     fun playEpisode(e: IptvEpisode) {
         val it = item ?: return
         val resume = e.progress?.takeIf { p -> p.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L
-        viewModel.navigationManager.navigateTo(
+        onNavigate(
             Destination.JellytipIptvPlay(title = "${it.title} · ${e.title}", seriesId = it.id, episodeId = e.id, resumeMs = resume),
             "iptv episode OK",
         )
     }
+    // Series: the one episode the primary button names and plays, and the season the Episodes section opens on
+    val resolved = remember(d) { if (d != null && d.item.isSeries) resolveIptvSeriesPlay(d.seasons) else null }
+    var season by remember(item?.id) { mutableIntStateOf(resolved?.seasonIndex ?: 0) }
+
+    // My list: flips at once, goes back with a short note under the buttons when the server can't change it
+    val pageScope = androidx.compose.runtime.rememberCoroutineScope()
+    var myListBusy by remember(item?.id) { mutableStateOf(false) }
+    var myListNote by remember(item?.id) { mutableStateOf<String?>(null) }
+    fun toggleMyList(v: IptvVodItem) {
+        if (myListBusy) return
+        val want = !IptvMyList.isOn(v)
+        IptvMyList.set(v.id, want)
+        if (want) {
+            com.github.damontecres.wholphin.jellytip.signals.JellytipSignals.emit(
+                com.github.damontecres.wholphin.jellytip.signals.TasteRules.event(
+                    com.github.damontecres.wholphin.jellytip.signals.TasteTarget(if (v.isSeries) "series" else "movie", v.tmdbId, iptvId = v.id),
+                    "mylist",
+                    System.currentTimeMillis(),
+                ),
+            )
+        }
+        myListBusy = true
+        myListNote = null
+        JellytipTrace.log("iptv", "my list ${v.id} on=$want")
+        pageScope.launch {
+            val result = setFavourite(v.id, want)
+            if (result == null) {
+                IptvMyList.set(v.id, !want)
+                myListNote = "Couldn't update My list"
+            } else {
+                IptvMyList.set(v.id, result)
+            }
+            myListBusy = false
+        }
+    }
+
     // Trailer button: the companion's cached mp4 plays full screen over the page (library details plays it in the player);
     // Back returns to the Trailer button. Only the passive preview below plays behind the text.
     val context = androidx.compose.ui.platform.LocalContext.current
     var trailerPlaying by remember(id) { mutableStateOf(false) }
-    val trailerFocus = remember { FocusRequester() }
     var trailerWasOpen by remember(id) { mutableStateOf(false) }
     LaunchedEffect(trailerPlaying) {
-        // Back (or the end) from the full-screen trailer lands on the Trailer button again
-        if (trailerPlaying) trailerWasOpen = true else if (trailerWasOpen) trailerFocus.tryRequestFocus()
+        // Back (or the end) from the full-screen trailer: the buttons row takes focus again and restores the Trailer button
+        if (trailerPlaying) {
+            trailerWasOpen = true
+        } else if (trailerWasOpen) {
+            withFrameNanos { }
+            rowReq.tryRequestFocus()
+        }
     }
     val trailerUrl = d?.trailer
     val playTrailer: () -> Unit = {
@@ -380,23 +485,20 @@ fun JellytipIptvDetailsPage(
                 com.github.damontecres.wholphin.services.TrailerService.onClick(
                     context,
                     com.github.damontecres.wholphin.data.model.RemoteTrailer("${item?.title ?: title} trailer", url, null),
-                ) { dest -> viewModel.navigationManager.navigateTo(dest, "iptv details trailer") }
+                ) { dest -> onNavigate(dest, "iptv details trailer") }
             } else {
                 trailerPlaying = !trailerPlaying
             }
         }
     }
-    // Passive preview (web de81df8e, library details' rule): after a rest on the buttons or season chips, the cached
-    // trailer plays behind the text; once per visit to that zone, never over the Trailer button's own playback
-    val trailerSettings by viewModel.trailerSettings.collectAsState(com.github.damontecres.wholphin.jellytip.JellytipSettings())
+    // Passive preview (web de81df8e, library details' rule): after a rest on the buttons, the cached trailer plays behind
+    // the text; once per visit to that zone, never over the Trailer button's own playback
     var resumed by remember { mutableStateOf(true) }
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
         resumed = true
         onPauseOrDispose { resumed = false }
     }
-    var buttonsFocused by remember { mutableStateOf(false) }
-    var seasonsFocused by remember { mutableStateOf(false) }
-    val restZone = buttonsFocused || seasonsFocused
+    val restZone = scaffoldState.buttonRowFocused
     var autoTrailer by remember(id) { mutableStateOf(false) }
     var autoDone by remember(id) { mutableStateOf(false) }
     LaunchedEffect(restZone) {
@@ -409,166 +511,55 @@ fun JellytipIptvDetailsPage(
             autoTrailer = true
         }
     }
-    Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
-        (item?.backdrop ?: item?.poster)?.let {
-            AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    // Jellytip: "More like this" (companion /v1/similar); taken only while the lower rows are not open, so it never
+    // pops in under focus
+    val similarLoaded by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, d?.item?.id) {
+        val it = d?.item ?: return@produceState
+        value =
+            com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar
+                .path(if (it.isSeries) "series" else "movie", it.tmdbId, iptvId = it.id)
+                ?.let { p -> com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(p) }
+    }
+    var similar by remember(id) { mutableStateOf<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null) }
+    LaunchedEffect(similarLoaded, scaffoldState.sectionsActive) {
+        if (similarLoaded != null && !scaffoldState.sectionsActive) similar = similarLoaded
+    }
+    var overviewOpen by remember(id) { mutableStateOf(false) }
+    var moreOpen by remember(id) { mutableStateOf(false) }
+
+    // The hero: one model for every source (see iptvHeroOf)
+    androidx.compose.ui.platform.LocalConfiguration.current // a language change re-resolves the "Directed by" string
+    val resources = ctx.resources
+    val statusLine =
+        if (d != null && d.item.isSeries) {
+            seriesStatusLine(d.seasons.map { it.season }, resolved?.season, resolved?.episode?.episode) ?: "No episodes are available."
+        } else {
+            null
         }
-        androidx.compose.animation.AnimatedVisibility(
-            visible = autoTrailer && !trailerPlaying && trailerUrl != null,
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(800)),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(800)),
-        ) {
-            if (trailerUrl != null) {
-                com.github.damontecres.wholphin.jellytip.TrailerLayer(
-                    url = trailerUrl,
-                    sound = trailerSettings.trailerSound,
-                    httpClient = viewModel.httpClient,
-                    onEnded = {
-                        autoDone = true
-                        autoTrailer = false
-                    },
-                )
-            }
+    val hero =
+        if (d != null) {
+            iptvHeroOf(d, title, statusLine) { resources.getString(R.string.directed_by, it) }
+        } else {
+            JellytipDetailsHero(title = title, infoText = if (failed) "This title isn't available right now." else "Loading…")
         }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.7f to Color.Transparent)))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
-        // Jellytip: "More like this" (companion /v1/similar) sits under the page; the column scrolls to it
-        val similar by produceState<com.github.damontecres.wholphin.jellytip.rows.JellytipServerRow?>(null, d?.item?.id) {
-            val it = d?.item ?: return@produceState
-            value =
-                com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar
-                    .path(if (it.isSeries) "series" else "movie", it.tmdbId, iptvId = it.id)
-                    ?.let { p -> com.github.damontecres.wholphin.jellytip.similar.JellytipSimilar.row(p) }
-        }
-        // The row only composes once Down finds nothing more below (as the library pages do), so it never pushes the
-        // block up under focus when it arrives
-        var showSimilar by remember(id) { mutableStateOf(false) }
-        val similarFocus = remember { FocusRequester() }
-        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-        val pageScope = androidx.compose.runtime.rememberCoroutineScope()
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier =
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .onPreviewKeyEvent { ev ->
-                        if (showSimilar || similar == null || ev.type != KeyEventType.KeyDown || ev.key != Key.DirectionDown) return@onPreviewKeyEvent false
-                        if (!focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)) {
-                            showSimilar = true
-                            pageScope.launch {
-                                withFrameNanos { }
-                                withFrameNanos { }
-                                similarFocus.tryRequestFocus()
-                            }
-                        }
-                        true
-                    }.verticalScroll(rememberScrollState())
-                    .padding(start = 48.dp, bottom = 40.dp, end = 48.dp, top = 24.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(JellytipPalette.Jelly))
-                if (item != null && IptvMyList.isOn(item)) {
-                    com.github.damontecres.wholphin.ui.cards.FavoriteIndicator(fontSize = 14.sp)
-                }
-                Text(
-                    text = "via IPTV" + (item?.providerName?.let { " · $it" } ?: ""),
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.8f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 13.sp,
-                )
-            }
-            // TMDB title logo like the library details page; the text title when there is none (or it fails)
-            var logoFailed by remember(d?.logo) { mutableStateOf(false) }
-            val logo = d?.logo
-            if (logo != null && !logoFailed) {
-                AsyncImage(
-                    model = logo,
-                    contentDescription = item?.title ?: title,
-                    contentScale = ContentScale.Fit,
-                    alignment = Alignment.BottomStart,
-                    onError = { logoFailed = true },
-                    modifier = Modifier.width(380.dp).height(120.dp),
-                )
-            } else {
-                Text(
-                    text = item?.title ?: title,
-                    color = JellytipPalette.Vanilla,
-                    fontFamily = JellytipFontFamily,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 30.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(560.dp),
-                )
-            }
-            if (d == null || item == null) {
-                Text(
-                    text = if (failed) "This title isn't available right now." else "Loading…",
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 14.sp,
-                )
-                return@Column
-            }
-            val meta =
-                listOfNotNull(
-                    item.year?.toString(),
-                    if (item.isSeries) "Series" else d.runtimeMin?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
-                    com.github.damontecres.wholphin.jellytip.cards.JellytipTech
-                        .fullNames(item.tech.flatMap(com.github.damontecres.wholphin.jellytip.cards.JellytipTech::normalize).toSet())
-                        .joinToString("  ·  ")
-                        .takeIf { it.isNotEmpty() }
-                        ?: item.quality.joinToString(" ") { it.uppercase(Locale.ROOT) }.takeIf { it.isNotEmpty() },
-                    item.rating?.let { String.format(Locale.US, "TMDB %.1f", it) },
-                    d.genres.take(3).joinToString(", ").takeIf { it.isNotEmpty() } ?: d.genre,
-                ).joinToString("  ·  ")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(meta, color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1)
-                if (item.langUnknown) {
-                    // Outlined, quiet: the server couldn't confirm this copy's audio language
-                    Text(
-                        "Language unknown",
-                        color = JellytipPalette.Vanilla.copy(alpha = 0.7f),
-                        fontFamily = JellytipFontFamily,
-                        fontSize = 12.sp,
-                        modifier =
-                            Modifier
-                                .border(1.dp, JellytipPalette.Vanilla.copy(alpha = 0.28f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
-                    )
-                }
-            }
-            if (item.overview.isNotBlank()) {
-                Text(
-                    item.overview,
-                    color = JellytipPalette.Vanilla.copy(alpha = 0.8f),
-                    fontFamily = JellytipFontFamily,
-                    fontSize = 14.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(560.dp),
-                )
-            }
-            listOfNotNull(d.director?.let { "Directed by $it" }, d.cast).joinToString("  ·  ").takeIf { it.isNotEmpty() }?.let {
-                Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(560.dp))
-            }
-            if (!item.isSeries) {
-                val p = item.progress?.takeIf { it.resumable }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
-                ) {
-                    Button(onClick = { playMovie(fromStart = false) }, modifier = Modifier.focusRequester(focus)) {
-                        Text(if (p != null) "Resume from ${(p.positionSecs / 60).toInt()} min" else "Play")
-                    }
-                    if (p != null) {
-                        Button(onClick = { playMovie(fromStart = true) }) { Text("Play from start") }
-                    }
-                    // Opened from a Home double feature: this film, then the other half (library or IPTV)
-                    val partner = remember(item.id) { com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.partnerAfterIptv(item.id) }
+    val playWord = stringResource(R.string.play)
+    val resumeWord = stringResource(R.string.resume)
+    val restartWord = stringResource(R.string.restart)
+    val trailerWord = stringResource(R.string.jellytip_trailer)
+    val moreWord = stringResource(R.string.jellytip_more)
+    val moreAvailable by com.github.damontecres.wholphin.jellytip.me.JellytipMe.available.collectAsState()
+    // Opened from a Home double feature: this film, then the other half (library or IPTV)
+    val partner = remember(item?.id) { item?.takeIf { !it.isSeries }?.let { com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.partnerAfterIptv(it.id) } }
+    val buttons =
+        buildList {
+            if (item != null && d != null) {
+                if (!item.isSeries) {
+                    val p = item.progress?.takeIf { it.resumable }
+                    add(JellytipButton(if (p != null) resumeWord else playWord, primary = true, onClick = { playMovie(fromStart = false) }))
+                    if (p != null) add(JellytipButton(restartWord, { playMovie(fromStart = true) }))
                     if (partner != null) {
-                        Button(
-                            onClick = {
+                        add(
+                            JellytipButton("▶ Play both", {
                                 com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.then =
                                     com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.Then(
                                         com.github.damontecres.wholphin.jellytip.specials.JellytipDoubleBill.IptvHalf(item),
@@ -576,87 +567,278 @@ fun JellytipIptvDetailsPage(
                                     )
                                 // The double bill names this copy: never auto-skip to another one here
                                 playMovie(fromStart = true, manual = true)
-                            },
-                        ) { Text("Play both") }
+                            }),
+                        )
                     }
-                    TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
-                    MyListButton(item, viewModel)
-                    IptvTasteButtons(item)
+                } else if (resolved != null) {
+                    add(
+                        JellytipButton(
+                            seriesPlayLabel(resolved.season, resolved.episode.episode, resolved.resumable, resumeWord, playWord),
+                            primary = true,
+                            onClick = { playEpisode(resolved.episode) },
+                        ),
+                    )
                 }
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.onFocusChanged { buttonsFocused = it.hasFocus }.horizontalScroll(rememberScrollState()),
-                ) {
-                    TrailerButton(d.trailer, trailerPlaying, playTrailer, Modifier.focusRequester(trailerFocus))
-                    MyListButton(item, viewModel)
-                    IptvTasteButtons(item)
-                }
+                add(JellytipButton(myListLabel(IptvMyList.isOn(item)), { toggleMyList(item) }))
+                if (d.trailer != null) add(JellytipButton(trailerWord, playTrailer))
+                // (More holds the taste actions; without the companion's account service it would be an empty menu)
+                if (moreAvailable) add(JellytipButton(moreWord, { moreOpen = true }))
             }
-            if (d.copies.size > 1) {
-                WaysToWatchRow(d.copies, current = item.id) { c ->
-                    IptvStreamFail.rememberPick(ctx, IptvStreamFail.pickKey(item.kind, item.tmdbId, item.title, item.year), c.id)
-                    if (c.id != item.id) {
-                        JellytipTrace.log("iptv", "ways to watch: pick ${c.id}")
-                        shownId = c.id
-                    } else if (!item.isSeries) {
-                        playMovie(fromStart = false, manual = true)
-                    }
+        }
+    val sections =
+        listOf(
+            JellytipDetailsSection(EPISODES_SECTION, d != null && d.item.isSeries && d.seasons.isNotEmpty()) { focus ->
+                if (d != null) {
+                    IptvEpisodesSection(
+                        seasons = d.seasons,
+                        resolved = resolved,
+                        season = season,
+                        onSeason = { season = it },
+                        focus = focus,
+                        onPlay = { e -> playEpisode(e) },
+                    )
                 }
-            }
-            if (d.people.isNotEmpty()) CastRow(d.people)
-            if (!item.isSeries) {
-                Unit // films: the buttons above are all
-            } else if (d.seasons.isEmpty()) {
-                Text("No episodes are available.", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 14.sp)
-            } else {
-                var season by remember(item.id) { mutableIntStateOf(0) }
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.onFocusChanged { seasonsFocused = it.hasFocus }.focusGroup().focusRestorer(),
-                ) {
-                    items(d.seasons.size) { i ->
-                        Surface(
-                            onClick = { season = i },
-                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-                            border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
-                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                            colors =
-                                ClickableSurfaceDefaults.colors(
-                                    containerColor = if (i == season) JellytipPalette.Vanilla.copy(alpha = 0.18f) else Color.Transparent,
-                                    focusedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
-                                    contentColor = JellytipPalette.Vanilla,
-                                    focusedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
-                                    pressedContainerColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Pastel,
-                                    pressedContentColor = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.Ink,
-                                ),
-                            modifier = if (i == 0) Modifier.focusRequester(focus) else Modifier,
-                        ) {
-                            Text("Season ${d.seasons[i].season}", fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
+            },
+            JellytipDetailsSection("ways", d != null && d.copies.size > 1) { focus ->
+                if (d != null && item != null) {
+                    WaysToWatchRow(d.copies, current = item.id, modifier = Modifier.focusRequester(focus)) { c ->
+                        IptvStreamFail.rememberPick(ctx, IptvStreamFail.pickKey(item.kind, item.tmdbId, item.title, item.year), c.id)
+                        if (c.id != item.id) {
+                            JellytipTrace.log("iptv", "ways to watch: pick ${c.id}")
+                            onShowCopy(c.id)
+                        } else if (!item.isSeries) {
+                            playMovie(fromStart = false, manual = true)
                         }
                     }
                 }
-                val eps = d.seasons.getOrNull(season)?.episodes.orEmpty()
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom), modifier = Modifier.fillMaxWidth().jellytipFocusRoom().focusGroup().focusRestorer()) {
-                    items(eps, key = { it.id }) { e ->
-                        IptvEpisodeCard(e) { playEpisode(e) }
+            },
+            // The cast has no ids to open: plain cells, drawn but never a focus stop
+            JellytipDetailsSection("people", d != null && d.people.isNotEmpty(), focusable = false) { _ ->
+                if (d != null) IptvPeopleRow(d.people)
+            },
+            JellytipDetailsSection("similar", similar != null) { focus ->
+                similar?.let {
+                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(
+                        it,
+                        Modifier.fillMaxWidth().focusRequester(focus),
+                    )
+                }
+            },
+        )
+    Box(modifier.fillMaxSize()) {
+        JellytipDetailsScaffold(
+            modifier = Modifier.fillMaxSize(),
+            state = scaffoldState,
+            backdrop = { _, dimmed ->
+                val still = item?.backdrop ?: item?.poster
+                // Like the library: no art and no trailer = nothing drawn
+                if (still != null || trailerUrl != null) {
+                    JellytipDetailsStill(url = still, focal = null, dimmed = dimmed) {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = autoTrailer && !trailerPlaying && trailerUrl != null,
+                            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(800)),
+                            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(800)),
+                        ) {
+                            if (trailerUrl != null) {
+                                com.github.damontecres.wholphin.jellytip.TrailerLayer(
+                                    url = trailerUrl,
+                                    sound = trailerSettings.trailerSound,
+                                    httpClient = httpClient,
+                                    onEnded = {
+                                        autoDone = true
+                                        autoTrailer = false
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
-            }
-            similar?.takeIf { showSimilar }?.let { row ->
-                Box(Modifier.padding(top = 12.dp).offset(x = (-48).dp)) {
-                    com.github.damontecres.wholphin.jellytip.similar.JellytipSimilarRowView(row, Modifier.focusRequester(similarFocus))
-                }
-            }
+            },
+            hero = { slot ->
+                JellytipDetailsBlockContent(
+                    hero = hero,
+                    buttons = buttons,
+                    trailers = emptyList(),
+                    onTrailer = {},
+                    onOverview = { overviewOpen = true },
+                    buttonRowModifier = slot.buttonRowModifier.focusRequester(rowReq),
+                    modifier = slot.modifier,
+                    onFocusWithin = slot.onFocusWithin,
+                    below = {
+                        myListNote?.let {
+                            Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
+                        }
+                    },
+                )
+            },
+            sections = sections,
+        )
+        if (overviewOpen && item != null) {
+            // The full synopsis: one item, OK closes it
+            com.github.damontecres.wholphin.jellytip.JellytipDialog(
+                showDialog = true,
+                title = item.title,
+                dialogItems = listOf(com.github.damontecres.wholphin.ui.components.DialogItem(headlineContent = { Text(item.overview) }, onClick = {}, dismissOnClick = true)),
+                onDismissRequest = { overviewOpen = false },
+                waitToLoad = false,
+            )
+        }
+        if (moreOpen && item != null) {
+            IptvTileMenu(item, onDismiss = { moreOpen = false }, withMyList = false, provider = item.providerName, fromLongPress = false)
         }
         if (trailerPlaying && trailerUrl != null) {
-            IptvFullScreenTrailer(trailerUrl, viewModel.httpClient) {
+            IptvFullScreenTrailer(trailerUrl, httpClient) {
                 trailerPlaying = false
                 autoDone = true // just watched it: no passive replay until focus leaves and comes back
             }
         }
     }
 }
+
+/** Key of the series' Episodes section. */
+private const val EPISODES_SECTION = "episodes"
+
+/**
+ * The series' Episodes section, like the library's: title, one row of season chips (selecting on OK), one row of the
+ * shared episode tile. Opens on the season of [resolved] with that tile as the focus target and scrolled to; OK plays.
+ */
+@Composable
+private fun IptvEpisodesSection(
+    seasons: List<IptvSeason>,
+    resolved: IptvPlayTarget?,
+    season: Int,
+    onSeason: (Int) -> Unit,
+    focus: FocusRequester,
+    onPlay: (IptvEpisode) -> Unit,
+) {
+    val chipRequester = remember { FocusRequester() }
+    val tileRequester = remember { FocusRequester() }
+    // OK on a season chip: focus goes to the episode row once that season's tiles are showing
+    var focusTilePending by remember { mutableStateOf(false) }
+    LaunchedEffect(focusTilePending) {
+        if (focusTilePending) {
+            withFrameNanos { }
+            withFrameNanos { }
+            tileRequester.tryRequestFocus()
+            focusTilePending = false
+        }
+    }
+    val eps = seasons.getOrNull(season)?.episodes.orEmpty()
+    val now = remember(season) { System.currentTimeMillis() / 1000 }
+    // The tile the row opens on and focuses: the resolved episode in its own season, else the first
+    val focusTile = if (resolved != null && resolved.seasonIndex == season) resolved.episodeIndex else 0
+    val labels = remember(seasons) { seasons.mapIndexed { i, s -> seasonChipLabel(s.season, i) } }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+    ) {
+        ItemRowTitle("Episodes")
+        JellytipSeasonChips(
+            labels = labels,
+            selectedIndex = season,
+            onSelect = onSeason,
+            selectedRequester = chipRequester,
+            onConfirm = { focusTilePending = true },
+            modifier = Modifier.padding(start = com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset),
+        )
+        val rowState = key(season) { rememberLazyListState(focusTile) }
+        com.github.damontecres.wholphin.jellytip.JellytipRowFocusScope { rowFocusModifier ->
+            LazyRow(
+                state = rowState,
+                horizontalArrangement = Arrangement.spacedBy(com.github.damontecres.wholphin.jellytip.JellytipLayout.TileGap),
+                // Focus room: the first tile's growth and border are not cut; the row is pulled back so the tile still starts on
+                // the row title's line (8 dp, like People and Reviews)
+                contentPadding =
+                    PaddingValues(
+                        horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoomWide,
+                        vertical = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom,
+                    ),
+                modifier =
+                    rowFocusModifier
+                        .fillMaxWidth()
+                        .jellytipFocusRoom(com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoomWide - com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset)
+                        .focusRestorer(tileRequester),
+            ) {
+                itemsIndexed(eps, key = { _, e -> e.id }) { i, e ->
+                    val p = e.progress
+                    JellytipEpisodeTile(
+                        image = e.still,
+                        number = e.episode,
+                        name = e.title,
+                        overview = e.overview,
+                        played = p?.played == true,
+                        progress = p?.takeIf { it.resumable && it.durationSecs > 0 }?.let { (it.positionSecs / it.durationSecs).toFloat().coerceIn(0f, 1f) } ?: 0f,
+                        isNext = resolved != null && resolved.episode.id == e.id,
+                        onClick = { onPlay(e) },
+                        // IPTV episodes have no menu
+                        onLongClick = {},
+                        modifier = Modifier.ifElse(i == focusTile, Modifier.focusRequester(tileRequester)),
+                        // The failed-stream note ("Failed 2 h ago") sits under the title line
+                        sourceMark = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), now),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The TMDB cast as plain cells (photo or initials, name, character) at the library person cards' size. The cells do
+ * nothing on OK (IPTV has no person ids), so they are not focusable; the first few that fit are shown.
+ */
+@Composable
+private fun IptvPeopleRow(people: List<IptvCastMember>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        ItemRowTitle(stringResource(R.string.people_title))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(8.dp)) {
+            people.take(MAX_CAST).forEach { p ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.width(personRowCardWidth)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(CircleShape)
+                            .background(androidx.tv.material3.MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        var photoFailed by remember(p.profile) { mutableStateOf(false) }
+                        if (p.profile != null && !photoFailed) {
+                            AsyncImage(model = p.profile, contentDescription = p.name, contentScale = ContentScale.Crop, onError = { photoFailed = true }, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Text(
+                                p.name.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString(""),
+                                fontFamily = JellytipFontFamily,
+                                fontSize = 24.sp,
+                                color = androidx.tv.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Text(
+                        text = p.name,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    )
+                    p.character?.let {
+                        Text(
+                            text = it,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            style = androidx.tv.material3.MaterialTheme.typography.bodySmall,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val MAX_CAST = 6
 
 /**
  * "Ways to watch" (web 846292d8): every copy the companion offers, best first, with quality / language chips, the
@@ -667,12 +849,18 @@ fun JellytipIptvDetailsPage(
 private fun WaysToWatchRow(
     copies: List<IptvCopy>,
     current: String,
+    modifier: Modifier = Modifier,
     onPick: (IptvCopy) -> Unit,
 ) {
     val now = remember(copies) { System.currentTimeMillis() / 1000 }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Ways to watch", color = JellytipPalette.Vanilla.copy(alpha = 0.8f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom), modifier = Modifier.jellytipFocusRoom().focusGroup().focusRestorer()) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.fillMaxWidth()) {
+        ItemRowTitle("Ways to watch")
+        // The shared left line: the first tile starts on the title's line (focus room 12, pulled back 4)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoomWide, vertical = com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoom),
+            modifier = Modifier.fillMaxWidth().jellytipFocusRoom(com.github.damontecres.wholphin.jellytip.JellytipLayout.FocusRoomWide - com.github.damontecres.wholphin.jellytip.JellytipLayout.RowInset).focusGroup().focusRestorer(),
+        ) {
             items(copies, key = { it.id }) { c ->
                 val selected = c.id == current
                 val fail = IptvStreamFail.note(IptvStreamFail.failOf(c.id, c.lastFail), now)
@@ -718,54 +906,6 @@ private fun WaysToWatchRow(
     }
 }
 
-/** Like / Not for me / Watched on an IPTV title (web 6d8398bd); the same reactions the library thumbs use. */
-@Composable
-private fun IptvTasteButtons(item: IptvVodItem) {
-    val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
-    // Same gate as the library thumbs: a server without /v1/me shows none of these
-    val available by me.available.collectAsState()
-    if (!available) return
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val key = remember(item.id) { me.iptvTasteKey(item.id, item.kind, item.tmdbId) }
-    val thumb = me.thumbOfKey(key)
-    var played by remember(item.id) { mutableStateOf(item.played || item.progress?.played == true) }
-    var busy by remember(item.id) { mutableStateOf(false) }
-    val toast: (String?) -> Unit = { err -> if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_SHORT).show() }
-    Button(onClick = { me.thumbIptv(item.id, item.kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) }) {
-        Text(if (thumb == 1) "Liked ✓" else "Like")
-    }
-    Button(onClick = { me.thumbIptv(item.id, item.kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) }) {
-        Text(if (thumb == -1) "Not for me ✓" else "Not for me")
-    }
-    Button(
-        onClick = {
-            if (busy) return@Button
-            busy = true
-            val next = !played
-            played = next
-            me.setIptvPlayed(item.id, next) { err ->
-                busy = false
-                if (err != null) played = !next
-                toast(err)
-            }
-        },
-    ) {
-        Text(if (played) "Watched ✓" else "Mark watched")
-    }
-}
-
-/** Trailer: plays the companion's mp4 full screen (Back returns); a YouTube URL opens YouTube. */
-@Composable
-private fun TrailerButton(
-    url: String?,
-    playing: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    url ?: return
-    Button(onClick = onClick, modifier = modifier) { Text(if (playing) "Stop trailer" else "Trailer") }
-}
-
 /**
  * The Trailer button's playback: full screen with sound and nothing over it, not even the nav rail (library details hands
  * its trailer to the player). Its own window, so the D-pad can't reach the page underneath; Back, or the end, closes it.
@@ -783,101 +923,6 @@ private fun IptvFullScreenTrailer(
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             com.github.damontecres.wholphin.jellytip.TrailerLayer(url = url, sound = true, httpClient = httpClient, onEnded = { close() })
-        }
-    }
-}
-
-/** The TMDB cast with photos (initials when there is none), name and character; focusable so the row scrolls. */
-@Composable
-private fun CastRow(people: List<IptvCastMember>) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(vertical = 4.dp),
-        modifier = Modifier.focusGroup().focusRestorer(),
-    ) {
-        items(people.take(MAX_CAST).size) { i ->
-            val p = people[i]
-            Surface(
-                onClick = {},
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                colors =
-                    ClickableSurfaceDefaults.colors(
-                        containerColor = Color.Transparent,
-                        focusedContainerColor = Color.White.copy(alpha = 0.12f),
-                        contentColor = JellytipPalette.Vanilla,
-                        focusedContentColor = Color.White,
-                    ),
-                modifier = Modifier.width(92.dp),
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(6.dp)) {
-                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                        var failed by remember(p.profile) { mutableStateOf(false) }
-                        if (p.profile != null && !failed) {
-                            AsyncImage(model = p.profile, contentDescription = p.name, contentScale = ContentScale.Crop, onError = { failed = true }, modifier = Modifier.fillMaxSize())
-                        } else {
-                            Text(p.name.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString(""), fontFamily = JellytipFontFamily, fontSize = 16.sp)
-                        }
-                    }
-                    Text(p.name, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-                    p.character?.let {
-                        Text(it, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = JellytipPalette.Vanilla.copy(alpha = 0.6f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-private const val MAX_CAST = 12
-
-/**
- * My list toggle for an IPTV title (plan "My list"), next to Play like the library favourite. Flips at once; goes
- * back with a short note when the server can't change it (older server without the route, offline).
- */
-@Composable
-private fun MyListButton(
-    item: IptvVodItem,
-    viewModel: JellytipIptvVodViewModel,
-) {
-    val on = IptvMyList.isOn(item)
-    var busy by remember(item.id) { mutableStateOf(false) }
-    var note by remember(item.id) { mutableStateOf<String?>(null) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = {
-                if (busy) return@Button
-                val want = !on
-                IptvMyList.set(item.id, want)
-                if (want) {
-                    com.github.damontecres.wholphin.jellytip.signals.JellytipSignals.emit(
-                        com.github.damontecres.wholphin.jellytip.signals.TasteRules.event(
-                            com.github.damontecres.wholphin.jellytip.signals.TasteTarget(if (item.isSeries) "series" else "movie", item.tmdbId, iptvId = item.id),
-                            "mylist",
-                            System.currentTimeMillis(),
-                        ),
-                    )
-                }
-                busy = true
-                note = null
-                JellytipTrace.log("iptv", "my list ${item.id} on=$want")
-                scope.launch {
-                    val result = viewModel.vod.setFavourite(item.id, want)
-                    if (result == null) {
-                        IptvMyList.set(item.id, !want)
-                        note = "Couldn't update My list"
-                    } else {
-                        IptvMyList.set(item.id, result)
-                    }
-                    busy = false
-                }
-            },
-        ) {
-            Text(if (on) "\u2665  In My list" else "\u2661  My list")
-        }
-        note?.let {
-            Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
     }
 }
@@ -933,8 +978,15 @@ object IptvMyList {
 @Composable
 private fun IptvTileMenu(
     item: IptvVodItem,
-    onOpen: () -> Unit,
     onDismiss: () -> Unit,
+    /** The tile's "Open" line; null (the details page's More menu) leaves it out. */
+    onOpen: (() -> Unit)? = null,
+    /** The tile menu's My list line; the details page has a My list button of its own. */
+    withMyList: Boolean = true,
+    /** Informational first line ("Provider: X") for the details page's More menu. */
+    provider: String? = null,
+    /** Opened by a long press (the key is still down: items wait a moment) or by OK on a button (ready at once). */
+    fromLongPress: Boolean = true,
 ) {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -946,13 +998,18 @@ private fun IptvTileMenu(
     val inList = IptvMyList.isOn(item)
     val items =
         buildList {
-            add(com.github.damontecres.wholphin.ui.components.DialogItem("Open", dismissOnClick = true) { onOpen() })
-            add(
-                com.github.damontecres.wholphin.ui.components.DialogItem(if (inList) "♥  In My list — remove" else "♡  Add to My list", dismissOnClick = true) {
-                    // Fire and forget in a scope that outlives the menu (it closes on this click)
-                    IptvMyList.toggle(item.id, !inList, toast)
-                },
-            )
+            if (provider != null) {
+                add(com.github.damontecres.wholphin.ui.components.DialogItem(headlineContent = { Text("Provider: $provider") }, onClick = {}, enabled = false))
+            }
+            if (onOpen != null) add(com.github.damontecres.wholphin.ui.components.DialogItem("Open", dismissOnClick = true) { onOpen() })
+            if (withMyList) {
+                add(
+                    com.github.damontecres.wholphin.ui.components.DialogItem(if (inList) "♥  In My list — remove" else "♡  Add to My list", dismissOnClick = true) {
+                        // Fire and forget in a scope that outlives the menu (it closes on this click)
+                        IptvMyList.toggle(item.id, !inList, toast)
+                    },
+                )
+            }
             if (available) {
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == 1) "Liked ✓ — undo" else "Like", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == 1) 0 else 1, toast) })
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(if (thumb == -1) "Not for me ✓ — undo" else "Not for me", dismissOnClick = true) { me.thumbIptv(item.id, kind, item.tmdbId, if (thumb == -1) 0 else -1, toast) })
@@ -962,5 +1019,5 @@ private fun IptvTileMenu(
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(if (played) "Mark unwatched" else "Mark watched", dismissOnClick = true) { me.setIptvPlayed(item.id, !played, toast) })
             }
         }
-    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)
 }

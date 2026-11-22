@@ -1,0 +1,52 @@
+// Chip contract v1 golden file (~/ai/plans/jellytip-chat-search.md 3a): chipFor for every ChipData variant, the MOODS
+// round trip, and the C3 label cases. Generated from web/src/lib/askParse.ts; asserted by the web, the TV (AskParseTest)
+// and the server's Python port. Run: node gen-contract.mts > chip-contract-v1.json
+import { chipFor, moodLabel, MOOD_TABLE, type ChipData } from "./askParse.ts";
+const variants: ChipData[] = [
+  { t: "genre", genres: ["Comedy"] },
+  { t: "genre", genres: ["Science Fiction", "Sci-Fi & Fantasy"] },
+  { t: "genre", genres: ["Adventure"] },
+  { t: "notGenre", genres: ["Horror"] },
+  { t: "notGenre", genres: ["Animation"] },
+  { t: "kind", kind: "Movie" },
+  { t: "kind", kind: "Series" },
+  { t: "maxRuntime", min: 90 },
+  { t: "maxRuntime", min: 120 },
+  { t: "maxRuntime", min: 150 },
+  { t: "minRuntime", min: 60 },
+  { t: "minRuntime", min: 180 },
+  { t: "years", from: 1990, to: 1999 },
+  { t: "years", from: 1994, to: 1994 },
+  { t: "years", from: 2010, to: 2015 },
+  { t: "years", from: 1995, to: 2004 },
+  { t: "unplayed" },
+  { t: "played" },
+  { t: "kids", ratings: ["G", "PG", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "U"], genres: ["Family", "Animation", "Kids"] },
+  { t: "minRating", value: 7 },
+  { t: "minRating", value: 7.5 },
+  { t: "maxSeasons", n: 1 },
+  { t: "maxSeasons", n: 3 },
+  { t: "person", id: "0a1b2c3d4e5f60718293a4b5c6d7e8f9", name: "Chris Columbus", role: "Director" },
+  { t: "person", id: "f0e1d2c3b4a5968778695a4b3c2d1e0f", name: "Robin Williams", role: "Actor" },
+];
+const c3: string[][] = [
+  // rule 1: one mood's set, any case / order
+  ["Comedy"], ["comedy"], ["Sci-Fi & Fantasy", "Science Fiction"], ["Kids", "Family"],
+  // rule 2: union of 2+ moods (greedy in MOODS order; a mood adding nothing new is skipped)
+  ["Adventure", "Action & Adventure", "Comedy"], ["Horror", "Comedy"], ["Western", "Horror", "Thriller"],
+  // broad Feel-good (Comedy, Family, Animation, Kids) and narrower Comedy / Family both fit: Feel-good is taken first, the
+  // narrower ones add nothing and are skipped
+  ["Comedy", "Family", "Animation", "Kids", "Horror"],
+  // Feel-good does not fit (no Animation): Comedy and Family do
+  ["Family", "Kids", "Comedy"],
+  // rule 3: no exact cover by moods (single refine genres, partial mood sets, unknown genres)
+  ["Adventure"], ["Drama", "Adventure"], ["Kids"], ["Science Fiction"], ["Comedy", "Anime"], ["Action & Adventure", "Mystery"],
+];
+console.log(JSON.stringify({
+  v: 1,
+  sort: "case-insensitive: ordinal compare of the lower-cased strings",
+  moods: MOOD_TABLE,
+  variants: variants.map((d) => { const c = chipFor(d); return { data: d, id: c.id, label: c.label }; }),
+  moodRoundTrip: MOOD_TABLE.map((m) => ({ label: m.label, genre: chipFor({ t: "genre", genres: m.genres }), notGenre: chipFor({ t: "notGenre", genres: m.genres }) })).map((r) => ({ label: r.label, genreId: r.genre.id, genreLabel: r.genre.label, notGenreId: r.notGenre.id, notGenreLabel: r.notGenre.label })),
+  c3: c3.map((genres) => ({ genres, label: moodLabel(genres), genreId: chipFor({ t: "genre", genres }).id, notGenreId: chipFor({ t: "notGenre", genres }).id, notGenreLabel: chipFor({ t: "notGenre", genres }).label })),
+}, null, 1));
