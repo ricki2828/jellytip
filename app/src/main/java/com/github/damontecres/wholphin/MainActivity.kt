@@ -266,6 +266,11 @@ class MainActivity : AppCompatActivity() {
                 Timber.e(ex, "Error with keepScreenOn")
             }.launchIn(lifecycleScope)
 
+        // Jellytip one-shot preference moves (e.g. the old 25-per-row default -> 50)
+        lifecycleScope.launchDefault {
+            com.github.damontecres.wholphin.jellytip.home.JellytipPrefMigrations.run(applicationContext, userPreferencesDataStore)
+        }
+
         userPreferencesDataStore.data.collectLatestIn(lifecycleScope) { prefs ->
             signInAuto = prefs.signInAutomatically
             playerBackend = prefs.playbackPreferences.playerBackend
