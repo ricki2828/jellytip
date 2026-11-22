@@ -62,4 +62,12 @@ class LiveBufferTest {
         assertEquals("Auto (Low)", LiveBuffer.modeLabel("auto"))
         assertEquals("High (~15 s)", LiveBuffer.modeLabel("high"))
     }
+
+    @Test
+    fun filmProfileIsDeepAndNotALiveMode() {
+        val p = LiveBuffer.Profile.FILM
+        assertTrue(p.maxBufferMs >= 180_000 && p.afterRebufferMs >= 30_000 && p.startMs <= 5_000)
+        assertTrue("never offered as a live buffer mode", "film" !in LiveBuffer.MODES)
+        assertTrue("auto stepping never reaches it", LiveBuffer.AUTO_MAX.ordinal < p.ordinal)
+    }
 }

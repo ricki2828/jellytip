@@ -29,6 +29,13 @@ object LiveBuffer {
         NORMAL("Normal", 8_000, 6_000, 30_000, 700, 6_000),
         HIGH("High", 15_000, 11_000, 45_000, 6_000, 11_000),
         MAX("Max", 30_000, 22_000, 60_000, 6_000, 22_000),
+
+        /**
+         * Films and episodes (22-Nov, Celebrity Traitors S2E2: the provider serves that file at ~0.98x its bitrate; the remux
+         * after a skip cycled 30 s play / 21 s buffering on the live Low buffers): a deep buffer, a quick start, and a 30 s
+         * cushion after a rebuffer so stalls are rare and long rather than every half minute. Not a live mode (not in MODES).
+         */
+        FILM("Film", 0, 60_000, 180_000, 5_000, 30_000),
     }
 
     const val AUTO = "auto"
@@ -138,6 +145,9 @@ object LiveBuffer {
         target: IptvTarget,
         now: Long = System.currentTimeMillis(),
     ): Profile {
+        // Films / episodes: deep buffer (direct and remux alike, so a skip never rebuilds the player and the frame holds).
+        // Catch-up and recordings keep Low as before.
+        if (target.vodId != null || target.episodeId != null) return Profile.FILM
         if (!target.isLive) return Profile.LOW
         val mode = loadMode(context)
         if (mode != AUTO) return profileOf(mode) ?: TV_AUTO
