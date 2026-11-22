@@ -123,36 +123,47 @@ class JellytipIptvVodViewModel
          * plays from the library (it seeks, has subtitles; "source less important") at the IPTV copy's position (same episode,
          * so the timestamp is close enough). Otherwise, or when the lookup is slow / fails, the IPTV player as before.
          */
+        private var resumeJob: kotlinx.coroutines.Job? = null
+
         fun openResume(r: IptvResume) {
+            // A second OK while the library lookup is out would open a second player
+            if (resumeJob?.isActive == true) return
             val series = r.seriesLibraryUuid
             if (series == null || r.season == null || r.episode == null) {
                 navigationManager.navigateTo(r.destination(), "continue IPTV ${r.kind}")
                 return
             }
-            viewModelScope.launch {
-                val lib =
-                    try {
-                        kotlinx.coroutines.withTimeoutOrNull(IptvResumeLibrary.LOOKUP_MS) {
-                            val eps =
-                                api.tvShowsApi
-                                    .getEpisodes(seriesId = series, season = r.season, isMissing = false, limit = 200)
-                                    .content.items
-                                    .map { IptvResumeLibrary.Ep(it.id, it.parentIndexNumber, it.indexNumber) }
-                            IptvResumeLibrary.pick(eps, r.season, r.episode)
+            val from = navigationManager.backStack.lastOrNull()
+            resumeJob =
+                viewModelScope.launch {
+                    val lib =
+                        try {
+                            kotlinx.coroutines.withTimeoutOrNull(IptvResumeLibrary.LOOKUP_MS) {
+                                val eps =
+                                    api.tvShowsApi
+                                        .getEpisodes(seriesId = series, season = r.season, isMissing = false, limit = 200)
+                                        .content.items
+                                        .map { IptvResumeLibrary.Ep(it.id, it.parentIndexNumber, it.indexNumber) }
+                                IptvResumeLibrary.pick(eps, r.season, r.episode)
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            timber.log.Timber.w(e, "library episode lookup")
+                            null
                         }
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        timber.log.Timber.w(e, "library episode lookup")
-                        null
+                    // He moved on (Back, another page) while it looked: don't pull him into a player
+                    if (navigationManager.backStack.lastOrNull() !== from) {
+                        JellytipTrace.log("iptv", "continue: ${r.id} lookup ended after leaving the page; not opened")
+                        return@launch
                     }
-                if (lib != null) {
-                    JellytipTrace.log("iptv", "continue: ${r.id} S${r.season}E${r.episode} plays from the library $lib at ${r.pos.toLong()} s")
-                    navigationManager.navigateTo(Destination.Playback(itemId = lib, positionMs = (r.pos * 1000).toLong()), "continue IPTV episode -> library")
-                } else {
-                    navigationManager.navigateTo(r.destination(), "continue IPTV ${r.kind}")
+                    if (lib != null) {
+                        JellytipTrace.log("iptv", "continue: ${r.id} S${r.season}E${r.episode} plays from the library $lib at ${r.pos.toLong()} s")
+                        navigationManager.navigateTo(Destination.Playback(itemId = lib, positionMs = (r.pos * 1000).toLong()), "continue IPTV episode -> library")
+                    } else {
+                        navigationManager.navigateTo(r.destination(), "continue IPTV ${r.kind}")
+                    }
                 }
-            }
         }
 
         /** Trailer autoplay / sound, the same switches as the library details page. */
