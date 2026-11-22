@@ -119,6 +119,9 @@ object IptvStreamFail {
             else -> null
         }
 
+    /** A film / episode the player can't seek (an mkv with no Cues): reported once per viewing, never a failure. */
+    const val UNSEEKABLE = "unseekable"
+
     /** id + kind the companion records for a target; null for recordings and catch-up (never dinged). */
     fun outcomeTarget(t: IptvTarget): Pair<String, String>? =
         when {
@@ -130,12 +133,32 @@ object IptvStreamFail {
             else -> null
         }
 
+    /**
+     * What the player saw of a film / episode stream (server spec S4, 22-Nov): the server ranks a title's copies by it (a seekable
+     * copy before a cue-less mkv). Null fields = not known.
+     */
+    data class StreamTraits(
+        val seekable: Boolean? = null,
+        val remuxed: Boolean? = null,
+        val container: String? = null,
+    )
+
+    /** "mkv" from ".../s/<token>.mkv?x" (2-6 lower-case letters / digits), else null. */
+    fun containerOf(url: String?): String? =
+        url
+            ?.substringBefore('?')
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('.', "")
+            ?.lowercase()
+            ?.takeIf { Regex("^[a-z0-9]{2,6}$").matches(it) }
+
     fun outcomeBody(
         id: String,
         kind: String,
         ok: Boolean,
         reason: String?,
         posSec: Long?,
+        traits: StreamTraits? = null,
     ): String =
         JSONObject()
             .apply {
@@ -144,6 +167,12 @@ object IptvStreamFail {
                 put("ok", ok)
                 if (!ok) put("reason", reason ?: "open_failed")
                 if (posSec != null) put("posSec", posSec.coerceAtLeast(0))
+                // Films / episodes only (the server stores traits for those)
+                if (kind == "vod" || kind == "episode") {
+                    traits?.seekable?.let { put("seekable", it) }
+                    traits?.remuxed?.let { put("remuxed", it) }
+                    traits?.container?.let { put("container", it) }
+                }
             }.toString()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -154,12 +183,14 @@ object IptvStreamFail {
         ok: Boolean,
         reason: String? = null,
         posSec: Long? = null,
+        traits: StreamTraits? = null,
     ) {
         val (id, kind) = outcomeTarget(target) ?: return
         val now = System.currentTimeMillis() / 1000
-        if (ok) forgetLocal(id) else if (reason != "decode") rememberLocal(id, reason ?: "open_failed", now)
+        // decode / unseekable describe this device or this file's index, never a failed stream: no local ding
+        if (ok) forgetLocal(id) else if (reason != "decode" && reason != UNSEEKABLE) rememberLocal(id, reason ?: "open_failed", now)
         val api = JellytipApi.shared ?: return
-        scope.launch { runCatching { api.userCall("v1/iptv/play/outcome", outcomeBody(id, kind, ok, reason, posSec)) } }
+        scope.launch { runCatching { api.userCall("v1/iptv/play/outcome", outcomeBody(id, kind, ok, reason, posSec, traits)) } }
     }
 
     // ---- "Ways to watch": the copy picked for a title opens first next time (per device) ----

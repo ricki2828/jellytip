@@ -274,8 +274,13 @@ class JellytipIptvPlayback
                     }
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
-                        // A resume on a direct stream ExoPlayer can't seek (it started at 0): the remux, from the saved position
+                        // S4: a direct film / episode the player can't seek (an mkv with no Cues), once per viewing, never a failure
                         val p = player
+                        if (!isRemux && p != null && !p.isCurrentMediaItemSeekable && film(t) && !unseekableReported) {
+                            unseekableReported = true
+                            IptvStreamFail.report(t, ok = false, reason = IptvStreamFail.UNSEEKABLE, traits = streamTraits())
+                        }
+                        // A resume on a direct stream ExoPlayer can't seek (it started at 0): the remux, from the saved position
                         if (!isRemux && p != null && SkipPolicy.resumeViaRemux(film(t), p.isCurrentMediaItemSeekable, remuxAsked, openStartMs)) {
                             skipViaRemux(t, openStartMs, "resume via remux")
                             return
@@ -325,7 +330,7 @@ class JellytipIptvPlayback
                                     if (p.isPlaying && moved) playedS += OK_TICK_MS / 1000
                                     lastPos = pos
                                 }
-                                IptvStreamFail.report(t, ok = true, posSec = playedS)
+                                IptvStreamFail.report(t, ok = true, posSec = playedS, traits = streamTraits())
                             }
                     }
                 }
@@ -624,6 +629,7 @@ class JellytipIptvPlayback
         }
 
         private fun resetRecovery(target: IptvTarget) {
+            unseekableReported = false
             skipOpenMs = null
             skipTicker?.cancel()
             recTimer?.cancel()
@@ -650,8 +656,19 @@ class JellytipIptvPlayback
             if (rec.offline) return
             // A device decode note is logged but doesn't use the one counted report of the viewing
             if (reason != "decode") failReported = true
-            IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec)
+            IptvStreamFail.report(t, ok = false, reason = reason, posSec = posSec, traits = streamTraits())
         }
+
+        /** The loaded stream's traits for the outcome report (S4); the container from the stream link's extension. */
+        private var loadedContainer: String? = null
+        private var unseekableReported = false
+
+        private fun streamTraits(): IptvStreamFail.StreamTraits =
+            IptvStreamFail.StreamTraits(
+                seekable = player?.isCurrentMediaItemSeekable?.takeIf { player?.playbackState == Player.STATE_READY || it },
+                remuxed = isRemux,
+                container = loadedContainer,
+            )
 
         private fun posSec(): Long = positionMs() / 1000
 
@@ -837,6 +854,7 @@ class JellytipIptvPlayback
                                     }.build()
                             val p = ensurePlayer(profile)
                             loadedTarget = target
+                            loadedContainer = IptvStreamFail.containerOf(r.answer.url)
                             isRemux = r.answer.remux
                             remuxStartMs = if (r.answer.remux) r.answer.startAt * 1000 else 0L
                             remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null

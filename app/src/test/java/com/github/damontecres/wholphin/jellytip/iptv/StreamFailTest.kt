@@ -88,4 +88,29 @@ class StreamFailTest {
         assertTrue(IptvStreamFail.pickKey("movie", 603, "The Matrix", 1999) == "movie:t603")
         assertEquals("movie:nthe matrix:1999", IptvStreamFail.pickKey("movie", null, "The  Matrix!", 1999))
     }
+
+    @Test
+    fun outcomeCarriesStreamTraitsForFilmsAndEpisodesOnly() {
+        // S4 (22-Nov): the server ranks copies by what players saw (Celebrity Traitors S2E2: an mkv with no Cues)
+        val tr = IptvStreamFail.StreamTraits(seekable = false, remuxed = false, container = "mkv")
+        val o = JSONObject(IptvStreamFail.outcomeBody("p:e:2111120", "episode", false, IptvStreamFail.UNSEEKABLE, null, tr))
+        assertEquals("unseekable", o.getString("reason"))
+        assertFalse(o.getBoolean("seekable"))
+        assertFalse(o.getBoolean("remuxed"))
+        assertEquals("mkv", o.getString("container"))
+        val live = JSONObject(IptvStreamFail.outcomeBody("p:1", "live", true, null, 120, tr))
+        assertFalse("live: no traits", live.has("seekable") || live.has("container"))
+        val unknown = JSONObject(IptvStreamFail.outcomeBody("p:m:1", "vod", true, null, 90, IptvStreamFail.StreamTraits(remuxed = true)))
+        assertTrue(unknown.getBoolean("remuxed"))
+        assertFalse("null fields are left out", unknown.has("seekable") || unknown.has("container"))
+    }
+
+    @Test
+    fun containerFromTheStreamLink() {
+        assertEquals("mkv", IptvStreamFail.containerOf("v1/iptv/s/abc.def.mkv"))
+        assertEquals("mp4", IptvStreamFail.containerOf("https://h/v1/iptv/s/tok.MP4?x=1"))
+        assertNull(IptvStreamFail.containerOf("v1/iptv/s/token"))
+        assertNull(IptvStreamFail.containerOf("v1/iptv/s/t.verylongext"))
+        assertNull(IptvStreamFail.containerOf(null))
+    }
 }
