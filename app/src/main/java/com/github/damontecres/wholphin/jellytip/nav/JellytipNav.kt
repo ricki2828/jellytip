@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,6 +137,7 @@ fun JellytipSeasonChips(
             Column(
                 modifier =
                     Modifier
+                        .testTag("jellytip-season-chip-$index")
                         .then(if (selected) Modifier.focusRequester(selectedRequester) else Modifier)
                         .clip(RoundedCornerShape(sizes.px(4f)))
                         .background(if (focused) Color.White.copy(alpha = 0.16f) else Color.Transparent)

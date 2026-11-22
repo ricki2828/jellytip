@@ -682,7 +682,7 @@ fun JellytipIptvDetailsContent(
             )
         }
         if (moreOpen && item != null) {
-            IptvTileMenu(item, onDismiss = { moreOpen = false }, withMyList = false, provider = item.providerName)
+            IptvTileMenu(item, onDismiss = { moreOpen = false }, withMyList = false, provider = item.providerName, fromLongPress = false)
         }
         if (trailerPlaying && trailerUrl != null) {
             IptvFullScreenTrailer(trailerUrl, httpClient) {
@@ -983,6 +983,8 @@ private fun IptvTileMenu(
     withMyList: Boolean = true,
     /** Informational first line ("Provider: X") for the details page's More menu. */
     provider: String? = null,
+    /** Opened by a long press (the key is still down: items wait a moment) or by OK on a button (ready at once). */
+    fromLongPress: Boolean = true,
 ) {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -1015,5 +1017,5 @@ private fun IptvTileMenu(
                 add(com.github.damontecres.wholphin.ui.components.DialogItem(if (played) "Mark unwatched" else "Mark watched", dismissOnClick = true) { me.setIptvPlayed(item.id, !played, toast) })
             }
         }
-    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true)
+    com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = items, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)
 }
