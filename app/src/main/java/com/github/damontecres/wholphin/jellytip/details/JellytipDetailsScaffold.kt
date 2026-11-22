@@ -30,9 +30,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.github.damontecres.wholphin.jellytip.BoxScopeDownHint
 import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+
+private const val OPEN_AT_WAIT_MS = 2500L
+private const val OPEN_AT_STEP_MS = 50L
 
 /**
  * One lower block of a details page (a row, or a custom block). It is composed only after Down from the hero buttons,
@@ -121,6 +125,7 @@ fun JellytipDetailsScaffold(
         if (openAt == null) heroFocus.tryRequestFocus()
     }
     LaunchedEffect(state.topFocused) { if (state.topFocused) state.sectionsActive = false }
+    var pageHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(state.sectionsActive) {
         if (state.sectionsActive) {
             // Rows only exist once sectionsActive composes them: wait for that, scroll to them, then focus
@@ -131,12 +136,30 @@ fun JellytipDetailsScaffold(
             val present = currentSections.filter { it.present }
             val first = pendingOpenAt?.let { k -> present.firstOrNull { it.key == k } }
             pendingOpenAt = null
-            val order = if (first != null) listOf(first) + present.filter { it !== first } else present
             var focused = false
-            for (s in order) {
-                if (requesters.getOrPut(s.key) { FocusRequester() }.tryRequestFocus()) {
-                    focused = true
-                    break
+            if (first != null) {
+                // The opened section's content may arrive late (episodes still loading): its focus target does not exist
+                // yet, so ask again every few frames until focus lands, for up to OPEN_AT_WAIT_MS
+                val target = requesters.getOrPut(first.key) { FocusRequester() }
+                var waited = 0L
+                while (!focused && waited <= OPEN_AT_WAIT_MS) {
+                    target.tryRequestFocus()
+                    withFrameNanos { }
+                    withFrameNanos { }
+                    focused = pageHasFocus && !state.topFocused
+                    if (!focused) {
+                        delay(OPEN_AT_STEP_MS)
+                        waited += OPEN_AT_STEP_MS
+                    }
+                }
+            }
+            if (!focused) {
+                for (s in present) {
+                    if (s === first) continue
+                    if (requesters.getOrPut(s.key) { FocusRequester() }.tryRequestFocus()) {
+                        focused = true
+                        break
+                    }
                 }
             }
             // Nothing took focus: fall back to the hero so Down is not swallowed forever
@@ -149,7 +172,6 @@ fun JellytipDetailsScaffold(
     }
     val headerAlpha by animateFloatAsState(if (state.topFocused) 1f else 0f, tween(250), label = "jellytip-header")
 
-    var pageHasFocus by remember { mutableStateOf(false) }
     RestoreFocusOnResume(heroFocus, pageHasFocus)
     Box(modifier = modifier.onFocusChanged { pageHasFocus = it.hasFocus }) {
         backdrop(state.buttonRowFocused, !state.topFocused)

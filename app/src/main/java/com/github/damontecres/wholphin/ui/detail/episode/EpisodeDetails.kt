@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.episode
 
+import com.github.damontecres.wholphin.jellytip.details.myListLabel
 import com.github.damontecres.wholphin.jellytip.RestoreFocusOnResume
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -303,7 +304,7 @@ fun EpisodeDetailsContent(
                     }
                     add(
                         JellytipButton(
-                            stringResource(if (dto.userData?.isFavorite == true) R.string.remove_favorite else R.string.add_favorite),
+                            myListLabel(dto.userData?.isFavorite == true),
                             favoriteOnClick,
                         ),
                     )

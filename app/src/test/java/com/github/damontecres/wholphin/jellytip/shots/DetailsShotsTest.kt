@@ -8,6 +8,9 @@ import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -27,7 +33,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
@@ -49,6 +58,7 @@ import com.github.damontecres.wholphin.jellytip.JellytipExtras
 import com.github.damontecres.wholphin.jellytip.JellytipSettings
 import com.github.damontecres.wholphin.jellytip.LocalJellytipDetailsSource
 import com.github.damontecres.wholphin.jellytip.cache.ImagePick
+import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.iptv.IptvCastMember
 import com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode
@@ -86,6 +96,7 @@ import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.UserItemDataDto
 import org.jellyfin.sdk.model.api.request.GetEpisodesRequest
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -207,6 +218,16 @@ class DetailsShotsTest {
             val m: SemanticsMatcher = hasClickAction() and (hasText(text) or hasAnyDescendant(hasText(text)))
             compose.onAllNodes(m).onFirst().requestFocus()
         }.onFailure { println("shot $name: focus on '$text' not set (${it.message?.lineSequence()?.firstOrNull()})") }
+    }
+
+    /** OK on the focused node (the D-pad centre key). */
+    private fun pressOk(name: String) {
+        runCatching {
+            compose.onRoot().performKeyInput {
+                keyDown(Key.DirectionCenter)
+                keyUp(Key.DirectionCenter)
+            }
+        }.onFailure { println("shot $name: OK key not sent (${it.message?.lineSequence()?.firstOrNull()})") }
     }
 
     private fun pressDown(name: String) {
@@ -353,7 +374,7 @@ class DetailsShotsTest {
         "River Cartwright is given a last chance to prove himself, and a loose thread from an old operation threatens to pull the whole house down. " +
             "Lamb knows more than he is saying, and the slow horses are about to find out how much."
 
-    /** Six episodes of season 1: E1 watched, E2 part-watched, E4 is next up (set by the caller via nextUpId). */
+    /** Six episodes of season 1: E1 and E2 watched, E3 part-watched (the series button resumes it), E4 is next up (set by the caller via nextUpId). */
     private fun episodes(): List<BaseItem> =
         episodeTitles.mapIndexed { i, title ->
             val n = i + 1
@@ -375,8 +396,8 @@ class DetailsShotsTest {
                     imageTags = mapOf(ImageType.PRIMARY to "still"),
                     userData =
                         when (n) {
-                            1 -> userData(id, played = true)
-                            2 -> userData(id, positionMin = 21, percent = 44.0)
+                            1, 2 -> userData(id, played = true)
+                            3 -> userData(id, positionMin = 21, percent = 44.0)
                             else -> userData(id)
                         },
                 ),
@@ -475,8 +496,18 @@ class DetailsShotsTest {
         shot(name, steps = { focusText(name, "Play") }) { FilmPage(film(title = title), withRows = true) }
     }
 
+    /** The part-watched episode the series button resumes (S1 E3). */
+    private fun resumeTarget() = episodes()[2]
+
     @Composable
-    private fun SeriesPage(episodes: EpisodeList) {
+    private fun SeriesPage(
+        episodes: EpisodeList,
+        resolved: BaseItem? = resumeTarget(),
+        seasonIndex: Int = 0,
+        onChangeSeason: (Int) -> Unit = {},
+        onPlayEpisode: (BaseItem) -> Unit = {},
+        onClickEpisode: (BaseItem) -> Unit = {},
+    ) {
         SeriesDetailsContent(
             preferences = prefs,
             series = series(),
@@ -492,10 +523,10 @@ class DetailsShotsTest {
             onClickItem = { _, _ -> },
             episodes = episodes,
             nextUpId = nextUpId,
-            seasonIndex = 0,
-            initialEpisodeIndex = 3,
-            onChangeSeason = {},
-            onClickEpisode = {},
+            seasonIndex = seasonIndex,
+            initialEpisodeIndex = 2,
+            onChangeSeason = onChangeSeason,
+            onClickEpisode = onClickEpisode,
             consumeReturnToEpisodes = { false },
             onClickPerson = {},
             onLongClickItem = { _, _ -> },
@@ -510,13 +541,39 @@ class DetailsShotsTest {
             onClickDiscover = { _, _ -> },
             discoverSeries = null,
             onClickDiscoverSeries = {},
+            resolved = resolved,
+            onPlayEpisode = onPlayEpisode,
         )
     }
+
+    /** A page that keeps the selected season itself, as the view model does, and records every season change it is asked for. */
+    @Composable
+    private fun SeasonStatefulSeriesPage(
+        episodes: EpisodeList,
+        changes: MutableList<Int>,
+    ) {
+        var selected by remember { mutableStateOf(0) }
+        SeriesPage(
+            episodes = episodes,
+            seasonIndex = selected,
+            onChangeSeason = {
+                changes.add(it)
+                selected = it
+            },
+        )
+    }
+
+    private val primaryLabel = "Resume S1 E3"
 
     @Test
     fun seriesHero() {
         val name = "details-series-hero"
-        shot(name, steps = { focusText(name, "Play") }) { SeriesPage(EpisodeList.Loading) }
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            // The button names the episode it plays; the status line says how many seasons and what is next
+            compose.onAllNodes(hasText(primaryLabel)).onFirst().assertExists()
+            compose.onAllNodes(hasText("3 seasons  \u00B7  Next: S1 E3")).onFirst().assertExists()
+        }) { SeriesPage(EpisodeList.Loading) }
     }
 
     @Test
@@ -524,10 +581,92 @@ class DetailsShotsTest {
         val name = "details-series-episodes"
         val list = episodeList(name, episodes()) ?: return
         shot(name, steps = {
-            focusText(name, "Play")
+            focusText(name, primaryLabel)
             pressDown(name)
             advance(1500)
         }) { SeriesPage(list) }
+    }
+
+    @Test
+    fun seriesSeasonFocus() {
+        val name = "details-series-season-focus"
+        val list = episodeList(name, episodes()) ?: return
+        val changes = mutableListOf<Int>()
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            pressDown(name)
+            advance(1500)
+            // Focus only moves: Season 1 stays the selected season and the episodes stay put
+            focusText(name, "Season 2")
+            advance(800)
+            assertEquals("focusing a season chip must not change the season", emptyList<Int>(), changes)
+        }) { SeasonStatefulSeriesPage(list, changes) }
+    }
+
+    @Test
+    fun seriesSeasonOk() {
+        val name = "details-series-season-ok"
+        val list = episodeList(name, episodes()) ?: return
+        val changes = mutableListOf<Int>()
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            pressDown(name)
+            advance(1500)
+            focusText(name, "Season 2")
+            advance(800)
+            assertEquals("not before OK", emptyList<Int>(), changes)
+            pressOk(name)
+            advance(800)
+            assertEquals("OK on Season 2 changes the season exactly once", listOf(1), changes)
+        }) { SeasonStatefulSeriesPage(list, changes) }
+    }
+
+    @Test
+    fun seriesEpisodeOk() {
+        val name = "details-series-episode-ok"
+        val list = episodeList(name, episodes()) ?: return
+        val played = mutableListOf<UUID>()
+        var overviewOpened = 0
+        shot(name, steps = {
+            focusText(name, primaryLabel)
+            pressDown(name)
+            advance(1500)
+            runCatching { compose.onNodeWithTag("jellytip-episode-tile-4").requestFocus() }
+                .onFailure { println("shot $name: tile focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+            advance(500)
+            pressOk(name)
+            advance(500)
+            assertEquals("OK on the E4 tile plays that episode", listOf(uuid("episode:1:4")), played)
+            assertEquals("the old Overview path is not used by a tile", 0, overviewOpened)
+        }) {
+            SeriesPage(list, onPlayEpisode = { played.add(it.id) }, onClickEpisode = { overviewOpened++ })
+        }
+    }
+
+    @Test
+    fun episodeTile() {
+        val name = "details-episode-tile"
+        val still = "https://h/s/1/1"
+        shot(name, steps = {
+            // The part-watched tile with the Next pill takes focus: scale + cream border
+            runCatching { compose.onNodeWithTag("jellytip-episode-tile-3").requestFocus() }
+                .onFailure { println("shot $name: tile focus not set (${it.message?.lineSequence()?.firstOrNull()})") }
+        }) {
+            Column(Modifier.padding(start = 24.dp, top = 28.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Unwatched, part-watched with the Next pill, watched
+                    JellytipEpisodeTile(still, 2, "Work Ethic", episodeOverview, played = false, progress = 0f, isNext = false, onClick = {}, onLongClick = {})
+                    JellytipEpisodeTile(still, 3, "Hey, Joe", episodeOverview, played = false, progress = 0.44f, isNext = true, onClick = {}, onLongClick = {})
+                    JellytipEpisodeTile(still, 1, "Failure's Contagious", episodeOverview, played = true, progress = 0f, isNext = false, onClick = {}, onLongClick = {})
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Long name, no overview, no still
+                    JellytipEpisodeTile(still, 6, "A Very Long Episode Title That Will Not Fit On One Line", episodeOverview, played = false, progress = 0f, isNext = false, onClick = {}, onLongClick = {})
+                    JellytipEpisodeTile(still, 5, "The Ten Thousand Hour Rule", null, played = false, progress = 0f, isNext = false, onClick = {}, onLongClick = {})
+                    JellytipEpisodeTile(null, 4, "Spook Street", episodeOverview, played = false, progress = 0f, isNext = false, onClick = {}, onLongClick = {})
+                }
+            }
+        }
     }
 
     @Test

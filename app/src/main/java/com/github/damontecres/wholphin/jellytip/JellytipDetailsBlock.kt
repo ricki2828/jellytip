@@ -84,6 +84,8 @@ fun JellytipDetailsBlock(
     modifier: Modifier = Modifier,
     onFocusWithin: (Boolean) -> Unit = {},
     subtitle: String? = null,
+    /** One quiet line under the title / subtitle ("3 seasons  ·  Next: S2 E4"); null (film and episode pages) draws nothing. */
+    statusLine: String? = null,
     bottomPadding: Dp? = null,
     below: @Composable () -> Unit = {},
     viewModel: JellytipDetailsSource = LocalJellytipDetailsSource.current ?: hiltViewModel<JellytipDetailsViewModel>(),
@@ -117,6 +119,7 @@ fun JellytipDetailsBlock(
             directedBy = { resources.getString(R.string.directed_by, it) },
             logoUrl = logoUrl,
             subtitle = subtitle,
+            statusLine = statusLine,
             audienceLine = audienceLine,
         )
     JellytipDetailsBlockContent(
