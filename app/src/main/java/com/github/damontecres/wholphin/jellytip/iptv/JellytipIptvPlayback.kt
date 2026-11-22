@@ -274,6 +274,12 @@ class JellytipIptvPlayback
                     }
                     // READY from the previous stream while the next one is still being asked for is not the new one playing
                     if (playbackState == Player.STATE_READY && _state.value is IptvPlayState.Opening && loadedTarget == t) {
+                        // A resume on a direct stream ExoPlayer can't seek (it started at 0): the remux, from the saved position
+                        val p = player
+                        if (!isRemux && p != null && SkipPolicy.resumeViaRemux(t.isLive, t.recordingId != null, p.isCurrentMediaItemSeekable, openStartMs)) {
+                            skipViaRemux(t, openStartMs, "resume via remux")
+                            return
+                        }
                         setState(IptvPlayState.Playing(t), "ready")
                         pendingRemuxSeekMs = null
                         if (recTarget == t) {
@@ -467,6 +473,9 @@ class JellytipIptvPlayback
         @Volatile
         private var pendingRemuxSeekMs: Long? = null
 
+        /** Where the current open meant to start (ms): a direct stream that turns out unseekable resumes there through the remux. */
+        private var openStartMs = 0L
+
         /**
          * The recording being played (its times and state), set by the page: a recording's length comes from it when the
          * file can't say (raw TS has no index; an in-progress one grows), so progress is never saved against half of it.
@@ -487,16 +496,41 @@ class JellytipIptvPlayback
         /** Seek a film / episode; a remux reopens from [ms] (the server starts the conversion there). */
         fun seekTo(ms: Long) {
             val t = _state.value.target ?: return
-            if (isRemux) {
-                JellytipTrace.player("iptv", "remux seek ${t.channelId} to ${ms / 1000} s")
-                _note.value = "Converting…"
-                pendingRemuxSeekMs = ms
-                // The old conversion must not report READY (and clear the pending seek) while the new one starts
-                stopPlayer()
-                launchOpen(t, "remux seek", remux = true, seekMs = ms)
-            } else {
-                player?.seekTo(ms)
+            val p = player
+            when {
+                isRemux -> skipViaRemux(t, ms, "remux seek")
+                p != null && p.isCurrentMediaItemSeekable -> p.seekTo(ms)
+                // A film / episode ExoPlayer can't seek (an mkv with no Cues, Celebrity Traitors S2E2 22-Nov): the server's
+                // conversion starts at [ms] (ffmpeg seeks the file itself, ~10 s)
+                SkipPolicy.viaRemux(t.isLive, t.recordingId != null, false, p?.isCurrentMediaItemSeekable == true) -> skipViaRemux(t, ms, "skip via remux")
+                else -> p?.seekTo(ms)
             }
+        }
+
+        /** A seek can work here: the player can, the stream is the remux, or it's a film / episode the remux can start anywhere. */
+        fun canSkip(): Boolean {
+            val t = _state.value.target ?: return false
+            val p = player ?: return false
+            return p.isCurrentMediaItemSeekable || isRemux || SkipPolicy.viaRemux(t.isLive, t.recordingId != null, false, false)
+        }
+
+        /**
+         * Reopen through the remux at [ms] with the current frame held ("Skipping to 31:20…"): no stop / clear, so the picture
+         * stays; the old stream's late READY / errors are ignored (loadedTarget cleared) and the server drops its provider
+         * connection when the new one is asked for. A second seek meanwhile counts from [ms] ([pendingRemuxSeekMs]).
+         */
+        private fun skipViaRemux(
+            t: IptvTarget,
+            ms: Long,
+            why: String,
+        ) {
+            JellytipTrace.player("iptv", "$why ${t.channelId} to ${ms / 1000} s (frame held)")
+            _note.value = "Skipping to ${IptvPlayControls.clock(ms)}…"
+            pendingRemuxSeekMs = ms
+            remuxAsked = true
+            loadedTarget = null
+            player?.playWhenReady = false
+            launchOpen(t, why, remux = true, seekMs = ms)
         }
 
         private fun resetRecovery(target: IptvTarget) {
@@ -673,6 +707,7 @@ class JellytipIptvPlayback
             seekMs: Long? = null,
         ) {
             val startMs = seekMs ?: target.resumeMs
+            openStartMs = startMs
             job?.cancel()
             okJob?.cancel()
             setState(IptvPlayState.Opening(target), reason)
@@ -908,3 +943,24 @@ class JellytipIptvPlayback
             private const val READ_TIMEOUT_MS = 15_000
         }
     }
+
+/** When a seek / resume goes through the server remux (pure; tested). */
+object SkipPolicy {
+    /** Resumes this close to the start just play from the top. */
+    const val RESUME_MIN_MS = 5_000L
+
+    /** A film / episode (not live, not a recording) whose stream the player can't seek, and not already the remux. */
+    fun viaRemux(
+        live: Boolean,
+        recording: Boolean,
+        remux: Boolean,
+        seekable: Boolean,
+    ): Boolean = !live && !recording && !remux && !seekable
+
+    fun resumeViaRemux(
+        live: Boolean,
+        recording: Boolean,
+        seekable: Boolean,
+        startMs: Long,
+    ): Boolean = viaRemux(live, recording, false, seekable) && startMs >= RESUME_MIN_MS
+}

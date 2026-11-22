@@ -311,7 +311,7 @@ fun JellytipIptvPlayPage(
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 overlayTick++
                 val p = playback.player
-                val seekable = p != null && (p.isCurrentMediaItemSeekable || playback.isRemux)
+                val seekable = playback.canSkip()
                 // Remote media keys act directly, overlay or not
                 when (e.key) {
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
@@ -457,7 +457,7 @@ fun JellytipIptvPlayPage(
                 onMore = { moreOpen = true },
                 onInteraction = { overlayTick++ },
                 modifier = Modifier.align(Alignment.BottomStart),
-                scrubbable = tp2 != null && (tp2.isCurrentMediaItemSeekable || playback.isRemux) && duration > 0,
+                scrubbable = playback.canSkip() && duration > 0,
                 onScrubFocus = { scrubFocused = it },
             )
         }
