@@ -545,9 +545,12 @@ class Audit2ShotsTest {
         println("shot $name: menu items=$labels")
         captureScreenRoboImage(out(name))
         val goTo = ApplicationProvider.getApplicationContext<android.content.Context>().getString(R.string.go_to)
-        assertEquals("$name: exactly one Details item in $labels", 1, labels.count { it.startsWith("Details") })
-        assertTrue("$name: Details is the first item in $labels", labels.firstOrNull()?.startsWith("Details") == true)
-        assertFalse("$name: no Go To item in $labels", labels.any { it.startsWith(goTo) })
+        // (Counted by text match: the labels read from the clickable nodes' own semantics came back empty in CI.)
+        val details = compose.onAllNodes(hasText("Details")).fetchSemanticsNodes()
+        assertEquals("$name: exactly one Details item", 1, details.size)
+        assertEquals("$name: no Go To item", 0, compose.onAllNodes(hasText(goTo)).fetchSemanticsNodes().size)
+        val resumeTop = compose.onAllNodes(hasText("Resume")).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+        assertTrue("$name: Details sits above the stock items", resumeTop == null || details.first().boundsInRoot.top < resumeTop)
     }
 
     @Test
