@@ -77,4 +77,15 @@ class ChatVoiceTextTest {
         // and the restart it triggers still counts toward the cap
         assertEquals(ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_RESTARTS))
     }
+
+    @Test
+    fun aSilentPressNeverResendsTypedText() {
+        assertTrue(ChatVoiceText.heardNothing("under 90 minutes", "under 90 minutes"))
+        assertTrue(ChatVoiceText.heardNothing("  under  90 minutes ", "under 90 minutes"))
+        assertTrue(ChatVoiceText.heardNothing("", ""))
+        assertTrue(ChatVoiceText.heardNothing("", "   "))
+        assertFalse(ChatVoiceText.heardNothing("under 90 minutes", "under 90 minutes with Paul Rudd"))
+        assertFalse(ChatVoiceText.heardNothing("", "something funny"))
+        assertFalse("the same words spoken again are new speech", ChatVoiceText.heardNothing("funny", ChatVoiceText.join("funny", "funny")))
+    }
 }

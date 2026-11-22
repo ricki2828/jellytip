@@ -82,6 +82,12 @@ object ChatVoiceText {
         glitchUsed: Boolean,
     ): Boolean = held && !tap && restarts > 0 && !glitchUsed && (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER)
 
+    /** A silent press: nothing was added to what was in the box at press time, so there is nothing new to send (never re-send typed text). */
+    fun heardNothing(
+        base: String,
+        text: String,
+    ): Boolean = text.isBlank() || join(text, "") == join(base, "")
+
     fun quantizeLevel(rmsdB: Float): Float {
         val n = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
         return (n * 4).roundToInt() / 4f
@@ -111,6 +117,7 @@ class ChatVoice(
     private var held = false
     private var tap = false
     private var committed = ""
+    private var pressBase = ""
     private var partial = ""
     private var restarts = 0
     private var glitchUsed = false // the one tolerated post-restart ERROR_CLIENT / ERROR_SERVER of this restart
@@ -178,7 +185,8 @@ class ChatVoice(
         active = true
         held = true
         tap = false
-        committed = ChatVoiceText.join(base, "")
+        pressBase = ChatVoiceText.join(base, "")
+        committed = pressBase
         partial = ""
         restarts = 0
         glitchUsed = false
@@ -281,8 +289,8 @@ class ChatVoice(
         cleanup()
         _ui.value = ChatVoiceUi()
         if (!send) return
-        if (text.isBlank()) {
-            _ui.value = ChatVoiceUi(errorRes = R.string.voice_error_no_match)
+        if (ChatVoiceText.heardNothing(pressBase, text)) {
+            _ui.value = ChatVoiceUi(errorRes = R.string.voice_error_no_match) // typed text stays in the box, nothing is sent
         } else {
             onText(text)
             onFinal(text)
