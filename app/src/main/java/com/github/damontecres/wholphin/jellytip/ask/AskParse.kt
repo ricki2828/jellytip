@@ -263,6 +263,15 @@ object AskParse {
     /** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
     fun chipsFromData(list: List<ChipData>): List<AskChip> = list.map { chipFor(it) }.distinctBy { it.id }
 
+    /**
+     * The kids trigger (shared with the server and the web: kids-trigger-v1.json, t5q askchat 0a373fd; ported verbatim,
+     * AskParseTest asserts it equals the fixture). Case-insensitive search over the raw text. A kids chip made only by a
+     * weak phrase (works for all / everyone, all ages, whole family) is dropped unless this matches too.
+     */
+    const val KIDS_TRIGGER_PATTERN = """\b(?:(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?<!\bno )(?<!\bnot )(?<!\bwithout )with (?:an?|my|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds?|me and (?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,3}(?:kids?|children|son|daughter|toddler|grandkids?|nephews?|nieces?|little ones)(?! of\b)(?!-in-law)|(?:my|the|our) (?:(?!(?:no|not|without|since|because|while|but|or|of)\b)[\w'-]+ ){0,2}(?:kids?|children|toddler|grandkids?) and (?:i|me)|for (?:(?:the )?(?:kids|family|children)|(?:my|our) (?:family|little ones|kids?|children|toddler|grandkids?|(?:son|daughter)(?!-in-law)))|(?:kids|children) are watching|(?:my|our|the) (?:kids|children) are here|(?:[1-9]|1[0-4])[- ]?(?:year|yr)s?[- ]?olds? (?:is|are) watching|family (?:movie|night|film))\b"""
+    val KIDS_TRIGGER = Regex(KIDS_TRIGGER_PATTERN, RegexOption.IGNORE_CASE)
+    private val WEAK_KIDS = Regex("""^(?:(?:that )?(?:would |will |can )?works? for |all ages|whole family)""")
+
     private val DECADE_WORDS =
         mapOf(
             "twenties" to 1920,
@@ -324,6 +333,8 @@ object AskParse {
         val ignored = mutableListOf<String>()
         var curPos = 0
         var curSrc = ""
+        // Set when a kids phrase other than a weak one made the kids chip
+        var kidsStrong = false
 
         fun add(
             id: String,
@@ -421,6 +432,7 @@ object AskParse {
                 """\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b""",
             ),
         ) {
+            if (!WEAK_KIDS.containsMatchIn(curSrc)) kidsStrong = true
             add("kids", "for kids (rated G, PG)", ChipData.Kids(KIDS_RATINGS, KIDS_GENRES))
         }
 
@@ -497,6 +509,12 @@ object AskParse {
             chips.remove(drop)
             ignored.add(drop.src.ifEmpty { drop.label })
             notes.add("$what contradict each other: kept “${keep.label}”, ignored “${drop.src.ifEmpty { drop.label }}”.")
+        }
+        // "works for everyone" / "all ages" / "whole family" alone is not a kids request (kids-trigger v1): no PG cap
+        val kidsAt = chips.indexOfFirst { it.id == "kids" }
+        if (kidsAt >= 0 && !kidsStrong && !KIDS_TRIGGER.containsMatchIn(raw)) {
+            chips.removeAt(kidsAt)
+            notes.add("Read “works for everyone” / “all ages” as no age limit; say “for the kids” to keep it to kids' ratings.")
         }
         clash("kind:Movie", "kind:Series", "Movies and shows")
         for (mood in MOODS) clash("genre:${mood.label}", "notgenre:${mood.label}", "“${mood.label}” and “no ${mood.label.lowercase()}”")
