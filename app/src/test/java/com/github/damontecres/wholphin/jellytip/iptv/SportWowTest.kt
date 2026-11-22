@@ -183,7 +183,27 @@ class SportWowTest {
         assertEquals(listOf("Play h1", "Play h2", "Play s"), CatchUpPolicy.cards(rel, newest, newest) { true }.map { it.text })
         assertEquals(2, CatchUpPolicy.periodNumber("2nd Half"))
         assertEquals(3, CatchUpPolicy.periodNumber("Q3"))
-        assertNull(CatchUpPolicy.periodNumber("OT"))
+        assertNull(CatchUpPolicy.periodNumber("Live"))
+    }
+
+    @Test
+    fun catchUpOvertimeAfterNumberedPeriods() {
+        assertEquals(100, CatchUpPolicy.periodNumber("OT"))
+        assertEquals(102, CatchUpPolicy.periodNumber("2OT"))
+        assertEquals(100, CatchUpPolicy.periodNumber("Extra Time"))
+        assertEquals(101, CatchUpPolicy.periodNumber("Extra Time 1st"))
+        assertEquals(100, CatchUpPolicy.periodNumber("Penalties"))
+        assertEquals(100, CatchUpPolicy.periodNumber("AET"))
+        // Not overtime: words that merely contain the letters
+        assertEquals(2, CatchUpPolicy.periodNumber("Set 2"))
+        assertEquals(9, CatchUpPolicy.periodNumber("Bottom 9th"))
+        // Cards: 4th quarter, then overtime (oldest first), no wallclocks
+        fun np(
+            id: String,
+            period: String?,
+        ) = LivePlay("10:00", period, "Play $id", true, "home", 3, id = id)
+        val rel = answer(listOf(np("q4", "4"), np("ot", "OT"), np("q1", "1")), updatedAt = 900)
+        assertEquals(listOf("Play q1", "Play q4", "Play ot"), CatchUpPolicy.cards(rel, rel, rel) { true }.map { it.text })
     }
 
     @Test
