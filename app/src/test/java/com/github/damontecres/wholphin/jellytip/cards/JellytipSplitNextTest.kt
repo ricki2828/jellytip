@@ -1,5 +1,10 @@
-package com.github.damontecres.wholphin.jellytip.details
+package com.github.damontecres.wholphin.jellytip.cards
 
+import com.github.damontecres.wholphin.jellytip.details.SplitEp
+import com.github.damontecres.wholphin.jellytip.details.SplitLibEp
+import com.github.damontecres.wholphin.jellytip.details.nextAfter
+import com.github.damontecres.wholphin.jellytip.details.splitEpisodes
+import com.github.damontecres.wholphin.jellytip.details.splitNextUp
 import com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode
 import com.github.damontecres.wholphin.jellytip.iptv.IptvProgress
 import com.github.damontecres.wholphin.jellytip.iptv.IptvSeason

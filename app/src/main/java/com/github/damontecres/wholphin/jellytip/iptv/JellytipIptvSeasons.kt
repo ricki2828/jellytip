@@ -103,10 +103,12 @@ object IptvSeasons {
     suspend fun lookup(
         title: String,
         tmdbId: Int,
+        /** Ask again even when cached (back from playback: an episode's watched / progress state moved). */
+        fresh: Boolean = false,
     ): IptvVodDetail? {
         val api = JellytipApi.shared ?: return null
         val key = "${api.currentUserKey()}|$tmdbId"
-        cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
+        if (!fresh) cache[key]?.let { (at, v) -> if (System.currentTimeMillis() - at < TTL_MS) return v }
         var failed = false
         val got =
             try {
@@ -150,9 +152,12 @@ object IptvSeasons {
             ?.toIntOrNull()
 
     /** The person's IPTV copy of a library series (matched by TMDB id) with all its seasons; null when there is none. */
-    suspend fun detailFor(series: BaseItem): IptvVodDetail? {
+    suspend fun detailFor(
+        series: BaseItem,
+        fresh: Boolean = false,
+    ): IptvVodDetail? {
         val tmdb = tmdbOf(series) ?: return null
-        return lookup(series.name ?: return null, tmdb)
+        return lookup(series.name ?: return null, tmdb, fresh)
     }
 
     /**

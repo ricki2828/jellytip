@@ -566,6 +566,7 @@ class DetailsShotsTest {
         onPlayIptvEpisode: (IptvVodDetail, IptvEpisode) -> Unit = { _, _ -> },
         initialEpisodeIndex: Int = 2,
         consumeReturnToEpisodes: () -> Boolean = { false },
+        allLibraryEpisodes: List<BaseItem>? = null,
     ) {
         SeriesDetailsContent(
             preferences = prefs,
@@ -602,6 +603,7 @@ class DetailsShotsTest {
             onClickDiscoverSeries = {},
             resolved = resolved,
             onPlayEpisode = onPlayEpisode,
+            allLibraryEpisodes = allLibraryEpisodes,
             iptv = iptv,
             onPlayIptvEpisode = onPlayIptvEpisode,
         )
@@ -616,6 +618,7 @@ class DetailsShotsTest {
         iptv: IptvVodDetail? = null,
         onPlayIptvEpisode: (IptvVodDetail, IptvEpisode) -> Unit = { _, _ -> },
         onPlayEpisode: (BaseItem) -> Unit = {},
+        allLibraryEpisodes: List<BaseItem>? = null,
     ) {
         var selected by remember { mutableStateOf(0) }
         SeriesPage(
@@ -629,6 +632,7 @@ class DetailsShotsTest {
             iptv = iptv,
             onPlayIptvEpisode = onPlayIptvEpisode,
             onPlayEpisode = onPlayEpisode,
+            allLibraryEpisodes = allLibraryEpisodes,
         )
     }
 
@@ -737,6 +741,37 @@ class DetailsShotsTest {
                 iptv = iptvSplitDetail(),
                 onPlayIptvEpisode = { _, e -> iptvPlayed.add(e.id) },
                 onPlayEpisode = { libraryPlayed.add(it.id) },
+            )
+        }
+    }
+
+    /** Library E1-E3 watched, E4 only on IPTV (Celebrity Traitors, 22-Nov): next up is the IPTV E4, not the library's E5. */
+    @Test
+    fun seriesSplitNextIsTheIptvEpisode() {
+        val name = "details-series-split-next-iptv"
+        val lib = splitLibraryEpisodes().map { if (it.data.indexNumber == 3) BaseItem(it.data.copy(userData = userData(it.id, played = true))) else it }
+        val list = episodeList(name, lib) ?: return
+        val changes = mutableListOf<Int>()
+        val libraryPlayed = mutableListOf<UUID>()
+        val iptvPlayed = mutableListOf<String>()
+        shot(name, steps = {
+            focusText(name, "Play S1 E4")
+            assertEquals("the status line names the IPTV episode", 1, textCount("3 seasons  \u00B7  Next: S1 E4"))
+            pressOk(name)
+            advance(500)
+            assertEquals("the button plays the IPTV E4", listOf("p1:s:42:1:4"), iptvPlayed)
+            assertEquals("and no library episode", emptyList<UUID>(), libraryPlayed)
+            pressDown(name)
+            advance(1500)
+        }) {
+            SeasonStatefulSeriesPage(
+                list,
+                changes,
+                librarySeasons = seasons().take(2),
+                iptv = iptvSplitDetail(),
+                onPlayIptvEpisode = { _, e -> iptvPlayed.add(e.id) },
+                onPlayEpisode = { libraryPlayed.add(it.id) },
+                allLibraryEpisodes = lib,
             )
         }
     }
