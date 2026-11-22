@@ -399,6 +399,16 @@ class JellytipIptvPlayback
                         .setAllowCrossProtocolRedirects(true)
                         .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
                         .setReadTimeoutMs(READ_TIMEOUT_MS)
+                // The server's remux sends nothing until ffmpeg has its first bytes: a seek on an mkv with no Cues took 23-38 s
+                // (Celebrity Traitors S2E2, 22-Nov); the 15 s read timeout would cut every skip and loop. Remux items only.
+                val remuxHttp =
+                    DefaultHttpDataSource
+                        .Factory()
+                        .setUserAgent("Jellytip")
+                        .setAllowCrossProtocolRedirects(true)
+                        .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+                        .setReadTimeoutMs(REMUX_READ_TIMEOUT_MS)
+                remuxSources = DefaultMediaSourceFactory(remuxHttp, extractors)
                 // Live buffer profile (Low = the old small buffers: a zap shows the new channel in about a second)
                 val load =
                     DefaultLoadControl
@@ -472,6 +482,9 @@ class JellytipIptvPlayback
          */
         @Volatile
         private var pendingRemuxSeekMs: Long? = null
+
+        /** Media sources for the server's remux (a long read timeout: see [buildPlayer]). */
+        private var remuxSources: DefaultMediaSourceFactory? = null
 
         /** Where the current open meant to start (ms): a direct stream that turns out unseekable resumes there through the remux. */
         private var openStartMs = 0L
@@ -765,7 +778,12 @@ class JellytipIptvPlayback
                             remuxDurationMs = if (r.answer.remux) r.answer.durationSec?.times(1000) else null
                             if (remux && !r.answer.remux) JellytipTrace.player("iptv", "remux asked but the server sent the file as is (${target.channelId})")
                             // A remux already begins at the asked position
-                            if (startMs > 0 && !r.answer.remux) p.setMediaItem(item, startMs) else p.setMediaItem(item)
+                            val rs = remuxSources
+                            when {
+                                r.answer.remux && rs != null -> p.setMediaSource(rs.createMediaSource(item))
+                                startMs > 0 && !r.answer.remux -> p.setMediaItem(item, startMs)
+                                else -> p.setMediaItem(item)
+                            }
                             p.playWhenReady = true
                             p.prepare()
                             if (recovering && recTarget?.channelId == target.channelId) dispatch(StreamRecovery.Event.Opened)
@@ -964,6 +982,7 @@ class JellytipIptvPlayback
             private const val SLOT_FREE_WAIT_MS = 3_000L
             private const val CONNECT_TIMEOUT_MS = 8_000
             private const val READ_TIMEOUT_MS = 15_000
+            private const val REMUX_READ_TIMEOUT_MS = 75_000
         }
     }
 
