@@ -107,3 +107,7 @@ object AskVod {
         return if (parts.isEmpty()) null else "${parts.joinToString("; ")}."
     }
 }
+
+/** The slice [AskVod.vodKeep] reads (certification / runtime are filtered by the route itself). */
+fun com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem.vodView(): VodView =
+    VodView(kind = kind, year = year, genreIds = genreIds, certification = null, runtime = null, played = played)

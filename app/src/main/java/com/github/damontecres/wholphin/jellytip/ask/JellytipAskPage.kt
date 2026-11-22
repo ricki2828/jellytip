@@ -1,5 +1,15 @@
 package com.github.damontecres.wholphin.jellytip.ask
 
+import com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf
+import com.github.damontecres.wholphin.jellytip.cards.JellytipSourceMerge
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
+import com.github.damontecres.wholphin.jellytip.cards.iptvRef
+import com.github.damontecres.wholphin.jellytip.cards.libRef
+import com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodParse
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodTile
+import org.json.JSONObject
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import androidx.compose.foundation.background
@@ -97,7 +107,31 @@ sealed interface AskResult {
         val kept: List<BaseItem> = emptyList(),
         /** The shown picks with their people (a second, small request; empty until it answers or when it fails). */
         val withPeople: List<BaseItem> = emptyList(),
-    ) : AskResult
+        /** IPTV titles that fit (after the library picks; twins of a library pick dropped); empty until they answer. */
+        val iptv: List<IptvVodItem> = emptyList(),
+        /** What the IPTV half checked / couldn't apply; null = no IPTV searched. */
+        val iptvNote: String? = null,
+    ) : AskResult {
+        /** One grid: the library picks, then the IPTV ones (appended, so nothing moves under focus when they arrive). */
+        val tiles: List<AskTile> get() = picks.items.map { AskTile.Lib(it) } + iptv.map { AskTile.Vod(it) }
+    }
+
+/** A tile of Ask's grid: a library title or an IPTV one (source-neutral: same tile look, no source mark). */
+sealed interface AskTile {
+    val key: String
+
+    data class Lib(
+        val item: BaseItem,
+    ) : AskTile {
+        override val key get() = JellytipSourceMerge.libKey(item.id.toString())
+    }
+
+    data class Vod(
+        val item: IptvVodItem,
+    ) : AskTile {
+        override val key get() = JellytipSourceMerge.iptvKey(item.id)
+    }
+}
 }
 
 data class AskState(
@@ -138,6 +172,15 @@ class JellytipAskViewModel
         private val _state = MutableStateFlow(AskState())
         val state: StateFlow<AskState> = _state
         private var job: Job? = null
+
+        /** Bumped per load: a late answer (people, IPTV) of an older load never lands on a newer one. */
+        private var loadSeq = 0
+
+        /** Fold a late answer into the current result, only if it is still [seq]'s. */
+        private fun patch(
+            seq: Int,
+            f: (AskResult.Done) -> AskResult.Done,
+        ) = _state.update { st -> (st.result as? AskResult.Done)?.takeIf { seq == loadSeq }?.let { st.copy(result = f(it)) } ?: st }
 
         fun setText(v: String) = _state.update { it.copy(text = v) }
 
@@ -183,11 +226,13 @@ class JellytipAskViewModel
             }
             _state.update { it.copy(result = AskResult.Loading) }
             val user = serverRepository.currentUser?.id
+            val seq = ++loadSeq
             job =
                 viewModelScope.launch {
                     val result =
                         try {
-                            val req = AskParse.buildQuery(chips, shuffle = s.shuffle, refine = true).toGetItemsRequest(user)
+                            // Provider ids: the TMDB id the IPTV half's twins are dropped by
+                            val req = AskParse.buildQuery(chips, shuffle = s.shuffle, refine = true).toGetItemsRequest(user, extraFields = listOf(ItemFields.PROVIDER_IDS))
                             val page = api.itemsApi.getItems(req).content
                             val items = page.items.map { BaseItem(it, false) }
                             val picks = AskParse.pickFrom(items, page.totalRecordCount, chips, s.shuffle) { it.data.askItem() }
@@ -201,9 +246,12 @@ class JellytipAskViewModel
                     // A different person signed in while this was out: never show them another's picks
                     val stillMine = serverRepository.currentUser?.id == user
                     _state.update { it.copy(result = if (stillMine) result else AskResult.Idle) }
-                    // People for the shown picks only (director / actor refine chips); a failure just means none
                     val done = result as? AskResult.Done ?: return@launch
-                    if (!stillMine || done.picks.items.size < 2) return@launch
+                    if (!stillMine) return@launch
+                    // IPTV alongside (source-neutral): its own request, never an error for the page
+                    launch { loadIptv(seq, chips, s.shuffle, done.picks.items) }
+                    // People for the shown picks only (director / actor refine chips); a failure just means none
+                    if (done.picks.items.size < 2) return@launch
                     val withPeople =
                         try {
                             api.itemsApi
@@ -222,16 +270,73 @@ class JellytipAskViewModel
                             Timber.w(e, "Ask people failed")
                             return@launch
                         }
-                    _state.update { st -> if (st.result === done) st.copy(result = done.copy(withPeople = withPeople)) else st }
+                    patch(seq) { it.copy(withPeople = withPeople) }
                 }
+        }
+
+        /**
+         * IPTV titles for [chips] (GET v1/iptv/vod per kind, AskVod): only for people with IPTV; kept by AskVod.vodKeep, twins
+         * of a library pick dropped (JellytipSourceMerge), shuffled when the library half is, at most PICKS. Failures, 403 /
+         * 404 or no IPTV = library only (never the page's error).
+         */
+        private suspend fun loadIptv(
+            seq: Int,
+            chips: List<AskChip>,
+            shuffle: Boolean,
+            library: List<BaseItem>,
+        ) {
+            if (com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvState.hasIptv.value != true) return
+            val queries = AskVod.vodQueries(chips)
+            val note = AskVod.vodNote(chips)
+            if (queries.isEmpty()) {
+                patch(seq) { it.copy(iptvNote = note) }
+                return
+            }
+            val api = com.github.damontecres.wholphin.jellytip.JellytipApi.shared ?: return
+            var fetched = 0
+            val kept = mutableListOf<IptvVodItem>()
+            try {
+                val base = api.companionBase().also { IptvVodParse.imageBase = it }
+                for (q in queries) {
+                    val qs = q.params.entries.joinToString("&") { (k, v) -> "$k=${java.net.URLEncoder.encode(v, "UTF-8")}" }
+                    val (code, body) = api.userCall("v1/iptv/vod?$qs") ?: continue
+                    if (code != 200) continue
+                    val items = IptvVodParse.items(JSONObject(body).optJSONArray("items"), base)
+                    fetched += items.size
+                    kept += items.filter { AskVod.vodKeep(it.vodView(), chips) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "Ask IPTV failed")
+                return
+            }
+            val pool = if (shuffle) kept.shuffled() else kept
+            // One tile per title: an IPTV copy of a library pick goes (the library tile wins)
+            val merged =
+                JellytipSourceMerge
+                    .merge(library.map { JellytipSourceMerge.Entry<IptvVodItem?>(null, lib = it.libRef()) } + pool.map { JellytipSourceMerge.Entry<IptvVodItem?>(it, iptv = it.iptvRef()) })
+                    .entries
+                    .filterNotNull()
+            val shown = merged.take(AskParse.PICKS)
+            JellytipTrace.log("ask", "iptv fetched=$fetched kept=${kept.size} shown=${shown.size}")
+            val checked = "IPTV: ${shown.size} more from the top $fetched by rating" + (if (kept.size > shown.size) " (${kept.size} fit)" else "") + "."
+            patch(seq) { it.copy(iptv = shown, iptvNote = listOfNotNull(checked.takeIf { fetched > 0 }, note).joinToString(" ").ifBlank { null }) }
         }
 
         /** The pick last opened: Back from its page lands on it again (the grid is rebuilt on return). */
         var lastOpened: String? = null
             private set
 
+        fun openVod(item: IptvVodItem) {
+            lastOpened = JellytipSourceMerge.iptvKey(item.id)
+            JellytipTrailerControl.stop()
+            // An IPTV title the library also has opens the library page (source-neutral)
+            navigationManager.navigateTo(JellytipTitleOpen.detailsFor(item), "ask iptv pick OK")
+        }
+
         fun open(item: BaseItem) {
-            lastOpened = item.id.toString()
+            lastOpened = JellytipSourceMerge.libKey(item.id.toString())
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(item.destination(), "ask pick OK")
         }
@@ -255,9 +360,11 @@ fun JellytipAskPage(
     val gridState = rememberLazyGridState()
     val restore = remember { FocusRequester() }
     // First composition (also on Back from a pick's page): the pick that was opened, else the text box
+    // Hold OK on a library pick: the library title menu (IPTV tiles bring their own)
+    val menu = rememberJellytipLibraryMenu()
     LaunchedEffect(Unit) {
-        val items = (state.result as? AskResult.Done)?.picks?.items.orEmpty()
-        val at = viewModel.lastOpened?.let { id -> items.indexOfFirst { it.id.toString() == id } } ?: -1
+        val tiles = (state.result as? AskResult.Done)?.tiles.orEmpty()
+        val at = viewModel.lastOpened?.let { key -> tiles.indexOfFirst { it.key == key } } ?: -1
         if (at >= 0) {
             gridState.scrollToItem(at)
             withFrameNanos { }
@@ -390,7 +497,7 @@ fun JellytipAskPage(
                 Text(
                     when (r) {
                         AskResult.Error -> "Couldn't reach your library."
-                        is AskResult.Done -> "${if (r.picks.items.isEmpty()) "Nothing fits. " else ""}${r.picks.note}"
+                        is AskResult.Done -> listOfNotNull(if (r.tiles.isEmpty()) "Nothing fits." else null, r.picks.note, r.iptvNote).joinToString(" ")
                         else -> "Looking…"
                     },
                     color = dim,
@@ -416,19 +523,51 @@ fun JellytipAskPage(
                 }
             }
         }
-        if (r is AskResult.Done && r.picks.items.isNotEmpty()) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
-                state = gridState,
-                modifier = Modifier.fillMaxWidth().weight(1f).focusGroup().focusRestorer(),
-            ) {
-                items(r.picks.items.size, key = { r.picks.items[it].id.toString() }) { i ->
-                    val item = r.picks.items[i]
-                    PosterCard(item, onClick = { viewModel.open(item) }, onLongClick = {}, modifier = if (item.id.toString() == viewModel.lastOpened) Modifier.focusRequester(restore) else Modifier)
-                }
+        if (r is AskResult.Done && r.tiles.isNotEmpty()) {
+            AskPicksGrid(
+                tiles = r.tiles,
+                gridState = gridState,
+                restoreKey = viewModel.lastOpened,
+                restore = restore,
+                onOpenLibrary = viewModel::open,
+                onOpenIptv = viewModel::openVod,
+                onHoldLibrary = { menu.open(it) },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        }
+        JellytipLibraryMenuHostOf(menu)
+    }
+}
+
+/**
+ * Ask's picks: library posters then IPTV ones, the same tile look (source-neutral: IptvVodTile draws like PosterCard, no
+ * source mark). Keys are JellytipSourceMerge's library / IPTV keys; [restoreKey] = the tile focus returns to.
+ */
+@Composable
+internal fun AskPicksGrid(
+    tiles: List<AskTile>,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    restoreKey: String?,
+    restore: FocusRequester,
+    onOpenLibrary: (BaseItem) -> Unit,
+    onOpenIptv: (IptvVodItem) -> Unit,
+    onHoldLibrary: (BaseItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(SpecialTokens.POSTER_W + 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 48.dp),
+        state = gridState,
+        modifier = modifier.focusGroup().focusRestorer(),
+    ) {
+        items(tiles.size, key = { tiles[it].key }) { i ->
+            val tile = tiles[i]
+            val m = if (tile.key == restoreKey) Modifier.focusRequester(restore) else Modifier
+            when (tile) {
+                is AskTile.Lib -> PosterCard(tile.item, onClick = { onOpenLibrary(tile.item) }, onLongClick = { onHoldLibrary(tile.item) }, modifier = m)
+                is AskTile.Vod -> IptvVodTile(tile.item, SpecialTokens.POSTER_W, SpecialTokens.POSTER_H, poster = true, onClick = { onOpenIptv(tile.item) }, modifier = m)
             }
         }
     }
