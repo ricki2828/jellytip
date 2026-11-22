@@ -114,7 +114,8 @@ object IptvSeasons {
             try {
                 // Providers this person owns or has shared with them (same as the web's season lookup)
                 val owned =
-                    api.userCall("v1/iptv/providers").also { if (it == null) failed = true }?.takeIf { it.first == 200 }?.let { (_, b) ->
+                    // No answer or a non-200 is a failure (not cached as "no IPTV"), not "owns no providers"
+                    api.userCall("v1/iptv/providers").also { if (it == null || it.first != 200) failed = true }?.takeIf { it.first == 200 }?.let { (_, b) ->
                         val a = JSONObject(b).optJSONArray("providers")
                         (0 until (a?.length() ?: 0)).mapNotNull { a?.optJSONObject(it)?.optString("id")?.takeIf { s -> s.isNotBlank() } }
                     }
