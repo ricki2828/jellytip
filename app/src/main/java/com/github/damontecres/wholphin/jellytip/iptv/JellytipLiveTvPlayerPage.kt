@@ -1685,7 +1685,8 @@ fun JellytipLiveTvPlayerPage(
         }
         if (trackSheetOpen) {
             Column(
-                modifier = Modifier.align(Alignment.CenterEnd).padding(32.dp).widthIn(min = 320.dp, max = 440.dp)
+                // 48 dp from the right: the safe area (audit P2)
+                modifier = Modifier.align(Alignment.CenterEnd).padding(start = 32.dp, top = 32.dp, bottom = 32.dp, end = 48.dp).widthIn(min = 320.dp, max = 440.dp)
                     .fillMaxHeight(0.85f).background(Broadcast.Base.copy(alpha = 0.97f), RoundedCornerShape(12.dp))
                     .verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

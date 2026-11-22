@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,9 +33,23 @@ import com.github.damontecres.wholphin.ui.theme.JellytipFontFamily
  * state, the timers and the toast animation; this only places and draws.
  */
 
+/** The player's safe area (5% of 960x540 dp; audit §1) and the corner stacks inside it. */
+internal object PlayerSafeArea {
+    val SIDE = 48.dp
+
+    /** The first block starts below overscan (page top 28 dp, the 27 dp safe line plus one). */
+    val TOP = 28.dp
+    val GAP = 8.dp
+
+    /** Each corner stack takes at most half of the 864 dp safe width, less the gap: the two never meet. */
+    val COLUMN_MAX = 428.dp
+}
+
 /**
- * Every corner overlay of the player, each at its place. A null slot / value draws nothing. [toastProgress] is the
- * toast's slide-in (0 hidden, 1 in place), read in the draw phase only.
+ * Every corner overlay of the player, inside the 5% safe area (audit W2). Top left, from 28 / 48: scorebug, fantasy
+ * chip, track message. Top right, from 28 / 48, end-aligned: delay chip, banner hint, toast (below the hint). 8 dp
+ * between items, each stack at most half the safe width, so nothing overlaps. A null slot / value draws nothing.
+ * [toastProgress] is the toast's slide-in (0 hidden, 1 in place), read in the draw phase only.
  */
 @Composable
 internal fun PlayerCornerOverlays(
@@ -47,46 +63,49 @@ internal fun PlayerCornerOverlays(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize()) {
-        delayChip?.let { chip -> Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 16.dp)) { chip() } }
-        scorebug?.let { bug -> Box(Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 48.dp)) { bug() } }
-        toast?.let { t ->
-            PlayerToastView(
-                t,
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 24.dp, end = 24.dp)
-                    .graphicsLayer {
+        Column(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(top = PlayerSafeArea.TOP, start = PlayerSafeArea.SIDE)
+                .widthIn(max = PlayerSafeArea.COLUMN_MAX),
+            verticalArrangement = Arrangement.spacedBy(PlayerSafeArea.GAP),
+        ) {
+            scorebug?.invoke()
+            fantasy?.let { PlayerChipText(it, Color.White, 14.sp, Modifier, weight = FontWeight.SemiBold) }
+            trackMessage?.let {
+                Text(
+                    it,
+                    color = Color.White,
+                    fontFamily = JellytipFontFamily,
+                    fontSize = 15.sp,
+                    modifier =
+                        Modifier
+                            .background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        }
+        Column(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = PlayerSafeArea.TOP, end = PlayerSafeArea.SIDE)
+                .widthIn(max = PlayerSafeArea.COLUMN_MAX),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(PlayerSafeArea.GAP),
+        ) {
+            delayChip?.invoke()
+            hint?.let { PlayerChipText(it, JellytipPalette.Vanilla.copy(alpha = 0.85f), 14.sp, Modifier) }
+            toast?.let { t ->
+                PlayerToastView(
+                    t,
+                    // Slides in from the right edge (past the 48 dp margin); layout stays put
+                    Modifier.graphicsLayer {
                         val p = toastProgress()
-                        translationX = (1f - p) * (size.width + 24.dp.toPx())
+                        translationX = (1f - p) * (size.width + PlayerSafeArea.SIDE.toPx())
                         alpha = p
                     },
-            )
-        }
-        fantasy?.let {
-            PlayerChipText(
-                it,
-                Color.White,
-                14.sp,
-                Modifier.align(Alignment.TopStart).padding(top = 32.dp, start = 48.dp),
-                weight = FontWeight.SemiBold,
-            )
-        }
-        hint?.let {
-            PlayerChipText(it, JellytipPalette.Vanilla.copy(alpha = 0.85f), 14.sp, Modifier.align(Alignment.TopEnd).padding(top = 32.dp, end = 48.dp))
-        }
-        trackMessage?.let {
-            Text(
-                it,
-                color = Color.White,
-                fontFamily = JellytipFontFamily,
-                fontSize = 15.sp,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 76.dp, start = 48.dp)
-                        .background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-            )
+                )
+            }
         }
     }
 }
@@ -109,7 +128,7 @@ private fun PlayerChipText(
         modifier =
             modifier
                 .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
 
@@ -130,7 +149,7 @@ internal fun PlayerToastView(
         Box(Modifier.width(36.dp).fillMaxHeight().background(Broadcast.Chip), contentAlignment = Alignment.Center) {
             androidx.tv.material3.Icon(t.icon, contentDescription = null, tint = t.kickerColor, modifier = Modifier.size(19.dp))
         }
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             t.kicker?.let { Cond(it, 12.sp, t.kickerColor, tracking = 0.08f) }
             Text(
                 t.main.uppercase(java.util.Locale.ROOT),

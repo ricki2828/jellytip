@@ -709,7 +709,8 @@ fun JellytipLivePanel(
                     Modifier
                         .fillMaxSize()
                         .then(if (floating) Modifier.border(2.dp, Broadcast.Gold.copy(alpha = 0.6f), shape) else Modifier)
-                        .padding(14.dp),
+                        // Docked: inside the safe area (24 dp from the right edge, 27 top / bottom; audit P1)
+                        .then(if (floating) Modifier.padding(14.dp) else Modifier.padding(start = 16.dp, end = 24.dp, top = 27.dp, bottom = 27.dp)),
             ) {
                 if (match.isEvent || (match.home == null && match.away == null)) {
                     EventStrip(match, pal, if (spoilerNotice) null else flash)

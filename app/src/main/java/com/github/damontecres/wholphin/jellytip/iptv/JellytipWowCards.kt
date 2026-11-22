@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -65,7 +67,7 @@ fun FullTimeCard(
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
-    Column(modifier.jellytipEnter(match.id).width(960.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
+    Column(modifier.playerCardWidth().jellytipEnter(match.id).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
         Row(Modifier.height(92.dp)) {
             Slab(match.home?.name ?: "Home", if (pal.known) pal.home else Broadcast.Chip, false, Modifier.weight(1f).fillMaxHeight())
             Box(Modifier.width(280.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -73,13 +75,13 @@ fun FullTimeCard(
             }
             Slab(match.away?.name ?: "Away", if (pal.known) pal.away else Broadcast.Chip, true, Modifier.weight(1f).fillMaxHeight())
         }
-        Column(Modifier.padding(horizontal = 30.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(horizontal = 32.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Cond("Full time", 22.sp, Broadcast.Gold)
             val g = next?.game
             if (g != null || next?.pickTitle != null) {
                 Column(
-                    Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFF1F0EC)).border(2.dp, Color.White, RoundedCornerShape(8.dp)).padding(horizontal = 22.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFF1F0EC)).border(2.dp, Color.White, RoundedCornerShape(8.dp)).padding(horizontal = 24.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (g != null) {
                         Cond("Next: ${g.title}", 26.sp, Broadcast.Ink)
@@ -110,15 +112,15 @@ fun CatchUpChoiceCard(
     modifier: Modifier = Modifier,
 ) {
     val pal = matchPalette(match)
-    Column(modifier.jellytipEnter(match.id).width(1200.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
+    Column(modifier.playerCardWidth().jellytipEnter(match.id).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f))) {
         Row(Modifier.height(92.dp)) {
             Slab(match.home?.name ?: "Home", if (pal.known) pal.home else Broadcast.Chip, false, Modifier.weight(1f).fillMaxHeight())
             Slab(match.away?.name ?: "Away", if (pal.known) pal.away else Broadcast.Chip, true, Modifier.weight(1f).fillMaxHeight())
         }
-        Column(Modifier.padding(34.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Cond(joining, 26.sp, Broadcast.Gold)
             BodyText("Score stays hidden until you choose.", 20.sp, Broadcast.Secondary, maxLines = 1)
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 val opts =
                     listOf(
                         Triple(0, "From kick-off", "Watch the whole game"),
@@ -133,9 +135,10 @@ fun CatchUpChoiceCard(
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (f) Color(0xFFF1F0EC) else Broadcast.Chip)
                             .border(if (f) 3.dp else 0.dp, if (f) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 22.dp, vertical = 20.dp),
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
+                        // Three options in 864 dp: the side padding gave way (22 -> 16), the text keeps its size
                         Cond(title, 28.sp, if (f) Broadcast.Ink else Color.White)
                         BodyText(sub, 18.sp, if (f) Broadcast.Ink else Broadcast.Secondary, maxLines = 1)
                     }
@@ -157,13 +160,13 @@ fun CatchUpRecapCard(
 ) {
     val pal = matchPalette(match)
     // each recap card rises in on its own
-    Column(modifier.jellytipEnter(index, rise = 10.dp).width(900.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier.playerCardWidth().jellytipEnter(index, rise = 8.dp).clip(RoundedCornerShape(10.dp)).background(Broadcast.Base.copy(alpha = 0.97f)).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Cond("Catch me up", 20.sp, Broadcast.Gold)
             BodyText("${index + 1} / $total", 16.sp, Broadcast.Secondary, maxLines = 1)
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (card.whenText.isNotBlank()) Cond(card.whenText, 26.sp, Broadcast.Gold, modifier = Modifier.width(110.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (card.whenText.isNotBlank()) Cond(card.whenText, 26.sp, Broadcast.Gold, modifier = Modifier.width(112.dp))
             Box(Modifier.width(6.dp).height(40.dp).background(card.team?.let { if (pal.known) pal.side(it) else Broadcast.Gold } ?: Color.Transparent))
             BodyText(card.text, 26.sp, Color.White, modifier = Modifier.weight(1f), maxLines = 2)
             card.points?.takeIf { it > 0 }?.let { Cond("+$it", 26.sp, Broadcast.Ink, modifier = Modifier.background(Broadcast.Gold).padding(horizontal = 8.dp)) }
@@ -171,6 +174,12 @@ fun CatchUpRecapCard(
         BodyText("OK next · Back: straight to live", 16.sp, Broadcast.Secondary, maxLines = 1)
     }
 }
+
+/**
+ * A player card's width (audit W1): the 960 dp screen less the 48 dp safe margin each side, so at most 864 dp,
+ * centred by the caller's alignment.
+ */
+private fun Modifier.playerCardWidth(): Modifier = padding(horizontal = 48.dp).widthIn(max = 864.dp).fillMaxWidth()
 
 @Composable
 private fun Dot(color: Color) = Box(Modifier.size(10.dp).clip(CircleShape).background(color))

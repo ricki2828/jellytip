@@ -286,7 +286,7 @@ fun DelayChipText(
         color = Color.White,
         fontFamily = JellytipFontFamily,
         fontSize = 13.sp,
-        modifier = modifier.background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = modifier.background(Broadcast.Base.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 
