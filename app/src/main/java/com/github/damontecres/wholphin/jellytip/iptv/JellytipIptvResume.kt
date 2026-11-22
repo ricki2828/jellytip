@@ -111,6 +111,10 @@ data class IptvResume(
             infoLine = com.github.damontecres.wholphin.jellytip.cards.JellytipContinueInfo.forIptv(this),
         )
 
+    /** The library series of an IPTV episode entry (the server's `seriesLibraryId`, else the library entry of `seriesSources`). */
+    val seriesLibraryUuid: java.util.UUID?
+        get() = if (kind == "episode") com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.libraryIdOf(seriesLibraryId, seriesSources) else null
+
     /** Where OK goes: the IPTV player at the saved position. */
     fun destination() =
         when (kind) {
@@ -382,7 +386,8 @@ fun JellytipResumeRow(
                 is ResumeTile.Lib -> onClickLibrary(t.index, t.item)
                 is ResumeTile.Iptv -> {
                     JellytipTrailerControl.stop()
-                    viewModel.navigationManager.navigateTo(t.r.destination(), "continue IPTV ${t.r.kind}")
+                    // An episode the library also has plays from the library (seeks, subtitles) at the IPTV copy's position
+                    viewModel.openResume(t.r)
                 }
             }
         },
@@ -423,5 +428,26 @@ fun JellytipResumeRow(
             }
         },
     )
+    }
+}
+
+/** The library copy of an IPTV episode: same season and episode number (Specials = season 0 never matched by a missing season). */
+object IptvResumeLibrary {
+    /** How long OK waits for the library lookup before playing the IPTV copy (inside the nav gate's OK window). */
+    const val LOOKUP_MS = 1_500L
+
+    data class Ep(
+        val id: java.util.UUID,
+        val season: Int?,
+        val episode: Int?,
+    )
+
+    fun pick(
+        eps: List<Ep>,
+        season: Int?,
+        episode: Int?,
+    ): java.util.UUID? {
+        if (season == null || episode == null) return null
+        return eps.firstOrNull { it.season == season && it.episode == episode }?.id
     }
 }
