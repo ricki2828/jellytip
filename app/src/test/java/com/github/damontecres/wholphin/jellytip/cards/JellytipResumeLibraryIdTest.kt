@@ -122,3 +122,27 @@ class JellytipResumeLibraryIdTest {
         assertEquals(listOf("iptv:movie:u"), Tonight.dedupe(listOf(unknown)).map { it.key })
     }
 }
+
+/** The IPTV-copy registry is per signed-in person. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class JellytipTitleSourcesUserTest {
+    @Test
+    fun profilesDoNotShareCopies() {
+        val id = "0a1b2c3d4e5f6789abcdef0123456789"
+        var user = "A"
+        JellytipTitleSources.userKey = { user }
+        try {
+            JellytipTitleSources.clear()
+            JellytipTitleSources.put(id, listOf(IptvSource("iptv", "v1")))
+            assertEquals(listOf("v1"), JellytipTitleSources.iptvFor(id).map { it.id })
+            user = "B"
+            assertEquals(emptyList<IptvSource>(), JellytipTitleSources.iptvFor(id))
+            user = "A"
+            assertEquals(listOf("v1"), JellytipTitleSources.iptvFor(id).map { it.id })
+        } finally {
+            JellytipTitleSources.clear()
+            JellytipTitleSources.userKey = { "" }
+        }
+    }
+}

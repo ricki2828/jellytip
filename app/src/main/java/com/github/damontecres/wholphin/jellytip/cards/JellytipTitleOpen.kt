@@ -56,7 +56,10 @@ object JellytipTitleSources {
     private const val MAX = 4000
     private val byLibraryId = ConcurrentHashMap<String, List<IptvSource>>()
 
-    private fun key(id: String) = id.replace("-", "").lowercase()
+    /** The signed-in person's key (profile switches must not share copies); replaceable by a test. */
+    internal var userKey: () -> String = { com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.currentUserKey().orEmpty() }
+
+    private fun key(id: String) = "${userKey()}|${id.replace("-", "").lowercase()}"
 
     fun put(
         libraryId: String,

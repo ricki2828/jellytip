@@ -949,6 +949,9 @@ object IptvMyList {
     }
 }
 
+/** Outlives the menu dialog (it closes on the click), like [IptvMyList]'s. */
+private val menuScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+
 /**
  * An IPTV tile's long-press menu: the same list, order and words as a library tile's (the common block of
  * [com.github.damontecres.wholphin.jellytip.cards.JellytipTitleMenu]), each line doing the IPTV action.
@@ -1054,12 +1057,20 @@ internal fun IptvTileMenu(
                         }
 
                         JellytipTitleMenu.Id.PLAY_OTHER -> {
-                            { libraryUuid?.let { nav(Destination.Playback(it, 0L), "iptv tile menu Play from library") } }
+                            {
+                                // Continue where the library copy was left (a series starts at 0, as the library tile's Play does): one GET, in a scope that outlives the dialog
+                                libraryUuid?.let { uuid ->
+                                    menuScope.launch {
+                                        val pos = if (item.isSeries) 0L else com.github.damontecres.wholphin.jellytip.JellytipApi.shared?.libraryResumeMs(uuid) ?: 0L
+                                        nav(Destination.Playback(uuid, pos), "iptv tile menu Play from library")
+                                    }
+                                }
+                            }
                         }
 
                         else -> null
                     }
-                if (action != null) add(com.github.damontecres.wholphin.ui.components.DialogItem(e.label, dismissOnClick = true) { action() })
+                if (action != null) add(com.github.damontecres.wholphin.ui.components.DialogItem(JellytipTitleMenu.localized(e.label, ctx.resources), dismissOnClick = true) { action() })
             }
         }
     com.github.damontecres.wholphin.jellytip.JellytipDialog(showDialog = true, title = item.title, dialogItems = dialogItems, onDismissRequest = onDismiss, dismissOnClick = true, waitToLoad = fromLongPress)

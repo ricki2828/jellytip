@@ -351,6 +351,7 @@ private fun titleMenuItems(
     watched: Boolean,
     favorite: Boolean,
     actions: ContextMenuActions,
+    resources: Resources,
 ): List<DialogItem> {
     val me = com.github.damontecres.wholphin.jellytip.me.JellytipMe
     val tasteOk = me.available.value && item.type in setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE)
@@ -382,7 +383,8 @@ private fun titleMenuItems(
             notInterested = off,
             other = JellytipTitleMenu.otherForLibraryTile(iptvCopies, failed),
         )
-    return JellytipTitleMenu.common(state).mapNotNull { e ->
+    return JellytipTitleMenu.common(state).mapNotNull { entry ->
+        val e = entry.copy(label = JellytipTitleMenu.localized(entry.label, resources))
         when (e.id) {
             JellytipTitleMenu.Id.PLAY ->
                 DialogItem(e.label, Icons.Default.PlayArrow, dismissOnClick = true) {
@@ -460,7 +462,7 @@ private fun buildContextMenuItems(
     buildList {
         addAll(contextMenu.leadingItems)
         // Jellytip: the block every title's hold-OK menu shares (library and IPTV tiles), built by JellytipTitleMenu
-        addAll(titleMenuItems(contextMenu, item, watched, favorite, actions))
+        addAll(titleMenuItems(contextMenu, item, watched, favorite, actions, resources))
         if (item.type in supportedShufflableTypes) {
             add(
                 DialogItem(

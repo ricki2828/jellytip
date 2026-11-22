@@ -29,6 +29,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
 import java.util.UUID
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -630,6 +631,10 @@ class JellytipApi
         }
 
         /** Cache key part for per-person answers: the signed-in Jellyfin user (by token), "" when signed out. */
+        /** The library item's resume position (ms) for the signed-in person; 0 when unknown (one GET, only on a tap). */
+        suspend fun libraryResumeMs(id: UUID): Long =
+            runCatching { api.userLibraryApi.getItem(id).content.userData?.playbackPositionTicks?.div(10_000) }.getOrNull() ?: 0L
+
         fun currentUserKey(): String = api.accessToken?.hashCode()?.toString() ?: ""
 
         /** The companion base URL (no trailing slash); stream links and image paths from IPTV answers are relative to it. */

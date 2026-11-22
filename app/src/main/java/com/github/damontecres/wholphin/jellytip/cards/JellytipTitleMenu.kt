@@ -81,6 +81,22 @@ object JellytipTitleMenu {
     const val PLAY_FROM_IPTV = "Play from IPTV"
     const val PLAY_FROM_LIBRARY = "Play from library"
 
+    /**
+     * The device-language word for a label whose wording did not change from the library menu's own strings (Play, Resume,
+     * Mark as watched / unwatched); the newly worded lines stay English constants.
+     */
+    fun localized(
+        label: String,
+        resources: android.content.res.Resources,
+    ): String =
+        when (label) {
+            PLAY -> resources.getString(com.github.damontecres.wholphin.R.string.play)
+            RESUME -> resources.getString(com.github.damontecres.wholphin.R.string.resume)
+            MARK_WATCHED -> resources.getString(com.github.damontecres.wholphin.R.string.mark_watched)
+            MARK_UNWATCHED -> resources.getString(com.github.damontecres.wholphin.R.string.mark_unwatched)
+            else -> label
+        }
+
     fun otherLabel(other: Other): String =
         when (other.direction) {
             Direction.TO_LIBRARY -> PLAY_FROM_LIBRARY
