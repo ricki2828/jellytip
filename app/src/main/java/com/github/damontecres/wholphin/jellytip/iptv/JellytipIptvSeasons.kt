@@ -368,7 +368,7 @@ fun JellytipLibraryWaysToWatch(
                     ).joinToString("  ·  ")
                 WayTile("IPTV · ${c.providerName ?: "copy"}", words.ifEmpty { "Watch via IPTV" }) {
                     JellytipTrace.log("iptv", "library ways to watch: ${c.id}")
-                    viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipIptvDetails(c.id, c.title), "library ways to watch IPTV")
+                    viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipIptvDetails(c.id, c.title, pick = true), "library ways to watch IPTV")
                 }
             }
         }

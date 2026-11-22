@@ -101,7 +101,9 @@ import com.github.damontecres.wholphin.ui.tryRequestFocus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import java.util.Locale
 import javax.inject.Inject
 
@@ -111,10 +113,59 @@ class JellytipIptvVodViewModel
     constructor(
         val vod: JellytipIptvVodService,
         val navigationManager: NavigationManager,
+        private val api: org.jellyfin.sdk.api.client.ApiClient,
         /** The library trailer player's client (the trailer cache is the same). */
         @param:com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient val httpClient: okhttp3.OkHttpClient,
         preferences: androidx.datastore.core.DataStore<com.github.damontecres.wholphin.preferences.AppPreferences>,
     ) : ViewModel() {
+        /**
+         * OK on an IPTV Continue Watching entry. An episode whose series is in the library, with that exact episode there too,
+         * plays from the library (it seeks, has subtitles; "source less important") at the IPTV copy's position (same episode,
+         * so the timestamp is close enough). Otherwise, or when the lookup is slow / fails, the IPTV player as before.
+         */
+        private var resumeJob: kotlinx.coroutines.Job? = null
+
+        fun openResume(r: IptvResume) {
+            // A second OK while the library lookup is out would open a second player
+            if (resumeJob?.isActive == true) return
+            val series = r.seriesLibraryUuid
+            if (series == null || r.season == null || r.episode == null) {
+                navigationManager.navigateTo(r.destination(), "continue IPTV ${r.kind}")
+                return
+            }
+            val from = navigationManager.backStack.lastOrNull()
+            resumeJob =
+                viewModelScope.launch {
+                    val lib =
+                        try {
+                            kotlinx.coroutines.withTimeoutOrNull(IptvResumeLibrary.LOOKUP_MS) {
+                                val eps =
+                                    api.tvShowsApi
+                                        .getEpisodes(seriesId = series, season = r.season, isMissing = false, limit = 200)
+                                        .content.items
+                                        .map { IptvResumeLibrary.Ep(it.id, it.parentIndexNumber, it.indexNumber) }
+                                IptvResumeLibrary.pick(eps, r.season, r.episode)
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            timber.log.Timber.w(e, "library episode lookup")
+                            null
+                        }
+                    // He moved on (Back, another page) while it looked: don't pull him into a player
+                    if (navigationManager.backStack.lastOrNull() !== from) {
+                        JellytipTrace.log("iptv", "continue: ${r.id} lookup ended after leaving the page; not opened")
+                        return@launch
+                    }
+                    if (lib != null) {
+                        JellytipTrace.log("iptv", "continue: ${r.id} S${r.season}E${r.episode} plays from the library $lib at ${r.pos.toLong()} s")
+                        navigationManager.navigateTo(Destination.Playback(itemId = lib, positionMs = (r.pos * 1000).toLong()), "continue IPTV episode -> library")
+                    } else {
+                        navigationManager.navigateTo(r.destination(), "continue IPTV ${r.kind}")
+                    }
+                }
+        }
+
         /** Trailer autoplay / sound, the same switches as the library details page. */
         val trailerSettings: kotlinx.coroutines.flow.Flow<com.github.damontecres.wholphin.jellytip.JellytipSettings> =
             preferences.data
@@ -270,6 +321,8 @@ fun JellytipIptvDetailsPage(
     id: String,
     title: String,
     modifier: Modifier = Modifier,
+    /** Picked on purpose (library "Ways to watch"): stays on this IPTV copy even when the library has the title. */
+    pick: Boolean = false,
     viewModel: JellytipIptvVodViewModel = hiltViewModel(),
 ) {
     // Ways to watch: the copy shown can change in place (a pick, or the copy picked last time); Back still leaves the page
@@ -284,6 +337,15 @@ fun JellytipIptvDetailsPage(
             return@produceState
         }
         val it = got?.item
+        // Last net: the detail itself says the library has this title (a path that never saw the cross-link): its page instead
+        if (!pick && it != null && shownId == id) {
+            val lib = com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen.detailsFor(it)
+            if (lib is com.github.damontecres.wholphin.ui.nav.Destination.MediaItem) {
+                JellytipTrace.log("iptv", "details: ${it.id} is in the library -> ${lib.itemId}")
+                viewModel.navigationManager.replaceTop(lib)
+                return@produceState
+            }
+        }
         if (got != null && it != null && !redirected) {
             redirected = true
             val to =

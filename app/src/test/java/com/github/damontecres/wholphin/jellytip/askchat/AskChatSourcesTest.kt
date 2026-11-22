@@ -99,10 +99,10 @@ class AskChatSourcesTest {
     }
 
     @Test
-    fun aSeriesWithALibraryCopyStillOpensItsIptvPageForNow() {
-        // JellytipTitleOpen redirects films only (the library series page has no "Ways to watch" yet)
+    fun aSeriesWithALibraryCopyOpensTheLibrarySeriesPage() {
+        // One page per title (22-Nov, Celebrity Traitors): series too; the library page's split merge shows the IPTV episodes
         val d = JellytipTitleOpen.detailsFor(tv("p1:s:11").toVodItem())
-        assertEquals(Destination.JellytipIptvDetails("p1:s:11", "Series With Library Copy"), d)
+        assertEquals(Destination.MediaItem(itemId = java.util.UUID.fromString("aaaabbbb-cccc-dddd-eeee-ffff00001111"), type = org.jellyfin.sdk.model.api.BaseItemKind.SERIES), d)
         assertEquals("aaaabbbbccccddddeeeeffff00001111", tv("p1:s:11").libraryId)
     }
 

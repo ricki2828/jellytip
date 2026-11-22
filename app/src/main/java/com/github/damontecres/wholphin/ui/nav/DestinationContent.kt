@@ -506,7 +506,7 @@ fun DestinationContent(
 
         is Destination.JellytipIptvDetails -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDetailsPage(id = destination.id, title = destination.title, modifier = modifier)
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipIptvDetailsPage(id = destination.id, title = destination.title, pick = destination.pick, modifier = modifier)
         }
 
         is Destination.JellytipIptvPlay -> {

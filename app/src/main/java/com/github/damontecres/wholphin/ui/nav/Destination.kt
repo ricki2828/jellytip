@@ -284,6 +284,8 @@ sealed class Destination(
     data class JellytipIptvDetails(
         val id: String,
         val title: String,
+        /** The person picked this IPTV copy on purpose (library "Ways to watch"): never redirected to the library page. */
+        val pick: Boolean = false,
     ) : Destination(false)
 
     /** Jellytip: an IPTV recording, film or series episode full screen. */
