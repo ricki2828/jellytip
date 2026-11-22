@@ -206,11 +206,34 @@ object AskParse {
 
     private fun lcSet(xs: List<String>) = xs.map { it.lowercase() }.toSet()
 
-    /** The mood label for a genre list (same genres as a mood = its label, so ids match the parser's), else the first genre. */
-    private fun moodLabel(genres: List<String>): String {
-        val want = lcSet(genres).sorted().joinToString("|")
-        return MOODS.firstOrNull { lcSet(it.genres).sorted().joinToString("|") == want }?.label ?: genres.first()
+    /** Case-insensitive order, ordinal on the lower-cased strings (the same on the web and in the server's Python port). */
+    private fun ciSort(xs: List<String>) = xs.sortedWith { a, b -> a.lowercase().compareTo(b.lowercase()) }
+
+    /**
+     * The label for a genre list (chip contract v1, C3; ~/ai/plans/jellytip-chat-search.md 3a), so ids never collide:
+     *  1. the genres are one mood's set (any case): that mood's label;
+     *  2. else exactly the union of 2+ moods' sets: those moods (each mood inside the genres, in MOODS order, kept when it
+     *     adds a genre not yet covered), labels sorted and joined " or ";
+     *  3. else the genres themselves, sorted and joined " or ".
+     */
+    fun moodLabel(genres: List<String>): String {
+        val set = lcSet(genres)
+        val key = set.sorted().joinToString("|")
+        MOODS.firstOrNull { lcSet(it.genres).sorted().joinToString("|") == key }?.let { return it.label }
+        val covered = HashSet<String>()
+        val kept = mutableListOf<String>()
+        for (m in MOODS) {
+            val gs = m.genres.map { it.lowercase() }.distinct()
+            if (!gs.all { it in set } || gs.all { it in covered }) continue
+            covered.addAll(gs)
+            kept.add(m.label)
+        }
+        if (kept.size >= 2 && covered.size == set.size) return ciSort(kept).joinToString(" or ")
+        return ciSort(genres.associateBy { it.lowercase() }.values.toList()).joinToString(" or ")
     }
+
+    /** The mood table (label + genres, in order), as in the chip contract's golden file. */
+    val MOOD_TABLE: List<Pair<String, List<String>>> get() = MOODS.map { it.label to it.genres }
 
     /**
      * The one way to turn filter data into a chip (id + label): for chips that don't come from the parsed text (refine

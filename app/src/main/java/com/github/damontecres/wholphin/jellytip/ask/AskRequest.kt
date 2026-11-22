@@ -70,6 +70,7 @@ fun BaseItemDto.askItem(): AskItem =
                         PersonKind.ACTOR -> "Actor"
                         else -> return@mapNotNull null
                     }
-                AskPerson(p.id.toString(), p.name.orEmpty(), kind)
+                // Jellyfin's dashless lowercase hex, as on the web and in the chip contract (person:<32 hex>)
+                AskPerson(p.id.toString().replace("-", "").lowercase(), p.name.orEmpty(), kind)
             },
     )

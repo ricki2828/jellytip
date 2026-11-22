@@ -342,6 +342,53 @@ class AskParseTest {
     }
 
     @Test
+    fun chipContractV1() {
+        // The golden file shared with the web and the server (generated from the web TS)
+        val g =
+            JSONObject(
+                javaClass.classLoader!!
+                    .getResourceAsStream("jellytip/chip-contract-v1.json")!!
+                    .bufferedReader()
+                    .readText(),
+            )
+        assertEquals(1, g.getInt("v"))
+        val moods = g.getJSONArray("moods")
+        assertEquals(
+            (0 until moods.length()).map { moods.getJSONObject(it).let { m -> m.getString("label") to m.getJSONArray("genres").strings() } },
+            AskParse.MOOD_TABLE,
+        )
+        fun data(o: JSONObject): ChipData =
+            when (o.getString("t")) {
+                "genre" -> ChipData.Genre(o.getJSONArray("genres").strings())
+                "notGenre" -> ChipData.NotGenre(o.getJSONArray("genres").strings())
+                "kind" -> ChipData.Kind(o.getString("kind"))
+                "maxRuntime" -> ChipData.MaxRuntime(o.getInt("min"))
+                "minRuntime" -> ChipData.MinRuntime(o.getInt("min"))
+                "years" -> ChipData.Years(o.getInt("from"), o.getInt("to"))
+                "unplayed" -> ChipData.Unplayed
+                "played" -> ChipData.Played
+                "kids" -> ChipData.Kids(o.getJSONArray("ratings").strings(), o.getJSONArray("genres").strings())
+                "minRating" -> ChipData.MinRating(o.getDouble("value"))
+                "maxSeasons" -> ChipData.MaxSeasons(o.getInt("n"))
+                "person" -> ChipData.Person(o.getString("id"), o.getString("name"), o.getString("role"))
+                else -> error(o.toString())
+            }
+        val variants = g.getJSONArray("variants")
+        for (i in 0 until variants.length()) {
+            val v = variants.getJSONObject(i)
+            val c = AskParse.chipFor(data(v.getJSONObject("data")))
+            assertEquals("variant $i", v.getString("id") to v.getString("label"), c.id to c.label)
+        }
+        val c3 = g.getJSONArray("c3")
+        for (i in 0 until c3.length()) {
+            val c = c3.getJSONObject(i)
+            val genres = c.getJSONArray("genres").strings()
+            assertEquals("c3 $genres", c.getString("label"), AskParse.moodLabel(genres))
+            assertEquals("c3 not $genres", c.getString("notGenreLabel"), AskParse.chipFor(ChipData.NotGenre(genres)).label)
+        }
+    }
+
+    @Test
     fun rickiWithTheKidsNothingAnimatedNothingScary() {
         val r = parse("I'm here with my two kids, want something non animated not scary that would work for all")
         assertEquals(listOf("kids", "notgenre:Animation", "notgenre:Horror"), r.chips.map { it.id }.sorted())
