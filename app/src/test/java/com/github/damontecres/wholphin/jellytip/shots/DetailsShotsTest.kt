@@ -60,6 +60,8 @@ import com.github.damontecres.wholphin.jellytip.cache.ImagePick
 import com.github.damontecres.wholphin.jellytip.details.JellytipEpisodeTile
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.iptv.IptvCastMember
+import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.jellytip.iptv.IptvCopy
 import com.github.damontecres.wholphin.jellytip.iptv.IptvEpisode
 import com.github.damontecres.wholphin.jellytip.iptv.IptvProgress
 import com.github.damontecres.wholphin.jellytip.iptv.IptvSeason
@@ -227,6 +229,19 @@ class DetailsShotsTest {
                 keyUp(Key.DirectionCenter)
             }
         }.onFailure { println("shot $name: OK key not sent (${it.message?.lineSequence()?.firstOrNull()})") }
+    }
+
+    /** One D-pad key through the test framework (focus moves the way the remote moves it). */
+    private fun pressKey(
+        name: String,
+        key: Key,
+    ) {
+        runCatching {
+            compose.onRoot().performKeyInput {
+                keyDown(key)
+                keyUp(key)
+            }
+        }.onFailure { println("shot $name: key not sent (${it.message?.lineSequence()?.firstOrNull()})") }
     }
 
     private fun pressDown(name: String) {
@@ -596,7 +611,10 @@ class DetailsShotsTest {
             pressDown(name)
             advance(1500)
             // Focus only moves: Season 1 stays the selected season and the episodes stay put
-            focusText(name, "Season 2")
+            // Down landed on the next-up episode tile: Up goes to the selected chip (Season 1), Right to Season 2
+            pressKey(name, Key.DirectionUp)
+            advance(400)
+            pressKey(name, Key.DirectionRight)
             advance(800)
             assertEquals("focusing a season chip must not change the season", emptyList<Int>(), changes)
         }) { SeasonStatefulSeriesPage(list, changes) }
@@ -611,7 +629,10 @@ class DetailsShotsTest {
             focusText(name, primaryLabel)
             pressDown(name)
             advance(1500)
-            focusText(name, "Season 2")
+            // Down landed on the next-up episode tile: Up goes to the selected chip (Season 1), Right to Season 2
+            pressKey(name, Key.DirectionUp)
+            advance(400)
+            pressKey(name, Key.DirectionRight)
             advance(800)
             assertEquals("not before OK", emptyList<Int>(), changes)
             pressOk(name)
@@ -780,6 +801,12 @@ class DetailsShotsTest {
             seasons = emptyList(),
             people = iptvPeople,
             genres = listOf("Crime", "Drama", "Thriller"),
+            // Two ways to watch: the film's Down opens a focusable row (People alone would not take focus)
+            copies =
+                listOf(
+                    IptvCopy("p1:m:42", "Provider One", listOf("4k"), res = "4k", langLabel = "English", current = true),
+                    IptvCopy("p2:m:77", "Provider Two", listOf("1080p"), res = "fhd", langLabel = "English"),
+                ),
         )
 
     private fun iptvSeriesDetail() =
@@ -801,7 +828,13 @@ class DetailsShotsTest {
                                 runtimeMin = 46 + i,
                                 overview = episodeOverview,
                                 still = "https://h/s/$s/${i + 1}",
-                                progress = if (s == 1 && i == 1) IptvProgress(1260.0, 2800.0, false) else null,
+                                // E1 and E2 watched, E3 part-watched (like the library series data)
+                                progress =
+                                    when {
+                                        s == 1 && i < 2 -> IptvProgress(2700.0, 2800.0, true)
+                                        s == 1 && i == 2 -> IptvProgress(1260.0, 2800.0, false)
+                                        else -> null
+                                    },
                             )
                         },
                     )
@@ -811,7 +844,10 @@ class DetailsShotsTest {
         )
 
     @Composable
-    private fun IptvPage(detail: IptvVodDetail) {
+    private fun IptvPage(
+        detail: IptvVodDetail,
+        onNavigate: (Destination, String?) -> Unit = { _, _ -> },
+    ) {
         JellytipIptvDetailsContent(
             id = detail.item.id,
             title = detail.item.title,
@@ -820,7 +856,7 @@ class DetailsShotsTest {
             trailerSettings = JellytipSettings(trailerAutoplay = false),
             httpClient = OkHttpClient(),
             onShowCopy = {},
-            onNavigate = { _, _ -> },
+            onNavigate = onNavigate,
             setFavourite = { _, on -> on },
         )
     }
@@ -832,19 +868,66 @@ class DetailsShotsTest {
     }
 
     @Test
+    fun iptvFilmRows() {
+        val name = "details-iptv-film-rows"
+        shot(name, steps = {
+            focusText(name, "Play")
+            pressDown(name)
+            advance(1500)
+        }) { IptvPage(iptvFilmDetail()) }
+    }
+
+    @Test
+    fun iptvMore() {
+        val name = "details-iptv-more"
+        shot(name, steps = {
+            focusText(name, "More")
+            pressOk(name)
+            advance(1500)
+        }) { IptvPage(iptvFilmDetail()) }
+    }
+
+    @Test
     fun iptvSeries() {
         val name = "details-iptv-series"
-        // The page puts focus on the first season chip itself
-        shot(name) { IptvPage(iptvSeriesDetail()) }
+        val played = mutableListOf<Destination>()
+        shot(name, steps = {
+            // The primary button names the episode it plays (E1, E2 watched, E3 part-watched) and plays exactly that one
+            focusText(name, "Resume S1 E3")
+            compose.onAllNodes(hasText("Resume S1 E3")).onFirst().assertExists()
+            compose.onAllNodes(hasText("3 seasons  \u00B7  Next: S1 E3")).onFirst().assertExists()
+            advance(300)
+            pressOk(name)
+            advance(300)
+            val dest = played.filterIsInstance<Destination.JellytipIptvPlay>().singleOrNull()
+            assertEquals("OK on the primary button plays E3", "p1:s:42:1:3", dest?.episodeId)
+            assertEquals("and resumes at its position", 1_260_000L, dest?.resumeMs)
+            played.clear()
+        }) { IptvPage(iptvSeriesDetail(), onNavigate = { dest, _ -> played.add(dest) }) }
+    }
+
+    @Test
+    fun iptvSeriesEpisodes() {
+        val name = "details-iptv-series-episodes"
+        shot(name, steps = {
+            focusText(name, "Resume S1 E3")
+            pressDown(name)
+            advance(1500)
+        }) { IptvPage(iptvSeriesDetail()) }
     }
 
     @Test
     fun iptvSeriesScrolled() {
         val name = "details-iptv-series-scrolled"
         shot(name, steps = {
-            // Down from the first season chip lands on the first episode card
+            // Down, then along the season chips to Season 2 (chips select on OK only)
+            focusText(name, "Resume S1 E3")
             pressDown(name)
             advance(1500)
+            focusText(name, "Season 2")
+            advance(500)
+            pressOk(name)
+            advance(1000)
         }) { IptvPage(iptvSeriesDetail()) }
     }
 }

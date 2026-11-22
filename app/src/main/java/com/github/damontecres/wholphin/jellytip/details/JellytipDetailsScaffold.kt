@@ -44,12 +44,15 @@ private const val OPEN_AT_STEP_MS = 50L
  *
  * @param key unique and stable within a page; also the lazy item key and the value [JellytipDetailsScaffold]'s `openAt` matches
  * @param present false = left out entirely (nothing to show, or not loaded yet)
+ * @param focusable false = drawn like any section but never a focus stop (a row of plain, non-clickable cells): it does not
+ *  count for the Down hint or for opening the sections, and [content] gets a requester it need not attach
  * @param content draws the section; it must put `Modifier.focusRequester(focus)` on its first focusable node, or the
  *  scaffold cannot focus it
  */
 class JellytipDetailsSection(
     val key: String,
     val present: Boolean,
+    val focusable: Boolean = true,
     val content: @Composable (focus: FocusRequester) -> Unit,
 )
 
@@ -114,7 +117,7 @@ fun JellytipDetailsScaffold(
     val heroFocus = remember { FocusRequester() }
     val requesters = remember { HashMap<String, FocusRequester>() }
     val currentSections by rememberUpdatedState(sections)
-    val hasBelow = sections.any { it.present }
+    val hasBelow = sections.any { it.present && it.focusable }
     var pendingOpenAt by remember { mutableStateOf(openAt) }
 
     val listState = rememberLazyListState()
@@ -136,7 +139,7 @@ fun JellytipDetailsScaffold(
             withFrameNanos { }
             if (listState.layoutInfo.totalItemsCount > 1) listState.animateScrollToItem(1)
             withFrameNanos { }
-            val present = currentSections.filter { it.present }
+            val present = currentSections.filter { it.present && it.focusable }
             val first = pendingOpenAt?.let { k -> present.firstOrNull { it.key == k } }
             pendingOpenAt = null
             var focused = false

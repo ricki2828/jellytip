@@ -3,9 +3,12 @@ package com.github.damontecres.wholphin.jellytip.details
 import androidx.compose.ui.text.AnnotatedString
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.jellytip.JellytipExtras
+import com.github.damontecres.wholphin.jellytip.cards.JellytipTech
+import com.github.damontecres.wholphin.jellytip.iptv.IptvVodDetail
 import com.github.damontecres.wholphin.jellytip.scoreLine
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.PersonKind
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -128,6 +131,47 @@ fun heroOf(
         overview = dto.overview,
         scores = scoreLine(extras),
         sourceBadge = sourceBadge,
+    )
+}
+
+/** "TMDB 7.4": the one score an IPTV title has. */
+fun iptvScoreText(rating: Double?): String? = rating?.takeIf { it > 0 }?.let { String.format(Locale.US, "TMDB %.1f", it) }
+
+/**
+ * The IPTV title adapter over [buildDetailsHero]: the same hero as a library page, drawn from what IPTV knows.
+ *
+ *  - info line: year, runtime (films only; a series says its seasons on the status line), premium names (else the quality
+ *    words), up to 3 genres - the library's order and separators
+ *  - "Language unknown" is one more badge, "IPTV" the source badge at the end of the line (the provider is not in the hero)
+ *  - dim line: "Directed by X" (no cast text); score line: the single TMDB rating as plain text
+ *  - [statusLine]: a series' "3 seasons  ·  Next: S2 E4" (built by the caller from [resolveIptvSeriesPlay])
+ */
+fun iptvHeroOf(
+    d: IptvVodDetail,
+    fallbackTitle: String,
+    statusLine: String? = null,
+    directedBy: (String) -> String = { "Directed by $it" },
+): JellytipDetailsHero {
+    val item = d.item
+    val premium =
+        JellytipTech
+            .fullNames(item.tech.flatMap(JellytipTech::normalize).toSet())
+            .ifEmpty { listOf(item.quality.joinToString(" ") { it.uppercase(Locale.ROOT) }).filter { it.isNotEmpty() } }
+    return buildDetailsHero(
+        title = item.title.ifBlank { fallbackTitle },
+        logoUrl = d.logo,
+        logoStyleIds = emptyList(),
+        statusLine = statusLine,
+        productionYear = item.year,
+        runTimeTicks = if (item.isSeries) null else d.runtimeMin?.let { it * 600_000_000L },
+        premium = premium,
+        genres = d.genres.ifEmpty { listOfNotNull(d.genre) },
+        fileBadges = if (item.langUnknown) listOf("Language unknown") else emptyList(),
+        directors = listOfNotNull(d.director),
+        directedBy = directedBy,
+        overview = item.overview,
+        scores = iptvScoreText(item.rating)?.let { AnnotatedString(it) },
+        sourceBadge = "IPTV",
     )
 }
 
