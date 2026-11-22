@@ -23,6 +23,7 @@ import { Collections } from "./screens/Collections";
 import { CollectionRow } from "./screens/CollectionRow";
 import { Search } from "./screens/Search";
 import { Ask } from "./screens/Ask";
+import { AskChat } from "./screens/AskChat";
 import { Tonight } from "./screens/Tonight";
 import { Channels } from "./screens/Channels";
 import { MovieNight } from "./screens/MovieNight";
@@ -125,6 +126,7 @@ export function App() {
         {route.name === "mylistshows" && <CollectionRow key="my-shows" id="my-shows" load={() => myListRow("tv")} missingText="Nothing in your list yet. Add shows with + My list." />}
         {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
         {route.name === "ask" && <Ask key={session.userId} />}
+        {route.name === "askchat" && <AskChat key={session.userId} />}
         {route.name === "tonight" && <Tonight key={session.userId} />}
         {route.name === "channels" && <Channels key={session.userId} />}
         {route.name === "movienight" && <MovieNight key={session.userId} joinParam={route.query.get("join")} />}

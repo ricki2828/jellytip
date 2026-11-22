@@ -1,0 +1,1423 @@
+{
+ "headline": {
+  "status": 200,
+  "ms": 3017,
+  "body": {
+   "v": 1,
+   "rev": 1,
+   "text": "here with my two kids, something non-animated, not scary, that works for all",
+   "turns": [],
+   "chips": [],
+   "removed": []
+  },
+  "resp": {
+   "v": 1,
+   "rev": 1,
+   "mode": "llm",
+   "reply": "Family picks \u00b7 PG or under \u00b7 no Animation \u00b7 nothing scary",
+   "chips": [
+    {
+     "id": "notgenre:Animation",
+     "label": "no animation",
+     "data": {
+      "t": "notGenre",
+      "genres": [
+       "Animation"
+      ]
+     },
+     "removable": true
+    },
+    {
+     "id": "kids",
+     "label": "for kids (rated G, PG)",
+     "data": {
+      "t": "kids",
+      "ratings": [
+       "G",
+       "PG",
+       "TV-Y",
+       "TV-Y7",
+       "TV-G",
+       "TV-PG",
+       "U"
+      ],
+      "genres": [
+       "Family",
+       "Animation",
+       "Kids"
+      ]
+     },
+     "removable": true,
+     "protected": true
+    },
+    {
+     "id": "noscary",
+     "label": "nothing scary",
+     "server": true,
+     "data": {
+      "t": "noscary"
+     },
+     "removable": true
+    }
+   ],
+   "refine": [],
+   "sources": [
+    "library"
+   ],
+   "cards": [
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "c648fd417aee0b2ba55f181d598b818f",
+     "title": "Harry Potter and the Philosopher's Stone",
+     "year": 2001,
+     "tmdbId": 671,
+     "rating": 7.903,
+     "match": "filter",
+     "played": false,
+     "score": 0.309,
+     "certification": "PG",
+     "runtime": 159
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "9fed770d7526eaec4212cf047466c86c",
+     "title": "Harry Potter and the Prisoner of Azkaban",
+     "year": 2004,
+     "tmdbId": 673,
+     "rating": 8.012,
+     "match": "filter",
+     "played": false,
+     "score": 0.307,
+     "certification": "PG",
+     "runtime": 142
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "366094297530f07a69ac782c6eec7724",
+     "title": "Harry Potter and the Chamber of Secrets",
+     "year": 2002,
+     "tmdbId": 672,
+     "rating": 7.708,
+     "match": "filter",
+     "played": false,
+     "score": 0.306,
+     "certification": "PG",
+     "runtime": 161
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "31dd37b5821c2a2be4b86c4dea4f422a",
+     "title": "Harry Potter and the Half-Blood Prince",
+     "year": 2009,
+     "tmdbId": 767,
+     "rating": 7.682,
+     "match": "filter",
+     "played": false,
+     "score": 0.305,
+     "certification": "PG",
+     "runtime": 154
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "312a2d2e758ac851a51b0548cdcff0c0",
+     "title": "Beauty and the Beast",
+     "year": 2017,
+     "tmdbId": 321612,
+     "rating": 6.967,
+     "match": "filter",
+     "played": false,
+     "score": 0.299,
+     "certification": "PG",
+     "runtime": 129
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "58e57104700710433220c36164008fc6",
+     "title": "Back to the Future",
+     "year": 1985,
+     "tmdbId": 105,
+     "rating": 8.33,
+     "match": "filter",
+     "played": true,
+     "score": 0.298,
+     "certification": "PG",
+     "runtime": 116
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "334c3a7c5f1644be1cd49c602c873807",
+     "title": "The Empire Strikes Back",
+     "year": 1980,
+     "tmdbId": 1891,
+     "rating": 8.4,
+     "match": "filter",
+     "played": true,
+     "score": 0.296,
+     "certification": "PG",
+     "runtime": 127
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "94ebb07eee068c06d2898149fb784776",
+     "title": "Hugo",
+     "year": 2011,
+     "tmdbId": 44826,
+     "rating": 7.2,
+     "match": "filter",
+     "played": false,
+     "score": 0.292,
+     "certification": "PG",
+     "runtime": 126
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "f6cb554657c07092bec8de754d829064",
+     "title": "Moana",
+     "year": 2026,
+     "tmdbId": 1108427,
+     "rating": 7.493,
+     "match": "filter",
+     "played": false,
+     "score": 0.292,
+     "certification": "PG",
+     "runtime": 115
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "ef19d5e27dd57b1f2d4485219a0825a9",
+     "title": "Wicked: For Good",
+     "year": 2025,
+     "tmdbId": 967941,
+     "rating": 6.566,
+     "match": "filter",
+     "played": false,
+     "score": 0.29,
+     "certification": "PG",
+     "runtime": 138
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "2985cef9e3173a639ce6a43a8c8d134d",
+     "title": "The Karate Kid",
+     "year": 1984,
+     "tmdbId": 1885,
+     "rating": 7.23,
+     "match": "filter",
+     "played": false,
+     "score": 0.288,
+     "certification": "PG",
+     "runtime": 127
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "e3a1e83831942880d7f86e7c8a0d4acc",
+     "title": "Star Wars: Episode I - The Phantom Menace",
+     "year": 1999,
+     "tmdbId": 1893,
+     "rating": 6.583,
+     "match": "filter",
+     "played": true,
+     "score": 0.287,
+     "certification": "PG",
+     "runtime": 136
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "605b2e8057ef41a2c99bcfedbd9cd6e9",
+     "title": "The Chronicles of Narnia: The Lion, the Witch and the Wardrobe",
+     "year": 2005,
+     "tmdbId": 411,
+     "rating": 7.145,
+     "match": "filter",
+     "played": true,
+     "score": 0.286,
+     "certification": "PG",
+     "runtime": 143
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "67e0e02719e3daf1e14ded9ec79cb889",
+     "title": "Monty Python and the Holy Grail",
+     "year": 1975,
+     "tmdbId": 762,
+     "rating": 7.803,
+     "match": "filter",
+     "played": true,
+     "score": 0.283,
+     "certification": "PG",
+     "runtime": 92
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "663f7996134bee2834181dfb38a570f6",
+     "title": "The Straight Story",
+     "year": 1999,
+     "tmdbId": 404,
+     "rating": 7.736,
+     "match": "filter",
+     "played": false,
+     "score": 0.28,
+     "certification": "G",
+     "runtime": 112
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "618d0373813ff31f1a576f47b0dc558e",
+     "title": "Paddington",
+     "year": 2014,
+     "tmdbId": 116149,
+     "rating": 7.125,
+     "match": "filter",
+     "played": true,
+     "score": 0.276,
+     "certification": "PG",
+     "runtime": 95
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "977e207c87076f690a466196f248c888",
+     "title": "The Muppets",
+     "year": 2011,
+     "tmdbId": 64328,
+     "rating": 6.668,
+     "match": "filter",
+     "played": false,
+     "score": 0.275,
+     "certification": "PG",
+     "runtime": 103
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "d6cd13abc145593396175a92154ef4fb",
+     "title": "Speed Racer",
+     "year": 2008,
+     "tmdbId": 7459,
+     "rating": 6.381,
+     "match": "filter",
+     "played": false,
+     "score": 0.274,
+     "certification": "PG",
+     "runtime": 135
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "6d1c1d6f3866de84af73e342e37aa33e",
+     "title": "Roald Dahl's Matilda the Musical",
+     "year": 2022,
+     "tmdbId": 668482,
+     "rating": 6.8,
+     "match": "filter",
+     "played": false,
+     "score": 0.268,
+     "certification": "PG",
+     "runtime": 122
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "dcda03b7f7ed1de087d71c9a60cc28e8",
+     "title": "IF",
+     "year": 2024,
+     "tmdbId": 639720,
+     "rating": 6.939,
+     "match": "filter",
+     "played": true,
+     "score": 0.265,
+     "certification": "PG",
+     "runtime": 107
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "fd53f908b32b2129bed91170975937a6",
+     "title": "Hoosiers",
+     "year": 1986,
+     "tmdbId": 5693,
+     "rating": 7,
+     "match": "filter",
+     "played": false,
+     "score": 0.265,
+     "certification": "PG",
+     "runtime": 115
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "c45b13e520a266117c9b02757c71abc7",
+     "title": "The Bad News Bears",
+     "year": 1976,
+     "tmdbId": 23479,
+     "rating": 6.9,
+     "match": "filter",
+     "played": false,
+     "score": 0.259,
+     "certification": "PG",
+     "runtime": 102
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "e21044537d5c711201d98b316a36d595",
+     "title": "Penguins",
+     "year": 2019,
+     "tmdbId": 508802,
+     "rating": 7.1,
+     "match": "filter",
+     "played": false,
+     "score": 0.241,
+     "certification": "G",
+     "runtime": 76
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "b92fa75c0be2e8f5ae5e2f5fa416b1f5",
+     "title": "The Truman Show",
+     "year": 1998,
+     "tmdbId": 37165,
+     "rating": 8.159,
+     "match": "filter",
+     "played": true,
+     "score": 0.196,
+     "certification": "PG",
+     "runtime": 103
+    }
+   ],
+   "matched": 54,
+   "partial": false,
+   "notes": []
+  }
+ },
+ "paul_rudd": {
+  "status": 200,
+  "ms": 2846,
+  "body": {
+   "v": 1,
+   "rev": 2,
+   "text": "something with Paul Rudd",
+   "turns": [
+    {
+     "user": "here with my two kids, something non-animated, not scary, that works for all"
+    }
+   ],
+   "chips": [
+    {
+     "id": "notgenre:Animation",
+     "label": "no animation",
+     "data": {
+      "t": "notGenre",
+      "genres": [
+       "Animation"
+      ]
+     },
+     "removable": true
+    },
+    {
+     "id": "kids",
+     "label": "for kids (rated G, PG)",
+     "data": {
+      "t": "kids",
+      "ratings": [
+       "G",
+       "PG",
+       "TV-Y",
+       "TV-Y7",
+       "TV-G",
+       "TV-PG",
+       "U"
+      ],
+      "genres": [
+       "Family",
+       "Animation",
+       "Kids"
+      ]
+     },
+     "removable": true,
+     "protected": true
+    },
+    {
+     "id": "noscary",
+     "label": "nothing scary",
+     "server": true,
+     "data": {
+      "t": "noscary"
+     },
+     "removable": true
+    }
+   ],
+   "removed": []
+  },
+  "resp": {
+   "v": 1,
+   "rev": 2,
+   "mode": "llm",
+   "reply": "Family picks \u00b7 PG or under \u00b7 no Animation \u00b7 with Paul Rudd \u00b7 nothing scary",
+   "chips": [
+    {
+     "id": "notgenre:Animation",
+     "label": "no animation",
+     "data": {
+      "t": "notGenre",
+      "genres": [
+       "Animation"
+      ]
+     },
+     "removable": true
+    },
+    {
+     "id": "kids",
+     "label": "for kids (rated G, PG)",
+     "data": {
+      "t": "kids",
+      "ratings": [
+       "G",
+       "PG",
+       "TV-Y",
+       "TV-Y7",
+       "TV-G",
+       "TV-PG",
+       "U"
+      ],
+      "genres": [
+       "Family",
+       "Animation",
+       "Kids"
+      ]
+     },
+     "removable": true,
+     "protected": true
+    },
+    {
+     "id": "noscary",
+     "label": "nothing scary",
+     "server": true,
+     "data": {
+      "t": "noscary"
+     },
+     "removable": true
+    },
+    {
+     "id": "person:3e909596adb405578ff2191e296d5826",
+     "label": "with Paul Rudd",
+     "data": {
+      "t": "person",
+      "id": "3e909596adb405578ff2191e296d5826",
+      "name": "Paul Rudd",
+      "role": "Actor"
+     },
+     "removable": true
+    }
+   ],
+   "refine": [],
+   "sources": [
+    "library"
+   ],
+   "cards": [],
+   "matched": 0,
+   "partial": false,
+   "notes": [
+    {
+     "text": "Nothing in your library fits all of that.",
+     "code": "no_results"
+    }
+   ]
+  }
+ },
+ "remove_kids": {
+  "status": 200,
+  "ms": 85,
+  "body": {
+   "v": 1,
+   "rev": 3,
+   "op": {
+    "remove": "kids"
+   },
+   "turns": [],
+   "chips": [
+    {
+     "id": "notgenre:Animation",
+     "label": "no animation",
+     "data": {
+      "t": "notGenre",
+      "genres": [
+       "Animation"
+      ]
+     },
+     "removable": true
+    },
+    {
+     "id": "kids",
+     "label": "for kids (rated G, PG)",
+     "data": {
+      "t": "kids",
+      "ratings": [
+       "G",
+       "PG",
+       "TV-Y",
+       "TV-Y7",
+       "TV-G",
+       "TV-PG",
+       "U"
+      ],
+      "genres": [
+       "Family",
+       "Animation",
+       "Kids"
+      ]
+     },
+     "removable": true,
+     "protected": true
+    },
+    {
+     "id": "noscary",
+     "label": "nothing scary",
+     "server": true,
+     "data": {
+      "t": "noscary"
+     },
+     "removable": true
+    }
+   ],
+   "removed": []
+  },
+  "resp": {
+   "v": 1,
+   "rev": 3,
+   "mode": "fallback",
+   "reply": "No Animation \u00b7 nothing scary",
+   "chips": [
+    {
+     "id": "notgenre:Animation",
+     "label": "no animation",
+     "data": {
+      "t": "notGenre",
+      "genres": [
+       "Animation"
+      ]
+     },
+     "removable": true
+    },
+    {
+     "id": "noscary",
+     "label": "nothing scary",
+     "server": true,
+     "data": {
+      "t": "noscary"
+     },
+     "removable": true
+    }
+   ],
+   "refine": [],
+   "sources": [
+    "library"
+   ],
+   "cards": [
+    {
+     "kind": "series",
+     "source": "library",
+     "id": "e55f43bd5687c33fd00b704c73d3ebd6",
+     "title": "Game of Thrones",
+     "year": 2011,
+     "tmdbId": 1399,
+     "rating": 8.476,
+     "match": "filter",
+     "played": false,
+     "score": 0.211,
+     "certification": "TV-MA",
+     "runtime": null,
+     "seasons": 8,
+     "episodes": 73
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "c648fd417aee0b2ba55f181d598b818f",
+     "title": "Harry Potter and the Philosopher's Stone",
+     "year": 2001,
+     "tmdbId": 671,
+     "rating": 7.903,
+     "match": "filter",
+     "played": false,
+     "score": 0.209,
+     "certification": "PG",
+     "runtime": 159
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "427a24282984eb5a154ffd2891752a81",
+     "title": "Project Hail Mary",
+     "year": 2026,
+     "tmdbId": 687163,
+     "rating": 8.642,
+     "match": "filter",
+     "played": true,
+     "score": 0.209,
+     "certification": "PG-13",
+     "runtime": 157
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "2e23d1f0faacde0ef102d52940f115d8",
+     "title": "Predator: Badlands",
+     "year": 2025,
+     "tmdbId": 1242898,
+     "rating": 7.839,
+     "match": "filter",
+     "played": false,
+     "score": 0.207,
+     "certification": "PG-13",
+     "runtime": 107
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "90b886d8b6c65d08c9c5a4ee734faae8",
+     "title": "The Green Mile",
+     "year": 1999,
+     "tmdbId": 497,
+     "rating": 8.506,
+     "match": "filter",
+     "played": false,
+     "score": 0.207,
+     "certification": "R",
+     "runtime": 189
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "9fed770d7526eaec4212cf047466c86c",
+     "title": "Harry Potter and the Prisoner of Azkaban",
+     "year": 2004,
+     "tmdbId": 673,
+     "rating": 8.012,
+     "match": "filter",
+     "played": false,
+     "score": 0.207,
+     "certification": "PG",
+     "runtime": 142
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "366094297530f07a69ac782c6eec7724",
+     "title": "Harry Potter and the Chamber of Secrets",
+     "year": 2002,
+     "tmdbId": 672,
+     "rating": 7.708,
+     "match": "filter",
+     "played": false,
+     "score": 0.206,
+     "certification": "PG",
+     "runtime": 161
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "f8514ad7cf6023802790d02c07a9f9b5",
+     "title": "Harry Potter and the Goblet of Fire",
+     "year": 2005,
+     "tmdbId": 674,
+     "rating": 7.802,
+     "match": "filter",
+     "played": false,
+     "score": 0.206,
+     "certification": "PG-13",
+     "runtime": 157
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "31dd37b5821c2a2be4b86c4dea4f422a",
+     "title": "Harry Potter and the Half-Blood Prince",
+     "year": 2009,
+     "tmdbId": 767,
+     "rating": 7.682,
+     "match": "filter",
+     "played": false,
+     "score": 0.205,
+     "certification": "PG",
+     "runtime": 154
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "a41b6e0cccaeb689e840c012f5d2dbb5",
+     "title": "Harry Potter and the Order of the Phoenix",
+     "year": 2007,
+     "tmdbId": 675,
+     "rating": 7.673,
+     "match": "filter",
+     "played": false,
+     "score": 0.205,
+     "certification": "PG-13",
+     "runtime": 138
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "90b5703829b6fc12a61a9e9b68fd3580",
+     "title": "Fantastic Beasts and Where to Find Them",
+     "year": 2016,
+     "tmdbId": 259316,
+     "rating": 7.307,
+     "match": "filter",
+     "played": false,
+     "score": 0.203,
+     "certification": "PG-13",
+     "runtime": 133
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "5bd3e9781567d05d9009cdd7fa8f8bfd",
+     "title": "Fight Club",
+     "year": 1999,
+     "tmdbId": 550,
+     "rating": 8.437,
+     "match": "filter",
+     "played": true,
+     "score": 0.202,
+     "certification": "R",
+     "runtime": 139
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "d77df031ae73f3fb27b1dc6b5c5c464c",
+     "title": "Ready Player One",
+     "year": 2018,
+     "tmdbId": 333339,
+     "rating": 7.586,
+     "match": "filter",
+     "played": false,
+     "score": 0.202,
+     "certification": "PG-13",
+     "runtime": 140
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "9d3af02c6859efbc0a18f191c02a0f64",
+     "title": "Green Book",
+     "year": 2018,
+     "tmdbId": 490132,
+     "rating": 8.224,
+     "match": "filter",
+     "played": false,
+     "score": 0.202,
+     "certification": "PG-13",
+     "runtime": 130
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "cf208fc5222d3c2abae2b38bfda6d167",
+     "title": "Pulp Fiction",
+     "year": 1994,
+     "tmdbId": 680,
+     "rating": 8.48,
+     "match": "filter",
+     "played": true,
+     "score": 0.202,
+     "certification": "R",
+     "runtime": 155
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "67b3b2940a1c3d8777bb18fd4c805fdf",
+     "title": "The Notebook",
+     "year": 2004,
+     "tmdbId": 11036,
+     "rating": 7.889,
+     "match": "filter",
+     "played": false,
+     "score": 0.2,
+     "certification": "PG-13",
+     "runtime": 124
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "c79d758bddb8c0abf96addc3d841a553",
+     "title": "The Shadow's Edge",
+     "year": 2025,
+     "tmdbId": 1419406,
+     "rating": 8.358,
+     "match": "filter",
+     "played": false,
+     "score": 0.2,
+     "certification": "NR",
+     "runtime": 142
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "80c1288025835b2055a91e9394b90670",
+     "title": "The Matrix",
+     "year": 1999,
+     "tmdbId": 603,
+     "rating": 8.259,
+     "match": "filter",
+     "played": true,
+     "score": 0.2,
+     "certification": "R",
+     "runtime": 136
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "56dcce125676a48c52edeee34c148525",
+     "title": "The Godfather",
+     "year": 1972,
+     "tmdbId": 238,
+     "rating": 8.688,
+     "match": "filter",
+     "played": true,
+     "score": 0.2,
+     "certification": "R",
+     "runtime": 177
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "9f74e21f49e2072a1d98de9ef3ff8e00",
+     "title": "Men in Black",
+     "year": 1997,
+     "tmdbId": 607,
+     "rating": 7.231,
+     "match": "filter",
+     "played": false,
+     "score": 0.199,
+     "certification": "PG-13",
+     "runtime": 98
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "312a2d2e758ac851a51b0548cdcff0c0",
+     "title": "Beauty and the Beast",
+     "year": 2017,
+     "tmdbId": 321612,
+     "rating": 6.967,
+     "match": "filter",
+     "played": false,
+     "score": 0.199,
+     "certification": "PG",
+     "runtime": 129
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "e990320d3776da4539154a28bdf08c99",
+     "title": "The End of Oak Street",
+     "year": 2026,
+     "tmdbId": 1101383,
+     "rating": 7.05,
+     "match": "filter",
+     "played": false,
+     "score": 0.199,
+     "certification": "PG-13",
+     "runtime": 100
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "7f4ef2d655a515a12bd242e59171ccb5",
+     "title": "Hamnet",
+     "year": 2025,
+     "tmdbId": 858024,
+     "rating": 7.7,
+     "match": "filter",
+     "played": false,
+     "score": 0.199,
+     "certification": "PG-13",
+     "runtime": 125
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "a5efc8d2124537708ad18ec95ad6c6be",
+     "title": "Inglourious Basterds",
+     "year": 2009,
+     "tmdbId": 16869,
+     "rating": 8.217,
+     "match": "filter",
+     "played": true,
+     "score": 0.198,
+     "certification": "R",
+     "runtime": 153
+    }
+   ],
+   "matched": 522,
+   "partial": false,
+   "notes": []
+  }
+ },
+ "op_add_person": {
+  "status": 200,
+  "ms": 14,
+  "body": {
+   "v": 1,
+   "rev": 4,
+   "op": {
+    "add": {
+     "t": "person",
+     "id": "3e909596adb405578ff2191e296d5826",
+     "name": "Paul Rudd",
+     "role": "Actor"
+    }
+   },
+   "turns": [],
+   "chips": [],
+   "removed": []
+  },
+  "resp": {
+   "v": 1,
+   "rev": 4,
+   "mode": "fallback",
+   "reply": "With Paul Rudd",
+   "chips": [
+    {
+     "id": "person:3e909596adb405578ff2191e296d5826",
+     "label": "with Paul Rudd",
+     "data": {
+      "t": "person",
+      "id": "3e909596adb405578ff2191e296d5826",
+      "name": "Paul Rudd",
+      "role": "Actor"
+     },
+     "removable": true
+    }
+   ],
+   "refine": [],
+   "sources": [
+    "library"
+   ],
+   "cards": [
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "04e0c9ced3dec45b1500e5df700a507a",
+     "title": "Knocked Up",
+     "year": 2007,
+     "tmdbId": 4964,
+     "rating": 6.305,
+     "match": "filter",
+     "played": false,
+     "score": 0.183,
+     "certification": "R",
+     "runtime": 133
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "06aa8afce20ffd30e357079ce314b1ee",
+     "title": "The 40 Year-Old Virgin",
+     "year": 2005,
+     "tmdbId": 6957,
+     "rating": 6.432,
+     "match": "filter",
+     "played": true,
+     "score": 0.179,
+     "certification": "R",
+     "runtime": 132
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "a6d9841f079e422c771a7a9d1607e306",
+     "title": "Clueless",
+     "year": 1995,
+     "tmdbId": 9603,
+     "rating": 7.242,
+     "match": "filter",
+     "played": true,
+     "score": 0.178,
+     "certification": "PG-13",
+     "runtime": 97
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "de8f9ca25b60d46f69fa84a0a6f671ed",
+     "title": "The Cider House Rules",
+     "year": 1999,
+     "tmdbId": 1715,
+     "rating": 7.1,
+     "match": "filter",
+     "played": false,
+     "score": 0.173,
+     "certification": "PG-13",
+     "runtime": 125
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "158141c180368b638673eb77f7230f24",
+     "title": "Forgetting Sarah Marshall",
+     "year": 2008,
+     "tmdbId": 9870,
+     "rating": 6.511,
+     "match": "filter",
+     "played": true,
+     "score": 0.172,
+     "certification": "R",
+     "runtime": 118
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "5f6b0c2f93838688c5d38e1577e94e5c",
+     "title": "I Love You, Man",
+     "year": 2009,
+     "tmdbId": 16538,
+     "rating": 6.569,
+     "match": "filter",
+     "played": true,
+     "score": 0.166,
+     "certification": "R",
+     "runtime": 105
+    }
+   ],
+   "matched": 6,
+   "partial": false,
+   "notes": []
+  }
+ },
+ "fallback_no_llm": {
+  "status": 200,
+  "ms": 253,
+  "body": {
+   "v": 1,
+   "rev": 1,
+   "text": "a funny 90s film under 2 hours I haven't seen",
+   "turns": [],
+   "chips": [],
+   "removed": []
+  },
+  "resp": {
+   "v": 1,
+   "rev": 1,
+   "mode": "fallback",
+   "reply": "Under 2 h \u00b7 unwatched \u00b7 movies \u00b7 1990s \u00b7 Comedy",
+   "chips": [
+    {
+     "id": "maxrt:120",
+     "label": "under 2 h",
+     "data": {
+      "t": "maxRuntime",
+      "min": 120
+     },
+     "removable": true
+    },
+    {
+     "id": "unplayed",
+     "label": "unwatched",
+     "data": {
+      "t": "unplayed"
+     },
+     "removable": true
+    },
+    {
+     "id": "kind:Movie",
+     "label": "movies",
+     "data": {
+      "t": "kind",
+      "kind": "Movie"
+     },
+     "removable": true
+    },
+    {
+     "id": "years:1990-1999",
+     "label": "1990s",
+     "data": {
+      "t": "years",
+      "from": 1990,
+      "to": 1999
+     },
+     "removable": true
+    },
+    {
+     "id": "genre:Comedy",
+     "label": "Comedy",
+     "data": {
+      "t": "genre",
+      "genres": [
+       "Comedy"
+      ]
+     },
+     "removable": true
+    }
+   ],
+   "refine": [],
+   "sources": [
+    "library"
+   ],
+   "cards": [
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "9f74e21f49e2072a1d98de9ef3ff8e00",
+     "title": "Men in Black",
+     "year": 1997,
+     "tmdbId": 607,
+     "rating": 7.231,
+     "match": "filter",
+     "played": false,
+     "score": 0.199,
+     "certification": "PG-13",
+     "runtime": 98
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "f4abf95b63b0280ce3ecdc7827a9160c",
+     "title": "Dumb and Dumber",
+     "year": 1994,
+     "tmdbId": 8467,
+     "rating": 6.666,
+     "match": "filter",
+     "played": false,
+     "score": 0.189,
+     "certification": "PG-13",
+     "runtime": 113
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "243ce6a768c847dc4d112a550ae44355",
+     "title": "There's Something About Mary",
+     "year": 1998,
+     "tmdbId": 544,
+     "rating": 6.6,
+     "match": "filter",
+     "played": false,
+     "score": 0.186,
+     "certification": "R",
+     "runtime": 119
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "db1b0b849dddf4ac849638f686a7390c",
+     "title": "Rushmore",
+     "year": 1998,
+     "tmdbId": 11545,
+     "rating": 7.4,
+     "match": "filter",
+     "played": false,
+     "score": 0.182,
+     "certification": "R",
+     "runtime": 93
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "1794f06f60f42b358abf2936a5404f85",
+     "title": "Four Weddings and a Funeral",
+     "year": 1994,
+     "tmdbId": 712,
+     "rating": 6.772,
+     "match": "filter",
+     "played": false,
+     "score": 0.181,
+     "certification": "R",
+     "runtime": 118
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "f729246e88385ad6a05699adc533534e",
+     "title": "Barton Fink",
+     "year": 1991,
+     "tmdbId": 290,
+     "rating": 7.5,
+     "match": "filter",
+     "played": false,
+     "score": 0.179,
+     "certification": "R",
+     "runtime": 117
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "3cc72c9ca6b5ef39448969d772c07133",
+     "title": "Wayne's World",
+     "year": 1992,
+     "tmdbId": 8872,
+     "rating": 6.681,
+     "match": "filter",
+     "played": false,
+     "score": 0.179,
+     "certification": "PG-13",
+     "runtime": 94
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "d08930181447e6ae1d94b113e095d42e",
+     "title": "Runaway Bride",
+     "year": 1999,
+     "tmdbId": 4806,
+     "rating": 6.1,
+     "match": "filter",
+     "played": false,
+     "score": 0.175,
+     "certification": "PG",
+     "runtime": 116
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "7d6ae0299ad813f09c00935deb463409",
+     "title": "The Waterboy",
+     "year": 1998,
+     "tmdbId": 10663,
+     "rating": 6.063,
+     "match": "filter",
+     "played": false,
+     "score": 0.174,
+     "certification": "PG-13",
+     "runtime": 90
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "1d53726a95965073ae36cf4746ca9e6a",
+     "title": "Billy Madison",
+     "year": 1995,
+     "tmdbId": 11017,
+     "rating": 6.18,
+     "match": "filter",
+     "played": false,
+     "score": 0.173,
+     "certification": "PG-13",
+     "runtime": 90
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "3026d9d871448141dbca06de96c7d2f9",
+     "title": "Kingpin",
+     "year": 1996,
+     "tmdbId": 11543,
+     "rating": 6.5,
+     "match": "filter",
+     "played": false,
+     "score": 0.168,
+     "certification": "PG-13",
+     "runtime": 117
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "280ebc2d89ee4dfb2bf5d07526f6443e",
+     "title": "Swingers",
+     "year": 1996,
+     "tmdbId": 10218,
+     "rating": 6.8,
+     "match": "filter",
+     "played": false,
+     "score": 0.167,
+     "certification": "R",
+     "runtime": 96
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "2de6221730246f7ea304acbe353c63e1",
+     "title": "The Idiots",
+     "year": 1998,
+     "tmdbId": 452,
+     "rating": 6.5,
+     "match": "filter",
+     "played": false,
+     "score": 0.164,
+     "certification": "R",
+     "runtime": 110
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "55b95ec881fcb1a4a6ebea392fbfc2c5",
+     "title": "Multiplicity",
+     "year": 1996,
+     "tmdbId": 9304,
+     "rating": 5.8,
+     "match": "filter",
+     "played": false,
+     "score": 0.16,
+     "certification": "PG-13",
+     "runtime": 117
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "06b84198219bfcc9f8e72832b5882ab6",
+     "title": "Human Traffic",
+     "year": 1999,
+     "tmdbId": 11129,
+     "rating": 6.8,
+     "match": "filter",
+     "played": false,
+     "score": 0.16,
+     "certification": "R",
+     "runtime": 99
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "eda8bf105224dc4e16401987f6c94a03",
+     "title": "Black Sheep",
+     "year": 1996,
+     "tmdbId": 13997,
+     "rating": 6.1,
+     "match": "filter",
+     "played": false,
+     "score": 0.159,
+     "certification": "PG-13",
+     "runtime": 86
+    },
+    {
+     "kind": "film",
+     "source": "library",
+     "id": "eb1fa9e13ea785d7f67acf093fd144be",
+     "title": "Truly Madly Deeply",
+     "year": 1991,
+     "tmdbId": 18317,
+     "rating": 6.9,
+     "match": "filter",
+     "played": false,
+     "score": 0.147,
+     "certification": "PG",
+     "runtime": 107
+    }
+   ],
+   "matched": 17,
+   "partial": false,
+   "notes": []
+  }
+ }
+}

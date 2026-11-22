@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getItems, uid, type Item } from "../api/jellyfin";
 import { activeChips, appliedNotes, buildQuery, EXAMPLES, filterItems, parseAsk, pickFrom, refineOptions, removeChip, type Chip, type Picks } from "../lib/askParse";
 import { Card } from "../components/Card";
+import { go } from "../lib/router";
 import "./Ask.css";
 
 // kept = the fetched titles that pass every check (what the refine chips are drawn from)
@@ -113,6 +114,9 @@ export function Ask() {
         />
         <button type="submit" className="btn primary" data-nav>
           Ask
+        </button>
+        <button type="button" className="btn" data-nav onClick={() => go("/ask/chat")}>
+          Chat
         </button>
       </form>
 
