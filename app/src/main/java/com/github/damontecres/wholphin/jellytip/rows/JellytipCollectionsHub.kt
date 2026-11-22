@@ -580,8 +580,9 @@ internal fun JellytipHubCollectionContent(
                                     fontSize = 13.sp,
                                     modifier =
                                         Modifier
-                                            .align(Alignment.TopStart)
-                                            .padding(6.dp)
+                                            // (bottom-left: the heart now sits top-left on every tile; clear of the progress bar)
+                                            .align(Alignment.BottomStart)
+                                            .padding(start = 6.dp, bottom = 9.dp)
                                             .background(JellytipPalette.Vanilla, RoundedCornerShape(4.dp))
                                             .padding(horizontal = 6.dp, vertical = 1.dp),
                                 )
