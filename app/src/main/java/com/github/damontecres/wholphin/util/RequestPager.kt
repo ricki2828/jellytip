@@ -37,6 +37,12 @@ abstract class RequestPager<T>(
             .maximumSize(cacheSize)
             .build<Int, MutableList<T>>()
 
+    // Identity, not content: AbstractList's equals reads every index (each unloaded one fetches a page), and row states
+    // holding a pager are compared on every state change (Jellytip: paged Favourites rows on Home)
+    override fun equals(other: Any?): Boolean = this === other
+
+    override fun hashCode(): Int = System.identityHashCode(this)
+
     open suspend fun init(initialPosition: Int = 0): RequestPager<T> {
         if (totalCount < 0) {
             fetchPageBlocking(initialPosition, true)

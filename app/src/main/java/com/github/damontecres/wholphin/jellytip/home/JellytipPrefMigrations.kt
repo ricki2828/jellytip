@@ -37,6 +37,8 @@ object JellytipPrefMigrations {
                 JellytipTrace.log("app", "home rows: $stored -> $limit per row (old default)")
             }
             flags.edit().putBoolean("rows50", true).apply()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Best-effort: tried again next start
             JellytipTrace.log("app", "home rows migration failed: ${e.javaClass.simpleName}")
