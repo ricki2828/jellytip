@@ -108,7 +108,7 @@ class NextEpisodeTest {
 
     @Test
     fun duplicateInBothSourcesLibraryWins() {
-        val library = listOf(lib(1, 1), lib(1, 2), lib(1, 2).copy(id = "lib-dup"))
+        val library = listOf(lib(1, 1), lib(1, 2))
         val merged = NextEpisode.merged(library, listOf(iseason(1, 1, 2), iseason(2, 1)))
         assertEquals(listOf("lib-1-1", "lib-1-2", "p1:e:21"), merged.map { it.id })
         assertEquals(lib(1, 2), NextEpisode.after(cur(Source.IPTV, 1, 1), library, listOf(iseason(1, 2))))
@@ -135,10 +135,60 @@ class NextEpisodeTest {
     }
 
     @Test
-    fun specialsNeverComeFromIptvOrTheLibrary() {
+    fun specialsStayWhereTheLibraryPutsThemAndIptvSeasonZeroIsIgnored() {
         val library = listOf(lib(0, 1), lib(1, 1))
         val iptv = listOf(iseason(0, 1, 2), iseason(2, 1))
-        assertEquals(listOf("lib-1-1", "p1:e:21"), NextEpisode.merged(library, iptv).map { it.id })
+        assertEquals(listOf("lib-0-1", "lib-1-1", "p1:e:21"), NextEpisode.merged(library, iptv).map { it.id })
+        assertEquals(lib(1, 1), NextEpisode.after(lib(0, 1), library, iptv))
+        // Specials listed last by the library stay last, after the IPTV-only season
+        val last = listOf(lib(1, 1), lib(0, 1))
+        assertEquals(listOf("lib-1-1", "p1:e:21", "lib-0-1"), NextEpisode.merged(last, iptv).map { it.id })
+    }
+
+    @Test
+    fun missingLibraryEpisodesAreNeverPlayed() {
+        // S1E2 is a Jellyfin placeholder with no IPTV copy: a tile on the page, skipped as a next
+        val library = listOf(lib(1, 1), lib(1, 2).copy(missing = true), lib(1, 3))
+        assertEquals(lib(1, 3), NextEpisode.after(lib(1, 1), library, emptyList()))
+    }
+
+    /** The series page's tiles for the same data: mergeSeasons then seasonTiles per chip, as the page draws them. */
+    private fun pageTiles(
+        library: List<Ep>,
+        iptv: List<IptvSeason>,
+    ): List<String> {
+        val seasons = library.map { it.season }.distinct()
+        val refs = seasons.mapIndexed { i, n -> com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef(i, n) }
+        return com.github.damontecres.wholphin.jellytip.details.mergeSeasons(refs, iptv).flatMap { m ->
+            val eps = m.libraryIndex?.let { i -> library.filter { it.season == seasons[i] } }.orEmpty()
+            com.github.damontecres.wholphin.jellytip.details
+                .seasonTiles(m, eps.size, true, { eps[it].episode }, { eps[it].missing })
+                .map { t ->
+                    when (t) {
+                        is IptvSeasons.SeasonTile.Lib -> eps[t.index].id
+                        is IptvSeasons.SeasonTile.Iptv -> t.episode.id
+                    }
+                }
+        }
+    }
+
+    @Test
+    fun mergedOrderEqualsTheSeriesPageTiles() {
+        // Library S1 + IPTV S2
+        val a = listOf(lib(1, 1), lib(1, 2)) to listOf(iseason(2, 1, 2))
+        // Library S2E1-3 + IPTV S2E1-8
+        val b = listOf(lib(2, 1), lib(2, 2), lib(2, 3)) to listOf(IptvSeason(2, (1..8).map { iep(2, it) }))
+        // A missing library episode in the middle, with and without an IPTV copy
+        val c = listOf(lib(1, 1), lib(1, 2).copy(missing = true), lib(1, 3), lib(1, 4).copy(missing = true), lib(1, 5)) to listOf(iseason(1, 2))
+        assertEquals(listOf("lib-1-1", "lib-1-2", "p1:e:21", "p1:e:22"), NextEpisode.merged(a.first, a.second).map { it.id })
+        assertEquals(listOf("lib-2-1", "lib-2-2", "lib-2-3", "p1:e:24", "p1:e:25", "p1:e:26", "p1:e:27", "p1:e:28"), NextEpisode.merged(b.first, b.second).map { it.id })
+        assertEquals(listOf("lib-1-1", "p1:e:12", "lib-1-3", "lib-1-4", "lib-1-5"), NextEpisode.merged(c.first, c.second).map { it.id })
+        for ((library, iptv) in listOf(a, b, c)) {
+            assertEquals(pageTiles(library, iptv), NextEpisode.merged(library, iptv).map { it.id })
+        }
+        // And the player's next follows those tiles: the IPTV copy replaces the placeholder, the uncopied one is skipped
+        assertEquals("p1:e:12", NextEpisode.after(lib(1, 1), c.first, c.second)?.id)
+        assertEquals(lib(1, 5), NextEpisode.after(lib(1, 3), c.first, c.second))
     }
 
     @Test

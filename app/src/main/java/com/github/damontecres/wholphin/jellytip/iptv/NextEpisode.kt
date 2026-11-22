@@ -1,10 +1,11 @@
 package com.github.damontecres.wholphin.jellytip.iptv
 
 /**
- * "Next episode" across a split series (Ricki 22-Nov, Celebrity Traitors on IPTV): the same merge the library series page
- * shows. Whole seasons only IPTV has ([IptvSeasons.onlySeasons]), plus, inside a library season, the IPTV episodes the
- * library lacks ([IptvSeasons.interleave] rule: the library copy wins). No Specials from IPTV. Pure: both players and the
- * tests use it.
+ * "Next episode" across a split series (Ricki 22-Nov, Celebrity Traitors on IPTV): EXACTLY the series page's order
+ * ([mergeSeasons] then [seasonTiles], jellytip/details/JellytipSeasonMerge.kt): library seasons in library order (Specials
+ * where the library puts them), IPTV-only seasons slotted in by number, and inside a library season the IPTV episodes the
+ * library lacks interleaved (library wins; a "missing" library placeholder gives way to the IPTV copy). IPTV season 0 is
+ * ignored. Pure: both players and the tests use it.
  */
 object NextEpisode {
     enum class Source { LIBRARY, IPTV }
@@ -18,47 +19,66 @@ object NextEpisode {
         val title: String,
         /** A library episode's own resume point (ms); 0 = from the start. */
         val resumeMs: Long = 0,
+        /** A Jellyfin "missing" placeholder (LocationType VIRTUAL): a tile on the series page, never played. */
+        val missing: Boolean = false,
     ) {
         /** "S2 E2" */
         val code: String get() = "S$season E$episode"
     }
 
     /**
-     * The whole series in watching order, by (season, episode): library episodes (season >= 1; real ones, the caller drops
-     * "missing" placeholders), the IPTV-only seasons, and the IPTV episodes missing inside a library season. The same
-     * (season, episode) twice: the library copy wins (then the first one listed).
+     * The whole series in the series page's tile order. [library] = the library's episodes in library order (seasons in
+     * the order they first appear, episodes in their order), "missing" placeholders included and marked.
      */
     fun merged(
         library: List<Ep>,
         iptv: List<IptvSeason>,
     ): List<Ep> {
-        val lib = library.filter { it.season >= 1 }
-        val libSeasons = lib.map { it.season }.toSet()
-        val only =
-            IptvSeasons.onlySeasons(libSeasons, iptv).flatMap { s ->
-                s.episodes.map { e -> Ep(Source.IPTV, e.id, s.season, e.episode, e.title) }
-            }
-        val fill =
-            libSeasons.flatMap { sn ->
-                val have = lib.filter { it.season == sn }.map { it.episode }.toSet()
-                IptvSeasons.episodesFor(iptv, sn).filter { it.episode !in have }.map { e -> Ep(Source.IPTV, e.id, sn, e.episode, e.title) }
-            }
-        return (lib + only + fill)
-            .withIndex()
-            .sortedWith(compareBy({ it.value.season }, { it.value.episode }, { if (it.value.source == Source.LIBRARY) 0 else 1 }, { it.index }))
-            .map { it.value }
-            .distinctBy { it.season to it.episode }
+        val seasons = library.map { it.season }.distinct()
+        val bySeason = library.groupBy { it.season }
+        val refs = seasons.mapIndexed { i, n -> com.github.damontecres.wholphin.jellytip.details.LibrarySeasonRef(i, n) }
+        return com.github.damontecres.wholphin.jellytip.details.mergeSeasons(refs, iptv).flatMap { m ->
+            val libEps = m.libraryIndex?.let { bySeason[seasons[it]] }.orEmpty()
+            com.github.damontecres.wholphin.jellytip.details
+                .seasonTiles(m, libEps.size, true, { libEps[it].episode }, { libEps[it].missing })
+                .map { t ->
+                    when (t) {
+                        is IptvSeasons.SeasonTile.Lib -> libEps[t.index]
+                        is IptvSeasons.SeasonTile.Iptv -> Ep(Source.IPTV, t.episode.id, m.number ?: 0, t.episode.episode, t.episode.title)
+                    }
+                }
+        }
     }
 
     /**
-     * The first episode after [current] (by season, then episode; it may be from either source and need not be in the
-     * merged list itself), crossing seasons and skipping gaps; null after the last one.
+     * The first playable episode after [current] in [merged] order, crossing seasons; null after the last one. [current] is
+     * found by source + id; when it isn't a tile (an IPTV copy the library wins over, or an unknown id) by its season and
+     * episode number. "Missing" placeholders are skipped.
      */
     fun after(
         current: Ep,
         library: List<Ep>,
         iptv: List<IptvSeason>,
-    ): Ep? = merged(library, iptv).firstOrNull { it.season > current.season || (it.season == current.season && it.episode > current.episode) }
+    ): Ep? {
+        val list = merged(library, iptv)
+        val at = list.indexOfFirst { it.source == current.source && it.id == current.id }
+        val from = if (at >= 0) at + 1 else startAfter(list, current.season, current.episode)
+        return list.drop(from).firstOrNull { !it.missing }
+    }
+
+    /** Where "after S[season] E[episode]" begins in [list] when that episode isn't a tile. */
+    private fun startAfter(
+        list: List<Ep>,
+        season: Int,
+        episode: Int,
+    ): Int {
+        val inSeason = list.indices.filter { list[it].season == season }
+        if (inSeason.isNotEmpty()) {
+            return inSeason.firstOrNull { list[it].episode > episode } ?: (inSeason.last() + 1)
+        }
+        // A season the list doesn't have: where the page would slot it (before the first higher-numbered season)
+        return list.indexOfFirst { it.season > season }.takeIf { it >= 0 } ?: list.size
+    }
 
     /** The IPTV episode [episodeId] as an [Ep], from the IPTV series' seasons; null when it isn't there. */
     fun iptvEpisode(

@@ -50,7 +50,7 @@ fun PlaybackViewModel.jellytipPrefetchIptvNext() {
     val itemId = data.id
     jellytipIptvJob =
         viewModelScope.launch {
-            val up = NextEpisodeLoader.iptvAfterLibrary(api, serverRepository.currentUser?.id, seriesId, season, episode)
+            val up = NextEpisodeLoader.iptvAfterLibrary(api, serverRepository.currentUser?.id, seriesId, itemId, season, episode)
             // Still the same item (a newer start cancels this job, but be sure)
             if (runCatching { currentItem.item.data.id }.getOrNull() == itemId) jellytipIptvPending = up
         }

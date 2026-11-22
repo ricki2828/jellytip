@@ -60,7 +60,10 @@ object NextEpisodeLoader {
 
     private fun tmdbOf(ids: Map<String, String?>?): Int? = ids?.entries?.firstOrNull { it.key.equals("Tmdb", true) }?.value?.toIntOrNull()
 
-    /** A library series' real episodes (no "missing" / unaired placeholders), as [NextEpisode.Ep]s. */
+    /**
+     * A library series' episodes in the library's order (Specials where it puts them), "missing" placeholders marked
+     * (the series page shows them, IPTV copies replace them, they are never played), as [NextEpisode.Ep]s.
+     */
     private suspend fun libraryEpisodes(
         api: ApiClient,
         userId: UUID?,
@@ -69,13 +72,12 @@ object NextEpisodeLoader {
         api.tvShowsApi
             .getEpisodes(seriesId = seriesId, userId = userId)
             .content.items
-            .filter { it.locationType != LocationType.VIRTUAL }
             .mapNotNull { e ->
                 val s = e.parentIndexNumber ?: return@mapNotNull null
                 val n = e.indexNumber ?: return@mapNotNull null
                 // Its own resume point (Jellyfin clears it once played): ticks are 100 ns
                 val resume = (e.userData?.playbackPositionTicks ?: 0L).takeIf { e.userData?.played != true }?.div(10_000) ?: 0L
-                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n", resume)
+                NextEpisode.Ep(NextEpisode.Source.LIBRARY, e.id.toString(), s, n, e.name ?: "Episode $n", resume, missing = e.locationType == LocationType.VIRTUAL)
             }
 
     /**
@@ -167,6 +169,7 @@ object NextEpisodeLoader {
         api: ApiClient,
         userId: UUID?,
         seriesId: UUID,
+        itemId: UUID,
         season: Int,
         episode: Int,
     ): UpNext? =
@@ -176,7 +179,7 @@ object NextEpisodeLoader {
                 val tmdb = tmdbOf(series.providerIds) ?: return@withTimeoutOrNull null
                 val d = IptvSeasons.lookup(series.name ?: return@withTimeoutOrNull null, tmdb) ?: return@withTimeoutOrNull null
                 val library = libraryEpisodes(api, userId, seriesId)
-                val current = NextEpisode.Ep(NextEpisode.Source.LIBRARY, "", season, episode, "")
+                val current = NextEpisode.Ep(NextEpisode.Source.LIBRARY, itemId.toString(), season, episode, "")
                 // Only an IPTV next: a library next is the library player's own business (its playlist may be short)
                 NextEpisode
                     .after(current, library, d.seasons)
