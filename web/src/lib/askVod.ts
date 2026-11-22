@@ -32,6 +32,8 @@ const ids = (genres: string[]) => [...new Set(genres.map((g) => TMDB_GENRES[g.to
 
 /** How many IPTV titles one ask fetches per kind (the route's own maximum). */
 export const VOD_LIMIT = 200;
+/** The route's largest runtime filter (minutes). */
+export const MAX_RUNTIME = 1000;
 
 /**
  * The IPTV queries for the chips: none when a chip can't be applied to IPTV at all (a person: the catalogue has no
@@ -45,12 +47,18 @@ export function vodQueries(chips: Chip[]): VodQuery[] {
   const list: ("movie" | "series")[] = wantSeasons ? ["series"] : kinds.length === 1 ? [kinds[0] === "Movie" ? "movie" : "series"] : ["movie", "series"];
   const p: Record<string, string> = { limit: String(VOD_LIMIT), sort: "rating" };
   const kids = of(chips, "kids")[0];
-  // US ratings only on the route (NR / unrated never match): the kids rule's G / PG / TV-* list as it is
-  if (kids) p.certifications = kids.data.ratings.filter((r) => r !== "U").join("|");
+  // US ratings only on the route (NR / unrated never match): the kids rule's G / PG / TV-* list as it is. None left (e.g.
+  // only "U") = no IPTV at all: an empty list would mean no rating filter on the route (fail open)
+  if (kids) {
+    const certs = kids.data.ratings.filter((r) => r !== "U");
+    if (!certs.length) return [];
+    p.certifications = certs.join("|");
+  }
   const maxRt = Math.min(Infinity, ...of(chips, "maxRuntime").map((c) => c.data.min));
   const minRt = Math.max(0, ...of(chips, "minRuntime").map((c) => c.data.min));
-  if (maxRt !== Infinity) p.maxRuntime = String(maxRt);
-  if (minRt > 0) p.minRuntime = String(minRt);
+  // The route takes 1..1000 minutes (else 400 for the whole query): a length beyond that is no filter there
+  if (maxRt !== Infinity && maxRt <= MAX_RUNTIME) p.maxRuntime = String(maxRt);
+  if (minRt > 0 && minRt <= MAX_RUNTIME) p.minRuntime = String(minRt);
   const minRating = Math.max(0, ...of(chips, "minRating").map((c) => c.data.value));
   if (minRating > 0) p.minRating = String(minRating);
   const years = of(chips, "years");
@@ -84,6 +92,9 @@ export function vodNote(chips: Chip[]): string | null {
   if (of(chips, "kids").length) parts.push("IPTV titles without a known age rating are left out");
   if (of(chips, "maxRuntime").length || of(chips, "minRuntime").length) parts.push("IPTV titles without a known length are left out");
   if (of(chips, "maxSeasons").length) parts.push("IPTV season counts aren't known");
+  // A genre IPTV can't name (not in the TMDB table): nothing on IPTV can match it
+  const unknown = of(chips, "genre").filter((c) => ids(c.data.genres).length === 0).map((c) => c.label);
+  if (unknown.length) parts.push(`IPTV can't match ${unknown.map((l) => `“${l}”`).join(", ")}`);
   return parts.length ? `${parts.join("; ")}.` : null;
 }
 

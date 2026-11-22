@@ -45,7 +45,15 @@ test("client check: moods, left-out genres, kids genres, exact years, played", (
   assert.ok(vodKeep(v({ played: null }), chips("unwatched")));
 });
 
+test("kids with no US rating left: no IPTV at all (never an unrated query); lengths the route can't take are dropped", () => {
+  assert.deepEqual(vodQueries(chipsFromData([{ t: "kids", ratings: ["U"], genres: ["Family"] }])), []);
+  const p = vodQueries(chips("under 2000 hours"))[0].params;
+  assert.equal(p.maxRuntime, undefined);
+  assert.equal(vodQueries(chips("under 90 minutes"))[0].params.maxRuntime, "90");
+});
+
 test("notes: what IPTV can't know", () => {
+  assert.match(vodNote(chipsFromData([{ t: "genre", genres: ["Anime"] }])) ?? "", /can't match “Anime”/);
   assert.match(vodNote(chips("for the kids")) ?? "", /without a known age rating/);
   assert.match(vodNote(chips("under 90 minutes")) ?? "", /without a known length/);
   assert.equal(vodNote(chips("funny")), null);
