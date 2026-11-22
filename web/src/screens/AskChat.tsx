@@ -11,7 +11,7 @@ import { EXAMPLES } from "../lib/askParse";
 import { isNative } from "../lib/native";
 import { go } from "../lib/router";
 import {
-  alignCards, applyError, applyResponse, ChatSender, dismissNotice, displayChips, emptyState, noticeSeen, NOTICE_TEXT, refineChat, retry, submitText, tapChip,
+  alignCards, applyError, applyResponse, ChatSender, dismissNotice, displayChips, emptyState, noticeSeen, NOTICE_TEXT, refineChat, retry, submitText, tapChip, TOO_LONG_TEXT,
   type Call, type ChatBody, type ChatState, type Op,
 } from "../lib/askChat";
 import { Ask } from "./Ask";
@@ -19,7 +19,7 @@ import "./Ask.css";
 import "./AskChat.css";
 
 type Fetched = { key: string; items: Item[]; people: Item[] };
-type Speech = { lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void };
+type Speech = { abort(): void; lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void };
 const speechCtor = (): (new () => Speech) | null => {
   if (isNative || typeof window === "undefined") return null;
   const w = window as unknown as { SpeechRecognition?: new () => Speech; webkitSpeechRecognition?: new () => Speech };
@@ -46,22 +46,29 @@ export function AskChat() {
   const input = useRef<HTMLInputElement>(null);
   const turnsEnd = useRef<HTMLDivElement>(null);
   const Speech = useMemo(speechCtor, []);
+  const rec = useRef<Speech | null>(null);
 
   const commit = (n: ChatState) => {
     stateRef.current = n;
     setState(n);
   };
-  const dispatch = (r: { state: ChatState; body: ChatBody } | null) => {
-    if (!r) return;
-    commit(r.state);
-    void sender.current!.send(r.body).then((out) => {
+  const run = (body: ChatBody) => {
+    void sender.current!.send(body).then((out) => {
       if (out.kind === "aborted") return; // a newer request replaced it
-      commit(out.kind === "ok" ? applyResponse(stateRef.current, out.resp) : applyError(stateRef.current, r.body.rev, out.status));
+      if (out.kind === "ok") return commit(applyResponse(stateRef.current, out.resp));
+      const e = applyError(stateRef.current, body.rev, out.status);
+      commit(e.state);
+      if (e.resend) run(e.resend); // 400 / 413: once more with the oldest turns trimmed
     });
+  };
+  const dispatch = (r: { state: ChatState; body: ChatBody } | null) => {
+    if (!r) return; // refused: a turn is pending (the controls are disabled too)
+    commit(r.state);
+    run(r.body);
   };
   const submit = (v: string) => {
     const r = submitText(stateRef.current, v);
-    if (!r) return;
+    if (!r) return; // empty, or a turn is already pending: keep what was typed
     setText("");
     dispatch(r);
   };
@@ -71,6 +78,18 @@ export function AskChat() {
   useEffect(() => {
     sender.current!.warm();
   }, []);
+  // leaving the screen stops a recognition that is still listening
+  useEffect(
+    () => () => {
+      try {
+        rec.current?.abort();
+      } catch {
+        /* already stopped */
+      }
+      rec.current = null;
+    },
+    [],
+  );
   useEffect(() => {
     turnsEnd.current?.scrollIntoView?.({ block: "nearest" });
   }, [state.turns.length, state.pending]);
@@ -111,8 +130,9 @@ export function AskChat() {
   if (state.error === "off") return <Ask key={userId} />; // chat is switched off on the server: the classic Ask screen
 
   const listen = () => {
-    if (!Speech || listening) return;
+    if (!Speech || listening || stateRef.current.pending) return;
     const r = new Speech();
+    rec.current = r;
     r.lang = navigator.language || "en-US";
     r.interimResults = false;
     r.onresult = (e) => {
@@ -122,8 +142,14 @@ export function AskChat() {
         submit(t);
       }
     };
-    r.onend = () => setListening(false);
-    r.onerror = () => setListening(false);
+    r.onend = () => {
+      rec.current = null;
+      setListening(false);
+    };
+    r.onerror = () => {
+      rec.current = null;
+      setListening(false);
+    };
     setListening(true);
     r.start();
   };
@@ -190,11 +216,11 @@ export function AskChat() {
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
-            <button type="submit" className="btn primary" data-nav disabled={!text.trim()}>
+            <button type="submit" className="btn primary" data-nav disabled={!text.trim() || pending}>
               Send
             </button>
             {Speech && (
-              <button type="button" className={listening ? "btn on" : "btn"} data-nav aria-label="Speak" aria-pressed={listening} onClick={listen}>
+              <button type="button" className={listening ? "btn on" : "btn"} data-nav title="Voice uses your browser's speech service" aria-label="Voice uses your browser's speech service" aria-pressed={listening} disabled={pending && !listening} onClick={listen}>
                 {listening ? "Listening…" : "Mic"}
               </button>
             )}
@@ -229,6 +255,11 @@ export function AskChat() {
               </button>
             </div>
           )}
+          {state.error === "tooLong" && (
+            <div className="rows-error" role="alert">
+              <p>{TOO_LONG_TEXT}</p>
+            </div>
+          )}
           {state.error === "signedOut" && (
             <div className="rows-error" role="alert">
               <p>You're signed out. Sign in again to use chat.</p>
@@ -239,7 +270,7 @@ export function AskChat() {
               <h2 className="row-title">Try</h2>
               <div className="chips">
                 {EXAMPLES.map((q) => (
-                  <button key={q} className="chip" data-nav onClick={() => submit(q)}>
+                  <button key={q} className="chip" data-nav disabled={pending} onClick={() => submit(q)}>
                     {q}
                   </button>
                 ))}
@@ -253,7 +284,7 @@ export function AskChat() {
                 const off = (c as { applied?: boolean }).applied === false;
                 const removable = !prov && (c as { removable?: boolean }).removable !== false;
                 return removable ? (
-                  <button key={c.id} className={`chip on${off ? " ac-off" : ""}`} data-nav aria-label={`Remove ${c.label}`} onClick={() => tap({ remove: c.id })}>
+                  <button key={c.id} className={`chip on${off ? " ac-off" : ""}`} data-nav disabled={pending} aria-label={`Remove ${c.label}`} onClick={() => tap({ remove: c.id })}>
                     {c.label}
                     {off && <span className="ac-sub"> (not applied)</span>}
                     <span aria-hidden> ×</span>
@@ -275,7 +306,7 @@ export function AskChat() {
                   {n.actions && (
                     <div className="chips">
                       {n.actions.map((a) => (
-                        <button key={a.label} className="btn small" data-nav onClick={() => tap(a.op)}>
+                        <button key={a.label} className="btn small" data-nav disabled={pending} onClick={() => tap(a.op)}>
                           {a.label}
                         </button>
                       ))}
@@ -310,7 +341,7 @@ export function AskChat() {
             <div className="chips ask-refine" aria-label="Narrow it down">
               <span className="ask-refine-label">Narrow it down</span>
               {refine.map((c) => (
-                <button key={c.id} className="chip" data-nav onClick={() => tap({ add: c.data })}>
+                <button key={c.id} className="chip" data-nav disabled={pending} onClick={() => tap({ add: c.data })}>
                   + {c.label}
                 </button>
               ))}

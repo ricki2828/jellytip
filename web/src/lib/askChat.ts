@@ -26,6 +26,18 @@ export interface ServerChip {
 /** A native chip as the server returns it: t5k's {id, label, data} plus flags. */
 export type NativeChip = Chip & { removable?: boolean; protected?: boolean; applied?: boolean };
 export type ChatChip = NativeChip | ServerChip;
+/** The ChipData `t` values the client can build a chip for (chipFor has no default branch: anything else would throw). */
+export const NATIVE_T = ["genre", "notGenre", "kind", "maxRuntime", "minRuntime", "years", "unplayed", "played", "kids", "minRating", "maxSeasons", "person"];
+/** chipFor that never throws or returns nothing: null for anything that is not a known native ChipData. */
+export function safeChipFor(d: unknown): Chip | null {
+  if (!d || typeof d !== "object" || !NATIVE_T.includes((d as { t?: string }).t ?? "")) return null;
+  try {
+    const c = chipFor(d as ChipData);
+    return c && typeof c.id === "string" ? c : null;
+  } catch {
+    return null;
+  }
+}
 export const isServerChip = (c: ChatChip): c is ServerChip => (c as ServerChip).server === true;
 
 export type Op = { add: ChipData } | { remove: string };
@@ -72,7 +84,8 @@ export interface ChatResponse {
 
 // ---------- state ----------
 
-export type ChatError = null | "off" | "signedOut" | "unreachable";
+export type ChatError = null | "off" | "signedOut" | "unreachable" | "tooLong";
+export const TOO_LONG_TEXT = "Couldn't send that \u2014 try a shorter message";
 export interface ChatState {
   turns: Turn[];
   /** The server's chips, exactly as received (echoed back verbatim). */
@@ -80,7 +93,7 @@ export interface ChatState {
   removed: string[];
   /** The latest revision issued; only a response with this rev is applied. */
   rev: number;
-  pending: { body: ChatBody } | null;
+  pending: { body: ChatBody; /** already re-sent once with fewer turns (400 / 413) */ trimmed?: boolean } | null;
   /** The server's one-line reading of the current state. */
   reply: string;
   cards: ChatCard[];
@@ -106,16 +119,22 @@ const bodyFor = (s: ChatState, rev: number, extra: { text?: string; op?: Op }): 
   removed: s.removed.slice(-MAX_REMOVED),
 });
 
-/** A typed or spoken turn. null for empty text. The new state is pending: skeleton, no cards, local chips shown dimmed. */
+/** A typed or spoken turn. null for empty text, and null while another turn is pending (a second send would be built from the old
+ *  server state and silently drop the pending one): the screen disables sending, this keeps the rule even if the wiring misses.
+ *  The new state is pending: skeleton, no cards, local chips shown dimmed. */
 export function submitText(s: ChatState, text: string): { state: ChatState; body: ChatBody } | null {
+  if (s.pending) return null;
   const t = text.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
   if (!t) return null;
   const body = bodyFor(s, s.rev + 1, { text: t });
   return { state: { ...s, rev: body.rev, pending: { body }, error: null, failed: null }, body };
 }
 
-/** A chip tap: `{add: ChipData}` (a refine chip) or `{remove: id}` (a chip's x, a note action). Pending too: no cards until it answers. */
-export function tapChip(s: ChatState, op: Op): { state: ChatState; body: ChatBody } {
+/** A chip tap: `{add: ChipData}` (a refine chip) or `{remove: id}` (a chip's x, a note action). Pending too: no cards until it answers.
+ *  null while another turn is pending, or for an add that is not a known native chip. */
+export function tapChip(s: ChatState, op: Op): { state: ChatState; body: ChatBody } | null {
+  if (s.pending) return null;
+  if ("add" in op && !safeChipFor(op.add)) return null;
   const body = bodyFor(s, s.rev + 1, { op });
   return { state: { ...s, rev: body.rev, pending: { body }, error: null, failed: null }, body };
 }
@@ -131,7 +150,7 @@ export function applyResponse(s: ChatState, r: ChatResponse): ChatState {
   let removed = s.removed;
   if (b.op && "remove" in b.op && !removed.includes(b.op.remove)) removed = [...removed, b.op.remove];
   if (b.op && "add" in b.op) {
-    const id = chipFor(b.op.add).id;
+    const id = safeChipFor(b.op.add)?.id;
     removed = removed.filter((x) => x !== id);
   }
   const have = new Set(r.chips.map((c) => c.id));
@@ -139,13 +158,24 @@ export function applyResponse(s: ChatState, r: ChatResponse): ChatState {
   return { turns, chips: r.chips, removed, rev: s.rev, pending: null, reply: r.reply, cards: r.cards, notes: r.notes, mode: r.mode, sources: r.sources, matched: r.matched, error: null, failed: null };
 }
 
-/** A failed request for revision `rev` (ignored when a newer one has been issued). 404 = the feature is off (the screen falls back to
- *  classic Ask), 401 = signed out, anything else (0, 5xx, 429...) keeps the last good state and offers a retry of the same body. */
-export function applyError(s: ChatState, rev: number, status: number): ChatState {
-  if (!s.pending || rev !== s.rev) return s;
-  if (status === 404) return { ...s, pending: null, error: "off" };
-  if (status === 401) return { ...s, pending: null, error: "signedOut" };
-  return { ...s, pending: null, error: "unreachable", failed: s.pending.body };
+/** A failed request for revision `rev` (ignored when a newer one has been issued).
+ *  404 = the feature is off (classic Ask); 401 / 403 = signed out; 400 / 413 = too big: the oldest turns are trimmed and the request is
+ *  re-sent once (`resend`), then a plain "try a shorter message"; anything else (0, 5xx, 429...) = unreachable: Retry re-sends the same
+ *  body, and the cards of the superseded reading stay hidden until a newer response is applied. */
+export function applyError(s: ChatState, rev: number, status: number): { state: ChatState; resend: ChatBody | null } {
+  if (!s.pending || rev !== s.rev) return { state: s, resend: null };
+  if (status === 404) return { state: { ...s, pending: null, error: "off" }, resend: null };
+  if (status === 401 || status === 403) return { state: { ...s, pending: null, error: "signedOut" }, resend: null };
+  if (status === 400 || status === 413) {
+    const b = s.pending.body;
+    if (!s.pending.trimmed && b.turns.length > 0) {
+      const body: ChatBody = { ...b, turns: b.turns.slice(b.turns.length - Math.floor(b.turns.length / 2)) };
+      return { state: { ...s, pending: { body, trimmed: true } }, resend: body };
+    }
+    return { state: { ...s, pending: null, error: "tooLong" }, resend: null };
+  }
+  // the superseded reading's cards, notes and count are not shown any more: only a newer response brings cards back
+  return { state: { ...s, pending: null, error: "unreachable", failed: s.pending.body, cards: [], notes: [], matched: 0 }, resend: null };
 }
 
 /** Retry after "unreachable": the same body again (same rev: nothing newer was issued). */
@@ -166,7 +196,8 @@ export function displayChips(s: ChatState, now = new Date()): (ChatChip & { prov
     return [...cur, ...read.map((r) => ({ ...strip(r), provisional: true as const }))];
   }
   if (b.op && "add" in b.op) {
-    const c = chipFor(b.op.add);
+    const c = safeChipFor(b.op.add);
+    if (!c) return cur;
     return cur.some((x) => x.id === c.id) ? cur : [...cur, { ...c, provisional: true as const }];
   }
   if (b.op && "remove" in b.op) {
@@ -179,7 +210,7 @@ export function displayChips(s: ChatState, now = new Date()): (ChatChip & { prov
 // ---------- response parsing ----------
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
-const isOp = (x: unknown): x is Op => isObj(x) && ((typeof x.remove === "string" && x.remove.length > 0) || (isObj(x.add) && typeof x.add.t === "string"));
+const isOp = (x: unknown): x is Op => isObj(x) && ((typeof x.remove === "string" && x.remove.length > 0) || (isObj(x.add) && safeChipFor(x.add) !== null));
 
 /** Wire JSON -> ChatResponse, or null when it is not a chat answer. Malformed chips / cards / notes are dropped, not fatal. */
 export function parseResponse(d: unknown): ChatResponse | null {

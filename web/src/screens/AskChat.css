@@ -159,3 +159,10 @@
     padding-top: 0;
   }
 }
+
+/* while a turn is pending nothing can be sent: the controls are disabled and dimmed */
+.askchat .chip:disabled,
+.askchat .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

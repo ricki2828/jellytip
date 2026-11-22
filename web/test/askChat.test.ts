@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   alignCards, applyError, applyResponse, ChatSender, displayChips, dismissNotice, emptyState, isServerChip, MAX_TEXT, MAX_TURNS, noticeSeen, NOTICE_KEY, parseResponse,
-  refineChat, retry, submitText, tapChip, type ChatBody, type ChatResponse, type ChatState, type ServerChip,
+  refineChat, retry, submitText, tapChip, TOO_LONG_TEXT, type ChatBody, type ChatResponse, type ChatState, type Op, type ServerChip,
 } from "../src/lib/askChat.ts";
 import { chipFor } from "../src/lib/askParse.ts";
 import type { Item } from "../src/api/jellyfin.ts";
@@ -13,6 +13,7 @@ const live = JSON.parse(readFileSync(new URL("./fixtures/askchat-live-20261122.j
 const NOW = new Date("2026-11-22T00:00:00Z");
 const resp = (o: Partial<ChatResponse> = {}): ChatResponse => ({ v: 1, rev: 1, mode: "fallback", reply: "r", chips: [], cards: [], notes: [], sources: ["library"], matched: 0, partial: false, ...o });
 const send = (s: ChatState, text: string) => submitText(s, text)!;
+const tap = (s: ChatState, op: Op) => tapChip(s, op)!;
 const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 const card = (id: string) => ({ kind: "film" as const, source: "library" as const, id, title: id });
 
@@ -48,16 +49,17 @@ test("pending shows the local reading as provisional chips on top of the current
 
 test("pending op add shows the chip provisional; pending op remove drops it at once", () => {
   const base = applyResponse(send(emptyState(), "x").state, resp({ chips: [chipFor({ t: "genre", genres: ["Comedy"] }), chipFor({ t: "kind", kind: "Movie" })] }));
-  const add = tapChip(base, { add: { t: "unplayed" } }).state;
+  const add = tap(base, { add: { t: "unplayed" } }).state;
   assert.deepEqual(ids(displayChips(add)), ["genre:Comedy", "kind:Movie", "unplayed"]);
-  const rem = tapChip(base, { remove: "kind:Movie" }).state;
+  const rem = tap(base, { remove: "kind:Movie" }).state;
   assert.deepEqual(ids(displayChips(rem)), ["genre:Comedy"]);
   assert.deepEqual(ids(base.chips), ["genre:Comedy", "kind:Movie"], "the state itself still holds the server's chips");
 });
 
 test("rev rule: an older response is dropped, the latest is applied", () => {
   const a = send(emptyState(), "funny");
-  const b = send(a.state, "scary");
+  const first = applyResponse(a.state, resp({ rev: 1, reply: "one", cards: [card("one")] }));
+  const b = send(first, "scary");
   assert.equal(b.body.rev, 2);
   const late = applyResponse(b.state, resp({ rev: 1, reply: "OLD", cards: [card("old")] }));
   assert.equal(late, b.state, "rev 1 after rev 2 was issued: dropped (same object)");
@@ -67,6 +69,21 @@ test("rev rule: an older response is dropped, the latest is applied", () => {
   assert.equal(ok.pending, null);
   assert.equal(applyResponse(ok, resp({ rev: 2, reply: "AGAIN" })), ok, "a duplicate answer is ignored (nothing pending)");
   assert.equal(applyResponse(a.state, resp({ rev: 9 })), a.state, "a rev from the future is not applied either");
+});
+
+test("a second send or tap while a turn is pending is refused (no body); after the answer it builds from the NEW server state", () => {
+  const first = send(emptyState(), "here with my kids");
+  assert.equal(submitText(first.state, "something funny"), null, "second text refused");
+  assert.equal(tapChip(first.state, { remove: "kids" }), null, "tap refused");
+  assert.equal(tapChip(first.state, { add: { t: "unplayed" } }), null);
+  assert.equal(first.state.rev, 1, "nothing was issued");
+  const kids = { ...chipFor({ t: "kids", ratings: ["G", "PG"], genres: ["Family"] }), removable: true, protected: true };
+  const answered = applyResponse(first.state, resp({ rev: 1, chips: [kids], reply: "Family picks" }));
+  const second = send(answered, "something funny");
+  assert.equal(second.body.rev, 2);
+  assert.deepEqual(ids(second.body.chips), ["kids"], "kids is in the echoed state of the second turn");
+  assert.deepEqual(second.body.turns, [{ user: "here with my kids", reply: "Family picks" }]);
+  assert.ok(tapChip(answered, { remove: "kids" }), "a tap on a settled state is fine");
 });
 
 test("applyResponse replaces chips, cards, notes, mode, sources wholesale; the turn is recorded", () => {
@@ -93,13 +110,13 @@ test("turns: at most 6 are kept and sent", () => {
 
 test("an op turn restates the last reply and adds no turn; a removed id is remembered and a re-added one forgotten", () => {
   let s = applyResponse(send(emptyState(), "kids film").state, resp({ reply: "Family", chips: [chipFor({ t: "kind", kind: "Movie" })] }));
-  const r = tapChip(s, { remove: "kind:Movie" });
+  const r = tap(s, { remove: "kind:Movie" });
   assert.equal(r.body.op && "remove" in r.body.op && r.body.op.remove, "kind:Movie");
   s = applyResponse(r.state, resp({ rev: 2, reply: "Family (all kinds)", chips: [] }));
   assert.deepEqual(s.turns, [{ user: "kids film", reply: "Family (all kinds)" }]);
   assert.deepEqual(s.removed, ["kind:Movie"]);
   assert.deepEqual(send(s, "x").body.removed, ["kind:Movie"], "removed is echoed");
-  s = applyResponse(tapChip(s, { add: { t: "kind", kind: "Movie" } }).state, resp({ rev: 3, chips: [chipFor({ t: "kind", kind: "Movie" })] }));
+  s = applyResponse(tap(s, { add: { t: "kind", kind: "Movie" } }).state, resp({ rev: 3, chips: [chipFor({ t: "kind", kind: "Movie" })] }));
   assert.deepEqual(s.removed, [], "adding it back clears it from removed");
 });
 
@@ -113,29 +130,84 @@ test("a server chip round-trips byte-identical, and native chips are echoed verb
   assert.ok(isServerChip(body.chips[0]) && !isServerChip(body.chips[1]));
 });
 
-test("errors: 404 = off (classic Ask), 401 = signed out, 0 / 5xx / 429 = keep the last good state + retry", () => {
+const err = (s: ChatState, rev: number, status: number) => applyError(s, rev, status);
+
+test("errors: 404 = off (classic Ask), 401 / 403 = signed out, 0 / 5xx / 429 = unreachable + retry", () => {
   const good = applyResponse(send(emptyState(), "funny").state, resp({ reply: "good", cards: [card("a")], chips: [chipFor({ t: "genre", genres: ["Comedy"] })] }));
   const p = send(good, "scary");
-  assert.equal(applyError(p.state, 2, 404).error, "off");
-  assert.equal(applyError(p.state, 2, 401).error, "signedOut");
-  for (const st of [0, 500, 502, 503, 429, 400]) {
-    const e = applyError(p.state, 2, st);
+  assert.equal(err(p.state, 2, 404).state.error, "off");
+  assert.equal(err(p.state, 2, 401).state.error, "signedOut");
+  assert.equal(err(p.state, 2, 403).state.error, "signedOut");
+  for (const st of [0, 500, 502, 503, 504, 429]) {
+    const { state: e, resend } = err(p.state, 2, st);
     assert.equal(e.error, "unreachable", String(st));
+    assert.equal(resend, null);
     assert.equal(e.pending, null);
     assert.equal(e.reply, "good");
-    assert.deepEqual(ids(e.cards), ["a"]);
     assert.deepEqual(ids(e.chips), ["genre:Comedy"]);
     assert.equal(e.turns.length, 1, "the failed turn is not recorded");
   }
-  assert.equal(applyError(p.state, 1, 503), p.state, "an error for an older rev is ignored");
-  const e = applyError(p.state, 2, 503);
+  assert.equal(err(p.state, 1, 503).state, p.state, "an error for an older rev is ignored");
+  const e = err(p.state, 2, 503).state;
   const r = retry(e)!;
   assert.deepEqual(r.body, p.body, "retry re-sends the same body (same rev)");
   assert.ok(r.state.pending && r.state.error === null);
   assert.equal(retry(good), null);
-  assert.equal(retry(applyError(p.state, 2, 404)), null);
-  const ok = applyResponse(r.state, resp({ rev: 2, reply: "recovered" }));
+  assert.equal(retry(err(p.state, 2, 404).state), null);
+  const ok = applyResponse(r.state, resp({ rev: 2, reply: "recovered", cards: [card("z")] }));
   assert.equal(ok.reply, "recovered");
+  assert.deepEqual(ids(ok.cards), ["z"]);
+});
+
+test("unreachable: the previous cards stay hidden (error + Retry only) until a newer response is applied", () => {
+  const good = applyResponse(send(emptyState(), "kids film").state, resp({ reply: "good", cards: [card("a"), card("b")], notes: [{ text: "n", code: "c" }], matched: 9 }));
+  const p = send(good, "something funny");
+  const e = err(p.state, 2, 503).state;
+  assert.deepEqual([e.cards, e.notes, e.matched], [[], [], 0], "cards from the superseded reading do not reappear");
+  assert.equal(e.error, "unreachable");
+  const again = err(retry(e)!.state, 2, 0).state;
+  assert.deepEqual(again.cards, []);
+  const ok = applyResponse(retry(e)!.state, resp({ rev: 2, cards: [card("c")] }));
+  assert.deepEqual(ids(ok.cards), ["c"]);
+});
+
+test("400 / 413: the oldest turns are trimmed and the request re-sent once; then a plain 'shorter message'", () => {
+  let s = emptyState();
+  for (let i = 1; i <= 6; i++) s = applyResponse(send(s, `t${i}`).state, resp({ rev: i, reply: `r${i}` }));
+  const p = send(s, "seventh");
+  assert.equal(p.body.turns.length, 6);
+  for (const st of [400, 413]) {
+    const { state, resend } = err(p.state, 7, st);
+    assert.ok(resend, String(st));
+    assert.equal(resend!.rev, 7, "same rev");
+    assert.deepEqual(resend!.turns.map((t) => t.user), ["t4", "t5", "t6"], "the oldest half is gone");
+    assert.equal(resend!.text, "seventh");
+    assert.ok(state.pending && state.pending.trimmed && state.error === null);
+    const second = err(state, 7, st);
+    assert.equal(second.resend, null, "only one re-send");
+    assert.equal(second.state.error, "tooLong");
+    assert.equal(second.state.pending, null);
+    assert.equal(second.state.cards, state.cards, "a message problem keeps the last good state");
+    assert.equal(retry(second.state), null, "no Retry of the same body");
+  }
+  // nothing to trim: straight to the message
+  const bare = send(emptyState(), "x");
+  assert.equal(err(bare.state, 1, 413).state.error, "tooLong");
+  assert.equal(err(bare.state, 1, 413).resend, null);
+  assert.ok(TOO_LONG_TEXT.includes("shorter message"));
+  // a trimmed re-send that succeeds is applied normally
+  const ok = applyResponse(err(p.state, 7, 400).state, resp({ rev: 7, reply: "fine" }));
+  assert.equal(ok.reply, "fine");
+});
+
+test("an unknown add op never reaches a pending state or a skeleton", () => {
+  const s = applyResponse(send(emptyState(), "x").state, resp({}));
+  assert.equal(tapChip(s, { add: { t: "mystery" } as never }), null);
+  assert.equal(tapChip(s, { add: null as never }), null);
+  assert.equal(parseResponse({ ...(live.paul_rudd.resp as object), notes: [{ text: "n", code: "c", actions: [{ label: "bad", op: { add: { t: "mystery" } } }, { label: "ok", op: { add: { t: "unplayed" } } }] }] })!.notes[0].actions!.length, 1);
+  const weird = applyResponse({ ...send(s, "y").state, pending: { body: { ...send(s, "y").body, text: undefined, op: { add: { t: "mystery" } as never } } } }, resp({ rev: 2 }));
+  assert.equal(weird.pending, null, "applying a response never throws on an odd pending op");
+  assert.deepEqual(ids(displayChips({ ...s, pending: { body: { v: 1, rev: 2, op: { add: { t: "mystery" } as never }, turns: [], chips: [], removed: [] } } })), []);
 });
 
 test("ChatSender: a newer request aborts the one in flight; the aborted answer is never applied", async () => {
@@ -176,7 +248,7 @@ test("live fixtures: every response parses and applies exactly as given", () => 
     const raw = f.resp as { chips: unknown[]; cards: { id: string }[]; notes: unknown[]; mode: string; sources: string[]; reply: string };
     let s = emptyState();
     s = { ...s, rev: f.body.rev - 1 };
-    const sub = f.body.text ? submitText(s, f.body.text)! : tapChip(s, f.body.op!);
+    const sub = f.body.text ? submitText(s, f.body.text)! : tap(s, f.body.op!);
     const out = applyResponse(sub.state, r!);
     assert.equal(out.rev, f.body.rev, name);
     assert.deepEqual(out.chips, raw.chips, `${name}: chips exactly as given`);
@@ -220,7 +292,7 @@ test("notes with actions parse (up to 3, valid ops only) and an action is a tap"
   const acts = p.notes[0].actions!;
   assert.equal(acts.length, 3);
   assert.deepEqual(acts.map((a) => a.label), ["Drop “with Paul Rudd”", "Drop the kids filter", "x"]);
-  const t = tapChip(applyResponse(submitText(emptyState(), "x")!.state, { ...p, rev: 1 }), acts[1].op);
+  const t = tap(applyResponse(submitText(emptyState(), "x")!.state, { ...p, rev: 1 }), acts[1].op);
   assert.deepEqual(t.body.op, { remove: "kids" });
 });
 
