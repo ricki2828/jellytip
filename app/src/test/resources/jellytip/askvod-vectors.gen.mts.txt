@@ -1,0 +1,28 @@
+// Golden vectors for the TV port of web/src/lib/askVod.ts. Run: node gen-vod.mts > askvod-vectors.json
+import { parseAsk, chipsFromData } from "./askParse.ts";
+import { TMDB_GENRES, vodKeep, vodNote, vodQueries, type VodView } from "./askVod.ts";
+const NOW = new Date(2026, 5, 1);
+const qs = [
+  "for the kids, under 2 hours, well rated 90s", "a funny movie", "a short series", "80s or 2010 to 2015", "sci-fi",
+  "I'm here with my two kids, want something non animated not scary that would work for all", "unwatched comedy", "a rewatch",
+  "nothing scary or animated", "feel-good for the kids", "over 2 hours rated 8", "family friendly", "something", "documentaries from 2020",
+  "single season", "funny and scary", "for the kids, nothing animated", "under 2000 hours", "over 2000 minutes",
+];
+const G = TMDB_GENRES;
+const items: VodView[] = [];
+const gs = [[G.family, G.adventure], [G.family, G.animation], [G.kids, G.horror], [G.drama], [G["sci-fi & fantasy"]], [G.comedy], [G.comedy, G.horror], [G.documentary], [], [G.family, G.comedy], [G["science fiction"], G.action], [G.kids]];
+for (let i = 0; i < 36; i++) items.push({
+  kind: i % 3 === 0 ? "series" : "movie", year: i % 7 === 0 ? null : 1978 + i * 1.3 | 0, genreIds: gs[i % gs.length],
+  certification: null, runtime: null, played: i % 4 === 0 ? null : i % 4 === 1,
+});
+const cases = qs.map((q) => {
+  const chips = parseAsk(q, NOW).chips;
+  return { q, queries: vodQueries(chips), keep: items.map((it) => vodKeep(it, chips)), note: vodNote(chips) };
+});
+const person = chipsFromData([{ t: "person", id: "d1", name: "C", role: "Director" }]);
+const fromData = [
+  [{ t: "kids", ratings: ["U"], genres: ["Family"] }],
+  [{ t: "genre", genres: ["Anime"] }],
+  [{ t: "genre", genres: ["Comedy"] }, { t: "notGenre", genres: ["Anime"] }],
+].map((list: any) => { const c = chipsFromData(list); return { list, queries: vodQueries(c), keep: items.map((it) => vodKeep(it, c)), note: vodNote(c) }; });
+console.log(JSON.stringify({ tmdb: G, items, cases, person: { queries: vodQueries(person), note: vodNote(person) }, fromData }));
