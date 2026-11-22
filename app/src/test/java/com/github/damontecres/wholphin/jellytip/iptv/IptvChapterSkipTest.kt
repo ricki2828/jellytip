@@ -56,6 +56,9 @@ class IptvChapterSkipTest {
         val credits = IptvSkipSeg("credits", 2400.0, 2500.0)
         assertEquals(IptvChapterSkip.Action.Next, IptvChapterSkip.action(credits, hasNext = true))
         assertEquals(IptvChapterSkip.Action.Seek(2_500_000), IptvChapterSkip.action(credits, hasNext = false))
+        // to the file's end: stops 1.5 s short of it
+        assertEquals(IptvChapterSkip.Action.Seek(2_498_500), IptvChapterSkip.action(credits, hasNext = false, durationMs = 2_500_000))
+        assertEquals(IptvChapterSkip.Action.Seek(2_400_000), IptvChapterSkip.action(IptvSkipSeg("credits", 2300.0, 2400.0), false, 2_500_000))
         assertEquals(IptvChapterSkip.Action.Seek(62_000), IptvChapterSkip.action(IptvSkipSeg("intro", 0.0, 62.0), hasNext = true))
         assertEquals("Skip intro", IptvChapterSkip.label("intro"))
         assertEquals("Skip recap", IptvChapterSkip.label("recap"))

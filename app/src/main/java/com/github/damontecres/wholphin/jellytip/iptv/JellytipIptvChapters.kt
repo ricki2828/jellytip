@@ -27,8 +27,14 @@ data class IptvChapters(
  * chapter marks; IPTV's only source is the file's own named chapters, read by the server from the first bytes it relays). Pure (tested).
  */
 object IptvChapterSkip {
-    /** After Playing: ask at these delays while the server says "not probed yet" (its probe needs the first 12 MB, ~20 s). */
-    val POLL_DELAYS_MS = listOf(25_000L, 60_000L, 150_000L)
+    /**
+     * After open: ask at these delays while the server says "not probed yet". The first is a free cache read (a file played before
+     * is known at once, so an intro at 0 s gets its button); a first play needs the server's probe of the first 12 MB (~20 s).
+     */
+    val POLL_DELAYS_MS = listOf(2_000L, 25_000L, 60_000L, 150_000L)
+
+    /** A skip to the very end stops this far short of it (a remux reopened at end of file is untested ground). */
+    const val END_MARGIN_MS = 1_500L
 
     /** The button shows for this long from when the part was first reached (the library player's 10 s). */
     const val SHOW_MS = 10_000L
@@ -94,11 +100,16 @@ object IptvChapterSkip {
         data object Next : Action
     }
 
-    /** Credits with a next episode: play it (the library player's behaviour); otherwise to the part's end. */
+    /** Credits with a next episode: play it (the library player's behaviour); otherwise to the part's end, short of the file's end. */
     fun action(
         seg: IptvSkipSeg,
         hasNext: Boolean,
-    ): Action = if (seg.kind == "credits" && hasNext) Action.Next else Action.Seek((seg.e * 1000).toLong())
+        durationMs: Long = 0,
+    ): Action {
+        if (seg.kind == "credits" && hasNext) return Action.Next
+        val to = (seg.e * 1000).toLong()
+        return Action.Seek(if (durationMs > END_MARGIN_MS) minOf(to, durationMs - END_MARGIN_MS) else to)
+    }
 
     /** Chapter starts as fractions of the duration for the scrub bar (not 0, not past the end). */
     fun marks(

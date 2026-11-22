@@ -369,7 +369,7 @@ fun JellytipIptvPlayPage(
 
     fun doSkip(seg: IptvSkipSeg) {
         skipDismissed[seg.kind] = true
-        when (val a = IptvChapterSkip.action(seg, upNext != null)) {
+        when (val a = IptvChapterSkip.action(seg, upNext != null, duration)) {
             IptvChapterSkip.Action.Next -> {
                 JellytipTrace.player("iptv", "skip ${seg.kind} -> next episode")
                 playNext("skip credits")
