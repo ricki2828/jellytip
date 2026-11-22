@@ -124,7 +124,8 @@ object JellytipHomeTokens {
     const val TITLE_PX = 34
     const val LOGO_MAX_W_PX = 380
     const val LOGO_MAX_H_PX = 150
-    const val TEXT_BLOCK_W_PX = 900
+    // 868 since 22-Nov (was 900): the Home content moved 16 dp right onto the 96 dp line; the hero text must still end before the buttons
+    const val TEXT_BLOCK_W_PX = 868
     const val START_PAD_PX = 16
     const val BOTTOM_PAD_PX = 28
     const val HEADER_HEIGHT_FRACTION = 0.56f // rows start here; text block sits at its bottom, above the first row
