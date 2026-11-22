@@ -9,7 +9,7 @@ import { nextGame, nextLine } from "../../lib/sportWow";
 import { isMuted } from "../../lib/liveHero";
 import { fxTitle, pickChannel, type FxItem } from "../../lib/gameCentre";
 import { fixturesNow, refreshFixtures, useFixtures } from "../../api/fixtures";
-import { CATCHUP_FAILED_TEXT, cards as catchCards_, choices as catchChoices, DECIDE_WAIT_MS, joiningLine, kickoffFailed, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
+import { CATCHUP_FAILED_TEXT, CATCHUP_STOPPED_TEXT, cards as catchCards_, choices as catchChoices, DECIDE_WAIT_MS, joiningLine, kickoffClockHeld, kickoffFailed, LATE_SEC, markOffered, offer, wasOffered, type CatchCard } from "../../lib/catchUp";
 import { useOutcome } from "./useOutcome";
 import { countsAsStall, deniedFailReason, isDecodeFault } from "../../lib/streamFail";
 import { addReminderFor, removeReminder, useReminders } from "../../api/reminderStore";
@@ -749,20 +749,21 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
   // when this target began opening; not the attempt clock, which every recovery attempt restarts (a loop must not hide the failure).
   // Restarted while "every connection is in use" is up: the wait for a free one is not the archive's fault
   const kickoffSince = useRef(Date.now());
-  const kickoffFail = useCallback((why: string) => {
+  const kickoffFail = useCallback((why: string, played = false) => {
     if (returned.current || !target.channel) return;
     returned.current = true;
-    debugEvent("iptv-player", "catch-up failed, back to live", { why, channel: target.channel });
-    flashNote(CATCHUP_FAILED_TEXT);
+    debugEvent("iptv-player", "catch-up failed, back to live", { why, played, channel: target.channel });
+    flashNote(played ? CATCHUP_STOPPED_TEXT : CATCHUP_FAILED_TEXT);
     go(livePath(target.channel, title, extrasIn), true);
   }, [target.channel, title, extrasIn]);
   useEffect(() => {
     if (!kickoffRun.current) return;
     const check = () => {
       if (firstFrame.current) kickoffPlayed.current = true;
-      if (state.kind === "full") kickoffSince.current = Date.now();
-      const k = { state: state.kind, phase: recRef.current.phase, played: kickoffPlayed.current, sinceMs: Date.now() - kickoffSince.current };
-      if (kickoffFailed(k)) kickoffFail(`${k.state}/${k.phase}${k.played ? "" : " no picture"}`);
+      const v = videoRef.current;
+      const k = { state: state.kind, phase: recRef.current.phase, played: kickoffPlayed.current, sinceMs: Date.now() - kickoffSince.current, paused: !!v?.paused && state.kind === "playing", hidden: document.hidden };
+      if (kickoffClockHeld(k)) kickoffSince.current = Date.now();
+      if (kickoffFailed(k)) kickoffFail(`${k.state}/${k.phase}${k.played ? "" : " no picture"}`, k.played);
     };
     check();
     const t = setInterval(check, 1000);
@@ -1689,7 +1690,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       const ask = offer({ live: true, replay: false, status: snap.raw?.status ?? fxStatus, startsAt: catchStartsAt, nowSec: Date.now() / 1000 });
       // as the web player: decide what to offer first; only Live left = no card
       const cs = ask ? catchCards_(snap.shown, snap.raw, revealClock.reveal) : [];
-      const canKick = !!extras?.kickoff;
+      const canKick = !!(isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop);
       const show = ask && catchChoices(canKick, cs.length).length > 0;
       if (ask && !show) debugEvent("iptv-player", "catch-up not offered", { kickoff: canKick, cards: cs.length }, "info");
       if (ask) markOffered(id);
@@ -1752,11 +1753,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   // error screen (the server's 400 no_catchup, ExoPlayer failing on the provider's empty archive, or ending at once)
   const kickoffRun = useRef(!isLiveTarget(target) && !!target.channel && target.stop != null && target.stop * 1000 > Date.now());
   const kickoffBack = useRef(false);
-  const kickoffFail = useCallback((why: string) => {
+  const kickoffFail = useCallback((why: string, played = false) => {
     if (kickoffBack.current || !target.channel) return;
     kickoffBack.current = true;
-    debugEvent("iptv-player", "catch-up failed, back to live", { why, channel: target.channel, player: "exoplayer" });
-    flashNote(CATCHUP_FAILED_TEXT);
+    debugEvent("iptv-player", "catch-up failed, back to live", { why, played, channel: target.channel, player: "exoplayer" });
+    flashNote(played ? CATCHUP_STOPPED_TEXT : CATCHUP_FAILED_TEXT);
     go(livePath(target.channel, title, extrasIn), true);
   }, [target.channel, title, extrasIn]);
 
@@ -1840,6 +1841,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
           mime: a.mime,
           live,
           growing: !live && !!a.growing,
+          // From kick-off target: the native player watches it for stalls (10 s buffering = closes with an error -> back to live)
+          ...(kickoffRun.current ? { catchUp: true } : {}),
           resumeMs,
           note: link.direct ? DIRECT_NOTE : undefined,
           // The portrait panel for anything that is not a match (description, what's next), and the user's alert settings
@@ -1889,8 +1892,9 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       }
       // (a stale link is renewed once and "every connection is in use" keeps its pop-up, as below)
       const kickWhat = r.reason === "error" ? linkFailure(r.httpStatus ?? 0, r.iptvError) : null;
-      if (kickoffRun.current && (r.reason === "ended" || r.reason === "error") && r.positionMs < KICKOFF_PLAYED_MS && kickWhat !== "full" && !(kickWhat === "renew" && !renewed.current)) {
-        kickoffFail(`${r.reason} ${r.errorCode ?? r.httpStatus ?? ""}`.trim());
+      // ended at once = never played; an error at any point = back to live ("stopped" once it had played a while)
+      if (kickoffRun.current && ((r.reason === "ended" && r.positionMs < KICKOFF_PLAYED_MS) || r.reason === "error") && kickWhat !== "full" && !(kickWhat === "renew" && !renewed.current)) {
+        kickoffFail(`${r.reason} ${r.errorCode ?? r.httpStatus ?? ""}`.trim(), r.positionMs >= KICKOFF_PLAYED_MS);
         return;
       }
       if (r.reason === "ended") watch.end(true);
@@ -2012,7 +2016,7 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
         <CatchUpChoice
           fixture={feedSource.get().fixture}
           joining={joiningLine(catchStartsAt, Date.now() / 1000)}
-          canKickOff={!!extras?.kickoff}
+          canKickOff={!!(isLive && extras?.kickoff && Date.now() / 1000 < extras.kickoff.stop)}
           plays={catchCards.length}
           onChoose={(c) => {
             const k = extras?.kickoff;

@@ -63,6 +63,8 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_RESUME_MS = "resumeMs";
     static final String EXTRA_NOTE = "note";
     static final String EXTRA_GROWING = "growing";
+    /** A catch-up of the programme on now opened from the web (From kick-off on the late-join card): not live, but watched for stalls. */
+    static final String EXTRA_CATCH_UP = "catchUp";
     static final String EXTRA_CHANNEL_ID = "channelId";
     static final String EXTRA_ALT_IDS = "altIds";
     static final String EXTRA_ALT_NAMES = "altNames";
@@ -136,6 +138,7 @@ public class PlayerActivity extends AppCompatActivity {
     /** Going back to live after From kick-off failed: one request at a time. */
     private boolean kickOffFailing;
     static final String CATCHUP_FAILED = "Catch-up isn't working on this channel right now";
+    static final String CATCHUP_STOPPED = "Catch-up stopped \u2014 back to live";
     /** A kick-off catch-up that "ends" before this far in never really played (the provider's empty archive). */
     private static final long KICKOFF_PLAYED_MS = 5_000;
     private TextView kickOffButton;
@@ -155,6 +158,7 @@ public class PlayerActivity extends AppCompatActivity {
         void onUrl(String url, String mime, String error);
     }
     private boolean growing;
+    private boolean catchUpTarget;
     /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
     private boolean toLiveEdge;
     private int session;
@@ -222,6 +226,7 @@ public class PlayerActivity extends AppCompatActivity {
         String mime = in.getStringExtra(EXTRA_MIME);
         live = in.getBooleanExtra(EXTRA_LIVE, false);
         growing = in.getBooleanExtra(EXTRA_GROWING, false);
+        catchUpTarget = !live && in.getBooleanExtra(EXTRA_CATCH_UP, false);
         channelId = in.getStringExtra(EXTRA_CHANNEL_ID);
         channelTitle = in.getStringExtra(EXTRA_TITLE);
         String[] altIds = in.getStringArrayExtra(EXTRA_ALT_IDS);
@@ -505,7 +510,7 @@ public class PlayerActivity extends AppCompatActivity {
         player.setPlayWhenReady(true);
         player.prepare();
         if (!live) handler.postDelayed(progressTick, PROGRESS_MS);
-        if (live) handler.postDelayed(stallTick, 1_000);
+        if (live || catchUpTarget) handler.postDelayed(stallTick, 1_000);
     }
 
     private void toggleTracksMenu() {
@@ -739,6 +744,10 @@ public class PlayerActivity extends AppCompatActivity {
                     stalledSince = 0;
                 } else if (stalledSince == 0) {
                     stalledSince = now;
+                } else if (now - stalledSince >= STALL_MS && catchUpTarget) {
+                    // Catch-up opened by the web buffering for 10 s: close as an error; the web goes back to live with the note
+                    close("error", null);
+                    return;
                 } else if (now - stalledSince >= STALL_MS && fromKickOff) {
                     // From kick-off buffering for 10 s (a dead archive): back to live, not an endless spinner
                     stalledSince = now;
@@ -858,7 +867,8 @@ public class PlayerActivity extends AppCompatActivity {
         if (kickOffFailing || closing) return;
         kickOffFailing = true;
         emitEvent("failover", "{\"from\":\"" + channelId + "\",\"to\":\"" + channelId + "\",\"why\":\"catch-up failed: " + why + "\"}");
-        backToLiveAfterKickOff(CATCHUP_FAILED);
+        // it played a while first: it stopped, rather than never working
+        backToLiveAfterKickOff(player != null && player.getCurrentPosition() >= KICKOFF_PLAYED_MS ? CATCHUP_STOPPED : CATCHUP_FAILED);
     }
 
     private void backToLiveAfterKickOff(String note) {
@@ -870,6 +880,7 @@ public class PlayerActivity extends AppCompatActivity {
             (url, mime, error) -> {
                 kickOffFailing = false;
                 if (url == null) {
+                    android.widget.Toast.makeText(this, "Back to live".equals(note) ? "Can't go back to live" : note, android.widget.Toast.LENGTH_LONG).show();
                     close("ended", null);
                     return;
                 }

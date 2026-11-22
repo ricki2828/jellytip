@@ -84,6 +84,8 @@ export interface JellytipPlayerPlugin {
     mime?: string;
     live: boolean;
     growing?: boolean;
+    /** A catch-up of the programme on now (From kick-off): watched for stalls although not live. */
+    catchUp?: boolean;
     resumeMs?: number;
     note?: string;
     /** Live (plan "8h Block 3"): the channel playing, for failover and From kick-off. */

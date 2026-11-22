@@ -14,6 +14,13 @@ export const MAX_CARDS = 12;
 /** How long the player waits for the first live answer before deciding (the score is held meanwhile). */
 export const DECIDE_WAIT_MS = 4_000;
 
+/**
+ * A play's `wallclock` is when it really happened (ESPN), earlier than when the stream shows it (broadcast + provider lag), which is
+ * what the reveal clock is calibrated to. A play is asked about this much later than its wallclock so a recap card never spoils
+ * what the picture has not reached yet.
+ */
+export const WALLCLOCK_SLACK_SEC = 60;
+
 export interface CatchCard {
   /** "54'" / "2nd 4:12"; empty when unknown. */
   when: string;
@@ -68,7 +75,7 @@ export function cards(released: LiveStats | null, latest: LiveStats | null, reve
     seen.add(k);
     plays.push(p);
   };
-  if (latest && latest !== released) for (const p of latest.plays) if (p.scoring && (relKeys.has(playKey(p)) || (p.wallclock != null && reveal(p.wallclock)))) add(p);
+  if (latest && latest !== released) for (const p of latest.plays) if (p.scoring && (relKeys.has(playKey(p)) || (p.wallclock != null && reveal(p.wallclock + WALLCLOCK_SLACK_SEC)))) add(p);
   for (const p of rel) add(p);
   if (plays.length) return plays.slice(0, MAX_CARDS).reverse().map((p) => ({ when: [p.period, p.clock].filter(Boolean).join(" "), text: p.text, team: p.team, points: p.delta != null && p.delta > 0 ? p.delta : null }));
   const moments = [...(released?.moments ?? []), ...(latest?.moments ?? [])].filter((m) => reveal(m.at));
@@ -106,6 +113,8 @@ export function choices(canKickOff: boolean, plays: number): { id: ChoiceId; tit
 
 /** The note when From kick-off could not play: the player goes back to live with it. */
 export const CATCHUP_FAILED_TEXT = "Catch-up isn't working on this channel right now";
+/** The note when From kick-off played a while and then broke. */
+export const CATCHUP_STOPPED_TEXT = "Catch-up stopped — back to live";
 /** A From kick-off target with no picture this long after it began opening has failed (the provider's dead archive answers 200 + nothing). */
 export const KICKOFF_START_MS = 20_000;
 
@@ -116,9 +125,15 @@ export interface KickoffIn {
   phase: string | null;
   /** A picture has been shown on this target. */
   played: boolean;
-  /** How long since the target began opening (ms). */
+  /** How long since the target began opening (ms), not counting time held (kickoffClockHeld). */
   sinceMs: number;
+  /** The video is paused (autoplay refused, or the viewer paused) / the page is hidden: no picture is expected. */
+  paused?: boolean;
+  hidden?: boolean;
 }
+
+/** Restart the no-picture clock: "every connection is in use" is up, or the video is paused / the page hidden (not the archive's fault). */
+export const kickoffClockHeld = (i: KickoffIn): boolean => i.state === "full" || !!i.paused || !!i.hidden;
 
 /**
  * Has a From kick-off (catch-up) target failed? Refused or errored (the server's 400 no_catchup, a dead link, recovery gave up),
@@ -128,7 +143,7 @@ export interface KickoffIn {
 export function kickoffFailed(i: KickoffIn): boolean {
   if (i.state === "full") return false;
   if (i.state === "error" || i.phase === "failed" || i.phase === "denied") return true;
-  return !i.played && i.sinceMs >= KICKOFF_START_MS;
+  return !i.played && !kickoffClockHeld(i) && i.sinceMs >= KICKOFF_START_MS;
 }
 
 // Once per match per page load: switching back to the same game does not ask again (a full reload may ask again, which only holds the score)

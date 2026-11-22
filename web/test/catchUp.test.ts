@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cards, choices, joiningLine, KICKOFF_START_MS, kickoffFailed, LATE_SEC, markOffered, MAX_CARDS, offer, wasOffered } from "../src/lib/catchUp.ts";
+import { cards, choices, joiningLine, KICKOFF_START_MS, kickoffClockHeld, kickoffFailed, WALLCLOCK_SLACK_SEC, LATE_SEC, markOffered, MAX_CARDS, offer, wasOffered } from "../src/lib/catchUp.ts";
 import { parseLive, type LiveStats } from "../src/lib/liveStats.ts";
 
 const NOW = 1_800_000_000;
@@ -142,4 +142,24 @@ test("kickoffFailed: refused / errored / no picture in time = back to live with 
   assert.equal(kickoffFailed({ ...k, state: "playing", sinceMs: KICKOFF_START_MS }), true); // 200 + 0 bytes
   assert.equal(kickoffFailed({ ...k, state: "playing", played: true, sinceMs: 10 * KICKOFF_START_MS }), false);
   assert.equal(kickoffFailed({ ...k, state: "full", sinceMs: 10 * KICKOFF_START_MS }), false);
+});
+
+test("cards: a play's wallclock (real event time) is asked WALLCLOCK_SLACK_SEC later, so the recap never runs ahead of the picture", () => {
+  // released by the 30 s delay on its own wallclock, but not with the slack (the stream shows it later than it happened)
+  const t = NOW - 30 - WALLCLOCK_SLACK_SEC + 10;
+  const latest = parseLive({ status: "in", updatedAt: NOW, plays: [P("p2", "Too fresh", t), P("p1", "Old enough", NOW - 30 - WALLCLOCK_SLACK_SEC)] })!;
+  assert.equal(delayed(t), true);
+  assert.deepEqual(cards(null, latest, delayed).map((c) => c.text), ["Old enough"]);
+});
+
+test("kickoffFailed: paused (autoplay refused) or a hidden page holds the no-picture clock; errors still count", () => {
+  const k = { state: "playing", phase: "playing", played: false, sinceMs: 10 * KICKOFF_START_MS };
+  assert.equal(kickoffFailed({ ...k, paused: true }), false);
+  assert.equal(kickoffFailed({ ...k, hidden: true }), false);
+  assert.equal(kickoffClockHeld({ ...k, paused: true }), true);
+  assert.equal(kickoffClockHeld({ ...k, hidden: true }), true);
+  assert.equal(kickoffClockHeld({ ...k, state: "full" }), true);
+  assert.equal(kickoffClockHeld(k), false);
+  assert.equal(kickoffFailed({ ...k, paused: true, state: "error" }), true);
+  assert.equal(kickoffFailed({ ...k, hidden: true, phase: "failed" }), true);
 });
