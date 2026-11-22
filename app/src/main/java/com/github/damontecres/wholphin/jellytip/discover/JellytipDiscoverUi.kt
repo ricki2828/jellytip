@@ -168,7 +168,7 @@ private fun Tag(
 ) {
     Text(
         text = text,
-        fontSize = 10.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
         color = JellytipPalette.Vanilla,
         modifier =

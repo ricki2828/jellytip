@@ -205,7 +205,7 @@ private fun SearchLiveCard(
                     listOfNotNull(o.league, o.channel.name.replace(providerPrefix, "")).joinToString("  ·  "),
                     color = LocalContentColor.current.copy(alpha = 0.75f),
                     fontFamily = JellytipFontFamily,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -268,7 +268,7 @@ internal fun SearchChannelsRow(
                                 c.nowTitle ?: c.channel.group,
                                 color = LocalContentColor.current.copy(alpha = 0.75f),
                                 fontFamily = JellytipFontFamily,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

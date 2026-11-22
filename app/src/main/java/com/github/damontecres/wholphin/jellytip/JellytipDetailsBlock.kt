@@ -91,8 +91,8 @@ fun JellytipDetailsBlock(
     val dto = item.data
     val body =
         MaterialTheme.typography.bodyMedium.copy(
-            fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
-            lineHeight = sizes.sp(JellytipHomeTokens.TEXT_PX * 1.35f),
+            fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
+            lineHeight = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX * 1.35f),
             shadow = TEXT_SHADOW,
         )
     val quiet = MaterialTheme.colorScheme.onSurface
@@ -191,7 +191,7 @@ fun JellytipDetailsBlock(
                         Text(
                             text = it,
                             style = body,
-                            color = quiet.copy(alpha = 0.5f),
+                            color = quiet.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -286,7 +286,7 @@ private fun Badge(
         Text(
             text = text,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-            fontSize = sizes.sp(JellytipHomeTokens.BADGE_PX),
+            fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
             maxLines = 1,
         )
     }
@@ -373,7 +373,7 @@ private fun TextButton(
         Text(
             text = button.label,
             fontFamily = JellytipFontFamily,
-            fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+            fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
             fontWeight = if (button.primary) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
         )

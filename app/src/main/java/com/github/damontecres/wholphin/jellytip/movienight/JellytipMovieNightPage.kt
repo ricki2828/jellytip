@@ -566,7 +566,7 @@ private fun NightScreen(
             }
             Text(
                 "Back leaves this screen; the night stays open and comes back here.",
-                color = JellytipPalette.Vanilla.copy(alpha = 0.45f),
+                color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
                 fontFamily = JellytipFontFamily,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 64.dp, top = 8.dp),
@@ -593,7 +593,7 @@ internal fun JoinCard(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(if (url != null) "Scan, or join with code" else "Join on your phone with code", color = Color(0xFF141414), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp)
             Text(MovieNight.showCode(code), color = Color(0xFF0A0A0A), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, letterSpacing = 3.sp)
-            if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 10.sp)
+            if (hint.isNotEmpty()) Text(hint, color = Color(0xFF141414).copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
         // ~150 dp: about 3.5 dp a module, readable from a sofa a few metres away on a 55" TV (not verified on a device)
         url?.let { QrCode(it, 150.dp) }

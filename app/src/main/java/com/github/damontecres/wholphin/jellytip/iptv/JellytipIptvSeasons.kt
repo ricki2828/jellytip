@@ -283,7 +283,8 @@ internal fun IptvEpisodeCard(
             onClick = onClick,
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
             colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF141414), focusedContainerColor = Color(0xFF141414)),
-            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(6.dp))),
+            border = com.github.damontecres.wholphin.jellytip.jellytipTileBorder(RoundedCornerShape(6.dp)),
+            scale = com.github.damontecres.wholphin.jellytip.jellytipTileScale(240.dp),
             modifier = Modifier.size(240.dp, 135.dp),
         ) {
             e.still?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
@@ -308,15 +309,15 @@ internal fun IptvEpisodeCard(
             }
         }
         if (viaIptv) {
-            Text("● via IPTV", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp)
+            Text("● via IPTV", color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
         if (e.progress?.played == true) {
-            Text("✓ Watched", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 11.sp)
+            Text("✓ Watched", color = JellytipPalette.Vanilla.copy(alpha = 0.7f), fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
         // Failed-stream memory: "Failed 2 h ago" (the server's lastFail or this TV's own report)
         val fail = IptvStreamFail.note(IptvStreamFail.failOf(e.id, e.lastFail), System.currentTimeMillis() / 1000)
         if (fail != null) {
-            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 11.sp)
+            Text(fail, color = JellytipPalette.Jelly, fontFamily = JellytipFontFamily, fontSize = 12.sp)
         }
     }
 }

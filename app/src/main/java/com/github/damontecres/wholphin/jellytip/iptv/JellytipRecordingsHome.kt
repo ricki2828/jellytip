@@ -176,7 +176,7 @@ fun JellytipRecordingsRow(
 }
 
 @Composable
-private fun RecordingCard(
+internal fun RecordingCard(
     r: IptvRecording,
     now: Long,
     onClick: () -> Unit,
@@ -230,14 +230,14 @@ private fun RecordingCard(
                     Text(
                         text = listOfNotNull(r.channel.takeIf { it.isNotBlank() }, durationLabel(r)).joinToString("  ·  "),
                         fontFamily = JellytipFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Text(r.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 r.desc?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 2.dp))
+                    Text(it, fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 2.dp))
                 }
                 val frac =
                     when {
@@ -267,7 +267,7 @@ private fun Chip(
         color = color,
         fontFamily = JellytipFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 9.sp,
+        fontSize = 12.sp,
         letterSpacing = 0.6.sp,
         maxLines = 1,
         modifier = Modifier.background(background, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp),

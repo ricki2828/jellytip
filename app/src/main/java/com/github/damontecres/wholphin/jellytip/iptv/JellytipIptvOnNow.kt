@@ -137,12 +137,13 @@ fun OnNowCard(
                                 alsoOnText(o.alternates.size),
                             ).joinToString("  ·  "),
                         fontFamily = JellytipFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    QualityChips(o.channel.quality)
+                    // (audit 22-Nov) at the 12 sp floor a narrow card has no room for two chips and a name: the audio chip goes first, and under 260 dp (the guide strip) both
+                    QualityChips(o.channel.quality?.takeIf { width >= 260.dp }?.let { if (width < 300.dp) it.copy(audio = null) else it })
                     // NFL games with your fantasy starters (plan "Fantasy live scoring for NFL")
                     if (isNfl(o.match)) {
                         val fantasy by JellytipFantasy.live.collectAsState()
@@ -155,7 +156,7 @@ fun OnNowCard(
                 }
                 val startsAt = o.startsAt
                 if (o.isPre(now) && startsAt != null) {
-                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 11.sp, maxLines = 1)
+                    Text(startsLabel(startsAt, now), fontFamily = JellytipFontFamily, fontSize = 12.sp, maxLines = 1)
                 } else {
                     val frac = ((now - o.start).toFloat() / (o.stop - o.start).coerceAtLeast(1)).coerceIn(0f, 1f)
                     Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.Gray.copy(alpha = 0.4f))) {
@@ -236,7 +237,7 @@ fun AlternatesMenu(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else {
-                            Text(initials(ch.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                            Text(initials(ch.name), fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp)
                         }
                     }
                 },

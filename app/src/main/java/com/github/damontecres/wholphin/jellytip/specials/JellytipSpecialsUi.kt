@@ -309,7 +309,7 @@ private fun TrailerBreakRow(
         ) {
             Kicker(special.title.ifBlank { "Trailer break" })
             LogoOrTitle(item, maxWidthPx = 380, maxHeightPx = 100)
-            if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = JellytipHomeTokens.TEXT_PX)
+            if (special.reason.isNotBlank()) Caption(special.reason, alpha = 0.9f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX)
             if (meta.isNotBlank()) Caption(meta, alpha = 0.65f)
         }
         SpecialCard(
@@ -438,7 +438,7 @@ private fun PersonSpotlightRow(
                                 color = Color.White,
                                 fontFamily = JellytipFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+                                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                 style = TextStyle(shadow = SoftShadow),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -498,7 +498,7 @@ private fun TonightsPickRow(
                 },
                 modifier = mod,
             ) {
-                Caption("More picks for tonight ›", alpha = 0.95f, px = JellytipHomeTokens.TEXT_PX, maxLines = 3, modifier = Modifier.align(Alignment.Center).padding(12.dp))
+                Caption("More picks for tonight ›", alpha = 0.95f, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 3, modifier = Modifier.align(Alignment.Center).padding(12.dp))
             }
         },
         cardContent = { _, _, cardModifier, onClick, onLongClick ->
@@ -527,7 +527,7 @@ private fun TonightsPickRow(
                     KickerUnlessTitled(special.kicker, special.title)
                     LogoOrTitle(item, maxWidthPx = 340, maxHeightPx = 110)
                     if (special.reason.isNotBlank()) {
-                        Caption(special.reason, alpha = 0.9f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 2)
+                        Caption(special.reason, alpha = 0.9f, italic = true, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 2)
                     }
                 }
             }
@@ -580,7 +580,7 @@ private fun IptvTonightsPick(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (special.reason.isNotBlank()) {
-                        Caption(special.reason, alpha = 0.9f, italic = true, px = JellytipHomeTokens.TEXT_PX, maxLines = 2)
+                        Caption(special.reason, alpha = 0.9f, italic = true, px = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX, maxLines = 2)
                     }
                 }
             }
@@ -750,7 +750,7 @@ private fun DoubleFeatureRow(
                                     color = Color.White,
                                     fontFamily = JellytipFontFamily,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = sizes.sp(16),
+                                    fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                     modifier =
                                         Modifier
                                             .align(Alignment.TopStart)
@@ -875,7 +875,7 @@ private fun BecauseLovedRow(
                                     text = stars(it),
                                     color = JellytipPalette.Jelly,
                                     fontFamily = JellytipFontFamily,
-                                    fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+                                    fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                 )
                             }
                             val quote = special.quote
@@ -1063,7 +1063,7 @@ private fun ClosetPicksRow(
                                 color = Color.White,
                                 fontFamily = JellytipFontFamily,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = sizes.sp(JellytipHomeTokens.TEXT_PX),
+                                fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
                                 style = TextStyle(shadow = SoftShadow),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1174,7 +1174,7 @@ private fun BoxScope.FadedPick(
             color = Color.White,
             fontFamily = JellytipFontFamily,
             fontWeight = FontWeight.Medium,
-            fontSize = sizes.sp(JellytipHomeTokens.CARD_SUBTITLE_PX),
+            fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -1433,7 +1433,7 @@ internal fun Kicker(text: String) {
         color = JellytipPalette.Jelly,
         fontFamily = JellytipFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = sizes.sp(16),
+        fontSize = sizes.sp(com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX),
         letterSpacing = 0.12.em,
         maxLines = 1,
     )
@@ -1445,7 +1445,7 @@ internal fun Caption(
     modifier: Modifier = Modifier,
     alpha: Float = 0.75f,
     italic: Boolean = false,
-    px: Int = JellytipHomeTokens.CARD_SUBTITLE_PX,
+    px: Int = com.github.damontecres.wholphin.jellytip.JellytipLayout.MIN_TEXT_PX,
     maxLines: Int = 1,
 ) {
     val sizes = rememberJellytipSizes()
