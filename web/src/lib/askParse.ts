@@ -12,7 +12,9 @@ export type ChipData =
   | { t: "played" }
   | { t: "kids"; ratings: string[]; genres: string[] }
   | { t: "minRating"; value: number }
-  | { t: "maxSeasons"; n: number };
+  | { t: "maxSeasons"; n: number }
+  /** "not scary", "non-animated": titles in any of these genres are left out (checked client-side over the fetched page). */
+  | { t: "notGenre"; genres: string[] };
 
 export interface Chip {
   /** Stable for a given reading, so a removed chip stays removed while the text is unchanged. */
@@ -69,6 +71,45 @@ const MOODS: [RegExp, string[], string][] = [
   [/\b(?:family)\b/, ["Family", "Kids"], "Family"],
 ];
 
+/** Moods that can be negated ("not scary" = no Horror). Others stay unsupported: "not sad" would drop every drama. */
+const INVERTIBLE = new Set(["Horror", "Animation", "Comedy", "Thriller", "Romance", "Action", "Sci-fi", "Mystery", "Crime", "Documentary", "War", "Western", "Fantasy", "Adventure", "Music", "History"]);
+
+const lc = (xs: string[]) => new Set(xs.map((x) => x.toLowerCase()));
+
+/**
+ * The one way to turn filter data into a chip (id + label): used for chips that don't come from the parsed text (refine
+ * options, and a query produced elsewhere, e.g. an LLM, as a list of ChipData). The parser keeps its own labels.
+ */
+export function chipFor(d: ChipData): Chip {
+  switch (d.t) {
+    case "genre":
+      return { id: `genre:${d.genres[0]}`, label: d.genres[0], data: d };
+    case "notGenre":
+      return { id: `notgenre:${d.genres[0]}`, label: `no ${d.genres[0].toLowerCase()}`, data: d };
+    case "kind":
+      return { id: `kind:${d.kind}`, label: d.kind === "Movie" ? "movies" : "shows", data: d };
+    case "maxRuntime":
+      return { id: `maxrt:${d.min}`, label: `under ${fmtMin(d.min)}`, data: d };
+    case "minRuntime":
+      return { id: `minrt:${d.min}`, label: `over ${fmtMin(d.min)}`, data: d };
+    case "years":
+      return { id: `years:${d.from}-${d.to}`, label: d.from === d.to ? `${d.from}` : d.to - d.from === 9 && d.from % 10 === 0 ? `${d.from}s` : `${d.from}-${d.to}`, data: d };
+    case "unplayed":
+      return { id: "unplayed", label: "unwatched", data: d };
+    case "played":
+      return { id: "played", label: "already watched", data: d };
+    case "kids":
+      return { id: "kids", label: "for kids (rated G, PG)", data: d };
+    case "minRating":
+      return { id: `minrating:${d.value}`, label: `rated ${d.value}+`, data: d };
+    case "maxSeasons":
+      return { id: `maxseasons:${d.n}`, label: d.n === 1 ? "1 season" : `up to ${d.n} seasons`, data: d };
+  }
+}
+
+/** Chips for a list of filter data (de-duplicated by id): the entry point for a query produced outside the parser. */
+export const chipsFromData = (list: ChipData[]): Chip[] => list.map(chipFor).filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
+
 const DECADE_WORDS: Record<string, number> = {
   twenties: 1920, thirties: 1930, forties: 1940, fifties: 1950, sixties: 1960, seventies: 1970, eighties: 1980, nineties: 1990,
 };
@@ -106,14 +147,23 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     });
   };
 
-  // Negatives are not supported: left out of the reading (never inverted into a filter) and reported
-  const NEG = /\b(?:not|no|non[- ]?|without|except|excluding|nothing|anything but|but not)\s+(?:(?:too|very|so|really)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*/g;
+  // Negatives: a negated mood that names genres ("not scary", "no horror", "non-animated") leaves those genres out;
+  // anything else ("not too long", "not for kids", "not sad") is left out of the reading (never guessed) and reported
+  const NEG = /\b(?:(?:not|no|without|except|excluding|nothing|anything but|but not)\s+|non[- ])(?:(?:too|very|so|really|at all)\s+)?(?:for\s+)?(?:the\s+|my\s+)?[a-z][a-z0-9'-]*/g;
   t = t.replace(NEG, (m, off: number, whole: string) => {
     const rest = whole.slice(off + m.length);
     // Phrases that are supported and are not negations of a filter
     if (/^(?:not|no)\s+(?:more than|seen|watched|played)\b/.test(whole.slice(off)) || /^no more than\b/.test(whole.slice(off)) || /^(?:not|no)\s+(?:seen|watched|played)\b/.test(m + rest)) return m;
-    ignored.push(clean(m));
-    if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives like 'not scary' aren't supported yet.");
+    const word = (m.match(/[a-z][a-z0-9'-]*$/) ?? [""])[0];
+    const mood = /\bfor\s/.test(m) ? undefined : MOODS.find(([re, , label]) => INVERTIBLE.has(label) && new RegExp(re.source).test(` ${word} `));
+    if (mood) {
+      const [, genres, label] = mood;
+      cur = { pos: off, src: clean(m) };
+      add({ id: `notgenre:${label}`, label: `no ${label.toLowerCase()}`, data: { t: "notGenre", genres } });
+    } else {
+      ignored.push(clean(m));
+      if (!notes.some((n) => n.startsWith("Negatives"))) notes.push("Negatives only work for genres ('not scary', 'no animation'); the rest was left out.");
+    }
     return " ".repeat(m.length);
   });
 
@@ -143,7 +193,7 @@ export function parseAsk(raw: string, now = new Date()): Reading {
   take(/\b(?:rewatch|re-watch|seen before|watched before|already seen|already watched)\b/, () => add({ id: "played", label: "already watched", data: { t: "played" } }));
 
   // ----- kids -----
-  take(/\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly)\b/, () =>
+  take(/\b(?:for (?:the |my |our )?(?:kids?|children|little ones)|kids'?|children'?s|family[- ]friendly|kid[- ]friendly|(?:that )?(?:would |will |can )?works? for (?:all|everyone|everybody|all of us)|all ages|whole family)\b/, () =>
     add({ id: "kids", label: "for kids (rated G, PG)", data: { t: "kids", ratings: KIDS_RATINGS, genres: KIDS_GENRES } }),
   );
 
@@ -217,6 +267,7 @@ export function parseAsk(raw: string, now = new Date()): Reading {
     notes.push(`${what} contradict each other: kept “${keep.label}”, ignored “${drop.src ?? drop.label}”.`);
   };
   clash("kind:Movie", "kind:Series", "Movies and shows");
+  for (const [, , label] of MOODS) clash(`genre:${label}`, `notgenre:${label}`, `“${label}” and “no ${label.toLowerCase()}”`);
   clash("unplayed", "played", "Unwatched and rewatch");
 
   for (const w of clean(t).split(" ")) {
@@ -238,14 +289,27 @@ type Params = Record<string, string | number | boolean | undefined>;
 
 const of = <T extends ChipData["t"]>(chips: Chip[], t: T) => chips.filter((c): c is Chip & { data: Extract<ChipData, { t: T }> } => c.data.t === t);
 
+/** Genres left out by "not ..." chips (lower case). */
+export const excludedGenres = (chips: Chip[]): Set<string> => lc(of(chips, "notGenre").flatMap((c) => c.data.genres));
+
+/** The kids rule's genres, minus any left out ("for the kids, nothing animated" = Family or Kids). */
+export function kidsGenres(chips: Chip[]): string[] {
+  const kids = of(chips, "kids")[0];
+  if (!kids) return [];
+  const out = excludedGenres(chips);
+  return kids.data.genres.filter((g) => !out.has(g.toLowerCase()));
+}
+
 /** Jellyfin Items params for the chips. Runtime, season counts and "each mood matches" are checked client-side (see pickFrom). */
 export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: number } = {}): Params {
   const kinds = of(chips, "kind").map((c) => c.data.kind);
   const genres = new Set<string>();
   for (const c of of(chips, "genre")) c.data.genres.forEach((g) => genres.add(g));
   const kids = of(chips, "kids")[0];
-  // "for kids" adds Family/Animation only when no mood already chose genres
-  if (kids && genres.size === 0) kids.data.genres.forEach((g) => genres.add(g));
+  // "for kids" adds Family/Animation only when no mood already chose genres; genres left out by "not ..." never go in
+  if (kids && genres.size === 0) kidsGenres(chips).forEach((g) => genres.add(g));
+  const out = excludedGenres(chips);
+  for (const g of [...genres]) if (out.has(g.toLowerCase())) genres.delete(g);
   const yearSet = new Set<number>();
   for (const c of of(chips, "years")) for (let y = c.data.from; y <= c.data.to; y++) yearSet.add(y);
   const flags: string[] = [];
@@ -261,7 +325,7 @@ export function buildQuery(chips: Chip[], opts: { shuffle?: boolean; limit?: num
     Limit: opts.limit ?? fetchLimit(chips),
     StartIndex: 0,
     // Only what is checked client-side. RunTimeTicks is not a Fields value: the server always returns it.
-    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
+    Fields: ["PrimaryImageAspectRatio", of(chips, "genre").length > 1 || out.size ? "Genres" : "", wantSeasons ? "ChildCount" : ""].filter(Boolean).join(","),
     Genres: genres.size ? [...genres].join("|") : undefined,
     Years: yearSet.size ? [...yearSet].sort((a, b) => a - b).join(",") : undefined,
     Filters: flags.length ? flags.join(",") : undefined,
@@ -277,7 +341,7 @@ export function fetchLimit(chips: Chip[]): number {
 
 /** True when some of the chips can only be checked over the fetched page. */
 export function needsClientFilter(chips: Chip[]): boolean {
-  return of(chips, "maxRuntime").length + of(chips, "minRuntime").length + of(chips, "maxSeasons").length > 0 || of(chips, "genre").length > 1;
+  return of(chips, "maxRuntime").length + of(chips, "minRuntime").length + of(chips, "maxSeasons").length + of(chips, "notGenre").length > 0 || of(chips, "genre").length > 1;
 }
 
 const runtimeMin = (it: Item): number | null => (it.RunTimeTicks ? it.RunTimeTicks / 600_000_000 : null);
@@ -288,6 +352,7 @@ export function filterItems(items: Item[], chips: Chip[]): Item[] {
   const minRt = Math.max(0, ...of(chips, "minRuntime").map((c) => c.data.min));
   const maxSeasons = Math.min(Infinity, ...of(chips, "maxSeasons").map((c) => c.data.n));
   const moods = of(chips, "genre");
+  const out = excludedGenres(chips);
   return items.filter((it) => {
     if (maxRt !== Infinity || minRt > 0) {
       const m = runtimeMin(it);
@@ -298,6 +363,8 @@ export function filterItems(items: Item[], chips: Chip[]): Item[] {
       if (it.Type !== "Series" || it.ChildCount == null || it.ChildCount > maxSeasons) return false;
     }
     const have = new Set((it.Genres ?? []).map((g) => g.toLowerCase()));
+    // A title in a left-out genre is out (no genres known = kept: nothing to say it is one)
+    for (const g of have) if (out.has(g)) return false;
     return moods.every((c) => c.data.genres.some((g) => have.has(g.toLowerCase())));
   });
 }
@@ -318,6 +385,7 @@ export function pickFrom(items: Item[], total: number | undefined, chips: Chip[]
     of(chips, "maxRuntime").length + of(chips, "minRuntime").length > 0 ? "length" : "",
     of(chips, "maxSeasons").length > 0 ? "season" : "",
     of(chips, "genre").length > 1 ? "all-moods" : "",
+    of(chips, "notGenre").length > 0 ? "left-out-genre" : "",
   ].filter(Boolean);
   let note: string;
   if (!partial) note = filtered ? `Checked all ${n} matches in your library.` : `All ${n} matches in your library.`;
@@ -335,8 +403,11 @@ export function appliedNotes(chips: Chip[]): string[] {
   const kids = of(chips, "kids")[0];
   if (kids) {
     const moods = of(chips, "genre").length > 0;
-    notes.push(`For kids: rated ${kids.data.ratings.join(", ")}${moods ? "" : `, genres ${kids.data.genres.join(" or ")}`}. Unrated titles are left out.`);
+    const kg = kidsGenres(chips);
+    notes.push(`For kids: rated ${kids.data.ratings.join(", ")}${moods || kg.length === 0 ? "" : `, genres ${kg.join(" or ")}`}. Unrated titles are left out.`);
   }
+  const left = of(chips, "notGenre").flatMap((c) => c.data.genres);
+  if (left.length) notes.push(`Left out: titles in ${[...new Set(left)].join(", ")}.`);
   if (of(chips, "maxRuntime").length || of(chips, "minRuntime").length) notes.push("Length: shows are judged by episode length; titles without a known length are left out.");
   if (of(chips, "genre").length > 1) notes.push("Several moods: a title must match each one (any of that mood's genres).");
   if (of(chips, "minRating").length) notes.push("Rating: titles without a community rating are left out.");
