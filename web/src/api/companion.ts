@@ -10,7 +10,7 @@ import { parseCollection, parseRows, type Collection, type ServerRow } from "../
 import { registerLogoStyles } from "../lib/logoStyle";
 import { registerTechs } from "../lib/techBadges";
 import { parseGenres, parseTitles, type DiscoverSection, type DiscoverTitle, type Genre, type MediaType } from "../lib/discover";
-import { isNotFoundStatus } from "../lib/journeys";
+import { isNotFound } from "../lib/journeysV1";
 export type { Collection, CollectionPart, RowLayout, ServerRow } from "../lib/rows";
 
 export const COMPANION_BASE = `${SERVER_ORIGIN}/jellytip-api`;
@@ -629,7 +629,7 @@ export async function collectionPageOrThrow(tmdbId: number): Promise<CollectionP
   const page = await collectionPage(tmdbId);
   if (page) return page;
   const status = lastStatus.get(`/v1/collections/${tmdbId}`);
-  if (isNotFoundStatus(status)) return null;
+  if (isNotFound(status)) return null;
   collections.forget(String(tmdbId));
   throw new Error(`collection ${tmdbId} failed to load${status ? ` (${status})` : ""}`);
 }

@@ -1,0 +1,57 @@
+{
+  "_note": "Journeys v1 fixture, shaped by ~/ai/state/fleet/jellytip-journeys-v1-spec.md (23-Nov). Film names illustrative.",
+  "home": {
+    "active": "cur:road-to-heat",
+    "builtAt": 1763900000,
+    "journeys": [
+      {"id": "cur:road-to-heat", "kind": "curated", "title": "The road to Heat", "curated": true, "status": "active", "done": 2, "total": 6, "playable": 5,
+       "poster": "https://image.tmdb.org/t/p/w342/thief.jpg", "backdrop": "https://image.tmdb.org/t/p/w1280/thief.jpg", "nowIndex": 2, "nowTitle": "Thief", "touchedAt": 1763890000},
+      {"id": "l:sight-and-sound", "kind": "list", "title": "Sight & Sound 100", "curated": false, "status": "paused", "done": 40, "total": 99, "playable": 58,
+       "poster": "https://image.tmdb.org/t/p/w342/vertigo.jpg", "backdrop": null, "nowIndex": 41, "nowTitle": "Vertigo", "touchedAt": 1763000000},
+      {"id": "d:240", "kind": "director", "title": "Kubrick in order", "curated": false, "status": "active", "done": 3, "total": 7, "playable": 6,
+       "poster": null, "backdrop": null, "nowIndex": 3, "nowTitle": "2001: A Space Odyssey", "touchedAt": 1762000000},
+      {"id": "cur:neo-noir-6", "kind": "curated", "title": "Neo-noir in 6", "curated": true, "status": "none", "done": 0, "total": 6, "playable": 6,
+       "poster": "https://image.tmdb.org/t/p/w342/chinatown.jpg", "backdrop": null, "nowIndex": 0, "nowTitle": "Chinatown", "touchedAt": null},
+      {"id": "cur:kurosawa-to-leone", "kind": "curated", "title": "Kurosawa to Leone", "curated": true, "status": "none", "done": 1, "total": 5, "playable": 4,
+       "poster": "https://image.tmdb.org/t/p/w342/yojimbo.jpg", "backdrop": null, "nowIndex": 1, "nowTitle": "A Fistful of Dollars", "touchedAt": null},
+      {"id": "f:87359", "kind": "franchise", "title": "Mission: Impossible", "curated": false, "status": "none", "done": 5, "total": 8, "playable": 8,
+       "poster": "https://image.tmdb.org/t/p/w342/mi6.jpg", "backdrop": null, "nowIndex": 5, "nowTitle": "Mission: Impossible - Fallout", "touchedAt": null},
+      {"id": "d:1223", "kind": "director", "title": "The Coens", "curated": false, "status": "none", "done": 6, "total": 11, "playable": 9,
+       "poster": "https://image.tmdb.org/t/p/w342/fargo.jpg", "backdrop": null, "nowIndex": 6, "nowTitle": "Fargo", "touchedAt": null},
+      {"id": "cur:all-done", "kind": "curated", "title": "Finished one", "curated": true, "status": "done", "done": 4, "total": 4, "playable": 4,
+       "poster": null, "backdrop": null, "nowIndex": null, "nowTitle": null, "touchedAt": 1761000000},
+      {"id": "", "title": "no id: dropped"}
+    ],
+    "rows": {
+      "yours": ["cur:road-to-heat", "l:sight-and-sound", "d:240", "unknown:id"],
+      "start": ["cur:neo-noir-6", "cur:kurosawa-to-leone", "cur:road-to-heat"],
+      "finish": ["f:87359", "d:1223"]
+    }
+  },
+  "kidsHome": {
+    "active": null,
+    "builtAt": 1763900000,
+    "journeys": [
+      {"id": "f:10194", "kind": "franchise", "title": "Toy Story", "curated": false, "status": "none", "done": 1, "total": 4, "playable": 4,
+       "poster": "https://image.tmdb.org/t/p/w342/toystory.jpg", "backdrop": null, "nowIndex": 1, "nowTitle": "Toy Story 2", "touchedAt": null},
+      {"id": "cur:ghibli-first", "kind": "curated", "title": "Ghibli, gently", "curated": true, "status": "none", "done": 0, "total": 5, "playable": 5,
+       "poster": "https://image.tmdb.org/t/p/w342/totoro.jpg", "backdrop": null, "nowIndex": 0, "nowTitle": "My Neighbor Totoro", "touchedAt": null}
+    ],
+    "rows": {"yours": [], "start": ["cur:ghibli-first", "f:10194"], "finish": []}
+  },
+  "journey": {
+    "id": "cur:road-to-heat", "kind": "curated", "title": "The road to Heat", "curated": true, "status": "active", "done": 2, "total": 6, "playable": 5,
+    "poster": "https://image.tmdb.org/t/p/w342/thief.jpg", "backdrop": "https://image.tmdb.org/t/p/w1280/thief.jpg", "nowIndex": 2, "nowTitle": "Thief", "touchedAt": 1763890000,
+    "premise": "Michael Mann's lonely professionals, and the films that made them.", "maxRating": "R",
+    "steps": [
+      {"n": 1, "tmdbId": 5511, "title": "Le Samouraï", "year": 1967, "runtimeMin": 105, "rating": 7.9, "why": "Where the cool, wordless professional starts.", "source": "library", "itemId": "0000000000000000000000000000000a", "iptv": null, "seen": true, "rewatch": false, "skipped": false, "poster": null, "backdrop": null},
+      {"n": 2, "tmdbId": 25103, "title": "Le Cercle Rouge", "year": 1970, "runtimeMin": 140, "rating": 7.9, "why": "Melville again: the heist as ritual.", "source": "iptv", "itemId": null,
+       "iptv": {"id": "v:p1:m:9001", "kind": "movie", "tmdbId": 25103, "title": "Le Cercle Rouge", "year": 1970, "quality": ["hd"], "poster": null, "backdrop": null, "overview": "", "rating": 7.9}, "seen": true, "rewatch": false, "skipped": false, "poster": null, "backdrop": null},
+      {"n": 3, "tmdbId": 11524, "title": "Thief", "year": 1981, "runtimeMin": 122, "rating": 7.4, "why": "Mann's first film: the same lonely professional, fourteen years before Heat. Watch what he does with the city at night.", "source": "library", "itemId": "00000000-0000-0000-0000-00000000000B", "iptv": null, "seen": false, "rewatch": false, "skipped": false, "poster": "https://image.tmdb.org/t/p/w342/thief.jpg", "backdrop": "https://image.tmdb.org/t/p/w1280/thief.jpg"},
+      {"n": 4, "tmdbId": 11454, "title": "Manhunter", "year": 1986, "runtimeMin": 120, "rating": 6.9, "why": "The same eye on a darker job.", "source": "gettable", "itemId": null, "iptv": null, "seen": false, "rewatch": false, "skipped": false, "poster": null, "backdrop": null},
+      {"n": 5, "tmdbId": 949, "title": "Heat", "year": 1995, "runtimeMin": 170, "rating": 7.9, "why": "The destination.", "source": "library", "itemId": "0000000000000000000000000000000c", "iptv": null, "seen": false, "rewatch": true, "skipped": false, "poster": null, "backdrop": null},
+      {"n": 6, "tmdbId": 1538, "title": "Collateral", "year": 2004, "runtimeMin": 120, "rating": 7.5, "why": null, "source": "missing", "itemId": null, "iptv": null, "seen": false, "rewatch": false, "skipped": false, "poster": null, "backdrop": null},
+      {"n": 7, "title": ""}
+    ]
+  }
+}
