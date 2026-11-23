@@ -13,7 +13,6 @@ export type NavItem = "home" | "movies" | "shows" | "live" | "collections" | "se
 /** Route name → the nav item that is current (null: nothing, e.g. a detail page). */
 export function navActive(route: string): NavItem | null {
   if (LIVE_ROUTES.includes(route)) return "live";
-  if (route === "ask") return "search";
   if (route === "moviesall" || route === "mylistmovies") return "movies";
   if (route === "showsall" || route === "mylistshows") return "shows";
   if (route === "collectionrow" || route === "journeys" || route === "journey") return "collections";

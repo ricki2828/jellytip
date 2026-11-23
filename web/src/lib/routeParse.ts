@@ -65,7 +65,8 @@ export function parseHash(hash: string): Route {
       // #/iptv = settings for the person's providers; #/iptv/play?… = the IPTV player; #/iptv/item?id=… = film / series
       return { name: seg[1] === "play" ? "iptvplay" : seg[1] === "item" ? "iptvitem" : "iptv", params: {}, query };
     case "ask":
-      return { name: seg[1] === "chat" ? "askchat" : "ask", params: {}, query }; // #/ask/chat = chat search
+      // Ask and Chat are the one box now (Ricki 23-Nov): old links (#/ask, #/ask/chat, ...) open it, keeping ?q=
+      return { name: "search", params: {}, query };
     case "settings":
     case "fantasy":
     case "taste":

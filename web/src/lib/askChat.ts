@@ -1,4 +1,4 @@
-// Chat search (#/ask/chat): the turn-state machine. Pure and tested (web/test/askChat.test.ts); the screen only renders it.
+// Chat (the one box's chat view, screens/Search.tsx): the turn-state machine. Pure and tested (web/test/askChat.test.ts); the screen only renders it.
 // The server (POST /v1/ask/chat on the companion) turns each turn into chips and picks the titles; the client never ranks cards.
 // Plan: ~/ai/plans/jellytip-chat-search.md sections 3 (wire, rev rule, display rule), 3a (chips), 6 (UI), 7 (notice).
 //
@@ -112,7 +112,17 @@ export interface ChatResponse {
   sources: string[];
   matched: number;
   partial: boolean;
+  /** 23-Nov (additive): true only when the AI was unavailable for a typed turn (outage, timeout, busy, off, daily cap). Absent = an older server. */
+  basic?: boolean;
+  /** 23-Nov (additive): what the turn was. */
+  turn?: "text" | "op";
 }
+
+/**
+ * "basic mode" under the turn: only when the server says `basic`. An older server has no field: then only for a fallback answer to a
+ * typed turn (a chip tap never asks the AI, so it is never "basic").
+ */
+export const basicLabel = (r: ChatResponse, b: ChatBody): boolean => (typeof r.basic === "boolean" ? r.basic : r.mode === "fallback" && !!b.text);
 
 // ---------- state ----------
 
@@ -131,6 +141,8 @@ export interface ChatState {
   cards: ChatCard[];
   notes: ChatNote[];
   mode: "llm" | "fallback" | null;
+  /** Show "basic mode" under the latest turn (basicLabel). */
+  basic: boolean;
   sources: string[];
   matched: number;
   error: ChatError;
@@ -139,7 +151,7 @@ export interface ChatState {
 }
 
 export const emptyState = (): ChatState => ({
-  turns: [], chips: [], removed: [], rev: 0, pending: null, reply: "", cards: [], notes: [], mode: null, sources: [], matched: 0, error: null, failed: null,
+  turns: [], chips: [], removed: [], rev: 0, pending: null, reply: "", cards: [], notes: [], mode: null, basic: false, sources: [], matched: 0, error: null, failed: null,
 });
 
 const bodyFor = (s: ChatState, rev: number, extra: { text?: string; op?: Op }): ChatBody => ({
@@ -191,11 +203,11 @@ export function applyResponse(s: ChatState, r: ChatResponse): ChatState {
   }
   const have = new Set(r.chips.map((c) => c.id));
   removed = removed.filter((x) => !have.has(x)); // a chip the server holds is not "removed"
-  return { turns, chips: r.chips, removed, rev: s.rev, pending: null, reply: r.reply, cards: r.cards, notes: r.notes, mode: r.mode, sources: r.sources, matched: r.matched, error: null, failed: null };
+  return { turns, chips: r.chips, removed, rev: s.rev, pending: null, reply: r.reply, cards: r.cards, notes: r.notes, mode: r.mode, basic: basicLabel(r, b), sources: r.sources, matched: r.matched, error: null, failed: null };
 }
 
 /** A failed request for revision `rev` (ignored when a newer one has been issued).
- *  404 = the feature is off (classic Ask); 401 / 403 = signed out; 400 / 413 = too big: the oldest turns are trimmed and the request is
+ *  404 = the feature is off (the one box shows the plain results instead); 401 / 403 = signed out; 400 / 413 = too big: the oldest turns are trimmed and the request is
  *  re-sent once (`resend`), then a plain "try a shorter message"; anything else (0, 5xx, 429...) = unreachable: Retry re-sends the same
  *  body, and the cards of the superseded reading stay hidden until a newer response is applied. */
 export function applyError(s: ChatState, rev: number, status: number): { state: ChatState; resend: ChatBody | null } {
@@ -273,6 +285,8 @@ export function parseResponse(d: unknown): ChatResponse | null {
     sources: (Array.isArray(d.sources) ? d.sources : []).filter((x): x is string => typeof x === "string"),
     matched: typeof d.matched === "number" ? d.matched : cards.length,
     partial: d.partial === true,
+    ...(typeof d.basic === "boolean" ? { basic: d.basic } : {}),
+    ...(d.turn === "text" || d.turn === "op" ? { turn: d.turn } : {}),
   };
 }
 
