@@ -684,8 +684,18 @@ export function Search({ initial }: { initial: string }) {
         const live = () => !ctl.signal.aborted && guard.current.isCurrent(ticket);
         void lateGroups(out.d.search, it, ctl.signal, live);
       }
+      if (out.kind === "ok" && out.d.mode !== "search") warm();
       apply(decided(findRef.current, seq, out, Date.now()));
     });
+  };
+
+  // The chat service warms up only when chat is likely: a chat / both answer, or the "Ask Chat about this" chip shown or focused
+  // (fire and forget, at most once a minute from this page)
+  const warmedAt = useRef(0);
+  const warm = () => {
+    if (Date.now() - warmedAt.current < WARM_EVERY_MS) return;
+    warmedAt.current = Date.now();
+    sender.current!.warm();
   };
 
   const submitBox = (text: string) => {
@@ -715,7 +725,6 @@ export function Search({ initial }: { initial: string }) {
 
   useEffect(() => {
     if (!restored) suggestions().then(setSugg);
-    if (!restored) sender.current!.warm(); // the chat service warms up while the box is open (fire and forget)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // A different signed-in user sees their own recents
@@ -796,6 +805,11 @@ export function Search({ initial }: { initial: string }) {
   const chatTouched = chat.turns.length > 0 || !!chat.pending || !!chat.error;
   // under the box on search answers and plain results; BOTH has its own in the chat area
   const askable = view === "search" && (term.length >= 2 || find.q.length >= 2);
+  const askChipShown = (askable && !deciding) || (view === "both" && !chatTouched);
+  useEffect(() => {
+    if (askChipShown) warm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askChipShown]);
   const noticeLine = notice && (chatShown || (view === "both" && chatTouched)) ? (
     <p className="onebox-notice">
       {NOTICE_TEXT}{" "}
@@ -898,7 +912,7 @@ export function Search({ initial }: { initial: string }) {
           </span>
         )}
         {askable && !deciding && (
-          <button className="chip" data-nav data-testid="ask-chip" onClick={() => apply(askChip(findRef.current, term))}>
+          <button className="chip" data-nav data-testid="ask-chip" onFocus={warm} onClick={() => apply(askChip(findRef.current, term))}>
             Ask Chat about this ›
           </button>
         )}
@@ -975,7 +989,10 @@ export function Search({ initial }: { initial: string }) {
                 <h2 className="row-title">Chat</h2>
                 {!chatTouched ? (
                   <div className="chips">
-                    <button className="chip" data-nav onFocus={(e) => e.currentTarget.matches(":focus-visible") && apply(deferredScrolled(findRef.current))} onClick={() => apply(askChip(findRef.current, term))}>
+                    <button className="chip" data-nav onFocus={(e) => {
+                        warm();
+                        if (e.currentTarget.matches(":focus-visible")) apply(deferredScrolled(findRef.current));
+                      }} onClick={() => apply(askChip(findRef.current, term))}>
                       {bothLine(find.deferred, false, false)} ›
                     </button>
                   </div>
@@ -1010,3 +1027,4 @@ export function Search({ initial }: { initial: string }) {
 }
 
 const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+const WARM_EVERY_MS = 60_000;
