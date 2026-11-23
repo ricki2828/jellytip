@@ -22,8 +22,6 @@ import { Player } from "./screens/Player";
 import { Collections } from "./screens/Collections";
 import { CollectionRow } from "./screens/CollectionRow";
 import { Search } from "./screens/Search";
-import { Ask } from "./screens/Ask";
-import { AskChat } from "./screens/AskChat";
 import { Tonight } from "./screens/Tonight";
 import { Channels } from "./screens/Channels";
 import { MovieNight } from "./screens/MovieNight";
@@ -124,9 +122,7 @@ export function App() {
         {route.name === "showsall" && <Browse key="tv" kind="tv" query={route.query} />}
         {route.name === "mylistmovies" && <CollectionRow key="my-movies" id="my-movies" load={() => myListRow("movie")} missingText="Nothing in your list yet. Add films with + My list." />}
         {route.name === "mylistshows" && <CollectionRow key="my-shows" id="my-shows" load={() => myListRow("tv")} missingText="Nothing in your list yet. Add shows with + My list." />}
-        {route.name === "search" && <Search initial={route.query.get("q") ?? ""} />}
-        {route.name === "ask" && <Ask key={session.userId} />}
-        {route.name === "askchat" && <AskChat key={session.userId} />}
+        {route.name === "search" && <Search key={session.userId} initial={route.query.get("q") ?? ""} />}
         {route.name === "tonight" && <Tonight key={session.userId} />}
         {route.name === "channels" && <Channels key={session.userId} />}
         {route.name === "movienight" && <MovieNight key={session.userId} joinParam={route.query.get("join")} />}

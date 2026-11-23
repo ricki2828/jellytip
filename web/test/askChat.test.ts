@@ -341,11 +341,11 @@ test("notice: once per device, in localStorage", () => {
   assert.doesNotThrow(() => dismissNotice({ getItem: () => null, setItem: () => { throw new Error("full"); } }));
 });
 
-test("routes: #/ask/chat is the chat screen, #/ask stays classic Ask", () => {
-  assert.equal(parseHash("#/ask/chat").name, "askchat");
-  assert.equal(parseHash("#/ask").name, "ask");
-  assert.equal(parseHash("#/ask?x=1").name, "ask");
-  assert.equal(parseHash("#/ask/other").name, "ask");
+test("routes: #/ask/chat and #/ask both open the one box (#/search)", () => {
+  assert.equal(parseHash("#/ask/chat").name, "search");
+  assert.equal(parseHash("#/ask").name, "search");
+  assert.equal(parseHash("#/ask?x=1").name, "search");
+  assert.equal(parseHash("#/ask/other").name, "search");
 });
 
 test("ChatSender: a call that never answers times out as error 0 (pending can clear), the signal is aborted", async () => {
