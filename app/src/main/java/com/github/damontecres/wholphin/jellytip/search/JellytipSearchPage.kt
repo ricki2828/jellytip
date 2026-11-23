@@ -264,6 +264,12 @@ private fun SearchContent(
     DisposableEffect(Unit) {
         onDispose { if (resultsTouched) viewModel.opened("left page from results") }
     }
+    // A short press on the remote's Search key while this page is up: listen (JellytipSearchButton consumes the key itself)
+    DisposableEffect(viewModel) {
+        val voice: () -> Unit = { if (viewModel.voiceInputManager.isAvailable) viewModel.voiceInputManager.startListening() }
+        JellytipSearchButton.pageVoice = voice
+        onDispose { if (JellytipSearchButton.pageVoice === voice) JellytipSearchButton.pageVoice = null }
+    }
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier =

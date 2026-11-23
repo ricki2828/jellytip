@@ -294,6 +294,9 @@ class ChatButtonShotsTest {
                 assertEquals("$name: the Ask chip is gone", 0, count(hasText("Not sure? Ask")))
                 inSafe(name, "Chat chip", hasTestTag("search-chat"))
                 inSafe(name, "hint", hasText(SEARCH_CHAT_HINT))
+                // voice = null here, so the mic (MinButtonSize 40 dp + the row's 12 dp gap) is not drawn: the device row is 52 dp wider
+                val hintRight = bounds(hasText(SEARCH_CHAT_HINT)).right.value
+                assertTrue("$name: hint right $hintRight + 52 dp of mic must stay <= 912", hintRight + 52f <= 912f)
             },
         ) { SearchTop() }
     }

@@ -362,12 +362,26 @@ fun JellytipAskChatPage(
             }
             listenAfterGrant = false
         }
+    // A short press on the remote's Search key while Chat is up: listen with the chat's recognizer (JellytipSearchButton consumes the key)
+    androidx.compose.runtime.DisposableEffect(viewModel, micPermission) {
+        val voice: () -> Unit = {
+            when {
+                !viewModel.chatVoice.isAvailable || viewModel.ui.value.chat.pending != null -> Unit
+                viewModel.chatVoice.hasPermission -> viewModel.micTap()
+                else -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+        com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.pageVoice = voice
+        onDispose { if (com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.pageVoice === voice) com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.pageVoice = null }
+    }
     // Hold Search (sidebar item or remote key) = Chat, listening: on open, and again on every hold while the page is up
     val listenToken by com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.listen.collectAsState()
     LaunchedEffect(listenToken) {
         if (!com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.takeListen(listenToken)) return@LaunchedEffect
         when {
             !viewModel.chatVoice.isAvailable -> JellytipTrace.log("askchat", "hold: no recognizer, not listening")
+            // already listening: keep going (a second tap would send what was heard so far)
+            viewModel.ui.value.voice.listening -> JellytipTrace.log("askchat", "hold: already listening")
             viewModel.chatVoice.hasPermission -> {
                 JellytipTrace.log("askchat", "hold: listening")
                 viewModel.micTap()
@@ -379,7 +393,7 @@ fun JellytipAskChatPage(
         }
     }
     if (ui.chat.error == ChatError.Off) {
-        // The server has chat switched off (404): back to Ask with a short notice (no destinations stacking up on repeated taps)
+        // The server has chat switched off (404): back with a short notice (no destinations stacking up on repeated taps)
         LaunchedEffect(Unit) { viewModel.chatOff() }
     } else {
         val actions =

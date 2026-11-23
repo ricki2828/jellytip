@@ -28,6 +28,12 @@ object JellytipSearchButton {
 
     private val remote = SearchPressHold()
 
+    /**
+     * The open Search / Chat page's own "listen now" (registered while it is on screen): a short Search-key press there calls it.
+     * The key itself is consumed here, because Compose drops a key-up whose key-down it never saw.
+     */
+    var pageVoice: (() -> Unit)? = null
+
     /** The chat page: true once per hold, if [token] is the current, fresh request. */
     fun takeListen(token: Long): Boolean {
         if (token == 0L || _listen.value != token) return false
@@ -63,14 +69,18 @@ object JellytipSearchButton {
     }
 
     /**
-     * The remote's Search key (MainActivity, every key event). True = consumed. On the Search and Chat pages a short press is passed
-     * through: those pages already start listening on the key-up.
+     * The remote's Search key (MainActivity, every key event). True = consumed. On the Search and Chat pages a short press listens
+     * there ([pageVoice]). Players are left alone (the key did nothing there before).
      */
     fun onRemoteKey(
         event: KeyEvent,
         nav: NavigationManager,
     ): Boolean {
-        if (event.keyCode != KeyEvent.KEYCODE_SEARCH && event.keyCode != KeyEvent.KEYCODE_VOICE_ASSIST) return false
+        if (event.keyCode != KeyEvent.KEYCODE_SEARCH) return false
+        if (nav.backStack.lastOrNull().isPlayer()) {
+            remote.reset()
+            return false
+        }
         return when (event.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (remote.down(event.eventTime, event.repeatCount) == SearchPressHold.Press.LONG) hold(nav, "remote", fromDrawer = false)
@@ -82,11 +92,13 @@ object JellytipSearchButton {
                 when (remote.up(event.eventTime)) {
                     SearchPressHold.Press.SHORT -> {
                         val top = nav.backStack.lastOrNull()
-                        if (top is Destination.Search || top.isChat()) {
+                        val voice = pageVoice
+                        if ((top is Destination.Search || top.isChat()) && voice != null) {
                             JellytipTrace.log("nav", "search short via=remote (page listens)")
-                            return false
+                            voice()
+                        } else if (top !is Destination.Search) {
+                            short(nav, "remote", fromDrawer = false)
                         }
-                        short(nav, "remote", fromDrawer = false)
                     }
 
                     SearchPressHold.Press.LONG -> hold(nav, "remote", fromDrawer = false)
@@ -101,4 +113,7 @@ object JellytipSearchButton {
     }
 
     private fun Destination?.isChat() = this is Destination.JellytipAskChat || this is Destination.JellytipAsk
+
+    private fun Destination?.isPlayer() =
+        this is Destination.Playback || this is Destination.PlaybackList || this is Destination.JellytipLiveTvPlayer || this is Destination.JellytipIptvPlay
 }
