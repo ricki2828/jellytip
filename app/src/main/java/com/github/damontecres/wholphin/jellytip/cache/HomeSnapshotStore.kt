@@ -128,7 +128,9 @@ class HomeSnapshotStore
             fun clear(context: Context) {
                 synchronized(LOCK) {
                     memo = null
-                    File(context.filesDir, FILE_NAME).delete()
+                    // filesDir can be null under a mocked Context (unit tests); nothing to delete then
+                    val dir = context.filesDir ?: return
+                    File(dir, FILE_NAME).delete()
                 }
             }
         }

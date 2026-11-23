@@ -203,6 +203,8 @@ configure<ApplicationExtension> {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            // Jellytip: JellytipTrace etc. call android.util.Log / Intent getters in plain JUnit tests
+            isReturnDefaultValues = true
         }
     }
 

@@ -41,7 +41,7 @@ jobs:
         run: bash .github/scripts/jellytip-fixture-scan.sh
       - name: "Unit tests (full suite, Jellytip + upstream)"
         timeout-minutes: 15
-        run: ./gradlew testDefaultDebugUnitTest --tests "*TestMainActivityViewModel" --tests "*MediaManagementServiceTest" --tests "*ServerRepositoryTest" --no-daemon # TEMP-FILTER
+        run: ./gradlew testDefaultDebugUnitTest --tests "*TestMainActivityViewModel" --tests "*MediaManagementServiceTest" --tests "*ServerRepositoryTest" --tests "*PlaybackViewModelTests" --no-daemon # TEMP-FILTER
       # t5n (21-Nov): design screenshots from jellytip.shots.* (Roborazzi, synthetic data): for eyes, not compared
       - name: Upload Jellytip screenshots
         if: always()
