@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { channelItems, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
 import { useTasteProfile } from "../api/tasteProfile";
-import { orderByAffinity } from "../lib/channelsRow";
+import { channelNumber, orderByAffinity } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
 import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
@@ -13,7 +13,7 @@ type Load = { state: "loading" } | { state: "error" } | { state: "ok"; items: Ch
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean }) {
+function Card({ def, items, now, onHide, hidden, number }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean; number: number | null }) {
   const pool = useMemo(() => poolOf(items, def), [items, def]);
   const { slots, offsetS, progress } = schedule(pool, def.id, now, 4);
   const target = tuneTarget(slots, offsetS);
@@ -22,7 +22,10 @@ function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: Cha
   return (
     <li className={`ch-card${hidden ? " hidden" : ""}`}>
       <div className="ch-head">
-        <h2 className="ch-name">{def.name}</h2>
+        <h2 className="ch-name">
+          {number != null && <span className="ch-num">{number}</span>}
+          {def.name}
+        </h2>
         <span className="ch-blurb">{def.blurb}</span>
       </div>
       <div className="ch-now">
@@ -152,7 +155,9 @@ export function Channels() {
       <ul className="ch-list">
         {shown.map((c) => {
           const items = itemsOf[c.id];
-          return items ? <Card key={c.id} def={c} items={items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} /> : null;
+          // numbered as on Home's My Channels row and the TV: 101 up, in this order, hidden ones unnumbered
+          const at = visible.indexOf(c);
+          return items ? <Card key={c.id} def={c} items={items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} number={at >= 0 ? channelNumber(at) : null} /> : null;
         })}
       </ul>
       {hiddenViable.length > 0 && (

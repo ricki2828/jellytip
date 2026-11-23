@@ -14,6 +14,7 @@ import { OnNowStrip } from "../components/OnNowStrip";
 import { HomeTopHero } from "../components/LiveMatchHero";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { ChannelsRow } from "../components/ChannelsRow";
+import { homeLeadRows } from "../lib/channelsRow";
 import { useHubTick } from "../api/collections";
 import { iptvContinue, iptvNext } from "../api/iptv";
 import type { ContinueEntry } from "../lib/continue";
@@ -488,19 +489,32 @@ export function Home() {
       {/* TV port (Game Centre 2A): while his game (else the top-ranked one) is live, the live match hero takes the hero's place */}
       <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} journey={journey} />} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
-        {entries && entries.length > 0 && (
-          <Row
-            title="Continue Watching"
-            items={[]}
-            extra={entries.map((e, i) => ({ id: e.key, node: <ContinueTile key={e.key} entry={e} autoFocus={i === 0} onFocusItem={onFocusItem} onAction={onAction} /> }))}
-          />
-        )}
-        <RemindersRow />
-        {/* Recordings: ready, recording now and scheduled, right after Continue Watching */}
-        <RecordingsRow />
-        {/* People with an IPTV provider: live sport right now, only when there are at least two */}
-        <OnNowStrip title="Live sport on now" sportOnly min={2} checkProvider />
-        <UpcomingRow />
+        {/* Continue watching, then My Channels (Ricki 23-Nov; first when there is no Continue row), then reminders, recordings,
+            live sport and upcoming: order in lib/channelsRow.homeLeadRows */}
+        {homeLeadRows(!!entries && entries.length > 0).map((k) => {
+          switch (k) {
+            case "continue":
+              return (
+                <Row
+                  key={k}
+                  title="Continue Watching"
+                  items={[]}
+                  extra={entries!.map((e, i) => ({ id: e.key, node: <ContinueTile key={e.key} entry={e} autoFocus={i === 0} onFocusItem={onFocusItem} onAction={onAction} /> }))}
+                />
+              );
+            case "mychannels":
+              return <ChannelsRow key={k} />;
+            case "reminders":
+              return <RemindersRow key={k} />;
+            case "recordings":
+              return <RecordingsRow key={k} />;
+            case "livesport":
+              // People with an IPTV provider: live sport right now, only when there are at least two
+              return <OnNowStrip key={k} title="Live sport on now" sportOnly min={2} checkProvider />;
+            case "upcoming":
+              return <UpcomingRow key={k} />;
+          }
+        })}
         {rowsFailed && (
           <RowsError
             onRetry={() => {
@@ -518,8 +532,6 @@ export function Home() {
         )}
         {!rowsFailed && shown && shown.visible.map(wrap)}
         {!rowsFailed && shown && moreOpen && shown.more.map(wrap)}
-        {/* Personal scheduled channels, after the main rows: it appears late (after startup), so it must not push them or steal their focus */}
-        <ChannelsRow />
         {/* In flow at the end of Home (was absolutely positioned over the hero and overlapped its buttons) */}
         <div className="home-open">
           <button className="btn" data-nav onClick={() => go("/tonight")}>Pick for tonight</button>
