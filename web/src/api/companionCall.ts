@@ -13,7 +13,7 @@ export interface Reply {
   data: unknown;
 }
 
-export async function companionCall(method: Method, path: string, body?: unknown, opts: { signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<Reply> {
+export async function companionCall(method: Method, path: string, body?: unknown, opts: { signal?: AbortSignal; headers?: Record<string, string>; timeoutMs?: number } = {}): Promise<Reply> {
   const token = getSession()?.token;
   if (!token) return { status: 401, data: null };
   const url = `${COMPANION_BASE}/${path.replace(/^\//, "")}`;
@@ -21,7 +21,7 @@ export async function companionCall(method: Method, path: string, body?: unknown
   if (body !== undefined) headers["Content-Type"] = "application/json";
   try {
     if (isNative) {
-      const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: "json", connectTimeout: 8000, readTimeout: 8000 });
+      const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: "json", connectTimeout: 8000, readTimeout: opts.timeoutMs ?? 8000 });
       return { status: r.status, data: typeof r.data === "string" ? null : r.data };
     }
     const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: opts.signal });

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
-  activeSummary, art, askFromReply, askLabel, askText, btnLabel, canAsk, dot, getBody, getIndex, isCurrent, isHomeEmpty, isJourneyId, isNotFound, journeyPath,
+  activeSummary, art, askFromReply, facts, askLabel, askText, btnLabel, canAsk, dot, getBody, getIndex, isCurrent, isHomeEmpty, isJourneyId, isNotFound, journeyPath,
   kicker, loadOutcome, meta, missingReason, nowIndex, oneAtATime, parseHome, parseJourney, parseStep, pathButtons, pathWindow, progress, progressLabel, retryMs,
   runtime, skipFor, stable, stableHome, statusAfter, stepAction, withSkipped, yourJourneyLine, type JvStep,
 } from "../src/lib/journeysV1.ts";
@@ -127,6 +127,7 @@ test("kicker, meta and progress", () => {
   assert.equal(meta(journey().steps[2]), "2 h 2 m · ★ 7.4 · Library");
   assert.equal(meta(journey().steps[1]), "2 h 20 m · ★ 7.9 · IPTV");
   assert.equal(meta(journey().steps[4]), "2 h 50 m · ★ 7.9 · Library · Rewatch");
+  assert.equal(facts(journey().steps[2]), "2 h 2 m · ★ 7.4");
   assert.equal(runtime(45), "45 m");
   assert.equal(runtime(120), "2 h");
   assert.equal(runtime(null), null);

@@ -1,55 +1,74 @@
-// Guided film journeys (#/journeys): short ordered paths grouped by type. Counts come from the collections hub and the
-// carousels manifest (no per-journey calls here); the progress lives on each journey's page.
-import { useEffect, useMemo, useState } from "react";
-import { hubNow, loadHub, onHubChange } from "../api/collections";
-import { manifest, type Manifest } from "../api/companion";
-import { go } from "../lib/router";
-import { summaries, type JourneySummary } from "../lib/journeys";
+// #/journeys (Journeys v1, server-built, per person; kids filtering is the server's): the hero is tonight's step of the active
+// journey, else the top of Yours, Start or Finish; the path strip under it; then the rows Yours / Finish / Start in that order.
+// Back paints the session memo (api/journeysV1.ts) with no request and no re-rank; the router puts scroll and row offsets back.
+import { useJourney, useJourneysHome } from "../api/journeysV1";
+import { isHomeEmpty, rowOf, type JvHome } from "../lib/journeysV1";
+import { JourneyCard, JourneyHero, PathStrip } from "../components/JourneyHero";
 import "./Journeys.css";
 
-const GROUPS: { key: "franchise" | "director" | "list"; title: string }[] = [
-  { key: "franchise", title: "Finish a series" },
-  { key: "director", title: "Start with a director" },
-  { key: "list", title: "From a list" },
+const ROWS: { key: "yours" | "finish" | "start"; title: string }[] = [
+  { key: "yours", title: "Your journeys" },
+  { key: "finish", title: "Finish what you started" },
+  { key: "start", title: "Start something new" },
 ];
 
+const heroIdOf = (h: JvHome | null): string | null => (h ? h.active ?? h.yours[0] ?? h.start[0] ?? h.finish[0] ?? null : null);
+
 export function Journeys() {
-  const [, tick] = useState(0);
-  const [m, setM] = useState<Manifest | null | undefined>(undefined);
-  useEffect(() => {
-    let alive = true;
-    void loadHub();
-    void manifest().then((x) => alive && setM(x));
-    const off = onHubChange(() => tick((n) => n + 1));
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  const hub = hubNow();
-  const groups = useMemo(() => summaries(hub, m?.letterboxd ?? null), [hub, m]);
-  const loading = !hub || m === undefined;
-  const any = GROUPS.some((g) => groups[g.key].length);
+  const L = useJourneysHome();
+  const home = L.value;
+  const heroId = heroIdOf(home);
+  const hj = useJourney(heroId);
+  if (!home) {
+    return (
+      <div className="journeys jv-page">
+        <h1 className="page-title">Journeys</h1>
+        {L.missing ? (
+          <p className="empty">Journeys aren't available.</p>
+        ) : L.failures > 0 ? (
+          <>
+            <p className="empty">Couldn't load your journeys. Trying again…</p>
+            <button className="btn jv-btn" data-nav data-autofocus onClick={L.retryNow}>
+              Retry now
+            </button>
+          </>
+        ) : (
+          <p className="empty">Loading…</p>
+        )}
+      </div>
+    );
+  }
+  if (isHomeEmpty(home))
+    return (
+      <div className="journeys jv-page">
+        <h1 className="page-title">Journeys</h1>
+        <p className="empty">No journeys yet. They're built overnight from your lists and films.</p>
+      </div>
+    );
+  const heroS = heroId ? home.journeys[heroId] : null;
+  const j = hj.value && heroId && hj.value.summary.id === heroId ? hj.value : null;
   return (
-    <div className="journeys">
-      <h1 className="page-title">Journeys</h1>
-      {loading && !any && <p className="empty">Loading…</p>}
-      {!loading && !any && <p className="empty">No journeys yet.</p>}
-      {GROUPS.map((g) =>
-        groups[g.key].length ? (
-          <section key={g.key} className="journey-group">
-            <h2 className="row-title">{g.title}</h2>
-            <div className="journey-cards">
-              {groups[g.key].map((s: JourneySummary) => (
-                <button key={s.id} className="journey-card" data-nav onClick={() => go(`/journeys/${encodeURIComponent(s.id)}`)}>
-                  {s.kicker && <span className="journey-kicker">{s.kicker}</span>}
-                  {s.title}
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null,
-      )}
+    <div className="jv-home">
+      {heroS && <JourneyHero s={j?.summary ?? heroS} j={j} />}
+      <div className="rows jv-rows">
+        {j && <PathStrip j={j} />}
+        {ROWS.map((r) => {
+          const cards = rowOf(home, home[r.key]);
+          if (!cards.length) return null;
+          return (
+            <section key={r.key} className="row jv-row">
+              <h2 className="row-title">
+                {r.title} <span className="count">{cards.length}</span>
+              </h2>
+              <div className="row-scroll">
+                {cards.map((s) => (
+                  <JourneyCard key={s.id} s={s} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }

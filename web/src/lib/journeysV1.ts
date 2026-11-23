@@ -375,6 +375,9 @@ export function runtime(min: number | null | undefined): string | null {
 
 export const sourceBadge = (s: JvSource): string => (s === "library" ? "Library" : s === "iptv" ? "IPTV" : s === "gettable" ? "Not here yet" : "Not available");
 
+/** "2 h 2 m · ★ 7.4": runtime and rating only (the page draws the source as its own small badge). */
+export const facts = (s: JvStep): string => [runtime(s.runtimeMin), s.rating ? `★ ${s.rating.toFixed(1)}` : null].filter(Boolean).join(" · ");
+
 /** "2 h 2 m · ★ 7.4 · Library" (the year sits with the title): the source is a small fact; library and IPTV look the same. */
 export function meta(s: JvStep): string {
   return [runtime(s.runtimeMin), s.rating ? `★ ${s.rating.toFixed(1)}` : null, sourceBadge(s.source), s.rewatch ? "Rewatch" : null].filter(Boolean).join(" · ");
