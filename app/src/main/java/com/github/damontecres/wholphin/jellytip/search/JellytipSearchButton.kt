@@ -1,0 +1,104 @@
+package com.github.damontecres.wholphin.jellytip.search
+
+import android.os.SystemClock
+import android.view.KeyEvent
+import com.github.damontecres.wholphin.jellytip.JellytipInputGuard
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.ui.nav.Destination
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * One button for Search and Chat (23-Nov, replaces the separate "Ask" page): press = Search, hold = Chat with the mic already
+ * listening. Two places feed it:
+ * - the sidebar's Search item (OK press / hold), which is the path on Ricki's Chromecast: its remote has no Search key that reaches
+ *   the app (no KEYCODE_SEARCH / VOICE_ASSIST in any saved trace; the Assistant button is taken by the system);
+ * - the remote's Search key, if a remote sends one ([onRemoteKey], from MainActivity).
+ * The press/hold decision is [SearchPressHold] (pure, tested). Main thread only.
+ */
+object JellytipSearchButton {
+    /** A hold asked Chat to start listening: the uptime it asked at, 0 = nothing asked. The chat page takes it once ([takeListen]). */
+    private val _listen = MutableStateFlow(0L)
+    val listen: StateFlow<Long> = _listen.asStateFlow()
+
+    /** A listen request older than this is stale (the navigation never happened): the next time Chat opens it stays quiet. */
+    private const val LISTEN_FRESH_MS = 5_000L
+
+    private val remote = SearchPressHold()
+
+    /** The chat page: true once per hold, if [token] is the current, fresh request. */
+    fun takeListen(token: Long): Boolean {
+        if (token == 0L || _listen.value != token) return false
+        _listen.value = 0L
+        return SystemClock.uptimeMillis() - token < LISTEN_FRESH_MS
+    }
+
+    /** Short press: Search. From the sidebar the stack is reset to Home first (every sidebar item does that). */
+    fun short(
+        nav: NavigationManager,
+        source: String,
+        fromDrawer: Boolean,
+    ) {
+        JellytipTrace.log("nav", "search short via=$source")
+        if (fromDrawer) nav.navigateToFromDrawer(Destination.Search()) else nav.navigateTo(Destination.Search(), "search key")
+    }
+
+    /**
+     * Hold: Chat, listening. Already on Chat: just listen. Otherwise open it once the held OK is released (JellytipInputGuard),
+     * so the rest of the press never lands on the chat input and opens the keyboard.
+     */
+    fun hold(
+        nav: NavigationManager,
+        source: String,
+        fromDrawer: Boolean,
+    ) {
+        JellytipTrace.log("nav", "search hold -> chat via=$source")
+        _listen.value = SystemClock.uptimeMillis().coerceAtLeast(1L)
+        if (nav.backStack.lastOrNull().isChat()) return
+        JellytipInputGuard.afterRelease {
+            if (fromDrawer) nav.navigateToFromDrawer(Destination.JellytipAskChat) else nav.navigateTo(Destination.JellytipAskChat, "search hold")
+        }
+    }
+
+    /**
+     * The remote's Search key (MainActivity, every key event). True = consumed. On the Search and Chat pages a short press is passed
+     * through: those pages already start listening on the key-up.
+     */
+    fun onRemoteKey(
+        event: KeyEvent,
+        nav: NavigationManager,
+    ): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_SEARCH && event.keyCode != KeyEvent.KEYCODE_VOICE_ASSIST) return false
+        return when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (remote.down(event.eventTime, event.repeatCount) == SearchPressHold.Press.LONG) hold(nav, "remote", fromDrawer = false)
+                remote.inPress
+            }
+
+            KeyEvent.ACTION_UP -> {
+                val ours = remote.inPress
+                when (remote.up(event.eventTime)) {
+                    SearchPressHold.Press.SHORT -> {
+                        val top = nav.backStack.lastOrNull()
+                        if (top is Destination.Search || top.isChat()) {
+                            JellytipTrace.log("nav", "search short via=remote (page listens)")
+                            return false
+                        }
+                        short(nav, "remote", fromDrawer = false)
+                    }
+
+                    SearchPressHold.Press.LONG -> hold(nav, "remote", fromDrawer = false)
+
+                    SearchPressHold.Press.NONE -> Unit
+                }
+                ours
+            }
+
+            else -> false
+        }
+    }
+
+    private fun Destination?.isChat() = this is Destination.JellytipAskChat || this is Destination.JellytipAsk
+}

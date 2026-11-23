@@ -251,11 +251,11 @@ sealed class Destination(
 
     // ---- t5n (21-Nov): Ask (plain-language discovery, web #/ask) + Journeys (web #/journeys) ----
 
-    /** Jellytip: Ask, "something funny under 90 minutes" -> chips -> library picks ("Not sure? Ask" on Search). */
+    /** Jellytip: the old Ask page. 23-Nov: nothing opens it; kept only so a saved back stack still decodes, and it shows Chat. */
     @Serializable
     data object JellytipAsk : Destination(false)
 
-    /** Jellytip: Chat search (web #/ask/chat): talk to it, it turns each turn into chips and picks titles ("Chat" next to Ask on the Ask page). */
+    /** Jellytip: Chat search (web #/ask/chat): talk to it, it turns each turn into chips and picks titles. Entry: hold Search (sidebar item or remote key), or "Chat" on Search. */
     @Serializable
     data object JellytipAskChat : Destination(false)
 

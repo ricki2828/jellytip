@@ -66,6 +66,8 @@ import com.github.damontecres.wholphin.jellytip.JellytipApi
 import com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxNavItem
 import com.github.damontecres.wholphin.jellytip.nav.rememberJellytipStorage
 import com.github.damontecres.wholphin.jellytip.rememberJellytipSizes
+import com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton
+import com.github.damontecres.wholphin.jellytip.search.jellytipPressHold
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.MusicService
@@ -486,7 +488,17 @@ fun NavDrawer(
                                 },
                                 modifier =
                                     Modifier
-                                        .focusRequester(searchFocusRequester)
+                                        // Jellytip (23-Nov): OK = Search, hold OK = Chat (listening); replaces the separate Ask page
+                                        .jellytipPressHold(
+                                            onShort = {
+                                                viewModel.setIndex(SEARCH_INDEX)
+                                                JellytipSearchButton.short(viewModel.navigationManager, "rail", fromDrawer = true)
+                                            },
+                                            onHold = {
+                                                viewModel.setIndex(SEARCH_INDEX)
+                                                JellytipSearchButton.hold(viewModel.navigationManager, "rail", fromDrawer = true)
+                                            },
+                                        ).focusRequester(searchFocusRequester)
                                         .ifElse(
                                             selectedIndex == SEARCH_INDEX,
                                             Modifier.focusRequester(focusRequester),

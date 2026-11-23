@@ -366,7 +366,13 @@ class MainActivity : AppCompatActivity() {
         if (JellytipInputGuard.shouldSwallow(event)) return true
         if (JellytipTrailerControl.onBackKey(event)) return true
         if (JellytipOverlayKeys.intercept(event)) return true
-        if (screensaverService.state.value.run { show || showDim }) {
+        val saverUp = screensaverService.state.value.run { show || showDim }
+        // Jellytip (23-Nov): the remote's Search key, press = Search, hold = Chat (if this remote sends one at all)
+        if (!saverUp && com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.onRemoteKey(event, navigationManager)) {
+            screensaverService.pulse()
+            return true
+        }
+        if (saverUp) {
             // Jellytip (t5n): OK on the ambient scoreboard opens the game it shows
             val ok = event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
             val okDown = event.action == KeyEvent.ACTION_DOWN && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)

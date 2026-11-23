@@ -39,6 +39,8 @@ data class ChatVoiceUi(
     val level: Float = 0f,
     /** A string resource for the last failure, until the next press / the next typed character. */
     val errorRes: Int? = null,
+    /** Listening after a tap (or a Search hold), not a held OK: it sends by itself when the speaker stops, so no "release" hint. */
+    val tap: Boolean = false,
 )
 
 /** The pure part: how segments join, tap vs hold, and what to do when the recognizer ends. */
@@ -212,6 +214,7 @@ class ChatVoice(
         held = false
         if (ChatVoiceText.isTap(SystemClock.uptimeMillis() - downAt)) {
             tap = true // the fallback: keep listening, the recognizer's own end-of-speech sends
+            _ui.value = _ui.value.copy(tap = true)
             handler.removeCallbacks(watchdog)
             handler.postDelayed(watchdog, TAP_MAX_MS)
             return

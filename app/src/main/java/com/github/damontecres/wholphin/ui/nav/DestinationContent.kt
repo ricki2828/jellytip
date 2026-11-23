@@ -474,13 +474,11 @@ fun DestinationContent(
             com.github.damontecres.wholphin.jellytip.channels.JellytipMyChannelsPage(modifier = modifier)
         }
 
-        // t5n (21-Nov): Ask + Journeys
-        Destination.JellytipAsk -> {
-            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.ask.JellytipAskPage(modifier = modifier)
-        }
-
-        Destination.JellytipAskChat -> {
+        // t5n (21-Nov): Ask + Journeys. 23-Nov: no separate Ask page any more (Ricki: "get rid of ask"); an old Ask entry (a saved
+        // back stack) opens Chat, which is reached by holding Search
+        Destination.JellytipAsk,
+        Destination.JellytipAskChat,
+        -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             com.github.damontecres.wholphin.jellytip.askchat.JellytipAskChatPage(modifier = modifier)
         }

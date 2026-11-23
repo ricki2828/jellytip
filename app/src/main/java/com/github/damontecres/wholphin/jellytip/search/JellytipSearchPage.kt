@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -281,44 +282,36 @@ private fun SearchContent(
                     }
                 },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoiceSearchButton(
-                onSpeechResult = { spoken ->
-                    JellytipTrace.log("search", "voice result '$spoken'")
-                    viewModel.setQuery(spoken, immediate = true)
-                },
-                voiceInputManager = viewModel.voiceInputManager,
-            )
-            SearchEditTextBox(
-                value = state.query,
-                onValueChange = {
-                    typing = true
-                    viewModel.setQuery(it)
-                },
-                onSearchClick = { viewModel.setQuery(state.query, immediate = true) },
-                readOnly = !typing,
-                modifier =
-                    Modifier
-                        .width(480.dp)
-                        .focusRequester(boxFocus)
-                        .onFocusChanged { if (!it.isFocused) typing = false }
-                        .onPreviewKeyEvent { event ->
-                            val ok = event.key == Key.DirectionCenter || event.key == Key.Enter
-                            if (event.type == KeyEventType.KeyUp && ok && !typing) {
-                                typing = true
-                                keyboard?.show()
-                                true
-                            } else {
-                                false
-                            }
-                        },
-            )
-            // t5n (21-Nov): web 69fc43f6 "Not sure? Ask" chip beside the box
-            Chip("Not sure? Ask") { viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipAsk, "search -> ask") }
-            if (state.searching) {
-                Text("Searching…", color = JellytipPalette.Vanilla.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
-            }
-        }
+        SearchHeaderRow(
+            query = state.query,
+            searching = state.searching,
+            voice = viewModel.voiceInputManager,
+            onSpeech = { spoken ->
+                JellytipTrace.log("search", "voice result '$spoken'")
+                viewModel.setQuery(spoken, immediate = true)
+            },
+            onQueryChange = {
+                typing = true
+                viewModel.setQuery(it)
+            },
+            onSubmit = { viewModel.setQuery(state.query, immediate = true) },
+            readOnly = !typing,
+            boxModifier =
+                Modifier
+                    .focusRequester(boxFocus)
+                    .onFocusChanged { if (!it.isFocused) typing = false }
+                    .onPreviewKeyEvent { event ->
+                        val ok = event.key == Key.DirectionCenter || event.key == Key.Enter
+                        if (event.type == KeyEventType.KeyUp && ok && !typing) {
+                            typing = true
+                            keyboard?.show()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            onChat = { viewModel.navigationManager.navigateTo(com.github.damontecres.wholphin.ui.nav.Destination.JellytipAskChat, "search -> chat") },
+        )
         val answer = state.answer?.takeIf { state.query.trim().length >= 2 }
         if (answer != null && answer.chips.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.focusGroup().focusRestorer()) {
@@ -359,6 +352,50 @@ private fun SearchContent(
         }
     }
 }
+
+/**
+ * Search's top row: mic, the box, then the way to Chat. 23-Nov: the "Not sure? Ask" chip became "Chat" (there is no Ask page any
+ * more), with the hint that holding Search opens it too (hidden while "Searching…" needs the room). Internal for the shots.
+ */
+@Composable
+internal fun SearchHeaderRow(
+    query: String,
+    searching: Boolean,
+    voice: com.github.damontecres.wholphin.ui.components.VoiceInputManager?,
+    onSpeech: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    readOnly: Boolean,
+    boxModifier: Modifier,
+    onChat: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        VoiceSearchButton(onSpeechResult = onSpeech, voiceInputManager = voice)
+        SearchEditTextBox(
+            value = query,
+            onValueChange = onQueryChange,
+            onSearchClick = onSubmit,
+            readOnly = readOnly,
+            modifier = Modifier.width(480.dp).testTag("search-input").then(boxModifier),
+        )
+        Chip("Chat", modifier = Modifier.testTag("search-chat")) { onChat() }
+        if (searching) {
+            Text("Searching…", color = JellytipPalette.Vanilla.copy(alpha = 0.5f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
+        } else {
+            Text(
+                SEARCH_CHAT_HINT,
+                color = JellytipPalette.Vanilla.copy(alpha = com.github.damontecres.wholphin.jellytip.JellytipLayout.TEXT_ALPHA),
+                fontFamily = JellytipFontFamily,
+                fontSize = com.github.damontecres.wholphin.jellytip.JellytipLayout.MinText,
+                maxLines = 1,
+                modifier = Modifier.testTag("search-chat-hint"),
+            )
+        }
+    }
+}
+
+/** The Search page's hint (and the shots' assert). */
+internal const val SEARCH_CHAT_HINT = "Hold Search for Chat"
 
 @Composable
 private fun Suggestions(
@@ -612,10 +649,12 @@ private fun TextCard(
 @Composable
 internal fun Chip(
     label: String,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        modifier = modifier,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
         border = com.github.damontecres.wholphin.jellytip.JellytipSurfaceFocus.border(RoundedCornerShape(16.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),

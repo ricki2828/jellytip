@@ -700,7 +700,7 @@ class Audit2ShotsTest {
                     Box(Modifier.width(480.dp).height(48.dp).background(Color.White.copy(alpha = 0.12f)), contentAlignment = Alignment.CenterStart) {
                         Text("stand-in: search box", color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(start = 12.dp))
                     }
-                    Chip("Not sure? Ask") {}
+                    Chip("Chat") {}
                 }
                 SuggestionsContent(
                     recent = listOf("severance", "heat", "nrl", "the bear", "ghibli"),

@@ -110,7 +110,8 @@ import javax.inject.Inject
  * Chat search (web #/ask/chat), TV: "here with my kids, something funny, not scary" -> the server turns each turn into chips and picks the
  * titles from your library (and TV for a full account). The state machine is AskChatState.kt (a port of the web's, tested); this file
  * renders it. While a turn is pending the cards are hidden (skeleton), the chips are the dimmed local reading and EVERY control is
- * disabled (focus parks on the input). Entry: "Chat" next to the Ask button on the Ask page.
+ * disabled (focus parks on the input). Entry (23-Nov, the Ask page is gone): hold Search (the sidebar item or the remote's key) opens
+ * this page already listening; "Chat" on Search opens it quiet.
  */
 
 /** What the page shows: the state machine's state, the typed text, the notice, and the library items fetched for the cards. */
@@ -310,7 +311,7 @@ class JellytipAskChatViewModel
             navigationManager.navigateTo(JellytipTitleOpen.detailsFor(card.toVodItem()), "chat TV pick OK")
         }
 
-        /** Chat is switched off on the server (404): tell the person and pop back to the Ask page they came from. */
+        /** Chat is switched off on the server (404): tell the person and go back to where they came from. */
         fun chatOff() {
             viewModelScope.launch { showToast(context, "Chat isn't available right now") }
             navigationManager.goBack()
@@ -350,10 +351,33 @@ fun JellytipAskChatPage(
     viewModel: JellytipAskChatViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsState()
+    // A Search hold asked to listen: once mic permission comes back granted, listen (the hold was the ask)
+    var listenAfterGrant by remember { mutableStateOf(false) }
     val micPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (!granted) viewModel.micPermissionDenied()
+            if (!granted) {
+                viewModel.micPermissionDenied()
+            } else if (listenAfterGrant) {
+                viewModel.micTap()
+            }
+            listenAfterGrant = false
         }
+    // Hold Search (sidebar item or remote key) = Chat, listening: on open, and again on every hold while the page is up
+    val listenToken by com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.listen.collectAsState()
+    LaunchedEffect(listenToken) {
+        if (!com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.takeListen(listenToken)) return@LaunchedEffect
+        when {
+            !viewModel.chatVoice.isAvailable -> JellytipTrace.log("askchat", "hold: no recognizer, not listening")
+            viewModel.chatVoice.hasPermission -> {
+                JellytipTrace.log("askchat", "hold: listening")
+                viewModel.micTap()
+            }
+            else -> {
+                listenAfterGrant = true
+                micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
     if (ui.chat.error == ChatError.Off) {
         // The server has chat switched off (404): back to Ask with a short notice (no destinations stacking up on repeated taps)
         LaunchedEffect(Unit) { viewModel.chatOff() }
@@ -382,6 +406,9 @@ fun JellytipAskChatPage(
 }
 
 private val dim = JellytipPalette.Vanilla.copy(alpha = JellytipLayout.TEXT_ALPHA)
+
+/** The one-line hint under Chat's title (and the shots' assert). */
+internal const val CHAT_HOLD_HINT = "Hold Search to talk anytime"
 private val CHAT_W = 326.dp
 
 /** A control that cannot be used while a turn is pending: dimmed and not focusable (focus parks on the input meanwhile). */
@@ -443,10 +470,10 @@ internal fun AskChatContent(
                 .background(JellytipPalette.Night)
                 .padding(start = JellytipLayout.PageStart, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd, bottom = JellytipLayout.PageBottom)
                 .onPreviewKeyEvent { e ->
-                    // The remote's Search / mic key: listen right away (not while a turn is pending)
-                    val v = actions.voice
-                    if (e.type == KeyEventType.KeyUp && (e.key == Key.Search || e.key == Key.VoiceAssist) && v != null && v.isAvailable && !pending) {
-                        v.startListening()
+                    // The remote's Search / mic key (a short press; a hold is JellytipSearchButton's): listen with the chat's own
+                    // recognizer, which keeps going until the speaker stops (not while a turn is pending)
+                    if (e.type == KeyEventType.KeyUp && (e.key == Key.Search || e.key == Key.VoiceAssist) && actions.micAvailable && !pending) {
+                        actions.micTap()
                         true
                     } else {
                         false
@@ -457,9 +484,10 @@ internal fun AskChatContent(
         JellytipLibraryMenuHostOf(menu) // the library tile's hold-OK menu, once on the page (composes nothing until a tile asks)
         // ---- the conversation ----
         Column(Modifier.width(CHAT_W).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(JellytipLayout.TileGap)) {
-            Text("Ask", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = JellytipLayout.PageTitle)
+            Text("Chat", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = JellytipLayout.PageTitle)
+            Text(CHAT_HOLD_HINT, color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.MinText, maxLines = 1, modifier = Modifier.testTag("chat-hold-hint"))
             Column(Modifier.weight(1f).verticalScroll(turnsScroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (fresh) Text("Ask like you'd ask a friend.", color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.Body, lineHeight = 17.sp)
+                if (fresh) Text("Talk to it like you would a friend.", color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.Body, lineHeight = 17.sp)
                 chat.turns.forEachIndexed { i, t ->
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(t.user, color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.Body, lineHeight = 17.sp)
@@ -520,6 +548,7 @@ internal fun AskChatContent(
             }
             val hint =
                 when {
+                    ui.voice.listening && ui.voice.tap -> "Listening… just talk, it sends when you stop"
                     ui.voice.listening -> "Listening… release to send"
                     ui.voice.errorRes != null -> stringResource(ui.voice.errorRes)
                     actions.micAvailable && !pending -> "Hold OK on the mic to talk"
