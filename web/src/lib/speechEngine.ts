@@ -8,9 +8,11 @@
 // - `partial` / `final` carry THIS window's text so far (each replaces the previous one; the hook appends it to what earlier
 //   windows heard). Browser results are already cumulative per window; Android's partial and final results replace each other.
 // - every start() ends in exactly one `end`; an `error` always comes before its `end`. cancel() ends a window with no events.
-// - error codes are the browser's (no-speech, aborted, not-allowed, audio-capture, network, ...) plus "mic-allowed" (the phone's
-//   permission prompt ended the press: hold again) and "interrupted" (the app was left while listening).
-// Restarts are decided only by chatVoice.afterEnd (the hook calls start() again); the engines never restart by themselves.
+// - error codes are the browser's (no-speech, aborted, not-allowed, audio-capture, network, ...) plus the phone's "mic-prompt"
+//   (no microphone permission yet: the press ends and the system prompt opens), "mic-allowed" / "not-allowed" (the prompt's
+//   answer, sent after that press ended) and "interrupted" (the app was left while listening).
+// Restarts are decided only by chatVoice.afterEnd (the hook calls start() again); the engines never restart by themselves. The
+// native engine only paces them like the TV (RESTART_DELAY_MS, RECREATE_DELAY_MS after a glitch / busy recognizer).
 // This file imports nothing from Capacitor (the plugin object is passed in), so it runs under node --test.
 import { sessionText } from "./chatVoice.ts";
 
@@ -132,10 +134,12 @@ type Handle = Promise<{ remove: () => Promise<void> }>;
 export interface JellytipSpeechPlugin {
   available(): Promise<{ available: boolean }>;
   /**
-   * One listening window for `session` (the same recognizer is reused while the session lasts). {started: false} when the
-   * microphone permission had to be asked first: nothing is listening (permission says what the person answered).
+   * One listening window for `session` (the same recognizer is reused while the session lasts). {started: false, permission:
+   * "needed"} without the microphone permission: nothing is listening (ask with requestMic()).
    */
-  start(o: { session: number; lang?: string; hold: boolean }): Promise<{ started: boolean; permission?: "granted" | "denied" }>;
+  start(o: { session: number; lang?: string; hold: boolean }): Promise<{ started: boolean; permission?: "needed" | "denied" }>;
+  /** The system's microphone prompt (answers at once when it was refused for good). */
+  requestMic(): Promise<{ granted: boolean }>;
   stop(o: { session: number }): Promise<void>;
   /** Ends the window with no events and releases the recognizer. */
   cancel(): Promise<void>;
@@ -180,22 +184,39 @@ export function androidErrorCode(error: number, glitch = false): string {
   }
 }
 
-/** What start()'s answer means: null = listening; otherwise the error that ends the press. */
+/**
+ * What start()'s answer means: null = listening; otherwise the error that ends the press. "mic-prompt": no permission yet, the
+ * engine asks for it now (the dialog takes the finger off the mic, so that press can't go on).
+ */
 export function startOutcome(res: { started?: boolean; permission?: string } | null | undefined): string | null {
   if (res?.started !== false) return null;
-  return res.permission === "granted" ? "mic-allowed" : "not-allowed";
+  return res.permission === "denied" ? "not-allowed" : "mic-prompt";
 }
+
+/** The answer to the permission prompt, reported after the press it ended (the hook shows it as a notice). */
+export const permissionNotice = (granted: boolean): string => (granted ? "mic-allowed" : "not-allowed");
+
+/** The TV's restart pacing (ChatVoice.kt): the next window on the same recognizer after a beat, a fresh one after a longer one. */
+export const RESTART_DELAY_MS = 40;
+export const RECREATE_DELAY_MS = 150;
+export const restartDelay = (firstWindow: boolean, lastCode: string | null): number =>
+  firstWindow ? 0 : lastCode === "aborted" ? RECREATE_DELAY_MS : RESTART_DELAY_MS;
 
 export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
   const em = new VoiceEmitter();
   let session = 0; // the press being listened to; 0 = none (events of any other session are dropped)
   let next = 1;
+  let lastCode: string | null = null; // the last error of this press: "aborted" = the plugin builds a fresh recognizer next
   const mine = (e: NativeSpeechEvent | null | undefined) => session !== 0 && e?.session === session;
   // Capacitor drops events nobody listens to: every start waits until the four listeners are attached
   const ready = Promise.all([
     plugin.addListener("partial", (e) => mine(e) && em.emit("partial", { text: e.text ?? "" })),
     plugin.addListener("final", (e) => mine(e) && em.emit("final", { text: e.text ?? "" })),
-    plugin.addListener("error", (e) => mine(e) && em.emit("error", { code: androidErrorCode(e.error ?? 0, !!e.glitch) })),
+    plugin.addListener("error", (e) => {
+      if (!mine(e)) return;
+      lastCode = androidErrorCode(e.error ?? 0, !!e.glitch);
+      em.emit("error", { code: lastCode });
+    }),
     plugin.addListener("end", (e) => mine(e) && em.emit("end", {})),
   ]).catch(() => []);
   const fail = (s: number, code: string) => {
@@ -208,15 +229,26 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
     available: () => plugin.available().then((r) => !!r?.available, () => false),
     start({ lang, hold }) {
       // a restart within a press keeps its session (the plugin reuses that recognizer); the hook cancels between presses
-      if (session === 0) session = next++;
+      const first = session === 0;
+      if (first) session = next++;
       const s = session;
-      void ready
+      const delay = restartDelay(first, lastCode);
+      lastCode = null;
+      const wait = delay ? new Promise<void>((r) => setTimeout(r, delay)) : Promise.resolve();
+      void Promise.all([ready, wait])
         .then(() => (session === s ? plugin.start({ session: s, lang, hold }) : null))
         .then(
           (res) => {
-            if (res === null) return; // cancelled before the listeners were ready
+            if (res === null) return; // cancelled (or released) before it went out
             const code = startOutcome(res);
-            if (code) fail(s, code);
+            if (!code) return;
+            fail(s, code);
+            // ask now; the answer comes after the press ended, so it is sent outside any session (the hook shows it as a notice)
+            if (code === "mic-prompt")
+              void plugin.requestMic().then(
+                (r) => em.emit("error", { code: permissionNotice(!!r?.granted) }),
+                () => em.emit("error", { code: "not-allowed" }),
+              );
           },
           () => fail(s, "start-failed"),
         );

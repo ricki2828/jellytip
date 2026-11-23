@@ -32,7 +32,8 @@ export const isQuietError = (code: string): boolean => code === "no-speech" || c
 export function errorText(code: string, phone = false): string {
   if (code === "not-allowed" || code === "service-not-allowed")
     return phone ? "Microphone blocked: allow it for Jellytip in Android settings to talk" : "Microphone blocked: allow it in your browser to talk";
-  if (code === "mic-allowed") return "Microphone allowed: hold the mic to talk"; // the permission prompt ended that press
+  if (code === "mic-prompt") return "Allow the microphone, then hold the mic to talk"; // the permission prompt ended that press
+  if (code === "mic-allowed") return "Microphone allowed: hold the mic to talk";
   if (code === "audio-capture") return "No microphone found";
   if (code === "network") return "Voice needs a network connection";
   if (code === "interrupted") return "Voice stopped when the app was left: hold the mic to talk again";

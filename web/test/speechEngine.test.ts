@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ANDROID_ERRORS as E, androidErrorCode, nativeEngine, startOutcome, VoiceEmitter, webEngine, webSpeechCtor,
+  ANDROID_ERRORS as E, androidErrorCode, nativeEngine, permissionNotice, RECREATE_DELAY_MS, RESTART_DELAY_MS, restartDelay, startOutcome, VoiceEmitter, webEngine, webSpeechCtor,
   type JellytipSpeechPlugin, type NativeSpeechEvent, type SpeechEngine, type WebRecognition,
 } from "../src/lib/speechEngine.ts";
 import { isQuietError } from "../src/lib/chatVoice.ts";
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 /** Every event an engine sends, as "name:payload" strings. */
 function record(engine: SpeechEngine): string[] {
@@ -43,13 +43,23 @@ test("quiet vs failure: only the window-is-over codes keep a held press going", 
   for (const n of [E.INSUFFICIENT_PERMISSIONS, E.AUDIO, E.NETWORK, E.CLIENT, E.INTERRUPTED]) assert.ok(!isQuietError(androidErrorCode(n)), String(n));
 });
 
-test("startOutcome: listening, or the permission prompt ended the press", () => {
+test("startOutcome: listening, or no permission yet (the prompt ends the press)", () => {
   assert.equal(startOutcome({ started: true }), null);
   assert.equal(startOutcome({}), null);
   assert.equal(startOutcome(undefined), null);
-  assert.equal(startOutcome({ started: false, permission: "granted" }), "mic-allowed");
+  assert.equal(startOutcome({ started: false, permission: "needed" }), "mic-prompt");
+  assert.equal(startOutcome({ started: false }), "mic-prompt");
   assert.equal(startOutcome({ started: false, permission: "denied" }), "not-allowed");
-  assert.equal(startOutcome({ started: false }), "not-allowed");
+  assert.equal(permissionNotice(true), "mic-allowed");
+  assert.equal(permissionNotice(false), "not-allowed");
+});
+
+test("restartDelay: the TV's pacing (first window at once, a beat on reuse, longer for a fresh recognizer)", () => {
+  assert.equal(restartDelay(true, null), 0);
+  assert.equal(restartDelay(true, "aborted"), 0);
+  assert.equal(restartDelay(false, null), RESTART_DELAY_MS);
+  assert.equal(restartDelay(false, "no-speech"), RESTART_DELAY_MS);
+  assert.equal(restartDelay(false, "aborted"), RECREATE_DELAY_MS);
 });
 
 test("VoiceEmitter: typed listeners, unsubscribe", () => {
@@ -158,7 +168,10 @@ test("web engine without SpeechRecognition: unavailable, and a start fails clean
 
 // ---- native engine over a fake SpeechPlugin ----
 
-function fakePlugin(startAnswer: () => Promise<{ started: boolean; permission?: "granted" | "denied" }> = () => Promise.resolve({ started: true })) {
+function fakePlugin(
+  startAnswer: () => Promise<{ started: boolean; permission?: "needed" | "denied" }> = () => Promise.resolve({ started: true }),
+  granted = true,
+) {
   const ls: Record<string, ((e: NativeSpeechEvent) => void)[]> = {};
   const calls: string[] = [];
   const plugin: JellytipSpeechPlugin = {
@@ -166,6 +179,10 @@ function fakePlugin(startAnswer: () => Promise<{ started: boolean; permission?: 
     start: (o) => {
       calls.push(`start:${o.session}:${o.hold ? "hold" : "tap"}`);
       return startAnswer();
+    },
+    requestMic: () => {
+      calls.push("requestMic");
+      return Promise.resolve({ granted });
     },
     stop: (o) => {
       calls.push(`stop:${o.session}`);
@@ -194,8 +211,10 @@ test("native engine: restarts keep the press's session; events of other sessions
   send("partial", { session: 1, text: "something" });
   send("final", { session: 1, text: "something funny" });
   send("end", { session: 1 });
-  eng.start({ hold: true }); // restart while held: same session (the plugin reuses its recognizer)
+  eng.start({ hold: true }); // restart while held: same session (the plugin reuses its recognizer), after a beat
   await tick();
+  assert.deepEqual(calls, ["start:1:hold"]);
+  await tick(RESTART_DELAY_MS + 20);
   send("partial", { session: 9, text: "stale" });
   send("error", { session: 1, error: E.NO_MATCH });
   send("end", { session: 1 });
@@ -230,15 +249,44 @@ test("native engine: a cancel before the start went out sends no start", async (
   assert.deepEqual(calls, ["cancel"]);
 });
 
-test("native engine: the permission prompt ends the press (allowed: hold again; denied: not-allowed)", async () => {
-  for (const [permission, code] of [["granted", "mic-allowed"], ["denied", "not-allowed"]] as const) {
-    const { plugin } = fakePlugin(() => Promise.resolve({ started: false, permission }));
+test("native engine: no permission ends the press at once, then asks; the answer comes as a notice after the press", async () => {
+  for (const [granted, notice] of [[true, "mic-allowed"], [false, "not-allowed"]] as const) {
+    const { plugin, calls } = fakePlugin(() => Promise.resolve({ started: false, permission: "needed" }), granted);
     const eng = nativeEngine(plugin);
     const ev = record(eng);
     eng.start({ hold: true });
     await tick();
-    assert.deepEqual(ev, [`error:${code}`, "end"]);
+    eng.cancel(); // the hook ends the press on the error
+    await tick();
+    assert.deepEqual(ev, ["error:mic-prompt", "end", `error:${notice}`]);
+    assert.deepEqual(calls, ["start:1:hold", "requestMic", "cancel"]);
   }
+});
+
+test("native engine: a release during the restart beat sends no start for the dropped window", async () => {
+  const { plugin, calls, send } = fakePlugin();
+  const eng = nativeEngine(plugin);
+  eng.start({ hold: true });
+  await tick();
+  send("end", { session: 1 });
+  eng.start({ hold: true }); // restart, delayed
+  eng.cancel(); // the press finished before the beat ran out
+  await tick(RESTART_DELAY_MS + 20);
+  assert.deepEqual(calls, ["start:1:hold", "cancel"]);
+});
+
+test("native engine: after a glitch / busy end the restart waits longer (a fresh recognizer)", async () => {
+  const { plugin, calls, send } = fakePlugin();
+  const eng = nativeEngine(plugin);
+  eng.start({ hold: true });
+  await tick();
+  send("error", { session: 1, error: E.RECOGNIZER_BUSY });
+  send("end", { session: 1 });
+  eng.start({ hold: true });
+  await tick(RESTART_DELAY_MS + 20);
+  assert.deepEqual(calls, ["start:1:hold"]);
+  await tick(RECREATE_DELAY_MS);
+  assert.deepEqual(calls, ["start:1:hold", "start:1:hold"]);
 });
 
 test("native engine: a rejected start fails the press; a glitch error is quiet", async () => {

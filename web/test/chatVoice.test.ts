@@ -58,7 +58,8 @@ test("error text: the phone points at Android settings; permission prompt and le
   assert.match(errorText("not-allowed", true), /Android settings/);
   assert.doesNotMatch(errorText("not-allowed", true), /browser/);
   assert.match(errorText("mic-allowed", true), /hold the mic/);
+  assert.match(errorText("mic-prompt", true), /Allow the microphone/);
   assert.match(errorText("interrupted", true), /app was left/);
   assert.match(errorText("client", true), /type it/);
-  assert.ok(!isQuietError("mic-allowed") && !isQuietError("interrupted"));
+  assert.ok(!isQuietError("mic-allowed") && !isQuietError("mic-prompt") && !isQuietError("interrupted"));
 });

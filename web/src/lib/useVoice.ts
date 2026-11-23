@@ -103,7 +103,11 @@ export function useVoice(opts: VoiceOptions): Voice {
       engine.on("final", heard),
       engine.on("error", ({ code }) => {
         const s = v.current;
-        if (!s.active) return;
+        if (!s.active) {
+          // the phone's permission answer arrives after the press it ended (speechEngine.nativeEngine)
+          if (code === "mic-allowed" || code === "not-allowed") setError(errorText(code, phone));
+          return;
+        }
         log("window error", { code, n: s.restarts + 1 });
         if (isQuietError(code)) return; // end follows
         const text = s.live;

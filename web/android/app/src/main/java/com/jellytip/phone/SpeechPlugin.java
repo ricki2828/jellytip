@@ -75,14 +75,18 @@ public class SpeechPlugin extends Plugin {
     }
 
     /**
-     * {session, lang?, hold}: start one listening window. Without the microphone permission it asks for it and resolves
-     * {started: false, permission}: that press is over (the person's finger has long left the mic by the time they answer).
+     * {session, lang?, hold}: start one listening window. Without the microphone permission it resolves {started: false,
+     * permission: "needed"} at once and listens to nothing: the web side ends that press (the system dialog takes the finger off
+     * the mic) and calls requestMic().
      */
     @PluginMethod
     public void start(PluginCall call) {
         if (getPermissionState(MIC) != PermissionState.GRANTED) {
-            Log.i(TAG, "voice start: asking for the microphone permission");
-            requestPermissionForAlias(MIC, call, "micPermission");
+            Log.i(TAG, "voice start: no microphone permission yet");
+            JSObject r = new JSObject();
+            r.put("started", false);
+            r.put("permission", "needed");
+            call.resolve(r);
             return;
         }
         final int s = call.getInt("session", 0);
@@ -96,13 +100,23 @@ public class SpeechPlugin extends Plugin {
         });
     }
 
+    /** {granted}: the system's microphone prompt (Android answers at once, with no dialog, when it was refused for good). */
+    @PluginMethod
+    public void requestMic(PluginCall call) {
+        if (getPermissionState(MIC) == PermissionState.GRANTED) {
+            micPermission(call);
+            return;
+        }
+        Log.i(TAG, "voice: asking for the microphone permission");
+        requestPermissionForAlias(MIC, call, "micPermission");
+    }
+
     @PermissionCallback
     private void micPermission(PluginCall call) {
         boolean granted = getPermissionState(MIC) == PermissionState.GRANTED;
         Log.i(TAG, "voice permission " + (granted ? "granted" : "denied"));
         JSObject r = new JSObject();
-        r.put("started", false);
-        r.put("permission", granted ? "granted" : "denied");
+        r.put("granted", granted);
         call.resolve(r);
     }
 
