@@ -17,6 +17,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.jellytip.askchat.ChatVoiceText
+import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -173,6 +175,57 @@ class VoiceInputManager
         private var recognizer: SpeechRecognizer? = null
         private var timeoutJob: Job? = null
 
+        /*
+         * Jellytip (23-Nov): one search can span several recognizer windows. A window that ends with words (a pause) starts the next one
+         * on the same recognizer and its words are appended; the first window that hears nothing new ends the search with everything
+         * heard. Main thread (recognizer callbacks).
+         */
+        private var committed = ""
+        private var windowPartial = ""
+        private var restarts = 0
+
+        private fun trace(msg: String) = JellytipTrace.log("voice", "search $msg")
+
+        /** The window ended; [heard] = what it added. True = another window was started (the search goes on). */
+        private fun continueAfter(
+            rec: SpeechRecognizer,
+            heard: String,
+        ): Boolean {
+            committed = ChatVoiceText.join(committed, heard)
+            windowPartial = ""
+            if (ChatVoiceText.afterEnd(held = false, tap = true, restarts = restarts, added = heard.isNotBlank()) != ChatVoiceText.Next.Restart) return false
+            restarts++
+            trace("window ${restarts + 1} (heard ${committed.length} chars so far)")
+            handler.post {
+                _partialResult.value = committed
+                if (recognizer !== rec) return@post
+                try {
+                    rec.startListening(recognitionIntent)
+                } catch (e: Exception) {
+                    Timber.w(e, "Voice restart failed")
+                    finishWith(committed)
+                }
+            }
+            return true
+        }
+
+        /** End the search with [text] (blank: no match). */
+        private fun finishWith(text: String) {
+            trace("finish: ${text.length} chars after $restarts restarts")
+            cancelTimeout()
+            destroyRecognizer()
+            handler.post {
+                _state.value =
+                    if (text.isNotBlank()) {
+                        VoiceInputState.Result(text)
+                    } else {
+                        VoiceInputState.Error(messageResId = R.string.voice_error_no_match, isRetryable = true)
+                    }
+                _soundLevel.value = 0f
+                _partialResult.value = ""
+            }
+        }
+
         private fun provideMainDispatcher(): CoroutineDispatcher =
             try {
                 WholphinDispatchers.Main.immediate
@@ -186,6 +239,10 @@ class VoiceInputManager
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, MAX_RESULTS)
+                // Jellytip (23-Nov): a short pause must not end the search (many TV recognizers ignore these; the restart below is the fix)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000L)
             }
         }
 
@@ -232,6 +289,10 @@ class VoiceInputManager
                     }
 
                     cancelTimeout()
+                    committed = ""
+                    windowPartial = ""
+                    restarts = 0
+                    trace("start")
                     handler.post {
                         _partialResult.value = ""
                         _soundLevel.value = 0f
@@ -286,7 +347,7 @@ class VoiceInputManager
                     delay(LISTENING_TIMEOUT_MS)
                     mutex.withLock {
                         if (_state.value is VoiceInputState.Listening && recognizer != null) {
-                            val partial = _partialResult.value
+                            val partial = ChatVoiceText.join(committed, windowPartial)
                             destroyRecognizer()
                             handler.post {
                                 _soundLevel.value = 0f
@@ -378,7 +439,17 @@ class VoiceInputManager
                 override fun onError(error: Int) {
                     if (!isValid()) return
                     Timber.e("Voice recognition error code: $error")
+                    trace("window ${restarts + 1} error $error")
                     cancelTimeout()
+                    // A quiet window (no match / speech timeout): the words it had go on, and if it heard any the search goes on too
+                    if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                        val heard = windowPartial
+                        if (continueAfter(activeRecognizer, heard)) return
+                        if (committed.isNotBlank()) return finishWith(committed)
+                    } else if (ChatVoiceText.join(committed, windowPartial).isNotBlank()) {
+                        // a real failure after words were heard: search what was heard rather than lose it
+                        return finishWith(ChatVoiceText.join(committed, windowPartial))
+                    }
                     destroyRecognizer()
 
                     if (error == SpeechRecognizer.ERROR_TOO_MANY_REQUESTS) {
@@ -407,13 +478,17 @@ class VoiceInputManager
                 override fun onResults(results: Bundle?) {
                     if (!isValid()) return
                     cancelTimeout()
-                    val spokenText =
+                    val window =
                         results
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.firstOrNull()
+                            ?.takeIf { it.isNotBlank() } ?: windowPartial
+                    trace("window ${restarts + 1} result: ${window.length} chars")
+                    if (continueAfter(activeRecognizer, window)) return
+                    val spokenText = committed
                     handler.post {
                         _state.value =
-                            if (!spokenText.isNullOrBlank()) {
+                            if (spokenText.isNotBlank()) {
                                 VoiceInputState.Result(spokenText)
                             } else {
                                 VoiceInputState.Error(
@@ -431,7 +506,11 @@ class VoiceInputManager
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
-                        ?.let { handler.post { _partialResult.value = it } }
+                        ?.let {
+                            windowPartial = it
+                            val shown = ChatVoiceText.join(committed, it)
+                            handler.post { _partialResult.value = shown }
+                        }
                 }
 
                 override fun onEvent(

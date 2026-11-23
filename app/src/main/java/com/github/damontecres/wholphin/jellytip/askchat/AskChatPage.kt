@@ -380,10 +380,17 @@ fun JellytipAskChatPage(
         if (!com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.takeListen(listenToken)) return@LaunchedEffect
         when {
             !viewModel.chatVoice.isAvailable -> JellytipTrace.log("askchat", "hold: no recognizer, not listening")
+            viewModel.chatVoice.hasPermission && com.github.damontecres.wholphin.jellytip.JellytipInputGuard.isHeld() -> {
+                // OK is still down from the sidebar hold: push-to-talk (or it takes over a tap-listen already running); the key-up,
+                // swallowed by the guard, stops and sends
+                JellytipTrace.log("askchat", "hold: listening while OK is held")
+                viewModel.micDown()
+                com.github.damontecres.wholphin.jellytip.JellytipInputGuard.holdUntilRelease { viewModel.micUp() }
+            }
             // already listening: keep going (a second tap would send what was heard so far)
             viewModel.ui.value.voice.listening -> JellytipTrace.log("askchat", "hold: already listening")
             viewModel.chatVoice.hasPermission -> {
-                JellytipTrace.log("askchat", "hold: listening")
+                JellytipTrace.log("askchat", "hold: listening (OK already released)")
                 viewModel.micTap()
             }
             else -> {
@@ -699,6 +706,7 @@ private fun ChatMicButton(
     onFocus: (Boolean) -> Unit,
 ) {
     val desc = "Hold OK to talk"
+    val keys = remember { ChatPttKeys() }
     Surface(
         onClick = { actions.micTap() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -719,7 +727,7 @@ private fun ChatMicButton(
                 .semantics { contentDescription = desc }
                 .onFocusChanged {
                     onFocus(it.isFocused)
-                    if (!it.isFocused) actions.micUp() // focus left while held: never leave the mic open
+                    if (!it.isFocused && keys.up()) actions.micUp() // focus left while held: never leave the mic open
                 }.onPreviewKeyEvent { e ->
                     val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                     if (!ok) {
@@ -727,12 +735,13 @@ private fun ChatMicButton(
                     } else {
                         when (e.type) {
                             KeyEventType.KeyDown -> {
-                                if (e.nativeKeyEvent.repeatCount == 0) actions.micDown() // auto-repeats while held are swallowed
+                                // push-to-talk: the first down starts; repeats / extra downs while held are swallowed
+                                if (keys.down(e.nativeKeyEvent.eventTime, e.nativeKeyEvent.repeatCount)) actions.micDown()
                                 true
                             }
 
                             KeyEventType.KeyUp -> {
-                                actions.micUp()
+                                if (keys.up()) actions.micUp() // only the key-up of a press that started here
                                 true
                             }
 

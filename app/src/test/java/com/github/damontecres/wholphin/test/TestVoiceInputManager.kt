@@ -230,9 +230,64 @@ class TestVoiceInputManager {
 
         capturedListener.onResults(createResultsBundle("hello world"))
         idleMainLooper()
+        // Jellytip: a window with words is a pause, not the end; the next window hearing nothing ends the search
+        capturedListener.onError(SpeechRecognizer.ERROR_NO_MATCH)
+        idleMainLooper()
 
         assertTrue(manager.state.value is VoiceInputState.Result)
         assertEquals("hello world", (manager.state.value as VoiceInputState.Result).text)
+    }
+
+    @Test
+    fun `a pause does not end the search - windows are appended until one hears nothing`() {
+        manager.startListening()
+        idleMainLooper()
+
+        capturedListener.onResults(createResultsBundle("something funny"))
+        idleMainLooper()
+        assertTrue("still listening after the pause", manager.state.value !is VoiceInputState.Result)
+        assertEquals("something funny", manager.partialResult.value)
+        verify(exactly = 2) { speechRecognizer.startListening(any<Intent>()) }
+        verify(exactly = 1) { SpeechRecognizer.createSpeechRecognizer(activity) } // same recognizer, no recreate gap
+
+        capturedListener.onPartialResults(createResultsBundle("for the"))
+        idleMainLooper()
+        assertEquals("something funny for the", manager.partialResult.value)
+        capturedListener.onResults(createResultsBundle("for the kids"))
+        idleMainLooper()
+        capturedListener.onError(SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+        idleMainLooper()
+
+        assertEquals("something funny for the kids", (manager.state.value as VoiceInputState.Result).text)
+    }
+
+    @Test
+    fun `a window cut off with only partial words keeps them and goes on`() {
+        manager.startListening()
+        idleMainLooper()
+        capturedListener.onPartialResults(createResultsBundle("films from the"))
+        idleMainLooper()
+        capturedListener.onError(SpeechRecognizer.ERROR_NO_MATCH)
+        idleMainLooper()
+        verify(exactly = 2) { speechRecognizer.startListening(any<Intent>()) }
+        capturedListener.onResults(createResultsBundle("90s"))
+        idleMainLooper()
+        capturedListener.onResults(createResultsBundle(""))
+        idleMainLooper()
+
+        assertEquals("films from the 90s", (manager.state.value as VoiceInputState.Result).text)
+    }
+
+    @Test
+    fun `a real error after words searches what was heard`() {
+        manager.startListening()
+        idleMainLooper()
+        capturedListener.onResults(createResultsBundle("heat"))
+        idleMainLooper()
+        capturedListener.onError(SpeechRecognizer.ERROR_NETWORK)
+        idleMainLooper()
+
+        assertEquals("heat", (manager.state.value as VoiceInputState.Result).text)
     }
 
     @Test
@@ -243,6 +298,8 @@ class TestVoiceInputManager {
         idleMainLooper()
 
         capturedListener.onResults(createResultsBundle("test"))
+        idleMainLooper()
+        capturedListener.onError(SpeechRecognizer.ERROR_NO_MATCH)
         idleMainLooper()
 
         assertEquals(0f, manager.soundLevel.value)

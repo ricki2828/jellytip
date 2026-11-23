@@ -52,8 +52,9 @@ object JellytipSearchButton {
     }
 
     /**
-     * Hold: Chat, listening. Already on Chat: just listen. Otherwise open it once the held OK is released (JellytipInputGuard),
-     * so the rest of the press never lands on the chat input and opens the keyboard.
+     * Hold: Chat, listening. Already on Chat: just listen. Otherwise open it now, while OK is still held, so the chat page can listen
+     * push-to-talk until the key-up; the rest of the press (repeats, key-up) is swallowed (JellytipInputGuard), so it never lands on
+     * the chat input and opens the keyboard. OK not held (a hold seen only at key-up, the Search key): open now, the page taps.
      */
     fun hold(
         nav: NavigationManager,
@@ -62,10 +63,9 @@ object JellytipSearchButton {
     ) {
         JellytipTrace.log("nav", "search hold -> chat via=$source")
         _listen.value = SystemClock.uptimeMillis().coerceAtLeast(1L)
+        JellytipInputGuard.swallowRestOfPress()
         if (nav.backStack.lastOrNull().isChat()) return
-        JellytipInputGuard.afterRelease {
-            if (fromDrawer) nav.navigateToFromDrawer(Destination.JellytipAskChat) else nav.navigateTo(Destination.JellytipAskChat, "search hold")
-        }
+        if (fromDrawer) nav.navigateToFromDrawer(Destination.JellytipAskChat) else nav.navigateTo(Destination.JellytipAskChat, "search hold")
     }
 
     /**

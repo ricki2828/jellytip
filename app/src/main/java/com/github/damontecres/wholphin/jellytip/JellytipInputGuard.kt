@@ -36,13 +36,50 @@ object JellytipInputGuard {
         if (!isCenter(event.keyCode)) return
         lastCenterEvent = SystemClock.uptimeMillis()
         when (event.action) {
-            KeyEvent.ACTION_DOWN -> held = true
+            KeyEvent.ACTION_DOWN -> {
+                // A fresh press while a hold-until-release is waiting: its key-up was missed, end that hold now
+                if (event.repeatCount == 0 && onRelease != null) runOnRelease()
+                held = true
+            }
+
             KeyEvent.ACTION_UP -> {
                 held = false
                 // Let this key-up finish dispatching to the card first, then open the destination
                 if (pending != null) handler.post { runPending() }
+                if (onRelease != null) handler.post { runOnRelease() }
             }
         }
+    }
+
+    private var onRelease: (() -> Unit)? = null
+
+    private fun runOnRelease() {
+        val action = onRelease ?: return
+        onRelease = null
+        action()
+    }
+
+    /** OK is down right now (a recent key event of a press whose key-up has not come). */
+    fun isHeld(): Boolean = held && SystemClock.uptimeMillis() - lastCenterEvent < HELD_FRESH_MS
+
+    /**
+     * The rest of the OK press now in progress (its repeats and key-up) is consumed here, so it never reaches the page that opened
+     * under it. No-op when OK is not held.
+     */
+    fun swallowRestOfPress() {
+        if (isHeld()) swallowUntilUp = true
+    }
+
+    /**
+     * Push-to-talk from a hold that started somewhere else (the sidebar's Search item): [action] runs once, when the OK press now in
+     * progress is released (or a new press shows its key-up was missed); the rest of the press is swallowed. False (and nothing is
+     * kept) when OK is not held.
+     */
+    fun holdUntilRelease(action: () -> Unit): Boolean {
+        if (!isHeld()) return false
+        swallowUntilUp = true
+        onRelease = action
+        return true
     }
 
     /**
