@@ -39,7 +39,7 @@ jobs:
           restore-keys: robolectric-${{ runner.os }}-
       - name: "Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)"
         run: bash .github/scripts/jellytip-fixture-scan.sh
-      - name: Unit tests (full suite: Jellytip + upstream, 23-Nov)
+      - name: "Unit tests (full suite, Jellytip + upstream)"
         run: ./gradlew testDefaultDebugUnitTest --no-daemon
       # t5n (21-Nov): design screenshots from jellytip.shots.* (Roborazzi, synthetic data): for eyes, not compared
       - name: Upload Jellytip screenshots
