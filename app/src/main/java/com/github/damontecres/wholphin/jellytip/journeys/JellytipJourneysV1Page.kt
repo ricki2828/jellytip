@@ -143,14 +143,16 @@ class JellytipJourneysV1ViewModel
 
         /** Open / back on the page: a fresh answer, kept in place (no re-rank). Failures retry with backoff while the page is up. */
         fun load(again: Boolean = false) {
-            if (loadJob?.isActive == true) return
             val who = api.currentUserKey()
             if (who != user) {
-                // Another profile: nothing of the last one stays (kids policy)
+                // Another profile: nothing of the last one stays (kids policy), and its load is dropped
+                loadJob?.cancel()
                 user = who
                 lastFocus = null
+                attempt = 0
                 _state.value = JvPageState()
             }
+            if (loadJob?.isActive == true) return
             loadJob =
                 viewModelScope.launch {
                     while (true) {
@@ -193,25 +195,44 @@ class JellytipJourneysV1ViewModel
             load()
         }
 
-        /** The hero: the active journey, else the first of yours, else the first to start. */
+        /**
+         * The hero: the active journey, else the first of yours, else the first to start. A 404 (hidden / gone since the list) moves
+         * on to the next one; a failure retries with backoff (this runs in the page's load job: it stops while the page is hidden).
+         */
         private suspend fun loadHero(h: JvHome) {
-            val id = heroId(h) ?: return _state.update { it.copy(hero = null, heroFailed = false) }
-            when (val r = service.journey(id)) {
-                is JvLoad.Ok -> _state.update { it.copy(hero = r.value, heroFailed = false) }
-                else -> _state.update { if (it.hero?.summary?.id == id) it else it.copy(hero = null, heroFailed = true) }
+            val candidates = heroCandidates(h)
+            if (candidates.isEmpty()) return _state.update { it.copy(hero = null, heroFailed = false, note = null) }
+            var tries = 0
+            for (id in candidates.take(HERO_TRIES)) {
+                while (true) {
+                    when (val r = service.journey(id)) {
+                        is JvLoad.Ok ->
+                            return _state.update {
+                                it.copy(hero = r.value, heroFailed = false, note = if (it.hero?.summary?.id == id) it.note else null)
+                            }
+
+                        JvLoad.NotFound, JvLoad.NoRoute -> break
+
+                        is JvLoad.Failed -> {
+                            // A hero already up stays; nothing yet: say so (Retry), and keep trying
+                            _state.update { if (it.hero?.summary?.id == id) it else it.copy(hero = null, heroFailed = true) }
+                            delay(JourneysV1.backoffMs(tries++))
+                        }
+                    }
+                }
             }
+            _state.update { it.copy(hero = null, heroFailed = false, note = null) }
         }
 
         override fun play(
             j: JvJourney,
             index: Int,
         ) {
-            lastFocus = "hero:play"
             jvPlay(viewModelScope, service, api, navigationManager, j, index)
         }
 
+        /** A card or the hero's See the path (focus has already said which: [focused]). */
         override fun open(id: String) {
-            lastFocus = id
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(Destination.JellytipJourney(id, v1 = true), "journeys v1 card OK")
         }
@@ -230,7 +251,11 @@ class JellytipJourneysV1ViewModel
         }
 
         companion object {
-            fun heroId(h: JvHome): String? = h.active ?: h.yours.firstOrNull() ?: h.start.firstOrNull() ?: h.finish.firstOrNull()
+            const val HERO_TRIES = 3
+
+            fun heroCandidates(h: JvHome): List<String> = (listOfNotNull(h.active) + h.yours + h.start + h.finish).distinct()
+
+            fun heroId(h: JvHome): String? = heroCandidates(h).firstOrNull()
         }
     }
 
@@ -248,8 +273,11 @@ internal fun jvPlay(
 ) {
     val step = j.steps.getOrNull(index) ?: return
     if (!step.source.playable) return
+    // One play at a time: a second OK while the first is still resolving does nothing (no double navigation / events)
+    if (!jvPlayBusy.compareAndSet(false, true)) return
     JellytipTrailerControl.stop()
     scope.launch {
+      try {
         val dest =
             if (step.source == JvSource.IPTV) {
                 val v = step.iptv ?: return@launch
@@ -269,8 +297,14 @@ internal fun jvPlay(
         if (j.summary.status != "active") service.action(j.summary.id, "start")
         JourneysV1.skipFor(j.steps, index)?.let { service.event(j.summary.id, "skip", it.tmdbId) }
         service.event(j.summary.id, "play", step.tmdbId)
+      } finally {
+        jvPlayBusy.set(false)
+      }
     }
 }
+
+/** A play (or Home's fetch-then-play) is under way. */
+internal val jvPlayBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
 @Composable
 fun JellytipJourneysV1Page(
@@ -304,7 +338,7 @@ internal fun JourneysV1Content(
     val home = (state.home as? JvLoad.Ok)?.value
     val hero = state.hero
     val heroNow = hero?.let { JourneysV1.nowIndex(it.steps) }
-    val heroStep = heroNow?.let { hero.steps[it] }
+    val heroStep = heroNow?.let { hero?.steps?.getOrNull(it) }
     Box(modifier.fillMaxSize().background(JellytipPalette.Night)) {
         // Backdrop of tonight's film, full width behind the hero
         val backdrop = heroStep?.backdrop ?: heroStep?.iptv?.backdrop ?: hero?.summary?.backdrop
@@ -343,18 +377,23 @@ internal fun JourneysV1Content(
 
             else -> {
                 val listState = rememberLazyListState()
+                // Focus once per visit: on the restored card / button, else Play. The hero lands after the rows, so a miss is tried
+                // again then, but never once he has moved (the page holds focus) or after a refetch
+                var focusDone by remember { mutableStateOf(false) }
                 LaunchedEffect(home.journeys.keys, hero?.summary?.id) {
+                    if (focusDone) return@LaunchedEffect
                     withFrameNanos { }
-                    if (restoreId == null || !restore.tryRequestFocus()) first.tryRequestFocus()
+                    if (focusDone) return@LaunchedEffect
+                    if ((restoreId != null && restore.tryRequestFocus()) || first.tryRequestFocus()) focusDone = true
                 }
                 LazyColumn(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(JellytipLayout.RowGap),
                     contentPadding = PaddingValues(top = JellytipLayout.PageTop, bottom = 48.dp),
-                    modifier = Modifier.fillMaxSize().focusRestorer(first),
+                    modifier = Modifier.fillMaxSize().focusRestorer(first).onFocusChanged { if (it.hasFocus) focusDone = true }.testTag("jv-list"),
                 ) {
                     item(key = "hero") {
-                        JvHero(state, hero, heroNow, isAdmin, actions, first, if (restoreId == "hero:play") restore else null)
+                        JvHero(state, hero, heroNow, isAdmin, actions, first, restore.takeIf { restoreId == "hero:play" }, restore.takeIf { restoreId == "hero:path" })
                     }
                     listOf("Your journeys" to home.yours, "Start something new" to home.start, "Finish what you started" to home.finish).forEach { (label, ids) ->
                         val row = home.row(ids)
@@ -393,6 +432,7 @@ internal fun JvHero(
     actions: JvActions,
     first: FocusRequester,
     restore: FocusRequester?,
+    restorePath: FocusRequester? = null,
 ) {
     val step = now?.let { hero?.steps?.getOrNull(it) }
     val getAt = hero?.let { JourneysV1.getIndex(it.steps) }
@@ -442,11 +482,12 @@ internal fun JvHero(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp).focusGroup()) {
             val playM = Modifier.focusRequester(first).then(if (restore != null) Modifier.focusRequester(restore) else Modifier)
+            val pathM = (if (restorePath != null) Modifier.focusRequester(restorePath) else Modifier).onFocusChanged { if (it.isFocused) actions.focused("hero:path") }
             if (step != null) {
-                JvButton("▶  Play ${step.title}", playM.testTag("jv-play"), primary = true) { actions.play(hero, now ?: return@JvButton) }
-                JvButton("See the path", Modifier.testTag("jv-path")) { actions.open(s.id) }
+                JvButton("▶  Play ${step.title}", playM.onFocusChanged { if (it.isFocused) actions.focused("hero:play") }.testTag("jv-play"), primary = true) { actions.play(hero, now ?: return@JvButton) }
+                JvButton("See the path", pathM.testTag("jv-path")) { actions.open(s.id) }
             } else {
-                JvButton("See the path", playM.testTag("jv-path")) { actions.open(s.id) }
+                JvButton("See the path", playM.then(pathM).testTag("jv-path")) { actions.open(s.id) }
             }
             if (isAdmin && getAt != null) {
                 JvButton("Get ${hero.steps[getAt].title}", Modifier.testTag("jv-get")) { actions.getIt(hero) }

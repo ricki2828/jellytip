@@ -32,12 +32,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -262,9 +264,10 @@ class JourneysShotsTest {
     @Test
     fun rows() {
         shot("jv-3-rows", steps = {
-            // The first "Start something new" card (after the 3 of "Your journeys")
-            compose.onAllNodes(hasTestTag("jv-card")).fetchSemanticsNodes()
-            compose.onAllNodes(hasTestTag("jv-card"))[3].requestFocus()
+            // Scroll that row in first (it may sit below the fold), then focus its first card: Neo-noir in 6
+            compose.onNode(hasTestTag("jv-list")).performScrollToKey("row:Start something new")
+            advance(400)
+            compose.onAllNodes(hasTestTag("jv-card") and (hasText("Neo-noir in 6") or hasAnyDescendant(hasText("Neo-noir in 6")))).onFirst().requestFocus()
             advance(600)
         }, measure = {
             assertEquals(1, count(hasText("Your journeys")))

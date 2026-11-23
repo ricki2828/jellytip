@@ -125,13 +125,21 @@ private fun playTonight(
         navigationManager.navigateTo(Destination.JellytipJourney(s.id, v1 = true), "home hero journey (no service)")
         return
     }
+    // One at a time: a second OK while tonight's step is being fetched does nothing
+    if (jvPlayBusy.get() || !tonightBusy.compareAndSet(false, true)) return
     scope.launch {
-        val j = (service.journey(s.id) as? JvLoad.Ok)?.value
-        val now = j?.let { JourneysV1.nowIndex(it.steps) }
-        if (j == null || now == null) {
-            navigationManager.navigateTo(Destination.JellytipJourney(s.id, v1 = true), "home hero journey (no step)")
-        } else {
-            jvPlay(scope, service, api, navigationManager, j, now)
+        try {
+            val j = (service.journey(s.id) as? JvLoad.Ok)?.value
+            val now = j?.let { JourneysV1.nowIndex(it.steps) }
+            if (j == null || now == null) {
+                navigationManager.navigateTo(Destination.JellytipJourney(s.id, v1 = true), "home hero journey (no step)")
+            } else {
+                jvPlay(scope, service, api, navigationManager, j, now)
+            }
+        } finally {
+            tonightBusy.set(false)
         }
     }
 }
+
+private val tonightBusy = java.util.concurrent.atomic.AtomicBoolean(false)
