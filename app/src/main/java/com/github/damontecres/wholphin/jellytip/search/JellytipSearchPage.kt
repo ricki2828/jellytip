@@ -246,14 +246,31 @@ class JellytipSearchViewModel
             setQuery("")
         }
 
+        /** BOTH: focus reached the chat chip, the chat turn goes now. */
+        fun chatFocused(chat: ChatBridge) {
+            val (s, e) = FindFlow.chatFocused(_find.value)
+            _find.value = s
+            applyFind(e, chat)
+        }
+
         /** Hold Search: the chat view with its mic (the words go through find when they land, see JellytipAskChatViewModel.voiceRoute). */
-        fun enterChatForVoice() {
-            _find.update { it.copy(view = FindMode.CHAT) }
+        fun enterChatForVoice(chat: ChatBridge) {
+            val (s, e) = FindFlow.holdToTalk(_find.value)
+            _find.value = s
+            applyFind(e, chat)
         }
 
         /** The chat is off on this server: the results stay. */
         fun leaveChat() {
-            _find.update { it.copy(view = FindMode.SEARCH) }
+            _find.value = FindFlow.chatOff(_find.value).first
+        }
+
+        /** "Just search for this" / Back in the chat: the plain results for the words that were decided (or typed). */
+        fun searchChip(chat: ChatBridge) {
+            val q = _find.value.decidedQ ?: _state.value.query
+            val (s, e) = FindFlow.searchChip(_find.value, q)
+            _find.value = s
+            applyFind(e, chat)
         }
 
         fun findPlayed() {
@@ -270,10 +287,20 @@ class JellytipSearchViewModel
             if (e.resetChat) chat.reset()
             e.chat?.let { chat.send(it) }
             e.search?.let { if (_state.value.query.trim() != it || _state.value.answer == null) setQuery(it, immediate = true) }
+            e.chatAfterMs?.let { wait ->
+                val seq = _find.value.seq
+                viewModelScope.launch {
+                    delay(wait)
+                    val (s3, e3) = FindFlow.bothTimer(_find.value, seq)
+                    _find.value = s3
+                    applyFind(e3, chat)
+                }
+            }
             val q = e.find ?: return
             val seq = _find.value.seq
-            // The results for these words: usually already there from typing; else the normal search path (it handles the late IPTV)
-            if (_state.value.query.trim() != q || _state.value.answer == null) setQuery(q, immediate = true)
+            // The results for these words: usually already there (or on their way) from typing or the voice result; else the normal
+            // search path (it handles the late IPTV). Same words = never a second search.
+            if (_state.value.query.trim() != q) setQuery(q, immediate = true)
             viewModelScope.launch {
                 val d = service.find(q)
                 JellytipTrace.log("search", "find '$q' -> ${d?.mode} p=${d?.p} why=${d?.why}")
@@ -284,8 +311,12 @@ class JellytipSearchViewModel
         }
 
         /** "Client calls on result open." */
-        fun opened(reason: String) {
-            findPlayed()
+        fun opened(
+            reason: String,
+            /** false: the page is leaving with results touched, not a result opened (no "played" for the find decision). */
+            played: Boolean = true,
+        ) {
+            if (played) findPlayed()
             val q = _state.value.query.trim()
             if (q.length < 2) return
             viewModelScope.launch { service.recordRecent(q) }
@@ -316,12 +347,19 @@ fun JellytipSearchPage(
     initialQuery: String,
     modifier: Modifier = Modifier,
     viewModel: JellytipSearchViewModel = hiltViewModel(),
+    /** An old Ask / Chat entry: on a server without the companion's search, it still shows the chat. */
+    chatEntry: Boolean = false,
     fallback: @Composable () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(Unit) { viewModel.start(initialQuery) }
+    // A hold that just asked to listen (the token is still unclaimed) on a server without the companion's search: the chat page
+    // takes it, as before the one box, so Chat stays reachable
+    val listenPending = JellytipSearchButton.listen.collectAsState().value != 0L
+    var oldServerChat by remember { mutableStateOf(chatEntry) }
+    if (listenPending && !oldServerChat) oldServerChat = true // latched: the chat page claims the token (it goes back to 0)
     when (state.available) {
-        false -> fallback()
+        false -> if (oldServerChat) com.github.damontecres.wholphin.jellytip.askchat.JellytipAskChatPage(modifier = modifier) else fallback()
         null -> Box(modifier.fillMaxSize().background(JellytipPalette.Night))
         true -> FindHost(state, viewModel, modifier)
     }
@@ -374,7 +412,7 @@ private fun FindHost(
     val listenToken by JellytipSearchButton.listen.collectAsState()
     LaunchedEffect(listenToken) {
         if (!JellytipSearchButton.takeListen(listenToken)) return@LaunchedEffect
-        viewModel.enterChatForVoice()
+        viewModel.enterChatForVoice(bridge)
         when {
             !chatVm.chatVoice.isAvailable -> JellytipTrace.log("search", "hold: no recognizer, not listening")
             chatVm.chatVoice.hasPermission && com.github.damontecres.wholphin.jellytip.JellytipInputGuard.isHeld() -> {
@@ -404,6 +442,7 @@ private fun FindHost(
         JellytipSearchButton.pageVoice = voice
         onDispose { if (JellytipSearchButton.pageVoice === voice) JellytipSearchButton.pageVoice = null }
     }
+    androidx.activity.compose.BackHandler(enabled = find.view == FindMode.CHAT) { viewModel.searchChip(bridge) }
     if (find.view == FindMode.CHAT) {
         val embed =
             remember(viewModel, bridge) {
@@ -412,7 +451,24 @@ private fun FindHost(
                     off = { viewModel.leaveChat() },
                 )
             }
-        com.github.damontecres.wholphin.jellytip.askchat.JellytipAskChatPage(modifier = modifier, viewModel = chatVm, embedded = embed)
+        Column(modifier.fillMaxSize().background(JellytipPalette.Night)) {
+            // Over the chat: the way back to plain results for the same words, and "working out" while /v1/find decides a spoken question
+            val q = find.decidedQ
+            if (find.deciding || q != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 24.dp, top = 8.dp),
+                ) {
+                    if (find.deciding) {
+                        Text(FindText.DECIDING, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 13.sp)
+                    } else if (q != null) {
+                        Chip(FindText.justSearch(q), modifier = Modifier.testTag("find-just-search")) { viewModel.searchChip(bridge) }
+                    }
+                }
+            }
+            com.github.damontecres.wholphin.jellytip.askchat.JellytipAskChatPage(modifier = Modifier.weight(1f), viewModel = chatVm, embedded = embed)
+        }
     } else {
         SearchContent(
             state,
@@ -422,7 +478,7 @@ private fun FindHost(
             onChat = { viewModel.askChip(bridge) },
             chatLine =
                 if (find.view == FindMode.BOTH || find.deciding) {
-                    { BothChatChip(find, chatUi.chat) { viewModel.askChip(bridge) } }
+                    { BothChatChip(find, chatUi.chat, onFocus = { viewModel.chatFocused(bridge) }) { viewModel.askChip(bridge) } }
                 } else {
                     null
                 },
@@ -435,9 +491,21 @@ private fun FindHost(
 private fun BothChatChip(
     find: FindUi,
     chat: com.github.damontecres.wholphin.jellytip.askchat.ChatState,
+    onFocus: () -> Unit,
     onClick: () -> Unit,
 ) {
-    Chip(FindText.bothChip(find.deciding, chat.pending != null, chat.reply.takeIf { it.isNotBlank() }, chat.cards.size), onClick = onClick)
+    // While /v1/find decides: plain text, never a focus target that could vanish under the person
+    if (find.deciding) {
+        Text(FindText.DECIDING, color = JellytipPalette.Vanilla.copy(alpha = 0.6f), fontFamily = JellytipFontFamily, fontSize = 13.sp, modifier = Modifier.padding(4.dp))
+        return
+    }
+    // Before the chat turn went out (BOTH waits ~3 s for a pick) the chip just offers it
+    val waiting = !find.chatSent
+    Chip(
+        if (waiting) FindText.bothChip(false, false, null, 0) else FindText.bothChip(find.deciding, chat.pending != null, chat.reply.takeIf { it.isNotBlank() }, chat.cards.size),
+        modifier = Modifier.onFocusChanged { if (it.isFocused) onFocus() },
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -459,7 +527,7 @@ private fun SearchContent(
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { boxFocus.tryRequestFocus() }
     DisposableEffect(Unit) {
-        onDispose { if (resultsTouched) viewModel.opened("left page from results") }
+        onDispose { if (resultsTouched) viewModel.opened("left page from results", played = false) }
     }
     // (The remote's Search key short press: FindHost registers the page voice for whichever view is on screen.)
     Column(

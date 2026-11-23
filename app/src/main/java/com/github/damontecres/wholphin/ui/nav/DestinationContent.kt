@@ -480,7 +480,7 @@ fun DestinationContent(
         Destination.JellytipAskChat,
         -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.search.JellytipSearchPage(initialQuery = "", modifier = modifier) {
+            com.github.damontecres.wholphin.jellytip.search.JellytipSearchPage(initialQuery = "", modifier = modifier, chatEntry = true) {
                 SearchPage(initialQuery = "", userPreferences = preferences, modifier = modifier)
             }
         }

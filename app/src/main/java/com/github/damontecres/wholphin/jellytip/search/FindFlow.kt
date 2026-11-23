@@ -68,6 +68,10 @@ data class FindUi(
     val feedbackSent: Boolean = false,
     /** The submit counter: an answer for an older submit is dropped. */
     val seq: Int = 0,
+    /** The chat turn for this decision went out (BOTH waits, see [FindFlow.BOTH_CHAT_DELAY_MS]). */
+    val chatSent: Boolean = false,
+    /** A result was opened for this decision: BOTH's deferred chat turn is then never spent. */
+    val picked: Boolean = false,
 )
 
 /** What a step asks the page to do besides showing [FindUi]. */
@@ -82,10 +86,18 @@ data class FindEffects(
     val search: String? = null,
     /** Feedback for a decision id. */
     val feedback: Pair<String, FindSwitch>? = null,
+    /** BOTH: call [FindFlow.bothTimer] after this many ms (the chat turn waits for a pick first). */
+    val chatAfterMs: Long? = null,
 )
 
 object FindFlow {
     const val RETYPE_WINDOW_MS = 60_000L
+
+    /**
+     * BOTH (t3x 23-Nov): the chat turn costs an LLM call, so it is only spent when the person doesn't pick a search hit within this
+     * long, or moves to the chat chip first.
+     */
+    const val BOTH_CHAT_DELAY_MS = 3_000L
 
     /**
      * A submit from the box. In the chat (view CHAT, or BOTH once the person moved into its answer) it is a follow-up and goes
@@ -118,8 +130,29 @@ object FindFlow {
     ): Pair<FindUi, FindEffects> {
         if (seq != s.seq) return s to FindEffects() // a newer submit took over
         if (d == null) return s.copy(deciding = false, view = FindMode.SEARCH, decisionId = null) to FindEffects(search = q.trim())
-        val next = FindUi(view = d.mode, deciding = false, decisionId = d.id, decidedQ = q.trim(), decidedAtMs = nowMs, feedbackSent = false, seq = s.seq)
-        return next to FindEffects(chat = if (d.mode != FindMode.SEARCH) (d.askText ?: q.trim()) else null)
+        val text = d.askText ?: q.trim()
+        val next = FindUi(view = d.mode, deciding = false, decisionId = d.id, decidedQ = q.trim(), decidedAtMs = nowMs, feedbackSent = false, seq = s.seq,
+                          chatSent = d.mode == FindMode.CHAT)
+        return when (d.mode) {
+            FindMode.CHAT -> next to FindEffects(chat = text)
+            FindMode.BOTH -> next to FindEffects(chatAfterMs = BOTH_CHAT_DELAY_MS)
+            FindMode.SEARCH -> next to FindEffects()
+        }
+    }
+
+    /** BOTH's wait is over (for submit [seq]): send the chat turn unless a pick came first, a newer submit took over, or it went already. */
+    fun bothTimer(
+        s: FindUi,
+        seq: Int,
+    ): Pair<FindUi, FindEffects> {
+        if (seq != s.seq || s.view != FindMode.BOTH || s.chatSent || s.picked) return s to FindEffects()
+        return s.copy(chatSent = true) to FindEffects(chat = s.decidedQ)
+    }
+
+    /** BOTH: focus reached the chat chip (the person is heading for the chat answer): send it now. */
+    fun chatFocused(s: FindUi): Pair<FindUi, FindEffects> {
+        if (s.view != FindMode.BOTH || s.chatSent) return s to FindEffects()
+        return s.copy(chatSent = true) to FindEffects(chat = s.decidedQ)
     }
 
     /** "Ask Chat about this" on a search answer (no chat sent yet) or on BOTH (the answer is already there): into the chat. */
@@ -127,9 +160,25 @@ object FindFlow {
         s: FindUi,
         q: String,
     ): Pair<FindUi, FindEffects> {
+        if (s.deciding) return s to FindEffects() // a decision is on its way: the chip is not an answer to anything yet
         val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.ASK_CHIP }
-        val sendChat = s.view == FindMode.SEARCH
-        return s.copy(view = FindMode.CHAT, feedbackSent = s.feedbackSent || fb != null) to FindEffects(chat = if (sendChat) q.trim().ifEmpty { null } else null, feedback = fb)
+        val sendChat = s.view == FindMode.SEARCH || !s.chatSent
+        val text = (if (s.view == FindMode.BOTH) s.decidedQ else null) ?: q.trim()
+        return s.copy(view = FindMode.CHAT, feedbackSent = s.feedbackSent || fb != null, chatSent = true, seq = s.seq + 1) to
+            FindEffects(chat = if (sendChat) text.ifEmpty { null } else null, feedback = fb)
+    }
+
+    /**
+     * Hold Search: the chat view with its mic. From the results (SEARCH / BOTH) it is a new question: the old chat is cleared and an
+     * answer still on its way is dropped, so the spoken words go through /v1/find. Already in the chat: the mic is a follow-up.
+     */
+    fun holdToTalk(s: FindUi): Pair<FindUi, FindEffects> {
+        if (s.view == FindMode.CHAT && !s.deciding) return s to FindEffects()
+        return FindUi(view = FindMode.CHAT, seq = s.seq + 1) to FindEffects(resetChat = true)
+    }
+
+    /** The chat is off on this server: back to the results, dropping anything on its way. */
+    fun chatOff(s: FindUi): Pair<FindUi, FindEffects> = s.copy(view = FindMode.SEARCH, deciding = false, seq = s.seq + 1) to FindEffects()
     }
 
     /** "Just search for this" under a chat answer: back to the plain results for the same words. */
@@ -138,13 +187,14 @@ object FindFlow {
         q: String,
     ): Pair<FindUi, FindEffects> {
         val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.SEARCH_CHIP }
-        return s.copy(view = FindMode.SEARCH, feedbackSent = s.feedbackSent || fb != null) to FindEffects(search = q.trim(), resetChat = true, feedback = fb)
+        return s.copy(view = FindMode.SEARCH, deciding = false, seq = s.seq + 1, feedbackSent = s.feedbackSent || fb != null) to
+            FindEffects(search = q.trim(), resetChat = true, feedback = fb)
     }
 
     /** A result or chat pick was opened / played: a confirmation of the decision (once). */
     fun played(s: FindUi): Pair<FindUi, FindEffects> {
-        val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.PLAYED } ?: return s to FindEffects()
-        return s.copy(feedbackSent = true) to FindEffects(feedback = fb)
+        val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.PLAYED } ?: return s.copy(picked = true) to FindEffects()
+        return s.copy(feedbackSent = true, picked = true) to FindEffects(feedback = fb)
     }
 
     /** Start over: an empty box, plain search, no chat. */
@@ -153,6 +203,11 @@ object FindFlow {
 
 /** The one box's words (unit tested). */
 object FindText {
+    const val DECIDING = "Working out what you mean…"
+
+    /** Over the chat: back to plain results for the decided words. */
+    fun justSearch(q: String): String = "Just search for “${q.take(40)}”  ›"
+
     /** BOTH's chip under the box: what the chat is doing, then what it said. */
     fun bothChip(
         deciding: Boolean,
@@ -161,7 +216,7 @@ object FindText {
         picks: Int,
     ): String =
         when {
-            deciding -> "Working out what you mean…"
+            deciding -> DECIDING
             chatPending -> "Asking Chat about this…"
             reply != null && picks > 0 -> "Chat: $reply · $picks ${if (picks == 1) "pick" else "picks"}  ›"
             else -> "Ask Chat about this  ›"

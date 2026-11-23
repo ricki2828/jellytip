@@ -52,7 +52,8 @@ class FindFlowTest {
         assertFalse(chat.deciding)
         val (both, e2) = FindFlow.decided(s0, s0.seq, "kids", d(FindMode.BOTH, ask = "kids"), 10)
         assertEquals(FindMode.BOTH, both.view)
-        assertEquals("kids", e2.chat)
+        assertNull(e2.chat) // BOTH waits before spending a chat turn
+        assertEquals(FindFlow.BOTH_CHAT_DELAY_MS, e2.chatAfterMs)
         val (search, e3) = FindFlow.decided(s0, s0.seq, "the matrix", d(FindMode.SEARCH), 10)
         assertEquals(FindMode.SEARCH, search.view)
         assertNull(e3.chat)
@@ -100,10 +101,12 @@ class FindFlowTest {
 
     @Test
     fun askChipMovesIntoTheChat() {
-        val both = FindUi(view = FindMode.BOTH, decisionId = "f_2", decidedQ = "kids")
+        val both = FindUi(view = FindMode.BOTH, decisionId = "f_2", decidedQ = "kids", chatSent = true)
         val (s, e) = FindFlow.askChip(both, "kids")
         assertEquals(FindMode.CHAT, s.view)
         assertNull(e.chat) // BOTH already sent it
+        val (_, e1) = FindFlow.askChip(both.copy(chatSent = false), "kids films typed since")
+        assertEquals("kids", e1.chat) // not sent yet: the decided words go now
         assertEquals("f_2" to FindSwitch.ASK_CHIP, e.feedback)
         val search = FindUi(view = FindMode.SEARCH, decisionId = "f_3", decidedQ = "heat")
         val (s2, e2) = FindFlow.askChip(search, "heat")
@@ -146,5 +149,63 @@ class FindFlowTest {
         assertEquals("Chat: Funny · 1990s · 24 picks  ›", FindText.bothChip(false, false, "Funny · 1990s", 24))
         assertEquals("Chat: Funny · 1 pick  ›", FindText.bothChip(false, false, "Funny", 1))
         assertEquals("Ask Chat about this  ›", FindText.bothChip(false, false, "Funny", 0))
+    }
+
+    @Test
+    fun bothSpendsTheChatTurnOnlyWithoutAPick() {
+        val (s0, _) = FindFlow.submit(FindUi(), "kids", 0)
+        val (both, _) = FindFlow.decided(s0, s0.seq, "kids", d(FindMode.BOTH, ask = "kids"), 10)
+        val (sent, e) = FindFlow.bothTimer(both, both.seq)
+        assertEquals("kids", e.chat)
+        assertTrue(sent.chatSent)
+        assertNull(FindFlow.bothTimer(sent, sent.seq).second.chat) // once
+        val (picked, _) = FindFlow.played(both)
+        assertNull(FindFlow.bothTimer(picked, picked.seq).second.chat) // a pick came first: never spent
+        assertNull(FindFlow.bothTimer(both, both.seq - 1).second.chat) // an older submit's timer
+        val (focused, ef) = FindFlow.chatFocused(both)
+        assertEquals("kids", ef.chat)
+        assertNull(FindFlow.bothTimer(focused, focused.seq).second.chat)
+        assertNull(FindFlow.chatFocused(FindUi(view = FindMode.SEARCH)).second.chat)
+    }
+
+    @Test
+    fun chatDecisionSendsAtOnce() {
+        val (s0, _) = FindFlow.submit(FindUi(), "funny", 0)
+        val (c, e) = FindFlow.decided(s0, s0.seq, "funny", d(FindMode.CHAT, ask = "funny"), 10)
+        assertTrue(c.chatSent)
+        assertEquals("funny", e.chat)
+        assertNull(e.chatAfterMs)
+    }
+
+    @Test
+    fun askChipWhileDecidingDoesNothing() {
+        val (s0, _) = FindFlow.submit(FindUi(decisionId = "f_old"), "kids", 0)
+        assertEquals(s0 to FindEffects(), FindFlow.askChip(s0, "kids"))
+    }
+
+    @Test
+    fun holdFromResultsIsANewQuestion() {
+        val both = FindUi(view = FindMode.BOTH, decisionId = "f_7", decidedQ = "kids", chatSent = true, seq = 2)
+        val (s, e) = FindFlow.holdToTalk(both)
+        assertEquals(FindUi(view = FindMode.CHAT, seq = 3), s)
+        assertTrue(e.resetChat)
+        // a decision still on its way is dropped
+        val (pending, _) = FindFlow.submit(FindUi(), "heat", 0)
+        val (held, _) = FindFlow.holdToTalk(pending)
+        assertEquals(held to FindEffects(), FindFlow.decided(held, pending.seq, "heat", d(FindMode.SEARCH), 5))
+        // already in the chat: the mic is a follow-up, nothing changes
+        val chat = FindUi(view = FindMode.CHAT, decisionId = "f_8")
+        assertEquals(chat to FindEffects(), FindFlow.holdToTalk(chat))
+    }
+
+    @Test
+    fun searchChipAndChatOffDropPendingAnswers() {
+        val (pending, _) = FindFlow.submit(FindUi(view = FindMode.CHAT), "heat", 0)
+        val (back, _) = FindFlow.searchChip(pending, "heat")
+        assertFalse(back.deciding)
+        assertEquals(back to FindEffects(), FindFlow.decided(back, pending.seq, "heat", d(FindMode.CHAT), 5))
+        val (off, _) = FindFlow.chatOff(pending)
+        assertEquals(FindMode.SEARCH, off.view)
+        assertEquals(off to FindEffects(), FindFlow.decided(off, pending.seq, "heat", d(FindMode.CHAT), 5))
     }
 }
