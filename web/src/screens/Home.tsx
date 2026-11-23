@@ -27,6 +27,8 @@ import { savePrefs, usePrefs } from "../api/me";
 import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 import { go } from "../lib/router";
+import { useActiveJourney, type ActiveJourney } from "../api/journeysV1";
+import { JourneyHero } from "../components/JourneyHero";
 
 const MAX_CAROUSEL_ROWS = 10;
 const MAX_LETTERBOXD_ROWS = 6;
@@ -62,14 +64,18 @@ export const letterboxdLoader = (l: LetterboxdRow) => async () => {
 };
 
 /** The hero: the featured mix rotates until someone touches a tile, then it follows focus. Own state, so a slide change does not re-render Home. */
-function HomeHero({ focused, focusedIptv, slides, engaged }: { focused: Item | null; focusedIptv: IptvHeroTile | null; slides: HeroSlide[]; engaged: boolean }) {
+function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused: Item | null; focusedIptv: IptvHeroTile | null; slides: HeroSlide[]; engaged: boolean; journey: ActiveJourney | null }) {
   const [i, setI] = useState(0);
+  // The active journey's tonight's step is one more slide, the first one (Journeys v1)
+  const n = slides.length + (journey ? 1 : 0);
   useEffect(() => {
-    if (engaged || slides.length < 2) return;
-    const t = setInterval(() => setI((n) => n + 1), SLIDE_MS);
+    if (engaged || n < 2) return;
+    const t = setInterval(() => setI((k) => k + 1), SLIDE_MS);
     return () => clearInterval(t);
-  }, [engaged, slides]);
-  const slide = !engaged && slides.length ? slides[i % slides.length] : null;
+  }, [engaged, slides, n]);
+  const at = !engaged && n ? i % n : -1;
+  if (journey && at === 0) return <JourneyHero s={journey.journey.summary} j={journey.journey} />;
+  const slide = at >= 0 && slides.length ? slides[(at - (journey ? 1 : 0) + slides.length) % slides.length] : null;
   if (focusedIptv && !slide) return <IptvHero tile={focusedIptv} />;
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }
@@ -91,6 +97,7 @@ interface ContinueSrc {
 
 export function Home() {
   useHubTick();
+  const journey = useActiveJourney();
   const [src, setSrc] = useState<ContinueSrc | null>(null);
   // Tiles hidden by an action in flight (or just done): key -> the server's last-played time then. Keys, not a snapshot of
   // the row, so two actions never undo each other.
@@ -479,7 +486,7 @@ export function Home() {
         </p>
       )}
       {/* TV port (Game Centre 2A): while his game (else the top-ranked one) is live, the live match hero takes the hero's place */}
-      <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} />} />
+      <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} journey={journey} />} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
         {entries && entries.length > 0 && (
           <Row
