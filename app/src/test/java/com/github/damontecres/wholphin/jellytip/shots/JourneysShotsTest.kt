@@ -387,7 +387,8 @@ class JourneysShotsTest {
             assertEquals(1, count(hasText("SIGHT & SOUND 100 · STEP 42 OF 99")))
             // The strip is one line: its "+n" ends sit on the same row as the steps (it wrapped before, 4a7d8208)
             val strip = bounds(hasTestTag("jv-path-strip"))
-            assertTrue("strip height ${strip.height}", strip.height.value < 30f)
+            val h = (strip.bottom - strip.top).value
+            assertTrue("strip height $h", h < 30f)
             assertEquals(1, count(hasText("— +54")))
         }) { JourneysV1Content(page(home, j), noop, isAdmin = true, restoreId = null) }
     }
