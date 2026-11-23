@@ -6,7 +6,7 @@
 // start / remove / drop; a stale memo still paints at once and the refetch is merged with stable() so cards keep their places.
 // Only a 404 is remembered (as "not there"); every other failure retries with backoff (5 s doubling to 5 min) while a screen is
 // listening, paused in a hidden tab, and is never remembered.
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { companionCall } from "./companionCall";
 import { COMPANION_BASE } from "./companion";
 import { uid } from "./jellyfin";
@@ -63,6 +63,11 @@ const mine = <T,>(m: Memo<T> | null | undefined, u: string): Memo<T> | null => (
 
 export const peekHome = (): Memo<JvHome> | null => mine(homeMemo, me());
 export const peekJourney = (id: string): Memo<JvJourney> | null => mine(journeyMemo.get(id), me());
+/** This person's memo of a journey, if it is fresh (not marked stale, younger than the window). */
+export const freshJourney = (id: string): JvJourney | null => {
+  const m = journeyMemo.get(id);
+  return fresh(m, me()) ? m!.value : null;
+};
 
 // ---------- reads ----------
 
@@ -85,9 +90,9 @@ export async function fetchHome(): Promise<Load<JvHome>> {
   return { kind: "ok", value: merged };
 }
 
-export async function fetchJourney(id: string): Promise<Load<JvJourney>> {
+export async function fetchJourney(id: string, timeoutMs = 12_000): Promise<Load<JvJourney>> {
   const u = me();
-  const r = await companionCall("GET", `v1/journeys/${apiId(id)}`, undefined, { timeoutMs: 12_000 });
+  const r = await companionCall("GET", `v1/journeys/${apiId(id)}`, undefined, { timeoutMs });
   if (u !== me()) return { kind: "failed", status: 0 };
   const outcome = loadOutcome(r.status);
   if (outcome === "missing") {
@@ -95,9 +100,16 @@ export async function fetchJourney(id: string): Promise<Load<JvJourney>> {
     changed();
     return { kind: "missing" };
   }
-  const j = outcome === "ok" ? parseJourney(r.data, base()) : null;
-  // Guard by id: an answer for another journey is never shown as this one
-  if (!j || j.summary.id !== id) return { kind: "failed", status: r.status === 200 ? 0 : r.status };
+  const parsed = outcome === "ok" ? parseJourney(r.data, base()) : null;
+  if (!parsed) return { kind: "failed", status: r.status === 200 ? 0 : r.status };
+  // Guard by id (case aside): an answer naming another journey is never shown as this one, and it is not worth asking again
+  // forever either: it reads as "not there"
+  if (parsed.summary.id.toLowerCase() !== id.toLowerCase()) {
+    journeyMemo.set(id, { uid: u, at: Date.now(), stale: false, value: null, missing: true });
+    changed();
+    return { kind: "missing" };
+  }
+  const j = { ...parsed, summary: { ...parsed.summary, id } };
   journeyMemo.set(id, { uid: u, at: Date.now(), stale: false, value: j, missing: false });
   changed();
   return { kind: "ok", value: j };
@@ -155,6 +167,16 @@ function useBackoff<T>(key: string | null, peek: () => Memo<T> | null, fetcher: 
   }, [key, tick]);
   void v;
   const m = key == null ? null : peek();
+  // A real stale mark while the screen is up (own start / remove / drop, a skip that didn't save): ask again. Back never
+  // lands here with a stale mark of its own making: a fresh memo paints as it is.
+  // Only a mark that arrives while mounted: on mount, a stale memo is already being fetched by the load effect above.
+  const staleNow = !!m?.stale;
+  const wasStale = useRef(staleNow);
+  useEffect(() => {
+    if (staleNow && !wasStale.current && key != null) setTick((t) => t + 1);
+    wasStale.current = staleNow;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleNow]);
   return { value: m?.value ?? null, missing: !!m?.missing, failures, retryNow: () => setTick((t) => t + 1) };
 }
 
@@ -222,12 +244,25 @@ export async function journeyAction(id: string, what: "start" | "pause" | "drop"
   patchStatus(id, statusAfter(current, what));
   const r = await companionCall("POST", `v1/journeys/${apiId(id)}/${what}`, {});
   const s = r.status === 200 ? parseSummary(r.data, base()) : null;
-  if (s && s.id === id) {
+  if (s && s.id.toLowerCase() === id.toLowerCase()) {
     patchStatus(id, s.status);
-    const jm = mine(journeyMemo.get(id), me());
-    if (jm?.value) jm.stale = true; // done / skips cleared by start: the steps refetch next time
+    markStale(id); // done / skips cleared by start: the steps refetch (now, if the page is up)
+  } else {
+    // Not saved (offline, 5xx, 409 "only from active"…): put the status back and ask the server what is true
+    patchStatus(id, current);
+    markStale(id);
   }
   return r.status;
+}
+
+/** The journey and the list no longer show what the server has: refetch (now where a screen listens, else on the next visit). */
+function markStale(id: string) {
+  const u = me();
+  const jm = mine(journeyMemo.get(id), u);
+  if (jm) jm.stale = true;
+  const hm = mine(homeMemo, u);
+  if (hm) hm.stale = true;
+  changed();
 }
 
 /** play | skip of a step. A skip is shown at once (tonight's moves on). */
@@ -241,7 +276,9 @@ export async function journeyEvent(id: string, type: "play" | "skip", tmdbId: nu
       changed();
     }
   }
-  return (await companionCall("POST", `v1/journeys/${apiId(id)}/event`, { type, tmdbId })).status;
+  const status = (await companionCall("POST", `v1/journeys/${apiId(id)}/event`, { type, tmdbId })).status;
+  if (status !== 200) markStale(id); // a skip that didn't save must not stay painted as skipped
+  return status;
 }
 
 /** Get it for one step (admin; the server only marks a step gettable for an admin). */
