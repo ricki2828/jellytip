@@ -40,8 +40,8 @@ jobs:
       - name: "Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)"
         run: bash .github/scripts/jellytip-fixture-scan.sh
       - name: "Unit tests (full suite, Jellytip + upstream)"
-        timeout-minutes: 15
-        run: ./gradlew testDefaultDebugUnitTest --tests "*ServerRepositoryTest" --tests "*PlaybackViewModelTests" --no-daemon # TEMP-FILTER
+        timeout-minutes: 40
+        run: ./gradlew testDefaultDebugUnitTest --no-daemon
       # t5n (21-Nov): design screenshots from jellytip.shots.* (Roborazzi, synthetic data): for eyes, not compared
       - name: Upload Jellytip screenshots
         if: always()
