@@ -5,7 +5,6 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ServerUserConfig
 import com.github.damontecres.wholphin.preferences.AppPreferences
-import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.ui.successResponse
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -28,6 +27,7 @@ import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.UserPolicy
+import com.github.damontecres.wholphin.jellytip.delete.JellytipDeleteResult
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -43,8 +43,10 @@ class MediaManagementServiceTest {
 
     private val mockLibraryApi = mockk<LibraryApi>()
 
+    private val mockJellytipApi = mockk<com.github.damontecres.wholphin.jellytip.JellytipApi>(relaxed = true)
+
     private val mediaManagementService =
-        MediaManagementService(mockContext, mockApiClient, mockServerRepository, mockUserPreferencesService, mockk<com.github.damontecres.wholphin.jellytip.JellytipApi>(relaxed = true))
+        MediaManagementService(mockContext, mockApiClient, mockServerRepository, mockUserPreferencesService, mockJellytipApi)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Before
@@ -52,11 +54,14 @@ class MediaManagementServiceTest {
         Dispatchers.setMain(testDispatcher)
 
         every { mockApiClient.libraryApi } returns mockLibraryApi
+        // Jellytip: delete is admin-only; tests act as an administrator
+        com.github.damontecres.wholphin.jellytip.JellytipAdmin.set(true)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @After
     fun tearDown() {
+        com.github.damontecres.wholphin.jellytip.JellytipAdmin.set(false)
         Dispatchers.resetMain()
     }
 
@@ -108,24 +113,14 @@ class MediaManagementServiceTest {
         AppPreferences
             .newBuilder()
             .apply {
-                interfacePreferences =
-                    InterfacePreferences
-                        .newBuilder()
-                        .apply {
-                            enableMediaManagement = true
-                        }.build()
+                jellytipDisableMediaManagement = false
             }.build()
 
     private val prefsDisabled =
         AppPreferences
             .newBuilder()
             .apply {
-                interfacePreferences =
-                    InterfacePreferences
-                        .newBuilder()
-                        .apply {
-                            enableMediaManagement = false
-                        }.build()
+                jellytipDisableMediaManagement = true
             }.build()
 
     @Test
@@ -133,6 +128,12 @@ class MediaManagementServiceTest {
         Assert.assertTrue(mediaManagementService.canDelete(movie, prefsEnabled))
         Assert.assertFalse(mediaManagementService.canDelete(movie, prefsDisabled))
         Assert.assertFalse(mediaManagementService.canDelete(movieCannotDelete, prefsEnabled))
+    }
+
+    @Test
+    fun `Test canDelete non-admin`() {
+        com.github.damontecres.wholphin.jellytip.JellytipAdmin.set(false)
+        Assert.assertFalse(mediaManagementService.canDelete(movie, prefsEnabled))
     }
 
     @Test
@@ -149,11 +150,12 @@ class MediaManagementServiceTest {
         Assert.assertFalse(mediaManagementService.canDelete(recording, prefsDisabled))
     }
 
+    // Jellytip: deletes go through the companion (Radarr/Sonarr aware); plain Jellyfin delete only when the route is missing (404)
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `Test successful delete`() =
         runTest {
-            coEvery { mockLibraryApi.deleteItem(any()) } returns successResponse(Unit)
+            coEvery { mockJellytipApi.deleteLibraryItem(any()) } returns JellytipDeleteResult(true, null)
 
             val deletedItems = mutableListOf<DeletedItem>()
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -161,16 +163,29 @@ class MediaManagementServiceTest {
             }
             val result = mediaManagementService.deleteItem(movie)
             Assert.assertTrue(result is DeleteResult.Success)
-            coVerify(exactly = 1) { mockLibraryApi.deleteItem(movie.id) }
+            coVerify(exactly = 1) { mockJellytipApi.deleteLibraryItem(movie.id) }
+            coVerify(exactly = 0) { mockLibraryApi.deleteItem(any()) }
             Assert.assertEquals(1, deletedItems.size)
             Assert.assertEquals(deletedItems[0].item.id, movie.id)
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun `Test delete falls back to Jellyfin when companion route is missing`() =
+        runTest {
+            coEvery { mockJellytipApi.deleteLibraryItem(any()) } returns JellytipDeleteResult(false, null, unsupported = true)
+            coEvery { mockLibraryApi.deleteItem(any()) } returns successResponse(Unit)
+
+            val result = mediaManagementService.deleteItem(movie)
+            Assert.assertTrue(result is DeleteResult.Success)
+            coVerify(exactly = 1) { mockLibraryApi.deleteItem(movie.id) }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun `Test unsuccessful delete`() =
         runTest {
-            coEvery { mockLibraryApi.deleteItem(any()) } throws InvalidStatusException(403)
+            coEvery { mockJellytipApi.deleteLibraryItem(any()) } returns JellytipDeleteResult(false, "You are not allowed to delete this.")
 
             val deletedItems = mutableListOf<DeletedItem>()
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -178,7 +193,7 @@ class MediaManagementServiceTest {
             }
             val result = mediaManagementService.deleteItem(movie)
             Assert.assertTrue(result is DeleteResult.Error)
-            coVerify(exactly = 1) { mockLibraryApi.deleteItem(movie.id) }
+            coVerify(exactly = 0) { mockLibraryApi.deleteItem(any()) }
             Assert.assertEquals(0, deletedItems.size)
         }
 }

@@ -418,3 +418,12 @@ dependencies {
     androidTestImplementation(libs.hilt.android.testing)
     androidTestImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+// Jellytip CI (23-Nov): full stack traces for failing unit tests, so a CI log is enough to diagnose
+tasks.withType<Test>().configureEach {
+    testLogging {
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStackTraces = true
+        showCauses = true
+    }
+}
