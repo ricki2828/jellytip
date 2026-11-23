@@ -71,9 +71,8 @@ export function PathStrip({ j }: { j: JvJourney }) {
   const open = () => go(journeyPath(j.summary.id));
   return (
     <section className="row jv-strip" aria-label="The path">
-      <h2 className="row-title">
-        The path <span className="count">{progressLabel(j.summary)} seen</span>
-      </h2>
+      {/* no counts in row titles: the title is the row's key for Back (lib/scrollMemory) and must not change with progress */}
+      <h2 className="row-title">The path: {j.summary.title}</h2>
       <div className="row-scroll">
         {w.before > 0 && (
           <button className="jv-step-chip more" data-nav onClick={open} aria-label={`${w.before} earlier steps`}>
@@ -83,15 +82,16 @@ export function PathStrip({ j }: { j: JvJourney }) {
         {j.steps.slice(w.from, w.to + 1).map((st, k) => {
           const i = w.from + k;
           const d = dot(j.steps, i, now);
+          const word = d === "gap" && st.source === "missing" ? "Not available" : DOT_WORD[d];
           return (
-            <button key={`${st.n}:${st.tmdbId ?? st.title}`} className={`jv-step-chip ${d}`} data-nav onClick={open} aria-label={`Step ${i + 1}: ${st.title}, ${DOT_WORD[d]}`}>
+            <button key={`${st.n}:${st.tmdbId ?? st.title}`} className={`jv-step-chip ${d}`} data-nav onClick={open} aria-label={`Step ${i + 1}: ${st.title}, ${word}`}>
               <span className="jv-dot" aria-hidden>
                 {DOT_MARK[d]}
               </span>
               <span className="jv-chip-text">
                 <span className="jv-chip-n">{i + 1}</span> {st.title}
               </span>
-              <span className="jv-chip-state">{DOT_WORD[d]}</span>
+              <span className="jv-chip-state">{word}</span>
             </button>
           );
         })}

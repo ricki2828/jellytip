@@ -13,6 +13,7 @@
   background: radial-gradient(ellipse 80% 90% at 85% 20%, rgba(226, 38, 77, 0.22), transparent 60%), linear-gradient(120deg, #141018 0%, #241a22 55%, #3a2a20 100%);
 }
 .jv-kicker {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -160,6 +161,7 @@
   box-shadow: 0 0 0 2px var(--night), 0 0 0 4px var(--vanilla);
 }
 .jv-card-title {
+  min-height: 2.5em;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
@@ -195,6 +197,9 @@
   display: flex;
   align-items: flex-end;
   overflow: hidden;
+}
+.jv-path-head .scrim-left {
+  background: linear-gradient(90deg, rgba(10, 10, 10, 0.88) 0%, rgba(10, 10, 10, 0.6) 45%, transparent 80%);
 }
 .jv-path-text {
   position: relative;
@@ -352,17 +357,17 @@
   font-size: 13px;
   color: var(--dim);
 }
-.jv-ask.queued {
+.jv-ask.st-queued {
   color: #8fd19e;
 }
-.jv-ask.blocked,
-.jv-ask.error {
+.jv-ask.st-blocked,
+.jv-ask.st-error {
   color: #f0a3a3;
 }
-.jv-get.queued {
+.jv-get.st-queued {
   background: rgba(143, 209, 158, 0.2);
 }
-.jv-get.blocked {
+.jv-get.st-blocked {
   background: rgba(240, 163, 163, 0.18);
 }
 
@@ -381,6 +386,9 @@
   }
   .jv-path-head {
     min-height: 56svh;
+  }
+  .jv-path-head .scrim-left {
+    background: linear-gradient(transparent 15%, rgba(10, 10, 10, 0.6) 50%, rgba(10, 10, 10, 0.92) 100%);
   }
   .jv-path-text {
     width: auto;

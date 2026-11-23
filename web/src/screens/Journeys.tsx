@@ -57,9 +57,7 @@ export function Journeys() {
           if (!cards.length) return null;
           return (
             <section key={r.key} className="row jv-row">
-              <h2 className="row-title">
-                {r.title} <span className="count">{cards.length}</span>
-              </h2>
+              <h2 className="row-title">{r.title}</h2>
               <div className="row-scroll">
                 {cards.map((s) => (
                   <JourneyCard key={s.id} s={s} />

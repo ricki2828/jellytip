@@ -163,7 +163,7 @@ function Path({ j }: { j: JvJourney }) {
                 </div>
                 <div className="jv-step-meta">
                   {facts(st)}
-                  <span className={`jv-src ${st.source}`}>{sourceBadge(st.source)}</span>
+                  <span className={`jv-src src-${st.source}`}>{sourceBadge(st.source)}</span>
                   {st.rewatch && <span className="jv-src">Rewatch</span>}
                 </div>
                 {st.why && <p className="jv-why">{st.why}</p>}
@@ -184,11 +184,11 @@ function Path({ j }: { j: JvJourney }) {
                     </button>
                   )}
                   {act === "get" && (
-                    <button className={`btn jv-btn jv-get${a ? ` ${a.state}` : ""}`} data-nav disabled={!canAsk(a)} onClick={() => ask(i)}>
+                    <button className={`btn jv-btn jv-get${a ? ` st-${a.state}` : ""}`} data-nav disabled={!canAsk(a)} onClick={() => ask(i)}>
                       {askLabel(a)}
                     </button>
                   )}
-                  {act === "get" && a && a.state !== "asking" && <span className={`jv-ask ${a.state}`}>{askText(a)}</span>}
+                  {act === "get" && a && a.state !== "asking" && <span className={`jv-ask st-${a.state}`}>{askText(a)}</span>}
                   {act === "get" && !a && <span className="jv-ask">Not here yet</span>}
                   {reason && <span className="jv-ask">{reason}</span>}
                 </div>
