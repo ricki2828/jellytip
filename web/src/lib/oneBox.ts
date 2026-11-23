@@ -195,9 +195,10 @@ export function opened(s: FindUi): Step {
  * already sent them. Feedback "ask_chip" when there is a decision.
  */
 export function askChip(s: FindUi, text: string): Step {
-  const q = norm(s.q || text) || norm(text);
-  const { state, fb } = feedback(s, "ask_chip");
   const already = s.view === "both" && s.deferred === "sent";
+  // the words in the box (typed since, or never submitted); BOTH that already asked keeps its words
+  const q = already ? s.q : norm(text) || s.q;
+  const { state, fb } = feedback(s, "ask_chip");
   const fx: FindEffects = { stopTimer: true, ...(fb ? { feedback: fb } : {}) };
   if (!already && q) fx.chat = q;
   if (!already && s.view !== "both") fx.resetChat = true;
@@ -218,6 +219,12 @@ export function chatOff(s: FindUi): Step {
 /** Start over: an empty box, plain search, no chat; anything in flight is dropped (seq moves on). */
 export function startOver(s: FindUi): Step {
   return { state: { ...emptyFind(), seq: s.seq + 1, fed: s.fed }, fx: { resetChat: true, stopTimer: true } };
+}
+
+/** The words in the box changed after a decision: BOTH's waiting chat is for the old words, so it is never sent. */
+export function typing(s: FindUi, text: string): Step {
+  if (s.view !== "both" || s.deferred !== "waiting" || same(s.q, text)) return { state: s, fx: {} };
+  return { state: { ...s, deferred: "cancelled" }, fx: { stopTimer: true } };
 }
 
 /** Leaving the screen (opening a hit, the nav): a waiting chat is never sent later, a find in flight becomes a Try again. */

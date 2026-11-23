@@ -1,0 +1,200 @@
+/* The one box's chat (components/ChatAnswer.tsx) and its page layout in screens/Search.tsx. Shared .chip / .grid / .card-skeleton. */
+.chat-answer {
+  display: grid;
+  gap: 12px;
+  padding: 0 var(--pad);
+  max-width: 1180px;
+}
+.chat-answer .grid {
+  padding-left: 0;
+  padding-right: 0;
+}
+.ac-turns {
+  display: grid;
+  gap: 14px;
+}
+.ac-turn {
+  display: grid;
+  gap: 4px;
+}
+.ac-user {
+  margin: 0;
+  justify-self: end;
+  max-width: min(92%, 640px);
+  padding: 7px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 15px;
+}
+.ac-reply {
+  margin: 0;
+  max-width: 92%;
+  color: var(--vanilla);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.ac-dim {
+  color: var(--dim);
+}
+.ac-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+}
+.ac-prov {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.35);
+}
+.ac-static {
+  cursor: default;
+}
+.ac-off {
+  opacity: 0.6;
+}
+.ac-sub {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.ac-hint,
+.ac-scope {
+  color: var(--faint);
+  font-size: 12px;
+  margin: 0;
+  align-self: center;
+}
+.ac-notes {
+  display: grid;
+  gap: 8px;
+}
+.ac-note {
+  display: grid;
+  gap: 6px;
+}
+.ac-note-text {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+.ac-refine {
+  align-items: center;
+  margin-top: 4px;
+}
+.ac-refine-label {
+  font-size: 13px;
+  opacity: 0.7;
+  margin-right: 4px;
+}
+.chat-answer .chip:disabled,
+.chat-answer .btn:disabled,
+.onebox .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------- the one box (screens/Search.tsx) ---------- */
+.onebox-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 820px;
+  margin: 8px var(--pad) 12px;
+}
+.onebox-bar .search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  min-height: 46px;
+}
+.onebox-bar .btn {
+  min-height: 46px;
+  min-width: 46px;
+  flex: none;
+}
+.onebox-mic {
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.onebox-mic svg {
+  width: 20px;
+  height: 20px;
+}
+.onebox-mic.on {
+  background: var(--vanilla);
+  color: var(--night);
+}
+.onebox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 var(--pad) 16px;
+}
+.onebox-actions .chip,
+.onebox-chat-area .chip,
+.chat-answer .chip,
+.onebox-actions .btn,
+.chat-answer .btn {
+  min-height: 36px;
+}
+.onebox-voice,
+.onebox-notice,
+.onebox-status {
+  margin: 0 var(--pad) 12px;
+  color: var(--dim);
+  font-size: 13px;
+}
+.onebox-notice {
+  color: var(--faint);
+  font-size: 12px;
+}
+.onebox-notice button {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  color: var(--dim);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.onebox-chat-area {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.onebox-chat-area > .row-title,
+.onebox-chat-area > .chips,
+.onebox-chat-area > .onebox-notice {
+  margin-left: var(--pad);
+  margin-right: var(--pad);
+}
+.onebox-error {
+  margin: 0 var(--pad) 16px;
+}
+/* phones: every tap target at least 44 px */
+@media (hover: none) and (pointer: coarse), (max-width: 720px) {
+  .onebox-bar {
+    margin: 4px var(--pad) 10px;
+  }
+  .onebox-actions .chip,
+  .onebox-chat-area .chip,
+  .chat-answer .chip,
+  .onebox-actions .btn,
+  .chat-answer .btn,
+  .onebox .rows-error .btn,
+  .onebox .search-suggest .chip {
+    min-height: 44px;
+  }
+}

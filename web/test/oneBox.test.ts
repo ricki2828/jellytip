@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   askChip, chatOff, decided, DEFER_CHAT_MS, deferredScrolled, deferredTimer, emptyFind, findOutcome, findRetryMs, leave, NO_ROUTE_MS, NoRouteMemory, opened, parseFind, retryFind,
-  RETYPE_WINDOW_MS, searchChip, startOver, submit, bothLine, type FindOutcome, type FindUi,
+  RETYPE_WINDOW_MS, searchChip, startOver, submit, typing, bothLine, type FindOutcome, type FindUi,
 } from "../src/lib/oneBox.ts";
 import { applyResponse, basicLabel, emptyState, parseResponse, submitText, tapChip, type ChatResponse } from "../src/lib/askChat.ts";
 import { parseHash } from "../src/lib/routeParse.ts";
@@ -180,7 +180,16 @@ test("deferred: the chip sends it at once (ask_chip) and moves to the chat; afte
 
 test("deferred: a hit opened after Back on a cancelled both, then the chip: the chat is asked now", () => {
   const o = opened(decide("heat but funny", { mode: "both" }).state);
-  assert.equal(askChip(o.state, "x").fx.chat, "heat but funny");
+  assert.equal(askChip(o.state, "heat but funny").fx.chat, "heat but funny");
+  assert.equal(askChip(o.state, "heat but sad").fx.chat, "heat but sad", "the words now in the box");
+});
+
+test("typing other words under a both answer cancels its waiting chat; the same words do not", () => {
+  const b = decide("heat but funny", { mode: "both" });
+  assert.deepEqual(typing(b.state, " Heat  but funny").fx, {});
+  const t = typing(b.state, "heat but");
+  assert.deepEqual([t.state.deferred, t.fx], ["cancelled", { stopTimer: true }]);
+  assert.deepEqual(typing(decide("heat", {}).state, "x").fx, {}, "nothing waiting");
 });
 
 test("leave: a waiting chat becomes cancelled; a find in flight becomes a Try again", () => {

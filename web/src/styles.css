@@ -2572,8 +2572,11 @@ button.overview.open {
     display: flex;
   }
 }
-.search-ask {
-  margin-left: var(--pad);
+/* the short dim line under a page title (Channels, Tonight, Movie night) */
+.ask-sub {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
 }
 
 /* Movies / Shows: "Browse all" entry points, and the sticky bar of the all-titles page */
