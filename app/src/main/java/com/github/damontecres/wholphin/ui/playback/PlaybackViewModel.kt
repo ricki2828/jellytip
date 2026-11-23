@@ -202,7 +202,7 @@ class PlaybackViewModel
 
         /** Jellytip taste signals: the watch of the item playing now (real playing time, closed once). */
         private val jellytipWatch = com.github.damontecres.wholphin.jellytip.signals.WatchSession()
-        private var jellytipWatchJob: kotlinx.coroutines.Job? = null
+        internal var jellytipWatchJob: kotlinx.coroutines.Job? = null
 
         private fun jellytipEndWatch(ended: Boolean) {
             val s = synchronized(jellytipWatch) { jellytipWatch.end(ended, System.currentTimeMillis()) }

@@ -69,6 +69,9 @@ class ServerRepositoryTest {
             .build()
 
     private val mockContext = mockk<Context>(relaxed = true)
+    init {
+        every { mockContext.filesDir } returns java.io.File(System.getProperty("java.io.tmpdir"))
+    }
     private val mockJellyfin = mockk<Jellyfin>()
     private val mockJellyfinServerDao = mockk<JellyfinServerDao>()
     private val mockApiClient = mockk<ApiClient>()

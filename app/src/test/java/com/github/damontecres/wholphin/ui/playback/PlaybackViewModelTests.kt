@@ -283,6 +283,9 @@ class PlaybackViewModelTests {
     @OptIn(InternalCoroutinesApi::class)
     private suspend fun TestScope.createViewModel(destination: Destination): PlaybackViewModel {
         val viewModel = create(destination)
+        // Jellytip: the taste-signal watch ticker is an endless 1 s loop; on the virtual-time test dispatcher it never
+        // lets runTest finish. Pre-set a cancelled job so it is never started in these tests.
+        viewModel.jellytipWatchJob = kotlinx.coroutines.Job().also { it.cancel() }
         testScheduler.advanceUntilIdle()
         viewModel.initJob.join()
         viewModel.initJob
