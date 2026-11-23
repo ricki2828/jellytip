@@ -158,7 +158,7 @@ class JellytipMyChannelsViewModel
             }.getOrNull()
     }
 
-private fun leftText(
+internal fun leftText(
     slot: Slot?,
     nowMs: Long,
 ): String {
@@ -171,7 +171,7 @@ private fun leftText(
     }
 }
 
-private fun hm(ms: Long) =
+internal fun hm(ms: Long) =
     java.time.Instant
         .ofEpochMilli(ms)
         .atZone(java.time.ZoneId.systemDefault())

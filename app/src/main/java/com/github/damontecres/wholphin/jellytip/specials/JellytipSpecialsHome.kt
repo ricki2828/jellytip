@@ -68,6 +68,11 @@ sealed interface JellytipHomeEntry {
         override val key get() = "upcoming-sport"
     }
 
+    /** "My Channels" (Home, directly under Continue Watching; Ricki 23-Nov). The row reads its channels itself. */
+    data object MyChannels : JellytipHomeEntry {
+        override val key get() = "my-channels"
+    }
+
     /** A server-built row (rows=1 manifest). */
     data class Server(
         val row: JellytipServerRow,
@@ -101,9 +106,28 @@ fun jellytipHomeEntries(
     /** Add the IPTV-only Continue Watching / Next Up rows (see [JellytipHomeEntry.IptvResumeOnly]). */
     iptvContinue: Boolean = false,
     iptvNext: Boolean = false,
-): List<JellytipHomeEntry> =
+    /** Add the "My Channels" row directly under Continue Watching (first when there is none). */
+    myChannels: Boolean = false,
+): List<JellytipHomeEntry> {
     // His live games are hero carousel slides now (Ricki 22-Nov), not a row
-    homeEntriesNoHero(rows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvContinue, iptvNext)
+    val out = homeEntriesNoHero(rows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvContinue, iptvNext)
+    return if (myChannels) withMyChannels(out, rows) else out
+}
+
+/** "My Channels" right after the Continue Watching row (real, combined with Next Up, or IPTV-only); first when there is none. */
+private fun withMyChannels(
+    base: List<JellytipHomeEntry>,
+    rows: List<HomeRowLoadingState>,
+): List<JellytipHomeEntry> {
+    val cw =
+        base.indexOfFirst { e ->
+            (e is JellytipHomeEntry.IptvResumeOnly && e.continueRow) ||
+                (e is JellytipHomeEntry.Row && (rows.getOrNull(e.index) as? HomeRowLoadingState.Success)?.rowType.let { it is HomeRowConfig.ContinueWatching || it is HomeRowConfig.ContinueWatchingCombined })
+        }
+    val out = base.toMutableList()
+    out.add(cw + 1, JellytipHomeEntry.MyChannels)
+    return out
+}
 
 private fun homeEntriesNoHero(
     rows: List<HomeRowLoadingState>,
