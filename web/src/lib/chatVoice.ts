@@ -31,7 +31,7 @@ export const isQuietError = (code: string): boolean => code === "no-speech" || c
 /** What to tell the person about a failed press. `phone`: the Android app (its permission lives in the system settings, not a browser). */
 export function errorText(code: string, phone = false): string {
   if (code === "not-allowed" || code === "service-not-allowed")
-    return phone ? "Microphone blocked: allow it for Jellytip in Android settings to talk" : "Microphone blocked: allow it in your browser to talk";
+    return phone ? "Microphone blocked: check the app's microphone permission in Android settings" : "Microphone blocked: allow it in your browser to talk";
   if (code === "mic-prompt") return "Allow the microphone, then hold the mic to talk"; // the permission prompt ended that press
   if (code === "mic-allowed") return "Microphone allowed: hold the mic to talk";
   if (code === "audio-capture") return "No microphone found";

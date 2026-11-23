@@ -25,7 +25,8 @@ test("androidErrorCode: Android errors as the browser codes chatVoice understand
   assert.equal(androidErrorCode(E.SPEECH_TIMEOUT), "no-speech");
   assert.equal(androidErrorCode(E.INSUFFICIENT_PERMISSIONS), "not-allowed");
   assert.equal(androidErrorCode(E.AUDIO), "audio-capture");
-  for (const n of [E.NETWORK, E.NETWORK_TIMEOUT, E.SERVER, E.SERVER_DISCONNECTED]) assert.equal(androidErrorCode(n), "network");
+  for (const n of [E.NETWORK, E.NETWORK_TIMEOUT, E.SERVER]) assert.equal(androidErrorCode(n), "network");
+  assert.equal(androidErrorCode(E.SERVER_DISCONNECTED), "client"); // the speech service went away: not a network problem
   assert.equal(androidErrorCode(E.RECOGNIZER_BUSY), "aborted");
   assert.equal(androidErrorCode(E.INTERRUPTED), "interrupted");
   assert.equal(androidErrorCode(E.CLIENT), "client");
@@ -117,7 +118,7 @@ test("web engine: window text is the session's results so far; one end per start
   const eng = webEngine(Ctor);
   assert.equal(await eng.available(), true);
   const ev = record(eng);
-  eng.start({ lang: "en-NZ", hold: true });
+  eng.start({ lang: "en-NZ" });
   const r = made[0]!;
   assert.ok(r.started && r.continuous && r.interimResults);
   assert.equal(r.lang, "en-NZ");
@@ -133,9 +134,9 @@ test("web engine: a restart is a new recognizer; cancel delivers nothing more", 
   const { Ctor, made } = fakeWeb();
   const eng = webEngine(Ctor);
   const ev = record(eng);
-  eng.start({ hold: true });
+  eng.start({});
   made[0]!.onend!();
-  eng.start({ hold: true });
+  eng.start({});
   assert.equal(made.length, 2);
   const second = made[1]!;
   eng.cancel();
@@ -150,7 +151,7 @@ test("web engine: stop asks the recognizer to finish (the last words, then end)"
   const { Ctor, made } = fakeWeb();
   const eng = webEngine(Ctor);
   const ev = record(eng);
-  eng.start({ hold: false });
+  eng.start({});
   eng.stop();
   assert.ok(made[0]!.stopped);
   made[0]!.onresult!(results("last words"));
@@ -162,7 +163,7 @@ test("web engine without SpeechRecognition: unavailable, and a start fails clean
   const eng = webEngine(null);
   assert.equal(await eng.available(), false);
   const ev = record(eng);
-  eng.start({ hold: true });
+  eng.start({});
   assert.deepEqual(ev, ["error:audio-capture", "end"]);
 });
 
@@ -177,7 +178,7 @@ function fakePlugin(
   const plugin: JellytipSpeechPlugin = {
     available: () => Promise.resolve({ available: true }),
     start: (o) => {
-      calls.push(`start:${o.session}:${o.hold ? "hold" : "tap"}`);
+      calls.push(`start:${o.session}`);
       return startAnswer();
     },
     requestMic: () => {
@@ -206,19 +207,19 @@ test("native engine: restarts keep the press's session; events of other sessions
   const eng = nativeEngine(plugin);
   assert.equal(await eng.available(), true);
   const ev = record(eng);
-  eng.start({ hold: true });
+  eng.start({});
   await tick();
   send("partial", { session: 1, text: "something" });
   send("final", { session: 1, text: "something funny" });
   send("end", { session: 1 });
-  eng.start({ hold: true }); // restart while held: same session (the plugin reuses its recognizer), after a beat
+  eng.start({}); // restart while held: same session (the plugin reuses its recognizer), after a beat
   await tick();
-  assert.deepEqual(calls, ["start:1:hold"]);
+  assert.deepEqual(calls, ["start:1"]);
   await tick(RESTART_DELAY_MS + 20);
   send("partial", { session: 9, text: "stale" });
   send("error", { session: 1, error: E.NO_MATCH });
   send("end", { session: 1 });
-  assert.deepEqual(calls, ["start:1:hold", "start:1:hold"]);
+  assert.deepEqual(calls, ["start:1", "start:1"]);
   assert.deepEqual(ev, ["partial:something", "final:something funny", "end", "error:no-speech", "end"]);
 });
 
@@ -226,24 +227,24 @@ test("native engine: cancel ends the session; the next press is a new one and ol
   const { plugin, calls, send } = fakePlugin();
   const eng = nativeEngine(plugin);
   const ev = record(eng);
-  eng.start({ hold: true });
+  eng.start({});
   await tick();
   eng.cancel();
   send("end", { session: 1 }); // a late end of the cancelled press
-  eng.start({ hold: false });
+  eng.start({});
   await tick();
   send("end", { session: 1 });
   send("final", { session: 2, text: "hi" });
   send("end", { session: 2 });
   eng.stop();
-  assert.deepEqual(calls, ["start:1:hold", "cancel", "start:2:tap", "stop:2"]);
+  assert.deepEqual(calls, ["start:1", "cancel", "start:2", "stop:2"]);
   assert.deepEqual(ev, ["final:hi", "end"]);
 });
 
 test("native engine: a cancel before the start went out sends no start", async () => {
   const { plugin, calls } = fakePlugin();
   const eng = nativeEngine(plugin);
-  eng.start({ hold: true });
+  eng.start({});
   eng.cancel();
   await tick();
   assert.deepEqual(calls, ["cancel"]);
@@ -254,54 +255,80 @@ test("native engine: no permission ends the press at once, then asks; the answer
     const { plugin, calls } = fakePlugin(() => Promise.resolve({ started: false, permission: "needed" }), granted);
     const eng = nativeEngine(plugin);
     const ev = record(eng);
-    eng.start({ hold: true });
+    eng.start({});
     await tick();
     eng.cancel(); // the hook ends the press on the error
     await tick();
     assert.deepEqual(ev, ["error:mic-prompt", "end", `error:${notice}`]);
-    assert.deepEqual(calls, ["start:1:hold", "requestMic", "cancel"]);
+    assert.deepEqual(calls, ["start:1", "requestMic", "cancel"]);
   }
 });
 
 test("native engine: a release during the restart beat sends no start for the dropped window", async () => {
   const { plugin, calls, send } = fakePlugin();
   const eng = nativeEngine(plugin);
-  eng.start({ hold: true });
+  eng.start({});
   await tick();
   send("end", { session: 1 });
-  eng.start({ hold: true }); // restart, delayed
+  eng.start({}); // restart, delayed
   eng.cancel(); // the press finished before the beat ran out
   await tick(RESTART_DELAY_MS + 20);
-  assert.deepEqual(calls, ["start:1:hold", "cancel"]);
+  assert.deepEqual(calls, ["start:1", "cancel"]);
 });
 
 test("native engine: after a glitch / busy end the restart waits longer (a fresh recognizer)", async () => {
   const { plugin, calls, send } = fakePlugin();
   const eng = nativeEngine(plugin);
-  eng.start({ hold: true });
+  eng.start({});
   await tick();
   send("error", { session: 1, error: E.RECOGNIZER_BUSY });
   send("end", { session: 1 });
-  eng.start({ hold: true });
+  eng.start({});
   await tick(RESTART_DELAY_MS + 20);
-  assert.deepEqual(calls, ["start:1:hold"]);
+  assert.deepEqual(calls, ["start:1"]);
   await tick(RECREATE_DELAY_MS);
-  assert.deepEqual(calls, ["start:1:hold", "start:1:hold"]);
+  assert.deepEqual(calls, ["start:1", "start:1"]);
 });
 
 test("native engine: a rejected start fails the press; a glitch error is quiet", async () => {
   const { plugin, send } = fakePlugin(() => Promise.reject(new Error("bridge")));
   const eng = nativeEngine(plugin);
   const ev = record(eng);
-  eng.start({ hold: true });
+  eng.start({});
   await tick();
   assert.deepEqual(ev, ["error:start-failed", "end"]);
   const p2 = fakePlugin();
   const eng2 = nativeEngine(p2.plugin);
   const ev2 = record(eng2);
-  eng2.start({ hold: true });
+  eng2.start({});
   await tick();
   p2.send("error", { session: 1, error: E.CLIENT, glitch: true });
   p2.send("end", { session: 1 });
   assert.deepEqual(ev2, ["error:aborted", "end"]);
+});
+
+test("native engine: a release while the restart is still waiting ends the window at once, and no start goes out", async () => {
+  const { plugin, calls, send } = fakePlugin();
+  const eng = nativeEngine(plugin);
+  const ev = record(eng);
+  eng.start({});
+  await tick();
+  send("end", { session: 1 });
+  eng.start({}); // restart beat
+  eng.stop();
+  assert.deepEqual(ev, ["end", "end"]);
+  await tick(RESTART_DELAY_MS + 20);
+  assert.deepEqual(calls, ["start:1"]);
+});
+
+test("native engine: a failed stop is labelled stop-failed", async () => {
+  const p = fakePlugin();
+  p.plugin.stop = () => Promise.reject(new Error("bridge"));
+  const eng = nativeEngine(p.plugin);
+  const ev = record(eng);
+  eng.start({});
+  await tick();
+  eng.stop();
+  await tick();
+  assert.deepEqual(ev, ["error:stop-failed", "end"]);
 });

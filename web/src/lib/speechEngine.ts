@@ -23,8 +23,11 @@ export interface SpeechEngine {
   readonly kind: "web" | "native";
   /** The engine can listen on this device (native: asks the system, so it is async). */
   available(): Promise<boolean>;
-  /** One listening window. `hold`: the mic is held (ask for long silences); a tap ends on the recognizer's own pause. */
-  start(o: { lang?: string; hold: boolean }): void;
+  /**
+   * One listening window. Windows always start as a hold's (no end on a short silence: the browser listens continuously, the
+   * phone asks for long silences); a tap is ended by the controller's quiet timer (TAP_SILENCE_MS after the last words).
+   */
+  start(o: { lang?: string }): void;
   /** Finish the window: the last words arrive (final), then end. */
   stop(): void;
   /** Drop the window: nothing more is delivered. */
@@ -72,8 +75,7 @@ export function webEngine(Ctor: WebRecognitionCtor | null): SpeechEngine {
   return {
     kind: "web",
     available: () => Promise.resolve(!!Ctor),
-    start({ lang, hold: _hold }) {
-      // the browser has no silence settings: continuous listening, and the hook's quiet timer ends a tap
+    start({ lang }) {
       const old = drop();
       try {
         old?.abort();
@@ -137,7 +139,7 @@ export interface JellytipSpeechPlugin {
    * One listening window for `session` (the same recognizer is reused while the session lasts). {started: false, permission:
    * "needed"} without the microphone permission: nothing is listening (ask with requestMic()).
    */
-  start(o: { session: number; lang?: string; hold: boolean }): Promise<{ started: boolean; permission?: "needed" | "denied" }>;
+  start(o: { session: number; lang?: string }): Promise<{ started: boolean; permission?: "needed" | "denied" }>;
   /** The system's microphone prompt (answers at once when it was refused for good). */
   requestMic(): Promise<{ granted: boolean }>;
   stop(o: { session: number }): Promise<void>;
@@ -172,7 +174,6 @@ export function androidErrorCode(error: number, glitch = false): string {
     case E.NETWORK:
     case E.NETWORK_TIMEOUT:
     case E.SERVER:
-    case E.SERVER_DISCONNECTED:
       return "network";
     case E.LANGUAGE_NOT_SUPPORTED:
     case E.LANGUAGE_UNAVAILABLE:
@@ -180,7 +181,7 @@ export function androidErrorCode(error: number, glitch = false): string {
     case E.INTERRUPTED:
       return "interrupted";
     default:
-      return "client"; // CLIENT, TOO_MANY_REQUESTS, anything new: "voice didn't work"
+      return "client"; // CLIENT, SERVER_DISCONNECTED (the speech service went away), TOO_MANY_REQUESTS, anything new: "voice didn't work"
   }
 }
 
@@ -206,6 +207,8 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
   const em = new VoiceEmitter();
   let session = 0; // the press being listened to; 0 = none (events of any other session are dropped)
   let next = 1;
+  let pending = 0; // a start not sent to the plugin yet (listeners not ready, or the restart beat): stop() drops it
+  let starts = 0;
   let lastCode: string | null = null; // the last error of this press: "aborted" = the plugin builds a fresh recognizer next
   const mine = (e: NativeSpeechEvent | null | undefined) => session !== 0 && e?.session === session;
   // Capacitor drops events nobody listens to: every start waits until the four listeners are attached
@@ -227,7 +230,7 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
   return {
     kind: "native",
     available: () => plugin.available().then((r) => !!r?.available, () => false),
-    start({ lang, hold }) {
+    start({ lang }) {
       // a restart within a press keeps its session (the plugin reuses that recognizer); the hook cancels between presses
       const first = session === 0;
       if (first) session = next++;
@@ -235,11 +238,17 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
       const delay = restartDelay(first, lastCode);
       lastCode = null;
       const wait = delay ? new Promise<void>((r) => setTimeout(r, delay)) : Promise.resolve();
+      const token = ++starts;
+      pending = token;
       void Promise.all([ready, wait])
-        .then(() => (session === s ? plugin.start({ session: s, lang, hold }) : null))
+        .then(() => {
+          if (session !== s || pending !== token) return null;
+          pending = 0;
+          return plugin.start({ session: s, lang });
+        })
         .then(
           (res) => {
-            if (res === null) return; // cancelled (or released) before it went out
+            if (res === null) return; // cancelled or stopped before it went out
             const code = startOutcome(res);
             if (!code) return;
             fail(s, code);
@@ -255,10 +264,18 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
     },
     stop() {
       const s = session;
-      if (s !== 0) void plugin.stop({ session: s }).catch(() => fail(s, "start-failed"));
+      if (s === 0) return;
+      if (pending) {
+        // released before the window was even asked for: nothing is listening, the window is over now
+        pending = 0;
+        em.emit("end", {});
+        return;
+      }
+      void plugin.stop({ session: s }).catch(() => fail(s, "stop-failed"));
     },
     cancel() {
       session = 0;
+      pending = 0;
       void plugin.cancel().catch(() => {});
     },
     on: (event, cb) => em.on(event, cb),
