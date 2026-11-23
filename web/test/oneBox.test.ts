@@ -195,6 +195,12 @@ test("typing other words while a find is out abandons it: no longer deciding, se
   assert.deepEqual(late.fx, {}, "no chat, no box wipe");
 });
 
+test("an emptied box (Escape) or a picked chip's words abandon a find out for other words", () => {
+  const a = submit(emptyFind(), "heat 1995", T0);
+  assert.deepEqual(typing(a.state, "").fx, { abortFind: true }, "Escape empties the box");
+  assert.deepEqual(typing(a.state, "heat").fx, { abortFind: true }, "a filter chip removed: other words");
+});
+
 test("typing other words under a both answer cancels its waiting chat; the same words do not", () => {
   const b = decide("heat but funny", { mode: "both" });
   assert.deepEqual(typing(b.state, " Heat  but funny").fx, {});

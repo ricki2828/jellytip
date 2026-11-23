@@ -714,7 +714,7 @@ export function Search({ initial }: { initial: string }) {
   // (fire and forget, at most once a minute from this page)
   const warmedAt = useRef(restored ? Date.now() : 0); // Back: the page is as it was, nothing is sent (not even a warm-up) at once
   const warm = () => {
-    if (Date.now() - warmedAt.current < WARM_EVERY_MS) return;
+    if (chatState.off || Date.now() - warmedAt.current < WARM_EVERY_MS) return; // chat is off: nothing to warm
     warmedAt.current = Date.now();
     sender.current!.warm();
   };
@@ -789,9 +789,15 @@ export function Search({ initial }: { initial: string }) {
     [],
   );
 
+  /** New words in the box from anywhere (typing, Escape, a chip or suggestion): a find out for other words is dropped (typing). */
+  const setWords = (v: string) => {
+    setQ(v);
+    const t = typing(findRef.current, v);
+    if (t.state !== findRef.current) apply(t);
+  };
   const pick = (v: string) => {
     apply(interrupt(findRef.current));
-    setQ(v);
+    setWords(v);
     input.current?.focus();
   };
   const remember = (t = term) => {
@@ -869,11 +875,7 @@ export function Search({ initial }: { initial: string }) {
           aria-label={PLACEHOLDER}
           placeholder={chatShown ? FOLLOW_UP_PLACEHOLDER : PLACEHOLDER}
           value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            const t = typing(findRef.current, e.target.value);
-            if (t.state !== findRef.current) apply(t);
-          }}
+          onChange={(e) => setWords(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               // Focus moves to the results only on an explicit key: the primary action when "watch X", else the first result
@@ -884,7 +886,7 @@ export function Search({ initial }: { initial: string }) {
             } else if (e.key === "Escape" && q) {
               // First Escape empties the box; with it already empty, Escape behaves as usual
               e.preventDefault();
-              setQ("");
+              setWords("");
             }
           }}
         />
