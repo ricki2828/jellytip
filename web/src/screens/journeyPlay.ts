@@ -32,14 +32,17 @@ const routeChangeOr = (ms: number) =>
 // A journey's IPTV step is often just {id, kind}: no progress. The film's own IPTV answer (as IptvDetails reads it) has it, so
 // the pages warm it in the background; a play uses it when it is there and never waits for it.
 const iptvResume = new Map<string, number>();
-if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => iptvResume.clear());
+// Dropped on a session change and whenever playback saved progress ("jellytip-watched"): a film watched further must not
+// restart from the old point
+if (typeof window !== "undefined") for (const ev of ["jellytip-session", "jellytip-watched"]) window.addEventListener(ev, () => iptvResume.clear());
 export function warmIptvResume(steps: JvStep[]): void {
   for (const st of steps.filter((x) => x.source === "iptv" && x.iptv?.kind === "movie" && !x.iptv.resume && !iptvResume.has(x.iptv.id)).slice(0, 8)) {
     const id = st.iptv!.id;
     iptvResume.set(id, 0);
     void vodItem(id)
       .then((a) => {
-        const p = a.status === 200 ? a.data?.progress : null;
+        if (a.status !== 200 || !a.data) return void iptvResume.delete(id); // a failed answer is not "from the start": ask again next time
+        const p = a.data.progress;
         iptvResume.set(id, p && !p.played && p.position > 30 ? Math.floor(p.position) : 0);
       })
       .catch(() => iptvResume.delete(id)); // ask again next time

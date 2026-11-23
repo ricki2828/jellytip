@@ -21,8 +21,20 @@ export async function companionCall(method: Method, path: string, body?: unknown
   if (body !== undefined) headers["Content-Type"] = "application/json";
   try {
     if (isNative) {
-      const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: "json", connectTimeout: 8000, readTimeout: opts.timeoutMs ?? 8000 });
-      return { status: r.status, data: typeof r.data === "string" ? null : r.data };
+      // timeoutMs caps the whole call: connect and read each get at most that, and the answer is given up on at that point
+      // (native HTTP can't be aborted, so a late answer is just ignored)
+      const t = opts.timeoutMs;
+      const req = CapacitorHttp.request({ url, method, headers, data: body, responseType: "json", connectTimeout: Math.min(8000, t ?? 8000), readTimeout: t ?? 8000 }).then(
+        (r): Reply => ({ status: r.status, data: typeof r.data === "string" ? null : r.data }),
+      );
+      if (!t) return await req;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<Reply>((res) => (timer = setTimeout(() => res({ status: 0, data: null }), t)));
+      try {
+        return await Promise.race([req.catch((): Reply => ({ status: 0, data: null })), late]);
+      } finally {
+        clearTimeout(timer);
+      }
     }
     // timeoutMs bounds the browser path too (a hung call must not hold a page's busy state until the browser gives up). An
     // AbortController + setTimeout, not AbortSignal.timeout: older WebViews and Safari < 16 lack it (as lib/askChat.ts)
