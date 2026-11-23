@@ -345,7 +345,7 @@ internal fun JourneysV1Content(
         if (backdrop != null) {
             Box(Modifier.fillMaxWidth().fillMaxHeight(0.72f).fillFullBleed()) {
                 AsyncImage(model = backdrop, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to JellytipPalette.Night, 0.38f to JellytipPalette.Night.copy(alpha = 0.86f), 0.75f to Color.Transparent)))
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to JellytipPalette.Night, 0.45f to JellytipPalette.Night.copy(alpha = 0.9f), 0.85f to Color.Transparent)))
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to JellytipPalette.Night)))
             }
         }
@@ -476,7 +476,7 @@ internal fun JvHero(
             Text(JourneysV1.meta(step), color = JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp)
             // Curated: the "why"; a quest has none: its premise (if any) says what the path is
             (step.why ?: hero.premise)?.let {
-                Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.88f), fontFamily = JellytipFontFamily, fontSize = 16.sp, lineHeight = 22.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 480.dp).testTag("jv-why"))
+                Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.88f), fontFamily = JellytipFontFamily, fontSize = 16.sp, lineHeight = 22.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 440.dp).testTag("jv-why"))
             }
         } else {
             Text("Every step seen.", color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 30.sp)
@@ -507,12 +507,14 @@ internal fun PathStrip(
     modifier: Modifier = Modifier,
 ) {
     val w = JourneysV1.window(steps.size, now)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
-        if (w.before > 0) Text("+${w.before} ✓ ——", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp)
+    // One line, always: the separators and "+n" keep their size, the step names share what is left (ellipsised), so a long
+    // path never wraps or pushes the strip down
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier.fillMaxWidth()) {
+        if (w.before > 0) Text("+${w.before} ✓ ——", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, softWrap = false)
         for (i in w.from..w.to) {
-            if (i > w.from) Text("—", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp)
+            if (i > w.from) Text("—", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, softWrap = false)
             val dot = JourneysV1.dot(steps, i, now)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.widthIn(max = 170.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.weight(1f, fill = false).widthIn(max = 170.dp)) {
                 when (dot) {
                     JvDot.DONE -> Text("✓", color = JellytipPalette.Vanilla, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     JvDot.NOW -> Box(Modifier.size(11.dp).background(JvColors.Peach, CircleShape))
@@ -535,7 +537,7 @@ internal fun PathStrip(
                 )
             }
         }
-        if (w.after > 0) Text("— +${w.after}", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp)
+        if (w.after > 0) Text("— +${w.after}", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, softWrap = false)
     }
 }
 

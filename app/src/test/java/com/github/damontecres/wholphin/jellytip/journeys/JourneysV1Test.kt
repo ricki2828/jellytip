@@ -137,8 +137,8 @@ class JourneysV1Test {
     fun kickerMetaAndProgress() {
         assertEquals("THE ROAD TO HEAT · STEP 3 OF 6", JourneysV1.kicker("The road to Heat", 2, 6))
         val thief = journey().steps[2]
-        assertEquals("1981 · 2 h 2 m · ★ 7.4 · Library", JourneysV1.meta(thief))
-        assertEquals("1970 · 2 h 20 m · ★ 7.9 · IPTV", JourneysV1.meta(journey().steps[1]))
+        assertEquals("2 h 2 m · ★ 7.4 · Library", JourneysV1.meta(thief))
+        assertEquals("2 h 20 m · ★ 7.9 · IPTV", JourneysV1.meta(journey().steps[1]))
         assertEquals("45 m", JourneysV1.runtime(45))
         assertEquals("2 h", JourneysV1.runtime(120))
         assertNull(JourneysV1.runtime(null))

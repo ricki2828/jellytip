@@ -303,7 +303,7 @@ private fun JourneyV1Body(
     // The focused step: its "why" and what OK does
     j.steps.getOrNull(focused)?.let { st ->
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.widthIn(max = 700.dp).testTag("jv-step-why")) {
-            Text(st.title + (st.year?.let { " ($it)" } ?: "") + " · " + JourneysV1.meta(st).substringAfter(" · ", JourneysV1.meta(st)), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(st.title + (st.year?.let { " ($it)" } ?: "") + " · " + JourneysV1.meta(st), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             st.why?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.85f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
     }

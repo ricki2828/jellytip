@@ -264,10 +264,9 @@ object JourneysV1 {
             }
         }
 
-    /** "2 h 2 m · ★ 7.4 · Library": the source is a small fact, library and IPTV otherwise look the same. */
+    /** "2 h 2 m · ★ 7.4 · Library" (the year sits with the title): the source is a small fact, library and IPTV look the same. */
     fun meta(s: JvStep): String =
         listOfNotNull(
-            s.year?.toString(),
             runtime(s.runtimeMin),
             s.rating?.let { "★ " + String.format(java.util.Locale.US, "%.1f", it) },
             when (s.source) {
