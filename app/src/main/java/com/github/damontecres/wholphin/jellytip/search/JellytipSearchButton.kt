@@ -61,11 +61,12 @@ object JellytipSearchButton {
         source: String,
         fromDrawer: Boolean,
     ) {
-        JellytipTrace.log("nav", "search hold -> chat via=$source")
+        JellytipTrace.log("nav", "search hold -> one box listening via=$source")
         _listen.value = SystemClock.uptimeMillis().coerceAtLeast(1L)
         JellytipInputGuard.swallowRestOfPress()
         if (nav.backStack.lastOrNull().isChat()) return
-        if (fromDrawer) nav.navigateToFromDrawer(Destination.JellytipAskChat) else nav.navigateTo(Destination.JellytipAskChat, "search hold")
+        // One box (Ricki 23-Nov): Search and Chat are one destination; the page listens (push-to-talk) and routes the words
+        if (fromDrawer) nav.navigateToFromDrawer(Destination.Search()) else nav.navigateTo(Destination.Search(), "search hold")
     }
 
     /**
@@ -112,7 +113,8 @@ object JellytipSearchButton {
         }
     }
 
-    private fun Destination?.isChat() = this is Destination.JellytipAskChat || this is Destination.JellytipAsk
+    /** The one box (Search) or an old Chat / Ask entry, which shows the same page. */
+    private fun Destination?.isChat() = this is Destination.Search || this is Destination.JellytipAskChat || this is Destination.JellytipAsk
 
     private fun Destination?.isPlayer() =
         this is Destination.Playback || this is Destination.PlaybackList || this is Destination.JellytipLiveTvPlayer || this is Destination.JellytipIptvPlay

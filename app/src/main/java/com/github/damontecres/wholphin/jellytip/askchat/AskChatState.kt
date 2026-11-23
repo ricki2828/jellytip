@@ -149,6 +149,8 @@ data class ChatResponse(
     val sources: List<String>,
     val matched: Int,
     val partial: Boolean,
+    /** 23-Nov (additive): true only when a typed turn got the plain reading because the AI was unavailable; null = an older server. */
+    val basic: Boolean? = null,
 )
 
 // ---------- state ----------
@@ -174,6 +176,8 @@ data class ChatState(
     val cards: List<ChatTitle> = emptyList(),
     val notes: List<ChatNote> = emptyList(),
     val mode: String? = null,
+    /** Show "basic mode" under the latest turn (AskChat.basicLabel). */
+    val basic: Boolean = false,
     val sources: List<String> = emptyList(),
     val matched: Int = 0,
     val error: ChatError? = null,
@@ -275,9 +279,18 @@ object AskChat {
         removed = removed.filter { it !in have } // a chip the server holds is not "removed"
         return ChatState(
             turns = turns, chips = r.chips, removed = removed, rev = s.rev, pending = null, reply = r.reply, cards = r.cards,
-            notes = r.notes, mode = r.mode, sources = r.sources, matched = r.matched, error = null, failed = null,
+            notes = r.notes, mode = r.mode, basic = basicLabel(r, b), sources = r.sources, matched = r.matched, error = null, failed = null,
         )
     }
+
+    /**
+     * "basic mode" under the turn (Ricki 23-Nov: "why is chat in basic mode?"): only when the AI was unavailable for a typed turn. The
+     * server says so in `basic`; an older server only has `mode`, so: fallback AND the turn was typed (a chip tap never asks the AI).
+     */
+    fun basicLabel(
+        r: ChatResponse,
+        b: ChatBody,
+    ): Boolean = r.basic ?: (r.mode == "fallback" && b.text != null)
 
     /**
      * A failed request for revision [rev] (ignored when a newer one has been issued).
@@ -532,6 +545,7 @@ object AskChat {
             sources = strList(d.optJSONArray("sources")),
             matched = optInt(d, "matched") ?: cards.size,
             partial = d.optBoolean("partial", false),
+            basic = d.opt("basic") as? Boolean,
         )
     }
 

@@ -649,6 +649,52 @@ class JellytipSearchService
             )
         }
 
+        /** One box: false once /v1/find answered 404 (an older server): submits then search plainly. */
+        @Volatile
+        var findAvailable: Boolean? = null
+
+        /**
+         * One box (FindFlow): the server's search / chat / both decision for a submitted [q], with the search body resolved like
+         * [search]. Null = no route (404, remembered) or a failure; the caller searches plainly. Only a 404 means "absent".
+         */
+        suspend fun find(q: String): FindDecision? {
+            if (findAvailable == false) return null
+            val (code, body) = api.userCall("v1/find?q=${enc(q)}&limit=$LIMIT", timeoutMs = 8_000) ?: return null
+            if (code == 404) {
+                findAvailable = false
+                return null
+            }
+            if (code != 200) return null
+            findAvailable = true
+            val base = runCatching { api.companionBase() }.getOrNull()
+            val logo: (String) -> String? = { rel ->
+                if (base == null || Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(rel) || rel.startsWith("//")) null else "$base/${rel.trimStart('/')}"
+            }
+            val d = FindParse.decision(body) { runCatching { SearchParse.answer(it, logo) }.getOrNull() } ?: return null
+            val a = d.search ?: return d
+            suspend fun img(u: String?) = u?.let { api.resolveUrl(it) }
+            suspend fun SearchResult.resolved() = if (source == "iptv" || kind == "collection") copy(poster = img(poster), backdrop = img(backdrop)) else this
+            return d.copy(
+                search =
+                    a.copy(
+                        groups = a.groups.map { g -> if (g.iptv.none { it.poster != null }) g else g.copy(iptv = g.iptv.map { it.copy(poster = img(it.poster)) }) },
+                        results = a.results?.map { it.resolved() },
+                        top = a.top?.resolved(),
+                    ),
+            )
+        }
+
+        /** Best effort, once per decision id (FindFlow decides when). */
+        fun findFeedback(
+            id: String,
+            switched: FindSwitch,
+        ) {
+            clickScope.launch {
+                val res = runCatching { api.userCall("v1/find/feedback", JSONObject().put("id", id).put("switched", switched.wire).toString(), timeoutMs = 5_000) }.getOrNull()
+                com.github.damontecres.wholphin.jellytip.debug.JellytipTrace.log("search", "find feedback ${switched.wire} -> ${res?.first}")
+            }
+        }
+
         private val clickScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
         /**

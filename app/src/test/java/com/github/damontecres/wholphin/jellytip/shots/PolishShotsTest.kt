@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.tv.material3.darkColorScheme
-import com.github.damontecres.wholphin.jellytip.ask.AskChipButton
+import com.github.damontecres.wholphin.jellytip.askchat.AskChipButton
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
 import com.github.damontecres.wholphin.jellytip.iptv.CatchUpChoiceCard
 import com.github.damontecres.wholphin.jellytip.iptv.CatchUpPolicy

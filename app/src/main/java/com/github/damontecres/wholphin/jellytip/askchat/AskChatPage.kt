@@ -76,8 +76,6 @@ import com.github.damontecres.wholphin.jellytip.cards.JellytipLibraryMenuHostOf
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleOpen
 import com.github.damontecres.wholphin.jellytip.cards.JellytipTitleSources
 import com.github.damontecres.wholphin.jellytip.cards.rememberJellytipLibraryMenu
-import com.github.damontecres.wholphin.jellytip.ask.AskButton
-import com.github.damontecres.wholphin.jellytip.ask.AskChipButton
 import com.github.damontecres.wholphin.jellytip.ask.AskParse
 import com.github.damontecres.wholphin.jellytip.ask.askItem
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
@@ -156,7 +154,22 @@ class JellytipAskChatViewModel
         val ui: StateFlow<AskChatUi> = _ui
         private val sender = ChatSender(ChatPost { path, body, timeoutMs -> jellytipApi.postJson(path, body, timeoutMs) })
         private var fetchJob: Job? = null
-        val chatVoice = ChatVoice(context, onText = { t -> _ui.update { it.copy(text = t) } }, onFinal = { t -> submit(t) })
+        /**
+         * One box (FindFlow): the search page takes a final voice result while the chat is empty, so the words go through /v1/find
+         * first. True = taken (the text is cleared here); false or null = a chat turn as before.
+         */
+        var voiceRoute: ((String) -> Boolean)? = null
+
+        /** One box: a pick was opened (a confirmation of the find decision). */
+        var onPicked: (() -> Unit)? = null
+
+        val chatVoice =
+            ChatVoice(context, onText = { t -> _ui.update { it.copy(text = t) } }, onFinal = { t ->
+                if (voiceRoute?.invoke(t) == true) _ui.update { it.copy(text = "") } else submit(t)
+            })
+
+        /** One box: true once the chat has a turn or one is in flight (a submit is then a follow-up, not a new question). */
+        fun hasTurns(): Boolean = _ui.value.chat.turns.isNotEmpty() || _ui.value.chat.pending != null
 
         init {
             sender.warm(viewModelScope) // the chat service warms up while the screen is open (fire and forget)
@@ -300,12 +313,14 @@ class JellytipAskChatViewModel
             private set
 
         fun openLibrary(item: BaseItem) {
+            onPicked?.invoke()
             lastOpened = AskChat.normId(item.id.toString())
             JellytipTrailerControl.stop()
             navigationManager.navigateTo(item.destination(), "chat pick OK")
         }
 
         fun openTv(card: ChatTitle.Iptv) {
+            onPicked?.invoke()
             lastOpened = "iptv:${card.iptvId}"
             // A TV film that is also in the library opens the library page (one page per title); otherwise its own IPTV page
             navigationManager.navigateTo(JellytipTitleOpen.detailsFor(card.toVodItem()), "chat TV pick OK")
@@ -326,6 +341,12 @@ class JellytipAskChatViewModel
             const val NOTICE_KEY = "notice_seen"
         }
     }
+
+/** One box: what the search page hosting the chat does instead of the chat page. */
+class ChatEmbed(
+    val startOver: () -> Unit,
+    val off: () -> Unit,
+)
 
 /** What the page calls (the view model's methods; no-ops in the screenshot harness). */
 internal class AskChatActions(
@@ -349,6 +370,8 @@ internal class AskChatActions(
 fun JellytipAskChatPage(
     modifier: Modifier = Modifier,
     viewModel: JellytipAskChatViewModel = hiltViewModel(),
+    /** One box: the search page hosts the chat; it owns the Search key / hold handling, Start over and the chat-off case. */
+    embedded: ChatEmbed? = null,
 ) {
     val ui by viewModel.ui.collectAsState()
     // A Search hold asked to listen: once mic permission comes back granted, listen (the hold was the ask)
@@ -363,7 +386,7 @@ fun JellytipAskChatPage(
             listenAfterGrant = false
         }
     // A short press on the remote's Search key while Chat is up: listen with the chat's recognizer (JellytipSearchButton consumes the key)
-    androidx.compose.runtime.DisposableEffect(viewModel, micPermission) {
+    if (embedded == null) androidx.compose.runtime.DisposableEffect(viewModel, micPermission) {
         val voice: () -> Unit = {
             when {
                 !viewModel.chatVoice.isAvailable || viewModel.ui.value.chat.pending != null -> Unit
@@ -376,7 +399,7 @@ fun JellytipAskChatPage(
     }
     // Hold Search (sidebar item or remote key) = Chat, listening: on open, and again on every hold while the page is up
     val listenToken by com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.listen.collectAsState()
-    LaunchedEffect(listenToken) {
+    if (embedded == null) LaunchedEffect(listenToken) {
         if (!com.github.damontecres.wholphin.jellytip.search.JellytipSearchButton.takeListen(listenToken)) return@LaunchedEffect
         when {
             !viewModel.chatVoice.isAvailable -> JellytipTrace.log("askchat", "hold: no recognizer, not listening")
@@ -400,11 +423,12 @@ fun JellytipAskChatPage(
         }
     }
     if (ui.chat.error == ChatError.Off) {
-        // The server has chat switched off (404): back with a short notice (no destinations stacking up on repeated taps)
-        LaunchedEffect(Unit) { viewModel.chatOff() }
+        // The server has chat switched off (404): back with a short notice (no destinations stacking up on repeated taps). In the one
+        // box the search results simply stay.
+        LaunchedEffect(Unit) { if (embedded != null) embedded.off() else viewModel.chatOff() }
     } else {
         val actions =
-            remember(viewModel, micPermission) {
+            remember(viewModel, micPermission, embedded) {
                 AskChatActions(
                     setText = viewModel::setText,
                     submit = viewModel::submit,
@@ -415,7 +439,7 @@ fun JellytipAskChatPage(
                     openTv = viewModel::openTv,
                     voice = viewModel.voiceInputManager,
                     lastOpened = { viewModel.lastOpened },
-                    startOver = viewModel::startOver,
+                    startOver = embedded?.startOver ?: viewModel::startOver,
                     micAvailable = viewModel.chatVoice.isAvailable,
                     micDown = { if (viewModel.chatVoice.hasPermission) viewModel.micDown() else micPermission.launch(Manifest.permission.RECORD_AUDIO) },
                     micUp = viewModel::micUp,
@@ -513,7 +537,7 @@ internal fun AskChatContent(
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(t.user, color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.Body, lineHeight = 17.sp)
                         Text(t.reply, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Medium, fontSize = JellytipLayout.Body, lineHeight = 17.sp)
-                        if (i == chat.turns.lastIndex && chat.mode == "fallback" && !pending) {
+                        if (i == chat.turns.lastIndex && chat.basic && !pending) {
                             Text("basic mode", color = dim, fontFamily = JellytipFontFamily, fontSize = JellytipLayout.MinText)
                         }
                     }

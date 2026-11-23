@@ -61,6 +61,9 @@ import com.github.damontecres.wholphin.jellytip.askchat.AskChatUi
 import com.github.damontecres.wholphin.jellytip.askchat.CHAT_HOLD_HINT
 import com.github.damontecres.wholphin.jellytip.askchat.ChatVoiceUi
 import com.github.damontecres.wholphin.jellytip.home.JellytipPalette
+import com.github.damontecres.wholphin.jellytip.search.Chip
+import com.github.damontecres.wholphin.jellytip.search.FindText
+import com.github.damontecres.wholphin.jellytip.search.ONE_BOX_PLACEHOLDER
 import com.github.damontecres.wholphin.jellytip.search.SEARCH_CHAT_HINT
 import com.github.damontecres.wholphin.jellytip.search.SearchHeaderRow
 import com.github.damontecres.wholphin.jellytip.search.jellytipPressHold
@@ -299,6 +302,29 @@ class ChatButtonShotsTest {
                 assertTrue("$name: hint right $hintRight + 52 dp of mic must stay <= 912", hintRight + 52f <= 912f)
             },
         ) { SearchTop() }
+    }
+
+    /** One box (Ricki 23-Nov): the empty box says what it takes, and BOTH's chip under it in its three states. */
+    @Test
+    fun oneBoxPlaceholderAndBothChip() {
+        val name = "onebox-1-placeholder-both"
+        shot(
+            name,
+            measure = {
+                assertEquals("$name: placeholder shown", 1, count(hasText(ONE_BOX_PLACEHOLDER)))
+                inSafe(name, "both chip", hasText(FindText.bothChip(false, false, "Comedy · 1990s", 24)))
+            },
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = JellytipLayout.PageTop, end = JellytipLayout.PageEnd),
+            ) {
+                SearchHeaderRow(query = "", searching = false, voice = null, onSpeech = {}, onQueryChange = {}, onSubmit = {}, readOnly = true, boxModifier = Modifier, onChat = {})
+                Chip(FindText.bothChip(true, false, null, 0)) {}
+                Chip(FindText.bothChip(false, true, null, 0)) {}
+                Chip(FindText.bothChip(false, false, "Comedy · 1990s", 24)) {}
+            }
+        }
     }
 
     @Test

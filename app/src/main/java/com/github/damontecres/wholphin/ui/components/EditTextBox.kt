@@ -325,6 +325,8 @@ fun SearchEditTextBox(
     readOnly: Boolean = false,
     height: Dp = 40.dp,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    // Jellytip one box: "Search or describe what you want"
+    placeholder: @Composable (() -> Unit)? = null,
 ) {
     EditTextBox(
         value,
@@ -352,6 +354,7 @@ fun SearchEditTextBox(
         enabled = enabled,
         readOnly = readOnly,
         height = height,
+        placeholder = placeholder,
         interactionSource = interactionSource,
     )
 }
