@@ -80,6 +80,8 @@ data class JvJourneyState(
     val load: JvLoad<JvJourney>? = null,
     val retrying: Boolean = false,
     val note: String? = null,
+    /** "Get it" per step index (Ricki 23-Nov: any gettable step can be asked for, not only the next one). */
+    val asks: Map<Int, JvAsk> = emptyMap(),
 )
 
 @HiltViewModel
@@ -103,6 +105,9 @@ class JellytipJourneyV1ViewModel
                 this.id = id
                 lastStep = null
                 _state.value = JvJourneyState()
+            } else {
+                // back on the page: the steps reload (a fetched film may have arrived); a finished ask is kept, a hung one is not
+                _state.update { s -> s.copy(asks = s.asks.filterValues { it.state != JvAskState.ASKING }) }
             }
             if (job?.isActive == true) return
             job =
@@ -138,16 +143,19 @@ class JellytipJourneyV1ViewModel
             jvPlay(viewModelScope, service, api, navigationManager, j, i)
         }
 
-        fun getIt(j: JvJourney) {
+        /** Get it for step [index] (null = the next missing one, as the header button). One ask per step at a time. */
+        fun getIt(
+            j: JvJourney,
+            index: Int?,
+        ) {
             if (!JellytipAdmin.isAdmin) return
-            _state.update { it.copy(note = "Asking for it…") }
+            val i = index ?: JourneysV1.getIndex(j.steps) ?: return
+            if (_state.value.asks[i]?.state == JvAskState.ASKING) return
+            val asking = JvAsk(JvAskState.ASKING)
+            _state.update { it.copy(note = JourneysV1.askText(asking), asks = it.asks + (i to asking)) }
             viewModelScope.launch {
-                val note =
-                    when (val r = service.get(j.summary.id)) {
-                        is JvGet.Queued -> "On its way. It shows up here when it's downloaded."
-                        is JvGet.Refused -> r.reason
-                    }
-                _state.update { it.copy(note = note) }
+                val a = JourneysV1.ask(service.get(j.summary.id, JourneysV1.getBody(j.steps, i)))
+                _state.update { it.copy(note = JourneysV1.askText(a), asks = it.asks + (i to a)) }
             }
         }
 
@@ -162,6 +170,13 @@ class JellytipJourneyV1ViewModel
                     "pause" -> "paused"
                     else -> "dropped"
                 }
+            service.toast(
+                when (what) {
+                    "start" -> JourneysV1.TOAST_ADDED
+                    "pause" -> JourneysV1.TOAST_REMOVED
+                    else -> JourneysV1.TOAST_DROPPED
+                },
+            )
             _state.update { s -> (s.load as? JvLoad.Ok)?.let { s.copy(load = JvLoad.Ok(it.value.copy(summary = it.value.summary.copy(status = status)))) } ?: s }
         }
     }
@@ -197,11 +212,13 @@ internal fun JourneyV1Content(
     isAdmin: Boolean,
     restoreStep: Int?,
     onPlay: (JvJourney, Int) -> Unit,
-    onGet: (JvJourney) -> Unit,
+    onGet: (JvJourney, Int?) -> Unit,
     onAction: (JvJourney, String) -> Unit,
     onFocusStep: (Int) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The shots: start with the drop confirm showing. */
+    confirmingDrop: Boolean = false,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -224,7 +241,7 @@ internal fun JourneyV1Content(
                 LaunchedEffect(Unit) { retry.tryRequestFocus() }
             }
 
-            is JvLoad.Ok -> JourneyV1Body(l.value, state.note, isAdmin, restoreStep, onPlay, onGet, onAction, onFocusStep)
+            is JvLoad.Ok -> JourneyV1Body(l.value, state.note, state.asks, isAdmin, restoreStep, onPlay, onGet, onAction, onFocusStep, confirmingDrop)
         }
     }
 }
@@ -233,12 +250,14 @@ internal fun JourneyV1Content(
 private fun JourneyV1Body(
     j: JvJourney,
     note: String?,
+    asks: Map<Int, JvAsk>,
     isAdmin: Boolean,
     restoreStep: Int?,
     onPlay: (JvJourney, Int) -> Unit,
-    onGet: (JvJourney) -> Unit,
+    onGet: (JvJourney, Int?) -> Unit,
     onAction: (JvJourney, String) -> Unit,
     onFocusStep: (Int) -> Unit,
+    confirmingDropAtStart: Boolean = false,
 ) {
     val s = j.summary
     val now = JourneysV1.nowIndex(j.steps)
@@ -248,6 +267,10 @@ private fun JourneyV1Body(
         Text(s.title, color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.Bold, fontSize = 28.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         if (s.curated) CuratedPill()
     }
+    // Once it's yours, say so (Ricki: after Start "not sure what happened")
+    JourneysV1.yourJourneyLine(s.title, s.status, now, j.steps.size)?.let {
+        Text(it, color = JvColors.Peach, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("jv-yours"))
+    }
     Text(
         listOfNotNull("${s.done} of ${j.steps.size} seen", s.playable.takeIf { it > 0 }?.let { "$it ready to play" }, j.maxRating?.let { "up to $it" }).joinToString(" · "),
         color = JvColors.Dim,
@@ -255,15 +278,41 @@ private fun JourneyV1Body(
         fontSize = 13.sp,
     )
     j.premise?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.88f), fontFamily = JellytipFontFamily, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 640.dp)) }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.focusGroup()) {
-        if (now != null) JvButton("▶  Play ${j.steps[now].title}", primary = true) { onPlay(j, now) }
-        when (s.status) {
-            "active" -> JvButton("Pause") { onAction(j, "pause") }
-            // A finished journey has nothing to start (the server answers status done)
-            "paused", "none", "dropped" -> JvButton(if (s.status == "none") "Start" else "Resume journey") { onAction(j, "start") }
+    var confirmingDrop by remember(s.id) { mutableStateOf(confirmingDropAtStart) }
+    val playFocus = remember { FocusRequester() }
+    val confirmFocus = remember { FocusRequester() }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.focusGroup().testTag("jv-path-buttons")) {
+        for (b in JourneysV1.pathButtons(s.status, now != null, confirmingDrop)) {
+            val label = JourneysV1.btnLabel(b, now?.let { j.steps[it].title })
+            val m =
+                when (b) {
+                    JvBtn.PLAY -> Modifier.focusRequester(playFocus).testTag("jv-btn-play")
+                    JvBtn.DROP_CANCEL -> Modifier.focusRequester(confirmFocus).testTag("jv-btn-keep")
+                    else -> Modifier.testTag("jv-btn-${b.name.lowercase()}")
+                }
+            JvButton(label, m, primary = b == JvBtn.PLAY) {
+                when (b) {
+                    JvBtn.PLAY -> now?.let { onPlay(j, it) } // starts the journey too (jvPlay)
+                    JvBtn.REMOVE -> onAction(j, "pause")
+                    JvBtn.ADD_BACK -> onAction(j, "start")
+                    JvBtn.DROP -> confirmingDrop = true
+                    JvBtn.DROP_CONFIRM -> {
+                        confirmingDrop = false
+                        onAction(j, "drop")
+                    }
+                    JvBtn.DROP_CANCEL -> confirmingDrop = false
+                }
+            }
         }
-        if (s.status != "dropped") JvButton("Drop it") { onAction(j, "drop") }
-        if (isAdmin && getAt != null) JvButton("Get ${j.steps[getAt].title}") { onGet(j) }
+        if (!confirmingDrop && isAdmin && getAt != null) JvButton("Get ${j.steps[getAt].title}") { onGet(j, getAt) }
+    }
+    if (confirmingDrop) {
+        Text("Drop this journey? It leaves your rows; you can still open it from here.", color = JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp)
+        // focus on the safe choice
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            confirmFocus.tryRequestFocus()
+        }
     }
     note?.let { Text(it, color = JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp) }
     val first = remember { FocusRequester() }
@@ -280,31 +329,45 @@ private fun JourneyV1Body(
             JvStepCard(
                 st,
                 dot,
-                Modifier
-                    .then(if (i == target) Modifier.focusRequester(first) else Modifier)
-                    .onFocusChanged { f ->
-                        if (f.isFocused) {
-                            focused = i
-                            onFocusStep(i)
-                        }
-                    },
+                label = if (JourneysV1.stepAction(st, isAdmin) == JvStepAction.GET) JourneysV1.askLabel(asks[i]) else null,
+                modifier =
+                    Modifier
+                        .then(if (i == target) Modifier.focusRequester(first) else Modifier)
+                        .onFocusChanged { f ->
+                            if (f.isFocused) {
+                                focused = i
+                                onFocusStep(i)
+                            }
+                        },
             ) {
-                when {
-                    st.source.playable -> onPlay(j, i)
-                    isAdmin && i == getAt -> onGet(j)
+                when (JourneysV1.stepAction(st, isAdmin)) {
+                    JvStepAction.PLAY -> onPlay(j, i)
+                    JvStepAction.GET -> onGet(j, i) // any gettable step, not only the next one
+                    JvStepAction.NONE -> Unit // missing: the line under the steps says why
                 }
             }
         }
     }
     LaunchedEffect(j.summary.id) {
         withFrameNanos { }
-        first.tryRequestFocus()
+        // Not started yet: Play (it starts the journey) is the first thing; otherwise the steps, as before
+        if (restoreStep == null && s.status == "none" && now != null && !confirmingDropAtStart) playFocus.tryRequestFocus() else first.tryRequestFocus()
     }
     // The focused step: its "why" and what OK does
     j.steps.getOrNull(focused)?.let { st ->
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.widthIn(max = 700.dp).testTag("jv-step-why")) {
             Text(st.title + (st.year?.let { " ($it)" } ?: "") + " · " + JourneysV1.meta(st), color = JellytipPalette.Vanilla, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             st.why?.let { Text(it, color = JellytipPalette.Vanilla.copy(alpha = 0.85f), fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            val act = JourneysV1.stepAction(st, isAdmin)
+            val line =
+                when {
+                    act == JvStepAction.GET -> asks[focused]?.let { JourneysV1.askText(it) } ?: "Not here yet. OK to get it."
+                    act == JvStepAction.NONE -> JourneysV1.missingReason(st)
+                    else -> null
+                }
+            line?.let {
+                Text(it, color = if (act == JvStepAction.GET) JvColors.Peach else JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("jv-step-get"))
+            }
         }
     }
 }
@@ -314,6 +377,8 @@ internal fun JvStepCard(
     st: JvStep,
     dot: JvDot,
     modifier: Modifier = Modifier,
+    /** Overrides the small label (a gettable step for an admin: "Get it" / "Asking…" / "On its way" / "Blocked"). */
+    label: String? = null,
     onClick: () -> Unit,
 ) {
     var failed by remember(st.poster) { mutableStateOf(false) }
@@ -343,7 +408,7 @@ internal fun JvStepCard(
             Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.align(Alignment.BottomStart).padding(7.dp)) {
                 Text(st.title, fontFamily = JellytipFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = JellytipPalette.Vanilla)
                 Text(
-                    when (dot) {
+                    label ?: when (dot) {
                         JvDot.GAP -> if (st.source == JvSource.GETTABLE) "Not here yet" else "Not available"
                         JvDot.SKIPPED -> "Skipped"
                         JvDot.NOW -> "Tonight"
@@ -351,7 +416,7 @@ internal fun JvStepCard(
                     },
                     fontFamily = JellytipFontFamily,
                     fontSize = 12.sp,
-                    color = if (dot == JvDot.NOW) JvColors.Peach else JvColors.Dim,
+                    color = if (dot == JvDot.NOW || label != null) JvColors.Peach else JvColors.Dim,
                 )
             }
         }

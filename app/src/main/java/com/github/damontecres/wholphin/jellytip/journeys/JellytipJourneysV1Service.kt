@@ -51,9 +51,15 @@ class JellytipJourneysV1Service
     @Inject
     constructor(
         private val api: JellytipApi,
+        @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     ) {
         init {
             shared = this
+        }
+
+        /** A short confirmation (start / remove / drop), on the main thread. */
+        fun toast(text: String) {
+            scope.launch { runCatching { com.github.damontecres.wholphin.ui.showToast(context, text, android.widget.Toast.LENGTH_SHORT) } }
         }
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -123,13 +129,18 @@ class JellytipJourneysV1Service
             scope.launch { runCatching { api.userCall("v1/journeys/${enc(id)}/event", body = body) } }
         }
 
-        suspend fun get(id: String): JvGet {
-            val r = api.userCall("v1/journeys/${enc(id)}/get", body = "{}", timeoutMs = 20_000) ?: return JvGet.Refused("Couldn't reach the server. Try again.")
+        /** Get it: [body] {} = the next missing step; {"index", "tmdbId"} = that step ([JourneysV1.getBody]). */
+        suspend fun get(
+            id: String,
+            body: String = "{}",
+        ): JvGet {
+            val r = api.userCall("v1/journeys/${enc(id)}/get", body = body, timeoutMs = 20_000) ?: return JvGet.Refused("Couldn't reach the server. Try again.")
             val o = runCatching { JSONObject(r.second) }.getOrNull()
             return when (r.first) {
                 200 -> JvGet.Queued(o?.optInt("tmdbId", 0)?.takeIf { it > 0 })
                 403 -> JvGet.Refused("Only an admin can get films.")
                 409 -> JvGet.Refused(o?.optString("reason")?.takeIf { it.isNotBlank() } ?: "Can't get it right now.")
+                404 -> JvGet.Refused("That step isn't in this journey any more. Go back and open it again.")
                 else -> JvGet.Refused("Couldn't ask for it (${r.first}). Try again.")
             }
         }

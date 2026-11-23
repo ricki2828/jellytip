@@ -69,6 +69,18 @@ data class JvStep(
     val backdrop: String?,
 )
 
+enum class JvStepAction { PLAY, GET, NONE }
+
+enum class JvBtn { PLAY, REMOVE, ADD_BACK, DROP, DROP_CONFIRM, DROP_CANCEL }
+
+enum class JvAskState { ASKING, QUEUED, BLOCKED }
+
+/** A "Get it" for one step: where it stands, and the server's reason when blocked (the 409 text: daily cap, 30 GB floor...). */
+data class JvAsk(
+    val state: JvAskState,
+    val reason: String? = null,
+)
+
 data class JvJourney(
     val summary: JvSummary,
     val premise: String?,
@@ -230,6 +242,112 @@ object JourneysV1 {
 
     /** The step "Get it" fetches (admin): the first unseen gettable one, as the server's /get picks it. */
     fun getIndex(steps: List<JvStep>): Int? = steps.indexOfFirst { !it.seen && it.source == JvSource.GETTABLE }.takeIf { it >= 0 }
+
+    // ---------- See the path buttons (Ricki 23-Nov: "I hit Start but not sure what happened. It now says I can pause it") ----------
+
+    /**
+     * The buttons, in order. Play is the way in: it starts the journey (no separate Start). An active journey can be removed from
+     * "my journeys" (server pause, progress kept); a removed / dropped one added back. Drop only behind a confirm.
+     */
+    fun pathButtons(
+        status: String,
+        canPlay: Boolean,
+        confirmingDrop: Boolean,
+    ): List<JvBtn> {
+        if (confirmingDrop) return listOf(JvBtn.DROP_CONFIRM, JvBtn.DROP_CANCEL)
+        val out = mutableListOf<JvBtn>()
+        if (canPlay) out += JvBtn.PLAY
+        when (status) {
+            "active" -> out += JvBtn.REMOVE
+            "paused", "dropped" -> out += JvBtn.ADD_BACK
+        }
+        if (status != "dropped" && status != "done") out += JvBtn.DROP
+        return out
+    }
+
+    fun btnLabel(
+        b: JvBtn,
+        nowTitle: String?,
+    ): String =
+        when (b) {
+            JvBtn.PLAY -> "▶  Play: ${nowTitle.orEmpty()}"
+            JvBtn.REMOVE -> "Remove from my journeys"
+            JvBtn.ADD_BACK -> "Add back to my journeys"
+            JvBtn.DROP -> "Drop it…"
+            JvBtn.DROP_CONFIRM -> "Yes, drop it"
+            JvBtn.DROP_CANCEL -> "Keep it"
+        }
+
+    /** The confirmation line once a journey is yours: "Your journey: Heat · step 3 of 6" (null unless active). */
+    fun yourJourneyLine(
+        title: String,
+        status: String,
+        now: Int?,
+        size: Int,
+    ): String? {
+        if (status != "active") return null
+        return if (now == null) "Your journey: $title · every step seen" else "Your journey: $title · step ${now + 1} of $size"
+    }
+
+    const val TOAST_ADDED = "Added to your journeys"
+    const val TOAST_REMOVED = "Removed from your journeys. Your progress is kept."
+    const val TOAST_DROPPED = "Dropped"
+
+    // ---------- Get it for any step (Ricki 23-Nov: "select one not available and get it") ----------
+
+    /** What OK does on a step: play it, ask for it (admin, gettable), or nothing (missing: [missingReason] says why). */
+    fun stepAction(
+        st: JvStep,
+        admin: Boolean,
+    ): JvStepAction =
+        when {
+            st.source.playable -> JvStepAction.PLAY
+            st.source == JvSource.GETTABLE && admin -> JvStepAction.GET
+            else -> JvStepAction.NONE
+        }
+
+    /** The short line under a step OK can't do anything with. */
+    fun missingReason(st: JvStep): String? =
+        when (st.source) {
+            JvSource.MISSING -> "Not in the library or on TV, and it can't be fetched"
+            JvSource.GETTABLE -> "Not here yet: an admin can get it"
+            else -> null
+        }
+
+    /** The /get body for one chosen step: its place in the steps (0-based) and its TMDB id, so the server can check both. */
+    fun getBody(
+        steps: List<JvStep>,
+        index: Int?,
+    ): String {
+        val o = JSONObject()
+        val st = index?.let { steps.getOrNull(it) } ?: return o.toString()
+        o.put("index", index)
+        st.tmdbId?.let { o.put("tmdbId", it) }
+        return o.toString()
+    }
+
+    /** What a step's own feedback says while / after it was asked for. */
+    fun askText(a: JvAsk): String =
+        when (a.state) {
+            JvAskState.ASKING -> "Asking for it…"
+            JvAskState.QUEUED -> "On its way. It shows up here when it's downloaded."
+            JvAskState.BLOCKED -> a.reason ?: "Can't get it right now."
+        }
+
+    /** The card's small label for a gettable step. */
+    fun askLabel(a: JvAsk?): String =
+        when (a?.state) {
+            null -> "Get it"
+            JvAskState.ASKING -> "Asking…"
+            JvAskState.QUEUED -> "On its way"
+            JvAskState.BLOCKED -> "Blocked"
+        }
+
+    fun ask(r: JvGet): JvAsk =
+        when (r) {
+            is JvGet.Queued -> JvAsk(JvAskState.QUEUED)
+            is JvGet.Refused -> JvAsk(JvAskState.BLOCKED, r.reason)
+        }
 
     fun dot(
         steps: List<JvStep>,

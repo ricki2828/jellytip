@@ -100,6 +100,8 @@ data class JvPageState(
     val retrying: Boolean = false,
     /** "Get it" answer to show under the buttons. */
     val note: String? = null,
+    /** The hero journey's asks, per step index (any gettable step on the path strip). */
+    val asks: Map<Int, JvAsk> = emptyMap(),
 )
 
 /** What the page can do (the view model; a fake in the shots). */
@@ -111,7 +113,11 @@ interface JvActions {
 
     fun open(id: String)
 
-    fun getIt(j: JvJourney)
+    /** Get it for step [index] (null = the next missing one). */
+    fun getIt(
+        j: JvJourney,
+        index: Int?,
+    )
 
     fun retry()
 
@@ -237,16 +243,21 @@ class JellytipJourneysV1ViewModel
             navigationManager.navigateTo(Destination.JellytipJourney(id, v1 = true), "journeys v1 card OK")
         }
 
-        override fun getIt(j: JvJourney) {
+        override fun getIt(
+            j: JvJourney,
+            index: Int?,
+        ) {
             if (!JellytipAdmin.isAdmin) return
-            _state.update { it.copy(note = "Asking for it…") }
+            val i = index ?: JourneysV1.getIndex(j.steps) ?: return
+            if (_state.value.asks[i]?.state == JvAskState.ASKING) return
+            val asking = JvAsk(JvAskState.ASKING)
+            _state.update { it.copy(note = JourneysV1.askText(asking), asks = it.asks + (i to asking)) }
             viewModelScope.launch {
-                val note =
-                    when (val r = service.get(j.summary.id)) {
-                        is JvGet.Queued -> "On its way. It shows up here when it's downloaded."
-                        is JvGet.Refused -> r.reason
-                    }
-                _state.update { it.copy(note = note) }
+                val a = JourneysV1.ask(service.get(j.summary.id, JourneysV1.getBody(j.steps, i)))
+                _state.update { s ->
+                    // the hero may have moved to another journey meanwhile: keep the answer only for the same one
+                    if (s.hero?.summary?.id != j.summary.id) s else s.copy(note = JourneysV1.askText(a), asks = s.asks + (i to a))
+                }
             }
         }
 
@@ -294,7 +305,11 @@ internal fun jvPlay(
             }
         if (!navigationManager.navigateToChecked(dest, "journey play ${j.summary.id} #${step.n}")) return@launch
         JellytipTrace.log("journeys", "play ${j.summary.id} step ${index + 1}/${j.steps.size} ${step.source}")
-        if (j.summary.status != "active") service.action(j.summary.id, "start")
+        if (j.summary.status != "active") {
+            // Play is the way in: it starts the journey, and says so
+            service.action(j.summary.id, "start")
+            service.toast(JourneysV1.TOAST_ADDED)
+        }
         JourneysV1.skipFor(j.steps, index)?.let { service.event(j.summary.id, "skip", it.tmdbId) }
         service.event(j.summary.id, "play", step.tmdbId)
       } finally {
@@ -450,7 +465,8 @@ internal fun JvHero(
         val s = hero.summary
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (step != null) JourneysV1.kicker(s.title, now ?: 0, hero.steps.size) else s.title.uppercase() + " · FINISHED",
+                (if (s.status == "active") "YOUR JOURNEY: " else "") +
+                    (if (step != null) JourneysV1.kicker(s.title, now ?: 0, hero.steps.size) else s.title.uppercase() + " · FINISHED"),
                 color = JvColors.Peach,
                 fontFamily = JellytipFontFamily,
                 fontWeight = FontWeight.Bold,
@@ -491,11 +507,18 @@ internal fun JvHero(
                 JvButton("See the path", playM.then(pathM).testTag("jv-path")) { actions.open(s.id) }
             }
             if (isAdmin && getAt != null) {
-                JvButton("Get ${hero.steps[getAt].title}", Modifier.testTag("jv-get")) { actions.getIt(hero) }
+                JvButton("Get ${hero.steps[getAt].title}", Modifier.testTag("jv-get")) { actions.getIt(hero, getAt) }
             }
         }
         state.note?.let { Text(it, color = JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp) }
-        PathStrip(hero.steps, now, Modifier.padding(top = 4.dp).testTag("jv-path-strip"))
+        PathStrip(
+            hero.steps,
+            now,
+            Modifier.padding(top = 4.dp).testTag("jv-path-strip"),
+            // admin: every gettable step on the strip is focusable, OK = Get it
+            onGet = if (isAdmin) ({ i -> actions.getIt(hero, i) }) else null,
+            asks = state.asks,
+        )
     }
 }
 
@@ -505,6 +528,8 @@ internal fun PathStrip(
     steps: List<JvStep>,
     now: Int?,
     modifier: Modifier = Modifier,
+    onGet: ((Int) -> Unit)? = null,
+    asks: Map<Int, JvAsk> = emptyMap(),
 ) {
     val w = JourneysV1.window(steps.size, now)
     // One line, always: the separators and "+n" keep their size, the step names share what is left (ellipsised), so a long
@@ -514,7 +539,14 @@ internal fun PathStrip(
         for (i in w.from..w.to) {
             if (i > w.from) Text("—", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, softWrap = false)
             val dot = JourneysV1.dot(steps, i, now)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.weight(1f, fill = false).widthIn(max = 170.dp)) {
+            val gettable = onGet != null && steps[i].source == JvSource.GETTABLE
+            val item = Modifier.weight(1f, fill = false).widthIn(max = 170.dp)
+            if (gettable) {
+                // a focusable chip: "Get it" (or how the ask went)
+                JvGetChip(steps[i].title, JourneysV1.askLabel(asks[i]), item.testTag("jv-strip-get-$i")) { onGet?.invoke(i) }
+                continue
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = item) {
                 when (dot) {
                     JvDot.DONE -> Text("✓", color = JellytipPalette.Vanilla, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     JvDot.NOW -> Box(Modifier.size(11.dp).background(JvColors.Peach, CircleShape))
@@ -538,6 +570,40 @@ internal fun PathStrip(
             }
         }
         if (w.after > 0) Text("— +${w.after}", color = JvColors.Faint, fontFamily = JellytipFontFamily, fontSize = 14.sp, maxLines = 1, softWrap = false)
+    }
+}
+
+/** A gettable step on the path strip (admin): its name and "Get it", focusable; OK asks for it. */
+@Composable
+private fun JvGetChip(
+    title: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors =
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                contentColor = JvColors.Dim,
+                focusedContainerColor = JellytipSurfaceFocus.Pastel,
+                focusedContentColor = JellytipSurfaceFocus.Ink,
+            ),
+        border = ClickableSurfaceDefaults.border(border = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(1.dp, JvColors.Faint))),
+        modifier = modifier,
+    ) {
+        Text(
+            "$title · $label",
+            fontFamily = JellytipFontFamily,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
+        )
     }
 }
 

@@ -217,4 +217,60 @@ class JourneysV1Test {
         assertEquals(listOf("cur:ghibli-first", "f:10194"), h.start)
         assertFalse(h.isEmpty)
     }
+
+    // ---- 23-Nov: Get it on any gettable step; Play is the way in ----
+
+    @Test
+    fun whatOkDoesOnEachStep() {
+        val j = journey() // Samouraï lib, Cercle iptv, Thief lib, Manhunter gettable, Heat lib, Collateral missing
+        val acts = j.steps.map { JourneysV1.stepAction(it, admin = true) }
+        assertEquals(listOf(JvStepAction.PLAY, JvStepAction.PLAY, JvStepAction.PLAY, JvStepAction.GET, JvStepAction.PLAY, JvStepAction.NONE), acts)
+        assertEquals("a non-admin can't get", JvStepAction.NONE, JourneysV1.stepAction(j.steps[3], admin = false))
+        assertEquals("Not in the library or on TV, and it can't be fetched", JourneysV1.missingReason(j.steps[5]))
+        assertNull(JourneysV1.missingReason(j.steps[0]))
+    }
+
+    @Test
+    fun getBodyNamesTheChosenStep() {
+        val j = journey()
+        val b = JSONObject(JourneysV1.getBody(j.steps, 3))
+        assertEquals(3, b.getInt("index"))
+        assertEquals(j.steps[3].tmdbId, b.getInt("tmdbId"))
+        assertEquals("no step = the server's next missing one", "{}", JourneysV1.getBody(j.steps, null))
+        assertEquals("out of range = {}", "{}", JourneysV1.getBody(j.steps, 99))
+    }
+
+    @Test
+    fun askFeedback() {
+        assertEquals("Get it", JourneysV1.askLabel(null))
+        assertEquals("Asking…", JourneysV1.askLabel(JvAsk(JvAskState.ASKING)))
+        val q = JourneysV1.ask(JvGet.Queued(500))
+        assertEquals(JvAskState.QUEUED, q.state)
+        assertEquals("On its way", JourneysV1.askLabel(q))
+        val b = JourneysV1.ask(JvGet.Refused("Daily request limit reached"))
+        assertEquals("Blocked", JourneysV1.askLabel(b))
+        assertEquals("the 409 reason is shown as is", "Daily request limit reached", JourneysV1.askText(b))
+    }
+
+    @Test
+    fun pathButtonsPlayStartsNoPauseConfusion() {
+        // not started: Play is the way in, no Start, no Pause
+        assertEquals(listOf(JvBtn.PLAY, JvBtn.DROP), JourneysV1.pathButtons("none", canPlay = true, confirmingDrop = false))
+        // started: Remove (progress kept) instead of Pause
+        assertEquals(listOf(JvBtn.PLAY, JvBtn.REMOVE, JvBtn.DROP), JourneysV1.pathButtons("active", canPlay = true, confirmingDrop = false))
+        assertEquals(listOf(JvBtn.PLAY, JvBtn.ADD_BACK, JvBtn.DROP), JourneysV1.pathButtons("paused", canPlay = true, confirmingDrop = false))
+        assertEquals(listOf(JvBtn.PLAY, JvBtn.ADD_BACK), JourneysV1.pathButtons("dropped", canPlay = true, confirmingDrop = false))
+        assertEquals("finished: nothing to start or drop", emptyList<JvBtn>(), JourneysV1.pathButtons("done", canPlay = false, confirmingDrop = false))
+        assertEquals("drop only behind a confirm", listOf(JvBtn.DROP_CONFIRM, JvBtn.DROP_CANCEL), JourneysV1.pathButtons("active", canPlay = true, confirmingDrop = true))
+        assertEquals("▶  Play: Thief", JourneysV1.btnLabel(JvBtn.PLAY, "Thief"))
+        assertEquals("Remove from my journeys", JourneysV1.btnLabel(JvBtn.REMOVE, null))
+    }
+
+    @Test
+    fun yourJourneyLineOnlyOnceItsYours() {
+        assertEquals("Your journey: The road to Heat · step 3 of 6", JourneysV1.yourJourneyLine("The road to Heat", "active", 2, 6))
+        assertEquals("Your journey: X · every step seen", JourneysV1.yourJourneyLine("X", "active", null, 4))
+        assertNull(JourneysV1.yourJourneyLine("X", "none", 0, 4))
+        assertNull(JourneysV1.yourJourneyLine("X", "paused", 0, 4))
+    }
 }

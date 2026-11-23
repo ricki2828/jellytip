@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
@@ -61,6 +63,8 @@ import com.github.damontecres.wholphin.jellytip.journeys.JourneysV1Content
 import com.github.damontecres.wholphin.jellytip.journeys.JvActions
 import com.github.damontecres.wholphin.jellytip.journeys.JvHome
 import com.github.damontecres.wholphin.jellytip.journeys.JvJourney
+import com.github.damontecres.wholphin.jellytip.journeys.JvAsk
+import com.github.damontecres.wholphin.jellytip.journeys.JvAskState
 import com.github.damontecres.wholphin.jellytip.journeys.JvJourneyState
 import com.github.damontecres.wholphin.jellytip.journeys.JvLoad
 import com.github.damontecres.wholphin.jellytip.journeys.JvPageState
@@ -172,7 +176,10 @@ class JourneysShotsTest {
 
             override fun open(id: String) {}
 
-            override fun getIt(j: JvJourney) {}
+            override fun getIt(
+                j: JvJourney,
+                index: Int?,
+            ) {}
 
             override fun retry() {}
 
@@ -246,9 +253,12 @@ class JourneysShotsTest {
             // 6 steps, window of 5 around tonight's: "+1 ✓" then steps 2-6
             val w = JourneysV1.window(heat.steps.size, 2)
             assertEquals(1, w.from)
-            heat.steps.drop(1).forEach { assertEquals("strip shows ${it.title}", 1, count(hasText(it.title, substring = false))) }
+            heat.steps.drop(1).filter { it.source != JvSource.GETTABLE }.forEach { assertEquals("strip shows ${it.title}", 1, count(hasText(it.title, substring = false))) }
+            // a gettable step is a focusable "Get it" chip on the strip (admin)
+            assertEquals(1, count(hasTestTag("jv-strip-get-3")))
+            assertEquals(1, count(hasText("Manhunter · Get it")))
             assertEquals(1, count(hasText("+1 ✓ ——")))
-            assertEquals(1, count(hasText("THE ROAD TO HEAT · STEP 3 OF 6")))
+            assertEquals(1, count(hasText("YOUR JOURNEY: THE ROAD TO HEAT · STEP 3 OF 6")))
             assertEquals(1, count(hasText("▶  Play Thief")))
             assertEquals(1, count(hasText("Get Manhunter")))
         }) { JourneysV1Content(page(home, heat), noop, isAdmin = true, restoreId = null) }
@@ -258,6 +268,7 @@ class JourneysShotsTest {
     fun heroNotAdminHasNoGetIt() {
         shot("jv-1b-hero-not-admin", measure = {
             assertEquals(0, count(hasTestTag("jv-get")))
+            assertEquals("no Get chips for a non-admin", 0, count(hasTestTag("jv-strip-get-3")))
         }) { JourneysV1Content(page(home, heat), noop, isAdmin = false, restoreId = null) }
     }
 
@@ -289,7 +300,7 @@ class JourneysShotsTest {
                 isAdmin = true,
                 restoreStep = null,
                 onPlay = { _, _ -> },
-                onGet = {},
+                onGet = { _, _ -> },
                 onAction = { _, _ -> },
                 onFocusStep = {},
                 onRetry = {},
@@ -398,5 +409,123 @@ class JourneysShotsTest {
         shot("jv-7-failed", measure = {
             compose.onNode(hasTestTag("jv-retry")).assertIsFocused()
         }) { JourneysV1Content(JvPageState(home = JvLoad.Failed(503)), noop, isAdmin = false, restoreId = null) }
+    }
+
+    // ---- 23-Nov: Get it on any gettable step; Play starts a journey (no Start / Pause confusion) ----
+
+    private fun pathPage(
+        j: JvJourney,
+        asks: Map<Int, JvAsk> = emptyMap(),
+        confirmingDrop: Boolean = false,
+        isAdmin: Boolean = true,
+    ): @Composable BoxScope.() -> Unit =
+        {
+            JourneyV1Content(
+                state = JvJourneyState(load = JvLoad.Ok(j), asks = asks),
+                isAdmin = isAdmin,
+                restoreStep = null,
+                onPlay = { _, _ -> },
+                onGet = { _, _ -> },
+                onAction = { _, _ -> },
+                onFocusStep = {},
+                onRetry = {},
+                confirmingDrop = confirmingDrop,
+            )
+        }
+
+    private fun withStatus(status: String) = heat.copy(summary = heat.summary.copy(status = status))
+
+    private fun stepCard(title: String) = hasClickAction() and hasAnyAncestor(hasTestTag("jv-steps")) and hasText(title, substring = true)
+
+    @Test
+    fun pathBeforeStartPlayIsTheWayIn() {
+        shot("jv-8-path-before-start", measure = {
+            compose.onNode(hasTestTag("jv-btn-play")).assertIsFocused()
+            assertEquals(1, count(hasText("▶  Play: Thief")))
+            assertEquals("no Start button", 0, count(hasText("Start", substring = false)))
+            assertEquals("no Pause / Remove before it's yours", 0, count(hasTestTag("jv-btn-remove")))
+            assertEquals(0, count(hasTestTag("jv-yours")))
+            assertEquals(1, count(hasText("Drop it…")))
+            inSafe("jv-8-path-before-start", "buttons", hasTestTag("jv-path-buttons"))
+        }, content = pathPage(withStatus("none")))
+    }
+
+    @Test
+    fun pathAfterStartSaysItsYours() {
+        shot("jv-9-path-after-start", steps = {
+            compose.onNode(hasTestTag("jv-btn-remove")).requestFocus()
+            advance(300)
+        }, measure = {
+            assertEquals(1, count(hasText("Your journey: The road to Heat · step 3 of 6")))
+            assertEquals(1, count(hasText("Remove from my journeys")))
+            assertEquals(0, count(hasText("Pause")))
+            inSafe("jv-9-path-after-start", "your journey line", hasTestTag("jv-yours"))
+        }, content = pathPage(withStatus("active")))
+    }
+
+    @Test
+    fun pathRemovedCanBeAddedBack() {
+        shot("jv-9b-path-removed", measure = {
+            assertEquals(1, count(hasText("Add back to my journeys")))
+            assertEquals(0, count(hasTestTag("jv-yours")))
+        }, content = pathPage(withStatus("paused")))
+    }
+
+    @Test
+    fun dropNeedsAConfirm() {
+        shot("jv-10-drop-confirm", steps = {
+            compose.onNode(hasTestTag("jv-btn-keep")).requestFocus()
+            advance(300)
+        }, measure = {
+            compose.onNode(hasTestTag("jv-btn-keep")).assertIsFocused()
+            assertEquals(1, count(hasText("Yes, drop it")))
+            assertEquals(0, count(hasTestTag("jv-btn-play")))
+        }, content = pathPage(withStatus("active"), confirmingDrop = true))
+    }
+
+    @Test
+    fun anyGettableStepCanBeAskedFor() {
+        shot("jv-11-get-any-blocked", steps = {
+            compose.onAllNodes(stepCard("Manhunter")).onFirst().requestFocus()
+            advance(400)
+        }, measure = {
+            assertEquals(1, count(hasText("Blocked")))
+            assertEquals(1, count(hasText("Not enough free disk space (30 GB floor)")))
+            inSafe("jv-11-get-any-blocked", "get line", hasTestTag("jv-step-get"))
+        }, content = pathPage(withStatus("active"), asks = mapOf(3 to JvAsk(JvAskState.BLOCKED, "Not enough free disk space (30 GB floor)"))))
+    }
+
+    @Test
+    fun aGettableStepNotYetAsked() {
+        shot("jv-11b-get-any-ask", steps = {
+            compose.onAllNodes(stepCard("Manhunter")).onFirst().requestFocus()
+            advance(400)
+        }, measure = {
+            assertEquals(1, count(hasText("Get it")))
+            assertEquals(1, count(hasText("Not here yet. OK to get it.")))
+        }, content = pathPage(withStatus("active")))
+    }
+
+    @Test
+    fun aMissingStepSaysWhyAndDoesNothing() {
+        shot("jv-12-missing", steps = {
+            compose.onAllNodes(stepCard("Collateral")).onFirst().requestFocus()
+            advance(400)
+        }, measure = {
+            assertEquals(1, count(hasText("Not in the library or on TV, and it can't be fetched")))
+            assertEquals(1, count(hasText("Not available")))
+        }, content = pathPage(withStatus("active")))
+    }
+
+    @Test
+    fun heroStripGetChipFocused() {
+        shot("jv-13-strip-get", steps = {
+            compose.onNode(hasTestTag("jv-strip-get-3")).requestFocus()
+            advance(400)
+        }, measure = {
+            compose.onNode(hasTestTag("jv-strip-get-3")).assertIsFocused()
+            assertEquals(1, count(hasText("Manhunter · On its way")))
+            inSafe("jv-13-strip-get", "path strip", hasTestTag("jv-path-strip"))
+        }) { JourneysV1Content(page(home, heat).copy(asks = mapOf(3 to JvAsk(JvAskState.QUEUED)), note = "On its way. It shows up here when it's downloaded."), noop, isAdmin = true, restoreId = null) }
     }
 }
