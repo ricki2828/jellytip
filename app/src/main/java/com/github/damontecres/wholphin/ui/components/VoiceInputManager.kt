@@ -199,6 +199,9 @@ class VoiceInputManager
             handler.post {
                 _partialResult.value = committed
                 if (recognizer !== rec) return@post
+                // listening again; the window timeout is re-armed so a window that never answers still ends the search
+                _state.value = VoiceInputState.Listening
+                startTimeout()
                 try {
                     rec.startListening(recognitionIntent)
                 } catch (e: Exception) {

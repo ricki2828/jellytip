@@ -52,6 +52,9 @@ object ChatVoiceText {
     const val TAP_MS = 300L
     const val MAX_RESTARTS = 40
 
+    /** While OK is held the 60 s watchdog is the real limit; this only stops a runaway loop of instant errors. */
+    const val MAX_HELD_RESTARTS = 400
+
     /** Spoken segments appended with one space, whitespace collapsed; an empty side adds nothing. */
     fun join(
         a: String,
@@ -67,7 +70,7 @@ object ChatVoiceText {
      * The recognizer ended one listening window (a result, or a no-match / speech-timeout error).
      * - Held (push-to-talk): restart, whatever the window heard: only the key-up ends it.
      * - Tap (listening without a held key): restart while windows still add words; a window that adds nothing means the speaker stopped.
-     * - Released: the utterance is over. Every case stops at [MAX_RESTARTS].
+     * - Released: the utterance is over. A hold stops at [MAX_HELD_RESTARTS] (never mid-press in practice), a tap at [MAX_RESTARTS].
      */
     fun afterEnd(
         held: Boolean,
@@ -76,9 +79,8 @@ object ChatVoiceText {
         added: Boolean = false,
     ): Next =
         when {
-            restarts >= MAX_RESTARTS -> Next.Finish
-            held && !tap -> Next.Restart
-            tap && added -> Next.Restart
+            held && !tap -> if (restarts < MAX_HELD_RESTARTS) Next.Restart else Next.Finish
+            tap && added && restarts < MAX_RESTARTS -> Next.Restart
             else -> Next.Finish
         }
 
@@ -329,7 +331,15 @@ class ChatVoice(
     }
 
     /** OK went down on the mic. [base] is what is already in the input box: the speech is appended to it. */
-    fun press(base: String) {
+    fun press(base: String) = start(base, asTap = false)
+
+    /** Listening without a held key (a pointer click, a sidebar hold already released, the Search key): the first window is a tap's. */
+    private fun startTap(base: String) = start(base, asTap = true)
+
+    private fun start(
+        base: String,
+        asTap: Boolean,
+    ) {
         when (ChatVoiceText.onPress(active, held, tap)) {
             ChatVoiceText.OnPress.Ignore -> return
 
@@ -352,10 +362,10 @@ class ChatVoice(
         if (!hasPermission) return fail(R.string.voice_error_permissions)
         if (!networkUp()) return fail(R.string.voice_error_network)
         if (!requestFocus()) return fail(R.string.voice_error_audio)
-        trace("press: start")
+        trace(if (asTap) "tap: start" else "press: start")
         active = true
-        held = true
-        tap = false
+        held = !asTap
+        tap = asTap
         tookOver = false
         pressBase = ChatVoiceText.join(base, "")
         committed = pressBase
@@ -365,8 +375,8 @@ class ChatVoice(
         recreate = false
         level = 0f
         downAt = SystemClock.uptimeMillis()
-        _ui.value = ChatVoiceUi(listening = true)
-        handler.postDelayed(watchdog, MAX_HOLD_MS)
+        _ui.value = ChatVoiceUi(listening = true, tap = asTap)
+        handler.postDelayed(watchdog, if (asTap) TAP_MAX_MS else MAX_HOLD_MS)
         begin()
     }
 
@@ -386,14 +396,13 @@ class ChatVoice(
                 // the window was started as a hold (no end on silence): start it again with the tap's end-of-speech
                 val r = recognizer
                 if (r != null && windowOpen) {
-                    gen++ // the old window's callbacks are dropped
-                    windowOpen = false
-                    try {
-                        r.cancel()
-                    } catch (e: Exception) {
-                        Timber.w(e, "Chat voice: cancel failed")
-                        recreate = true
-                    }
+                    // a new recognizer: nothing late from the cancelled session can reach the tap's window; counted as a restart so
+                    // a post-restart glitch is tolerated
+                    recreate = true
+                    restarts++
+                    committed = ChatVoiceText.join(committed, partial) // keep anything the short window already heard
+                    partial = ""
+                    destroyRecognizer()
                     handler.removeCallbacks(restartRun)
                     handler.postDelayed(restartRun, RECREATE_DELAY_MS)
                 }
@@ -409,8 +418,13 @@ class ChatVoice(
 
     /** A pointer click: a tap. */
     fun tapOnce(base: String) {
-        press(base)
-        release()
+        if (active) {
+            // listening already: a tap-listen is sent now (take over + release), a hold goes on
+            press(base)
+            release()
+        } else {
+            startTap(base)
+        }
     }
 
     /** Stop listening and send what was heard (the recognizer may still deliver a final segment first). */
@@ -599,7 +613,7 @@ class ChatVoice(
                 committed = ChatVoiceText.join(committed, partial) // keep what the cut-off window had heard
                 partial = ""
                 if (glitch || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) recreate = true
-                ended(added)
+                ended(added || glitch) // a glitch is the recognizer's fault, not the speaker's silence: try a fresh one (tap too)
             } else {
                 fail(errorRes(error))
             }

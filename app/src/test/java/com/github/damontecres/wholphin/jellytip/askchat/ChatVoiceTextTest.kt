@@ -38,8 +38,9 @@ class ChatVoiceTextTest {
         assertEquals("held: even a silent window restarts", ChatVoiceText.Next.Restart, ChatVoiceText.afterEnd(held = true, tap = false, restarts = 3, added = false))
         assertEquals("released: over", ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = false, tap = false, restarts = 0, added = true))
         assertEquals("tap stops at the cap too", ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = false, tap = true, restarts = ChatVoiceText.MAX_RESTARTS, added = true))
-        assertEquals("a runaway hold stops restarting", ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_RESTARTS))
-        assertEquals(ChatVoiceText.Next.Restart, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_RESTARTS - 1))
+        assertEquals("a hold is not cut at the tap cap (the 60 s watchdog is its limit)", ChatVoiceText.Next.Restart, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_RESTARTS))
+        assertEquals("only a runaway loop of instant errors stops a hold", ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_HELD_RESTARTS))
+        assertEquals(ChatVoiceText.Next.Restart, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_HELD_RESTARTS - 1))
     }
 
     @Test
@@ -80,7 +81,7 @@ class ChatVoiceTextTest {
         assertTrue("server disconnected (11)", ChatVoiceText.isGlitchAfterRestart(ChatVoiceText.ERROR_SERVER_DISCONNECTED, held = true, tap = false, restarts = 1, glitchUsed = false))
         assertFalse("other errors still fail", ChatVoiceText.isGlitchAfterRestart(SpeechRecognizer.ERROR_AUDIO, held = true, tap = false, restarts = 1, glitchUsed = false))
         // and the restart it triggers still counts toward the cap
-        assertEquals(ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_RESTARTS))
+        assertEquals(ChatVoiceText.Next.Finish, ChatVoiceText.afterEnd(held = true, tap = false, restarts = ChatVoiceText.MAX_HELD_RESTARTS))
     }
 
     @Test

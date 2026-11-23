@@ -15,6 +15,10 @@ object JellytipInputGuard {
     private const val HELD_FRESH_MS = 1_000L // repeats arrive every ~50-100 ms; older than this means we missed the key-up
     private const val FALLBACK_MS = 1_500L
 
+    // A remote that sends no repeats gives one key-down for the whole hold: "held" can't need a recent event. A missed key-up is
+    // ended by the next fresh press or the listener's own watchdog.
+    private const val HELD_MAX_MS = 60_000L
+
     private val handler = Handler(Looper.getMainLooper())
     private var lastCenterEvent = 0L
     private var held = false
@@ -34,11 +38,15 @@ object JellytipInputGuard {
     /** Observe only; never consumes. Call first thing in dispatchKeyEvent. */
     fun onKey(event: KeyEvent) {
         if (!isCenter(event.keyCode)) return
-        lastCenterEvent = SystemClock.uptimeMillis()
+        val now = SystemClock.uptimeMillis()
+        // a repeatCount-0 down while OK is held and its last event is recent: a second down of the same press (some remotes send
+        // those), not a new press
+        duplicateDown = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && held && now - lastCenterEvent < HELD_FRESH_MS
+        lastCenterEvent = now
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
                 // A fresh press while a hold-until-release is waiting: its key-up was missed, end that hold now
-                if (event.repeatCount == 0 && onRelease != null) runOnRelease()
+                if (event.repeatCount == 0 && !duplicateDown && onRelease != null) runOnRelease()
                 held = true
             }
 
@@ -52,6 +60,7 @@ object JellytipInputGuard {
     }
 
     private var onRelease: (() -> Unit)? = null
+    private var duplicateDown = false
 
     private fun runOnRelease() {
         val action = onRelease ?: return
@@ -60,7 +69,7 @@ object JellytipInputGuard {
     }
 
     /** OK is down right now (a recent key event of a press whose key-up has not come). */
-    fun isHeld(): Boolean = held && SystemClock.uptimeMillis() - lastCenterEvent < HELD_FRESH_MS
+    fun isHeld(): Boolean = held && SystemClock.uptimeMillis() - lastCenterEvent < HELD_MAX_MS
 
     /**
      * The rest of the OK press now in progress (its repeats and key-up) is consumed here, so it never reaches the page that opened
@@ -89,7 +98,7 @@ object JellytipInputGuard {
     fun shouldSwallow(event: KeyEvent): Boolean {
         if (!swallowUntilUp || !isCenter(event.keyCode)) return false
         // A fresh press (not a repeat) means the old key-up was missed: stop swallowing
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && !duplicateDown) {
             swallowUntilUp = false
             return false
         }

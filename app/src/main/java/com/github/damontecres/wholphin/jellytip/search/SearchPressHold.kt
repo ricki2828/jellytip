@@ -54,6 +54,16 @@ class SearchPressHold(
         return r
     }
 
+    /**
+     * A timer at [holdMs] after the key-down (for remotes that send no repeats while a key is held): LONG once, if this press is
+     * still down and no hold fired yet; the key-up after it is then nothing.
+     */
+    fun tick(now: Long): Press {
+        if (downAt < 0 || longFired || now - downAt < holdMs) return Press.NONE
+        longFired = true
+        return Press.LONG
+    }
+
     /** Forget the press in progress (focus left the control, the screen went away). */
     fun reset() {
         downAt = -1L

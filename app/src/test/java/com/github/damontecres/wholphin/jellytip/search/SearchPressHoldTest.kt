@@ -117,4 +117,26 @@ class SearchPressHoldTest {
         assertEquals(Press.NONE, p.down(600, 3))
         assertEquals(Press.LONG, p.down(800, 7))
     }
+
+    @Test
+    fun aRemoteWithoutRepeatsHoldsByTimerWhileTheKeyIsDown() {
+        val p = SearchPressHold()
+        p.down(1_000, 0)
+        assertEquals("too early", Press.NONE, p.tick(1_300))
+        assertEquals(Press.LONG, p.tick(1_520))
+        assertEquals("once", Press.NONE, p.tick(1_600))
+        assertEquals("a late repeat does not fire it again", Press.NONE, p.down(1_700, 1))
+        assertEquals("and the key-up after it is nothing", Press.NONE, p.up(8_000))
+    }
+
+    @Test
+    fun theTimerAfterAKeyUpOrResetIsNothing() {
+        val p = SearchPressHold()
+        p.down(1_000, 0)
+        assertEquals(Press.SHORT, p.up(1_100))
+        assertEquals(Press.NONE, p.tick(1_520))
+        p.down(2_000, 0)
+        p.reset()
+        assertEquals(Press.NONE, p.tick(2_600))
+    }
 }

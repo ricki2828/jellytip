@@ -1,5 +1,9 @@
 package com.github.damontecres.wholphin.jellytip.search
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -21,8 +25,17 @@ fun Modifier.jellytipPressHold(
 ): Modifier =
     composed {
         val ph = remember { SearchPressHold() }
+        val handler = remember { Handler(Looper.getMainLooper()) }
+        // A remote that sends no repeats: the hold fires from a timer while the key is still down (so Chat opens while OK is held)
+        val holdTimer = remember { Runnable { if (ph.tick(SystemClock.uptimeMillis()) == SearchPressHold.Press.LONG) onHold() } }
+        DisposableEffect(Unit) { onDispose { handler.removeCallbacks(holdTimer) } }
         this
-            .onFocusChanged { if (!it.isFocused) ph.reset() }
+            .onFocusChanged {
+                if (!it.isFocused) {
+                    handler.removeCallbacks(holdTimer)
+                    ph.reset()
+                }
+            }
             .onPreviewKeyEvent { e ->
                 val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.ButtonA
                 if (!ok) return@onPreviewKeyEvent false
@@ -30,10 +43,15 @@ fun Modifier.jellytipPressHold(
                 when (e.type) {
                     KeyEventType.KeyDown -> {
                         if (ph.down(n.eventTime, n.repeatCount) == SearchPressHold.Press.LONG) onHold()
+                        if (n.repeatCount == 0) {
+                            handler.removeCallbacks(holdTimer)
+                            handler.postDelayed(holdTimer, SearchPressHold.HOLD_MS + 20)
+                        }
                         ph.inPress
                     }
 
                     KeyEventType.KeyUp -> {
+                        handler.removeCallbacks(holdTimer)
                         val ours = ph.inPress
                         when (ph.up(n.eventTime)) {
                             SearchPressHold.Press.SHORT -> onShort()
