@@ -6,7 +6,8 @@ import { go } from "../lib/router";
 import {
   btnLabel, dot, journeyPath, kicker, meta, nowIndex, pathWindow, progress, progressLabel, yourJourneyLine, type JvJourney, type JvStep, type JvSummary,
 } from "../lib/journeysV1";
-import { playTonight } from "../screens/journeyPlay";
+import { useEffect } from "react";
+import { playTonight, warmIptvResume } from "../screens/journeyPlay";
 import "../screens/Journeys.css";
 
 /** The step's art, else the journey's, else the library's own backdrop, else the IPTV copy's; null = the gradient. */
@@ -31,6 +32,9 @@ export function JourneyHero({ s, j }: { s: JvSummary; j: JvJourney | null }) {
   const line =
     yourJourneyLine(s.title, status, now, total) ?? (status === "done" || now == null ? `${s.title} · every step seen` : kicker(s.title, now, total));
   const facts = step ? [step.year, meta(step)].filter(Boolean).join(" · ") : null;
+  useEffect(() => {
+    if (step) warmIptvResume([step]);
+  }, [step]);
   return (
     <div className="hero jv-hero" data-journey={s.id}>
       {art ? <Backdrop url={art} focal={null} kenBurns /> : <div className="jv-hero-fallback" aria-hidden />}

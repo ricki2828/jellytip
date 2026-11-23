@@ -12,7 +12,7 @@ import {
   askLabel, askText, btnLabel, canAsk, dot, facts, isCurrent, kicker, missingReason, nowIndex, pathButtons, progressLabel, sourceBadge, stepAction, stepDetailsPath, TOAST_ADDED,
   TOAST_DROPPED, TOAST_REMOVED, yourJourneyLine, type JvAsk, type JvBtn, type JvJourney, type JvStep,
 } from "../lib/journeysV1";
-import { playStep } from "./journeyPlay";
+import { playStep, warmIptvResume } from "./journeyPlay";
 import "./Journeys.css";
 
 const KIND = { curated: "Curated journey", list: "From a list", director: "A director's films", franchise: "A series in order" } as Record<string, string>;
@@ -51,11 +51,17 @@ function Path({ j }: { j: JvJourney }) {
   const [asks, setAsks] = useState<Record<string, JvAsk>>({});
   const showing = useRef(id);
   showing.current = id;
-  const dropRef = useRef<HTMLButtonElement>(null);
-  const keepRef = useRef<HTMLButtonElement>(null);
+  const btnBox = useRef<HTMLDivElement>(null);
+  // The button a press swaps in takes the focus (Remove -> Add back, Drop -> Keep it, Keep it -> Drop, Yes -> Add back), so a
+  // keyboard / remote user is never left on nothing
+  const [focusBtn, setFocusBtn] = useState<JvBtn | null>(null);
   useEffect(() => {
-    if (confirming) keepRef.current?.focus({ preventScroll: true });
-  }, [confirming]);
+    if (!focusBtn) return;
+    btnBox.current?.querySelector<HTMLElement>(`[data-btn="${focusBtn}"]`)?.focus({ preventScroll: true });
+    setFocusBtn(null);
+  }, [focusBtn, s.status, confirming]);
+  useEffect(() => warmIptvResume(j.steps), [j.steps]);
+  const saved = (st: number) => st !== 200 && flashNote("Couldn't save that. Check the connection and try again.");
 
   const buttons = pathButtons(s.status, nowStep != null, confirming);
   const press = (b: JvBtn) => {
@@ -64,24 +70,28 @@ function Path({ j }: { j: JvJourney }) {
         if (now != null) playStep(j, now);
         return;
       case "remove":
-        void journeyAction(id, "pause", s.status);
+        void journeyAction(id, "pause", s.status).then(saved);
         flashNote(TOAST_REMOVED);
+        setFocusBtn("addBack");
         return;
       case "addBack":
-        void journeyAction(id, "start", s.status);
+        void journeyAction(id, "start", s.status).then(saved);
         flashNote(TOAST_ADDED);
+        setFocusBtn("remove");
         return;
       case "drop":
         setConfirming(true);
+        setFocusBtn("dropCancel");
         return;
       case "dropConfirm":
-        void journeyAction(id, "drop", s.status);
+        void journeyAction(id, "drop", s.status).then(saved);
         flashNote(TOAST_DROPPED);
         setConfirming(false);
+        setFocusBtn("addBack");
         return;
       case "dropCancel":
         setConfirming(false);
-        requestAnimationFrame(() => dropRef.current?.focus({ preventScroll: true }));
+        setFocusBtn("drop");
         return;
     }
   };
@@ -99,7 +109,8 @@ function Path({ j }: { j: JvJourney }) {
       });
   };
   const skip = (st: JvStep) => {
-    void journeyEvent(id, "skip", st.tmdbId);
+    if (!st.tmdbId) return;
+    void journeyEvent(id, "skip", st.tmdbId).then(saved);
     flashNote(`Skipped ${st.title}`);
   };
 
@@ -121,11 +132,11 @@ function Path({ j }: { j: JvJourney }) {
           {j.premise && <p className="overview">{j.premise}</p>}
           <div className="line dim">{info}</div>
           {confirming && <p className="line">Drop this journey? It leaves your rows; you can still open it from here.</p>}
-          <div className="buttons jv-buttons">
+          <div className="buttons jv-buttons" ref={btnBox}>
             {buttons.map((b) => (
               <button
                 key={b}
-                ref={b === "drop" ? dropRef : b === "dropCancel" ? keepRef : undefined}
+                data-btn={b}
                 className={`btn jv-btn${b === "play" || b === "dropCancel" ? " primary" : ""}${b === "drop" ? " ghost" : ""}`}
                 data-nav
                 {...(b === "play" && s.status !== "active" ? { "data-autofocus": "" } : {})}
@@ -178,7 +189,7 @@ function Path({ j }: { j: JvJourney }) {
                       Details
                     </button>
                   )}
-                  {i === now && !st.seen && (
+                  {i === now && !st.seen && !!st.tmdbId && (
                     <button className="btn jv-btn ghost" data-nav onClick={() => skip(st)}>
                       Skip this one
                     </button>
