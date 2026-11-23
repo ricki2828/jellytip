@@ -13,7 +13,8 @@ defaults:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # integrate builds are ships: never cancel them (22-Nov: pushes cancelled each other); agent branches still cancel
+  cancel-in-progress: ${{ github.ref != 'refs/heads/jellytip-integrate' }}
 
 env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx12g -XX:MaxMetaspaceSize=1024m'"
@@ -38,8 +39,8 @@ jobs:
           restore-keys: robolectric-${{ runner.os }}-
       - name: "Jellytip fixture scan (public repo: no provider names, non-TMDB links or tokens)"
         run: bash .github/scripts/jellytip-fixture-scan.sh
-      - name: Jellytip unit tests
-        run: ./gradlew testDefaultDebugUnitTest --tests 'com.github.damontecres.wholphin.jellytip.debug.*' --tests 'com.github.damontecres.wholphin.jellytip.cards.*' --tests 'com.github.damontecres.wholphin.jellytip.iptv.*' --tests 'com.github.damontecres.wholphin.jellytip.search.*' --tests 'com.github.damontecres.wholphin.jellytip.rows.*' --tests 'com.github.damontecres.wholphin.jellytip.channels.*' --tests 'com.github.damontecres.wholphin.jellytip.movienight.*' --tests 'com.github.damontecres.wholphin.jellytip.ask.*' --tests 'com.github.damontecres.wholphin.jellytip.journeys.*' --tests 'com.github.damontecres.wholphin.jellytip.home.*' --tests 'com.github.damontecres.wholphin.jellytip.shots.*' --tests 'com.github.damontecres.wholphin.jellytip.askchat.*' --tests 'com.github.damontecres.wholphin.jellytip.details.*' --no-daemon
+      - name: Unit tests (full suite: Jellytip + upstream, 23-Nov)
+        run: ./gradlew testDefaultDebugUnitTest --no-daemon
       # t5n (21-Nov): design screenshots from jellytip.shots.* (Roborazzi, synthetic data): for eyes, not compared
       - name: Upload Jellytip screenshots
         if: always()
