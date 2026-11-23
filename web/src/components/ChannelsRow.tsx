@@ -1,11 +1,11 @@
 // Home "My Channels" (Ricki 23-Nov, TV 268dcba9): directly under Continue watching, the person's channels in the My Channels page's
 // order, numbered from 101 as on the TV. Each tile: number + name, what's on now, "sub · time left" and "Next HH:MM · title".
-// Tap / Enter joins the channel; hold (touch long-press, or a right click) plays what is on from the start; "From start" stays as a
+// Tap / Enter joins the channel; hold (a touch long-press, or a right click; a mouse held down is still a click) plays what is on from the start; "From start" stays as a
 // chip where there is a mouse. Hidden channels stay hidden. A channel that fails to load is asked again with backoff (never
 // remembered as missing); the loaded channels are kept per person for the session so Back paints the same row at once, and a
 // person who had channels last time gets the row's space reserved while it loads (nothing below it jumps).
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, rememberPersonal } from "../api/channels";
+import { channelItems, readHiddenChannels, rememberPersonal, sessionChannelOrder } from "../api/channels";
 import { imageUrl, uid } from "../api/jellyfin";
 import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { cardModel, channelNumber, channelRetryMs, nextLine, orderByAffinity, subLine, visibleChannels } from "../lib/channelsRow";
@@ -49,9 +49,10 @@ const Card = memo(function Card({ def, items, now, number }: { def: ChannelDef; 
   const art = m.artUrl ?? (m.artId ? imageUrl(m.artId, "Backdrop", { maxWidth: 640, quality: 70 }) : null);
   const pct = Math.round(m.progress * 100);
   const join = () => go(tunePath(cardModel(def, items, Date.now())?.target ?? m.target, def.id)); // the clock, not the card's last tick
-  const fromStart = () => {
+  const fromStart = (): boolean => {
     const t = fromStartTarget(schedule(poolOf(items, def), def.id, Date.now(), 2).slots);
     if (t) go(tunePath(t, def.id, true));
+    return !!t;
   };
   const endHold = () => {
     if (hold.current) window.clearTimeout(hold.current.t);
@@ -63,12 +64,13 @@ const Card = memo(function Card({ def, items, now, number }: { def: ChannelDef; 
         className="chrow-card"
         data-nav
         onPointerDown={(e) => {
-          if (e.button !== 0) return;
           endHold();
+          hold.current = null; // a new press: whatever a contextmenu that went nowhere left behind is gone
+          // only a finger's long-press is a hold; a mouse held down is still a click (right click = contextmenu below)
+          if (e.pointerType !== "touch" || e.button !== 0) return;
           const h = { t: 0, fired: false };
           h.t = window.setTimeout(() => {
-            h.fired = true;
-            fromStart();
+            h.fired = fromStart();
           }, HOLD_MS);
           hold.current = h;
         }}
@@ -80,8 +82,8 @@ const Card = memo(function Card({ def, items, now, number }: { def: ChannelDef; 
           e.preventDefault();
           if (!hold.current?.fired) {
             endHold();
-            hold.current = { t: 0, fired: true };
-            fromStart();
+            // swallow the click a touch long-press may still send, but only if it went somewhere
+            hold.current = fromStart() ? { t: 0, fired: true } : null;
           }
         }}
         onClick={() => {
@@ -109,7 +111,7 @@ const Card = memo(function Card({ def, items, now, number }: { def: ChannelDef; 
           <span style={{ width: `${pct}%` }} />
         </span>
       </button>
-      <button className="chrow-start" data-nav onClick={fromStart} aria-label={`${def.name}: play ${m.nowTitle} from the start`}>
+      <button className="chrow-start" data-nav onClick={() => void fromStart()} aria-label={`${def.name}: play ${m.nowTitle} from the start`}>
         From start
       </button>
     </div>
@@ -206,7 +208,9 @@ export function ChannelsRow() {
     for (const d of personal) m[d.id] = personalItems(d, loads, d.genres?.[0]);
     return m;
   }, [loads, personal]);
-  const shown = useMemo(() => orderByAffinity(visibleChannels(allLoads, hidden, [...personal, ...CHANNELS]), allLoads, Date.now()), [allLoads, hidden, personal]);
+  // Ranked by affinity only to place channels new to the session; placed ones keep their places and numbers (on Back, after a
+  // film, when a late channel or a retry lands), the same order and numbers as the My Channels page (api/channels sessionChannelOrder)
+  const shown = useMemo(() => sessionChannelOrder(orderByAffinity(visibleChannels(allLoads, hidden, [...personal, ...CHANNELS]), allLoads, Date.now())), [allLoads, hidden, personal]);
   const present = shown.length > 0;
   useEffect(() => {
     rowMemo = { uid: uid(), loads, profile };

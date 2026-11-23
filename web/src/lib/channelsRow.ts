@@ -99,3 +99,18 @@ export function homeLeadRows(hasContinue: boolean): LeadRow[] {
 
 /** A channel that failed to load (network, 5xx: never "missing") is asked again after 5 s, 10 s, 20 s… up to 5 min. */
 export const channelRetryMs = (failures: number): number => Math.min(5 * 60_000, 5_000 * 2 ** Math.max(0, failures - 1));
+
+/**
+ * The channel order for the session (Ricki's Back rule): channels already placed keep their places, channels new to the
+ * session (a late load, a retry that came good) go at the end in the given (affinity) order. `prev` = the ids placed so far,
+ * including ones not in `ranked` right now (hidden, still loading): they keep their place for when they come back.
+ * Returns the channels in order and the ids to remember.
+ */
+export function mergeChannelOrder(prev: readonly string[] | null, ranked: readonly ChannelDef[]): { order: ChannelDef[]; ids: string[] } {
+  if (!prev || !prev.length) return { order: [...ranked], ids: ranked.map((d) => d.id) };
+  const byId = new Map(ranked.map((d) => [d.id, d] as const));
+  const known = new Set(prev);
+  const kept = prev.map((id) => byId.get(id)).filter((d): d is ChannelDef => !!d);
+  const added = ranked.filter((d) => !known.has(d.id));
+  return { order: [...kept, ...added], ids: [...prev, ...added.map((d) => d.id)] };
+}

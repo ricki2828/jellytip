@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cardModel, channelNumber, channelRetryMs, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
+import { cardModel, channelNumber, channelRetryMs, mergeChannelOrder, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
 import { CHANNELS, EPOCH_MS, TICKS_PER_SECOND, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
@@ -71,4 +71,22 @@ test("cardModel carries when now ends", () => {
 
 test("a failed channel retries with backoff from 5 s to 5 min", () => {
   assert.deepEqual([1, 2, 3, 7, 20].map(channelRetryMs), [5_000, 10_000, 20_000, 300_000, 300_000]);
+});
+
+test("session channel order: placed channels keep places and numbers; late ones append; a re-rank never reorders", () => {
+  const d = (id: string) => CHANNELS.find((c) => c.id === id)!;
+  const first = mergeChannelOrder(null, [d("comedy"), d("90s-action"), d("sci-fi-nights")]);
+  assert.deepEqual(first.order.map((c) => c.id), ["comedy", "90s-action", "sci-fi-nights"]);
+  // Back after a film: affinity now ranks differently; the row keeps its order (so 101/102/103 stay on the same channels)
+  const back = mergeChannelOrder(first.ids, [d("sci-fi-nights"), d("90s-action"), d("comedy")]);
+  assert.deepEqual(back.order.map((c) => c.id), ["comedy", "90s-action", "sci-fi-nights"]);
+  assert.deepEqual(back.order.map((c, i) => [c.id, channelNumber(i)]), [["comedy", 101], ["90s-action", 102], ["sci-fi-nights", 103]]);
+  // a late load / a retry that came good goes at the end, nothing before it moves
+  const late = mergeChannelOrder(back.ids, [d("documentaries"), d("sci-fi-nights"), d("comedy"), d("90s-action")]);
+  assert.deepEqual(late.order.map((c) => c.id), ["comedy", "90s-action", "sci-fi-nights", "documentaries"]);
+  // hidden for now: it keeps its place in the remembered ids for when it is shown again
+  const hid = mergeChannelOrder(late.ids, [d("comedy"), d("sci-fi-nights"), d("documentaries")]);
+  assert.deepEqual(hid.order.map((c) => c.id), ["comedy", "sci-fi-nights", "documentaries"]);
+  assert.deepEqual(hid.ids, ["comedy", "90s-action", "sci-fi-nights", "documentaries"]);
+  assert.deepEqual(mergeChannelOrder(hid.ids, [d("90s-action"), d("comedy")]).order.map((c) => c.id), ["comedy", "90s-action"]);
 });

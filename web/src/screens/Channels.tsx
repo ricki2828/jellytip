@@ -1,7 +1,7 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
+import { channelItems, readHiddenChannels, rememberPersonal, sessionChannelOrder, writeHiddenChannels } from "../api/channels";
 import { useTasteProfile } from "../api/tasteProfile";
 import { channelNumber, orderByAffinity } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
@@ -129,7 +129,7 @@ export function Channels() {
   }, [baseItems, personal]);
   const defs = useMemo(() => [...personal, ...CHANNELS], [personal]);
   const viable = useMemo(
-    () => orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now()),
+    () => sessionChannelOrder(orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now())),
     [defs, itemsOf],
   );
   const pending = CHANNELS.some((c) => loads[c.id].state === "loading");

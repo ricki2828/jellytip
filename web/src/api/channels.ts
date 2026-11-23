@@ -8,6 +8,7 @@ import { iptvGet } from "./iptv";
 import { tasteProfileSoon } from "./tasteProfile";
 import { affinity, type TasteProfile } from "../lib/tasteProfile";
 import { personalItems } from "../lib/personalChannels";
+import { mergeChannelOrder } from "../lib/channelsRow";
 
 const TTL_MS = 6 * 3600 * 1000;
 /** While the server is still fetching runtimes for IPTV films, look again sooner. */
@@ -255,3 +256,34 @@ export async function rejoinPlan(channelId: string, currentId: string): Promise<
     return null;
   }
 }
+
+// ---------- one channel order per person per session (the My Channels page and Home's row agree, Back never re-ranks) ----------
+
+const orderKey = () => `jellytip.channels.order.v1.${uid()}`;
+let orderMemo: { uid: string; ids: string[] } | null = null;
+function placedIds(): string[] | null {
+  const u = uid();
+  if (orderMemo?.uid === u) return orderMemo.ids;
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(orderKey()) ?? "null");
+    if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  } catch {
+    // none yet
+  }
+  return null;
+}
+/** `ranked` (the affinity order of what is there now) put into the session's order: placed channels keep their places. */
+export function sessionChannelOrder(ranked: ChannelDef[]): ChannelDef[] {
+  const prev = placedIds();
+  const { order, ids } = mergeChannelOrder(prev, ranked);
+  if (!prev || ids.length !== prev.length) {
+    orderMemo = { uid: uid(), ids };
+    try {
+      sessionStorage.setItem(orderKey(), JSON.stringify(ids));
+    } catch {
+      // memory only
+    }
+  }
+  return order;
+}
+if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => (orderMemo = null));
