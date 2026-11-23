@@ -2,8 +2,8 @@
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { channelItems, commitChannelOrder, peekChannelOrder, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
-import { useTasteProfile } from "../api/tasteProfile";
-import { channelNumber, orderByAffinity, orderForView } from "../lib/channelsRow";
+import { useTasteProfileAnswer } from "../api/tasteProfile";
+import { channelNumber, orderByAffinity, orderForView, shouldCommitOrder } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
 import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
@@ -109,7 +109,8 @@ export function Channels() {
 
   // Personal channels come from the taste profile, cut from the loaded pools; the list is ordered by how well what is on now
   // fits the person's taste, once per load (not per clock tick) so cards stay put
-  const profile = useTasteProfile();
+  const profileAnswer = useTasteProfileAnswer();
+  const profile = profileAnswer === undefined ? undefined : profileAnswer.profile;
   const baseItems = useMemo(() => {
     const m: Record<string, ChanItem[] | undefined> = {};
     for (const c of CHANNELS) {
@@ -138,8 +139,8 @@ export function Channels() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const viable = useMemo(() => orderForView(peekChannelOrder(), ranked), [ranked, orderVer]);
   useEffect(() => {
-    if (!pending && profile !== undefined && ranked.length && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
-  }, [pending, profile, ranked]);
+    if (shouldCommitOrder(!pending, !!profileAnswer?.settled, ranked.length) && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
+  }, [pending, profileAnswer, ranked]);
   const errored = CHANNELS.filter((c) => loads[c.id].state === "error").length;
   const visible = viable.filter((c) => !hidden.includes(c.id));
   const hiddenViable = viable.filter((c) => hidden.includes(c.id));

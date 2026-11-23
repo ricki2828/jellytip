@@ -125,3 +125,10 @@ export function orderForView(committed: readonly string[] | null, ranked: readon
 
 /** The ids to commit once the first load has settled (and again for each late channel): placed ones stay, new ones append. */
 export const commitOrder = (committed: readonly string[] | null, ranked: readonly ChannelDef[]): string[] => mergeChannelOrder(committed, ranked).ids;
+
+/**
+ * When a screen may commit the session order: its first load has settled AND the taste profile request has really answered
+ * (`settled`: a profile, or a definite "none"). A profile that never settles (slow / unreachable) means no commit this visit:
+ * the live affinity order is drawn instead, so For You / "<genre> for you" are never frozen at the end.
+ */
+export const shouldCommitOrder = (loadSettled: boolean, profileSettled: boolean, channels: number): boolean => loadSettled && profileSettled && channels > 0;

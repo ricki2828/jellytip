@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cardModel, channelNumber, channelRetryMs, commitOrder, mergeChannelOrder, orderForView, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
+import { cardModel, channelNumber, channelRetryMs, commitOrder, mergeChannelOrder, orderForView, shouldCommitOrder, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
 import { CHANNELS, EPOCH_MS, TICKS_PER_SECOND, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
@@ -110,4 +110,11 @@ test("settled commit: channels arriving in another order than affinity still com
   // a late channel (a retry that came good) appends on the next commit
   committed = commitOrder(committed, [d("family-night"), ...later]);
   assert.deepEqual(committed, ["comedy", "sci-fi-nights", "90s-action", "documentaries", "family-night"]);
+});
+
+test("the order commits only on a settled load and a settled profile answer", () => {
+  assert.equal(shouldCommitOrder(true, true, 4), true);
+  assert.equal(shouldCommitOrder(true, false, 4), false); // profile slow / unreachable: live affinity order, no commit
+  assert.equal(shouldCommitOrder(false, true, 4), false); // channels still loading
+  assert.equal(shouldCommitOrder(true, true, 0), false); // nothing to order
 });

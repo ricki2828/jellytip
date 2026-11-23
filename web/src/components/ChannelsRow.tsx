@@ -8,9 +8,9 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { channelItems, commitChannelOrder, peekChannelOrder, readHiddenChannels, rememberPersonal } from "../api/channels";
 import { imageUrl, uid } from "../api/jellyfin";
 import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
-import { cardModel, channelNumber, channelRetryMs, nextLine, orderByAffinity, orderForView, subLine, visibleChannels } from "../lib/channelsRow";
+import { cardModel, channelNumber, channelRetryMs, nextLine, orderByAffinity, orderForView, shouldCommitOrder, subLine, visibleChannels } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
-import { tasteProfileSoon } from "../api/tasteProfile";
+import { tasteProfile, tasteProfileSoon } from "../api/tasteProfile";
 import type { TasteProfile } from "../lib/tasteProfile";
 import { afterStartup } from "../lib/startup";
 import { go } from "../lib/router";
@@ -150,10 +150,17 @@ export function ChannelsRow() {
       if (!alive || mine !== gen) return;
       const hid = readHiddenChannels();
       setHidden(hid);
+      // profileKnown only on a settled answer; the 5 s give-up of tasteProfileSoon waits on for the real one (tasteProfile()
+      // never rejects). Never settled: no commit this visit, the live affinity order is drawn
       void tasteProfileSoon().then((a) => {
         if (!alive || mine !== gen) return;
         setProfile(a.profile);
-        setProfileKnown(true);
+        if (a.settled) return setProfileKnown(true);
+        void tasteProfile().then((b) => {
+          if (!alive || mine !== gen) return;
+          setProfile(b.profile);
+          if (b.settled) setProfileKnown(true);
+        });
       });
       const failures = new Map<string, number>();
       const loadOne = (d: ChannelDef): Promise<void> =>
@@ -227,7 +234,7 @@ export function ChannelsRow() {
   const shown = useMemo(() => orderForView(peekChannelOrder(), ranked), [ranked, orderVer]);
   // Commit the order once the first load has settled (every channel answered, the taste profile known), then for each late one
   useEffect(() => {
-    if (answered && profileKnown && ranked.length && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
+    if (shouldCommitOrder(answered, profileKnown, ranked.length) && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
   }, [answered, profileKnown, ranked]);
   const present = shown.length > 0;
   useEffect(() => {
