@@ -27,9 +27,18 @@ import java.util.ArrayList;
  * - The web side (lib/chatVoice.ts + lib/useVoice.ts) holds the press-to-talk rules for both the browser and the phone: it calls
  *   start() for every listening window, and again after each "end" while the mic is held (the restart rule lives only there).
  * - This plugin runs the window it is told to, on ONE SpeechRecognizer reused across the windows of a press, with a
- *   generation-guarded listener per window (callbacks of an older window are dropped). Destroying and creating a recognizer per
- *   window lost the speaker's words on the TV (23-Nov). A fresh recognizer only after cancel(), a busy recognizer, or the first
- *   CLIENT / SERVER error right after a restart (the TV's "glitch": reported as {glitch: true}, a quiet end of that window).
+ *   generation-guarded listener per window. Destroying and creating a recognizer per window lost the speaker's words on the TV
+ *   (23-Nov). A fresh recognizer only after cancel(), a busy recognizer, or the first CLIENT / SERVER error right after a
+ *   restart (the TV's "glitch": reported as {glitch: true}, a quiet end of that window).
+ * - Exactly one end per window: a result or an error ends it (windowOpen), anything after that is dropped (e.g. AOSP answers a
+ *   stopListening that raced a queued onResults with a trailing ERROR_CLIENT).
+ * - Stale callbacks: SpeechRecognizer calls whichever listener is current when it handles a message, so the gen guard can't stop
+ *   a trailing callback of window N that is handled after window N+1's setRecognitionListener. Such a callback lands before
+ *   window N+1 has shown any sign of life (ready / beginning of speech / level), so until then results, partials and
+ *   NO_MATCH / SPEECH_TIMEOUT are dropped as stale (no speech can have been recognised yet), and CLIENT goes through the glitch
+ *   rule (a quiet end + a fresh recognizer, never a failure mid-hold). This assumes the recognizer reports onReadyForSpeech
+ *   before any result (Google's and AOSP's do); not verified on every recognizer.
+ * - Windows always ask for long silences (a hold's): a tap is ended by the web side's quiet timer (stop()), not by these hints.
  *
  * Events, each with the session (press) it belongs to: partial {text} / final {text} = this window's text so far; error {error}
  * = the SpeechRecognizer.ERROR_* code (-1: the app was left while listening), mapped to browser codes on the web side; end {} =
@@ -57,6 +66,9 @@ public class SpeechPlugin extends Plugin {
     private int windows = 0; // windows started in this session (for the log and the glitch rule)
     private boolean glitchUsed = false; // the tolerated post-restart CLIENT / SERVER error is spent; refilled by a result
     private String partial = "";
+    private boolean windowReady = false; // the open window has shown a sign of life (see "Stale callbacks" above)
+    private boolean paused = false; // the activity is paused: no window may start (the finger is off the mic)
+    private int closedSession = 0; // a press stopped / cancelled with no window open: a late start for it opens nothing
 
     /** {available}: a speech recognition service is installed (needs the RecognitionService <queries> entry on Android 11+). */
     @PluginMethod
@@ -91,9 +103,8 @@ public class SpeechPlugin extends Plugin {
         }
         final int s = call.getInt("session", 0);
         final String lang = call.getString("lang", null);
-        final boolean hold = Boolean.TRUE.equals(call.getBoolean("hold", false));
         main.post(() -> {
-            startWindow(s, lang, hold);
+            startWindow(s, lang);
             JSObject r = new JSObject();
             r.put("started", true);
             call.resolve(r);
@@ -120,23 +131,28 @@ public class SpeechPlugin extends Plugin {
         call.resolve(r);
     }
 
-    /** {session}: finish the window: the last words arrive (final), then end. Between windows: end at once. */
+    /**
+     * {session}: finish the window: the last words arrive (final), then end. A window that hasn't started hearing yet, or no window
+     * at all (between windows, or before the press's first start got here): end at once, and a late start for it opens nothing.
+     */
     @PluginMethod
     public void stop(PluginCall call) {
         final int s = call.getInt("session", 0);
         main.post(() -> {
-            if (s == session && recognizer != null && windowOpen) {
+            if (s != 0 && s == session && recognizer != null && windowOpen && windowReady) {
                 Log.i(TAG, "voice stop: window " + windows + " (session " + s + ")");
                 try {
                     recognizer.stopListening();
                 } catch (Exception e) {
                     Log.w(TAG, "voice stopListening failed", e);
-                    windowOpen = false;
-                    gen++;
+                    closeWindow(true);
                     emitEnd(s);
                 }
-            } else if (s == session && s != 0) {
-                emitEnd(s); // nothing is listening: the press is over now
+            } else if (s != 0) {
+                Log.i(TAG, "voice stop: nothing heard yet in session " + s + (windowOpen && s == session ? " (window dropped)" : ""));
+                if (s == session && windowOpen) closeWindow(true);
+                closedSession = s;
+                emitEnd(s);
             }
             call.resolve();
         });
@@ -147,25 +163,30 @@ public class SpeechPlugin extends Plugin {
     public void cancel(PluginCall call) {
         main.post(() -> {
             if (session != 0) Log.i(TAG, "voice cancel (session " + session + ", " + windows + " windows)");
+            if (session != 0) closedSession = session;
             session = 0;
             destroyRecognizer();
             call.resolve();
         });
     }
 
+    /** Main thread (activity lifecycle). Between windows too (the restart beat): the press is over, the hook must hear it. */
     @Override
     protected void handleOnPause() {
-        main.post(() -> {
-            if (session == 0 || recognizer == null) return;
-            Log.i(TAG, "voice: app left while listening (session " + session + ")");
-            int s = session;
-            boolean open = windowOpen;
-            destroyRecognizer();
-            if (open) {
-                emitError(s, ERROR_INTERRUPTED, false);
-                emitEnd(s);
-            }
-        });
+        paused = true;
+        if (session == 0) return;
+        Log.i(TAG, "voice: app left during session " + session + (windowOpen ? " (window open)" : " (between windows)"));
+        int s = session;
+        destroyRecognizer();
+        closedSession = s;
+        session = 0;
+        emitError(s, ERROR_INTERRUPTED, false);
+        emitEnd(s);
+    }
+
+    @Override
+    protected void handleOnResume() {
+        paused = false;
     }
 
     @Override
@@ -176,7 +197,18 @@ public class SpeechPlugin extends Plugin {
 
     // ---- main thread ----
 
-    private void startWindow(int s, String lang, boolean hold) {
+    private void startWindow(int s, String lang) {
+        if (s == 0 || s == closedSession) {
+            Log.i(TAG, "voice start ignored: session " + s + " already stopped");
+            emitEnd(s);
+            return;
+        }
+        if (paused) {
+            Log.i(TAG, "voice start refused: app paused (session " + s + ")");
+            emitError(s, ERROR_INTERRUPTED, false);
+            emitEnd(s);
+            return;
+        }
         if (s != session) {
             // a new press: a window of the old one (should have been cancelled) must not leak into it
             if (windowOpen) destroyRecognizer();
@@ -185,13 +217,7 @@ public class SpeechPlugin extends Plugin {
             glitchUsed = false;
         } else if (windowOpen) {
             // start while this press's window still runs (shouldn't happen: the web side waits for end): end it silently
-            gen++;
-            try {
-                recognizer.cancel();
-            } catch (Exception e) {
-                recreate = true;
-            }
-            windowOpen = false;
+            closeWindow(true);
         }
         if (recognizer == null || recreate) {
             destroyRecognizer();
@@ -213,12 +239,13 @@ public class SpeechPlugin extends Plugin {
         final int myGen = gen;
         final SpeechRecognizer r = recognizer;
         partial = "";
+        windowReady = false;
         r.setRecognitionListener(listener(r, myGen, s));
         try {
-            r.startListening(intent(lang, hold));
+            r.startListening(intent(lang));
             windowOpen = true;
             windows++;
-            Log.i(TAG, "voice window " + windows + " started (session " + s + ", gen " + myGen + ", " + (hold ? "hold" : "tap") + (windows > 1 ? ", restart" : "") + ")");
+            Log.i(TAG, "voice window " + windows + " started (session " + s + ", gen " + myGen + (windows > 1 ? ", restart" : "") + ")");
         } catch (Exception e) {
             Log.w(TAG, "voice: startListening failed", e);
             recreate = true;
@@ -227,18 +254,33 @@ public class SpeechPlugin extends Plugin {
         }
     }
 
-    private Intent intent(String lang, boolean hold) {
+    /** Always a hold's window: the web side's quiet timer ends a tap with stop(). */
+    private Intent intent(String lang) {
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         i.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
         if (lang != null && !lang.isEmpty()) i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
-        // hints only (many recognizers ignore them): held = don't end on silence; tap = end a couple of seconds after the words
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, hold ? HOLD_SILENCE_MS : 3000L);
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, hold ? HOLD_SILENCE_MS : 2500L);
-        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, hold ? HOLD_SILENCE_MS : 2000L);
+        // hints only (many recognizers ignore them, and the web side restarts while held): don't end on a short silence
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, HOLD_SILENCE_MS);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, HOLD_SILENCE_MS);
+        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, HOLD_SILENCE_MS);
         return i;
+    }
+
+    /** End the open window with no events; `cancel`: tell the recognizer too (it stays for reuse unless that fails). */
+    private void closeWindow(boolean cancel) {
+        gen++;
+        windowOpen = false;
+        windowReady = false;
+        if (cancel && recognizer != null) {
+            try {
+                recognizer.cancel();
+            } catch (Exception e) {
+                recreate = true;
+            }
+        }
     }
 
     private void destroyRecognizer() {
@@ -287,20 +329,38 @@ public class SpeechPlugin extends Plugin {
 
     private RecognitionListener listener(final SpeechRecognizer mine, final int myGen, final int s) {
         return new RecognitionListener() {
+            /** This window, still open: a result or an error closes it, so each window ends exactly once. */
             private boolean valid() {
-                return recognizer == mine && gen == myGen && session == s;
+                return recognizer == mine && gen == myGen && session == s && windowOpen;
+            }
+
+            private void alive() {
+                if (valid()) windowReady = true;
+            }
+
+            /** Before this window showed any life nothing can have been recognised: a result now is window N-1's, handled late. */
+            private boolean stale(String what) {
+                if (windowReady) return false;
+                Log.i(TAG, "voice window " + windows + ": stale " + what + " before ready, dropped");
+                return true;
             }
 
             @Override
             public void onReadyForSpeech(Bundle params) {
-                if (valid()) Log.i(TAG, "voice window " + windows + " ready (gen " + myGen + ")");
+                if (!valid()) return;
+                windowReady = true;
+                Log.i(TAG, "voice window " + windows + " ready (gen " + myGen + ")");
             }
 
             @Override
-            public void onBeginningOfSpeech() {}
+            public void onBeginningOfSpeech() {
+                alive();
+            }
 
             @Override
-            public void onRmsChanged(float rmsdB) {}
+            public void onRmsChanged(float rmsdB) {
+                if (!windowReady) alive();
+            }
 
             @Override
             public void onBufferReceived(byte[] buffer) {}
@@ -312,7 +372,7 @@ public class SpeechPlugin extends Plugin {
             public void onPartialResults(Bundle partialResults) {
                 if (!valid()) return;
                 String p = first(partialResults);
-                if (p.isEmpty()) return;
+                if (p.isEmpty() || stale("partial")) return;
                 partial = p;
                 glitchUsed = false; // proof the recognizer works
                 emitText("partial", s, p);
@@ -320,10 +380,10 @@ public class SpeechPlugin extends Plugin {
 
             @Override
             public void onResults(Bundle results) {
-                if (!valid()) return;
+                if (!valid() || stale("result")) return;
                 String seg = first(results);
                 if (seg.isEmpty()) seg = partial; // some recognizers answer stopListening with an empty final
-                windowOpen = false;
+                closeWindow(false);
                 if (!seg.isEmpty()) glitchUsed = false;
                 Log.i(TAG, "voice window " + windows + " result: " + seg.length() + " chars");
                 emitText("final", s, seg);
@@ -333,9 +393,14 @@ public class SpeechPlugin extends Plugin {
             @Override
             public void onError(int error) {
                 if (!valid()) return;
-                windowOpen = false;
-                boolean glitch = windows > 1 && !glitchUsed
-                    && (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER || error == ERROR_SERVER_DISCONNECTED);
+                if ((error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && stale("error " + error)) return;
+                boolean preReady = !windowReady;
+                closeWindow(false);
+                // the first CLIENT / SERVER after a restart, or a CLIENT before a restarted window showed life (likely window N-1's
+                // trailing answer to stopListening): a quiet end and a fresh recognizer, never a failure in the middle of a hold
+                boolean glitch = windows > 1
+                    && ((!glitchUsed && (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER || error == ERROR_SERVER_DISCONNECTED))
+                        || (preReady && error == SpeechRecognizer.ERROR_CLIENT));
                 if (glitch) glitchUsed = true;
                 if (glitch || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) recreate = true;
                 Log.i(TAG, "voice window " + windows + " error " + error + (glitch ? " (glitch: new recognizer next)" : "") + " partial=" + partial.length() + " chars");
