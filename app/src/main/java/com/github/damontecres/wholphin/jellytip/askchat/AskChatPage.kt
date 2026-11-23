@@ -168,11 +168,22 @@ class JellytipAskChatViewModel
                 if (voiceRoute?.invoke(t) == true) _ui.update { it.copy(text = "") } else submit(t)
             })
 
+        private var warmed = false
+
+        /**
+         * Wake the chat service (fire and forget), once per view model: when the chat shows, or the one box decides BOTH. Not on every
+         * Search visit (the one box creates this view model up front; review 23-Nov).
+         */
+        fun warmOnce() {
+            if (warmed) return
+            warmed = true
+            sender.warm(viewModelScope)
+        }
+
         /** One box: true once the chat has a turn or one is in flight (a submit is then a follow-up, not a new question). */
         fun hasTurns(): Boolean = _ui.value.chat.turns.isNotEmpty() || _ui.value.chat.pending != null
 
         init {
-            sender.warm(viewModelScope) // the chat service warms up while the screen is open (fire and forget)
             viewModelScope.launch { chatVoice.ui.collect { v -> _ui.update { it.copy(voice = v) } } }
         }
 
@@ -346,6 +357,8 @@ class JellytipAskChatViewModel
 class ChatEmbed(
     val startOver: () -> Unit,
     val off: () -> Unit,
+    /** A typed submit: true = the one box took it (an empty chat: the words go through /v1/find first). */
+    val firstTurn: ((String) -> Boolean)? = null,
 )
 
 /** What the page calls (the view model's methods; no-ops in the screenshot harness). */
@@ -374,6 +387,7 @@ fun JellytipAskChatPage(
     embedded: ChatEmbed? = null,
 ) {
     val ui by viewModel.ui.collectAsState()
+    LaunchedEffect(viewModel) { viewModel.warmOnce() }
     // A Search hold asked to listen: once mic permission comes back granted, listen (the hold was the ask)
     var listenAfterGrant by remember { mutableStateOf(false) }
     val micPermission =
@@ -431,7 +445,8 @@ fun JellytipAskChatPage(
             remember(viewModel, micPermission, embedded) {
                 AskChatActions(
                     setText = viewModel::setText,
-                    submit = viewModel::submit,
+                    // One box: a typed first question (empty chat) goes through /v1/find like a spoken one
+                    submit = { t -> if (embedded?.firstTurn?.invoke(t) != true) viewModel.submit(t) },
                     tap = viewModel::tap,
                     retry = viewModel::retry,
                     dismissNotice = viewModel::dismissNotice,

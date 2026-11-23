@@ -215,6 +215,8 @@ class JellytipSearchViewModel
             fun reset()
 
             fun hasTurns(): Boolean
+
+            fun warm()
         }
 
         private val _find = MutableStateFlow(FindUi())
@@ -288,6 +290,7 @@ class JellytipSearchViewModel
             e.chat?.let { chat.send(it) }
             e.search?.let { if (_state.value.query.trim() != it || _state.value.answer == null) setQuery(it, immediate = true) }
             e.chatAfterMs?.let { wait ->
+                chat.warm() // BOTH: the chat may be needed in a moment
                 val seq = _find.value.seq
                 viewModelScope.launch {
                     delay(wait)
@@ -387,6 +390,8 @@ private fun FindHost(
                 override fun reset() = chatVm.startOver()
 
                 override fun hasTurns() = chatVm.hasTurns()
+
+                override fun warm() = chatVm.warmOnce()
             }
         }
     DisposableEffect(chatVm, bridge) {
@@ -449,6 +454,15 @@ private fun FindHost(
                 com.github.damontecres.wholphin.jellytip.askchat.ChatEmbed(
                     startOver = { viewModel.findStartOver(bridge) },
                     off = { viewModel.leaveChat() },
+                    firstTurn = { t ->
+                        if (chatVm.hasTurns() || t.isBlank()) {
+                            false
+                        } else {
+                            chatVm.setText("")
+                            viewModel.submitFind(t, bridge)
+                            true
+                        }
+                    },
                 )
             }
         Column(modifier.fillMaxSize().background(JellytipPalette.Night)) {
