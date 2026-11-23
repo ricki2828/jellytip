@@ -15,7 +15,13 @@ export const CHAT_TIMEOUT_MS = 12_000;
 
 /** A 404 from /v1/find (an older server), remembered in memory for a while; a new sign-in forgets it. */
 export const noRoute = new NoRouteMemory();
-if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => noRoute.clear());
+/** /v1/ask/chat answered 404 (chat switched off on the server): remembered for the session, the Ask chips hide. */
+export const chatState = { off: false };
+if (typeof window !== "undefined")
+  window.addEventListener("jellytip-session", () => {
+    noRoute.clear();
+    chatState.off = false;
+  });
 
 const parse = (raw: unknown): SearchResult | null => {
   const r = parseSearch(raw);

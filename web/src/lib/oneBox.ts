@@ -124,6 +124,8 @@ export interface FindEffects {
   armTimer?: boolean;
   /** Stop the deferred-chat timer. */
   stopTimer?: boolean;
+  /** Drop the find in flight (its answer is for words no longer in the box). */
+  abortFind?: boolean;
 }
 export type Step = { state: FindUi; fx: FindEffects };
 
@@ -224,9 +226,15 @@ export function startOver(s: FindUi): Step {
   return { state: { ...emptyFind(), seq: s.seq + 1, fed: s.fed }, fx: { resetChat: true, stopTimer: true } };
 }
 
-/** The words in the box changed after a decision: BOTH's waiting chat is for the old words, so it is never sent. */
+/**
+ * The words in the box changed. While a find is out for other words, it is abandoned (its late answer would put old results back,
+ * or empty the box for a chat): the decision ends and the seq moves on. After a decision, BOTH's waiting chat is for the old
+ * words, so it is never sent.
+ */
 export function typing(s: FindUi, text: string): Step {
-  if (s.view !== "both" || s.deferred !== "waiting" || same(s.q, text)) return { state: s, fx: {} };
+  if (same(s.q, text)) return { state: s, fx: {} };
+  if (s.deciding) return { state: { ...s, deciding: false, seq: s.seq + 1 }, fx: { abortFind: true } };
+  if (s.view !== "both" || s.deferred !== "waiting") return { state: s, fx: {} };
   return { state: { ...s, deferred: "cancelled" }, fx: { stopTimer: true } };
 }
 

@@ -184,6 +184,17 @@ test("deferred: a hit opened after Back on a cancelled both, then the chip: the 
   assert.equal(askChip(o.state, "heat but sad").fx.chat, "heat but sad", "the words now in the box");
 });
 
+test("typing other words while a find is out abandons it: no longer deciding, seq moves on, its late answer is dropped", () => {
+  const a = submit(emptyFind(), "heat", T0);
+  assert.deepEqual(typing(a.state, "heat").fx, {}, "same words: the find stands");
+  const t = typing(a.state, "heat 19");
+  assert.deepEqual(t.fx, { abortFind: true });
+  assert.deepEqual([t.state.deciding, t.state.seq], [false, a.state.seq + 1]);
+  const late = decided(t.state, a.state.seq, ok({ mode: "chat", search: null }), T0 + 100);
+  assert.equal(late.state, t.state);
+  assert.deepEqual(late.fx, {}, "no chat, no box wipe");
+});
+
 test("typing other words under a both answer cancels its waiting chat; the same words do not", () => {
   const b = decide("heat but funny", { mode: "both" });
   assert.deepEqual(typing(b.state, " Heat  but funny").fx, {});

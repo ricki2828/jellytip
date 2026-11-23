@@ -66,6 +66,17 @@ export function ChatAnswer({
   const lastTurn = state.turns.length - 1;
   const basic = state.basic && !pending ? <span className="ac-tag" data-testid="basic-mode" title="The AI wasn't available for this turn: a simpler reading was applied.">basic mode</span> : null;
   const turns = compact ? state.turns.slice(-1) : state.turns;
+  // The newest turn (or "Reading…") scrolls into view as it comes, as the chat page did. Not on the first paint (Back puts the page
+  // where it was) and not under search results (both): a late answer there never moves the page.
+  const end = useRef<HTMLDivElement>(null);
+  const painted = useRef(false);
+  useEffect(() => {
+    if (!painted.current) {
+      painted.current = true;
+      return;
+    }
+    if (!compact) end.current?.scrollIntoView?.({ block: "nearest" });
+  }, [state.turns.length, pending, compact]);
 
   return (
     <div className={`chat-answer${compact ? " compact" : ""}`}>
@@ -92,6 +103,7 @@ export function ChatAnswer({
             Updating…
           </p>
         )}
+        <div ref={end} />
       </div>
       {state.error === "unreachable" && (
         <div className="rows-error" role="alert">

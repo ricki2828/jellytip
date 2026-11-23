@@ -16,7 +16,7 @@ import {
   askChip, bothLine, chatOff, decided, DEFER_CHAT_MS, deferredScrolled, deferredTimer, emptyFind, FIND_ERROR, findRetryMs, FOLLOW_UP_PLACEHOLDER, leave, opened, PLACEHOLDER, retryFind,
   interrupt, searchChip, startOver, submit, typing, type FindUi, type Step,
 } from "../lib/oneBox";
-import { chatCall, find as findApi, findFeedback, noRoute } from "../api/find";
+import { chatCall, chatState, find as findApi, findFeedback, noRoute } from "../api/find";
 import { useVoice } from "../lib/useVoice";
 import { ChatAnswer, useChatCards, type ChatFetched } from "../components/ChatAnswer";
 import { useIsPhone } from "../lib/device";
@@ -541,6 +541,9 @@ export function Search({ initial }: { initial: string }) {
   if (!sender.current) sender.current = new ChatSender(chatCall);
   /** The term the results on screen belong to: the typed search skips it (a find answered it, or Back restored it). */
   const shownTerm = useRef(restored?.shownTerm ?? "");
+  /** The words the results on screen were actually answered for (a failed find must not leave another term's results under it). */
+  const resultsFor = useRef(restored?.shownTerm ?? "");
+  const [chatOffNow, setChatOffNow] = useState(chatState.off);
   const qRef = useRef(q);
   qRef.current = q;
   const term = q.trim();
@@ -581,7 +584,7 @@ export function Search({ initial }: { initial: string }) {
         return;
       }
       if (r) {
-        shownTerm.current = norm(t);
+        shownTerm.current = resultsFor.current = norm(t);
         setUnified(r);
         setFallback(null);
         await lateGroups(r, it, ctl.signal, live);
@@ -590,7 +593,7 @@ export function Search({ initial }: { initial: string }) {
       // No unified search on this server (or it failed): Jellyfin's own search, with year and genre sent as server-side filters
       const items = await searchJellyfin(it, t).catch(() => [] as Item[]);
       if (!live()) return;
-      shownTerm.current = norm(t);
+      shownTerm.current = resultsFor.current = norm(t);
       setUnified(null);
       setFallback(items);
     }, delay);
@@ -621,7 +624,12 @@ export function Search({ initial }: { initial: string }) {
       if (out.kind === "aborted") return; // a newer request replaced it
       if (out.kind === "ok") return commitChat(applyResponse(chatRef.current, out.resp));
       const e = applyError(chatRef.current, body.rev, out.status);
-      if (e.state.error === "off") return apply(chatOff(findRef.current)); // chat is off on the server: the plain results
+      if (e.state.error === "off") {
+        // chat is off on the server: the plain results, and no more Ask chips this session
+        chatState.off = true;
+        setChatOffNow(true);
+        return apply(chatOff(findRef.current));
+      }
       commitChat(e.state);
       if (e.resend) runChat(e.resend); // 400 / 413: once more with the oldest turns trimmed
     });
@@ -643,6 +651,13 @@ export function Search({ initial }: { initial: string }) {
     commitFind(step.state);
     if (fx.feedback) findFeedback(fx.feedback.id, fx.feedback.switched);
     if (fx.stopTimer) stopDefer();
+    if (fx.abortFind) findCtl.current?.abort();
+    if (fx.chat && chatState.off) {
+      // chat is known to be off: never ask it; a chat view falls back to the plain results for the same words
+      if (step.state.view === "chat") return apply(chatOff(step.state));
+      if (step.state.view === "both") commitFind({ ...step.state, deferred: "cancelled" });
+      return;
+    }
     if (fx.resetChat) {
       sender.current!.cancel();
       commitChat(chatStartOver(chatRef.current));
@@ -675,7 +690,13 @@ export function Search({ initial }: { initial: string }) {
     const ctl = (findCtl.current = new AbortController());
     void findApi(t, ctl.signal).then((out) => {
       if (ctl.signal.aborted || findRef.current.seq !== seq) return;
+      if (out.kind === "error" && resultsFor.current !== norm(t)) {
+        // the results on screen are for other words (e.g. "hea" before the debounce): don't leave them under the error
+        setUnified(null);
+        setFallback(null);
+      }
       if (out.kind === "ok" && out.d.search) {
+        resultsFor.current = norm(t);
         setBlocked(false);
         setUnified(out.d.search);
         setFallback(null);
@@ -691,7 +712,7 @@ export function Search({ initial }: { initial: string }) {
 
   // The chat service warms up only when chat is likely: a chat / both answer, or the "Ask Chat about this" chip shown or focused
   // (fire and forget, at most once a minute from this page)
-  const warmedAt = useRef(0);
+  const warmedAt = useRef(restored ? Date.now() : 0); // Back: the page is as it was, nothing is sent (not even a warm-up) at once
   const warm = () => {
     if (Date.now() - warmedAt.current < WARM_EVERY_MS) return;
     warmedAt.current = Date.now();
@@ -700,6 +721,9 @@ export function Search({ initial }: { initial: string }) {
 
   const submitBox = (text: string) => {
     if (findRef.current.deciding) return;
+    if (retryTimer.current) clearTimeout(retryTimer.current); // a new submit replaces a pending Try again
+    retryTimer.current = null;
+    setRetryWait(false);
     const r = submit(findRef.current, text, Date.now(), noRoute.missing(Date.now()));
     if (!r.fx.find && !r.fx.search && !r.fx.chat) return;
     if (r.fx.chat && chatRef.current.pending) return; // a follow-up while a turn is out: keep what was typed
@@ -730,15 +754,20 @@ export function Search({ initial }: { initial: string }) {
   // A different signed-in user sees their own recents
   useEffect(() => setRecent(loadRecent(localStorage, userId)), [userId]);
 
-  // both: scrolling to the chat area asks the chat (a real scroll: a short page shows the area at once, the timer covers that)
+  // both: scrolling the chat area into view asks the chat. Only when it was below the fold when armed (a short page shows it at
+  // once: the timer covers that), and only once a real part of it shows (a 1 px scroll or the keyboard closing doesn't count)
   useEffect(() => {
-    if (view !== "both" || find.deferred !== "waiting") return;
-    const on = () => {
-      const el = chatArea.current;
-      if (el && el.getBoundingClientRect().top < window.innerHeight - 40) apply(deferredScrolled(findRef.current));
-    };
-    window.addEventListener("scroll", on, { passive: true });
-    return () => window.removeEventListener("scroll", on);
+    const el = chatArea.current;
+    if (view !== "both" || find.deferred !== "waiting" || !el || typeof IntersectionObserver === "undefined") return;
+    if (el.getBoundingClientRect().top < window.innerHeight) return;
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((x) => x.isIntersecting && x.intersectionRect.height >= SCROLL_IN_PX)) apply(deferredScrolled(findRef.current));
+      },
+      { threshold: [0, 0.25, 0.5, 1] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, find.deferred]);
 
@@ -804,8 +833,8 @@ export function Search({ initial }: { initial: string }) {
   const deciding = find.deciding;
   const chatTouched = chat.turns.length > 0 || !!chat.pending || !!chat.error;
   // under the box on search answers and plain results; BOTH has its own in the chat area
-  const askable = view === "search" && (term.length >= 2 || find.q.length >= 2);
-  const askChipShown = (askable && !deciding) || (view === "both" && !chatTouched);
+  const askable = !chatOffNow && view === "search" && (term.length >= 2 || find.q.length >= 2);
+  const askChipShown = (askable && !deciding) || (!chatOffNow && view === "both" && !chatTouched);
   useEffect(() => {
     if (askChipShown) warm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -984,7 +1013,7 @@ export function Search({ initial }: { initial: string }) {
                 </button>
               </div>
             )}
-            {view === "both" && (
+            {view === "both" && !chatOffNow && (
               <section className="onebox-chat-area" ref={chatArea} aria-label="Chat">
                 <h2 className="row-title">Chat</h2>
                 {!chatTouched ? (
@@ -1028,3 +1057,5 @@ export function Search({ initial }: { initial: string }) {
 
 const norm = (t: string) => t.replace(/\s+/g, " ").trim();
 const WARM_EVERY_MS = 60_000;
+/** BOTH: how much of the chat area must scroll into view before that counts as moving to it. */
+const SCROLL_IN_PX = 80;
