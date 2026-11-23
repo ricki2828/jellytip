@@ -259,14 +259,22 @@ sealed class Destination(
     @Serializable
     data object JellytipAskChat : Destination(false)
 
-    /** Jellytip: Journeys, short ordered film paths (franchise, director, Letterboxd list) ("Start a journey" on Collections). */
+    /**
+     * Jellytip: Journeys (sidebar item, 23-Nov Journeys v1): the server's journeys, tonight's step as the hero. A server without
+     * Journeys v1 shows the client-built paths (franchise, director, Letterboxd list) as before.
+     */
     @Serializable
     data object JellytipJourneys : Destination(false)
 
-    /** Jellytip: one journey ("f:<tmdbId>", "d:<personId>", "l:<slug>"): films in order, watched ticks, Play next. */
+    /**
+     * Jellytip: one journey. [v1] = a server journey ("cur:<slug>", "l:<slug>", "d:<TMDB person id>", "f:<TMDB collection id>",
+     * spec jellytip-journeys-v1-spec.md); otherwise a client-built one ("f:<tmdbId>", "d:<Jellyfin personId>", "l:<slug>"). The
+     * prefixes overlap, so the page is chosen by where it was opened from, never by the id.
+     */
     @Serializable
     data class JellytipJourney(
         val id: String,
+        val v1: Boolean = false,
     ) : Destination(false)
 
     // ---- end t5n ----

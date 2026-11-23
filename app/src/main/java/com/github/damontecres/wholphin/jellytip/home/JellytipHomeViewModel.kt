@@ -46,6 +46,8 @@ class JellytipHomeViewModel
         val navigationManager: NavigationManager,
         /** Built with Home so the inbox exists from the start (its look runs on Home; "Get it" records into it). */
         val inbox: com.github.damontecres.wholphin.jellytip.inbox.JellytipInboxService,
+        /** Journeys v1: the active journey is one slide of the hero carousel. */
+        val journeys: com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneysV1Service,
     ) : ViewModel() {
         val settings: Flow<JellytipSettings> =
             preferences.data

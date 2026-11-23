@@ -157,6 +157,11 @@ class NavDrawerViewModel
                     navigationManager.navigateToFromDrawer(Destination.JellytipCollections)
                 }
 
+                NavDrawerItem.Journeys -> {
+                    setIndex(index)
+                    navigationManager.navigateToFromDrawer(Destination.JellytipJourneys)
+                }
+
                 // ---- t5n wow extras (21-Nov) ----
                 NavDrawerItem.MovieNight -> {
                     setIndex(index)
@@ -204,6 +209,7 @@ class NavDrawerViewModel
                             is NavDrawerItem.Recordings -> Destination.JellytipRecordings
                             is NavDrawerItem.UpcomingSport -> Destination.JellytipUpcomingSport
                             is NavDrawerItem.Collections -> Destination.JellytipCollections
+                            is NavDrawerItem.Journeys -> Destination.JellytipJourneys
                             is NavDrawerItem.MovieNight -> Destination.JellytipMovieNight // t5n
                             is NavDrawerItem.MyChannels -> Destination.JellytipMyChannels // t5n
                             else -> null
@@ -305,6 +311,14 @@ sealed interface NavDrawerItem {
             get() = "a_jellytip_collections"
 
         override fun name(context: Context): String = context.getString(R.string.jellytip_collections)
+    }
+
+    /** Jellytip: Journeys (23-Nov, Journeys v1): its own item, right under Collections. */
+    object Journeys : NavDrawerItem {
+        override val id: String
+            get() = "a_jellytip_journeys"
+
+        override fun name(context: Context): String = context.getString(R.string.jellytip_journeys)
     }
 
     /** Jellytip: upcoming sport (next 3 days), under Live TV for people with IPTV. */
@@ -798,6 +812,8 @@ fun NavigationDrawerScope.NavItem(
                 }
 
                 NavDrawerItem.MovieNight -> R.string.fa_circle_play // t5n
+
+                NavDrawerItem.Journeys -> R.string.fa_compass
 
                 NavDrawerItem.MyChannels -> R.string.fa_tv // t5n
 

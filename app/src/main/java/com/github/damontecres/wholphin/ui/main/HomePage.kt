@@ -590,7 +590,11 @@ fun HomePageContent(
     // a featured mix; Left on the first button / Right on the last steps. Lower rows: the hero follows the focused tile.
     val carouselOn = specialsPage == "home" && heroComposable != null && LocalJellytipHome.current
     val heroMix = if (carouselOn) com.github.damontecres.wholphin.jellytip.home.rememberJellytipHeroMix(homeRows, specials, serverRows) else emptyList()
-    val heroSlides = remember(liveHeroNow, heroMix) { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.slides(liveHeroNow.orEmpty(), heroMix) }
+    // Journeys v1: the active journey is one slide (after the live game, before the mix)
+    val journeysVm = if (carouselOn) androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel<com.github.damontecres.wholphin.jellytip.home.JellytipHomeViewModel>() else null
+    val journeysService = journeysVm?.journeys
+    val heroJourney = journeysService?.let { com.github.damontecres.wholphin.jellytip.journeys.rememberJellytipJourneySlide(it) }
+    val heroSlides = remember(liveHeroNow, heroMix, heroJourney) { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.slides(liveHeroNow.orEmpty(), heroMix, heroJourney) }
     var slideIndex by rememberSaveable { mutableStateOf(0) }
     var slideKey by rememberSaveable { mutableStateOf<String?>(null) }
     // A rebuild (game starts / ends, rows refresh) keeps the slide on screen by key
@@ -598,6 +602,8 @@ fun HomePageContent(
         // Back on Home: the slides start empty and the games arrive later; don't lose a saved game slide meanwhile
         if (heroSlides.isEmpty()) return@LaunchedEffect
         if (liveHeroNow == null && slideKey?.startsWith("m:") == true && heroSlides.none { it.key == slideKey }) return@LaunchedEffect
+        // Same for the journey slide: it loads after the mix on the way back to Home
+        if (heroJourney == null && slideKey?.startsWith("j:") == true && heroSlides.none { it.key == slideKey }) return@LaunchedEffect
         slideIndex = com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.keep(heroSlides, slideKey, slideIndex)
         slideKey = heroSlides.getOrNull(slideIndex)?.key
     }
@@ -649,34 +655,40 @@ fun HomePageContent(
     val heroPager = if (carouselActive && heroSlides.size > 1) "\u2039  " + (slideIndex + 1) + " / " + heroSlides.size + "  \u203A" else null
     val slideTitle = (slide as? com.github.damontecres.wholphin.jellytip.home.HeroSlide.Title)?.item
     val slideMatch = (slide as? com.github.damontecres.wholphin.jellytip.home.HeroSlide.Match)?.f
+    val slideJourney = (slide as? com.github.damontecres.wholphin.jellytip.home.HeroSlide.Journey)?.s
     // The hero shows the slide on the top row / its buttons, else the focused tile (specials drive it through specialFocus)
     val heroTarget = if (carouselActive) slideTitle else focusedItem
     val heroHeaderTarget = if (carouselActive) slideTitle else headerItem
     val heroMatchTarget = if (carouselActive) slideMatch else null
+    val heroJourneyTarget = if (carouselActive) slideJourney else null
     // The hero/text block follow focus 150 ms behind, so fast scrolling does not reload the hero on every tile
     var heroItem by remember { mutableStateOf(heroTarget) }
     var heroHeaderItem by remember { mutableStateOf(heroHeaderTarget) }
     var heroMatch by remember { mutableStateOf(heroMatchTarget) }
+    var heroJourneyShown by remember { mutableStateOf(heroJourneyTarget) }
     // Keyed on ids, not the items: a refreshed row hands out equal-id copies of the focused tile, and keying on the
     // objects restarted this effect (debounce + trace) with focus not having moved at all
     val latestHeroTarget by rememberUpdatedState(heroTarget)
     val latestHeaderTarget by rememberUpdatedState(heroHeaderTarget)
     val latestMatchTarget by rememberUpdatedState(heroMatchTarget)
-    LaunchedEffect(heroTarget?.id, heroHeaderTarget?.id, heroMatchTarget?.fid, heroButtonsFocused) {
+    val latestJourneyTarget by rememberUpdatedState(heroJourneyTarget)
+    LaunchedEffect(heroTarget?.id, heroHeaderTarget?.id, heroMatchTarget?.fid, heroJourneyTarget?.id, heroButtonsFocused) {
         // Buttons focused: the hero holds still, except for the carousel's own steps
         if (heroButtonsFocused && !carouselActive) return@LaunchedEffect
         delay(HERO_DEBOUNCE_MS)
         heroItem = latestHeroTarget
         heroHeaderItem = latestHeaderTarget
         heroMatch = latestMatchTarget
+        heroJourneyShown = latestJourneyTarget
         JellytipTrace.focus("${focusedKey ?: "-"} ${focusedItem?.name ?: "-"}")
     }
     // Same tile, fresher copy (watched state, progress): take it at once, no debounce, no trace
-    LaunchedEffect(heroTarget, heroHeaderTarget, heroMatchTarget) {
+    LaunchedEffect(heroTarget, heroHeaderTarget, heroMatchTarget, heroJourneyTarget) {
         if (heroButtonsFocused && !carouselActive) return@LaunchedEffect
         if (heroItem?.id == heroTarget?.id) heroItem = heroTarget
         if (heroHeaderItem?.id == heroHeaderTarget?.id) heroHeaderItem = heroHeaderTarget
         if (heroMatch?.fid == heroMatchTarget?.fid) heroMatch = heroMatchTarget
+        if (heroJourneyShown?.id == heroJourneyTarget?.id) heroJourneyShown = heroJourneyTarget
     }
 
     val heroButtonsRequester = remember { FocusRequester() }
@@ -798,9 +810,11 @@ fun HomePageContent(
         heroComposable?.invoke(heroItem, hasFocus)
         // Jellytip: a live-game slide of the hero carousel (the film hero skips its still underneath)
         val shownMatch = heroMatch
+        val shownJourney = heroJourneyShown.takeIf { shownMatch == null }
         val shownGames = remember { HashSet<String>() }
-        DisposableEffect(shownMatch != null) {
-            com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = shownMatch != null
+        DisposableEffect(shownMatch != null || shownJourney != null) {
+            // A game or a journey slide covers the film hero (it skips its still underneath)
+            com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = shownMatch != null || shownJourney != null
             onDispose { com.github.damontecres.wholphin.jellytip.home.JellytipHeroCarousel.matchCovers = false }
         }
         if (shownMatch != null) {
@@ -824,6 +838,14 @@ fun HomePageContent(
                             )
                         }
                     },
+                )
+            }
+        }
+        if (shownJourney != null) {
+            Box(Modifier.fillMaxSize().fillFullBleed()) {
+                com.github.damontecres.wholphin.jellytip.journeys.JourneyHeroBackdrop(
+                    shownJourney,
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(com.github.damontecres.wholphin.jellytip.home.JellytipHomeTokens.HERO_HEIGHT_FRACTION),
                 )
             }
         }
@@ -853,6 +875,7 @@ fun HomePageContent(
                     },
             ) {
                 val headerMatch = heroMatch
+                val headerJourney = heroJourneyShown.takeIf { headerMatch == null }
                 val nowSec by androidx.compose.runtime.produceState(System.currentTimeMillis() / 1000) {
                     while (true) {
                         delay(30_000)
@@ -861,13 +884,16 @@ fun HomePageContent(
                 }
                 if (headerMatch != null) {
                     com.github.damontecres.wholphin.jellytip.iptv.HeroMatchHeader(headerMatch, nowSec)
+                } else if (headerJourney != null) {
+                    com.github.damontecres.wholphin.jellytip.journeys.JourneyHeroHeader(headerJourney)
                 } else {
                     headerComposable.invoke(heroHeaderItem)
                 }
                 val matchActions = if (carouselOn) com.github.damontecres.wholphin.jellytip.iptv.rememberHomeMatchActions() else null
                 // Jellytip: the hero item can be played from Home (Up from the first row lands on these buttons)
                 val heroPlayItem = heroHeaderItem
-                if (LocalJellytipHome.current && heroComposable != null && (heroPlayItem != null || (headerMatch != null && matchActions != null))) {
+                val journeyScope = androidx.compose.runtime.rememberCoroutineScope()
+                if (LocalJellytipHome.current && heroComposable != null && (heroPlayItem != null || (headerMatch != null && matchActions != null) || (headerJourney != null && journeysService != null))) {
                     // Only on the top row (or while they hold focus); fades out once focus is on a lower row
                     val heroButtonsAlpha by animateFloatAsState(
                         if (heroButtonsFocused || focusedEntry <= 0) 1f else 0f,
@@ -879,6 +905,12 @@ fun HomePageContent(
                     val heroButtonList =
                         if (headerMatch != null && matchActions != null) {
                             matchActions.buttons(headerMatch, nowSec)
+                        } else if (headerJourney != null) {
+                            com.github.damontecres.wholphin.jellytip.journeys.journeyHeroButtons(
+                                headerJourney,
+                                journeyScope,
+                                journeysVm!!.navigationManager,
+                            )
                         } else if (heroPlayItem != null) {
                             com.github.damontecres.wholphin.jellytip.home.heroPlayButtons(
                                 item = heroPlayItem,
@@ -935,7 +967,7 @@ fun HomePageContent(
                 }
             }
 
-            val heroButtonsShown = LocalJellytipHome.current && heroComposable != null && (heroHeaderItem != null || heroMatch != null)
+            val heroButtonsShown = LocalJellytipHome.current && heroComposable != null && (heroHeaderItem != null || heroMatch != null || heroJourneyShown != null)
             val density = LocalDensity.current
             val spaceAbovePx =
                 remember(density) {

@@ -204,6 +204,7 @@ class NavDrawerService
                 buildList {
                     add(NavDrawerItem.Favorites)
                     add(NavDrawerItem.Collections)
+                    add(NavDrawerItem.Journeys) // Journeys v1: every profile (kids see only what their policy allows)
                     add(NavDrawerItem.MyChannels) // t5n wow extras
                     add(NavDrawerItem.MovieNight) // t5n wow extras
                     // Jellytip: Discover is the companion's TMDB browse + Get it, admin only (never shown to anyone else)

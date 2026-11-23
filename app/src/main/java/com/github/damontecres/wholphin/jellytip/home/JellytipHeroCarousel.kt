@@ -46,6 +46,13 @@ sealed interface HeroSlide {
     ) : HeroSlide {
         override val key get() = "m:${f.fid}"
     }
+
+    /** Journeys v1: the active journey's tonight step (one slide at most). */
+    data class Journey(
+        val s: com.github.damontecres.wholphin.jellytip.journeys.JvSummary,
+    ) : HeroSlide {
+        override val key get() = "j:${s.id}"
+    }
 }
 
 object JellytipHeroCarousel {
@@ -73,7 +80,9 @@ object JellytipHeroCarousel {
     fun slides(
         matches: List<FxItem>,
         mix: List<HeroSlide.Title>,
-    ): List<HeroSlide> = listOfNotNull(matches.firstOrNull()?.let { HeroSlide.Match(it) }) + mix
+        /** Journeys v1: the active journey, right after the game (before the mix). */
+        journey: com.github.damontecres.wholphin.jellytip.journeys.JvSummary? = null,
+    ): List<HeroSlide> = listOfNotNull(matches.firstOrNull()?.let { HeroSlide.Match(it) }, journey?.let { HeroSlide.Journey(it) }) + mix
 
     /** The next / previous slide, wrapping. */
     fun step(

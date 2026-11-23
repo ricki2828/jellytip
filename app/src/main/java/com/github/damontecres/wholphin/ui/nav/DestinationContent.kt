@@ -485,12 +485,17 @@ fun DestinationContent(
 
         Destination.JellytipJourneys -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneysPage(modifier = modifier)
+            // Journeys v1 (falls back to the client-built page on a server without it)
+            com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneysV1Page(modifier = modifier)
         }
 
         is Destination.JellytipJourney -> {
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneyPage(id = destination.id, modifier = modifier)
+            if (destination.v1) {
+                com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneyV1Page(id = destination.id, modifier = modifier)
+            } else {
+                com.github.damontecres.wholphin.jellytip.journeys.JellytipJourneyPage(id = destination.id, modifier = modifier)
+            }
         }
         // ---- end t5n ----
 
