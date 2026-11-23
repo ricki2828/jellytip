@@ -4,30 +4,11 @@
 // is the native player. One play at a time.
 import { go } from "../lib/router";
 import { flashNote } from "../components/TasteButtons";
-import { targetPath } from "../lib/iptvPlay";
-import { vodPath } from "../lib/iptvVod";
 import { NativePlayer, nativeIptvPlayer } from "../lib/native";
-import { isPlayable, journeyPath, nowIndex, oneAtATime, skipFor, TOAST_ADDED, type JvJourney, type JvStep } from "../lib/journeysV1";
+import { isPlayable, journeyPath, nowIndex, oneAtATime, skipFor, stepPlayPath, TOAST_ADDED, type JvJourney } from "../lib/journeysV1";
 import { fetchJourney, journeyAction, journeyEvent, peekJourney } from "../api/journeysV1";
 
 const gate = oneAtATime();
-
-/** Where a step opens (details): the library item, or the IPTV title. */
-export function stepDetailsPath(st: JvStep): string | null {
-  if (st.source === "library" && st.itemId) return `/item/${st.itemId}`;
-  if (st.source === "iptv" && st.iptv) return vodPath(st.iptv.id);
-  return null;
-}
-
-function stepPlayPath(st: JvStep): string | null {
-  if (st.source === "library" && st.itemId) return `/play/${st.itemId}`;
-  if (st.source === "iptv" && st.iptv) {
-    // A series has no single thing to play: its page
-    if (st.iptv.kind === "series") return vodPath(st.iptv.id);
-    return `${targetPath({ vod: st.iptv.id })}&t=${encodeURIComponent(st.title)}${st.iptv.resume ? `&resume=${st.iptv.resume}` : ""}`;
-  }
-  return null;
-}
 
 /** The toast shows over the player: the web player's own note, or the phone's native IPTV player (it covers the page). */
 function toastOverPlayer(text: string, nativeIptv: boolean) {

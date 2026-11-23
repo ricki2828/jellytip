@@ -7,9 +7,10 @@ import { createHash } from "node:crypto";
 import {
   activeSummary, art, askFromReply, facts, askLabel, askText, btnLabel, canAsk, dot, getBody, getIndex, isCurrent, isHomeEmpty, isJourneyId, isNotFound, journeyPath,
   kicker, loadOutcome, meta, missingReason, nowIndex, oneAtATime, parseHome, parseJourney, parseStep, pathButtons, pathWindow, progress, progressLabel, retryMs,
-  runtime, skipFor, stable, stableHome, statusAfter, stepAction, withSkipped, yourJourneyLine, type JvStep,
+  runtime, skipFor, stable, stepDetailsPath, stepPlayPath, stableHome, statusAfter, stepAction, withSkipped, yourJourneyLine, type JvStep,
 } from "../src/lib/journeysV1.ts";
 import { parseHash } from "../src/lib/routeParse.ts";
+import { parseTarget } from "../src/lib/iptvPlay.ts";
 
 const base = "https://api.example";
 const raw = (n: string) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), "utf8");
@@ -323,4 +324,28 @@ test("an IPTV step resumes from its progress unless finished", () => {
   assert.equal(st({ position: 600, duration: 6000, played: false }).iptv?.resume, 600);
   assert.equal(st({ position: 600, duration: 6000, played: true }).iptv?.resume, 0);
   assert.equal(st(null).iptv?.resume, 0);
+});
+
+test("where a step plays and opens: library /play + /item, IPTV the IPTV player + details, read back by the routes", () => {
+  const j = journey();
+  assert.equal(stepPlayPath(j.steps[2]), "/play/0000000000000000000000000000000b");
+  assert.equal(stepDetailsPath(j.steps[2]), "/item/0000000000000000000000000000000b");
+  assert.deepEqual(parseHash(`#${stepPlayPath(j.steps[2])}`).params, { id: "0000000000000000000000000000000b" });
+  const live = parseJourney(JSON.parse(raw("journeys-v1-live-detail-20261123.json")), base)!;
+  const oldboy = live.steps[2];
+  const play = stepPlayPath(oldboy)!;
+  const r = parseHash(`#${play}`);
+  assert.equal(r.name, "iptvplay");
+  assert.deepEqual(parseTarget(r.query), { vod: "pp000001:m:1635672" });
+  assert.equal(r.query.get("t"), "Oldboy");
+  const d = parseHash(`#${stepDetailsPath(oldboy)}`);
+  assert.equal(d.name, "iptvitem");
+  assert.equal(d.query.get("id"), "pp000001:m:1635672");
+  // resume carried; a series opens its page; gettable / missing go nowhere
+  const resumed = parseStep({ n: 1, title: "A", source: "iptv", iptv: { id: "p:m:1", kind: "movie", progress: { position: 600, duration: 6000 } } }, base)!;
+  assert.equal(parseHash(`#${stepPlayPath(resumed)}`).query.get("resume"), "600");
+  const series = parseStep({ n: 1, title: "S", source: "iptv", iptv: { id: "p:s:1", kind: "series" } }, base)!;
+  assert.equal(parseHash(`#${stepPlayPath(series)}`).name, "iptvitem");
+  assert.equal(stepPlayPath(j.steps[3]), null);
+  assert.equal(stepDetailsPath(j.steps[5]), null);
 });

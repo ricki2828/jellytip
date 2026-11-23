@@ -9,10 +9,10 @@ import { Backdrop } from "../components/Backdrop";
 import { heroArt } from "../components/JourneyHero";
 import { go } from "../lib/router";
 import {
-  askLabel, askText, btnLabel, canAsk, dot, facts, isCurrent, kicker, missingReason, nowIndex, pathButtons, progressLabel, sourceBadge, stepAction, TOAST_ADDED,
+  askLabel, askText, btnLabel, canAsk, dot, facts, isCurrent, kicker, missingReason, nowIndex, pathButtons, progressLabel, sourceBadge, stepAction, stepDetailsPath, TOAST_ADDED,
   TOAST_DROPPED, TOAST_REMOVED, yourJourneyLine, type JvAsk, type JvBtn, type JvJourney, type JvStep,
 } from "../lib/journeysV1";
-import { playStep, stepDetailsPath } from "./journeyPlay";
+import { playStep } from "./journeyPlay";
 import "./Journeys.css";
 
 const KIND = { curated: "Curated journey", list: "From a list", director: "A director's films", franchise: "A series in order" } as Record<string, string>;

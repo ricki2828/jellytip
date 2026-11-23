@@ -24,7 +24,9 @@ export async function companionCall(method: Method, path: string, body?: unknown
       const r = await CapacitorHttp.request({ url, method, headers, data: body, responseType: "json", connectTimeout: 8000, readTimeout: opts.timeoutMs ?? 8000 });
       return { status: r.status, data: typeof r.data === "string" ? null : r.data };
     }
-    const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: opts.signal });
+    // timeoutMs bounds the browser path too (a hung call must not hold a page's busy state until the browser gives up)
+    const signal = opts.signal ?? (opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined);
+    const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
     return { status: res.status, data: await res.json().catch(() => null) };
   } catch {
     return { status: 0, data: null };

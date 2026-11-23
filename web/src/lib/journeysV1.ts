@@ -3,6 +3,9 @@
 // tonight's step, the path strip, the See the path buttons, Get it feedback, row order that does not re-rank on Back, and the
 // load policy (only a 404 is "missing"). A port of the TV's JourneysV1.kt (41b3eb51); tested in web/test/journeysV1.test.ts.
 
+import { targetPath } from "./iptvPlay.ts";
+import { vodPath } from "./iptvVod.ts";
+
 export type JvSource = "library" | "iptv" | "gettable" | "missing";
 export type JvStatus = "active" | "paused" | "none" | "dropped" | "done";
 
@@ -216,6 +219,24 @@ export const isJourneyId = (id: string): boolean => ID_RE.test(id);
 export const journeyPath = (id: string): string => `/journeys/${encodeURIComponent(id)}`;
 /** The API path segment: the id URL-encoded (the server takes "cur%3Aroad-to-heat" and "cur:road-to-heat"). */
 export const apiId = (id: string): string => encodeURIComponent(id);
+
+/** Where a step opens (details): the library item, or the IPTV title. Null = nothing to open. */
+export function stepDetailsPath(st: JvStep): string | null {
+  if (st.source === "library" && st.itemId) return `/item/${st.itemId}`;
+  if (st.source === "iptv" && st.iptv) return vodPath(st.iptv.id);
+  return null;
+}
+
+/** Where a step plays: /play/<id> for the library; an IPTV film the way IPTV details plays it (on the phone: the native player). */
+export function stepPlayPath(st: JvStep): string | null {
+  if (st.source === "library" && st.itemId) return `/play/${st.itemId}`;
+  if (st.source === "iptv" && st.iptv) {
+    // A series has no single thing to play: its page
+    if (st.iptv.kind === "series") return vodPath(st.iptv.id);
+    return `${targetPath({ vod: st.iptv.id })}&t=${encodeURIComponent(st.title)}${st.iptv.resume ? `&resume=${st.iptv.resume}` : ""}`;
+  }
+  return null;
+}
 
 // ---------- tonight's step ----------
 
