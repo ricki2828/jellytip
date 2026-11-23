@@ -14,7 +14,7 @@ import { go, isRestoring } from "../lib/router";
 import { applyError, applyResponse, ChatSender, dismissNotice, emptyState, noticeSeen, NOTICE_TEXT, retry as chatRetry, startOver as chatStartOver, submitText, tapChip, type ChatBody, type ChatState } from "../lib/askChat";
 import {
   askChip, bothLine, chatOff, decided, DEFER_CHAT_MS, deferredScrolled, deferredTimer, emptyFind, FIND_ERROR, findRetryMs, FOLLOW_UP_PLACEHOLDER, leave, opened, PLACEHOLDER, retryFind,
-  searchChip, startOver, submit, typing, type FindUi, type Step,
+  interrupt, searchChip, startOver, submit, typing, type FindUi, type Step,
 } from "../lib/oneBox";
 import { chatCall, find as findApi, findFeedback, noRoute } from "../api/find";
 import { useVoice } from "../lib/useVoice";
@@ -581,7 +581,7 @@ export function Search({ initial }: { initial: string }) {
         return;
       }
       if (r) {
-        shownTerm.current = t;
+        shownTerm.current = norm(t);
         setUnified(r);
         setFallback(null);
         await lateGroups(r, it, ctl.signal, live);
@@ -590,7 +590,7 @@ export function Search({ initial }: { initial: string }) {
       // No unified search on this server (or it failed): Jellyfin's own search, with year and genre sent as server-side filters
       const items = await searchJellyfin(it, t).catch(() => [] as Item[]);
       if (!live()) return;
-      shownTerm.current = t;
+      shownTerm.current = norm(t);
       setUnified(null);
       setFallback(items);
     }, delay);
@@ -650,7 +650,7 @@ export function Search({ initial }: { initial: string }) {
     if (fx.find) startFind(fx.find, step.state.seq);
     if (fx.search) {
       const t = fx.search;
-      shownTerm.current = t;
+      shownTerm.current = norm(t);
       setQ(t);
       runSearch(t, 0);
     }
@@ -670,7 +670,7 @@ export function Search({ initial }: { initial: string }) {
     // the typed search for these words is superseded by the find (it never lands over its answer)
     liveCtl.current?.abort();
     guard.current.next();
-    shownTerm.current = t;
+    shownTerm.current = norm(t);
     findCtl.current?.abort();
     const ctl = (findCtl.current = new AbortController());
     void findApi(t, ctl.signal).then((out) => {
@@ -697,7 +697,9 @@ export function Search({ initial }: { initial: string }) {
   };
 
   // ---- voice into the same box (lib/useVoice.ts: tap = until a pause, hold = until release) ----
-  const voice = useVoice({ getText: () => qRef.current, setText: setQ, onSend: submitBox, disabled: find.deciding || !!chat.pending });
+  // busy only while a find is out, or a chat turn is out in the chat view (both's deferred turn never cuts a press short)
+  const micBusy = find.deciding || (find.view === "chat" && !!chat.pending);
+  const voice = useVoice({ getText: () => qRef.current, setText: setQ, onSend: submitBox, disabled: micBusy });
   const { listening, error: voiceErr } = voice;
 
   // The typed search: as you type, unless the results already belong to these words (a find answered them, Back restored them),
@@ -705,7 +707,7 @@ export function Search({ initial }: { initial: string }) {
   useEffect(() => {
     go(urlQ ? `/search?q=${encodeURIComponent(urlQ)}` : "/search", true);
     if (view === "chat" || listening) return;
-    if (term === shownTerm.current && term.length >= 2) return;
+    if (norm(term) === shownTerm.current && term.length >= 2) return;
     shownTerm.current = "";
     return runSearch(term, DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -750,6 +752,7 @@ export function Search({ initial }: { initial: string }) {
   );
 
   const pick = (v: string) => {
+    apply(interrupt(findRef.current));
     setQ(v);
     input.current?.focus();
   };
@@ -791,7 +794,8 @@ export function Search({ initial }: { initial: string }) {
   const chatShown = view === "chat";
   const deciding = find.deciding;
   const chatTouched = chat.turns.length > 0 || !!chat.pending || !!chat.error;
-  const askable = !chatShown && (term.length >= 2 || find.q.length >= 2);
+  // under the box on search answers and plain results; BOTH has its own in the chat area
+  const askable = view === "search" && (term.length >= 2 || find.q.length >= 2);
   const noticeLine = notice && (chatShown || (view === "both" && chatTouched)) ? (
     <p className="onebox-notice">
       {NOTICE_TEXT}{" "}
@@ -850,10 +854,11 @@ export function Search({ initial }: { initial: string }) {
             title={voice.phone ? "Tap to talk, or hold and release. Voice uses your phone's speech service" : "Tap to talk, or hold and release (or hold Space). Voice uses your browser's speech service"}
             aria-label={listening ? "Listening" : "Talk"}
             aria-pressed={listening}
-            disabled={deciding || !!chat.pending}
+            disabled={micBusy}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               e.currentTarget.setPointerCapture?.(e.pointerId); // the release is seen even off the button
+              apply(interrupt(findRef.current));
               voice.down();
             }}
             onPointerUp={voice.up}
@@ -861,7 +866,10 @@ export function Search({ initial }: { initial: string }) {
             onKeyDown={(e) => {
               if (e.key !== " " && e.key !== "Enter") return;
               e.preventDefault(); // no click from the keyboard: the hold is the gesture
-              if (!e.repeat) voice.down();
+              if (!e.repeat) {
+                apply(interrupt(findRef.current));
+                voice.down();
+              }
             }}
             onKeyUp={(e) => {
               if (e.key !== " " && e.key !== "Enter") return;
@@ -950,7 +958,14 @@ export function Search({ initial }: { initial: string }) {
             {term.length >= 2 && blocked && (
               <div className="rows-error" role="alert">
                 <p>Search isn't available right now.</p>
-                <button className="btn" data-nav onClick={() => setRetry((n) => n + 1)}>
+                <button
+                  className="btn"
+                  data-nav
+                  onClick={() => {
+                    shownTerm.current = ""; // the words were never answered: search them again
+                    setRetry((n) => n + 1);
+                  }}
+                >
                   Try again
                 </button>
               </div>
@@ -993,3 +1008,5 @@ export function Search({ initial }: { initial: string }) {
     </div>
   );
 }
+
+const norm = (t: string) => t.replace(/\s+/g, " ").trim();

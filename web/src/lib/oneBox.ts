@@ -89,6 +89,8 @@ export interface FindUi {
   seq: number;
   /** The words of the last submit (what the chat / search chips act on). */
   q: string;
+  /** The decision's ask.text: what goes to the chat for these words (the server may have normalised them). */
+  askText: string;
   /** The decision on screen (null: no decision, e.g. an older server or a typed search). */
   decisionId: string | null;
   decidedAt: number;
@@ -105,7 +107,7 @@ export interface FindUi {
   deferred: Deferred;
 }
 
-export const emptyFind = (): FindUi => ({ view: "search", deciding: false, seq: 0, q: "", decisionId: null, decidedAt: 0, decided: null, fed: [], error: false, failures: 0, fallback: false, deferred: "none" });
+export const emptyFind = (): FindUi => ({ view: "search", deciding: false, seq: 0, q: "", askText: "", decisionId: null, decidedAt: 0, decided: null, fed: [], error: false, failures: 0, fallback: false, deferred: "none" });
 
 export interface FindEffects {
   /** Call /v1/find for this text (for submit [FindUi.seq]). */
@@ -149,7 +151,7 @@ export function submit(s: FindUi, text: string, now: number, noRoute = false): S
   let next: FindUi = s;
   let fb: FindEffects["feedback"];
   if (s.decisionId && !same(s.q, q) && now - s.decidedAt >= 0 && now - s.decidedAt <= RETYPE_WINDOW_MS) ({ state: next, fb } = feedback(s, "retyped"));
-  const base: FindUi = { ...next, view: "search", seq: s.seq + 1, q, error: false, deferred: "none", decided: null, decisionId: null };
+  const base: FindUi = { ...next, view: "search", seq: s.seq + 1, q, error: false, deferred: "none", decided: null, decisionId: null, askText: "" };
   if (noRoute) return { state: { ...base, deciding: false, fallback: true, failures: 0 }, fx: { search: q, resetChat: true, stopTimer: true, ...(fb ? { feedback: fb } : {}) } };
   return { state: { ...base, deciding: true, fallback: false }, fx: { find: q, resetChat: true, stopTimer: true, ...(fb ? { feedback: fb } : {}) } };
 }
@@ -166,9 +168,9 @@ export function decided<S>(s: FindUi, seq: number, out: FindOutcome<S>, now: num
   if (out.kind === "error") return { state: { ...s, deciding: false, error: true, failures: s.failures + 1 }, fx: {} };
   if (out.kind === "noRoute") return { state: { ...s, deciding: false, view: "search", fallback: true, failures: 0, decisionId: null, decided: null }, fx: { search: s.q } };
   const d = out.d;
-  const next: FindUi = { ...s, deciding: false, error: false, failures: 0, fallback: false, view: d.mode, decided: d.mode, decisionId: d.id, decidedAt: now, deferred: d.mode === "both" ? "waiting" : "none" };
+  const next: FindUi = { ...s, deciding: false, error: false, failures: 0, fallback: false, view: d.mode, decided: d.mode, decisionId: d.id, decidedAt: now, askText: d.askText ?? "", deferred: d.mode === "both" ? "waiting" : "none" };
   const fx: FindEffects = {};
-  if (d.mode === "chat") fx.chat = d.askText ?? s.q;
+  if (d.mode === "chat") fx.chat = d.askText ?? s.q; // the contract: send ask.text
   if (d.mode !== "chat" && d.search == null) fx.search = s.q; // the server's search part failed: search plainly
   if (d.mode === "both") fx.armTimer = true;
   return { state: next, fx };
@@ -177,7 +179,7 @@ export function decided<S>(s: FindUi, seq: number, out: FindOutcome<S>, now: num
 /** BOTH: the deferred chat turn goes now (the timer ran out, or the person moved / scrolled to the chat area). Once. */
 export function sendDeferred(s: FindUi): Step {
   if (s.view !== "both" || s.deferred !== "waiting") return { state: s, fx: {} };
-  return { state: { ...s, deferred: "sent" }, fx: { chat: s.q, stopTimer: true } };
+  return { state: { ...s, deferred: "sent" }, fx: { chat: s.askText || s.q, stopTimer: true } };
 }
 // the screen spells out which trigger fired (all three do the same)
 export const deferredTimer = sendDeferred;
@@ -200,7 +202,8 @@ export function askChip(s: FindUi, text: string): Step {
   const q = already ? s.q : norm(text) || s.q;
   const { state, fb } = feedback(s, "ask_chip");
   const fx: FindEffects = { stopTimer: true, ...(fb ? { feedback: fb } : {}) };
-  if (!already && q) fx.chat = q;
+  // the decided words go as the server's ask.text; words typed since go as they are
+  if (!already && q) fx.chat = s.askText && same(q, s.q) ? s.askText : q;
   if (!already && s.view !== "both") fx.resetChat = true;
   return { state: { ...state, view: "chat", q, deferred: s.view === "both" ? "sent" : "none" }, fx };
 }
@@ -224,6 +227,12 @@ export function startOver(s: FindUi): Step {
 /** The words in the box changed after a decision: BOTH's waiting chat is for the old words, so it is never sent. */
 export function typing(s: FindUi, text: string): Step {
   if (s.view !== "both" || s.deferred !== "waiting" || same(s.q, text)) return { state: s, fx: {} };
+  return { state: { ...s, deferred: "cancelled" }, fx: { stopTimer: true } };
+}
+
+/** Speech started, or a suggestion was picked: the box is getting other words, so BOTH's waiting chat is never sent. */
+export function interrupt(s: FindUi): Step {
+  if (s.view !== "both" || s.deferred !== "waiting") return { state: s, fx: {} };
   return { state: { ...s, deferred: "cancelled" }, fx: { stopTimer: true } };
 }
 
