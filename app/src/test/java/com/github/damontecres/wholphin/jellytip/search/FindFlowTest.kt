@@ -200,12 +200,29 @@ class FindFlowTest {
 
     @Test
     fun searchChipAndChatOffDropPendingAnswers() {
-        val (pending, _) = FindFlow.submit(FindUi(view = FindMode.CHAT), "heat", 0)
+        val (pending, _) = FindFlow.submit(FindUi(view = FindMode.CHAT), "heat", 0, inChat = false)
+        assertTrue(pending.deciding)
         val (back, _) = FindFlow.searchChip(pending, "heat")
         assertFalse(back.deciding)
         assertEquals(back to FindEffects(), FindFlow.decided(back, pending.seq, "heat", d(FindMode.CHAT), 5))
         val (off, _) = FindFlow.chatOff(pending)
         assertEquals(FindMode.SEARCH, off.view)
         assertEquals(off to FindEffects(), FindFlow.decided(off, pending.seq, "heat", d(FindMode.CHAT), 5))
+    }
+
+    @Test
+    fun bothSendsTheServersAskText() {
+        val (s0, _) = FindFlow.submit(FindUi(), "kids", 0)
+        val (both, _) = FindFlow.decided(s0, s0.seq, "kids", d(FindMode.BOTH, ask = "films for kids"), 10)
+        assertEquals("films for kids", FindFlow.bothTimer(both, both.seq).second.chat)
+        assertEquals("films for kids", FindFlow.chatFocused(both).second.chat)
+        assertEquals("films for kids", FindFlow.askChip(both, "kids").second.chat)
+    }
+
+    @Test
+    fun backIsNotACorrection() {
+        val chat = FindUi(view = FindMode.CHAT, decisionId = "f_9", decidedQ = "heat")
+        assertNull(FindFlow.searchChip(chat, "heat", viaBack = true).second.feedback)
+        assertEquals("f_9" to FindSwitch.SEARCH_CHIP, FindFlow.searchChip(chat, "heat").second.feedback)
     }
 }

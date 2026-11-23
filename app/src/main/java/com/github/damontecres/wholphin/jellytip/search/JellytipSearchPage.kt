@@ -268,9 +268,12 @@ class JellytipSearchViewModel
         }
 
         /** "Just search for this" / Back in the chat: the plain results for the words that were decided (or typed). */
-        fun searchChip(chat: ChatBridge) {
+        fun searchChip(
+            chat: ChatBridge,
+            viaBack: Boolean = false,
+        ) {
             val q = _find.value.decidedQ ?: _state.value.query
-            val (s, e) = FindFlow.searchChip(_find.value, q)
+            val (s, e) = FindFlow.searchChip(_find.value, q, viaBack)
             _find.value = s
             applyFind(e, chat)
         }
@@ -303,7 +306,7 @@ class JellytipSearchViewModel
             val seq = _find.value.seq
             // The results for these words: usually already there (or on their way) from typing or the voice result; else the normal
             // search path (it handles the late IPTV). Same words = never a second search.
-            if (_state.value.query.trim() != q) setQuery(q, immediate = true)
+            if (_state.value.query.trim() != q || _state.value.failed) setQuery(q, immediate = true)
             viewModelScope.launch {
                 val d = service.find(q)
                 JellytipTrace.log("search", "find '$q' -> ${d?.mode} p=${d?.p} why=${d?.why}")
@@ -447,7 +450,7 @@ private fun FindHost(
         JellytipSearchButton.pageVoice = voice
         onDispose { if (JellytipSearchButton.pageVoice === voice) JellytipSearchButton.pageVoice = null }
     }
-    androidx.activity.compose.BackHandler(enabled = find.view == FindMode.CHAT) { viewModel.searchChip(bridge) }
+    androidx.activity.compose.BackHandler(enabled = find.view == FindMode.CHAT) { viewModel.searchChip(bridge, viaBack = true) }
     if (find.view == FindMode.CHAT) {
         val embed =
             remember(viewModel, bridge) {

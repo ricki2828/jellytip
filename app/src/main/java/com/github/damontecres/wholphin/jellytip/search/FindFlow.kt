@@ -72,6 +72,8 @@ data class FindUi(
     val chatSent: Boolean = false,
     /** A result was opened for this decision: BOTH's deferred chat turn is then never spent. */
     val picked: Boolean = false,
+    /** The text the server said to send to the chat (`ask.text`), for BOTH's deferred turn. */
+    val askText: String? = null,
 )
 
 /** What a step asks the page to do besides showing [FindUi]. */
@@ -132,7 +134,7 @@ object FindFlow {
         if (d == null) return s.copy(deciding = false, view = FindMode.SEARCH, decisionId = null) to FindEffects(search = q.trim())
         val text = d.askText ?: q.trim()
         val next = FindUi(view = d.mode, deciding = false, decisionId = d.id, decidedQ = q.trim(), decidedAtMs = nowMs, feedbackSent = false, seq = s.seq,
-                          chatSent = d.mode == FindMode.CHAT)
+                          chatSent = d.mode == FindMode.CHAT, askText = if (d.mode == FindMode.SEARCH) null else text)
         return when (d.mode) {
             FindMode.CHAT -> next to FindEffects(chat = text)
             FindMode.BOTH -> next to FindEffects(chatAfterMs = BOTH_CHAT_DELAY_MS)
@@ -146,13 +148,13 @@ object FindFlow {
         seq: Int,
     ): Pair<FindUi, FindEffects> {
         if (seq != s.seq || s.view != FindMode.BOTH || s.chatSent || s.picked) return s to FindEffects()
-        return s.copy(chatSent = true) to FindEffects(chat = s.decidedQ)
+        return s.copy(chatSent = true) to FindEffects(chat = s.askText ?: s.decidedQ)
     }
 
     /** BOTH: focus reached the chat chip (the person is heading for the chat answer): send it now. */
     fun chatFocused(s: FindUi): Pair<FindUi, FindEffects> {
         if (s.view != FindMode.BOTH || s.chatSent) return s to FindEffects()
-        return s.copy(chatSent = true) to FindEffects(chat = s.decidedQ)
+        return s.copy(chatSent = true) to FindEffects(chat = s.askText ?: s.decidedQ)
     }
 
     /** "Ask Chat about this" on a search answer (no chat sent yet) or on BOTH (the answer is already there): into the chat. */
@@ -163,7 +165,7 @@ object FindFlow {
         if (s.deciding) return s to FindEffects() // a decision is on its way: the chip is not an answer to anything yet
         val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.ASK_CHIP }
         val sendChat = s.view == FindMode.SEARCH || !s.chatSent
-        val text = (if (s.view == FindMode.BOTH) s.decidedQ else null) ?: q.trim()
+        val text = (if (s.view == FindMode.BOTH) s.askText ?: s.decidedQ else null) ?: q.trim()
         return s.copy(view = FindMode.CHAT, feedbackSent = s.feedbackSent || fb != null, chatSent = true, seq = s.seq + 1) to
             FindEffects(chat = if (sendChat) text.ifEmpty { null } else null, feedback = fb)
     }
@@ -179,14 +181,15 @@ object FindFlow {
 
     /** The chat is off on this server: back to the results, dropping anything on its way. */
     fun chatOff(s: FindUi): Pair<FindUi, FindEffects> = s.copy(view = FindMode.SEARCH, deciding = false, seq = s.seq + 1) to FindEffects()
-    }
 
     /** "Just search for this" under a chat answer: back to the plain results for the same words. */
     fun searchChip(
         s: FindUi,
         q: String,
+        /** Back, not the chip: a plain "go back" is not a correction of the decision, so no feedback. */
+        viaBack: Boolean = false,
     ): Pair<FindUi, FindEffects> {
-        val fb = s.decisionId?.takeIf { !s.feedbackSent }?.let { it to FindSwitch.SEARCH_CHIP }
+        val fb = s.decisionId?.takeIf { !s.feedbackSent && !viaBack }?.let { it to FindSwitch.SEARCH_CHIP }
         return s.copy(view = FindMode.SEARCH, deciding = false, seq = s.seq + 1, feedbackSent = s.feedbackSent || fb != null) to
             FindEffects(search = q.trim(), resetChat = true, feedback = fb)
     }
