@@ -29,6 +29,7 @@ import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 import { go } from "../lib/router";
 import { useActiveJourney, type ActiveJourney } from "../api/journeysV1";
+import { heroSlideAt, insertJourneySlide, removeJourneySlide } from "../lib/journeysV1";
 import { JourneyHero } from "../components/JourneyHero";
 
 const MAX_CAROUSEL_ROWS = 10;
@@ -67,16 +68,35 @@ export const letterboxdLoader = (l: LetterboxdRow) => async () => {
 /** The hero: the featured mix rotates until someone touches a tile, then it follows focus. Own state, so a slide change does not re-render Home. */
 function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused: Item | null; focusedIptv: IptvHeroTile | null; slides: HeroSlide[]; engaged: boolean; journey: ActiveJourney | null }) {
   const [i, setI] = useState(0);
-  // The active journey's tonight's step is one more slide, the first one (Journeys v1)
-  const n = slides.length + (journey ? 1 : 0);
+  // The active journey's tonight's step is one more slide (Journeys v1). It loads after the mix: first if the hero hasn't rotated
+  // yet, else right after the slide on screen, so nothing jumps (lib/journeysV1 insertJourneySlide)
+  const [jPos, setJPos] = useState<number | null>(() => (journey ? 0 : null)); // already known (Back to Home): first
+  const rotated = useRef(false);
+  const hasJourney = !!journey;
+  useEffect(() => {
+    if (hasJourney && jPos == null) {
+      const ins = insertJourneySlide(i, slides.length, rotated.current);
+      setJPos(ins.pos);
+      setI(ins.i);
+    } else if (!hasJourney && jPos != null) {
+      setI(removeJourneySlide(i, slides.length, jPos));
+      setJPos(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasJourney]);
+  const pos = hasJourney ? jPos : null;
+  const n = slides.length + (pos != null ? 1 : 0);
   useEffect(() => {
     if (engaged || n < 2) return;
-    const t = setInterval(() => setI((k) => k + 1), SLIDE_MS);
+    const t = setInterval(() => {
+      rotated.current = true;
+      setI((k) => k + 1);
+    }, SLIDE_MS);
     return () => clearInterval(t);
   }, [engaged, slides, n]);
-  const at = !engaged && n ? i % n : -1;
-  if (journey && at === 0) return <JourneyHero s={journey.journey.summary} j={journey.journey} />;
-  const slide = at >= 0 && slides.length ? slides[(at - (journey ? 1 : 0) + slides.length) % slides.length] : null;
+  const at = engaged ? null : heroSlideAt(i, slides.length, pos);
+  if (journey && at && "journey" in at) return <JourneyHero s={journey.journey.summary} j={journey.journey} />;
+  const slide = at && "index" in at ? slides[at.index] ?? null : null;
   if (focusedIptv && !slide) return <IptvHero tile={focusedIptv} />;
   return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
 }

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
-  activeSummary, art, askFromReply, facts, askLabel, askText, btnLabel, canAsk, dot, getBody, getIndex, isCurrent, isHomeEmpty, isJourneyId, isNotFound, journeyPath,
+  activeSummary, art, askFromReply, facts, heroSlideAt, insertJourneySlide, removeJourneySlide, askLabel, askText, btnLabel, canAsk, dot, getBody, getIndex, isCurrent, isHomeEmpty, isJourneyId, isNotFound, journeyPath,
   kicker, loadOutcome, meta, missingReason, nowIndex, oneAtATime, parseHome, parseJourney, parseStep, pathButtons, pathWindow, progress, progressLabel, retryMs,
   runtime, skipFor, stable, stepDetailsPath, stepPlayPath, stableHome, statusAfter, stepAction, withSkipped, yourJourneyLine, type JvStep,
 } from "../src/lib/journeysV1.ts";
@@ -348,4 +348,28 @@ test("where a step plays and opens: library /play + /item, IPTV the IPTV player 
   assert.equal(parseHash(`#${stepPlayPath(series)}`).name, "iptvitem");
   assert.equal(stepPlayPath(j.steps[3]), null);
   assert.equal(stepDetailsPath(j.steps[5]), null);
+});
+
+test("home hero: the journey slide arrives without moving the slide on screen", () => {
+  // known before the first rotation: it is the one shown first
+  assert.deepEqual(insertJourneySlide(0, 5, false), { pos: 0, i: 0 });
+  assert.deepEqual(heroSlideAt(0, 5, 0), { journey: true });
+  assert.deepEqual(heroSlideAt(1, 5, 0), { index: 0 });
+  // mid-rotation (slide 3 of 5 on screen, counter 13): it goes right after, slide 3 stays, then the journey, then slide 4
+  const ins = insertJourneySlide(13, 5, true);
+  assert.deepEqual(ins, { pos: 4, i: 3 });
+  assert.deepEqual(heroSlideAt(13, 5, null), { index: 3 });
+  assert.deepEqual(heroSlideAt(ins.i, 5, ins.pos), { index: 3 });
+  assert.deepEqual(heroSlideAt(ins.i + 1, 5, ins.pos), { journey: true });
+  assert.deepEqual(heroSlideAt(ins.i + 2, 5, ins.pos), { index: 4 });
+  assert.deepEqual(heroSlideAt(ins.i + 3, 5, ins.pos), { index: 0 });
+  // no mix at all: the journey alone; nothing at all: nothing
+  assert.deepEqual(insertJourneySlide(7, 0, true), { pos: 0, i: 0 });
+  assert.deepEqual(heroSlideAt(0, 0, 0), { journey: true });
+  assert.equal(heroSlideAt(0, 0, null), null);
+  // it goes away: the mix slide on screen stays; if the journey was on screen, the one after it
+  assert.equal(removeJourneySlide(3, 5, 4), 3);
+  assert.equal(removeJourneySlide(4, 5, 4), 4);
+  assert.equal(removeJourneySlide(5, 5, 4), 4);
+  assert.equal(removeJourneySlide(0, 5, 0), 0);
 });

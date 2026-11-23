@@ -500,3 +500,34 @@ export function oneAtATime(): { run: (fn: () => Promise<unknown> | unknown) => b
     },
   };
 }
+
+// ---------- Home hero: the journey slide arriving / leaving without a jump ----------
+
+/**
+ * Where the journey slide goes when it arrives (it loads after the mix): first, shown at once, while the hero has not rotated
+ * yet; else right after the slide on screen, which stays put (rotation counter `i` is rebased onto it). `pos` is its place.
+ */
+export function insertJourneySlide(i: number, slideCount: number, rotated: boolean): { pos: number; i: number } {
+  if (!rotated || slideCount === 0) return { pos: 0, i: 0 };
+  const c = i % slideCount;
+  return { pos: c + 1, i: c };
+}
+
+/** What the hero shows for rotation counter `i`: the journey slide, mix slide `index`, or nothing. */
+export function heroSlideAt(i: number, slideCount: number, pos: number | null): { journey: true } | { index: number } | null {
+  const n = slideCount + (pos != null ? 1 : 0);
+  if (!n) return null;
+  const at = i % n;
+  if (pos == null) return { index: at };
+  const p = Math.min(pos, slideCount);
+  if (at === p) return { journey: true };
+  return { index: at < p ? at : at - 1 };
+}
+
+/** The journey slide went away: keep the mix slide on screen (or, if the journey was showing, the one after it). */
+export function removeJourneySlide(i: number, slideCount: number, pos: number): number {
+  if (!slideCount) return 0;
+  const cur = heroSlideAt(i, slideCount, pos);
+  if (!cur || "journey" in cur) return Math.min(pos, slideCount) % slideCount;
+  return cur.index;
+}
