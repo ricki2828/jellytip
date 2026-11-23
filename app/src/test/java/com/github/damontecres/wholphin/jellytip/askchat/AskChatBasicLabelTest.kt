@@ -3,8 +3,13 @@ package com.github.damontecres.wholphin.jellytip.askchat
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Ricki 23-Nov "why is chat in basic mode?": the label only when the AI was unavailable for a typed turn. */
+@RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [30])
 class AskChatBasicLabelTest {
     private fun resp(
         mode: String,

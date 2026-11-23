@@ -5,7 +5,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [30])
 class FindFlowTest {
     private val sa = SearchParse.answer("""{"q":"the matrix","groups":[],"results":[]}""")
 
