@@ -300,7 +300,7 @@ internal fun jvPlay(
       } finally {
         jvPlayBusy.set(false)
       }
-    }
+    }.invokeOnCompletion { jvPlayBusy.set(false) } // also when cancelled before it ever ran (scope gone)
 }
 
 /** A play (or Home's fetch-then-play) is under way. */
@@ -384,7 +384,8 @@ internal fun JourneysV1Content(
                     if (focusDone) return@LaunchedEffect
                     withFrameNanos { }
                     if (focusDone) return@LaunchedEffect
-                    if ((restoreId != null && restore.tryRequestFocus()) || first.tryRequestFocus()) focusDone = true
+                    // Only real focus counts (the list's onFocusChanged sets focusDone): a requester not attached yet doesn't
+                    if (restoreId == null || !restore.tryRequestFocus()) first.tryRequestFocus()
                 }
                 LazyColumn(
                     state = listState,

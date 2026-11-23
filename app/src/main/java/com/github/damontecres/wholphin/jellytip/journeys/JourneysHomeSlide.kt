@@ -139,7 +139,7 @@ private fun playTonight(
         } finally {
             tonightBusy.set(false)
         }
-    }
+    }.invokeOnCompletion { tonightBusy.set(false) } // also when cancelled before it ever ran (Home left)
 }
 
 private val tonightBusy = java.util.concurrent.atomic.AtomicBoolean(false)
