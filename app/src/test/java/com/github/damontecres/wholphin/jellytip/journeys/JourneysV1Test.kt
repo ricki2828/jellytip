@@ -179,6 +179,28 @@ class JourneysV1Test {
         assertEquals(60_000L, JourneysV1.backoffMs(9))
     }
 
+    private fun res(name: String) = javaClass.classLoader!!.getResourceAsStream("jellytip/$name")!!.bufferedReader().readText()
+
+    /** Real answers from the staged server (23-Nov, live data; art skipped in that harness). */
+    @Test
+    fun parsesTheLivePayloads() {
+        val h = JourneysV1.home(res("journeys-v1-live-list-20261123.json"), base)!!
+        assertEquals(80, h.journeys.size)
+        assertEquals(40, h.start.size)
+        assertEquals(20, h.finish.size)
+        assertTrue(h.yours.isEmpty())
+        assertNull(h.active)
+        val j = JourneysV1.journey(res("journeys-v1-live-detail-20261123.json"), base)!!
+        assertEquals(7, j.steps.size)
+        // The IPTV step is only {id, kind}: still playable from IPTV
+        assertEquals(JvSource.IPTV, j.steps[2].source)
+        assertEquals("11dd6d87:m:1635672", j.steps[2].iptv?.id)
+        // Tonight agrees with the server's nowIndex
+        assertEquals(j.summary.nowIndex, JourneysV1.nowIndex(j.steps))
+        // The gettable step is seen (Letterboxd): nothing to get
+        assertNull(JourneysV1.getIndex(j.steps))
+    }
+
     @Test
     fun kidsHomeHasOnlyWhatTheServerSent() {
         val h = JourneysV1.home(fixture.getJSONObject("kidsHome").toString(), base)!!

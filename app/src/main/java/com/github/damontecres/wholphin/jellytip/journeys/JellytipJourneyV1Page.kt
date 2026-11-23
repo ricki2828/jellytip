@@ -119,6 +119,11 @@ class JellytipJourneyV1ViewModel
                 }
         }
 
+        /** Hidden: no retries until it shows again. */
+        fun pause() {
+            job?.cancel()
+        }
+
         fun retry() {
             job?.cancel()
             _state.update { it.copy(retrying = true) }
@@ -170,7 +175,7 @@ fun JellytipJourneyV1Page(
     val state by viewModel.state.collectAsState()
     LifecycleResumeEffect(id) {
         viewModel.load(id)
-        onPauseOrDispose { }
+        onPauseOrDispose { viewModel.pause() }
     }
     val isAdmin by rememberIsJellytipAdmin()
     JourneyV1Content(

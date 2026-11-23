@@ -181,6 +181,11 @@ class JellytipJourneysV1ViewModel
                 }
         }
 
+        /** The page is hidden: no retries while nobody is looking (they start again on resume). */
+        fun pause() {
+            loadJob?.cancel()
+        }
+
         override fun retry() {
             loadJob?.cancel()
             attempt = 0
@@ -249,7 +254,8 @@ internal fun jvPlay(
             if (step.source == JvSource.IPTV) {
                 val v = step.iptv ?: return@launch
                 Destination.JellytipIptvPlay(
-                    title = v.title,
+                    // The step's own title: a journey's IPTV object can be just {id, kind} (live payload 23-Nov)
+                    title = step.title,
                     vodId = v.id,
                     resumeMs = v.progress?.takeIf { it.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L,
                 )
@@ -275,7 +281,7 @@ fun JellytipJourneysV1Page(
     // Open, and back from the player / a journey: fresh progress, cards kept in place
     LifecycleResumeEffect(Unit) {
         viewModel.load(again = true)
-        onPauseOrDispose { }
+        onPauseOrDispose { viewModel.pause() }
     }
     if (state.home is JvLoad.NoRoute) {
         // A server without Journeys v1: the client-built journeys
