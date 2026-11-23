@@ -39,6 +39,8 @@ export class VoiceController {
   private restarts = 0;
   private downAt = 0;
   private quiet: unknown = null;
+  /** One per press: a timer of an earlier press (or of this one after it ended) does nothing. */
+  private press = 0;
   readonly phone: boolean;
   private engine: SpeechEngine;
   private host: VoiceHost;
@@ -142,14 +144,23 @@ export class VoiceController {
   private requestStop() {
     this.stopping = true;
     this.clearQuiet();
+    // the fallback first: an engine may end the window inside stop() (nothing was listening yet), and that finish must clear it
+    this.quiet = this.later(() => this.finish(true), STOP_WAIT_MS);
     this.engine.stop();
-    this.quiet = this.timers.set(() => this.finish(true), STOP_WAIT_MS);
+  }
+
+  /** A timer that only fires while the press that set it is still live. */
+  private later(fn: () => void, ms: number): unknown {
+    const press = this.press;
+    return this.timers.set(() => {
+      if (this.active && this.press === press) fn();
+    }, ms);
   }
 
   // tap mode: a pause of TAP_SILENCE_MS after the last words ends it
   private armQuiet() {
     this.clearQuiet();
-    this.quiet = this.timers.set(() => this.requestStop(), TAP_SILENCE_MS);
+    this.quiet = this.later(() => this.requestStop(), TAP_SILENCE_MS);
   }
 
   /** Mic pressed (pointer down, Space / Enter down). */
@@ -159,6 +170,7 @@ export class VoiceController {
       return;
     }
     this.host.setError(null);
+    this.press++;
     const t = this.host.getText();
     this.active = this.held = true;
     this.tap = this.stopping = false;

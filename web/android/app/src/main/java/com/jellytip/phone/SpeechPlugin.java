@@ -36,8 +36,10 @@ import java.util.ArrayList;
  *   a trailing callback of window N that is handled after window N+1's setRecognitionListener. Such a callback lands before
  *   window N+1 has shown any sign of life (ready / beginning of speech / level), so until then results, partials and
  *   NO_MATCH / SPEECH_TIMEOUT are dropped as stale (no speech can have been recognised yet), and CLIENT goes through the glitch
- *   rule (a quiet end + a fresh recognizer, never a failure mid-hold). This assumes the recognizer reports onReadyForSpeech
- *   before any result (Google's and AOSP's do); not verified on every recognizer.
+ *   rule (a quiet end + a fresh recognizer, never a failure mid-hold; at most MAX_PRE_READY_GLITCHES in a row, reset by any sign
+ *   of life, then CLIENT is a real error). Safety net for recognizers that never report ready / beginning / level: until some
+ *   window of the press has shown life, nothing is treated as stale (results, partials and errors are taken as this window's,
+ *   and logged as such), and stop() always asks for the last words.
  * - Windows always ask for long silences (a hold's): a tap is ended by the web side's quiet timer (stop()), not by these hints.
  *
  * Events, each with the session (press) it belongs to: partial {text} / final {text} = this window's text so far; error {error}
@@ -67,6 +69,9 @@ public class SpeechPlugin extends Plugin {
     private boolean glitchUsed = false; // the tolerated post-restart CLIENT / SERVER error is spent; refilled by a result
     private String partial = "";
     private boolean windowReady = false; // the open window has shown a sign of life (see "Stale callbacks" above)
+    private boolean sessionEverReady = false; // some window of this press has shown life: only then can a pre-ready callback be stale
+    private int preReadyGlitches = 0; // CLIENT errors in a row before a restarted window showed life
+    private static final int MAX_PRE_READY_GLITCHES = 2;
     private boolean paused = false; // the activity is paused: no window may start (the finger is off the mic)
     private int closedSession = 0; // a press stopped / cancelled with no window open: a late start for it opens nothing
 
@@ -139,7 +144,7 @@ public class SpeechPlugin extends Plugin {
     public void stop(PluginCall call) {
         final int s = call.getInt("session", 0);
         main.post(() -> {
-            if (s != 0 && s == session && recognizer != null && windowOpen && windowReady) {
+            if (s != 0 && s == session && recognizer != null && windowOpen && (windowReady || !sessionEverReady)) {
                 Log.i(TAG, "voice stop: window " + windows + " (session " + s + ")");
                 try {
                     recognizer.stopListening();
@@ -215,6 +220,8 @@ public class SpeechPlugin extends Plugin {
             session = s;
             windows = 0;
             glitchUsed = false;
+            sessionEverReady = false;
+            preReadyGlitches = 0;
         } else if (windowOpen) {
             // start while this press's window still runs (shouldn't happen: the web side waits for end): end it silently
             closeWindow(true);
@@ -335,12 +342,22 @@ public class SpeechPlugin extends Plugin {
             }
 
             private void alive() {
-                if (valid()) windowReady = true;
+                if (!valid()) return;
+                windowReady = true;
+                sessionEverReady = true;
+                preReadyGlitches = 0;
             }
 
-            /** Before this window showed any life nothing can have been recognised: a result now is window N-1's, handled late. */
+            /**
+             * Before this window showed any life nothing can have been recognised: a result now is window N-1's, handled late. Unless
+             * no window of this press ever showed life (a recognizer without those callbacks): then it is taken as this window's.
+             */
             private boolean stale(String what) {
                 if (windowReady) return false;
+                if (!sessionEverReady) {
+                    Log.i(TAG, "voice window " + windows + ": " + what + " with no ready yet in this press, taken as this window's");
+                    return false;
+                }
                 Log.i(TAG, "voice window " + windows + ": stale " + what + " before ready, dropped");
                 return true;
             }
@@ -348,7 +365,7 @@ public class SpeechPlugin extends Plugin {
             @Override
             public void onReadyForSpeech(Bundle params) {
                 if (!valid()) return;
-                windowReady = true;
+                alive();
                 Log.i(TAG, "voice window " + windows + " ready (gen " + myGen + ")");
             }
 
@@ -372,7 +389,9 @@ public class SpeechPlugin extends Plugin {
             public void onPartialResults(Bundle partialResults) {
                 if (!valid()) return;
                 String p = first(partialResults);
-                if (p.isEmpty() || stale("partial")) return;
+                if (p.isEmpty()) return;
+                // logged once per window (partials come several a second); a stale one is dropped every time
+                if (!windowReady && (partial.isEmpty() ? stale("partial") : sessionEverReady)) return;
                 partial = p;
                 glitchUsed = false; // proof the recognizer works
                 emitText("partial", s, p);
@@ -394,14 +413,16 @@ public class SpeechPlugin extends Plugin {
             public void onError(int error) {
                 if (!valid()) return;
                 if ((error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && stale("error " + error)) return;
-                boolean preReady = !windowReady;
+                // pre-ready in a press that has shown life before: likely a late callback of the last window
+                boolean preReady = !windowReady && sessionEverReady;
                 closeWindow(false);
                 // the first CLIENT / SERVER after a restart, or a CLIENT before a restarted window showed life (likely window N-1's
                 // trailing answer to stopListening): a quiet end and a fresh recognizer, never a failure in the middle of a hold
                 boolean glitch = windows > 1
                     && ((!glitchUsed && (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER || error == ERROR_SERVER_DISCONNECTED))
-                        || (preReady && error == SpeechRecognizer.ERROR_CLIENT));
+                        || (preReady && error == SpeechRecognizer.ERROR_CLIENT && preReadyGlitches < MAX_PRE_READY_GLITCHES));
                 if (glitch) glitchUsed = true;
+                if (glitch && preReady) preReadyGlitches++;
                 if (glitch || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) recreate = true;
                 Log.i(TAG, "voice window " + windows + " error " + error + (glitch ? " (glitch: new recognizer next)" : "") + " partial=" + partial.length() + " chars");
                 emitError(s, error, glitch);

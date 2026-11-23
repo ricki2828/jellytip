@@ -266,9 +266,10 @@ export function nativeEngine(plugin: JellytipSpeechPlugin): SpeechEngine {
       const s = session;
       if (s === 0) return;
       if (pending) {
-        // released before the window was even asked for: nothing is listening, the window is over now
+        // released before the window was even asked for: nothing is listening, the window is over now (sent after stop()
+        // returns, like every other engine event: callers never see an end from inside their own stop() call)
         pending = 0;
-        em.emit("end", {});
+        queueMicrotask(() => session === s && em.emit("end", {}));
         return;
       }
       void plugin.stop({ session: s }).catch(() => fail(s, "stop-failed"));

@@ -316,6 +316,8 @@ test("native engine: a release while the restart is still waiting ends the windo
   send("end", { session: 1 });
   eng.start({}); // restart beat
   eng.stop();
+  assert.deepEqual(ev, ["end"]); // never from inside stop() itself
+  await tick();
   assert.deepEqual(ev, ["end", "end"]);
   await tick(RESTART_DELAY_MS + 20);
   assert.deepEqual(calls, ["start:1"]);

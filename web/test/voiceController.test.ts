@@ -2,17 +2,20 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { STOP_WAIT_MS, VoiceController, type VoiceTimers } from "../src/lib/voiceController.ts";
 import { MAX_RESTARTS, TAP_MS, TAP_SILENCE_MS } from "../src/lib/chatVoice.ts";
-import { VoiceEmitter, type SpeechEngine, type VoiceEventMap, type VoiceEventName } from "../src/lib/speechEngine.ts";
+import { nativeEngine, RESTART_DELAY_MS, VoiceEmitter, type JellytipSpeechPlugin, type SpeechEngine, type VoiceEventMap, type VoiceEventName } from "../src/lib/speechEngine.ts";
 
 /** A fake engine: records calls; the test emits its events. */
-function fakeEngine(kind: "web" | "native" = "native") {
+function fakeEngine(kind: "web" | "native" = "native", endInsideStop = false) {
   const em = new VoiceEmitter();
   const calls: string[] = [];
   const engine: SpeechEngine = {
     kind,
     available: () => Promise.resolve(true),
     start: () => void calls.push("start"),
-    stop: () => void calls.push("stop"),
+    stop: () => {
+      calls.push("stop");
+      if (endInsideStop) em.emit("end", {}); // an engine that ends the window inside stop() (nothing was listening yet)
+    },
     cancel: () => void calls.push("cancel"),
     on: (e, cb) => em.on(e, cb),
   };
@@ -46,8 +49,10 @@ function fakeTime() {
   return { timers, now: () => now, advance };
 }
 
-function setup(typed = "", kind: "web" | "native" = "native") {
-  const { engine, calls, emit } = fakeEngine(kind);
+function setup(typed = "", kind: "web" | "native" = "native", endInsideStop = false, real?: SpeechEngine) {
+  const fake = fakeEngine(kind, endInsideStop);
+  const { calls, emit } = fake;
+  const engine = real ?? fake.engine;
   const t = fakeTime();
   const out = { text: typed, sent: [] as string[], error: null as string | null, listening: false };
   const ctl = new VoiceController(
@@ -205,4 +210,75 @@ test("interrupted (the app was left) between windows ends a hold with the words 
   assert.equal(out.text, "nearly");
   assert.deepEqual(out.sent, []);
   assert.match(out.error ?? "", /app was left/);
+});
+
+test("an engine that ends inside stop(): exactly one send, and the stop fallback can't fire later (release, tap pause, second tap)", () => {
+  // release during the restart beat
+  {
+    const { ctl, emit, out, advance } = setup("", "native", true);
+    ctl.down();
+    emit("final", { text: "something funny" });
+    emit("end", {}); // restart
+    advance(1000);
+    ctl.up(); // stop() ends at once
+    assert.deepEqual(out.sent, ["something funny"]);
+    out.text = "typed after";
+    advance(STOP_WAIT_MS + 100);
+    assert.deepEqual(out.sent, ["something funny"]);
+    assert.equal(out.text, "typed after"); // old text never comes back
+  }
+  // the tap quiet timer
+  {
+    const { ctl, emit, out, advance } = setup("", "native", true);
+    ctl.down();
+    ctl.up();
+    emit("partial", { text: "hello" });
+    advance(TAP_SILENCE_MS + 10);
+    assert.deepEqual(out.sent, ["hello"]);
+    advance(STOP_WAIT_MS + 100);
+    assert.deepEqual(out.sent, ["hello"]);
+  }
+  // a second tap, then a new press that the old fallback must not kill
+  {
+    const { ctl, emit, out, advance } = setup("", "native", true);
+    ctl.down();
+    ctl.up();
+    emit("partial", { text: "now" });
+    ctl.down(); // second tap: send now
+    assert.deepEqual(out.sent, ["now"]);
+    advance(500);
+    ctl.down(); // a new hold
+    emit("partial", { text: "next one" });
+    advance(STOP_WAIT_MS + 100);
+    assert.equal(out.listening, true);
+    assert.deepEqual(out.sent, ["now"]);
+  }
+});
+
+test("controller over the real native engine: a release during the restart beat sends once", async () => {
+  const ls: Record<string, ((e: { session: number; text?: string }) => void)[]> = {};
+  const plugin: JellytipSpeechPlugin = {
+    available: () => Promise.resolve({ available: true }),
+    start: () => Promise.resolve({ started: true }),
+    requestMic: () => Promise.resolve({ granted: true }),
+    stop: () => Promise.resolve(),
+    cancel: () => Promise.resolve(),
+    addListener: (event, cb) => {
+      (ls[event] ??= []).push(cb);
+      return Promise.resolve({ remove: () => Promise.resolve() });
+    },
+  };
+  const send = (event: string, e: { session: number; text?: string }) => ls[event]?.forEach((cb) => cb(e));
+  const { ctl, out, advance } = setup("", "native", false, nativeEngine(plugin));
+  ctl.down();
+  await new Promise((r) => setTimeout(r, 0));
+  send("final", { session: 1, text: "something funny" });
+  send("end", { session: 1 }); // the controller restarts: the native engine waits RESTART_DELAY_MS
+  advance(1000);
+  ctl.up(); // the start is still pending: the engine ends the window itself
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(out.sent, ["something funny"]);
+  advance(STOP_WAIT_MS + 100);
+  await new Promise((r) => setTimeout(r, RESTART_DELAY_MS + 20));
+  assert.deepEqual(out.sent, ["something funny"]);
 });
