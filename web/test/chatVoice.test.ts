@@ -52,3 +52,15 @@ test("a silent press never re-sends typed text; new speech (even the same words)
   assert.ok(!heardNothing("", "something funny"));
   assert.ok(!heardNothing("funny", joinSpeech("funny", "funny")));
 });
+
+test("error text: the phone points at Android settings; permission prompt and leaving the app have their own words", () => {
+  assert.match(errorText("not-allowed"), /browser/);
+  assert.match(errorText("not-allowed", true), /Android settings/);
+  assert.doesNotMatch(errorText("not-allowed", true), /Jellytip/); // the refusal may be the speech service's, not ours
+  assert.doesNotMatch(errorText("not-allowed", true), /browser/);
+  assert.match(errorText("mic-allowed", true), /hold the mic/);
+  assert.match(errorText("mic-prompt", true), /Allow the microphone/);
+  assert.match(errorText("interrupted", true), /app was left/);
+  assert.match(errorText("client", true), /type it/);
+  assert.ok(!isQuietError("mic-allowed") && !isQuietError("mic-prompt") && !isQuietError("interrupted"));
+});

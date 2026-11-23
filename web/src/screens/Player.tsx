@@ -29,6 +29,7 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog.tsx";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess.ts";
 import { addedSubtitle, remapActive } from "../lib/remoteSubtitles.ts";
 import { canOfferRotate, nextPlayerOrientation } from "../lib/playerOrientation";
+import { PlayerNote } from "../components/PlayerNote";
 import { chainTarget, channelById, poolOf, schedule, tunePath, type ChanItem } from "../lib/channels.ts";
 import { channelItems, rejoinPlan, takeChainHop } from "../api/channels";
 
@@ -1041,7 +1042,7 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
           )}
         </div>
       </div>
-
+      <PlayerNote />
     </div>
   );
 }

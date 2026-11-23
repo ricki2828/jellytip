@@ -1,6 +1,7 @@
 // Runtime differences between the website (same origin as Jellyfin) and the Android app (bundled in a Capacitor
 // WebView at https://localhost, talking to the seedbox across origins).
 import { Capacitor, CapacitorHttp, registerPlugin } from "@capacitor/core";
+import type { JellytipSpeechPlugin } from "./speechEngine";
 
 export const isNative = Capacitor.isNativePlatform();
 
@@ -171,3 +172,6 @@ export interface JellytipRemindersPlugin {
 }
 
 export const NativeReminders = registerPlugin<JellytipRemindersPlugin>("JellytipReminders");
+
+/** Chat voice on the phone (android/app/src/main/java/com/jellytip/phone/SpeechPlugin.java); used through lib/speechEngine.ts. */
+export const NativeSpeech = registerPlugin<JellytipSpeechPlugin>("JellytipSpeech");

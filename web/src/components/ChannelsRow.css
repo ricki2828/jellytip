@@ -66,29 +66,52 @@
 .chrow-card > :not(.chrow-art):not(.chrow-shade):not(.onnow-progress) {
   position: relative;
 }
-.chrow-name {
-  font-size: 11.5px;
+.chrow-head {
+  position: absolute !important;
+  top: 12px;
+  left: 14px;
+  right: 110px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.chrow-num {
+  flex: none;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  opacity: 0.85;
+  color: var(--jelly);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.chrow-name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.chrow-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .chrow-now {
   font-size: 17px;
   font-weight: 600;
   line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.chrow-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--jelly);
-  margin-right: 4px;
+.chrow-sub {
+  font-size: 13px;
+  color: rgba(242, 242, 240, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chrow-next {
   font-size: 12.5px;
@@ -97,9 +120,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the row's place, held while a person who had channels last time waits for them (title + one tile high) */
+.chrow-reserve {
+  height: 218px;
+}
+/* touch: hold the tile instead (long-press plays from the start); no hover-only chip, and no text selection on hold */
+@media (hover: none) {
+  .chrow-start {
+    display: none;
+  }
+  .chrow-head {
+    right: 14px;
+  }
+}
+.chrow-card {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
 @media (max-width: 700px) {
   .chrow-wrap {
-    width: 260px;
-    height: 150px;
+    width: 280px;
+    height: 158px;
+  }
+  .chrow-reserve {
+    height: 196px;
+  }
+}
+/* phone: the title link is a 44 px target without moving the row (padding out, margin back) */
+@media (max-width: 760px), (hover: none) {
+  .chrow .row-title-link {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    margin-top: -12px;
+    margin-bottom: -12px;
   }
 }

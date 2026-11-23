@@ -1,6 +1,7 @@
 // flashNote() messages while the player is up. The app-level note host is not mounted on the player route (and would sit
 // outside the fullscreen element anyway), so the player renders its own inside its root.
 import { useEffect, useState } from "react";
+import "./DelayChip.css"; // .player-note
 
 export function PlayerNote() {
   const [note, setNote] = useState<string | null>(null);
