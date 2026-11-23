@@ -110,6 +110,15 @@ class JourneysV1Test {
     }
 
     @Test
+    fun everyPlayableStepSkippedOffersTheFirstSkippedAgain() {
+        val steps = journey().steps.map { if (!it.seen && it.source.playable) it.copy(skipped = true) else it }
+        // Thief (2) and Heat (4) both skipped: Thief again, drawn as tonight
+        assertEquals(2, JourneysV1.nowIndex(steps))
+        assertEquals(JvDot.NOW, JourneysV1.dot(steps, 2))
+        assertEquals(JvDot.SKIPPED, JourneysV1.dot(steps, 4))
+    }
+
+    @Test
     fun allSeenHasNoTonight() {
         val steps = journey().steps.map { it.copy(seen = true) }
         assertNull(JourneysV1.nowIndex(steps))

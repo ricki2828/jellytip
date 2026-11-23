@@ -221,9 +221,12 @@ object JourneysV1 {
 
     /**
      * Tonight's step: the first step not seen, not skipped and playable. Earlier unseen steps that can't play yet are passed
-     * over (the path offers the next playable one meanwhile, plan §4). Null = nothing left to play.
+     * over (the path offers the next playable one meanwhile, plan §4). When every unseen playable step was skipped, the first
+     * skipped one is offered again (spec: never null just from skips). Null = nothing left to play.
      */
-    fun nowIndex(steps: List<JvStep>): Int? = steps.indexOfFirst { !it.seen && !it.skipped && it.source.playable }.takeIf { it >= 0 }
+    fun nowIndex(steps: List<JvStep>): Int? =
+        steps.indexOfFirst { !it.seen && !it.skipped && it.source.playable }.takeIf { it >= 0 }
+            ?: steps.indexOfFirst { !it.seen && it.source.playable }.takeIf { it >= 0 }
 
     /** The step "Get it" fetches (admin): the first unseen gettable one, as the server's /get picks it. */
     fun getIndex(steps: List<JvStep>): Int? = steps.indexOfFirst { !it.seen && it.source == JvSource.GETTABLE }.takeIf { it >= 0 }

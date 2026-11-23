@@ -259,13 +259,8 @@ private fun JourneyV1Body(
         if (now != null) JvButton("▶  Play ${j.steps[now].title}", primary = true) { onPlay(j, now) }
         when (s.status) {
             "active" -> JvButton("Pause") { onAction(j, "pause") }
-            "paused", "none", "dropped", "done" -> JvButton(
-                when (s.status) {
-                    "none" -> "Start"
-                    "done" -> "Start again"
-                    else -> "Resume journey"
-                },
-            ) { onAction(j, "start") }
+            // A finished journey has nothing to start (the server answers status done)
+            "paused", "none", "dropped" -> JvButton(if (s.status == "none") "Start" else "Resume journey") { onAction(j, "start") }
         }
         if (s.status != "dropped") JvButton("Drop it") { onAction(j, "drop") }
         if (isAdmin && getAt != null) JvButton("Get ${j.steps[getAt].title}") { onGet(j) }
