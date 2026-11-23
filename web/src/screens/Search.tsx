@@ -975,7 +975,7 @@ export function Search({ initial }: { initial: string }) {
                 <h2 className="row-title">Chat</h2>
                 {!chatTouched ? (
                   <div className="chips">
-                    <button className="chip" data-nav onFocus={() => apply(deferredScrolled(findRef.current))} onClick={() => apply(askChip(findRef.current, term))}>
+                    <button className="chip" data-nav onFocus={(e) => e.currentTarget.matches(":focus-visible") && apply(deferredScrolled(findRef.current))} onClick={() => apply(askChip(findRef.current, term))}>
                       {bothLine(find.deferred, false, false)} ›
                     </button>
                   </div>
