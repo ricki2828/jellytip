@@ -44,7 +44,8 @@ export function parseHash(hash: string): Route {
         return { name: "collectionrow", params: { id }, query };
       }
     case "journeys": {
-      // #/journeys = all guided journeys; #/journeys/<id> = one ("f:<tmdbId>", "d:<personId>", "l:<list slug>")
+      // #/journeys = all journeys; #/journeys/<id> = one (v1 ids: "cur:<slug>", "l:<list slug>", "d:<TMDB person id>",
+      // "f:<TMDB collection id>"; lib/journeysV1.ts isJourneyId is the same rule)
       if (seg[1] == null) return { name: "journeys", params: {}, query };
       let id = seg[1];
       try {
@@ -52,7 +53,7 @@ export function parseHash(hash: string): Route {
       } catch {
         return { name: "journeys", params: {}, query };
       }
-      if (!/^(f:\d{1,9}|d:([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})|l:[a-z0-9][a-z0-9_-]{0,120})$/i.test(id)) return { name: "journeys", params: {}, query };
+      if (!/^(cur:[a-z0-9][a-z0-9_-]{0,159}|l:[a-z0-9][a-z0-9_-]{0,159}|d:\d{1,10}|f:\d{1,10})$/i.test(id)) return { name: "journeys", params: {}, query };
       return { name: "journey", params: { id }, query };
     }
     case "movies":

@@ -8,6 +8,7 @@ import { iptvGet } from "./iptv";
 import { tasteProfileSoon } from "./tasteProfile";
 import { affinity, type TasteProfile } from "../lib/tasteProfile";
 import { personalItems } from "../lib/personalChannels";
+import { commitOrder } from "../lib/channelsRow";
 
 const TTL_MS = 6 * 3600 * 1000;
 /** While the server is still fetching runtimes for IPTV films, look again sooner. */
@@ -255,3 +256,38 @@ export async function rejoinPlan(channelId: string, currentId: string): Promise<
     return null;
   }
 }
+
+// ---------- one channel order per person per session (the My Channels page and Home's row agree, Back never re-ranks) ----------
+// Read with peekChannelOrder (pure, no write); written with commitChannelOrder from an effect, only once a screen's first load
+// has settled (all channels answered, taste profile known), so the order is the affinity order, not the order channels arrived.
+
+const orderKey = () => `jellytip.channels.order.v1.${uid()}`;
+let orderMemo: { uid: string; ids: string[] | null } | null = null;
+/** The committed order for this person this session, or null before any screen has settled one. */
+export function peekChannelOrder(): string[] | null {
+  const u = uid();
+  if (orderMemo?.uid === u) return orderMemo.ids;
+  let ids: string[] | null = null;
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(orderKey()) ?? "null");
+    if (Array.isArray(v)) ids = v.filter((x): x is string => typeof x === "string");
+  } catch {
+    // none yet
+  }
+  orderMemo = { uid: u, ids }; // parsed once, not on every render
+  return ids;
+}
+/** Commit `ranked` (affinity order of a settled load) into the session order; returns true when it changed. */
+export function commitChannelOrder(ranked: ChannelDef[]): boolean {
+  const prev = peekChannelOrder();
+  const ids = commitOrder(prev, ranked);
+  if (prev && ids.length === prev.length) return false;
+  orderMemo = { uid: uid(), ids };
+  try {
+    sessionStorage.setItem(orderKey(), JSON.stringify(ids));
+  } catch {
+    // memory only
+  }
+  return true;
+}
+if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => (orderMemo = null));

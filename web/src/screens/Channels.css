@@ -100,3 +100,9 @@
 .ch-toggle {
   justify-self: start;
 }
+
+.ch-num {
+  margin-right: 10px;
+  color: var(--jelly);
+  font-variant-numeric: tabular-nums;
+}

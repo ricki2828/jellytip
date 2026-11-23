@@ -1,9 +1,9 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
-import { useTasteProfile } from "../api/tasteProfile";
-import { orderByAffinity } from "../lib/channelsRow";
+import { channelItems, commitChannelOrder, peekChannelOrder, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
+import { useTasteProfileAnswer } from "../api/tasteProfile";
+import { channelNumber, orderByAffinity, orderForView, shouldCommitOrder } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
 import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
@@ -13,7 +13,7 @@ type Load = { state: "loading" } | { state: "error" } | { state: "ok"; items: Ch
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean }) {
+function Card({ def, items, now, onHide, hidden, number }: { def: ChannelDef; items: ChanItem[]; now: number; onHide: () => void; hidden: boolean; number: number | null }) {
   const pool = useMemo(() => poolOf(items, def), [items, def]);
   const { slots, offsetS, progress } = schedule(pool, def.id, now, 4);
   const target = tuneTarget(slots, offsetS);
@@ -22,7 +22,10 @@ function Card({ def, items, now, onHide, hidden }: { def: ChannelDef; items: Cha
   return (
     <li className={`ch-card${hidden ? " hidden" : ""}`}>
       <div className="ch-head">
-        <h2 className="ch-name">{def.name}</h2>
+        <h2 className="ch-name">
+          {number != null && <span className="ch-num">{number}</span>}
+          {def.name}
+        </h2>
         <span className="ch-blurb">{def.blurb}</span>
       </div>
       <div className="ch-now">
@@ -106,7 +109,8 @@ export function Channels() {
 
   // Personal channels come from the taste profile, cut from the loaded pools; the list is ordered by how well what is on now
   // fits the person's taste, once per load (not per clock tick) so cards stay put
-  const profile = useTasteProfile();
+  const profileAnswer = useTasteProfileAnswer();
+  const profile = profileAnswer === undefined ? undefined : profileAnswer.profile;
   const baseItems = useMemo(() => {
     const m: Record<string, ChanItem[] | undefined> = {};
     for (const c of CHANNELS) {
@@ -125,11 +129,18 @@ export function Channels() {
     return m;
   }, [baseItems, personal]);
   const defs = useMemo(() => [...personal, ...CHANNELS], [personal]);
-  const viable = useMemo(
+  const ranked = useMemo(
     () => orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now()),
     [defs, itemsOf],
   );
   const pending = CHANNELS.some((c) => loads[c.id].state === "loading");
+  // The session order (shared with Home's row): drawn when committed; committed here once the load settled and the profile is known
+  const [orderVer, setOrderVer] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const viable = useMemo(() => orderForView(peekChannelOrder(), ranked), [ranked, orderVer]);
+  useEffect(() => {
+    if (shouldCommitOrder(!pending, !!profileAnswer?.settled, ranked.length) && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
+  }, [pending, profileAnswer, ranked]);
   const errored = CHANNELS.filter((c) => loads[c.id].state === "error").length;
   const visible = viable.filter((c) => !hidden.includes(c.id));
   const hiddenViable = viable.filter((c) => hidden.includes(c.id));
@@ -152,7 +163,9 @@ export function Channels() {
       <ul className="ch-list">
         {shown.map((c) => {
           const items = itemsOf[c.id];
-          return items ? <Card key={c.id} def={c} items={items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} /> : null;
+          // numbered as on Home's My Channels row and the TV: 101 up, in this order, hidden ones unnumbered
+          const at = visible.indexOf(c);
+          return items ? <Card key={c.id} def={c} items={items} now={now} hidden={hidden.includes(c.id)} onHide={() => toggle(c.id)} number={at >= 0 ? channelNumber(at) : null} /> : null;
         })}
       </ul>
       {hiddenViable.length > 0 && (

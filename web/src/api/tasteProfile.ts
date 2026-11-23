@@ -52,16 +52,16 @@ window.addEventListener("jellytip-session", () => {
   inflight = null;
 });
 
-/** undefined while asking; null when there is no profile. */
-export function useTasteProfile(): TasteProfile | null | undefined {
-  const [p, setP] = useState<TasteProfile | null | undefined>(undefined);
+/** The answer so far: undefined while asking; `settled` false while the server hasn't really answered (it keeps asking). */
+export function useTasteProfileAnswer(): ProfileAnswer | undefined {
+  const [p, setP] = useState<ProfileAnswer | undefined>(undefined);
   useEffect(() => {
     let alive = true;
     let retry: number | undefined;
     const run = () =>
       void tasteProfileSoon().then((a) => {
         if (!alive) return;
-        setP(a.profile);
+        setP(a);
         if (!a.settled) retry = window.setTimeout(run, 15_000); // slow or unreachable: ask again shortly
       });
     run();
@@ -73,4 +73,10 @@ export function useTasteProfile(): TasteProfile | null | undefined {
     };
   }, []);
   return p;
+}
+
+/** undefined while asking; null when there is no profile. */
+export function useTasteProfile(): TasteProfile | null | undefined {
+  const a = useTasteProfileAnswer();
+  return a === undefined ? undefined : a.profile;
 }
