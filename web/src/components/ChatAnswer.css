@@ -194,7 +194,8 @@
   .onebox-actions .btn,
   .chat-answer .btn,
   .onebox .rows-error .btn,
-  .onebox .search-suggest .chip {
+  .onebox .search-suggest .chip,
+  .onebox .search-clear {
     min-height: 44px;
   }
 }
