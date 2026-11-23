@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DownloadsPlugin.class);
         registerPlugin(PlayerPlugin.class);
         registerPlugin(RemindersPlugin.class);
+        registerPlugin(SpeechPlugin.class);
         super.onCreate(savedInstanceState);
         takeReminderLink(getIntent());
     }

@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Chat voice (SpeechPlugin): Android 11+ only lets the app see the speech recognition service when it is declared here -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
@@ -82,4 +89,6 @@
     <!-- Sport reminders at the minute; where the user hasn't allowed exact alarms it falls back to a 2-minute window -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Chat voice (SpeechPlugin): asked for at the first press of the mic -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 </manifest>
