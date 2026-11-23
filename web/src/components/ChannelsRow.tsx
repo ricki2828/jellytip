@@ -5,10 +5,10 @@
 // remembered as missing); the loaded channels are kept per person for the session so Back paints the same row at once, and a
 // person who had channels last time gets the row's space reserved while it loads (nothing below it jumps).
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, rememberPersonal, sessionChannelOrder } from "../api/channels";
+import { channelItems, commitChannelOrder, peekChannelOrder, readHiddenChannels, rememberPersonal } from "../api/channels";
 import { imageUrl, uid } from "../api/jellyfin";
 import { CHANNELS, fromStartTarget, poolOf, schedule, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
-import { cardModel, channelNumber, channelRetryMs, nextLine, orderByAffinity, subLine, visibleChannels } from "../lib/channelsRow";
+import { cardModel, channelNumber, channelRetryMs, nextLine, orderByAffinity, orderForView, subLine, visibleChannels } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
 import { tasteProfileSoon } from "../api/tasteProfile";
 import type { TasteProfile } from "../lib/tasteProfile";
@@ -22,7 +22,7 @@ const CONCURRENCY = 2;
 const HOLD_MS = 550;
 
 /** What the row last showed, per person (Back paints it at once; channelItems keeps the pools themselves for hours). */
-let rowMemo: { uid: string; loads: Record<string, ChanItem[] | undefined>; profile: TasteProfile | null } | null = null;
+let rowMemo: { uid: string; loads: Record<string, ChanItem[] | undefined>; profile: TasteProfile | null; answered: boolean; profileKnown: boolean } | null = null;
 if (typeof window !== "undefined") window.addEventListener("jellytip-session", () => (rowMemo = null));
 const presentKey = () => `jellytip.mychannels.present.${uid()}`;
 const hadChannels = () => {
@@ -124,6 +124,10 @@ export function ChannelsRow() {
   const [hidden, setHidden] = useState<string[]>(readHiddenChannels);
   const [profile, setProfile] = useState<TasteProfile | null>(() => mine0?.profile ?? null);
   const [done, setDone] = useState(!!mine0);
+  /** Every channel has answered once (loaded or failed): the first load has settled. */
+  const [answered, setAnswered] = useState(!!mine0?.answered);
+  /** The taste profile request has answered (with a profile or none): personal channels are known. */
+  const [profileKnown, setProfileKnown] = useState(!!mine0?.profileKnown);
   const [reserve, setReserve] = useState(() => !mine0 && hadChannels());
   useEffect(() => {
     if (!reserve) return;
@@ -146,7 +150,11 @@ export function ChannelsRow() {
       if (!alive || mine !== gen) return;
       const hid = readHiddenChannels();
       setHidden(hid);
-      void tasteProfileSoon().then((a) => alive && mine === gen && setProfile(a.profile));
+      void tasteProfileSoon().then((a) => {
+        if (!alive || mine !== gen) return;
+        setProfile(a.profile);
+        setProfileKnown(true);
+      });
       const failures = new Map<string, number>();
       const loadOne = (d: ChannelDef): Promise<void> =>
         channelItems(d).then(
@@ -177,7 +185,8 @@ export function ChannelsRow() {
         for (let def = queue.shift(); def && alive && mine === gen; def = queue.shift()) await loadOne(def);
       };
       await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-      // "done" = every channel answered; while some are failing (retrying) the reservation and the remembered presence stay
+      if (alive && mine === gen) setAnswered(true);
+      // "done" = every channel loaded; while some are failing (retrying) the reservation and the remembered presence stay
       if (alive && mine === gen && failures.size === 0) setDone(true);
     };
     void run();
@@ -186,6 +195,8 @@ export function ChannelsRow() {
       setLoads({});
       setProfile(null);
       setDone(false);
+      setAnswered(false);
+      setProfileKnown(false);
       void run();
     };
     window.addEventListener("jellytip-session", onSession);
@@ -210,11 +221,18 @@ export function ChannelsRow() {
   }, [loads, personal]);
   // Ranked by affinity only to place channels new to the session; placed ones keep their places and numbers (on Back, after a
   // film, when a late channel or a retry lands), the same order and numbers as the My Channels page (api/channels sessionChannelOrder)
-  const shown = useMemo(() => sessionChannelOrder(orderByAffinity(visibleChannels(allLoads, hidden, [...personal, ...CHANNELS]), allLoads, Date.now())), [allLoads, hidden, personal]);
+  const ranked = useMemo(() => orderByAffinity(visibleChannels(allLoads, hidden, [...personal, ...CHANNELS]), allLoads, Date.now()), [allLoads, hidden, personal]);
+  const [orderVer, setOrderVer] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => orderForView(peekChannelOrder(), ranked), [ranked, orderVer]);
+  // Commit the order once the first load has settled (every channel answered, the taste profile known), then for each late one
+  useEffect(() => {
+    if (answered && profileKnown && ranked.length && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
+  }, [answered, profileKnown, ranked]);
   const present = shown.length > 0;
   useEffect(() => {
-    rowMemo = { uid: uid(), loads, profile };
-  }, [loads, profile]);
+    rowMemo = { uid: uid(), loads, profile, answered, profileKnown };
+  }, [loads, profile, answered, profileKnown]);
   useEffect(() => {
     if (present) rememberPresent(true);
     else if (done) rememberPresent(false);

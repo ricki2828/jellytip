@@ -1,9 +1,9 @@
 // #/channels: personal scheduled channels. Each is a deterministic lineup from the person's own library, so "on now" is
 // the same whenever they tune in. Schedule maths in lib/channels.ts; queries in api/channels.ts.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { channelItems, readHiddenChannels, rememberPersonal, sessionChannelOrder, writeHiddenChannels } from "../api/channels";
+import { channelItems, commitChannelOrder, peekChannelOrder, readHiddenChannels, rememberPersonal, writeHiddenChannels } from "../api/channels";
 import { useTasteProfile } from "../api/tasteProfile";
-import { channelNumber, orderByAffinity } from "../lib/channelsRow";
+import { channelNumber, orderByAffinity, orderForView } from "../lib/channelsRow";
 import { personalDefs, personalItems } from "../lib/personalChannels";
 import { CHANNELS, channelViable, fromStartTarget, itemLabel, poolOf, schedule, toggleHidden, tuneTarget, tunePath, type ChanItem, type ChannelDef } from "../lib/channels";
 import { go } from "../lib/router";
@@ -128,11 +128,18 @@ export function Channels() {
     return m;
   }, [baseItems, personal]);
   const defs = useMemo(() => [...personal, ...CHANNELS], [personal]);
-  const viable = useMemo(
-    () => sessionChannelOrder(orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now())),
+  const ranked = useMemo(
+    () => orderByAffinity(defs.filter((c) => { const l = itemsOf[c.id]; return !!l && channelViable(l, c); }), itemsOf, Date.now()),
     [defs, itemsOf],
   );
   const pending = CHANNELS.some((c) => loads[c.id].state === "loading");
+  // The session order (shared with Home's row): drawn when committed; committed here once the load settled and the profile is known
+  const [orderVer, setOrderVer] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const viable = useMemo(() => orderForView(peekChannelOrder(), ranked), [ranked, orderVer]);
+  useEffect(() => {
+    if (!pending && profile !== undefined && ranked.length && commitChannelOrder(ranked)) setOrderVer((v) => v + 1);
+  }, [pending, profile, ranked]);
   const errored = CHANNELS.filter((c) => loads[c.id].state === "error").length;
   const visible = viable.filter((c) => !hidden.includes(c.id));
   const hiddenViable = viable.filter((c) => hidden.includes(c.id));

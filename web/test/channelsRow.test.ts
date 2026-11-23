@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cardModel, channelNumber, channelRetryMs, mergeChannelOrder, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
+import { cardModel, channelNumber, channelRetryMs, commitOrder, mergeChannelOrder, orderForView, homeLeadRows, hhmm, leftText, nextLine, subLine, visibleChannels } from "../src/lib/channelsRow.ts";
 import { CHANNELS, EPOCH_MS, TICKS_PER_SECOND, type ChanItem } from "../src/lib/channels.ts";
 
 const MIN = 60 * TICKS_PER_SECOND;
@@ -89,4 +89,25 @@ test("session channel order: placed channels keep places and numbers; late ones 
   assert.deepEqual(hid.order.map((c) => c.id), ["comedy", "sci-fi-nights", "documentaries"]);
   assert.deepEqual(hid.ids, ["comedy", "90s-action", "sci-fi-nights", "documentaries"]);
   assert.deepEqual(mergeChannelOrder(hid.ids, [d("90s-action"), d("comedy")]).order.map((c) => c.id), ["comedy", "90s-action"]);
+});
+
+test("settled commit: channels arriving in another order than affinity still commit the affinity order; Back reuses it", () => {
+  const d = (id: string) => CHANNELS.find((c) => c.id === id)!;
+  // affinity (once everything is in): comedy, sci-fi, 90s action, documentaries. They arrive: documentaries, 90s action, …
+  const arrivals = [[d("documentaries")], [d("90s-action"), d("documentaries")], [d("sci-fi-nights"), d("90s-action"), d("documentaries")]];
+  let committed: string[] | null = null;
+  // before the load settles nothing is committed: the view is the affinity order of what is in (it may move, as before)
+  for (const ranked of arrivals) assert.deepEqual(orderForView(committed, ranked).map((c) => c.id), ranked.map((c) => c.id));
+  // settled: the full affinity order is committed, not the arrival order
+  const settled = [d("comedy"), d("sci-fi-nights"), d("90s-action"), d("documentaries")];
+  committed = commitOrder(committed, settled);
+  assert.deepEqual(committed, ["comedy", "sci-fi-nights", "90s-action", "documentaries"]);
+  // Back (or the other screen): a different ranking now, the committed order is drawn
+  const later = [d("documentaries"), d("90s-action"), d("comedy"), d("sci-fi-nights")];
+  assert.deepEqual(orderForView(committed, later).map((c) => c.id), committed);
+  // Back before this screen's own load is in: only what is loaded, still in the committed order
+  assert.deepEqual(orderForView(committed, [d("documentaries"), d("comedy")]).map((c) => c.id), ["comedy", "documentaries"]);
+  // a late channel (a retry that came good) appends on the next commit
+  committed = commitOrder(committed, [d("family-night"), ...later]);
+  assert.deepEqual(committed, ["comedy", "sci-fi-nights", "90s-action", "documentaries", "family-night"]);
 });

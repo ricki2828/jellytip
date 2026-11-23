@@ -114,3 +114,14 @@ export function mergeChannelOrder(prev: readonly string[] | null, ranked: readon
   const added = ranked.filter((d) => !known.has(d.id));
   return { order: [...kept, ...added], ids: [...prev, ...added.map((d) => d.id)] };
 }
+
+/**
+ * What a screen draws: the committed session order when there is one (Back, the other screen already settled it), else the
+ * plain affinity order of what has loaded so far (it may still move while channels arrive, as before).
+ */
+export function orderForView(committed: readonly string[] | null, ranked: readonly ChannelDef[]): ChannelDef[] {
+  return committed && committed.length ? mergeChannelOrder(committed, ranked).order : [...ranked];
+}
+
+/** The ids to commit once the first load has settled (and again for each late channel): placed ones stay, new ones append. */
+export const commitOrder = (committed: readonly string[] | null, ranked: readonly ChannelDef[]): string[] => mergeChannelOrder(committed, ranked).ids;
