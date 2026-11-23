@@ -105,9 +105,6 @@ class JellytipJourneyV1ViewModel
                 this.id = id
                 lastStep = null
                 _state.value = JvJourneyState()
-            } else {
-                // back on the page: the steps reload (a fetched film may have arrived); a finished ask is kept, a hung one is not
-                _state.update { s -> s.copy(asks = s.asks.filterValues { it.state != JvAskState.ASKING }) }
             }
             if (job?.isActive == true) return
             job =
@@ -155,6 +152,7 @@ class JellytipJourneyV1ViewModel
             _state.update { it.copy(note = JourneysV1.askText(asking), asks = it.asks + (i to asking)) }
             viewModelScope.launch {
                 val a = JourneysV1.ask(service.get(j.summary.id, JourneysV1.getBody(j.steps, i)))
+                if (id != j.summary.id) return@launch // another journey opened meanwhile
                 _state.update { it.copy(note = JourneysV1.askText(a), asks = it.asks + (i to a)) }
             }
         }
@@ -281,6 +279,8 @@ private fun JourneyV1Body(
     var confirmingDrop by remember(s.id) { mutableStateOf(confirmingDropAtStart) }
     val playFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
+    val dropFocus = remember { FocusRequester() }
+    var backToDrop by remember { mutableIntStateOf(0) }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.focusGroup().testTag("jv-path-buttons")) {
         for (b in JourneysV1.pathButtons(s.status, now != null, confirmingDrop)) {
             val label = JourneysV1.btnLabel(b, now?.let { j.steps[it].title })
@@ -288,6 +288,7 @@ private fun JourneyV1Body(
                 when (b) {
                     JvBtn.PLAY -> Modifier.focusRequester(playFocus).testTag("jv-btn-play")
                     JvBtn.DROP_CANCEL -> Modifier.focusRequester(confirmFocus).testTag("jv-btn-keep")
+                    JvBtn.DROP -> Modifier.focusRequester(dropFocus).testTag("jv-btn-drop")
                     else -> Modifier.testTag("jv-btn-${b.name.lowercase()}")
                 }
             JvButton(label, m, primary = b == JvBtn.PLAY) {
@@ -300,11 +301,20 @@ private fun JourneyV1Body(
                         confirmingDrop = false
                         onAction(j, "drop")
                     }
-                    JvBtn.DROP_CANCEL -> confirmingDrop = false
+                    JvBtn.DROP_CANCEL -> {
+                        confirmingDrop = false
+                        backToDrop++ // focus back on Drop, not on whatever now sits where Keep it was
+                    }
                 }
             }
         }
         if (!confirmingDrop && isAdmin && getAt != null) JvButton("Get ${j.steps[getAt].title}") { onGet(j, getAt) }
+    }
+    if (backToDrop > 0) {
+        LaunchedEffect(backToDrop) {
+            withFrameNanos { }
+            dropFocus.tryRequestFocus()
+        }
     }
     if (confirmingDrop) {
         Text("Drop this journey? It leaves your rows; you can still open it from here.", color = JvColors.Dim, fontFamily = JellytipFontFamily, fontSize = 13.sp)

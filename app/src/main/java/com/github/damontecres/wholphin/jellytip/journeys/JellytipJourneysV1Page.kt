@@ -207,27 +207,29 @@ class JellytipJourneysV1ViewModel
          */
         private suspend fun loadHero(h: JvHome) {
             val candidates = heroCandidates(h)
-            if (candidates.isEmpty()) return _state.update { it.copy(hero = null, heroFailed = false, note = null) }
+            if (candidates.isEmpty()) return _state.update { it.copy(hero = null, heroFailed = false, note = null, asks = emptyMap()) }
             var tries = 0
             for (id in candidates.take(HERO_TRIES)) {
                 while (true) {
                     when (val r = service.journey(id)) {
                         is JvLoad.Ok ->
                             return _state.update {
-                                it.copy(hero = r.value, heroFailed = false, note = if (it.hero?.summary?.id == id) it.note else null)
+                                // asks are per step index of THIS hero: another journey starts clean
+                                val same = it.hero?.summary?.id == id
+                                it.copy(hero = r.value, heroFailed = false, note = if (same) it.note else null, asks = if (same) it.asks else emptyMap())
                             }
 
                         JvLoad.NotFound, JvLoad.NoRoute -> break
 
                         is JvLoad.Failed -> {
                             // A hero already up stays; nothing yet: say so (Retry), and keep trying
-                            _state.update { if (it.hero?.summary?.id == id) it else it.copy(hero = null, heroFailed = true) }
+                            _state.update { if (it.hero?.summary?.id == id) it else it.copy(hero = null, heroFailed = true, asks = emptyMap()) }
                             delay(JourneysV1.backoffMs(tries++))
                         }
                     }
                 }
             }
-            _state.update { it.copy(hero = null, heroFailed = false, note = null) }
+            _state.update { it.copy(hero = null, heroFailed = false, note = null, asks = emptyMap()) }
         }
 
         override fun play(
