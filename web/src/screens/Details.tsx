@@ -1,6 +1,6 @@
 // Details for movies, series and episodes. Backdrop = companion detailsIndex (≠ hero, ≠ tile), info block bottom-left only;
 // series get season chips + episodes, episodes get prev/next; cast and more-like-this sit further down.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getSession,
   episodes as getEpisodes,
@@ -24,10 +24,8 @@ import { heroItemId, heroPick, type ImagePick } from "../lib/art";
 import { go } from "../lib/router";
 import { focusFirst } from "../lib/spatial";
 import { useIsPhone } from "../lib/device";
-import { Backdrop } from "../components/Backdrop";
 import { jfTarget } from "../lib/trailerPreview";
 import { useTrailerPreview } from "../lib/useTrailerPreview";
-import { PreviewVideo } from "../components/PreviewVideo";
 import { Card } from "../components/Card";
 import { Row } from "../components/Row";
 import { SimilarRow } from "../components/SimilarRow";
@@ -57,6 +55,7 @@ import { WaysToWatch, useDownloaded } from "../components/WaysToWatch";
 import { availabilityOf, type IptvCopy, type Way } from "../lib/availability";
 import { iptvMovieFor, type MovieIptv } from "../api/movieIptv";
 import { vodPath } from "../lib/iptvVod";
+import { askedSeason, DetailsHero, EpisodeList, HeroOverview, PeopleRow, rememberSeason, SeasonChips, TrailerModal, useFrozenPrimary, type EpisodeEntry } from "../components/DetailsScaffold";
 
 function fmtClock(ticks: number) {
   const s = Math.floor(ticks / TICKS_PER_SECOND);
@@ -102,9 +101,6 @@ export function Details({ id }: { id: string }) {
   const [claim, setClaim] = useState<{ v: SeriesNextClaim | null } | null>(null);
   const seasonPicked = useRef(false);
   const [seasonsDone, setSeasonsDone] = useState(false);
-  // The primary button's choice, made ONCE per page (the first moment everything answered or SPLIT_WAIT_MS passed): late
-  // answers still fill the tiles but never relabel the button, move the Next pill or switch the season under him
-  const frozen = useRef<{ id: string; v: Primary | null } | null>(null);
   const [allEps, setAllEps] = useState<{ season: string; items: Item[] } | null>(null);
   const [iptvDone, setIptvDone] = useState(false);
   const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
@@ -186,7 +182,7 @@ export function Details({ id }: { id: string }) {
             if (!alive) return;
             setSeasonList(s);
             setSeasonsDone(true);
-            const wanted = new URLSearchParams(location.hash.split("?")[1] ?? "").get("season");
+            const wanted = askedSeason();
             // Default: the first season with something unwatched, else the first
             // A ?season= that isn't one of this series' seasons (empty, stale) is ignored
             const asked = wanted ? s.find((x) => x.Id === wanted) : undefined;
@@ -251,18 +247,6 @@ export function Details({ id }: { id: string }) {
     };
   }, [item, season]);
 
-  // Esc closes the trailer instead of leaving the page (document runs before the app's window-level Esc)
-  useEffect(() => {
-    if (!showTrailer) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      setShowTrailer(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [showTrailer]);
-
   // Files only for play / download / Resume; the list below also shows placeholders and IPTV-only episodes
   const seasonEntries = useMemo(() => mergeSeasons(seasonList, iptvSeries?.seasons), [seasonList, iptvSeries]);
   // A ?season= IPTV season this title doesn't have (stale link, no IPTV now): the default season instead
@@ -297,10 +281,8 @@ export function Details({ id }: { id: string }) {
         : [],
     [seriesEps, iptvDone, iptvSeries, seasonList],
   );
-  // Decided once; "nothing to play" is decided again as answers land (a button appearing relabels nothing)
-  if (splitReady && (frozen.current?.id !== id || frozen.current.v === null)) frozen.current = { id, v: seriesPrimary(split, claim?.v) ?? libraryOnlyPrimary(seriesEps ?? []) };
-  const primary = frozen.current?.id === id ? frozen.current.v : null;
-  const decided = frozen.current?.id === id;
+  // The primary button's choice, made ONCE per page (the first moment everything answered or SPLIT_WAIT_MS passed)
+  const { primary, decided } = useFrozenPrimary<Primary>(id, splitReady, () => seriesPrimary(split, claim?.v) ?? libraryOnlyPrimary(seriesEps ?? []));
   const isNextRow = (r: EpRow) =>
     !!primary?.next && (primary.ep.lib ? r.status === "present" && r.item?.Id === primary.ep.lib.id : !!primary.ep.iptv && r.iptv?.id === primary.ep.iptv.id);
   // Open on the next episode's season (unless ?season= asked or a chip was picked)
@@ -309,10 +291,6 @@ export function Details({ id }: { id: string }) {
     // Not while he is in the episode list (the list would swap under his focus)
     if (nextSeasonKey && !seasonPicked.current && !document.activeElement?.closest(".details-below")) setSeason(nextSeasonKey);
   }, [nextSeasonKey]);
-  // No button after all (nothing playable): focus that sat on the waiting button moves on, never to nothing
-  useLayoutEffect(() => {
-    if (decided && !primary && document.activeElement === document.body) focusFirst(document.querySelector(".details") ?? document);
-  }, [decided, primary]);
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
   const playIptv = (episodeId: string, resume = 0) =>
@@ -424,14 +402,26 @@ export function Details({ id }: { id: string }) {
     }
   };
 
+  // Present episodes are library tiles (open the episode); everything else is a placeholder slot
+  const epEntries: EpisodeEntry[] | null = rows
+    ? rows.map((r): EpisodeEntry => {
+        const e = r.item;
+        if (r.status !== "present" || !e) return { key: r.key, next: isNextRow(r), slot: ph(r) };
+        return {
+          key: phone ? e.Id : r.key,
+          next: isNextRow(r),
+          card: (small) => (small ? <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} /> : <Card key={r.key} item={e} caption={`${e.IndexNumber ?? ""} · ${e.Name}`} />),
+          name: `${e.IndexNumber}. ${e.Name}`,
+          meta: [runtimeText(e.RunTimeTicks), e.UserData?.Played ? "Watched" : null].filter(Boolean).join("  ·  "),
+          overview: e.Overview,
+          onOpen: () => go(`/item/${e.Id}`),
+        };
+      })
+    : null;
+
   return (
     <div className="details">
-      <div className="details-hero">
-        <Backdrop url={pick.url} focal={pick.focal} />
-        <PreviewVideo url={preview} />
-        <div className="scrim-left" />
-        <div className="scrim-bottom" />
-        <div className="details-text">
+      <DetailsHero url={pick.url} focal={pick.focal} preview={preview} aside={!phone && <DetailsQuote item={item} phone={false} />}>
           <TitleLogo item={item} big />
           {item.Type === "Episode" && (
             <div className="line strong">
@@ -456,11 +446,7 @@ export function Details({ id }: { id: string }) {
               </button>
             </div>
           )}
-          {item.Overview && (
-            <button className={`overview${overviewOpen ? " open" : ""}`} data-nav onClick={() => setOverviewOpen((o) => !o)}>
-              {item.Overview}
-            </button>
-          )}
+          <HeroOverview text={item.Overview} open={overviewOpen} onToggle={() => setOverviewOpen((o) => !o)} />
           <ScoreLine extras={ext} />
           <div className="buttons">
             {item.Type === "Series" ? (
@@ -529,9 +515,7 @@ export function Details({ id }: { id: string }) {
             )}
           </div>
           {phone && <DetailsQuote item={item} phone />}
-        </div>
-        {!phone && <DetailsQuote item={item} phone={false} />}
-      </div>
+      </DetailsHero>
 
       {findSubs && canSubs && (
         <SubtitleSearchDialog
@@ -558,25 +542,15 @@ export function Details({ id }: { id: string }) {
         )}
         {item.Type === "Series" && seasonEntries.length > 0 && (
           <section className="row">
-            <div className="chips">
-              {seasonEntries.map((s) => (
-                <button
-                  key={s.key}
-                  data-nav
-                  className={`chip${s.key === season ? " on" : ""}`}
-                  onClick={() => {
-                    seasonPicked.current = true;
-                    setSeason(s.key);
-                    // Back to this page reopens the season he picked (?season=, as a link into it does)
-                    const [path, q] = location.hash.split("?");
-                    const u = new URLSearchParams(q ?? "");
-                    u.set("season", s.key);
-                    history.replaceState(history.state, "", `${path}?${u}`);
-                  }}
-                >
-                  {s.name}
-                </button>
-              ))}
+            <SeasonChips
+              seasons={seasonEntries}
+              current={season}
+              onPick={(key) => {
+                seasonPicked.current = true;
+                setSeason(key);
+                rememberSeason(key);
+              }}
+            >
               <SeasonDownloadButton episodes={eps ?? []} onError={flash} />
               {canSeasons && season && iptvOnlyNo == null && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles([season])}>Search subtitles for this season</button>}
               {canSeasons && <button className="chip" data-nav disabled={subtitleActive} onClick={() => void searchSeasonSubtitles(seasonList.map((s) => s.Id))}>Search subtitles for all seasons</button>}
@@ -592,51 +566,9 @@ export function Details({ id }: { id: string }) {
                   }}
                 />
               )}
-            </div>
+            </SeasonChips>
             {canSeasons && subtitleProgress && <p role="status" aria-live="polite" className="line dim">{resultText(subtitleProgress)}</p>}
-            {phone ? (
-              // Phone: a vertical list, still + name/runtime/overview side by side, the whole row is the tap target
-              <div className="ep-list">
-                {(rows ?? []).map((r) => {
-                  const e = r.item;
-                  // Always wrapped: the Next pill arriving toggles a class, never remounts a tile that may have focus
-                  if (r.status !== "present" || !e)
-                    return (
-                      <div key={r.key} className={`ep-slot${isNextRow(r) ? " is-next" : ""}`}>
-                        {ph(r)}
-                        {isNextRow(r) && <span className="ep-next-pill">Next</span>}
-                      </div>
-                    );
-                  return (
-                    <div key={e.Id} className={`ep-row${isNextRow(r) ? " is-next" : ""}`}>
-                      {isNextRow(r) && <span className="ep-next-pill">Next</span>}
-                      <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} />
-                      <button className="ep-text" onClick={() => go(`/item/${e.Id}`)}>
-                        <span className="ep-name">
-                          {e.IndexNumber}. {e.Name}
-                        </span>
-                        <span className="ep-meta">{[runtimeText(e.RunTimeTicks), e.UserData?.Played ? "Watched" : null].filter(Boolean).join("  ·  ")}</span>
-                        {e.Overview && <span className="ep-overview">{e.Overview}</span>}
-                      </button>
-                    </div>
-                  );
-                })}
-                {!rows && Array.from({ length: 3 }, (_, i) => <div key={i} className="ep-row card-skeleton" />)}
-              </div>
-            ) : (
-              <div className="row-scroll">
-                {(rows ?? []).map((r) => {
-                  const tile = r.status !== "present" || !r.item ? ph(r) : <Card key={r.key} item={r.item} caption={`${r.item.IndexNumber ?? ""} · ${r.item.Name}`} />;
-                  return (
-                    <div key={r.key} className={`ep-slot${isNextRow(r) ? " is-next" : ""}`}>
-                      {tile}
-                      {isNextRow(r) && <span className="ep-next-pill">Next</span>}
-                    </div>
-                  );
-                })}
-                {!rows && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
-              </div>
-            )}
+            <EpisodeList phone={phone} entries={epEntries} />
           </section>
         )}
         {item.Type === "Episode" && siblings.length > 0 && (
@@ -648,25 +580,7 @@ export function Details({ id }: { id: string }) {
           />
         )}
         <ReviewsRow item={item} />
-        {cast.length > 0 && (
-          <section className="row">
-            <h2 className="row-title">Cast</h2>
-            <div className="row-scroll">
-              {cast.map((p) => {
-                const img = personImage(p);
-                return (
-                  <div key={p.Id + (p.Role ?? "")} className="person">
-                    {img ? <img src={img} alt="" loading="lazy" /> : <div className="person-blank" />}
-                    <div className="person-text">
-                      <span>{p.Name}</span>
-                      {p.Role && <span className="dim">{p.Role}</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
+        <PeopleRow people={cast.map((p) => ({ key: p.Id + (p.Role ?? ""), name: p.Name, role: p.Role, img: personImage(p) }))} />
         {similarQuery ? (
           <SimilarRow key={`sim-${item.Id}`} query={similarQuery} fallback={loadSimilar ?? (item.SeriesId ? () => similar(item.SeriesId!) : undefined)} />
         ) : (
@@ -677,23 +591,15 @@ export function Details({ id }: { id: string }) {
       {getIt && tmdb > 0 && <GetItSheet pick={{ title: item.Name, year: item.ProductionYear, tmdbId: tmdb, mediaType: "tv" }} onClose={() => setGetIt(false)} />}
       {notice && <div className="toast">{notice}</div>}
       {showTrailer && trailerId && (
-        <div className="trailer-modal" onClick={() => setShowTrailer(false)}>
-          <video
-            src={trailerStreamUrl(trailerId)}
-            autoPlay
-            controls
-            onEnded={() => setShowTrailer(false)}
-            onTimeUpdate={onTrailerTime}
-            onError={() => {
-              setShowTrailer(false);
-              flash("The trailer won't play in this browser.");
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button className="btn modal-close" data-nav data-autofocus onClick={() => setShowTrailer(false)}>
-            Close
-          </button>
-        </div>
+        <TrailerModal
+          src={trailerStreamUrl(trailerId)}
+          onClose={() => setShowTrailer(false)}
+          onTimeUpdate={onTrailerTime}
+          onError={() => {
+            setShowTrailer(false);
+            flash("The trailer won't play in this browser.");
+          }}
+        />
       )}
     </div>
   );
