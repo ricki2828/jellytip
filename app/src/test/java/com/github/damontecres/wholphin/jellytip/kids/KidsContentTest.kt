@@ -31,7 +31,8 @@ class KidsContentTest {
         i: Int,
         kind: String = "series",
         target: String = "series",
-    ) = """{"id":"b$i","kind":"$kind","name":"Friend $i","image":{"itemId":"$id1","kind":"Primary"},"target":{"type":"$target","id":"$id1"}}"""
+        targetId: String = id1,
+    ) = """{"id":"b$i","kind":"$kind","name":"Friend $i","image":{"itemId":"$id1","kind":"Primary"},"target":{"type":"$target","id":"$targetId"}}"""
 
     @Test
     fun parsesHeroAndRowsInOrder() {
@@ -40,7 +41,7 @@ class KidsContentTest {
             "hero":{"kind":"resume","item":${item(type = "Episode", extra = ",\"seriesName\":\"Rocket Otters\",\"seriesId\":\"$id1\",\"progress\":0.62")}},
             "rows":[
               {"id":"watch_again","title":"Watch again","style":"tiles","items":[${item(extra = ",\"playCount\":5")},${item(id = "22222222-2222-2222-2222-222222222222", type = "Series")}]},
-              {"id":"friends","title":"Your friends","style":"bubbles","items":[${bubble(1)},${bubble(2, "collection", "collection")}]}
+              {"id":"friends","title":"Your friends","style":"bubbles","items":[${bubble(1)},${bubble(2, "collection", "collection", "33333333-3333-3333-3333-333333333333")}]}
             ]}"""
         val d = KidsHomeParse.parse(json, base, resolver)!!
         val hero = d.hero!!
