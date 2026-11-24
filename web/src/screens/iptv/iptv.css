@@ -624,104 +624,57 @@
   line-height: 1.45;
 }
 
-/* ---------- IPTV details ---------- */
-.iptv-details .title-text {
-  margin: 0;
-}
-.iptv-eps {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 860px;
-  padding: 4px var(--pad);
-}
-.iptv-eps .ep-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.iptv-eps .ep-row.done .ep-still img {
-  opacity: 0.55;
-}
-.iptv-eps .ep-still {
-  position: relative;
-  flex: none;
-  width: 150px;
-  aspect-ratio: 16 / 9;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #151515;
-  cursor: pointer;
-}
-.iptv-eps .ep-still img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.iptv-eps .ep-no {
+/* ---------- IPTV details (the library details scaffold; only the episode watched toggle is IPTV's own) ---------- */
+/* Wide: the toggle sits in the tile's top-right corner, where a library tile shows its ✓ */
+.ep-slot > .ep-watch-corner {
   position: absolute;
-  left: 6px;
-  bottom: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--vanilla);
-  text-shadow: 0 1px 3px #000;
-}
-.iptv-eps .ep-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: 0;
-  background: none;
-  color: var(--vanilla);
-  font: inherit;
-  text-align: left;
+  border-radius: 50%;
+  border: 1px solid rgba(242, 242, 240, 0.35);
+  background: rgba(10, 10, 10, 0.75);
+  color: rgba(242, 242, 240, 0.85);
+  font-size: 12px;
   cursor: pointer;
 }
-.iptv-eps .ep-name {
-  font-weight: 600;
-  font-size: 13.5px;
-  line-height: 1.25;
+.ep-slot > .ep-watch-corner:not(.on) {
+  opacity: 0;
+  transition: opacity 0.15s;
 }
-.iptv-eps .ep-meta {
-  font-size: 12px;
-  color: var(--faint);
+.ep-slot:hover > .ep-watch-corner,
+.ep-slot:focus-within > .ep-watch-corner {
+  opacity: 1;
 }
-.iptv-eps .ep-overview {
-  font-size: 12.5px;
-  color: var(--dim);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
+/* The Next pill keeps the corner: the toggle sits under it */
+.ep-slot.is-next > .ep-watch-corner {
+  top: 34px;
 }
-.iptv-eps .ep-text:focus-visible,
-.iptv-eps .ep-watch:focus-visible,
-.iptv-eps .ep-still:focus-visible {
-  outline: 2px solid rgba(242, 242, 240, 0.7);
-  outline-offset: 2px;
-}
-.iptv-eps .ep-watch {
+/* Phone: a 44 px toggle at the end of the row */
+.ep-row > .ep-watch-row {
   flex: none;
-  width: 32px;
-  height: 32px;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border-radius: 50%;
   border: 1px solid rgba(242, 242, 240, 0.25);
   background: none;
-  color: rgba(242, 242, 240, 0.35);
-  font-size: 14px;
+  color: rgba(242, 242, 240, 0.4);
+  font-size: 15px;
   cursor: pointer;
 }
-.iptv-eps .ep-watch.on {
+.ep-watch.on {
   background: rgba(242, 242, 240, 0.9);
   color: #111;
   border-color: transparent;
+}
+.ep-watch:focus-visible {
+  outline: 2px solid rgba(242, 242, 240, 0.7);
+  outline-offset: 2px;
 }
 
 /* ---- live sport badges ---- */
@@ -3213,54 +3166,6 @@
 .fail-note { color: #ffb86b; font-size: 0.85em; font-weight: 600; white-space: nowrap; }
 .btn .fail-note { margin-left: 6px; }
 
-/* ---- IPTV episodes: wide-screen card strip (matches library Details) ---- */
-.iptv-ep-card {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.iptv-ep-card.done .card-img {
-  opacity: 0.55;
-}
-/* ✓ sits under the card (not on it): the scaled card can't cover it and the D-pad reaches it with Down */
-.iptv-ep-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--dim);
-  min-height: 28px;
-}
-.iptv-ep-card .ep-watch {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(242, 242, 240, 0.35);
-  background: none;
-  color: rgba(242, 242, 240, 0.6);
-  font-size: 13px;
-  cursor: pointer;
-}
-.iptv-ep-card .ep-watch:not(.on) {
-  opacity: 0.35;
-  transition: opacity 0.15s;
-}
-.iptv-ep-card:hover .ep-watch,
-.iptv-ep-card:focus-within .ep-watch {
-  opacity: 1;
-}
-.iptv-ep-card .ep-watch.on {
-  background: rgba(242, 242, 240, 0.9);
-  color: #111;
-  border-color: transparent;
-}
-.iptv-ep-card .ep-watch:focus-visible {
-  outline: 2px solid rgba(242, 242, 240, 0.7);
-  outline-offset: 2px;
-}
 /* Kick-off card (TV port): the reminder toast's look with a gold Broadcast headline */
 .kickoff-toast .kickoff-head {
   color: #ffc72c;
