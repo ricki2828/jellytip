@@ -29,6 +29,9 @@ import { usePlayWatch } from "../../api/signals";
 import type { WatchMeta } from "../../lib/signals";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
+import { SkipPartButton } from "../../components/SkipPartButton";
+import { useIptvChapters } from "../../lib/useIptvChapters";
+import { iptvChapterMarks } from "../../lib/skipParts";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { TrackMenu } from "../../components/TrackMenu";
 import { useSubtitlePrefs } from "../../lib/useSubtitlePrefs";
@@ -1339,6 +1342,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     if (!total || at < total - 30) v.currentTime = at;
   };
   const seekable = !isLive && length > 0;
+  // Chapters + Skip intro / recap / credits (TV parity §5): films and episodes only, on the title's timeline
+  const chapters = useIptvChapters(target, !!(target.vod || target.episode));
+  const chapterMarks = useMemo(() => iptvChapterMarks(chapters?.chapters, length), [chapters, length]);
   const fmt = clockText;
 
   return (
@@ -1571,10 +1577,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
       )}
+      {!isLive && state.kind === "playing" && chapters && seekable && (
+        <SkipPartButton segs={chapters.skip} videoRef={videoRef} offset={remux?.off ?? 0} duration={length} onSeek={seekTo_} blocked={tracksOpen} />
+      )}
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
-            <TimeBarScrubber offset={remux?.off ?? 0} videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
+            <TimeBarScrubber offset={remux?.off ?? 0} videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} chapters={chapterMarks} />
           )}
           <div className="player-row iptv-controls">
             <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">

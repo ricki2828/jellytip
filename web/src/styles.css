@@ -2660,3 +2660,28 @@ button.overview.open {
   margin: 0 var(--pad) 14px;
   font-size: 13px;
 }
+
+/* Skip intro / recap / credits (components/SkipPartButton): bottom right, above the control bar and the Next episode card */
+.skip-part {
+  position: absolute;
+  z-index: 3;
+  right: var(--pad);
+  bottom: 170px;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: 28px;
+  background: #f2f2f0;
+  color: #0a0a0a;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.skip-part:hover,
+.skip-part:focus-visible {
+  background: #fff;
+  color: #000;
+}
+@media (max-width: 700px) {
+  .skip-part {
+    bottom: 150px;
+  }
+}
