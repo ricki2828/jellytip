@@ -625,34 +625,42 @@
 }
 
 /* ---------- IPTV details (the library details scaffold; only the episode watched toggle is IPTV's own) ---------- */
-/* Wide: the toggle sits in the tile's top-right corner, where a library tile shows its ✓ */
-.ep-slot > .ep-watch-corner {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
+/* Wide: the toggle sits under the tile, so Down reaches it and the focused (scaled) tile can't cover it */
+.iptv-ep-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.iptv-ep-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.iptv-ep-meta > .ep-watch-under {
+  flex: none;
   width: 30px;
   height: 30px;
   padding: 0;
   border-radius: 50%;
   border: 1px solid rgba(242, 242, 240, 0.35);
-  background: rgba(10, 10, 10, 0.75);
-  color: rgba(242, 242, 240, 0.85);
-  font-size: 12px;
+  background: none;
+  color: rgba(242, 242, 240, 0.6);
+  font-size: 13px;
   cursor: pointer;
 }
-.ep-slot > .ep-watch-corner:not(.on) {
-  opacity: 0;
+.iptv-ep-meta > .ep-watch-under:not(.on) {
+  opacity: 0.35;
   transition: opacity 0.15s;
 }
-.ep-slot:hover > .ep-watch-corner,
-.ep-slot:focus-within > .ep-watch-corner {
+.iptv-ep-col:hover .ep-watch-under,
+.iptv-ep-col:focus-within .ep-watch-under {
   opacity: 1;
 }
-/* The Next pill keeps the corner: the toggle sits under it */
-.ep-slot.is-next > .ep-watch-corner {
-  top: 34px;
-}
+
 /* Phone: a 44 px toggle at the end of the row */
 .ep-row > .ep-watch-row {
   flex: none;

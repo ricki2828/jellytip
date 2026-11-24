@@ -81,7 +81,6 @@ export function IptvDetails({ id }: { id: string }) {
             setD(a.data);
             setFav(a.data.favourite ?? null);
             seedTaste({ id: a.data.id, kind: a.data.kind, tmdbId: a.data.tmdbId }, a.data.thumb, a.data.notInterested);
-            setTimeout(() => alive && focusFirst(document.querySelector(".details") ?? document), 0);
           } else if (a.status === 404) setErr("This title is no longer on your IPTV provider.");
           else failed(a.status, errorText(a));
         },
@@ -94,6 +93,12 @@ export function IptvDetails({ id }: { id: string }) {
       clearTimeout(timer);
     };
   }, [id, attempt]);
+
+  // Focus starts on the primary button once the page is drawn (after the commit, so the button exists)
+  const loadedId = d?.id;
+  useEffect(() => {
+    if (loadedId) focusFirst(document.querySelector(".details") ?? document);
+  }, [loadedId]);
 
   // The series button: decided once per visit, from the first answer (IPTV has no server claim to wait for). Watched
   // toggles and later answers never relabel it, move the Next pill or switch the season under him.
@@ -246,10 +251,14 @@ export function IptvDetails({ id }: { id: string }) {
         small ? (
           <EpisodeStill src={still} fallback={showArt} width={150} caption={`${e.episode}`} label={`Play ${e.episode} · ${name}`} played={done} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
         ) : (
-          <>
-            <EpisodeStill src={still} fallback={showArt} width={CARD_W} caption={`${e.episode} · ${name}`} label={`Play ${e.episode} · ${name}`} played={done} pct={episodePct(e)} dataEp={e.id} showWatched={false} onClick={() => playEp(season!, e)} />
-            {toggle("ep-watch-corner")}
-          </>
+          // Wide: the watched toggle sits under the tile (Down reaches it; the focused, scaled tile can't cover it)
+          <div className="iptv-ep-col" style={{ width: CARD_W }}>
+            <EpisodeStill src={still} fallback={showArt} width={CARD_W} caption={`${e.episode} · ${name}`} label={`Play ${e.episode} · ${name}`} played={done} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
+            <div className="iptv-ep-meta">
+              <span>{episodeMeta(e)}</span>
+              {toggle("ep-watch-under")}
+            </div>
+          </div>
         ),
       name: `${e.episode}. ${name}`,
       meta: episodeMeta(e),
