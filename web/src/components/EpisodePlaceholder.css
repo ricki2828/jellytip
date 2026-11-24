@@ -32,3 +32,33 @@
   min-height: 0;
   flex: 1;
 }
+
+/* The series' next episode (lib/splitNext): a small pill on its tile, library or IPTV */
+.ep-slot {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+.ep-row.is-next {
+  position: relative;
+}
+.ep-next-pill {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f5f6f8;
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+/* A placeholder's title sits top-left: the pill goes top-right there */
+.ep-slot > .ep-next-pill {
+  left: auto;
+  right: 8px;
+}

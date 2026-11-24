@@ -9,6 +9,7 @@ import { parseTeams, type TeamHit } from "../lib/teams";
 import { parsePrune, type Policy, type PruneList } from "../lib/channelPrune";
 import { parseCredits, parseVodDetail, type VodDetail, type VodItem } from "../lib/iptvVod";
 import { parseContinue, type ContinueEntry } from "../lib/continue";
+import { dashless, parseSeriesNext, type SeriesNextClaim } from "../lib/splitNext";
 import { parseOnNow, type OnNow } from "../lib/onNow";
 import { parseQualitySummary, parseSuggest, type Quality, type QualitySummary, type Suggestion } from "../lib/sport";
 
@@ -367,8 +368,22 @@ export async function iptvContinue(): Promise<ContinueEntry[]> {
   return a.status === 200 ? parseContinue(a.data) : [];
 }
 export async function iptvNext(): Promise<ContinueEntry[]> {
+  return (await iptvNextAll()).items;
+}
+/** GET v1/me/next with the server's merged next per split series (`seriesNext`, lib/splitNext). */
+export async function iptvNextAll(): Promise<{ items: ContinueEntry[]; claims: Map<string, SeriesNextClaim> }> {
   const a = await companionCall("GET", "v1/me/next");
-  return a.status === 200 ? parseContinue(a.data) : [];
+  return a.status === 200 ? { items: parseContinue(a.data), claims: parseSeriesNext(a.data) } : { items: [], claims: new Map() };
+}
+/**
+ * The server's merged next for one series (GET v1/me/next?seriesId=, asked on every series page). Null = no claim: the server
+ * has none for it, no such route, or the call failed (the page uses its own order rule; nothing is remembered).
+ */
+export async function seriesNextFor(seriesId: string, timeoutMs = 4000): Promise<SeriesNextClaim | null> {
+  const id = dashless(seriesId);
+  if (!/^[0-9a-f]{32}$/.test(id)) return null;
+  const a = await companionCall("GET", `v1/me/next?seriesId=${id}`, undefined, { timeoutMs });
+  return a.status === 200 ? parseSeriesNext(a.data).get(id) ?? null : null;
 }
 
 /** A person's titles on the caller's IPTV (not in the library); null when the server has no such route. */

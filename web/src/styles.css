@@ -407,6 +407,10 @@ img {
   background: var(--vanilla);
   color: var(--night);
 }
+.btn.primary[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
 .btn.primary:hover {
   background: #fff;
 }

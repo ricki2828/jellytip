@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getItems, imageUrl, LIST_FIELDS, nextUp, resumeItems, uid, type Item } from "../api/jellyfin";
 import { manifest, serverRows } from "../api/companion";
-import { iptvContinue, iptvNext } from "../api/iptv";
+import { iptvContinue, iptvNextAll } from "../api/iptv";
+import { keepLibraryNext } from "../lib/splitNext";
 import { signalOf } from "../api/me";
 import { buildContinue, readDismissed } from "../lib/continueRow";
 import type { ContinueEntry } from "../lib/continue";
@@ -42,14 +43,17 @@ export const ratedFor = (ids: ConstraintId[]): Promise<Item[]> =>
 // Nothing here is cached across visits: what was just watched or stopped must not come back. (The companion layer caches
 // the static row definitions itself.)
 export async function load(): Promise<Raw> {
-  const [resume, next, ic, inx, rows, mf] = await Promise.all([
+  const [resume, nextAll, ic, nx, rows, mf] = await Promise.all([
     resumeItems(),
     nextUp(),
     iptvContinue().catch(() => [] as ContinueEntry[]),
-    iptvNext().catch(() => [] as ContinueEntry[]),
+    iptvNextAll().catch(() => ({ items: [] as ContinueEntry[], claims: new Map() })),
     serverRows("home").catch(() => null),
     manifest().catch(() => null),
   ]);
+  // Split series: Jellyfin's next-up episode the server's merged next disagrees with is left out (TV eeba1b39)
+  const next = nextAll.filter((i) => keepLibraryNext(i.SeriesId, i.Id, i.UserData?.PlaybackPositionTicks ?? 0, nx.claims));
+  const inx = nx.items;
   const from = new Map<string, { title: string; list?: string | null }>();
   const order: string[] = [];
   const take = (ids: string[], f: { title: string; list?: string | null }) => {
