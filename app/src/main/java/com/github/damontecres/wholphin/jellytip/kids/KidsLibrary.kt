@@ -56,6 +56,11 @@ data class KidsPlayTarget(
     val resumeMs: Long,
 )
 
+class KidsCollection(
+    val name: String,
+    val tiles: List<KidsTile>,
+)
+
 class KidsDetails(
     val id: String,
     val isSeries: Boolean,
@@ -230,11 +235,12 @@ class KidsLibraryService
                 entries.mapNotNull { entry ->
                     when (entry) {
                         is JellytipMyListEntry.Library -> byId[entry.id]?.let { tileOf(it) }
+                        // No kids page for an IPTV series: it would be a dead tile, so it is not drawn
                         is JellytipMyListEntry.Iptv ->
-                            KidsTile(
+                            if (entry.item.kind == "series") null else KidsTile(
                                 id = entry.item.id,
                                 source = "iptv",
-                                kind = if (entry.item.kind == "series") KidsKind.SERIES else KidsKind.MOVIE,
+                                kind = KidsKind.MOVIE,
                                 name = entry.item.title,
                                 imageUrl = entry.item.backdrop ?: entry.item.poster,
                             )
@@ -245,6 +251,33 @@ class KidsLibraryService
             } catch (e: Exception) {
                 Timber.w(e, "[kids] my list failed")
                 emptyList()
+            }
+
+        /** A friend's collection (BoxSet): its name and its films and shows, by the kid's own token (Jellyfin filters). Null = could not load. */
+        suspend fun collection(id: UUID): KidsCollection? =
+            try {
+                val box = api.userLibraryApi.getItem(id).content
+                if (box.type != BaseItemKind.BOX_SET) {
+                    null
+                } else {
+                    val request =
+                        GetItemsRequest(
+                            parentId = id,
+                            includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                            sortBy = listOf(ItemSortBy.SORT_NAME),
+                            sortOrder = listOf(SortOrder.ASCENDING),
+                            fields = SlimItemFields,
+                            enableUserData = true,
+                            limit = BROWSE_LIMIT,
+                            enableTotalRecordCount = false,
+                        )
+                    KidsCollection(box.name.orEmpty(), api.itemsApi.getItems(request).content.items.mapNotNull { tileOf(it) })
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "[kids] collection %s failed", id)
+                null
             }
 
         /** Details for a library movie or series; null = could not load. */

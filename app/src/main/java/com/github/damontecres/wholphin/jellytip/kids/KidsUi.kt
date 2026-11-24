@@ -787,10 +787,37 @@ fun KidsHomeContent(
 
 // ---- Shows / Movies / My list: art-first grids ----
 
-/** `tiles` null = still loading. */
+/** The Shows / Movies / My list page. `tiles` null = still loading. */
 @Composable
 fun KidsGridContent(
     section: KidsSection,
+    tiles: List<KidsTile>?,
+    memory: KidsFocusMemory,
+    onOpen: (KidsTile) -> Unit,
+    modifier: Modifier = Modifier,
+    gridState: LazyGridState,
+) {
+    val t = LocalKidsTokens.current
+    KidsGridPage(
+        title = section.label,
+        glyph = KidsGlyphs.forSection(section),
+        color = t.sectionColor(section),
+        emptyText = if (section == KidsSection.MY_LIST) "Press the heart on a show or film to keep it here" else "Nothing here yet",
+        tiles = tiles,
+        memory = memory,
+        onOpen = onOpen,
+        modifier = modifier,
+        gridState = gridState,
+    )
+}
+
+/** The kids art grid with its coloured title: sections, and a friend's collection (title = the collection's name). */
+@Composable
+fun KidsGridPage(
+    title: String,
+    glyph: String,
+    color: Color,
+    emptyText: String,
     tiles: List<KidsTile>?,
     memory: KidsFocusMemory,
     onOpen: (KidsTile) -> Unit,
@@ -805,16 +832,16 @@ fun KidsGridContent(
     }
     Column(modifier.fillMaxSize().padding(horizontal = t.pagePad - RowInset)) {
         Row(Modifier.padding(start = RowInset, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(30.dp).background(t.sectionColor(section), CircleShape), contentAlignment = Alignment.Center) {
-                KidsGlyph(KidsGlyphs.forSection(section), 14.sp, t.ink)
+            Box(Modifier.size(30.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
+                KidsGlyph(glyph, 14.sp, t.ink)
             }
-            KidsText(section.label, 24.sp, black = true)
+            KidsText(title, 24.sp, black = true)
         }
         when {
             tiles == null -> Unit
             tiles.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    KidsText(if (section == KidsSection.MY_LIST) "Press the heart on a show or film to keep it here" else "Nothing here yet", 18.sp, black = true)
+                    KidsText(emptyText, 18.sp, black = true)
                 }
 
             else ->

@@ -213,6 +213,42 @@ class KidsBrowseViewModel
         }
     }
 
+/** A friend's collection page: loads once per entry; null name = could not load. */
+@HiltViewModel
+class KidsCollectionViewModel
+    @Inject
+    constructor(
+        private val library: KidsLibraryService,
+        private val player: KidsPlayer,
+    ) : ViewModel() {
+        /** null = loading; a collection with `failed` = could not load. */
+        val state = MutableStateFlow<KidsCollectionUi>(KidsCollectionUi.Loading)
+        private var loadedId: UUID? = null
+
+        fun load(id: UUID) {
+            if (loadedId == id) return
+            loadedId = id
+            viewModelScope.launchIO {
+                val c = library.collection(id)
+                state.value = if (c == null) KidsCollectionUi.Failed else KidsCollectionUi.Ready(c)
+            }
+        }
+
+        fun open(tile: KidsTile) {
+            viewModelScope.launchIO { player.open(tile) }
+        }
+    }
+
+sealed interface KidsCollectionUi {
+    data object Loading : KidsCollectionUi
+
+    data class Ready(
+        val collection: KidsCollection,
+    ) : KidsCollectionUi
+
+    data object Failed : KidsCollectionUi
+}
+
 sealed interface KidsDetailsUi {
     data object Loading : KidsDetailsUi
 
@@ -318,6 +354,35 @@ private fun KidsSectionContent(
     }
 }
 
+/** A friend's collection as the kids art grid (title = its name). Back returns to the bubble it was opened from. */
+@Composable
+fun KidsCollectionHost(
+    collectionId: UUID,
+    modifier: Modifier = Modifier,
+    viewModel: KidsCollectionViewModel = hiltViewModel(),
+) {
+    LaunchedEffect(collectionId) { viewModel.load(collectionId) }
+    val state by viewModel.state.collectAsState()
+    val memory = rememberKidsFocusMemory()
+    val t = LocalKidsTokens.current
+    when (val s = state) {
+        KidsCollectionUi.Loading -> Box(modifier.fillMaxSize())
+        KidsCollectionUi.Failed -> KidsMessage("I could not open that one")
+        is KidsCollectionUi.Ready ->
+            KidsGridPage(
+                title = s.collection.name,
+                glyph = KidsGlyphs.STAR,
+                color = t.homeColor,
+                emptyText = "Nothing here yet",
+                tiles = s.collection.tiles,
+                memory = memory,
+                onOpen = viewModel::open,
+                modifier = modifier.padding(top = 18.dp),
+                gridState = rememberLazyGridState(),
+            )
+    }
+}
+
 @Composable
 fun KidsDetailsHost(
     itemId: UUID,
@@ -350,7 +415,7 @@ fun KidsDetailsHost(
 
 /**
  * The Kids shell, drawn instead of the nav drawer + pages when the signed-in user is a kid. A whitelist of destinations: Home
- * (its four sections), Search (the app's own search page: no chat) and Details (movie / series / episode). Anything else a stray
+ * (its four sections), Search (the app's own search page: no chat), Details (movie / series / episode) and a friend's collection grid. Anything else a stray
  * key or link might push shows Home: never an adult page.
  */
 @Composable
@@ -377,8 +442,11 @@ fun KidsShell(
                     destination is Destination.SeriesOverview -> destination.itemId
                     else -> null
                 }
+            val collectionId: UUID? =
+                (destination as? Destination.MediaItem)?.takeIf { it.type == BaseItemKind.BOX_SET }?.itemId
             when {
                 detailsId != null -> KidsDetailsHost(detailsId)
+                collectionId != null -> KidsCollectionHost(collectionId)
                 else ->
                     Column(Modifier.fillMaxSize()) {
                         KidsNavBar(

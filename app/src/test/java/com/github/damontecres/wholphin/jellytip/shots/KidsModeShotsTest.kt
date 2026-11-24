@@ -8,6 +8,8 @@ import android.graphics.Shader
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -34,7 +36,10 @@ import com.github.damontecres.wholphin.jellytip.kids.KidsChip
 import com.github.damontecres.wholphin.jellytip.kids.KidsDetails
 import com.github.damontecres.wholphin.jellytip.kids.KidsDetailsContent
 import com.github.damontecres.wholphin.jellytip.kids.KidsEpisode
+import com.github.damontecres.wholphin.jellytip.kids.KidsGlyphs
 import com.github.damontecres.wholphin.jellytip.kids.KidsGridContent
+import com.github.damontecres.wholphin.jellytip.kids.KidsGridPage
+import com.github.damontecres.wholphin.jellytip.kids.KidsTokens
 import com.github.damontecres.wholphin.jellytip.kids.KidsHero
 import com.github.damontecres.wholphin.jellytip.kids.KidsHomeContent
 import com.github.damontecres.wholphin.jellytip.kids.KidsHomeData
@@ -310,6 +315,25 @@ class KidsModeShotsTest {
 
     @Test
     fun myListEmpty() = shot("kids-my-list-empty", null) { Grid(KidsSection.MY_LIST, emptyList()) }
+
+    /** A friend's collection (a bubble opens it): the same art grid, titled with the collection's name, in the Home colour. */
+    @Test
+    fun collectionGrid() =
+        shot("kids-collection", KidsTags.grid(1)) {
+            KidsCanvas {
+                KidsGridPage(
+                    title = "Pip and Pals",
+                    glyph = KidsGlyphs.STAR,
+                    color = KidsTokens.Playground.homeColor,
+                    emptyText = "Nothing here yet",
+                    tiles = (shows.take(5) + movies.take(4)),
+                    memory = rememberKidsFocusMemory(),
+                    onOpen = {},
+                    modifier = Modifier.padding(top = 18.dp),
+                    gridState = rememberLazyGridState(),
+                )
+            }
+        }
 
     private fun episode(
         n: Int,

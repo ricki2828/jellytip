@@ -103,6 +103,8 @@ object KidsHomeParse {
         val kind = kindOf(o.str("type")) ?: return null
         val name = o.str("name") ?: return null
         val source = if (o.str("source") == "iptv") "iptv" else "library"
+        // IPTV is only a film (the server sends it only as the hero): an IPTV series or episode has no kids page, so no tile
+        if (source == "iptv" && kind != KidsKind.MOVIE) return null
         val progress = o.optDouble("progress", 0.0).takeIf { it > 0.0 && it < 1.0 }?.toFloat() ?: 0f
         return KidsTile(
             id = id,
@@ -179,7 +181,8 @@ object KidsHomeParse {
 
 /**
  * What a tap on a tile opens. Pure, so it is unit tested; null = nothing kids-safe to open (the tile does nothing). There is no
- * kids page for an IPTV series or a collection, and the adult ones are never shown to a kid: an IPTV film plays, the rest is a no-op.
+ * kids page for an IPTV series, and the adult one is never shown to a kid: an IPTV film plays, an IPTV series is a no-op (and the
+ * parser drops IPTV series so no dead tile is drawn).
  */
 object KidsOpen {
     fun destination(tile: KidsTile): Destination? =
@@ -195,7 +198,8 @@ object KidsOpen {
                         (tile.seriesId?.let { uuid(it) })?.let { Destination.MediaItem(it, BaseItemKind.SERIES) }
                             ?: uuid(tile.id)?.let { Destination.MediaItem(it, BaseItemKind.EPISODE) }
 
-                    KidsKind.COLLECTION -> null
+                    // A friend's collection opens the kids grid of its films and shows (the shell routes a BOX_SET there)
+                    KidsKind.COLLECTION -> uuid(tile.id)?.let { Destination.MediaItem(it, BaseItemKind.BOX_SET) }
                 }
         }
 

@@ -93,6 +93,17 @@ class KidsContentTest {
     }
 
     @Test
+    fun iptvSeriesAndEpisodesAreDroppedNoDeadTiles() {
+        val json = """{"kidsMode":true,"hero":{"kind":"favourite","item":{"id":"p:s:1","source":"iptv","type":"Series","name":"Cartoon Show","image":{"url":"/i.jpg"}}},"rows":[{"id":"movie_night","title":"M","style":"tiles","items":[
+            {"id":"p:s:1","source":"iptv","type":"Series","name":"Cartoon Show"},
+            {"id":"p:e:1","source":"iptv","type":"Episode","name":"Ep"},
+            {"id":"p:m:1","source":"iptv","type":"Movie","name":"Cartoon Film"}]}]}"""
+        val d = KidsHomeParse.parse(json, base, resolver)!!
+        assertNull(d.hero)
+        assertEquals(listOf("p:m:1"), d.rows[0].items.map { it.id })
+    }
+
+    @Test
     fun progressOutsideZeroToOneIsNoBar() {
         val d = KidsHomeParse.parse("""{"kidsMode":true,"hero":{"kind":"resume","item":${item(extra = ",\"progress\":1.0")}},"rows":[]}""", base, resolver)!!
         assertEquals(0f, d.hero!!.tile.progress, 0f)
@@ -117,8 +128,10 @@ class KidsContentTest {
         val dashless = KidsTile(id1.replace("-", ""), "library", KidsKind.MOVIE, "M")
         assertEquals(Destination.MediaItem(UUID.fromString(id1), BaseItemKind.MOVIE), KidsOpen.destination(dashless))
         assertNull(KidsOpen.destination(KidsTile("not-an-id", "library", KidsKind.MOVIE, "M")))
-        // no kids page for a collection or an IPTV series: nothing opens (never the adult page); an IPTV film plays
+        // a collection opens the kids collection grid (a BoxSet destination the shell routes there); not a UUID = nothing
+        assertEquals(Destination.MediaItem(UUID.fromString(id1), BaseItemKind.BOX_SET), KidsOpen.destination(KidsTile(id1, "library", KidsKind.COLLECTION, "Pals")))
         assertNull(KidsOpen.destination(KidsTile("c1", "library", KidsKind.COLLECTION, "Pals")))
+        // no kids page for an IPTV series: nothing opens (never the adult page); an IPTV film plays
         assertNull(KidsOpen.destination(KidsTile("p:s:1", "iptv", KidsKind.SERIES, "Cartoon Show")))
         assertNull(KidsOpen.destination(KidsTile("p:e:1", "iptv", KidsKind.EPISODE, "Ep", seriesId = "p:s:1")))
         assertEquals(Destination.JellytipIptvPlay(title = "Cartoon", vodId = "p:m:1"), KidsOpen.destination(KidsTile("p:m:1", "iptv", KidsKind.MOVIE, "Cartoon")))
