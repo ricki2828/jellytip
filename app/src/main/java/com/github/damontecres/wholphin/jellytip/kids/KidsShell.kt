@@ -33,7 +33,6 @@ import com.github.damontecres.wholphin.services.SetupNavigationManager
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
-import com.github.damontecres.wholphin.ui.nav.DestinationContent
 import com.github.damontecres.wholphin.ui.search.SearchPage
 import com.github.damontecres.wholphin.util.WholphinDispatchers
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -351,8 +350,8 @@ fun KidsDetailsHost(
 
 /**
  * The Kids shell, drawn instead of the nav drawer + pages when the signed-in user is a kid. A whitelist of destinations: Home
- * (its four sections), Search (the app's own search page: no chat), Details (movie / series), and a few passthrough pages a tile
- * can open. Anything else a stray key or link might push shows Home: never an adult page.
+ * (its four sections), Search (the app's own search page: no chat) and Details (movie / series / episode). Anything else a stray
+ * key or link might push shows Home: never an adult page.
  */
 @Composable
 fun KidsShell(
@@ -378,13 +377,8 @@ fun KidsShell(
                     destination is Destination.SeriesOverview -> destination.itemId
                     else -> null
                 }
-            val passthrough =
-                destination is Destination.JellytipIptvDetails ||
-                    destination is Destination.JellytipHubCollection ||
-                    destination is Destination.JellytipCollection
             when {
                 detailsId != null -> KidsDetailsHost(detailsId)
-                passthrough -> DestinationContent(destination, preferences, onClearBackdrop, Modifier.fillMaxSize().padding(horizontal = 28.dp))
                 else ->
                     Column(Modifier.fillMaxSize()) {
                         KidsNavBar(

@@ -117,8 +117,11 @@ class KidsContentTest {
         val dashless = KidsTile(id1.replace("-", ""), "library", KidsKind.MOVIE, "M")
         assertEquals(Destination.MediaItem(UUID.fromString(id1), BaseItemKind.MOVIE), KidsOpen.destination(dashless))
         assertNull(KidsOpen.destination(KidsTile("not-an-id", "library", KidsKind.MOVIE, "M")))
-        assertEquals(Destination.JellytipHubCollection("c1", "Pals"), KidsOpen.destination(KidsTile("c1", "library", KidsKind.COLLECTION, "Pals")))
-        assertEquals(Destination.JellytipIptvDetails("p:m:1", "Cartoon"), KidsOpen.destination(KidsTile("p:m:1", "iptv", KidsKind.MOVIE, "Cartoon")))
+        // no kids page for a collection or an IPTV series: nothing opens (never the adult page); an IPTV film plays
+        assertNull(KidsOpen.destination(KidsTile("c1", "library", KidsKind.COLLECTION, "Pals")))
+        assertNull(KidsOpen.destination(KidsTile("p:s:1", "iptv", KidsKind.SERIES, "Cartoon Show")))
+        assertNull(KidsOpen.destination(KidsTile("p:e:1", "iptv", KidsKind.EPISODE, "Ep", seriesId = "p:s:1")))
+        assertEquals(Destination.JellytipIptvPlay(title = "Cartoon", vodId = "p:m:1"), KidsOpen.destination(KidsTile("p:m:1", "iptv", KidsKind.MOVIE, "Cartoon")))
     }
 
     private fun ep(

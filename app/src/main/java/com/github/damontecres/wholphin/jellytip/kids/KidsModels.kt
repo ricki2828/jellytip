@@ -177,15 +177,14 @@ object KidsHomeParse {
     }
 }
 
-/** What a tap on a tile opens. Pure, so it is unit tested; null = nothing sensible to open (the tile does nothing). */
+/**
+ * What a tap on a tile opens. Pure, so it is unit tested; null = nothing kids-safe to open (the tile does nothing). There is no
+ * kids page for an IPTV series or a collection, and the adult ones are never shown to a kid: an IPTV film plays, the rest is a no-op.
+ */
 object KidsOpen {
     fun destination(tile: KidsTile): Destination? =
         when (tile.source) {
-            "iptv" -> {
-                // An IPTV episode opens its series page; the page picks the episode
-                val id = if (tile.kind == KidsKind.EPISODE) tile.seriesId ?: tile.id else tile.id
-                Destination.JellytipIptvDetails(id = id, title = tile.seriesName ?: tile.name)
-            }
+            "iptv" -> if (tile.kind == KidsKind.MOVIE) Destination.JellytipIptvPlay(title = tile.name, vodId = tile.id) else null
 
             else ->
                 when (tile.kind) {
@@ -196,7 +195,7 @@ object KidsOpen {
                         (tile.seriesId?.let { uuid(it) })?.let { Destination.MediaItem(it, BaseItemKind.SERIES) }
                             ?: uuid(tile.id)?.let { Destination.MediaItem(it, BaseItemKind.EPISODE) }
 
-                    KidsKind.COLLECTION -> Destination.JellytipHubCollection(id = tile.id, title = tile.name)
+                    KidsKind.COLLECTION -> null
                 }
         }
 
