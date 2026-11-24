@@ -140,7 +140,7 @@ function FilterSheet({ kind, value, onChange, onClose }: { kind: Kind; value: Li
               </button>
             ))}
             <button data-nav className={`chip${value.favorite ? " on" : ""}`} onClick={() => set({ favorite: !value.favorite })}>
-              Favourites
+              My list
             </button>
           </FilterGroup>
           <FilterGroup label="Quality">

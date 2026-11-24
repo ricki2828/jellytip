@@ -34,7 +34,7 @@ export function Inbox() {
           ))}
         </ul>
       )}
-      <p className="inbox-note">Covers favourite and up-next series, and titles you requested here. Items drop off after 30 days.</p>
+      <p className="inbox-note">Covers series in My list and up next, and titles you requested here. Items drop off after 30 days.</p>
     </div>
   );
 }

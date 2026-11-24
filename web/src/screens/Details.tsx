@@ -387,7 +387,7 @@ export function Details({ id }: { id: string }) {
       if (tg && !ud?.IsFavorite) emitSignal({ ...tg, type: "mylist", at: Date.now() });
       setItem({ ...item, UserData: { ...ud, IsFavorite: !ud?.IsFavorite } });
     } catch {
-      flash("Couldn't update favourite. Try again.");
+      flash("Couldn't update My list. Try again.");
     }
   };
   const searchSeasonSubtitles = async (ids: string[]) => {
@@ -500,7 +500,7 @@ export function Details({ id }: { id: string }) {
               {ud?.Played ? "Watched ✓" : "Mark watched"}
             </button>
             <button className="btn" data-nav onClick={toggleFav}>
-              {ud?.IsFavorite ? "♥ Favourite" : "♡ Favourite"}
+              {ud?.IsFavorite ? "✓ In my list" : "+ My list"}
             </button>
             {item.Type !== "Series" && <DownloadButton item={item} onError={flash} />}
             {canSubs && (item.Type === "Movie" || item.Type === "Episode") && (

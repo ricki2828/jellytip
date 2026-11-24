@@ -2689,3 +2689,12 @@ button.overview.open {
     bottom: 150px;
   }
 }
+
+/* Phone: every control on a details page (library or IPTV) is a 44 px touch target (buttons, thumbs, season chips, Ways to watch) */
+@media (max-width: 720px) {
+  .details .btn,
+  .details .chip,
+  .details button.overview {
+    min-height: 44px;
+  }
+}
