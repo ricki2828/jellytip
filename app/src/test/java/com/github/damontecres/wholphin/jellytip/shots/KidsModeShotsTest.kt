@@ -252,7 +252,7 @@ class KidsModeShotsTest {
     private fun assertInSafeArea(tag: String) {
         val bounds = compose.onNodeWithTag(tag).getBoundsInRoot()
         val root = compose.onRoot().getBoundsInRoot()
-        assertTrue("$tag bottom ${bounds.bottom} is inside the safe area (root ${root.height})", bounds.bottom <= root.height - 27.dp)
+        assertTrue("$tag bottom ${bounds.bottom} is inside the safe area (root bottom ${root.bottom})", bounds.bottom <= root.bottom - 27.dp)
         assertTrue("$tag top ${bounds.top} is on screen", bounds.top >= 0.dp)
     }
 
