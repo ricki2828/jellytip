@@ -57,3 +57,8 @@
   text-transform: uppercase;
   pointer-events: none;
 }
+/* A placeholder's title sits top-left: the pill goes top-right there */
+.ep-slot > .ep-next-pill {
+  left: auto;
+  right: 8px;
+}
