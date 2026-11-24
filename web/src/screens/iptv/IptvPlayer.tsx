@@ -1652,6 +1652,9 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
+/** Each native open's id (useNativeChapters / PlayerPlugin.chapters): chapters only ever reach their own player. */
+let nativeOpenSeq = 0;
+
 function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   // The native bridge has one matchId for the Companion and the alerts alike, so a merely guessed match is not passed to it.
   const detected = useChannelMatch(target.channel, !!target.channel && target.start == null && !extrasIn?.matchId && !extrasIn?.nospoil && !extrasIn?.replay);
@@ -1686,7 +1689,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   const retryTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(retryTimer.current), []);
   // Chapters + Skip intro / recap / credits in the native player (TV parity §5): asked here, drawn and acted on there
-  useNativeChapters(target, !!(target.vod || target.episode), (p) => NativePlayer.chapters(p));
+  const [openToken, setOpenToken] = useState<string | null>(null);
+  useNativeChapters(target, !!(target.vod || target.episode), openToken, (p) => NativePlayer.chapters(p));
 
   // ---- Catch me up (web/TV port): joining 10+ min late, the choice and the recap come BEFORE the native player opens (it would cover them)
   const catchStartsAt = isLive ? extras?.startsAt ?? null : null;
@@ -1855,8 +1859,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       ];
       let r: NativePlayerResult;
       openedAt.current = Date.now();
+      const openId = `o${++nativeOpenSeq}`;
+      setOpenToken(openId);
       try {
         r = await NativePlayer.open({
+          openId,
           url: link.url,
           title,
           mime: a.mime,

@@ -31,27 +31,30 @@ export function useIptvChapters(target: PlayTarget, enabled = true): IptvChapter
   return got && got.q === q ? got.c : null;
 }
 
-/** Phone: the same chapters, pushed to the open native player (PlayerPlugin.chapters); again every 2 s (5 tries) while none is open yet. */
-export function useNativeChapters(target: PlayTarget, enabled: boolean, push: (p: ReturnType<typeof nativeChapters>) => Promise<{ shown: boolean }>) {
+/**
+ * Phone: the same chapters, pushed to the native player of THIS open ([openId], passed to NativePlayer.open; the activity
+ * refuses another open's): again on every reopen (error, renewed link), and every 2 s (15 tries) while that player isn't up yet.
+ */
+export function useNativeChapters(target: PlayTarget, enabled: boolean, openId: string | null, push: (p: ReturnType<typeof nativeChapters> & { openId: string }) => Promise<{ shown: boolean }>) {
   const c = useIptvChapters(target, enabled);
   const pushRef = useRef(push);
   pushRef.current = push;
   useEffect(() => {
-    if (!c) return;
+    if (!c || !openId) return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const send = (tries: number) => {
-      void pushRef.current(nativeChapters(c)).then(
+      void pushRef.current({ ...nativeChapters(c), openId }).then(
         (r) => {
           if (alive && !r.shown && tries > 1) timer = setTimeout(() => send(tries - 1), 2_000);
         },
         () => undefined,
       );
     };
-    send(5);
+    send(15);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [c]);
+  }, [c, openId]);
 }

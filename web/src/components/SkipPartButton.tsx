@@ -4,7 +4,7 @@
 // players' own document handlers (Enter = play/pause, Escape = leave). Only this component re-renders on timeupdate.
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useVideoTime } from "./TimeBar";
-import { activeSeg, skipAction, skipLabel, skipVisible, type SkipKind, type SkipSeg } from "../lib/skipParts";
+import { activeSeg, skipAction, skipLabel, skipVisible, type SkipSeg } from "../lib/skipParts";
 
 export function SkipPartButton({
   segs,
@@ -32,29 +32,31 @@ export function SkipPartButton({
 }) {
   const pos = useVideoTime(videoRef, false, offset);
   const seg = segs.length ? activeSeg(segs, pos) : null;
-  const firstSeen = useRef(new Map<SkipKind, number>());
-  const [dismissed, setDismissed] = useState<ReadonlySet<SkipKind>>(() => new Set());
+  // Per part (kind + start), not per kind: a second ad / preview / recap gets its own 10 s and its own dismiss
+  const partKey = (x: SkipSeg) => `${x.kind}@${x.s}`;
+  const firstSeen = useRef(new Map<string, number>());
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   // A new list (another title): start over
   useEffect(() => {
     firstSeen.current = new Map();
     setDismissed(new Set());
   }, [segs]);
   useEffect(() => {
-    if (seg && !firstSeen.current.has(seg.kind)) firstSeen.current.set(seg.kind, pos);
+    if (seg && !firstSeen.current.has(partKey(seg))) firstSeen.current.set(partKey(seg), pos);
   }, [seg, pos]);
-  const shown = !blocked && skipVisible(seg, pos, seg ? firstSeen.current.get(seg.kind) ?? null : null, !!seg && dismissed.has(seg.kind));
+  const shown = !blocked && skipVisible(seg, pos, seg ? firstSeen.current.get(partKey(seg)) ?? null : null, !!seg && dismissed.has(partKey(seg)));
 
   const act = useRef<{ skip: () => void; dismiss: () => void }>({ skip: () => undefined, dismiss: () => undefined });
   act.current = {
     skip: () => {
       if (!seg) return;
-      setDismissed((d) => new Set(d).add(seg.kind));
+      setDismissed((d) => new Set(d).add(partKey(seg)));
       const a = skipAction(seg, hasNext && !!onNext, duration);
       if (a.kind === "next") onNext?.();
       else onSeek(a.to);
     },
     dismiss: () => {
-      if (seg) setDismissed((d) => new Set(d).add(seg.kind));
+      if (seg) setDismissed((d) => new Set(d).add(partKey(seg)));
     },
   };
 

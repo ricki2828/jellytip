@@ -208,7 +208,7 @@ export function LiveTv() {
   const record = async (s: Sheet) => {
     if (!s.prog) return;
     const a = await addRecording(s.ch.id, s.prog.start);
-    setSheet(null);
+    closeSheet();
     const ok = a.status === 201 || a.status === 200;
     setToast(ok ? [a.data?.warning, "Recording scheduled. It'll appear on Home."].filter(Boolean).join(" ") : errorText(a));
     setToastView(ok);
@@ -235,6 +235,7 @@ export function LiveTv() {
     const g = group;
     setSheet(null);
     sheetFrom.current = null;
+    setFocusChan(ch.id); // while the server answers, focus waits on the row (never on nothing)
     const err = await saveGroupChannels(t.pid, t.cat, { hide: { [t.sid]: true } });
     hideBusy.current = false;
     // Left the guide meanwhile: hidden on the server, no Undo
@@ -244,8 +245,12 @@ export function LiveTv() {
       setFocusChan(ch.id); // a failed hide keeps the row, and focus on it
       return;
     }
-    // Another group meanwhile: its load leaves it out; no Undo
-    if (groupRef.current !== g) return;
+    // Another group meanwhile: its load leaves it out; no Undo (focus that was left on the old row goes to the group chip)
+    if (groupRef.current !== g) {
+      const a = document.activeElement;
+      if (!a || a === document.body) document.querySelector<HTMLElement>(".livetv-groups .chip.on")?.focus({ preventScroll: true });
+      return;
+    }
     const list = channelsRef.current ?? [];
     const idx = list.findIndex((c) => c.id === ch.id);
     afterHide.current = neighbourOf(list.map((c) => c.id), ch.id);
@@ -255,6 +260,9 @@ export function LiveTv() {
   /** The Undo toast went (timeout, an arrow, Escape): focus to the neighbouring row, else the selected group chip. */
   const leaveUndo = (h: HiddenChannel<Channel>) => {
     setHidden((cur) => (cur === h ? null : cur));
+    // Only focus that is the toast's (or lost): he may be in another row's menu by now
+    const a = document.activeElement;
+    if (a && a !== document.body && !a.closest(".livetv-undo")) return;
     if (afterHide.current) setFocusChan(afterHide.current);
     else document.querySelector<HTMLElement>(".livetv-groups .chip.on")?.focus({ preventScroll: true });
   };

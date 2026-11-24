@@ -65,6 +65,7 @@ public class PlayerPlugin extends Plugin {
         Intent i = new Intent(getContext(), PlayerActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         i.putExtra(PlayerActivity.EXTRA_SESSION, session);
+        i.putExtra(PlayerActivity.EXTRA_OPEN_ID, call.getString("openId", ""));
         i.putExtra(PlayerActivity.EXTRA_URL, url);
         i.putExtra(PlayerActivity.EXTRA_TITLE, call.getString("title", ""));
         i.putExtra(PlayerActivity.EXTRA_MIME, call.getString("mime", ""));
@@ -213,7 +214,9 @@ public class PlayerPlugin extends Plugin {
     public void chapters(PluginCall call) {
         PlayerActivity a = PlayerActivity.instance.get();
         JSObject r = new JSObject();
-        if (a == null || a.isFinishing()) {
+        String want = call.getString("openId", "");
+        // Another open's chapters (the mini player's title while a new one opens, or an old open after a reopen): refused, the web asks again
+        if (a == null || a.isFinishing() || (want != null && !want.isEmpty() && !want.equals(a.openId))) {
             r.put("shown", false);
             call.resolve(r);
             return;

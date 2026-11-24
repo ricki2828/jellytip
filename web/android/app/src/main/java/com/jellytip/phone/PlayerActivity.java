@@ -91,6 +91,8 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_ALWAYS_SUBS = "alwaysSubs";
     /** Which open() this player answers (PlayerPlugin resolves that call when it closes). */
     static final String EXTRA_SESSION = "session";
+    /** The web app's id for this open (PlayerPlugin.chapters only accepts its own). */
+    static final String EXTRA_OPEN_ID = "openId";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -162,6 +164,7 @@ public class PlayerActivity extends AppCompatActivity {
     /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
     private boolean toLiveEdge;
     private int session;
+    String openId = "";
     private FrameLayout root;
     /** One /live poller for the drawer, the portrait panel and flip alerts; null without a live match. */
     private LiveFeed liveFeed;
@@ -239,6 +242,8 @@ public class PlayerActivity extends AppCompatActivity {
         programmeStop = in.getLongExtra(EXTRA_PROG_STOP, 0);
         instance = new java.lang.ref.WeakReference<>(this);
         session = in.getIntExtra(EXTRA_SESSION, 0);
+        String oid = in.getStringExtra(EXTRA_OPEN_ID);
+        openId = oid == null ? "" : oid;
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
         // Follow the phone's current orientation on entry, including when auto-rotate is disabled.
@@ -1359,6 +1364,11 @@ public class PlayerActivity extends AppCompatActivity {
             this.startMs = startMs;
             this.endMs = endMs;
         }
+
+        /** One part (kind + start): a second recap gets its own 10 s and its own dismiss. */
+        String key() {
+            return kind + "@" + startMs;
+        }
     }
 
     /** web skipParts SHOW_SEC / TAIL_SEC / END_MARGIN_SEC. */
@@ -1425,10 +1435,10 @@ public class PlayerActivity extends AppCompatActivity {
         long pos = player.getCurrentPosition();
         SkipSeg seg = activeSkip(pos);
         boolean show = false;
-        if (seg != null && !skipDismissed.contains(seg.kind) && !inPip()) {
-            Long first = skipFirstSeen.get(seg.kind);
+        if (seg != null && !skipDismissed.contains(seg.key()) && !inPip()) {
+            Long first = skipFirstSeen.get(seg.key());
             if (first == null) {
-                skipFirstSeen.put(seg.kind, pos);
+                skipFirstSeen.put(seg.key(), pos);
                 first = pos;
             }
             long d = pos - first;
@@ -1481,21 +1491,12 @@ public class PlayerActivity extends AppCompatActivity {
         }
     }
 
-    /** Tap: credits with a next episode -> the web app plays it ("skipNext"); otherwise to the part's end, short of the file's end. */
+    /** Tap: to the part's end, short of the file's end (credits included: the player's own end handling follows). */
     private void onSkipClick() {
         SkipSeg seg = skipShown;
         if (seg == null || player == null || closing) return;
-        skipDismissed.add(seg.kind);
+        skipDismissed.add(seg.key());
         hideSkip();
-        if ("credits".equals(seg.kind) && skipHasNext) {
-            PlayerPlugin p = PlayerPlugin.current;
-            if (p != null) {
-                JSObject o = new JSObject();
-                o.put("kind", seg.kind);
-                p.emit("skipNext", o);
-                return;
-            }
-        }
         long to = seg.endMs;
         long d = player.getDuration();
         if (d != C.TIME_UNSET && d > SKIP_END_MARGIN_MS) to = Math.min(to, d - SKIP_END_MARGIN_MS);

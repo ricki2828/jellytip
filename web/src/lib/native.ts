@@ -80,6 +80,8 @@ export interface NativePlayerResult {
 export interface JellytipPlayerPlugin {
   /** Full-screen ExoPlayer for an IPTV link; resolves when it closes. */
   open(o: {
+    /** This open's id: chapters() for another open are refused ({shown: false}). */
+    openId?: string;
     url: string;
     title: string;
     mime?: string;
@@ -128,7 +130,7 @@ export interface JellytipPlayerPlugin {
    * A film's / episode's chapters once the server has read them (lib/skipParts nativeChapters): marks on the seek bar and a
    * Skip intro / recap / credits button. {shown: false} = no player open.
    */
-  chapters(o: { marksMs: number[]; skip: { kind: string; s: number; e: number }[]; hasNext?: boolean }): Promise<{ shown: boolean }>;
+  chapters(o: { openId?: string; marksMs: number[]; skip: { kind: string; s: number; e: number }[]; hasNext?: boolean }): Promise<{ shown: boolean }>;
   /** Answer a "needUrl" event: the absolute link (from /play), or an error when there is none. */
   provideUrl(o: { requestId: number; url?: string; mime?: string; error?: string }): Promise<void>;
   addListener(event: "progress", cb: (e: { positionMs: number; durationMs: number }) => void): Promise<{ remove: () => Promise<void> }>;
