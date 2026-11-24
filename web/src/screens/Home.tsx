@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getItems, nextUp, resumeItems, uid, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { SpecialBlock } from "../components/specials/Specials";
@@ -11,12 +11,13 @@ import { rememberRowTitles } from "../lib/rowTitles";
 import { HomeEdit, type Placement } from "../components/HomeEdit";
 import { interleaveSpecials, planHome, readLocalHome, shouldDefer, TOP_KEY, WATCHED_SAMPLE, undash, writeLocalHome, type Cand, type HomePlan, type UserHome } from "../lib/homePlan";
 import { OnNowStrip } from "../components/OnNowStrip";
-import { HomeTopHero } from "../components/LiveMatchHero";
+import { LiveMatchHero, useHomeLivePicks } from "../components/LiveMatchHero";
 import { RecordingsRow } from "../components/RecordingsRow";
 import { ChannelsRow } from "../components/ChannelsRow";
 import { homeLeadRows } from "../lib/channelsRow";
 import { useHubTick } from "../api/collections";
-import { iptvContinue, iptvNext } from "../api/iptv";
+import { iptvContinue, iptvNextAll } from "../api/iptv";
+import { keepLibraryNext, type SeriesNextClaim } from "../lib/splitNext";
 import type { ContinueEntry } from "../lib/continue";
 import { actionsFor, buildContinue, optimisticHide, pruneHidden, readDismissed, writeDismissed, type ActionId, type RowEntry } from "../lib/continueRow";
 import { markWatched } from "../api/continueActions";
@@ -29,7 +30,7 @@ import { RowsError } from "../components/RowsError";
 import { dropPersonalCaches } from "../api/companion";
 import { go } from "../lib/router";
 import { useActiveJourney, type ActiveJourney } from "../api/journeysV1";
-import { heroSlideAt, insertJourneySlide, removeJourneySlide } from "../lib/journeysV1";
+import { heroSlots, keepSlide, nextSlide } from "../lib/homeHero";
 import { JourneyHero } from "../components/JourneyHero";
 
 const MAX_CAROUSEL_ROWS = 10;
@@ -65,40 +66,106 @@ export const letterboxdLoader = (l: LetterboxdRow) => async () => {
   return [...new Set(l.itemIds)].map((id) => byId.get(id)).filter((x): x is Item => !!x);
 };
 
-/** The hero: the featured mix rotates until someone touches a tile, then it follows focus. Own state, so a slide change does not re-render Home. */
+/**
+ * The hero: his top live game (one slide at most), the active journey's step, then the featured mix, rotating until someone
+ * touches a tile; then it follows focus. Own state (and its own fixtures poll), so a slide change does not re-render Home.
+ * Order and "the slide on screen stays put" rules: lib/homeHero (TV JellytipHeroCarousel).
+ */
 function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused: Item | null; focusedIptv: IptvHeroTile | null; slides: HeroSlide[]; engaged: boolean; journey: ActiveJourney | null }) {
-  const [i, setI] = useState(0);
-  // The active journey's tonight's step is one more slide (Journeys v1). It loads after the mix: first if the hero hasn't rotated
-  // yet, else right after the slide on screen, so nothing jumps (lib/journeysV1 insertJourneySlide)
-  const [jPos, setJPos] = useState<number | null>(() => (journey ? 0 : null)); // already known (Back to Home): first
+  const { picks, nowSec, mine } = useHomeLivePicks();
+  const { prefs } = usePrefs({ defer: true });
+  const game = picks[0] ?? null;
+  const mixKeys = useMemo(() => slides.map((s) => s.item.Id), [slides]);
+  const journeyId = journey?.journey.summary.id ?? null;
+  const slots = useMemo(() => heroSlots(game?.fid ?? null, journeyId, mixKeys), [game?.fid, journeyId, mixKeys]);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  // Where the hero is: the slide on screen by key, so slides arriving or leaving never swap it (keepSlide)
+  const pos = useRef<{ key: string | null; i: number }>({ key: null, i: 0 });
   const rotated = useRef(false);
-  const hasJourney = !!journey;
+  const [, setTick] = useState(0);
+  const idx = keepSlide(slots, pos.current.key, pos.current.i, rotated.current);
+  pos.current = { key: slots[idx]?.key ?? null, i: idx };
+  // Pointer over or focus inside the hero: it holds still (a button must not change under the click), and gets a full slide after
+  const [held, setHeld] = useState(false);
+  // Held = pinned: the slide on screen keeps its place by key even before the first turn (a game or journey arriving
+  // while he is on a slide's button never swaps it; keepSlide)
+  const hold = () => {
+    rotated.current = true;
+    setHeld(true);
+  };
+  // Focus was inside the hero: when the slide under it changes anyway (its game ended), focus goes into the new slide
+  const focusIn = useRef<HTMLElement | null>(null);
+  const heroEl = useRef<HTMLDivElement | null>(null);
+  const slideKey = engaged ? null : slots[idx]?.key ?? null;
+  useLayoutEffect(() => {
+    const was = focusIn.current;
+    // Only when the focused element went away with its slide (not a click elsewhere that left focus on the page)
+    if (!was || was.isConnected || document.activeElement !== document.body) return;
+    focusIn.current = null;
+    const el = heroEl.current?.querySelector<HTMLElement>("[data-nav], button, a[href]");
+    if (el) el.focus({ preventScroll: true });
+    else setHeld(false);
+  }, [slideKey]);
+  const n = slots.length;
   useEffect(() => {
-    if (hasJourney && jPos == null) {
-      const ins = insertJourneySlide(i, slides.length, rotated.current);
-      setJPos(ins.pos);
-      setI(ins.i);
-    } else if (!hasJourney && jPos != null) {
-      setI(removeJourneySlide(i, slides.length, jPos));
-      setJPos(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasJourney]);
-  const pos = hasJourney ? jPos : null;
-  const n = slides.length + (pos != null ? 1 : 0);
-  useEffect(() => {
-    if (engaged || n < 2) return;
+    if (engaged || held || n < 2) return;
     const t = setInterval(() => {
       rotated.current = true;
-      setI((k) => k + 1);
+      const s = slotsRef.current;
+      const i = nextSlide(pos.current.i, s.length);
+      pos.current = { key: s[i]?.key ?? null, i };
+      setTick((k) => k + 1);
     }, SLIDE_MS);
     return () => clearInterval(t);
-  }, [engaged, slides, n]);
-  const at = engaged ? null : heroSlideAt(i, slides.length, pos);
-  if (journey && at && "journey" in at) return <JourneyHero s={journey.journey.summary} j={journey.journey} />;
-  const slide = at && "index" in at ? slides[at.index] ?? null : null;
-  if (focusedIptv && !slide) return <IptvHero tile={focusedIptv} />;
-  return <Hero item={slide?.item ?? focused} kicker={slide?.kicker} rotating={!!slide} />;
+  }, [engaged, held, n]);
+  const slot = engaged ? null : slots[idx] ?? null;
+  let body: React.ReactNode;
+  if (slot?.kind === "journey" && journey) body = <JourneyHero s={journey.journey.summary} j={journey.journey} />;
+  else if (slot?.kind === "game" && game)
+    body = (
+      <div className="hero hero-game">
+        <LiveMatchHero key={game.fid} picks={[game]} nowSec={nowSec} kicker={mine ? "Your game is on" : "Live now"} spoilers={!!prefs?.sport.spoilers} />
+      </div>
+    );
+  else {
+    const s = slot?.kind === "mix" && slot.index != null ? slides[slot.index] ?? null : null;
+    body = focusedIptv && !s ? <IptvHero tile={focusedIptv} /> : <Hero item={s?.item ?? focused} kicker={s?.kicker} rotating={!!s} />;
+  }
+  return (
+    <div
+      ref={heroEl}
+      className="home-hero"
+      onPointerEnter={(e) => e.pointerType === "mouse" && hold()}
+      onPointerLeave={(e) => e.pointerType === "mouse" && setHeld(false)}
+      onFocusCapture={(e) => {
+        focusIn.current = e.target as HTMLElement;
+        hold();
+      }}
+      onBlurCapture={(e) => {
+        // A blur to nothing: the focused button unmounted with its slide (the effect above moves focus back in), or a tap on a
+        // blank area / the window losing focus; a frame later, focus that isn't in the hero and wasn't unmounted lets go
+        if (!e.relatedTarget) {
+          const hero = e.currentTarget;
+          requestAnimationFrame(() => {
+            const was = focusIn.current;
+            if (was && !was.isConnected) return;
+            if (!hero.contains(document.activeElement)) {
+              focusIn.current = null;
+              setHeld(false);
+            }
+          });
+          return;
+        }
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          focusIn.current = null;
+          setHeld(false);
+        }
+      }}
+    >
+      {body}
+    </div>
+  );
 }
 
 /**
@@ -114,7 +181,13 @@ interface ContinueSrc {
   next: Item[];
   ic: ContinueEntry[];
   inx: ContinueEntry[];
+  /** The server's merged next per split series: Jellyfin's next-up episode it disagrees with is left out (lib/splitNext). */
+  claims?: ReadonlyMap<string, SeriesNextClaim>;
 }
+
+const NO_CLAIMS: ReadonlyMap<string, SeriesNextClaim> = new Map();
+/** Jellyfin's Next Up minus the split-series episodes the merged next disagrees with (Celebrity Traitors: E6 when IPTV E3 is next). */
+const libraryNext = (src: ContinueSrc): Item[] => (src.claims?.size ? src.next.filter((i) => keepLibraryNext(i.SeriesId, i.Id, i.UserData?.PlaybackPositionTicks ?? 0, src.claims!)) : src.next);
 
 export function Home() {
   useHubTick();
@@ -129,7 +202,7 @@ export function Home() {
   const [dismissVer, setDismissVer] = useState(0);
   const user = uid();
   const entries = useMemo(
-    () => (src ? buildContinue(src.resume, src.next, src.ic, src.inx, { hidden, dismissed: readDismissed(localStorage, user) }) : null),
+    () => (src ? buildContinue(src.resume, libraryNext(src), src.ic, src.inx, { hidden, dismissed: readDismissed(localStorage, user) }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [src, hidden, user, dismissVer],
   );
@@ -216,9 +289,11 @@ export function Home() {
     void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([lib]) => {
       if (!lib) return; // from the memo: the IPTV part is in it
       const { resume, next } = lib;
-      const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
-      if (ic.length || inx.length) apply({ resume, next, ic, inx });
-      if (alive && uid() === me && seq.current === mine) continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic, inx } };
+      const [ic, nx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNextAll().catch(() => ({ items: [] as ContinueEntry[], claims: NO_CLAIMS }))]);
+      const inx = nx.items;
+      const claims = nx.claims;
+      if (ic.length || inx.length || claims.size) apply({ resume, next, ic, inx, claims });
+      if (alive && uid() === me && seq.current === mine) continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic, inx, claims } };
     });
     getSpecials("home")
       .then((s) => alive && setSpecials(s))
@@ -258,12 +333,13 @@ export function Home() {
         });
       const refresh = () => {
         const mine = ++seq.current;
-        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
+        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNextAll().catch(() => null)]).then(([resume, next, ic, nx]) => {
           if (uid() !== me || seq.current !== mine || !resume || !next) return;
-          setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
-          continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic: ic ?? [], inx: inx ?? [] } };
+          const v: ContinueSrc = { resume, next, ic: ic ?? [], inx: nx?.items ?? [], claims: nx?.claims ?? NO_CLAIMS };
+          setSrc(v);
+          continueMemo = { uid: me, at: Date.now(), v };
           // Hides for items the server no longer returns, or has since seen played again, are done with
-          const present = buildContinue(resume, next, ic ?? [], inx ?? []);
+          const present = buildContinue(resume, libraryNext(v), v.ic, v.inx);
           setHidden((h) => pruneHidden(h, present));
         });
       };
@@ -506,8 +582,8 @@ export function Home() {
           </button>
         </p>
       )}
-      {/* TV port (Game Centre 2A): while his game (else the top-ranked one) is live, the live match hero takes the hero's place */}
-      <HomeTopHero fallback={<HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} journey={journey} />} />
+      {/* His live game is one slide of the hero (Ricki 22-Nov), not a takeover */}
+      <HomeHero focused={focused} focusedIptv={focusedIptv} slides={slides} engaged={engaged} journey={journey} />
       <div className="rows" ref={rowsEl} onFocusCapture={settle} onBlurCapture={rowBlur}>
         {/* Continue watching, then My Channels (Ricki 23-Nov; first when there is no Continue row), then reminders, recordings,
             live sport and upcoming: order in lib/channelsRow.homeLeadRows */}

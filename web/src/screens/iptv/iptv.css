@@ -3269,3 +3269,56 @@
   letter-spacing: 0.03em;
   margin-right: 4px;
 }
+
+/* Row menu ("⋯", mouse only) over the channel cell's right edge; sticky with it */
+.livetv-chan:has(+ .livetv-more) {
+  padding-right: 44px;
+}
+.livetv-more {
+  position: sticky;
+  left: calc(var(--chan-w) - 44px);
+  z-index: 2;
+  flex: none;
+  width: 44px;
+  height: 100%;
+  margin-left: -44px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.livetv-row:hover .livetv-more,
+.livetv-row:focus-within .livetv-more,
+.livetv-more:focus-visible {
+  opacity: 1;
+}
+.livetv-more:hover {
+  color: var(--text, #fff);
+}
+/* Hide this channel: the Undo toast (above the ordinary toast) */
+.livetv-undo {
+  display: flex;
+  align-items: center;
+  max-width: min(92vw, 640px);
+  bottom: calc(var(--tabbar-h, 0px) + var(--safe-b, 0px) + 70px);
+  background: #000;
+}
+.livetv-undo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.livetv-undo button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+.livetv-undo button:focus-visible {
+  outline: 2px solid var(--jelly);
+  border-radius: 6px;
+}

@@ -4,6 +4,8 @@ import { Scrubber } from "../components/Scrubber";
 import { getSeekMeta, trickplaySource, type SeekMeta } from "../api/seekMeta";
 import { advanceSeek, commitDue, SETTLE_MS, type SeekRamp } from "../lib/seekRamp";
 import { chapterMarks, nextChapter, prevChapter } from "../lib/chapters";
+import { useLibrarySkips } from "../lib/useLibrarySkips";
+import { SkipPartButton } from "../components/SkipPartButton";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type Hls from "hls.js";
 import { episodes, getItem, getSession, TICKS_PER_SECOND, type Item, type MediaStream } from "../api/jellyfin";
@@ -607,6 +609,8 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
   useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const marks = chapterMarks(seekMeta?.chapters, duration || Infinity);
   const thumbs = plan && seekMeta ? trickplaySource(id, plan.source.Id, seekMeta.trickplay) : null;
+  // Skip intro / recap / credits (the TV library player's skip-segment button): Jellyfin MediaSegments, else chapter names
+  const skips = useLibrarySkips(id, marks, duration);
   const chapterSeek = (dir: -1 | 1) => {
     const v = videoRef.current;
     if (!v) return;
@@ -988,6 +992,9 @@ export function Player({ id, startParam, thenId, chId, offSchedule = false }: { 
         />
       )}
 
+      {skips.length > 0 && (
+        <SkipPartButton segs={skips} videoRef={videoRef} duration={duration} hasNext={!!next} onNext={playNext} onSeek={(t) => videoRef.current && (videoRef.current.currentTime = t)} blocked={menu || !!findSubs} />
+      )}
       {next && remaining > 0 && remaining < NEXT_UP_SECONDS && (
         <button className="btn primary next-up" data-nav onClick={playNext}>
           {thenId ? `Up next · ${next.Name}` : `Next episode · E${next.IndexNumber} ${next.Name}`}

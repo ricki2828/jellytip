@@ -65,6 +65,7 @@ public class PlayerPlugin extends Plugin {
         Intent i = new Intent(getContext(), PlayerActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         i.putExtra(PlayerActivity.EXTRA_SESSION, session);
+        i.putExtra(PlayerActivity.EXTRA_OPEN_ID, call.getString("openId", ""));
         i.putExtra(PlayerActivity.EXTRA_URL, url);
         i.putExtra(PlayerActivity.EXTRA_TITLE, call.getString("title", ""));
         i.putExtra(PlayerActivity.EXTRA_MIME, call.getString("mime", ""));
@@ -200,6 +201,47 @@ public class PlayerPlugin extends Plugin {
         }
         boolean spoiler = Boolean.TRUE.equals(call.getBoolean("spoiler", false));
         a.runOnUiThread(() -> a.notice(text, spoiler));
+        r.put("shown", true);
+        call.resolve(r);
+    }
+
+    /**
+     * {marksMs: number[], skip: [{kind, s, e}] (seconds), hasNext?}: the film's / episode's chapters once the server has read
+     * them (TV parity §5): marks on the seek bar and a Skip intro / recap / credits button. Resolves {shown: false} when no
+     * player is open.
+     */
+    @PluginMethod
+    public void chapters(PluginCall call) {
+        PlayerActivity a = PlayerActivity.instance.get();
+        JSObject r = new JSObject();
+        String want = call.getString("openId", "");
+        // Another open's chapters (the mini player's title while a new one opens, or an old open after a reopen): refused, the web asks again
+        if (a == null || a.isFinishing() || (want != null && !want.isEmpty() && !want.equals(a.openId))) {
+            r.put("shown", false);
+            call.resolve(r);
+            return;
+        }
+        JSArray m = call.getArray("marksMs");
+        long[] marks = new long[m == null ? 0 : m.length()];
+        int n = 0;
+        for (int k = 0; m != null && k < m.length(); k++) {
+            long v = m.optLong(k, -1L);
+            if (v > 0) marks[n++] = v;
+        }
+        final long[] marksOut = java.util.Arrays.copyOf(marks, n);
+        final java.util.List<PlayerActivity.SkipSeg> segs = new java.util.ArrayList<>();
+        JSArray sk = call.getArray("skip");
+        for (int k = 0; sk != null && k < sk.length(); k++) {
+            org.json.JSONObject o = sk.optJSONObject(k);
+            if (o == null) continue;
+            String kind = o.optString("kind", "");
+            double s = o.optDouble("s", Double.NaN);
+            double e = o.optDouble("e", Double.NaN);
+            if (!("intro".equals(kind) || "recap".equals(kind) || "credits".equals(kind)) || Double.isNaN(s) || Double.isNaN(e) || e <= s) continue;
+            segs.add(new PlayerActivity.SkipSeg(kind, Math.round(s * 1000), Math.round(e * 1000)));
+        }
+        final boolean hasNext = Boolean.TRUE.equals(call.getBoolean("hasNext", false));
+        a.runOnUiThread(() -> a.setChapters(marksOut, segs, hasNext));
         r.put("shown", true);
         call.resolve(r);
     }

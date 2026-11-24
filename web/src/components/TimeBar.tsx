@@ -2,6 +2,7 @@
 // re-renders a scrubber or a clock rather than the whole player (and the live drawer under it).
 import { useEffect, useState, type RefObject } from "react";
 import { Scrubber } from "./Scrubber";
+import type { ChapterMark } from "../lib/chapters";
 
 /** The video element's current time, re-read on timeupdate/seeked. Only the component that calls this re-renders. */
 export function useVideoTime(videoRef: RefObject<HTMLVideoElement | null>, wholeSeconds = false, offset = 0): number {
@@ -21,9 +22,9 @@ export function useVideoTime(videoRef: RefObject<HTMLVideoElement | null>, whole
   return time;
 }
 
-export function TimeBarScrubber({ videoRef, max, fmt, onActivity, onSeek, offset = 0 }: { offset?: number; videoRef: RefObject<HTMLVideoElement | null>; max: number; fmt: (s: number) => string; onActivity?: () => void; onSeek: (to: number) => void }) {
+export function TimeBarScrubber({ videoRef, max, fmt, onActivity, onSeek, offset = 0, chapters }: { offset?: number; videoRef: RefObject<HTMLVideoElement | null>; max: number; fmt: (s: number) => string; onActivity?: () => void; onSeek: (to: number) => void; chapters?: ChapterMark[] }) {
   const time = useVideoTime(videoRef, false, offset);
-  return <Scrubber time={time} max={max} fmt={fmt} onActivity={onActivity} onSeek={onSeek} />;
+  return <Scrubber time={time} max={max} fmt={fmt} onActivity={onActivity} onSeek={onSeek} chapters={chapters} />;
 }
 
 export function TimeBarClock({ videoRef, fmt, length, seekable, growing, offset = 0 }: { offset?: number; videoRef: RefObject<HTMLVideoElement | null>; fmt: (s: number) => string; length: number; seekable: boolean; growing: boolean }) {
