@@ -84,7 +84,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /*
- * Letterboxd Top 100 genre journeys (lt:<genre>, server lane lbtop 24-Nov): no client change, these are list quests whose premise
+ * Letterboxd Top 100 genre journeys (l:lbtop-<genre>, server lane lbtop 24-Nov): no client change, these are list quests whose premise
  * is the Letterboxd credit. Shots of the hero (official + community list with its long title), the rows and the path. Fixture
  * resources/jellytip/journeys-lbtop-fixture.json is built from the committed list data (sources synthetic), art synthetic.
  * Harness copied from JourneysShotsTest.
