@@ -14,10 +14,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -82,7 +84,7 @@ class KidsPlayer
         }
 
         /** A tap on a tile: its page. */
-        suspend fun open(tile: KidsTile) = go(KidsOpen.destination(tile), "kids open ${tile.kind}")
+        suspend fun open(tile: KidsTile) = guarded { go(KidsOpen.destination(tile), "kids open ${tile.kind}") }
 
         /** The big Play for [tile] (Home hero): the player for a film / episode, the next episode for a series. */
         suspend fun play(tile: KidsTile) =
@@ -90,7 +92,11 @@ class KidsPlayer
                 val destination: Destination? =
                     if (tile.source == "iptv") {
                         // An IPTV film plays; an IPTV series / episode opens its page (it works out the episode)
-                        if (tile.kind == KidsKind.MOVIE) Destination.JellytipIptvPlay(title = tile.name, vodId = tile.id) else KidsOpen.destination(tile)
+                        if (tile.kind == KidsKind.MOVIE) {
+                            Destination.JellytipIptvPlay(title = tile.name, vodId = tile.id, resumeMs = tile.resumeMs)
+                        } else {
+                            KidsOpen.destination(tile)
+                        }
                     } else {
                         val id = parseId(tile.id)
                         when {
@@ -106,14 +112,22 @@ class KidsPlayer
                 go(destination, "kids play ${tile.kind}")
             }
 
-        /** Play a library item at a known position (details Play, with the target the page already holds). */
-        suspend fun playAt(
-            itemId: String,
-            resumeMs: Long,
-        ) =
+        /**
+         * The details page's Play: the target is worked out NOW (a page left open, or reached by Back after watching, holds an old
+         * one): series = the next / resumable episode, film = its resume position; the loaded target only if that failed.
+         */
+        suspend fun playDetails(details: KidsDetails) =
             guarded {
-                val id = parseId(itemId) ?: return@guarded
-                go(Destination.Playback(id, resumeMs), "kids play item")
+                val id = parseId(details.id)
+                val fresh =
+                    when {
+                        id == null -> null
+                        details.isSeries -> library.seriesPlayTarget(id)
+                        else -> KidsPlayTarget(details.id, library.resumeMs(id))
+                    }
+                val target = KidsPlayTarget.chooseAtPress(fresh, details.playTarget) ?: return@guarded
+                val itemId = parseId(target.itemId) ?: return@guarded
+                go(Destination.Playback(itemId, target.resumeMs), "kids play details")
             }
 
         /** Play a library item from its own resume position (an episode tile). */
@@ -186,22 +200,41 @@ class KidsBrowseViewModel
             }
         }
 
+        /**
+         * Called each time a section is shown. Shows / Movies / My list load once (and again on the next visit if the last try
+         * came back empty: a failure reads as empty). Home loads on the first visit and RELOADS in place on every return (the
+         * hero is "keep watching": it must move on after a play); the old Home stays on screen until the new one lands, and the
+         * focus memory is kept. An unavailable Home retries the same way.
+         */
         fun ensure(section: KidsSection) {
-            if (!started.add(section)) return
+            val first = started.add(section)
+            if (!first && section != KidsSection.HOME) return
             viewModelScope.launchIO {
                 when (section) {
                     KidsSection.HOME ->
-                        home.value =
-                            when (val r = library.home()) {
-                                is KidsHomeResult.Ok -> KidsHomeUi.Ready(r.data)
-                                KidsHomeResult.Unavailable -> KidsHomeUi.Unavailable
-                            }
+                        when (val r = library.home()) {
+                            is KidsHomeResult.Ok -> home.value = KidsHomeUi.Ready(r.data)
+                            // A reload that fails keeps the Home already shown; a first load that fails shows the empty state
+                            KidsHomeResult.Unavailable -> if (home.value !is KidsHomeUi.Ready) home.value = KidsHomeUi.Unavailable
+                            KidsHomeResult.SignedOut -> home.value = KidsHomeUi.SignedOut
+                        }
 
-                    KidsSection.SHOWS -> shows.value = library.browse(BaseItemKind.SERIES)
-                    KidsSection.MOVIES -> movies.value = library.browse(BaseItemKind.MOVIE)
-                    KidsSection.MY_LIST -> myList.value = library.myList()
+                    KidsSection.SHOWS -> loadGrid(section, shows) { library.browse(BaseItemKind.SERIES) }
+                    KidsSection.MOVIES -> loadGrid(section, movies) { library.browse(BaseItemKind.MOVIE) }
+                    KidsSection.MY_LIST -> loadGrid(section, myList) { library.myList() }
                 }
             }
+        }
+
+        private suspend fun loadGrid(
+            section: KidsSection,
+            target: MutableStateFlow<List<KidsTile>?>,
+            load: suspend () -> List<KidsTile>,
+        ) {
+            val tiles = load()
+            target.value = tiles
+            // Empty may be a failure: ask again on the next visit
+            if (tiles.isEmpty()) started.remove(section)
         }
 
         fun open(tile: KidsTile) {
@@ -271,23 +304,27 @@ class KidsDetailsViewModel
         private val fav = MutableStateFlow(false)
         private var loadedId: UUID? = null
 
-        fun load(id: UUID) {
-            if (loadedId == id) return
+        /**
+         * The page is shown (first time, or again after Back from playback): load, or reload in place so the Play button's label
+         * and the episode marks move on. A reload that fails keeps what is on screen.
+         */
+        fun shown(id: UUID) {
+            val first = loadedId != id
             loadedId = id
             viewModelScope.launchIO {
                 val d = library.details(id)
-                if (d == null) {
-                    state.value = KidsDetailsUi.Failed
-                } else {
+                if (d != null) {
                     fav.value = d.favourite
                     state.value = KidsDetailsUi.Ready(d)
+                } else if (first || state.value !is KidsDetailsUi.Ready) {
+                    state.value = KidsDetailsUi.Failed
                 }
             }
         }
 
         fun play() {
-            val target = (state.value as? KidsDetailsUi.Ready)?.details?.playTarget ?: return
-            viewModelScope.launchIO { player.playAt(target.itemId, target.resumeMs) }
+            val d = (state.value as? KidsDetailsUi.Ready)?.details ?: return
+            viewModelScope.launchIO { player.playDetails(d) }
         }
 
         fun playEpisode(ep: KidsEpisode) {
@@ -389,7 +426,7 @@ fun KidsDetailsHost(
     modifier: Modifier = Modifier,
     viewModel: KidsDetailsViewModel = hiltViewModel(),
 ) {
-    LaunchedEffect(itemId) { viewModel.load(itemId) }
+    LaunchedEffect(itemId) { viewModel.shown(itemId) }
     val state by viewModel.state.collectAsState()
     val fav by viewModel.favourite.collectAsState()
     val memory = rememberKidsFocusMemory()
@@ -431,7 +468,8 @@ fun KidsShell(
     LaunchedEffect(Unit) { onClearBackdrop() }
     val section by KidsSectionState.flow.collectAsState()
     BackHandler(enabled = destination is Destination.Home && section != KidsSection.HOME) { KidsSectionState.set(KidsSection.HOME) }
-    CompositionLocalProvider(LocalKidsTokens provides KidsTokens.Playground) {
+    val navFocus = remember { FocusRequester() }
+    CompositionLocalProvider(LocalKidsTokens provides KidsTokens.Playground, LocalKidsNavFocus provides navFocus) {
         KidsCanvas(modifier) {
             val isSearch = destination is Destination.Search || destination is Destination.JellytipAskChat || destination is Destination.JellytipAsk
             val detailsId: UUID? =

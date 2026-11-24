@@ -33,7 +33,8 @@ class IntentService
             if (intent.action == com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.ACTION_WATCH) {
                 val ch = intent.getStringExtra(com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.EXTRA_CHANNEL)
                 val match = intent.getStringExtra(com.github.damontecres.wholphin.jellytip.iptv.SportAmbientIntent.EXTRA_MATCH)
-                return if (ch.isNullOrBlank()) IntentResult.NoOp else IntentResult.Target(listOf(Destination.JellytipLiveTvPlayer(ch, match)))
+                // Kids mode: a sport takeover never opens a live channel for a kid
+                return if (ch.isNullOrBlank() || com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active) IntentResult.NoOp else IntentResult.Target(listOf(Destination.JellytipLiveTvPlayer(ch, match)))
             }
             val action = intent.action ?: intent.data?.host
             if (

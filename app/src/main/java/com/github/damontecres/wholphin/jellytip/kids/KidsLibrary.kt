@@ -54,7 +54,18 @@ data class KidsSeason(
 data class KidsPlayTarget(
     val itemId: String,
     val resumeMs: Long,
-)
+) {
+    companion object {
+        /**
+         * The Play button works its target out when it is PRESSED (a page left open, or reached by Back after watching, holds an
+         * old one): [fresh] wins; if it could not be worked out in time, the target the page loaded with is better than nothing.
+         */
+        fun chooseAtPress(
+            fresh: KidsPlayTarget?,
+            loaded: KidsPlayTarget?,
+        ): KidsPlayTarget? = fresh ?: loaded
+    }
+}
 
 class KidsCollection(
     val name: String,
@@ -151,6 +162,10 @@ class KidsLibraryService
         suspend fun home(): KidsHomeResult {
             val base = vod.base()
             val (code, body) = jellytipApi.userCall("v1/kids/home") ?: return KidsHomeResult.Unavailable.also { Timber.w("[kids] home: no answer") }
+            if (code == 401) {
+                Timber.w("[kids] home: 401 (signed out)")
+                return KidsHomeResult.SignedOut
+            }
             if (code != 200) {
                 Timber.w("[kids] home: HTTP %d", code)
                 return KidsHomeResult.Unavailable
@@ -209,43 +224,45 @@ class KidsLibraryService
                 emptyList()
             }
 
-        /** The existing My list data (`/v1/me/list`), films then shows, library and IPTV, in the kids skin. */
+        /**
+         * My list in the kids skin: the library half is read from Jellyfin's own favourites (the heart is the truth, not the
+         * server's cached list), the IPTV half is the server's list of IPTV films. IPTV series are not drawn (no kids page).
+         */
         suspend fun myList(): List<KidsTile> =
             try {
-                val movies = myListService.list("movie", MY_LIST_LIMIT).orEmpty()
-                val series = myListService.list("series", MY_LIST_LIMIT).orEmpty()
-                if (movies.size >= MY_LIST_LIMIT || series.size >= MY_LIST_LIMIT) Timber.w("[kids] my list hit the %d cap", MY_LIST_LIMIT)
-                val entries = movies + series
-                val libIds = entries.filterIsInstance<JellytipMyListEntry.Library>().map { it.id }.distinct()
-                val byId =
-                    if (libIds.isEmpty()) {
-                        emptyMap()
-                    } else {
-                        api.itemsApi
-                            .getItems(
-                                GetItemsRequest(
-                                    ids = libIds,
-                                    fields = SlimItemFields,
-                                    enableUserData = true,
-                                    enableTotalRecordCount = false,
-                                ),
-                            ).content.items
-                            .associateBy { it.id }
-                    }
-                entries.mapNotNull { entry ->
-                    when (entry) {
-                        is JellytipMyListEntry.Library -> byId[entry.id]?.let { tileOf(it) }
-                        // No kids page for an IPTV series: it would be a dead tile, so it is not drawn
-                        is JellytipMyListEntry.Iptv ->
-                            if (entry.item.kind == "series") null else KidsTile(
+                val library =
+                    api.itemsApi
+                        .getItems(
+                            GetItemsRequest(
+                                includeItemTypes = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+                                recursive = true,
+                                isFavorite = true,
+                                sortBy = listOf(ItemSortBy.SORT_NAME),
+                                sortOrder = listOf(SortOrder.ASCENDING),
+                                fields = SlimItemFields,
+                                enableUserData = true,
+                                limit = MY_LIST_LIMIT,
+                                enableTotalRecordCount = false,
+                            ),
+                        ).content.items
+                        .mapNotNull { tileOf(it) }
+                if (library.size >= MY_LIST_LIMIT) Timber.w("[kids] my list hit the %d cap", MY_LIST_LIMIT)
+                val iptv =
+                    myListService
+                        .list("movie", MY_LIST_LIMIT)
+                        .orEmpty()
+                        .filterIsInstance<JellytipMyListEntry.Iptv>()
+                        .filter { it.item.kind != "series" }
+                        .map { entry ->
+                            KidsTile(
                                 id = entry.item.id,
                                 source = "iptv",
                                 kind = KidsKind.MOVIE,
                                 name = entry.item.title,
                                 imageUrl = entry.item.backdrop ?: entry.item.poster,
                             )
-                    }
-                }
+                        }
+                library + iptv
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

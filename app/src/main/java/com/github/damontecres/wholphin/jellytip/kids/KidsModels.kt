@@ -22,6 +22,8 @@ data class KidsTile(
     val progress: Float = 0f,
     val playCount: Int = 0,
     val imageUrl: String? = null,
+    /** IPTV film only: where to resume (ms); 0 = from the start / not sent. */
+    val resumeMs: Long = 0L,
 )
 
 class KidsHero(
@@ -51,6 +53,9 @@ sealed interface KidsHomeResult {
     ) : KidsHomeResult
 
     data object Unavailable : KidsHomeResult
+
+    /** 401: the kid's session is no longer valid. */
+    data object SignedOut : KidsHomeResult
 }
 
 /** Turns the server's `{itemId, kind}` image refs into URLs. [wide] = the hero card (big backdrop) rather than a tile. */
@@ -116,6 +121,7 @@ object KidsHomeParse {
             progress = progress,
             playCount = o.optInt("playCount", 0).coerceAtLeast(0),
             imageUrl = image(o.optJSONObject("image"), base, wide, resolver),
+            resumeMs = if (source == "iptv") o.optLong("resumeMs", 0L).coerceAtLeast(0L) else 0L,
         )
     }
 
@@ -187,7 +193,7 @@ object KidsHomeParse {
 object KidsOpen {
     fun destination(tile: KidsTile): Destination? =
         when (tile.source) {
-            "iptv" -> if (tile.kind == KidsKind.MOVIE) Destination.JellytipIptvPlay(title = tile.name, vodId = tile.id) else null
+            "iptv" -> if (tile.kind == KidsKind.MOVIE) Destination.JellytipIptvPlay(title = tile.name, vodId = tile.id, resumeMs = tile.resumeMs) else null
 
             else ->
                 when (tile.kind) {

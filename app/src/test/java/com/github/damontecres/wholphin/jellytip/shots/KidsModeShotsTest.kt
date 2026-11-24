@@ -281,6 +281,10 @@ class KidsModeShotsTest {
     @Test
     fun homeUnavailable() = shot("kids-home-unavailable", null) { Home(KidsHomeUi.Unavailable) }
 
+    /** 401: the session ended; the page says so and focus goes to the nav (nothing else to focus). */
+    @Test
+    fun homeSignedOut() = shot("kids-home-signed-out", null) { Home(KidsHomeUi.SignedOut) }
+
     @Composable
     private fun Grid(
         section: KidsSection,

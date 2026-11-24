@@ -104,6 +104,65 @@ class KidsContentTest {
     }
 
     @Test
+    fun iptvHeroCarriesResumeMs() {
+        fun hero(extra: String) =
+            KidsHomeParse
+                .parse(
+                    """{"kidsMode":true,"hero":{"kind":"resume","item":{"id":"p:m:1","source":"iptv","type":"Movie","name":"Cartoon Film","image":{"url":"/i.jpg"}$extra}},"rows":[]}""",
+                    base,
+                    resolver,
+                )!!.hero!!.tile
+        assertEquals(754_000L, hero(",\"resumeMs\":754000").resumeMs)
+        // absent (older server), negative or on a library item: 0
+        assertEquals(0L, hero("").resumeMs)
+        assertEquals(0L, hero(",\"resumeMs\":-5").resumeMs)
+        assertEquals(0L, KidsHomeParse.item(org.json.JSONObject(item(extra = ",\"resumeMs\":9000")), base, resolver)!!.resumeMs)
+        // and it reaches the player destination
+        val d = KidsOpen.destination(hero(",\"resumeMs\":754000")) as Destination.JellytipIptvPlay
+        assertEquals(754_000L, d.resumeMs)
+    }
+
+    @Test
+    fun playTargetIsChosenAtPress() {
+        val loaded = KidsPlayTarget("s2e4", 62_000L)
+        val fresh = KidsPlayTarget("s2e5", 0L)
+        assertEquals(fresh, KidsPlayTarget.chooseAtPress(fresh, loaded))
+        // the lookup failed or was too slow: the loaded target beats nothing
+        assertEquals(loaded, KidsPlayTarget.chooseAtPress(null, loaded))
+        assertNull(KidsPlayTarget.chooseAtPress(null, null))
+        // the stale case: the page loaded when s2e4 was part-watched; it has been finished since, so the press must say s2e5
+        val before = listOf(ep(2, 3, true), ep(2, 4, resume = 62_000), ep(2, 5))
+        val after = listOf(ep(2, 3, true), ep(2, 4, true), ep(2, 5))
+        assertEquals("s2e4", KidsPlayPick.pick(before)!!.episode.id)
+        assertEquals("s2e5", KidsPlayPick.pick(after)!!.episode.id)
+    }
+
+    @Test
+    fun searchTypesForKidsAndAdults() {
+        val all =
+            listOf(
+                BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE, BaseItemKind.BOX_SET, BaseItemKind.PERSON,
+                BaseItemKind.TV_CHANNEL, BaseItemKind.LIVE_TV_PROGRAM, BaseItemKind.MUSIC_ALBUM, BaseItemKind.PHOTO,
+            )
+        // adults: the list is returned unchanged
+        assertEquals(all, KidsSearch.types(all, kids = false))
+        // kids: films, shows, episodes, collections only; never live TV (a channel opens a live player), people, music, photos
+        assertEquals(listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE, BaseItemKind.BOX_SET), KidsSearch.types(all, kids = true))
+        assertTrue(BaseItemKind.TV_CHANNEL !in KidsSearch.types(all, kids = true))
+    }
+
+    @Test
+    fun onlyPlayersAreFullScreenForKids() {
+        val id = UUID.fromString(id1)
+        assertTrue(kidsAllowsFullScreen(Destination.Playback(id, 0L)))
+        assertTrue(kidsAllowsFullScreen(Destination.JellytipIptvPlay(title = "T", vodId = "p:m:1")))
+        assertTrue(!kidsAllowsFullScreen(Destination.JellytipLiveTvPlayer("ch1")))
+        assertTrue(!kidsAllowsFullScreen(Destination.NowPlaying))
+        assertTrue(!kidsAllowsFullScreen(Destination.UpdateApp))
+        assertTrue(!kidsAllowsFullScreen(Destination.Debug))
+    }
+
+    @Test
     fun progressOutsideZeroToOneIsNoBar() {
         val d = KidsHomeParse.parse("""{"kidsMode":true,"hero":{"kind":"resume","item":${item(extra = ",\"progress\":1.0")}},"rows":[]}""", base, resolver)!!
         assertEquals(0f, d.hero!!.tile.progress, 0f)

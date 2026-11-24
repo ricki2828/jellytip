@@ -7,6 +7,7 @@ import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
 import com.github.damontecres.wholphin.ui.nav.Destination
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.UserPolicy
 
 /**
@@ -59,14 +60,23 @@ object JellytipKids {
 }
 
 /**
- * The only full-screen destinations a kid's session opens: the players. Settings, Now playing, Update, Slideshow and the rest never
+ * The only full-screen destinations a kid's session opens: the library player and the IPTV film player. Settings, Now playing, Update, Slideshow and the rest never
  * open for a kid (they show the Kids Home instead).
  */
 fun kidsAllowsFullScreen(destination: Destination): Boolean =
     destination is Destination.Playback ||
         destination is Destination.PlaybackList ||
-        destination is Destination.JellytipIptvPlay ||
-        destination is Destination.JellytipLiveTvPlayer
+        destination is Destination.JellytipIptvPlay
+
+/** What kids Search looks for. Adults keep the full list ([types] with `kids = false` returns [all] unchanged). */
+object KidsSearch {
+    val TYPES: List<BaseItemKind> = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES, BaseItemKind.EPISODE, BaseItemKind.BOX_SET)
+
+    fun types(
+        all: List<BaseItemKind>,
+        kids: Boolean,
+    ): List<BaseItemKind> = if (kids) all.filter { it in TYPES } else all
+}
 
 /** Composable check; recomposes if the signed-in user changes. */
 @Composable

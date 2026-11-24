@@ -376,8 +376,8 @@ class MainActivity : AppCompatActivity() {
             // Jellytip (t5n): OK on the ambient scoreboard opens the game it shows
             val ok = event.action == KeyEvent.ACTION_UP && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
             val okDown = event.action == KeyEvent.ACTION_DOWN && (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
-            if (okDown && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.onOk != null) return true
-            if (ok && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.ok()) {
+            if (okDown && !com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.onOk != null) return true
+            if (ok && !com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active && com.github.damontecres.wholphin.jellytip.iptv.SportAmbientKeys.ok()) {
                 screensaverService.stop(false)
                 screensaverService.pulse()
                 return true

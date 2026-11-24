@@ -332,12 +332,15 @@ fun SearchPage(
                             },
                 )
 
-                ExpandableFaButton(
-                    title = R.string.view_options,
-                    iconStringRes = R.string.fa_sliders,
-                    onClick = { showViewOptions = true },
-                    modifier = Modifier.padding(start = 12.dp),
-                )
+                // Kids mode: no search view options (types, Discover)
+                if (!com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active) {
+                    ExpandableFaButton(
+                        title = R.string.view_options,
+                        iconStringRes = R.string.fa_sliders,
+                        onClick = { showViewOptions = true },
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                }
             }
         }
         AnimatedVisibility(

@@ -3,9 +3,9 @@ package com.github.damontecres.wholphin.jellytip.kids
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +99,12 @@ object KidsTags {
 
     fun episode(index: Int) = "kids-episode-$index"
 }
+
+/**
+ * The first nav button's requester, provided by KidsShell: the page puts initial focus there when it has nothing else to focus
+ * (no hero, no tiles: an empty or unavailable page must not leave focus nowhere).
+ */
+val LocalKidsNavFocus = compositionLocalOf<FocusRequester?> { null }
 
 /** Font Awesome glyphs the kids look uses (the app's bundled FA solid font). */
 object KidsGlyphs {
@@ -434,6 +441,7 @@ private fun KidsNavItem(
     section: KidsSection,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val t = LocalKidsTokens.current
     val src = remember { MutableInteractionSource() }
@@ -443,7 +451,7 @@ private fun KidsNavItem(
     Surface(
         onClick = onClick,
         interactionSource = src,
-        modifier = Modifier.testTag(KidsTags.nav(section)),
+        modifier = modifier.testTag(KidsTags.nav(section)),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(30.dp)),
         colors = transparentSurfaceColors(),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
@@ -556,7 +564,10 @@ fun KidsNavBar(
                 KidsText(if (userName.isNullOrBlank()) "Hi!" else "Hi $userName!", 19.sp, black = true)
             }
         }
-        KidsSection.entries.forEach { s -> KidsNavItem(s, selected == s) { onSection(s) } }
+        val navFocus = LocalKidsNavFocus.current
+        KidsSection.entries.forEach { s ->
+            KidsNavItem(s, selected == s, onClick = { onSection(s) }, modifier = if (s == KidsSection.HOME && navFocus != null) Modifier.focusRequester(navFocus) else Modifier)
+        }
         Spacer(Modifier.weight(1f))
         Row(Modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             KidsRoundButton(KidsGlyphs.SEARCH, KidsTags.SEARCH, onSearch)
@@ -685,6 +696,9 @@ sealed interface KidsHomeUi {
 
     /** 403 / error / old server: no rows, no hero, never the adult Home. */
     data object Unavailable : KidsHomeUi
+
+    /** 401: the session is no longer valid; a grown-up has to sign in again. */
+    data object SignedOut : KidsHomeUi
 }
 
 private fun rowGlyph(id: String): Pair<String, Color> =
@@ -725,9 +739,16 @@ fun KidsHomeContent(
     val firstTileFocus = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     val data = (ui as? KidsHomeUi.Ready)?.data
-    // First visit: the hero's Play; with rows but no hero, the first tile
-    LaunchedEffect(data != null) {
-        if (data != null) kidsPlaceFocus(memory, restore, if (data.hero != null) heroFocus else firstTileFocus)
+    val empty = data == null || (data.hero == null && data.rows.isEmpty())
+    val navFocus = LocalKidsNavFocus.current
+    // First visit: the hero's Play; with rows but no hero, the first tile; an empty / unavailable page, the first nav button.
+    // Keyed on the phase only, so a reload in place never takes focus back.
+    LaunchedEffect(if (ui is KidsHomeUi.Loading) 0 else if (empty) 1 else 2) {
+        when {
+            ui is KidsHomeUi.Loading -> Unit
+            empty -> kidsPlaceFocus(memory, restore, navFocus)
+            else -> kidsPlaceFocus(memory, restore, if (data?.hero != null) heroFocus else firstTileFocus)
+        }
     }
     when {
         ui is KidsHomeUi.Loading -> Box(modifier.fillMaxSize())
@@ -735,7 +756,7 @@ fun KidsHomeContent(
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     KidsMascot(84.dp)
-                    KidsText("Nothing to watch here yet", 20.sp, black = true)
+                    KidsText(if (ui is KidsHomeUi.SignedOut) "Ask a grown-up to sign in again" else "Nothing to watch here yet", 20.sp, black = true)
                 }
             }
 
@@ -827,8 +848,14 @@ fun KidsGridPage(
     val t = LocalKidsTokens.current
     val restore = remember { FocusRequester() }
     val first = remember { FocusRequester() }
-    LaunchedEffect(tiles != null) {
-        if (!tiles.isNullOrEmpty()) kidsPlaceFocus(memory, restore, first)
+    val navFocus = LocalKidsNavFocus.current
+    // Tiles: the first tile. Loaded but empty: the first nav button (focus must not be left nowhere).
+    LaunchedEffect(if (tiles == null) 0 else if (tiles.isEmpty()) 1 else 2) {
+        when {
+            tiles == null -> Unit
+            tiles.isEmpty() -> kidsPlaceFocus(memory, restore, navFocus)
+            else -> kidsPlaceFocus(memory, restore, first)
+        }
     }
     Column(modifier.fillMaxSize().padding(horizontal = t.pagePad - RowInset)) {
         Row(Modifier.padding(start = RowInset, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1011,22 +1038,22 @@ fun KidsDetailsContent(
             }
             // key(seasonIndex): each season's episode row starts at its own first episode, not at the last season's scroll
             key(seasonIndex) {
-            LazyRow(
-                state = rememberLazyListState(),
-                contentPadding = PaddingValues(horizontal = RowInset, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(t.tileGap),
-            ) {
-                itemsIndexed(season.episodes, key = { _, e -> e.id }) { i, ep ->
-                    KidsEpisodeCard(
-                        ep = ep,
-                        nextUp = ep.id == nextUpId,
-                        onClick = { onEpisode(ep) },
-                        tag = KidsTags.episode(i),
-                        focusModifier = Modifier.kidsTrack(memory, "ep:${ep.id}", restore),
-                        modifier = Modifier.width(170.dp),
-                    )
+                LazyRow(
+                    state = rememberLazyListState(),
+                    contentPadding = PaddingValues(horizontal = RowInset, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(t.tileGap),
+                ) {
+                    itemsIndexed(season.episodes, key = { _, e -> e.id }) { i, ep ->
+                        KidsEpisodeCard(
+                            ep = ep,
+                            nextUp = ep.id == nextUpId,
+                            onClick = { onEpisode(ep) },
+                            tag = KidsTags.episode(i),
+                            focusModifier = Modifier.kidsTrack(memory, "ep:${ep.id}", restore),
+                            modifier = Modifier.width(170.dp),
+                        )
+                    }
                 }
-            }
             }
         }
     }

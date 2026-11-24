@@ -143,7 +143,8 @@ class SearchViewModel
                 val possibleSearchableTypes = determineSearchableTypes(emptyList())
                 _state.update {
                     it.copy(
-                        discoverEnabled = discoverEnabled,
+                        // Kids mode: no Discover / requests
+                        discoverEnabled = discoverEnabled && !com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active,
                         includedSearchableTypes = searchableTypes,
                         possibleSearchableTypes = possibleSearchableTypes,
                         excludedSearchableTypes = excludedSearchableTypes,
@@ -159,7 +160,8 @@ class SearchViewModel
         private fun determineSearchableTypes(excludedSearchableTypes: List<BaseItemKind>): List<BaseItemKind> {
             val tvAccess = serverRepository.currentUserDto?.tvAccess == true
             val searchableTypes =
-                allSearchableTypes.filter {
+                // Kids mode: only films, shows, episodes and collections (never live TV, people, music, photos)
+                com.github.damontecres.wholphin.jellytip.kids.KidsSearch.types(allSearchableTypes, com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active).filter {
                     val excluded = excludedSearchableTypes.contains(it)
                     // Only include if there's a relevant, accessible library
                     val hasLibrary = userLibraryTypes.contains(it)
@@ -346,7 +348,7 @@ class SearchViewModel
 
         private fun searchSeerr(query: String) {
             viewModelScope.launchIO {
-                if (seerrActive.first() && state.value.discoverEnabled) {
+                if (seerrActive.first() && state.value.discoverEnabled && !com.github.damontecres.wholphin.jellytip.kids.JellytipKids.active) {
                     _state.update { it.copy(seerrResults = SearchResult.Searching) }
                     val results =
                         seerrService
