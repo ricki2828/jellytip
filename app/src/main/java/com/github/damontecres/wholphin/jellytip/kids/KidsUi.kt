@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
@@ -106,6 +107,9 @@ object KidsTags {
  * (no hero, no tiles: an empty or unavailable page must not leave focus nowhere).
  */
 val LocalKidsNavFocus = compositionLocalOf<FocusRequester?> { null }
+
+/** True while focus is anywhere in the top nav bar (so a page that lost focus to a reload does not take it from the nav). */
+val LocalKidsNavHasFocus = compositionLocalOf<androidx.compose.runtime.MutableState<Boolean>?> { null }
 
 /** Font Awesome glyphs the kids look uses (the app's bundled FA solid font). */
 object KidsGlyphs {
@@ -180,26 +184,65 @@ class KidsFocusMemory(
 
     /** True once any tracked target on this page has held focus (not saved: a fresh composition starts false). */
     var landed by mutableStateOf(false)
+
+    /** Every tracked target now on screen, by key: lets a page put focus back on a remembered tile after a reload. */
+    val targets = HashMap<String, FocusRequester>()
 }
 
 @Composable
 fun rememberKidsFocusMemory(): KidsFocusMemory =
     rememberSaveable(saver = listSaver<KidsFocusMemory, String>(save = { listOf(it.key) }, restore = { KidsFocusMemory(it[0]) })) { KidsFocusMemory("") }
 
-/** Tracks focus into [memory] under [key]; the target that was focused when the page was left also carries [restore]. */
+/**
+ * Tracks focus into [memory] under [key]; the target that was focused when the page was left also carries [restore], and every
+ * target registers its own requester in [KidsFocusMemory.targets] while it is on screen.
+ */
+@Composable
 fun Modifier.kidsTrack(
     memory: KidsFocusMemory,
     key: String,
     restore: FocusRequester,
-): Modifier =
-    this
+): Modifier {
+    val own = remember(memory, key) { FocusRequester() }
+    DisposableEffect(memory, key) {
+        memory.targets[key] = own
+        onDispose { if (memory.targets[key] === own) memory.targets.remove(key) }
+    }
+    return this
         .then(if (memory.restoreKey == key) Modifier.focusRequester(restore) else Modifier)
+        .focusRequester(own)
         .onFocusChanged {
             if (it.hasFocus) {
                 memory.key = key
                 memory.landed = true
             }
         }
+}
+
+/**
+ * After a reload in place took the focused node away (it left the row, or the rows were reordered), put focus back: on the
+ * remembered target if it is still on screen, else on the [fallback]s in order (hero, first tile). Stops as soon as [hasFocus].
+ */
+suspend fun kidsRecoverFocus(
+    memory: KidsFocusMemory,
+    hasFocus: () -> Boolean,
+    vararg fallback: FocusRequester?,
+) {
+    for (candidate in listOf(memory.targets[memory.key]) + fallback.toList()) {
+        if (candidate == null) continue
+        repeat(3) {
+            candidate.tryRequestFocus()
+            withFrameNanos { }
+            if (hasFocus()) return
+        }
+    }
+}
+
+/** The focus key of a Home tile: by the tile's id, never its position (a reload may reorder the row). Pure, unit tested. */
+fun kidsTrackKey(
+    rowId: String,
+    tile: KidsTile,
+): String = "$rowId:${tile.id}"
 
 /**
  * Puts focus on the page: first on [restore] (the target the page was left on) for up to ~20 frames, else on [fallback] for up to
@@ -558,8 +601,12 @@ fun KidsNavBar(
     modifier: Modifier = Modifier,
 ) {
     val t = LocalKidsTokens.current
+    val navHasFocus = LocalKidsNavHasFocus.current
     Row(
-        modifier.fillMaxWidth().padding(start = t.pagePad, end = t.pagePad, top = 12.dp, bottom = 6.dp),
+        modifier
+            .fillMaxWidth()
+            .onFocusChanged { navHasFocus?.value = it.hasFocus }
+            .padding(start = t.pagePad, end = t.pagePad, top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -747,6 +794,22 @@ fun KidsHomeContent(
     val data = (ui as? KidsHomeUi.Ready)?.data
     val empty = data == null || (data.hero == null && data.rows.isEmpty())
     val navFocus = LocalKidsNavFocus.current
+    val navHasFocus = LocalKidsNavHasFocus.current
+    var pageFocused by remember { mutableStateOf(false) }
+    var shownBefore by remember { mutableStateOf(false) }
+    // A reload in place (Back from playback, a retry) can remove or reorder the focused tile: if the page had focus and lost
+    // it (and the nav does not hold it), put it back on the remembered tile, else the hero, else the first tile
+    LaunchedEffect(data) {
+        if (data == null) return@LaunchedEffect
+        if (!shownBefore) {
+            shownBefore = true
+            return@LaunchedEffect
+        }
+        repeat(3) { withFrameNanos { } }
+        if (memory.landed && !pageFocused && navHasFocus?.value != true) {
+            kidsRecoverFocus(memory, { pageFocused }, heroFocus.takeIf { data.hero != null }, firstTileFocus)
+        }
+    }
     // First visit: the hero's Play; with rows but no hero, the first tile; an empty / unavailable page, the first nav button.
     // Keyed on the phase only, so a reload in place never takes focus back.
     LaunchedEffect(if (ui is KidsHomeUi.Loading) 0 else if (empty) 1 else 2) {
@@ -771,7 +834,7 @@ fun KidsHomeContent(
                 state = listState,
                 contentPadding = PaddingValues(start = t.pagePad - RowInset, end = t.pagePad - RowInset, top = 4.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = modifier.fillMaxSize(),
+                modifier = modifier.fillMaxSize().onFocusChanged { pageFocused = it.hasFocus },
             ) {
                 data.hero?.let { hero ->
                     item(key = "hero") {
@@ -793,8 +856,10 @@ fun KidsHomeContent(
                             contentPadding = PaddingValues(horizontal = RowInset, vertical = 10.dp),
                             horizontalArrangement = Arrangement.spacedBy(t.tileGap),
                         ) {
-                            itemsIndexed(row.items, key = { i, tile -> "${tile.id}#$i" }) { i, tile ->
-                                val key = "${row.id}:${tile.id}:$i"
+                            // Keyed by the tile's id (the parser keeps ids unique within a row): a reload that reorders the row
+                            // keeps each tile, and the focus on it
+                            itemsIndexed(row.items, key = { _, tile -> tile.id }) { i, tile ->
+                                val key = kidsTrackKey(row.id, tile)
                                 val track =
                                     Modifier
                                         .kidsTrack(memory, key, restore)
@@ -855,6 +920,8 @@ fun KidsGridPage(
     val restore = remember { FocusRequester() }
     val first = remember { FocusRequester() }
     val navFocus = LocalKidsNavFocus.current
+    // Unique by (source, id): they are the lazy keys and the focus keys
+    val unique = remember(tiles) { tiles.orEmpty().distinctBy { it.source to it.id } }
     // Tiles: the first tile. Loaded but empty: the first nav button (focus must not be left nowhere).
     LaunchedEffect(if (tiles == null) 0 else if (tiles.isEmpty()) 1 else 2) {
         when {
@@ -886,8 +953,8 @@ fun KidsGridPage(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    itemsIndexed(tiles, key = { i, tile -> "${tile.source}:${tile.id}#$i" }) { i, tile ->
-                        val track = Modifier.kidsTrack(memory, "grid:${tile.id}:$i", restore).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
+                    itemsIndexed(unique, key = { _, tile -> "${tile.source}:${tile.id}" }) { i, tile ->
+                        val track = Modifier.kidsTrack(memory, "grid:${tile.source}:${tile.id}", restore).then(if (i == 0) Modifier.focusRequester(first) else Modifier)
                         KidsTileCard(tile, onClick = { onOpen(tile) }, modifier = Modifier.fillMaxWidth(), tag = KidsTags.grid(i), focusModifier = track)
                     }
                 }

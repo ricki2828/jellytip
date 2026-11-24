@@ -123,7 +123,8 @@ class KidsPlayer
                     when {
                         id == null -> null
                         details.isSeries -> library.seriesPlayTarget(id)
-                        else -> KidsPlayTarget(details.id, library.resumeMs(id))
+                        // A film: its position now; a failed or slow lookup is null, so the loaded target wins (not a restart from 0)
+                        else -> library.resumeMsOrNull(id)?.let { KidsPlayTarget(details.id, it) }
                     }
                 val target = KidsPlayTarget.chooseAtPress(fresh, details.playTarget) ?: return@guarded
                 val itemId = parseId(target.itemId) ?: return@guarded
@@ -469,7 +470,8 @@ fun KidsShell(
     val section by KidsSectionState.flow.collectAsState()
     BackHandler(enabled = destination is Destination.Home && section != KidsSection.HOME) { KidsSectionState.set(KidsSection.HOME) }
     val navFocus = remember { FocusRequester() }
-    CompositionLocalProvider(LocalKidsTokens provides KidsTokens.Playground, LocalKidsNavFocus provides navFocus) {
+    val navHasFocus = remember { androidx.compose.runtime.mutableStateOf(false) }
+    CompositionLocalProvider(LocalKidsTokens provides KidsTokens.Playground, LocalKidsNavFocus provides navFocus, LocalKidsNavHasFocus provides navHasFocus) {
         KidsCanvas(modifier) {
             val isSearch = destination is Destination.Search || destination is Destination.JellytipAskChat || destination is Destination.JellytipAsk
             val detailsId: UUID? =

@@ -267,6 +267,7 @@ class KidsLibraryService
                                 kind = KidsKind.MOVIE,
                                 name = entry.item.title,
                                 imageUrl = entry.item.backdrop ?: entry.item.poster,
+                                resumeMs = entry.item.progress?.takeIf { it.resumable }?.let { p -> (p.positionSecs * 1000).toLong() } ?: 0L,
                             )
                         }
                 library + iptv
@@ -424,6 +425,9 @@ class KidsLibraryService
             }
 
         /** Resume position (ms) of a library item, 0 when none or when the GET failed or was slow (the tap must still start a play). */
+        /** [resumeMs] that says it failed: null when the GET failed or was slow. */
+        suspend fun resumeMsOrNull(id: UUID): Long? = withTimeoutOrNull(PLAY_LOOKUP_MS) { jellytipApi.libraryResumeMsOrNull(id) }
+
         suspend fun resumeMs(id: UUID): Long = withTimeoutOrNull(PLAY_LOOKUP_MS) { jellytipApi.libraryResumeMsOrNull(id) } ?: 0L
 
         suspend fun setFavourite(

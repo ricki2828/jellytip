@@ -182,7 +182,9 @@ object KidsHomeParse {
                         val o = arr?.optJSONObject(j)
                         if (bubbles) bubble(o, base, resolver) else item(o, base, resolver)
                     }
-                if (items.isEmpty()) null else KidsRow(id, title, bubbles, items)
+                // Unique ids within a row: they are the lazy keys and the focus keys (a reload may reorder the row)
+                val unique = items.distinctBy { it.id }
+                if (unique.isEmpty()) null else KidsRow(id, title, bubbles, unique)
             }.take(MAX_ROWS)
         return KidsHomeData(hero, rows)
     }

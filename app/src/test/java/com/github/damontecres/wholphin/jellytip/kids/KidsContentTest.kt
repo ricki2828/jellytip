@@ -106,6 +106,26 @@ class KidsContentTest {
     }
 
     @Test
+    fun duplicateIdsAreDroppedAndKeysFollowTheTileNotItsPlace() {
+        val other = "22222222-2222-2222-2222-222222222222"
+        val json =
+            """{"kidsMode":true,"hero":null,"rows":[{"id":"watch_again","title":"Watch again","style":"tiles","items":[
+            ${item()},${item(id = other, type = "Series")},${item(extra = ",\"playCount\":9")}]},
+            {"id":"friends","title":"Your friends","style":"bubbles","items":[${bubble(1)},${bubble(2)}]}]}"""
+        val rows = KidsHomeParse.parse(json, base, resolver)!!.rows
+        // the same id twice in one row would be a duplicate lazy key (a crash) and a clashing focus key: the first one stays
+        assertEquals(listOf(id1, other), rows[0].items.map { it.id })
+        assertEquals(1, rows[1].items.size)
+        // a reload that reorders the row (Watch again is by replays) keeps each tile's key, so focus stays on the tile
+        val before = rows[0].items.associateWith { kidsTrackKey("watch_again", it) }
+        val reordered = rows[0].items.reversed()
+        reordered.forEach { assertEquals(before[it], kidsTrackKey("watch_again", it)) }
+        assertEquals(before.values.toSet(), reordered.map { kidsTrackKey("watch_again", it) }.toSet())
+        // the same id in two rows has two different keys
+        assertTrue(kidsTrackKey("watch_again", rows[0].items[0]) != kidsTrackKey("movie_night", rows[0].items[0]))
+    }
+
+    @Test
     fun iptvHeroCarriesResumeMs() {
         fun hero(extra: String) =
             KidsHomeParse
