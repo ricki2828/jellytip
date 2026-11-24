@@ -1,28 +1,10 @@
-import { useState } from "react";
 import { logoUrl, runtimeText, type Item } from "../api/jellyfin";
-import { logoClass, logoOwner } from "../lib/logoStyle";
+import { logoOwner } from "../lib/logoStyle";
+import { HeroLogo } from "./DetailsScaffold";
 
 /** Clearlogo drawn as an off-white silhouette (never repeats the coloured tile logo), else the typeset title. */
 export function TitleLogo({ item, big = false }: { item: Item; big?: boolean }) {
-  const url = logoUrl(item);
-  const [failed, setFailed] = useState<string | null>(null);
-  const name = item.Type === "Episode" ? item.SeriesName ?? item.Name : item.Name;
-  if (url && failed !== url) {
-    return (
-      <img
-        className={`${big ? "title-logo big" : "title-logo"} ${logoClass(logoOwner(item), "white")}`}
-        src={url}
-        alt={name}
-        onError={() => setFailed(url)}
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          // Tall/narrow logos render tiny and unreadable: typeset the title instead
-          if (img.naturalHeight > img.naturalWidth * 0.6) setFailed(url);
-        }}
-      />
-    );
-  }
-  return <h1 className={big ? "title-text big" : "title-text"}>{name}</h1>;
+  return <HeroLogo url={logoUrl(item)} name={item.Type === "Episode" ? item.SeriesName ?? item.Name : item.Name} owner={logoOwner(item)} big={big} />;
 }
 
 export function infoLine(item: Item): string {
