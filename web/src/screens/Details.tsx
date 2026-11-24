@@ -1,6 +1,6 @@
 // Details for movies, series and episodes. Backdrop = companion detailsIndex (≠ hero, ≠ tile), info block bottom-left only;
 // series get season chips + episodes, episodes get prev/next; cast and more-like-this sit further down.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getSession,
   episodes as getEpisodes,
@@ -45,7 +45,7 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
-import { IPTV_SEASON_PREFIX, iptvSeasonKey, iptvSeasonRows, mergeEpisodes, mergeSeasonBlocks, mergeSeasons, presentEpisodes, type EpRow } from "../lib/seasonEpisodes";
+import { IPTV_SEASON_PREFIX, iptvSeasonKey, iptvSeasonRows, mergeEpisodes, mergeSeasonBlocks, mergeSeasons, presentEpisodes, episodeStatus, type EpRow } from "../lib/seasonEpisodes";
 import { iptvResumeAt, seriesPrimary, splitEpisodes, type SeriesNextClaim, type SplitEp } from "../lib/splitNext";
 import { seriesNextFor } from "../api/iptv";
 import { iptvSeriesFor } from "../api/seasonIptv";
@@ -68,6 +68,22 @@ function fmtClock(ticks: number) {
 /** How long the details page waits (dark) for the companion's backdrop ranking before choosing without it. */
 const RANK_WAIT_MS = 800;
 
+type Primary = NonNullable<ReturnType<typeof seriesPrimary>>;
+
+/**
+ * The button when the merged list has no slot (episodes without numbers, a specials-only series): the old library rule over
+ * the files, a started one first, else the first unwatched, else the first. Null = nothing to play.
+ */
+function libraryOnlyPrimary(all: Item[]): Primary | null {
+  const files = all.filter((e) => e.LocationType !== "Virtual");
+  const pick = files.find((e) => (e.UserData?.PlaybackPositionTicks ?? 0) > 0) ?? files.find((e) => !e.UserData?.Played) ?? files[0];
+  if (!pick) return null;
+  const ticks = pick.UserData?.PlaybackPositionTicks ?? 0;
+  const lib = { id: pick.Id, season: pick.ParentIndexNumber ?? null, episode: pick.IndexNumber ?? null, name: pick.Name, played: !!pick.UserData?.Played, positionTicks: ticks };
+  const ep: SplitEp = { season: pick.ParentIndexNumber ?? 0, episode: pick.IndexNumber ?? 0, lib, iptv: null, played: lib.played, inProgress: ticks > 0 && !lib.played };
+  return { ep, resume: ep.inProgress, next: false };
+}
+
 /** How long the series page's primary button waits for the episodes, the IPTV lookup and the server's next */
 const SPLIT_WAIT_MS = 6000;
 
@@ -85,6 +101,10 @@ export function Details({ id }: { id: string }) {
   const [seriesEps, setSeriesEps] = useState<Item[] | null>(null);
   const [claim, setClaim] = useState<{ v: SeriesNextClaim | null } | null>(null);
   const seasonPicked = useRef(false);
+  const [seasonsDone, setSeasonsDone] = useState(false);
+  // The primary button's choice, made ONCE per page (the first moment everything answered or SPLIT_WAIT_MS passed): late
+  // answers still fill the tiles but never relabel the button, move the Next pill or switch the season under him
+  const frozen = useRef<{ id: string; v: Primary | null } | null>(null);
   const [allEps, setAllEps] = useState<{ season: string; items: Item[] } | null>(null);
   const [iptvDone, setIptvDone] = useState(false);
   const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
@@ -130,6 +150,7 @@ export function Details({ id }: { id: string }) {
     setSiblings([]);
     setSeriesEps(null);
     setClaim(null);
+    setSeasonsDone(false);
     seasonPicked.current = false;
     getItem(id)
       .then((it) => {
@@ -164,13 +185,14 @@ export function Details({ id }: { id: string }) {
           getSeasons(it.Id).then((s) => {
             if (!alive) return;
             setSeasonList(s);
+            setSeasonsDone(true);
             const wanted = new URLSearchParams(location.hash.split("?")[1] ?? "").get("season");
             // Default: the first season with something unwatched, else the first
             // A ?season= that isn't one of this series' seasons (empty, stale) is ignored
             const asked = wanted ? s.find((x) => x.Id === wanted) : undefined;
             if (asked) seasonPicked.current = true; // ?season= wins over the next episode's season
             setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
-          });
+          }, () => alive && setSeasonsDone(true));
           episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
           // A failure is an empty list / no claim for this visit (the button falls back), never remembered
           seriesEpisodesComplete(it.Id).then(
@@ -195,6 +217,7 @@ export function Details({ id }: { id: string }) {
             setSeriesEps((e) => e ?? []);
             setClaim((c) => c ?? { v: null });
             setIptvDone(true);
+            setSeasonsDone(true);
           }, SPLIT_WAIT_MS);
         }
         if (it.Type === "Movie") {
@@ -251,26 +274,36 @@ export function Details({ id }: { id: string }) {
   }, [cur, iptvSeries, seasonNo, iptvOnlyNo]);
   // The primary button over the merged library + IPTV list: the server's claim when the page can place it, else the order
   // rule (lib/splitNext). Waits for the episodes, the IPTV lookup and the claim, so its label never changes under a click.
-  const splitReady = item?.Type === "Series" && seriesEps !== null && iptvDone && claim !== null;
+  const splitReady = item?.Type === "Series" && item.Id === id && seriesEps !== null && iptvDone && claim !== null && seasonsDone;
   const split = useMemo<SplitEp[]>(
     () =>
       seriesEps && iptvDone
         ? splitEpisodes(
-            seriesEps.map((e) => ({ id: e.Id, season: e.ParentIndexNumber ?? null, episode: e.IndexNumber ?? null, name: e.Name, played: !!e.UserData?.Played, positionTicks: e.UserData?.PlaybackPositionTicks ?? 0, virtual: e.LocationType === "Virtual" })),
+            seriesEps.map((e) => {
+              const st = episodeStatus(e, new Date());
+              return { id: e.Id, season: e.ParentIndexNumber ?? null, episode: e.IndexNumber ?? null, name: e.Name, played: !!e.UserData?.Played, positionTicks: e.UserData?.PlaybackPositionTicks ?? 0, virtual: st !== "present", unaired: st === "unaired" };
+            }),
             iptvSeries?.seasons,
             seasonList.flatMap((s) => (s.IndexNumber != null ? [s.IndexNumber] : [])),
           )
         : [],
     [seriesEps, iptvDone, iptvSeries, seasonList],
   );
-  const primary = splitReady ? seriesPrimary(split, claim?.v) : null;
+  if (splitReady && frozen.current?.id !== id) frozen.current = { id, v: seriesPrimary(split, claim?.v) ?? libraryOnlyPrimary(seriesEps ?? []) };
+  const primary = frozen.current?.id === id ? frozen.current.v : null;
+  const decided = frozen.current?.id === id;
   const isNextRow = (r: EpRow) =>
     !!primary?.next && (primary.ep.lib ? r.status === "present" && r.item?.Id === primary.ep.lib.id : !!primary.ep.iptv && r.iptv?.id === primary.ep.iptv.id);
   // Open on the next episode's season (unless ?season= asked or a chip was picked)
   const nextSeasonKey = primary?.next ? seasonList.find((s) => s.IndexNumber === primary.ep.season)?.Id ?? (primary.ep.lib ? null : iptvSeasonKey(primary.ep.season)) : null;
   useEffect(() => {
-    if (nextSeasonKey && !seasonPicked.current) setSeason(nextSeasonKey);
+    // Not while he is in the episode list (the list would swap under his focus)
+    if (nextSeasonKey && !seasonPicked.current && !document.activeElement?.closest(".details-below")) setSeason(nextSeasonKey);
   }, [nextSeasonKey]);
+  // No button after all (nothing playable): focus that sat on the waiting button moves on, never to nothing
+  useLayoutEffect(() => {
+    if (decided && !primary && document.activeElement === document.body) focusFirst(document.querySelector(".details") ?? document);
+  }, [decided, primary]);
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
   const playIptv = (episodeId: string, resume = 0) =>
@@ -423,7 +456,7 @@ export function Details({ id }: { id: string }) {
           <div className="buttons">
             {item.Type === "Series" ? (
               // One button element while it waits and once it's ready, so focus taken while waiting stays on it
-              (primary || !splitReady) && (
+              (primary || !decided) && (
                 <button
                   className="btn primary"
                   data-nav
@@ -432,7 +465,7 @@ export function Details({ id }: { id: string }) {
                   aria-busy={primary ? undefined : true}
                   onClick={() => primary && playSlot(primary.ep)}
                 >
-                  {primary ? `${primary.resume ? "Resume" : "Play"} S${primary.ep.season} E${primary.ep.episode}` : "Play"}
+                  {primary ? `${primary.resume && primary.ep.inProgress ? "Resume" : "Play"} S${primary.ep.season} E${primary.ep.episode}` : "Play"}
                 </button>
               )
             ) : (
@@ -525,6 +558,11 @@ export function Details({ id }: { id: string }) {
                   onClick={() => {
                     seasonPicked.current = true;
                     setSeason(s.key);
+                    // Back to this page reopens the season he picked (?season=, as a link into it does)
+                    const [path, q] = location.hash.split("?");
+                    const u = new URLSearchParams(q ?? "");
+                    u.set("season", s.key);
+                    history.replaceState(history.state, "", `${path}?${u}`);
                   }}
                 >
                   {s.name}
@@ -552,7 +590,14 @@ export function Details({ id }: { id: string }) {
               <div className="ep-list">
                 {(rows ?? []).map((r) => {
                   const e = r.item;
-                  if (r.status !== "present" || !e) return isNextRow(r) ? <div key={r.key} className="ep-slot is-next">{ph(r)}<span className="ep-next-pill">Next</span></div> : ph(r);
+                  // Always wrapped: the Next pill arriving toggles a class, never remounts a tile that may have focus
+                  if (r.status !== "present" || !e)
+                    return (
+                      <div key={r.key} className={`ep-slot${isNextRow(r) ? " is-next" : ""}`}>
+                        {ph(r)}
+                        {isNextRow(r) && <span className="ep-next-pill">Next</span>}
+                      </div>
+                    );
                   return (
                     <div key={e.Id} className={`ep-row${isNextRow(r) ? " is-next" : ""}`}>
                       {isNextRow(r) && <span className="ep-next-pill">Next</span>}
@@ -573,13 +618,11 @@ export function Details({ id }: { id: string }) {
               <div className="row-scroll">
                 {(rows ?? []).map((r) => {
                   const tile = r.status !== "present" || !r.item ? ph(r) : <Card key={r.key} item={r.item} caption={`${r.item.IndexNumber ?? ""} · ${r.item.Name}`} />;
-                  return isNextRow(r) ? (
-                    <div key={r.key} className="ep-slot is-next">
+                  return (
+                    <div key={r.key} className={`ep-slot${isNextRow(r) ? " is-next" : ""}`}>
                       {tile}
-                      <span className="ep-next-pill">Next</span>
+                      {isNextRow(r) && <span className="ep-next-pill">Next</span>}
                     </div>
-                  ) : (
-                    tile
                   );
                 })}
                 {!rows && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}

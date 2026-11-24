@@ -130,3 +130,13 @@ test("Home Next Up hides Jellyfin's episode when the merged next says otherwise"
   assert.equal(keepLibraryNext(null, e6, 0, claims), true);
   assert.equal(parseSeriesNext({ items: [] }).size, 0);
 });
+
+test("an unaired placeholder takes no IPTV copy (the page draws Airs …, no IPTV button), a missing one does", () => {
+  const v = (e: number): VodEpisode => ({ id: `pp000001:e:${e}`, episode: e, title: `Episode ${e}` }) as unknown as VodEpisode;
+  const eps = splitEpisodes(
+    [lib(1, { played: true }), lib(2, { virtual: true }), lib(3, { virtual: true, unaired: true })],
+    [{ season: 2, episodes: [v(2), v(3)] }],
+    [2],
+  );
+  assert.deepEqual(eps.map((e) => [e.episode, !!e.lib, e.iptv?.id ?? null]), [[1, true, null], [2, false, "pp000001:e:2"]]);
+});

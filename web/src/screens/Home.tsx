@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getItems, nextUp, resumeItems, uid, type Item } from "../api/jellyfin";
 import { manifest, rowsBlocked, serverRows, specials as getSpecials, type Carousel, type LetterboxdRow, type ServerRow, type Special } from "../api/companion";
 import { SpecialBlock } from "../components/specials/Specials";
@@ -88,6 +88,25 @@ function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused:
   pos.current = { key: slots[idx]?.key ?? null, i: idx };
   // Pointer over or focus inside the hero: it holds still (a button must not change under the click), and gets a full slide after
   const [held, setHeld] = useState(false);
+  // Held = pinned: the slide on screen keeps its place by key even before the first turn (a game or journey arriving
+  // while he is on a slide's button never swaps it; keepSlide)
+  const hold = () => {
+    rotated.current = true;
+    setHeld(true);
+  };
+  // Focus was inside the hero: when the slide under it changes anyway (its game ended), focus goes into the new slide
+  const focusIn = useRef<HTMLElement | null>(null);
+  const heroEl = useRef<HTMLDivElement | null>(null);
+  const slideKey = engaged ? null : slots[idx]?.key ?? null;
+  useLayoutEffect(() => {
+    const was = focusIn.current;
+    // Only when the focused element went away with its slide (not a click elsewhere that left focus on the page)
+    if (!was || was.isConnected || document.activeElement !== document.body) return;
+    focusIn.current = null;
+    const el = heroEl.current?.querySelector<HTMLElement>("[data-nav], button, a[href]");
+    if (el) el.focus({ preventScroll: true });
+    else setHeld(false);
+  }, [slideKey]);
   const n = slots.length;
   useEffect(() => {
     if (engaged || held || n < 2) return;
@@ -115,12 +134,21 @@ function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused:
   }
   return (
     <div
+      ref={heroEl}
       className="home-hero"
-      onPointerEnter={(e) => e.pointerType === "mouse" && setHeld(true)}
+      onPointerEnter={(e) => e.pointerType === "mouse" && hold()}
       onPointerLeave={(e) => e.pointerType === "mouse" && setHeld(false)}
-      onFocusCapture={() => setHeld(true)}
+      onFocusCapture={(e) => {
+        focusIn.current = e.target as HTMLElement;
+        hold();
+      }}
       onBlurCapture={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHeld(false);
+        // A blur to nothing (the focused button unmounted with its slide) is not leaving: the effect above moves focus back in
+        if (!e.relatedTarget) return;
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          focusIn.current = null;
+          setHeld(false);
+        }
       }}
     >
       {body}

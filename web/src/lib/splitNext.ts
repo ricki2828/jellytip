@@ -19,6 +19,8 @@ export interface SplitLibEp {
   positionTicks?: number;
   /** A missing / unaired placeholder (no file): never a slot of its own; its IPTV copy (if any) takes the slot. */
   virtual?: boolean;
+  /** A placeholder that hasn't aired (future premiere): the page draws "Airs …" with no IPTV button, so no IPTV slot either. */
+  unaired?: boolean;
 }
 
 /** One slot of the merged list: the library copy (wins when it has a file) or the IPTV copy. */
@@ -81,7 +83,7 @@ export function splitEpisodes(library: readonly SplitLibEp[], iptv: readonly { s
       if (!libSeason.has(s)) iptvCopy = v;
       else {
         const ph = placeholder.get(key);
-        if (ph && titlesAgree(ph.name, v.title)) iptvCopy = v;
+        if (ph && !ph.unaired && titlesAgree(ph.name, v.title)) iptvCopy = v;
       }
     }
     if (!l && !iptvCopy) continue; // no tile for it on the page
