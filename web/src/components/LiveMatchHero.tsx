@@ -2,7 +2,7 @@
 // in the two team colours with big crests, a gold-on-red LIVE tag (never a score or clock), Watch / From kick-off / More and, with more
 // than one of his games live, ‹ › to cycle them. Fixtures carry no colours: they come from the match record (GET v1/sport/match/{id},
 // the in-match palette's source), cached per match and fetched at most 3 at a time; neutral until then or when the server has none.
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { hasLiveTv, logoSrc } from "../api/iptv";
 import { refreshFixtures, useFixtures } from "../api/fixtures";
 import { usePrefs } from "../api/me";
@@ -260,20 +260,4 @@ export function useHomeLivePicks(): { picks: FxItem[]; nowSec: number; mine: boo
     const picks = live === true && data ? homePicks(data.items, now, refs ?? [], muted, leagues ?? []) : [];
     return { picks, nowSec: now, mine: picks.some((f) => isFavourite(f, refs ?? [])) };
   }, [live, data, now, refs, muted, leagues]);
-}
-
-/**
- * Home's top: the live match hero while a game is live (it takes the hero's place, no trailer behind it, as on the TV), else
- * [fallback] (the normal hero). Its own component, so the fixtures polling re-renders only this, not the whole Home tree.
- */
-export function HomeTopHero({ fallback }: { fallback: ReactNode }) {
-  const { picks, nowSec, mine } = useHomeLivePicks();
-  const { prefs } = usePrefs({ defer: true });
-  if (!picks.length) return <>{fallback}</>;
-  // key: a different set of games starts again at the first one; focus only if the swap took it away from the old hero
-  return (
-    <div className="home-live">
-      <LiveMatchHero key={picks.map((f) => f.fid).join("|")} picks={picks} nowSec={nowSec} kicker={mine ? "Your game is on" : "Live now"} autoFocus="ifLost" spoilers={!!prefs?.sport.spoilers} />
-    </div>
-  );
 }

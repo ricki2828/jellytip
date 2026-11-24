@@ -126,10 +126,6 @@
     width: 54px;
   }
 }
-/* Home: in the hero's place, clear of the top nav; the rows below pull up by 9vh as they do under the normal hero */
-.home-live {
-  padding: 84px var(--pad) calc(9vh + 8px);
-}
 .gc-hero {
   margin: 0 var(--pad);
 }
@@ -175,4 +171,20 @@
   width: 30px;
   height: 30px;
   object-fit: contain;
+}
+
+/* Home: his live game as one slide of the hero, in the hero's own box (same height as a film slide, so the rows never move
+   when the hero turns); clear of the top nav, and above the 9vh the rows pull up over the hero */
+.hero-game > .lh {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  min-height: 0;
+  border-radius: 0;
+  padding: 84px var(--pad) calc(9vh + 24px);
+}
+@media (max-width: 700px) {
+  .hero-game > .lh {
+    padding: calc(72px + env(safe-area-inset-top, 0px)) 12px calc(3vh + 24px);
+  }
 }
