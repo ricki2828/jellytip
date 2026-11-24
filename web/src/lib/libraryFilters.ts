@@ -160,7 +160,7 @@ export function activeChips(f: LibraryFilters): Chip[] {
   for (const r of f.ratings) c.push({ id: `r:${r}`, label: r });
   if (f.minRating !== null) c.push({ id: "min", label: `${f.minRating}+ rating` });
   if (f.watched !== "all") c.push({ id: "w", label: f.watched === "unplayed" ? "Unwatched" : "Watched" });
-  if (f.favorite) c.push({ id: "fav", label: "Favourites" });
+  if (f.favorite) c.push({ id: "fav", label: "My list" });
   if (f.runtime) c.push({ id: "rt", label: RUNTIME_BANDS.find(([k]) => k === f.runtime)?.[1] ?? f.runtime });
   if (f.res) c.push({ id: "res", label: f.res === "4k" ? "4K" : "HD" });
   if (f.subs) c.push({ id: "subs", label: "Has subtitles" });
