@@ -1,6 +1,6 @@
 // Trickplay + chapter metadata for the seek bar. A separate, optional request: an older server that rejects the extra
 // Fields just yields no thumbnails/ticks and playback is unaffected.
-import { getSession, JF_BASE, jf, qs, uid } from "./jellyfin";
+import { getSession, HttpError, JF_BASE, jf, qs, uid } from "./jellyfin";
 import type { Chapter } from "../lib/chapters";
 import { pickTrickplay, tileUrl, type TrickplayMap } from "../lib/trickplay";
 
@@ -24,4 +24,13 @@ export function trickplaySource(itemId: string, sourceId: string, map: Trickplay
   const token = getSession()?.token;
   if (!pick || !token) return null;
   return { info: pick.info, url: (sheet: number) => tileUrl(JF_BASE, itemId, pick.width, sheet, sourceId, token) };
+}
+
+/** Jellyfin MediaSegments (intro / outro / recap… from a segment provider plugin): {status, body}; status 0 = no answer. */
+export async function getMediaSegments(id: string): Promise<{ status: number; data: unknown }> {
+  try {
+    return { status: 200, data: await jf<unknown>(`/MediaSegments/${encodeURIComponent(id)}`) };
+  } catch (e) {
+    return { status: e instanceof HttpError ? e.status : 0, data: null };
+  }
 }

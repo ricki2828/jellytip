@@ -29,6 +29,9 @@ import { usePlayWatch } from "../../api/signals";
 import type { WatchMeta } from "../../lib/signals";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
+import { SkipPartButton } from "../../components/SkipPartButton";
+import { useIptvChapters, useNativeChapters } from "../../lib/useIptvChapters";
+import { iptvChapterMarks } from "../../lib/skipParts";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { TrackMenu } from "../../components/TrackMenu";
 import { useSubtitlePrefs } from "../../lib/useSubtitlePrefs";
@@ -1339,6 +1342,9 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
     if (!total || at < total - 30) v.currentTime = at;
   };
   const seekable = !isLive && length > 0;
+  // Chapters + Skip intro / recap / credits (TV parity §5): films and episodes only, on the title's timeline
+  const chapters = useIptvChapters(target, !!(target.vod || target.episode));
+  const chapterMarks = useMemo(() => iptvChapterMarks(chapters?.chapters, length), [chapters, length]);
   const fmt = clockText;
 
   return (
@@ -1571,10 +1577,13 @@ function WebIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId,
           <button className="btn small" data-nav onClick={reportStall}>Send diagnostics</button>
         </div>
       )}
+      {!isLive && state.kind === "playing" && chapters && seekable && (
+        <SkipPartButton segs={chapters.skip} videoRef={videoRef} offset={remux?.off ?? 0} duration={length} onSeek={seekTo_} blocked={tracksOpen} />
+      )}
       {!isLive && state.kind === "playing" && (
         <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
           {seekable && (
-            <TimeBarScrubber offset={remux?.off ?? 0} videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} />
+            <TimeBarScrubber offset={remux?.off ?? 0} videoRef={videoRef} max={length} fmt={fmt} onActivity={poke} onSeek={seekTo_} chapters={chapterMarks} />
           )}
           <div className="player-row iptv-controls">
             <button className="btn ghost" data-nav onClick={() => seekBy(-30)} aria-label="Back 30 seconds">
@@ -1643,6 +1652,9 @@ function nativeFailureText(r: NativePlayerResult): string {
  * error the link is renewed once (410 stale / 403 expired) or the reason is shown, and the error goes to
  * /v1/debug/report like the web player's.
  */
+/** Each native open's id (useNativeChapters / PlayerPlugin.chapters): chapters only ever reach their own player. */
+let nativeOpenSeq = 0;
+
 function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channelId }: { target: PlayTarget; title: string; resume?: number; extras?: LiveExtras; channelId?: string | null; offSchedule?: boolean }) {
   // The native bridge has one matchId for the Companion and the alerts alike, so a merely guessed match is not passed to it.
   const detected = useChannelMatch(target.channel, !!target.channel && target.start == null && !extrasIn?.matchId && !extrasIn?.nospoil && !extrasIn?.replay);
@@ -1676,6 +1688,9 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   const retries = useRef(0);
   const retryTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(retryTimer.current), []);
+  // Chapters + Skip intro / recap / credits in the native player (TV parity §5): asked here, drawn and acted on there
+  const [openToken, setOpenToken] = useState<string | null>(null);
+  useNativeChapters(target, !!(target.vod || target.episode), openToken, (p) => NativePlayer.chapters(p));
 
   // ---- Catch me up (web/TV port): joining 10+ min late, the choice and the recap come BEFORE the native player opens (it would cover them)
   const catchStartsAt = isLive ? extras?.startsAt ?? null : null;
@@ -1844,8 +1859,11 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
       ];
       let r: NativePlayerResult;
       openedAt.current = Date.now();
+      const openId = `o${++nativeOpenSeq}`;
+      setOpenToken(openId);
       try {
         r = await NativePlayer.open({
+          openId,
           url: link.url,
           title,
           mime: a.mime,

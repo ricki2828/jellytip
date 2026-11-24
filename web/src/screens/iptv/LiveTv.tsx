@@ -1,8 +1,11 @@
 // Live TV guide (#/livetv): opted-in groups as chips, then an EPG grid: channel column (logo, number, name), half-hour
 // ruler, now-line, a ~3 h window (2 h on a phone) that steps by an hour. Only the rows on screen are rendered and only
-// their guide data is fetched. The programme on now plays; others open a small sheet (catch-up, record).
+// their guide data is fetched. The programme on now plays; others open a small sheet (catch-up, record). The same sheet is the
+// row's menu (menu key / M, long-press, the "⋯" on a mouse, right-click on a programme): Hide this channel for the provider's
+// owner (TV 7a58289c), with an 8 s Undo.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
+import { addRecording, epg, errorText, liveChannels, liveGroups, logoSrc, providers, saveGroupChannels, setFavourite, type Channel, type LiveGroup } from "../../api/iptv";
+import { hideTarget, neighbourOf, restoreHidden, UNDO_MS, type HiddenChannel } from "../../lib/hideChannel";
 import { chunks, layoutRow, ticks, visibleRows, windowStart, type Prog } from "../../lib/epg";
 import { isPre, parsePhase, parseStartsAt } from "../../lib/preGame";
 import { SheetClose, useEscapeClose } from "../../components/BackArrow";
@@ -19,6 +22,7 @@ const ROW_H = 56;
 const GROUP_KEY = "jellytip.livetv.group";
 const MAX_CHANNELS = 2000;
 const EPG_CHUNK = 100;
+const LONG_PRESS_MS = 500;
 
 const clock = (t: number) => new Date(t * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 /** Compact time for programme blocks: no AM/PM. */
@@ -35,7 +39,8 @@ function ChannelLogo({ ch }: { ch: Channel }) {
 
 interface Sheet {
   ch: Channel;
-  prog: Prog;
+  /** null = the channel's menu (no programme picked). */
+  prog: Prog | null;
 }
 
 export function LiveTv() {
@@ -58,6 +63,34 @@ export function LiveTv() {
   const [toast, setToast] = useState<string | null>(null);
   const [toastView, setToastView] = useState(false);
   const upcoming = (useUpcoming(false)?.length ?? 0) > 0;
+  // Hide this channel (owner only): the providers this person owns (null = not known yet), the channel just hidden (its Undo)
+  const [owned, setOwned] = useState<ReadonlySet<string> | null>(null);
+  const [hidden, setHidden] = useState<HiddenChannel<Channel> | null>(null);
+  const [focusChan, setFocusChan] = useState<string | null>(null);
+  const alive = useRef(true);
+  const groupRef = useRef(group);
+  groupRef.current = group;
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
+  const hideBusy = useRef(false);
+  const afterHide = useRef<string | null>(null);
+  const sheetFrom = useRef<HTMLElement | null>(null);
+  const ownedAsk = useRef(false);
+  const loadOwned = useCallback(() => {
+    if (ownedAsk.current) return;
+    ownedAsk.current = true;
+    void providers().then((a) => {
+      ownedAsk.current = false;
+      if (alive.current && a.status === 200 && a.data) setOwned(new Set(a.data.providers.filter((p) => p.owner).map((p) => String(p.id))));
+    });
+  }, []);
+  useEffect(() => {
+    alive.current = true;
+    loadOwned();
+    return () => {
+      alive.current = false;
+    };
+  }, [loadOwned]);
 
   // ---- data ----
   useEffect(() => {
@@ -73,6 +106,7 @@ export function LiveTv() {
 
   useEffect(() => {
     if (!group) return;
+    setHidden((h) => (h && h.group !== group ? null : h));
     localStorage.setItem(GROUP_KEY, group);
     let alive = true;
     setChannels(null);
@@ -155,13 +189,26 @@ export function LiveTv() {
     const pre = isPre(at, Date.now() / 1000, parsePhase(p.phase));
     return { kickoff: p.startOver && !pre ? { start: p.start, stop: p.stop } : null, startsAt: pre ? at : null };
   };
-  const open = (ch: Channel, p: Prog) => {
+  const open = (ch: Channel, p: Prog, el?: HTMLElement) => {
     if (p.start <= now && now < p.stop) playChannel(ch, {}, ch.name, liveExtrasOf(p));
-    else setSheet({ ch, prog: p });
+    else openSheet(ch, p, el);
   };
-  const record = async (s: Sheet) => {
-    const a = await addRecording(s.ch.id, s.prog.start);
+  const openSheet = (ch: Channel, prog: Prog | null, el?: HTMLElement | null) => {
+    sheetFrom.current = el ?? (document.activeElement as HTMLElement | null);
+    if (!owned) loadOwned();
+    setSheet({ ch, prog });
+  };
+  // Dismissed (Escape, Close, outside): back to where it was opened from
+  const closeSheet = useCallback(() => {
     setSheet(null);
+    const el = sheetFrom.current;
+    sheetFrom.current = null;
+    if (el?.isConnected) el.focus({ preventScroll: true });
+  }, []);
+  const record = async (s: Sheet) => {
+    if (!s.prog) return;
+    const a = await addRecording(s.ch.id, s.prog.start);
+    closeSheet();
     const ok = a.status === 201 || a.status === 200;
     setToast(ok ? [a.data?.warning, "Recording scheduled. It'll appear on Home."].filter(Boolean).join(" ") : errorText(a));
     setToastView(ok);
@@ -173,7 +220,145 @@ export function LiveTv() {
     if (a.status === 200) setChannels((cs) => cs?.map((c) => (c.id === ch.id ? { ...c, favourite: !c.favourite } : c)) ?? null);
   };
 
-  useEscapeClose(() => setSheet(null), !!sheet);
+  useEscapeClose(closeSheet, !!sheet);
+
+  // ---- Hide this channel ----
+  const flash = (msg: string) => {
+    setToast(msg);
+    setToastView(false);
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 7000);
+  };
+  const hide = async (ch: Channel) => {
+    const t = hideTarget(ch, owned);
+    if (!t || hideBusy.current) return;
+    hideBusy.current = true;
+    const g = group;
+    setSheet(null);
+    sheetFrom.current = null;
+    setFocusChan(ch.id); // while the server answers, focus waits on the row (never on nothing)
+    const err = await saveGroupChannels(t.pid, t.cat, { hide: { [t.sid]: true } });
+    hideBusy.current = false;
+    // Left the guide meanwhile: hidden on the server, no Undo
+    if (!alive.current) return;
+    if (err) {
+      flash(`Couldn't hide ${ch.name} (${err}).`);
+      setFocusChan(ch.id); // a failed hide keeps the row, and focus on it
+      return;
+    }
+    // Another group meanwhile: its load leaves it out; no Undo (focus that was left on the old row goes to the group chip)
+    if (groupRef.current !== g) {
+      const a = document.activeElement;
+      if (!a || a === document.body) document.querySelector<HTMLElement>(".livetv-groups .chip.on")?.focus({ preventScroll: true });
+      return;
+    }
+    const list = channelsRef.current ?? [];
+    const idx = list.findIndex((c) => c.id === ch.id);
+    afterHide.current = neighbourOf(list.map((c) => c.id), ch.id);
+    setChannels(list.filter((c) => c.id !== ch.id));
+    setHidden({ ch, index: idx < 0 ? list.length : idx, group: g });
+  };
+  /** The Undo toast went (timeout, an arrow, Escape): focus to the neighbouring row, else the selected group chip. */
+  const leaveUndo = (h: HiddenChannel<Channel>) => {
+    setHidden((cur) => (cur === h ? null : cur));
+    // Only focus that is the toast's (or lost): he may be in another row's menu by now
+    const a = document.activeElement;
+    if (a && a !== document.body && !a.closest(".livetv-undo")) return;
+    if (afterHide.current) setFocusChan(afterHide.current);
+    else document.querySelector<HTMLElement>(".livetv-groups .chip.on")?.focus({ preventScroll: true });
+  };
+  const undo = async (h: HiddenChannel<Channel>) => {
+    leaveUndo(h); // focus goes to the neighbour now, to the restored row once the server agreed
+    const t = hideTarget(h.ch, owned);
+    if (!t) return;
+    const err = await saveGroupChannels(t.pid, t.cat, { hide: { [t.sid]: false } });
+    if (!alive.current) return;
+    if (err) return flash(`Couldn't bring back ${h.ch.name}. Show it again in Settings → Live TV / IPTV.`);
+    // Only into the group it came from (another group's load shows it again anyway)
+    if (groupRef.current !== h.group) return;
+    setChannels((cs) => (cs ? restoreHidden(cs, h) : cs));
+    setFocusChan(h.ch.id);
+    flash(`${h.ch.name} is back in the guide.`);
+  };
+  useEffect(() => {
+    if (!hidden) return;
+    const h = hidden;
+    document.querySelector<HTMLElement>(".livetv-undo button")?.focus({ preventScroll: true });
+    const t = window.setTimeout(() => leaveUndo(h), UNDO_MS);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hidden]);
+  // Focus a row once it is on screen (after a hide: the neighbour; after Undo: the restored row)
+  useEffect(() => {
+    if (!focusChan) return;
+    const el = document.querySelector<HTMLElement>(`.livetv-chan[data-chan="${CSS.escape(focusChan)}"]`);
+    if (el) {
+      el.focus({ preventScroll: true });
+      setFocusChan(null);
+      return;
+    }
+    // Not on screen (scrolled away): don't take focus later out of the blue
+    const t = window.setTimeout(() => setFocusChan(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [focusChan, channels, range]);
+
+  // ---- The row's menu: menu key / M, long-press (touch), right-click on a programme ----
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const pressFired = useRef(false);
+  const clearPress = () => {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+  };
+  const progOf = (ch: Channel, target: EventTarget | null): Prog | null => {
+    const at = (target as HTMLElement | null)?.closest<HTMLElement>("[data-prog-start]")?.dataset.progStart;
+    return at ? guide[ch.id]?.find((p) => String(p.start) === at) ?? null : null;
+  };
+  const rowMenu = (ch: Channel) => ({
+    onKeyDownCapture: (e: React.KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey) || e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        e.stopPropagation();
+        openSheet(ch, progOf(ch, e.target), e.target as HTMLElement);
+      }
+    },
+    onPointerDownCapture: (e: React.PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pressFired.current = false;
+      clearPress();
+      const el = e.target as HTMLElement;
+      press.current = {
+        x: e.clientX,
+        y: e.clientY,
+        timer: window.setTimeout(() => {
+          press.current = null;
+          pressFired.current = true;
+          openSheet(ch, progOf(ch, el), el.closest<HTMLElement>("[data-nav]"));
+        }, LONG_PRESS_MS),
+      };
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 10) clearPress();
+    },
+    onPointerUp: clearPress,
+    onPointerCancel: clearPress,
+    // A long-press must not also play
+    onClickCapture: (e: React.MouseEvent) => {
+      if (pressFired.current) {
+        pressFired.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    // Touch: the long-press above is the menu (no browser menu, no favourite toggle); a mouse on a programme opens the menu
+    onContextMenuCapture: (e: React.MouseEvent) => {
+      const touch = pressFired.current || press.current != null || matchMedia("(hover: none) and (pointer: coarse)").matches;
+      const prog = progOf(ch, e.target);
+      if (!touch && !prog) return; // right-click on the channel: favourite, as before
+      e.preventDefault();
+      e.stopPropagation();
+      if (!touch) openSheet(ch, prog, (e.target as HTMLElement).closest<HTMLElement>("[data-nav]"));
+    },
+  });
   const nowX = (now - from) * pps;
   const empty = groups && groups.length === 0;
 
@@ -239,8 +424,8 @@ export function LiveTv() {
                 const progs = guide[ch.id];
                 const blocks = progs ? layoutRow(progs, from, to, pps, now) : [];
                 return (
-                  <div key={ch.id} className="livetv-row" style={{ top: idx * ROW_H }}>
-                    <button className="livetv-chan" data-nav onClick={() => playChannel(ch)} onContextMenu={(e) => (e.preventDefault(), void fav(ch))} title={`${ch.name} · play`}>
+                  <div key={ch.id} className="livetv-row" style={{ top: idx * ROW_H }} {...rowMenu(ch)}>
+                    <button className="livetv-chan" data-nav data-chan={ch.id} onClick={() => playChannel(ch)} onContextMenu={(e) => (e.preventDefault(), void fav(ch))} title={`${ch.name} · play`}>
                       <ChannelLogo ch={ch} />
                       {phone && ch.quality && <SportBadges quality={ch.quality} size="sm" />}
                       {!phone && (
@@ -255,6 +440,12 @@ export function LiveTv() {
                       )}
                       {ch.favourite && <span className="livetv-fav" aria-label="favourite">★</span>}
                     </button>
+                    {/* Mouse: the row's menu. Not a spatial-nav stop (the menu key / M opens it from the keyboard) */}
+                    {!phone && (
+                      <button className="livetv-more" tabIndex={-1} aria-label={`More options for ${ch.name}`} aria-haspopup="dialog" title="More options" onClick={(e) => openSheet(ch, null, e.currentTarget.previousElementSibling as HTMLElement | null)}>
+                        ⋯
+                      </button>
+                    )}
                     <div className="livetv-track" style={{ width: trackW }}>
                       {progs && blocks.length === 0 && <span className="livetv-noguide">{ch.guideNote ?? (ch.event ? "Event feed, live when on" : "No guide")}</span>}
                       {!progs && <span className="livetv-loading" />}
@@ -264,7 +455,8 @@ export function LiveTv() {
                           className={`livetv-prog${b.live ? " live" : ""}${b.past ? " past" : ""}${b.clipped ? " clipped" : ""}`}
                           style={{ left: b.left, width: b.width }}
                           data-nav
-                          onClick={() => open(ch, b.prog)}
+                          data-prog-start={b.prog.start}
+                          onClick={(e) => open(ch, b.prog, e.currentTarget)}
                           title={`${b.prog.title} · ${clock(b.prog.start)}–${clock(b.prog.stop)}`}
                         >
                           <span className="livetv-prog-title">{b.prog.title}</span>
@@ -290,34 +482,70 @@ export function LiveTv() {
         </div>
       )}
       {sheet && (
-        <div className="livetv-sheet-back" onClick={() => setSheet(null)}>
-          <div className="livetv-sheet" role="dialog" aria-label={sheet.prog.title} onClick={(e) => e.stopPropagation()}>
-            <SheetClose onClose={() => setSheet(null)} />
-            <p className="iptv-hint">
-              {sheet.ch.name} · {new Date(sheet.prog.start * 1000).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(sheet.prog.start)}–{clock(sheet.prog.stop)}
-            </p>
-            <h2>{sheet.prog.title}</h2>
-            {sheet.prog.desc && <p className="livetv-desc">{sheet.prog.desc}</p>}
+        <div className="livetv-sheet-back" onClick={closeSheet}>
+          <div className="livetv-sheet" role="dialog" aria-label={sheet.prog?.title ?? sheet.ch.name} onClick={(e) => e.stopPropagation()}>
+            <SheetClose onClose={closeSheet} />
+            {sheet.prog ? (
+              <>
+                <p className="iptv-hint">
+                  {sheet.ch.name} · {new Date(sheet.prog.start * 1000).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(sheet.prog.start)}–{clock(sheet.prog.stop)}
+                </p>
+                <h2>{sheet.prog.title}</h2>
+                {sheet.prog.desc && <p className="livetv-desc">{sheet.prog.desc}</p>}
+              </>
+            ) : (
+              <h2>{sheet.ch.name}</h2>
+            )}
             <div className="buttons">
-              {sheet.prog.catchup && sheet.prog.stop <= now && (
-                <button className="btn primary" data-nav data-autofocus onClick={() => playChannel(sheet.ch, { start: sheet.prog.start, stop: sheet.prog.stop }, sheet.prog.title)}>
+              {sheet.prog && sheet.prog.catchup && sheet.prog.stop <= now && (
+                <button className="btn primary" data-nav data-autofocus onClick={() => playChannel(sheet.ch, { start: sheet.prog!.start, stop: sheet.prog!.stop }, sheet.prog!.title)}>
                   Watch (catch-up)
                 </button>
               )}
-              {sheet.prog.start > now && (
+              {sheet.prog && sheet.prog.start > now && (
                 <button className="btn primary" data-nav data-autofocus onClick={() => void record(sheet)}>
                   Record
                 </button>
               )}
-              <button className="btn" data-nav onClick={() => playChannel(sheet.ch)}>
+              <button className="btn" data-nav data-autofocus={!sheet.prog || (sheet.prog.start <= now && !(sheet.prog.catchup && sheet.prog.stop <= now)) || undefined} onClick={() => playChannel(sheet.ch, {}, sheet.ch.name, sheet.prog && sheet.prog.start <= now && now < sheet.prog.stop ? liveExtrasOf(sheet.prog) : undefined)}>
                 Watch {sheet.ch.name} now
               </button>
-              <button className="btn" data-nav onClick={() => setSheet(null)}>
+              {!sheet.prog && (
+                <button className="btn" data-nav onClick={() => (void fav(sheet.ch), closeSheet())}>
+                  {sheet.ch.favourite ? "Remove from favourites" : "Add to favourites"}
+                </button>
+              )}
+              {/* Owner only: hides it in the provider for everyone on it (Undo for 8 s, or show it again in Settings) */}
+              {hideTarget(sheet.ch, owned) && (
+                <button className="btn" data-nav onClick={() => void hide(sheet.ch)}>
+                  Hide this channel
+                </button>
+              )}
+              <button className="btn" data-nav onClick={closeSheet}>
                 Close
               </button>
             </div>
           </div>
         </div>
+      )}
+      {hidden && (
+        <p className="livetv-toast livetv-undo" role="status">
+          <span className="livetv-undo-text">Hid {hidden.ch.name} from the guide (for everyone on this provider)</span>
+          <button
+            data-nav
+            onClick={() => void undo(hidden)}
+            onKeyDown={(e) => {
+              // An arrow or Back: back to the guide on the neighbouring row (never also leaving the page)
+              if (["Escape", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+                e.preventDefault();
+                e.stopPropagation();
+                leaveUndo(hidden);
+              }
+            }}
+          >
+            Undo
+          </button>
+        </p>
       )}
       {toast && (
         <p className="livetv-toast" role="status">

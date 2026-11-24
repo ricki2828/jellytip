@@ -91,6 +91,8 @@ public class PlayerActivity extends AppCompatActivity {
     static final String EXTRA_ALWAYS_SUBS = "alwaysSubs";
     /** Which open() this player answers (PlayerPlugin resolves that call when it closes). */
     static final String EXTRA_SESSION = "session";
+    /** The web app's id for this open (PlayerPlugin.chapters only accepts its own). */
+    static final String EXTRA_OPEN_ID = "openId";
 
     static final String RESULT_REASON = "reason";
     static final String RESULT_POSITION_MS = "positionMs";
@@ -162,6 +164,7 @@ public class PlayerActivity extends AppCompatActivity {
     /** Set by "Live": once the reloaded recording is ready, jump near its (new) end. */
     private boolean toLiveEdge;
     private int session;
+    String openId = "";
     private FrameLayout root;
     /** One /live poller for the drawer, the portrait panel and flip alerts; null without a live match. */
     private LiveFeed liveFeed;
@@ -239,6 +242,8 @@ public class PlayerActivity extends AppCompatActivity {
         programmeStop = in.getLongExtra(EXTRA_PROG_STOP, 0);
         instance = new java.lang.ref.WeakReference<>(this);
         session = in.getIntExtra(EXTRA_SESSION, 0);
+        String oid = in.getStringExtra(EXTRA_OPEN_ID);
+        openId = oid == null ? "" : oid;
         long resumeMs = in.getLongExtra(EXTRA_RESUME_MS, 0);
 
         // Follow the phone's current orientation on entry, including when auto-rotate is disabled.
@@ -1200,6 +1205,7 @@ public class PlayerActivity extends AppCompatActivity {
             view.setLayoutParams(lp);
         }
         if (matchPanel != null) matchPanel.show(portrait, top + (portrait ? height : 0));
+        if (skipShown != null) placeSkip();
         // Pre-game card and note: over the picture's foot in landscape; in portrait a banner at the top of the panel
         int panelTop = top + (portrait ? height : 0);
         placeBanner(preCard, portrait, panelTop, Gravity.BOTTOM | Gravity.START, dp(24), dp(88));
@@ -1343,6 +1349,158 @@ public class PlayerActivity extends AppCompatActivity {
         boolean onScreen = !inPip() && getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
         if (onScreen) android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show();
         else postAlert(text, null);
+    }
+
+    // ---- Chapters + Skip intro / recap / credits (TV parity §5; web lib/skipParts.ts) -------------------------------
+
+    /** A part the chapters name (web skipParts SkipSeg), in ms. */
+    static final class SkipSeg {
+        final String kind;
+        final long startMs;
+        final long endMs;
+
+        SkipSeg(String kind, long startMs, long endMs) {
+            this.kind = kind;
+            this.startMs = startMs;
+            this.endMs = endMs;
+        }
+
+        /** One part (kind + start): a second recap gets its own 10 s and its own dismiss. */
+        String key() {
+            return kind + "@" + startMs;
+        }
+    }
+
+    /** web skipParts SHOW_SEC / TAIL_SEC / END_MARGIN_SEC. */
+    private static final long SKIP_SHOW_MS = 10_000;
+    private static final long SKIP_TAIL_MS = 3_000;
+    private static final long SKIP_END_MARGIN_MS = 1_500;
+    private static final long SKIP_TICK_MS = 500;
+    private final java.util.List<SkipSeg> skipSegs = new java.util.ArrayList<>();
+    private final java.util.Map<String, Long> skipFirstSeen = new java.util.HashMap<>();
+    private final java.util.Set<String> skipDismissed = new java.util.HashSet<>();
+    private boolean skipHasNext;
+    private TextView skipButton;
+    /** The part the button is for while it shows; null = hidden. */
+    private SkipSeg skipShown;
+    private final Runnable skipTick =
+        new Runnable() {
+            @Override
+            public void run() {
+                updateSkip();
+                if (!closing && !skipSegs.isEmpty()) handler.postDelayed(this, SKIP_TICK_MS);
+            }
+        };
+
+    /**
+     * From the web app once the server has read the file's chapters (it asks again while "not probed yet", so this comes
+     * after open): chapter starts as marks on the seek bar, and the parts to offer a skip for. Films and episodes only.
+     */
+    void setChapters(long[] marksMs, java.util.List<SkipSeg> segs, boolean hasNext) {
+        if (closing || live || view == null) return;
+        long[] marks = marksMs == null ? new long[0] : marksMs;
+        view.setExtraAdGroupMarkers(marks, new boolean[marks.length]);
+        skipSegs.clear();
+        if (segs != null) skipSegs.addAll(segs);
+        skipHasNext = hasNext;
+        skipFirstSeen.clear();
+        skipDismissed.clear();
+        handler.removeCallbacks(skipTick);
+        if (skipSegs.isEmpty()) {
+            hideSkip();
+            return;
+        }
+        if (skipButton == null) {
+            skipButton = pill("", 0xF2F2F2F0);
+            skipButton.setTextColor(0xFF0A0A0A);
+            skipButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            skipButton.setPadding(dp(22), dp(10), dp(22), dp(10));
+            skipButton.setGravity(Gravity.CENTER);
+            skipButton.setVisibility(View.GONE);
+            skipButton.setOnClickListener(v -> onSkipClick());
+            root.addView(skipButton, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.END));
+        }
+        handler.post(skipTick);
+    }
+
+    private SkipSeg activeSkip(long posMs) {
+        for (SkipSeg x : skipSegs) {
+            if (posMs >= x.startMs && posMs < x.endMs - SKIP_TAIL_MS) return x;
+        }
+        return null;
+    }
+
+    private void updateSkip() {
+        if (player == null || closing || skipButton == null) return;
+        long pos = player.getCurrentPosition();
+        SkipSeg seg = activeSkip(pos);
+        boolean show = false;
+        if (seg != null && !skipDismissed.contains(seg.key()) && !inPip()) {
+            Long first = skipFirstSeen.get(seg.key());
+            if (first == null) {
+                skipFirstSeen.put(seg.key(), pos);
+                first = pos;
+            }
+            long d = pos - first;
+            show = d >= 0 && d < SKIP_SHOW_MS;
+        }
+        if (!show) {
+            hideSkip();
+            return;
+        }
+        if (skipShown != seg) {
+            skipShown = seg;
+            skipButton.setText(skipLabel(seg.kind));
+            skipButton.setContentDescription(skipLabel(seg.kind));
+        }
+        placeSkip();
+        if (skipButton.getVisibility() != View.VISIBLE) {
+            skipButton.setVisibility(View.VISIBLE);
+            skipButton.bringToFront();
+        }
+    }
+
+    private void hideSkip() {
+        skipShown = null;
+        if (skipButton != null) skipButton.setVisibility(View.GONE);
+    }
+
+    private static String skipLabel(String kind) {
+        if ("intro".equals(kind)) return "Skip intro";
+        if ("recap".equals(kind)) return "Skip recap";
+        return "Skip credits";
+    }
+
+    /** Bottom right of the picture, above the controller's seek bar (portrait: the 16:9 box at the top). */
+    private void placeSkip() {
+        if (skipButton == null || root == null) return;
+        int w = root.getWidth();
+        int h = root.getHeight();
+        boolean portrait = h > w && !inPip();
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) skipButton.getLayoutParams();
+        int gravity = portrait ? Gravity.TOP | Gravity.END : Gravity.BOTTOM | Gravity.END;
+        int topMargin = portrait ? Math.max(0, dp(PORTRAIT_TOP_DP) + w * 9 / 16 - dp(44) - dp(64)) : 0;
+        int bottomMargin = portrait ? 0 : dp(96);
+        int right = dp(24);
+        if (lp.gravity != gravity || lp.topMargin != topMargin || lp.bottomMargin != bottomMargin || lp.rightMargin != right) {
+            lp.gravity = gravity;
+            lp.topMargin = topMargin;
+            lp.bottomMargin = bottomMargin;
+            lp.rightMargin = right;
+            skipButton.setLayoutParams(lp);
+        }
+    }
+
+    /** Tap: to the part's end, short of the file's end (credits included: the player's own end handling follows). */
+    private void onSkipClick() {
+        SkipSeg seg = skipShown;
+        if (seg == null || player == null || closing) return;
+        skipDismissed.add(seg.key());
+        hideSkip();
+        long to = seg.endMs;
+        long d = player.getDuration();
+        if (d != C.TIME_UNSET && d > SKIP_END_MARGIN_MS) to = Math.min(to, d - SKIP_END_MARGIN_MS);
+        player.seekTo(Math.max(0, to));
     }
 
     // ---- Language rules (web lib/iptvTracks.ts pickIptvTracks) ------------------------------------------------

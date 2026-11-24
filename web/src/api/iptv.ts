@@ -421,6 +421,11 @@ export async function saveGroupChannels(pid: string | number, catId: string | nu
   return typeof e === "string" && e ? e : a.status === 0 ? "The server can't be reached." : `Server said ${a.status}`;
 }
 
+/** GET v1/iptv/chapters for a film or an episode (TV parity §5): the raw status + body, read by lib/skipParts' chaptersOutcome. */
+export async function iptvChapters(q: string): Promise<{ status: number; data: unknown }> {
+  return companionCall("GET", `v1/iptv/chapters?${q}`, undefined, { timeoutMs: 15_000 });
+}
+
 /** Teams matching what was typed, from the catalogue (best first, at most 20); null when the server has no such route. */
 export async function sportTeams(q: string): Promise<TeamHit[] | null> {
   const a = await iptvGet<unknown>(`v1/sport/teams?q=${encodeURIComponent(q)}`);
