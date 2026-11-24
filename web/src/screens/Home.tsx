@@ -16,7 +16,8 @@ import { RecordingsRow } from "../components/RecordingsRow";
 import { ChannelsRow } from "../components/ChannelsRow";
 import { homeLeadRows } from "../lib/channelsRow";
 import { useHubTick } from "../api/collections";
-import { iptvContinue, iptvNext } from "../api/iptv";
+import { iptvContinue, iptvNextAll } from "../api/iptv";
+import { keepLibraryNext, type SeriesNextClaim } from "../lib/splitNext";
 import type { ContinueEntry } from "../lib/continue";
 import { actionsFor, buildContinue, optimisticHide, pruneHidden, readDismissed, writeDismissed, type ActionId, type RowEntry } from "../lib/continueRow";
 import { markWatched } from "../api/continueActions";
@@ -140,7 +141,13 @@ interface ContinueSrc {
   next: Item[];
   ic: ContinueEntry[];
   inx: ContinueEntry[];
+  /** The server's merged next per split series: Jellyfin's next-up episode it disagrees with is left out (lib/splitNext). */
+  claims?: ReadonlyMap<string, SeriesNextClaim>;
 }
+
+const NO_CLAIMS: ReadonlyMap<string, SeriesNextClaim> = new Map();
+/** Jellyfin's Next Up minus the split-series episodes the merged next disagrees with (Celebrity Traitors: E6 when IPTV E3 is next). */
+const libraryNext = (src: ContinueSrc): Item[] => (src.claims?.size ? src.next.filter((i) => keepLibraryNext(i.SeriesId, i.Id, i.UserData?.PlaybackPositionTicks ?? 0, src.claims!)) : src.next);
 
 export function Home() {
   useHubTick();
@@ -155,7 +162,7 @@ export function Home() {
   const [dismissVer, setDismissVer] = useState(0);
   const user = uid();
   const entries = useMemo(
-    () => (src ? buildContinue(src.resume, src.next, src.ic, src.inx, { hidden, dismissed: readDismissed(localStorage, user) }) : null),
+    () => (src ? buildContinue(src.resume, libraryNext(src), src.ic, src.inx, { hidden, dismissed: readDismissed(localStorage, user) }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [src, hidden, user, dismissVer],
   );
@@ -242,9 +249,11 @@ export function Home() {
     void Promise.all([libP, rowsP.catch(() => undefined)]).then(async ([lib]) => {
       if (!lib) return; // from the memo: the IPTV part is in it
       const { resume, next } = lib;
-      const [ic, inx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNext().catch(() => [] as ContinueEntry[])]);
-      if (ic.length || inx.length) apply({ resume, next, ic, inx });
-      if (alive && uid() === me && seq.current === mine) continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic, inx } };
+      const [ic, nx] = await Promise.all([iptvContinue().catch(() => [] as ContinueEntry[]), iptvNextAll().catch(() => ({ items: [] as ContinueEntry[], claims: NO_CLAIMS }))]);
+      const inx = nx.items;
+      const claims = nx.claims;
+      if (ic.length || inx.length || claims.size) apply({ resume, next, ic, inx, claims });
+      if (alive && uid() === me && seq.current === mine) continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic, inx, claims } };
     });
     getSpecials("home")
       .then((s) => alive && setSpecials(s))
@@ -284,12 +293,13 @@ export function Home() {
         });
       const refresh = () => {
         const mine = ++seq.current;
-        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNext().catch(() => null)]).then(([resume, next, ic, inx]) => {
+        return Promise.all([resumeItems().catch(() => null), nextUp().catch(() => null), iptvContinue().catch(() => null), iptvNextAll().catch(() => null)]).then(([resume, next, ic, nx]) => {
           if (uid() !== me || seq.current !== mine || !resume || !next) return;
-          setSrc({ resume, next, ic: ic ?? [], inx: inx ?? [] });
-          continueMemo = { uid: me, at: Date.now(), v: { resume, next, ic: ic ?? [], inx: inx ?? [] } };
+          const v: ContinueSrc = { resume, next, ic: ic ?? [], inx: nx?.items ?? [], claims: nx?.claims ?? NO_CLAIMS };
+          setSrc(v);
+          continueMemo = { uid: me, at: Date.now(), v };
           // Hides for items the server no longer returns, or has since seen played again, are done with
-          const present = buildContinue(resume, next, ic ?? [], inx ?? []);
+          const present = buildContinue(resume, libraryNext(v), v.ic, v.inx);
           setHidden((h) => pruneHidden(h, present));
         });
       };
