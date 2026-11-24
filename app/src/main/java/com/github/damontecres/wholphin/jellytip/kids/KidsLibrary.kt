@@ -149,12 +149,19 @@ class KidsLibraryService
     ) {
         /** Resolver for the server's `{itemId, kind}` image refs. */
         val imageResolver =
-            KidsImageResolver { itemId, kind, wide ->
+            KidsImageResolver { itemId, kind, wide, square ->
                 val uuid = runCatching { itemId.toUUID() }.getOrNull() ?: return@KidsImageResolver null
-                when (kind) {
-                    "Thumb" -> images.getItemImageUrl(itemId = uuid, imageType = ImageType.THUMB, fillWidth = if (wide) 1280 else 328, fillHeight = if (wide) 480 else 184)
-                    "Backdrop" -> images.getItemImageUrl(itemId = uuid, imageType = ImageType.BACKDROP, fillWidth = if (wide) 1280 else 328, fillHeight = if (wide) 480 else 184)
-                    else -> images.getItemImageUrl(itemId = uuid, imageType = ImageType.PRIMARY, maxWidth = if (wide) 1280 else 400)
+                val type =
+                    when (kind) {
+                        "Thumb" -> ImageType.THUMB
+                        "Backdrop" -> ImageType.BACKDROP
+                        else -> ImageType.PRIMARY
+                    }
+                when {
+                    // A bubble's picture keeps its own proportions; the round crop takes its centre
+                    square -> images.getItemImageUrl(itemId = uuid, imageType = type, maxWidth = 400)
+                    type == ImageType.PRIMARY -> images.getItemImageUrl(itemId = uuid, imageType = type, maxWidth = if (wide) 1280 else 400)
+                    else -> images.getItemImageUrl(itemId = uuid, imageType = type, fillWidth = if (wide) 1280 else 328, fillHeight = if (wide) 480 else 184)
                 }
             }
 

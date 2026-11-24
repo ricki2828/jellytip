@@ -59,6 +59,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -340,7 +341,10 @@ private fun BoxScope.KidsProgress(
     }
 }
 
-/** One 16:9 tile: art with a focus ring and grow, the title under it, a progress bar, and "x5" when watched again. */
+/**
+ * One 16:9 tile: art with a focus ring and grow, the title under it, a progress bar, and "x5" when watched again. The focus
+ * target is the art AND the title (one Surface), so bringing the focused tile into view brings its name into view too.
+ */
 @Composable
 fun KidsTileCard(
     tile: KidsTile,
@@ -355,47 +359,47 @@ fun KidsTileCard(
     val scale by animateFloatAsState(if (focused) t.focusScale else 1f, tween(t.focusMillis), label = "kids-tile-scale")
     val ring by animateColorAsState(if (focused) t.ring else t.borderColor, tween(t.focusMillis), label = "kids-tile-ring")
     val shape = RoundedCornerShape(t.tileRadius)
-    Column(
+    Box(
         modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
         },
     ) {
-        Box {
-            Surface(
-                onClick = onClick,
-                interactionSource = src,
-                modifier = focusModifier.fillMaxWidth().aspectRatio(16f / 9f).then(if (tag != null) Modifier.testTag(tag) else Modifier),
-                shape = ClickableSurfaceDefaults.shape(shape),
-                colors = transparentSurfaceColors(),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-            ) {
-                Box(Modifier.fillMaxSize().clip(shape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, shape)) {
+        Surface(
+            onClick = onClick,
+            interactionSource = src,
+            modifier = focusModifier.fillMaxWidth().then(if (tag != null) Modifier.testTag(tag) else Modifier),
+            shape = ClickableSurfaceDefaults.shape(RectangleShape),
+            colors = transparentSurfaceColors(),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        ) {
+            Column(Modifier.padding(bottom = 6.dp)) {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, shape)) {
                     KidsArt(tile.imageUrl, kidsTileTitle(tile), Modifier.fillMaxSize())
                     KidsProgress(tile.progress)
                 }
-            }
-            if (tile.playCount > 1) {
-                Row(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 5.dp, y = (-7).dp)
-                        .rotate(6f)
-                        .background(t.accent, CircleShape)
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    KidsGlyph(KidsGlyphs.REPLAY, 10.sp, t.ink)
-                    KidsText("x${tile.playCount}", 11.sp, color = t.ink, black = true)
-                }
+                KidsText(kidsTileTitle(tile), 13.5.sp, Modifier.padding(top = 5.dp), black = true)
             }
         }
-        KidsText(kidsTileTitle(tile), 13.5.sp, Modifier.padding(top = 5.dp), black = true)
+        if (tile.playCount > 1) {
+            Row(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 5.dp, y = (-7).dp)
+                    .rotate(6f)
+                    .background(t.accent, CircleShape)
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                KidsGlyph(KidsGlyphs.REPLAY, 10.sp, t.ink)
+                KidsText("x${tile.playCount}", 11.sp, color = t.ink, black = true)
+            }
+        }
     }
 }
 
-/** A round "friend" (a series or collection), name under it. */
+/** A round "friend" (a series or collection), name under it; the name is part of the focus target (see [KidsTileCard]). */
 @Composable
 fun KidsBubble(
     tile: KidsTile,
@@ -409,28 +413,30 @@ fun KidsBubble(
     val focused by src.collectIsFocusedAsState()
     val scale by animateFloatAsState(if (focused) 1.1f else 1f, tween(t.focusMillis), label = "kids-bubble-scale")
     val ring by animateColorAsState(if (focused) t.ring else Color(0x38FFFFFF), tween(t.focusMillis), label = "kids-bubble-ring")
-    Column(
+    Box(
         modifier
             .width(t.bubble)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Surface(
             onClick = onClick,
             interactionSource = src,
-            modifier = focusModifier.size(t.bubble).then(if (tag != null) Modifier.testTag(tag) else Modifier),
-            shape = ClickableSurfaceDefaults.shape(CircleShape),
+            modifier = focusModifier.fillMaxWidth().then(if (tag != null) Modifier.testTag(tag) else Modifier),
+            shape = ClickableSurfaceDefaults.shape(RectangleShape),
             colors = transparentSurfaceColors(),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         ) {
-            Box(Modifier.fillMaxSize().clip(CircleShape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, CircleShape)) {
-                KidsArt(tile.imageUrl, tile.name, Modifier.fillMaxSize(), letterSize = 30.sp)
+            Column(Modifier.padding(bottom = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Centre-crop (KidsArt crops from the centre): the circle shows the middle of the picture, never its edge
+                Box(Modifier.size(t.bubble).clip(CircleShape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, CircleShape)) {
+                    KidsArt(tile.imageUrl, tile.name, Modifier.fillMaxSize(), letterSize = 30.sp)
+                }
+                KidsText(tile.name, 13.sp, Modifier.padding(top = 4.dp), black = true, textAlign = TextAlign.Center)
             }
         }
-        KidsText(tile.name, 13.sp, Modifier.padding(top = 4.dp), black = true, textAlign = TextAlign.Center)
     }
 }
 
@@ -937,38 +943,39 @@ private fun KidsEpisodeCard(
     val scale by animateFloatAsState(if (focused) t.focusScale else 1f, tween(t.focusMillis), label = "kids-ep-scale")
     val ring by animateColorAsState(if (focused) t.ring else t.borderColor, tween(t.focusMillis), label = "kids-ep-ring")
     val shape = RoundedCornerShape(t.tileRadius)
-    Column(
+    Box(
         modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
         },
     ) {
-        Box {
-            Surface(
-                onClick = onClick,
-                interactionSource = src,
-                modifier = focusModifier.fillMaxWidth().aspectRatio(16f / 9f).testTag(tag),
-                shape = ClickableSurfaceDefaults.shape(shape),
-                colors = transparentSurfaceColors(),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-            ) {
-                Box(Modifier.fillMaxSize().clip(shape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, shape)) {
+        Surface(
+            onClick = onClick,
+            interactionSource = src,
+            modifier = focusModifier.fillMaxWidth().testTag(tag),
+            shape = ClickableSurfaceDefaults.shape(RectangleShape),
+            colors = transparentSurfaceColors(),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        ) {
+            Column(Modifier.padding(bottom = 6.dp)) {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape).border(t.tileBorder + if (focused) 1.dp else 0.dp, ring, shape)) {
                     KidsArt(ep.imageUrl, ep.title, Modifier.fillMaxSize())
                     KidsProgress(ep.progress)
+                    // Inside the art (not hanging off its corner): the card grows on focus and a badge outside it was covered
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(7.dp)
+                            .size(28.dp)
+                            .background(if (ep.played) t.showsColor else if (nextUp) t.accent else Color.White, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        KidsText("${ep.number}", 14.sp, color = t.ink, black = true)
+                    }
                 }
-            }
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .offset(x = (-5).dp, y = (-6).dp)
-                    .size(30.dp)
-                    .background(if (ep.played) t.showsColor else if (nextUp) t.accent else Color.White, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                KidsText("${ep.number}", 15.sp, color = t.ink, black = true)
+                KidsText(ep.title, 13.sp, Modifier.padding(top = 5.dp), black = true)
             }
         }
-        KidsText(ep.title, 13.sp, Modifier.padding(top = 5.dp), black = true)
     }
 }
 

@@ -64,6 +64,8 @@ fun interface KidsImageResolver {
         itemId: String,
         kind: String,
         wide: Boolean,
+        /** A round bubble: ask for the picture as it is (no fixed 16:9 box), the circle crops its centre. */
+        square: Boolean,
     ): String?
 }
 
@@ -90,11 +92,12 @@ object KidsHomeParse {
         base: String,
         wide: Boolean,
         resolver: KidsImageResolver,
+        square: Boolean = false,
     ): String? {
         o ?: return null
         o.str("url")?.let { return IptvVodParse.image(base, it) }
         val itemId = o.str("itemId") ?: return null
-        return resolver.url(itemId, o.str("kind") ?: "Primary", wide)
+        return resolver.url(itemId, o.str("kind") ?: "Primary", wide, square)
     }
 
     fun item(
@@ -148,7 +151,7 @@ object KidsHomeParse {
             source = "library",
             kind = kind,
             name = name,
-            imageUrl = image(o.optJSONObject("image"), base, false, resolver),
+            imageUrl = image(o.optJSONObject("image"), base, false, resolver, square = true),
         )
     }
 

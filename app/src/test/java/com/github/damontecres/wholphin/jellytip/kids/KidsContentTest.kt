@@ -17,7 +17,7 @@ import java.util.UUID
 @Config(manifest = Config.NONE, sdk = [30])
 class KidsContentTest {
     private val base = "https://c.example"
-    private val resolver = KidsImageResolver { id, kind, wide -> "https://img.example/$id/$kind/${if (wide) "wide" else "tile"}" }
+    private val resolver = KidsImageResolver { id, kind, wide, square -> "https://img.example/$id/$kind/${if (square) "square" else if (wide) "wide" else "tile"}" }
     private val id1 = "11111111-1111-1111-1111-111111111111"
 
     private fun item(
@@ -53,6 +53,8 @@ class KidsContentTest {
         assertEquals(5, d.rows[0].items[0].playCount)
         assertTrue(d.rows[1].bubbles)
         assertEquals(KidsKind.COLLECTION, d.rows[1].items[1].kind)
+        // a bubble asks for its picture as it is (the circle crops the centre); a tile for the 16:9 box
+        assertEquals("https://img.example/$id1/Primary/square", d.rows[1].items[0].imageUrl)
     }
 
     @Test
