@@ -122,6 +122,8 @@ class ServerRepository
 
                 val currentUser = CurrentUser(updatedServer, updatedUser)
                 mostRecentServerProvider.save(currentUser)
+                // Jellytip Kids: decided from the policy BEFORE the user is published, so a kid never sees one adult frame
+                com.github.damontecres.wholphin.jellytip.kids.JellytipKids.set(userDto.policy)
                 _current.value = currentUser
                 _currentUserDto.value = ServerUserConfig(userDto)
                 JellytipAdmin.set(userDto.policy?.isAdministrator == true)
@@ -203,6 +205,7 @@ class ServerRepository
                 return@withContext if (serverId == null || userId == null) {
                     _current.value = null
                     JellytipAdmin.set(false)
+                    com.github.damontecres.wholphin.jellytip.kids.JellytipKids.clear()
                     com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
                     null
                 } else {
@@ -284,6 +287,7 @@ class ServerRepository
                 apiClient.update(accessToken = null)
                 HomeSnapshotStore.clear(context)
                 JellytipAdmin.set(false)
+                com.github.damontecres.wholphin.jellytip.kids.JellytipKids.clear()
                 com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             }
             withContext(ioDispatcher) {
@@ -300,6 +304,7 @@ class ServerRepository
                 apiClient.update(baseUrl = null, accessToken = null)
                 HomeSnapshotStore.clear(context)
                 JellytipAdmin.set(false)
+                com.github.damontecres.wholphin.jellytip.kids.JellytipKids.clear()
                 com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             }
             withContext(ioDispatcher) {
@@ -310,6 +315,7 @@ class ServerRepository
         suspend fun switchServerOrUser() {
             HomeSnapshotStore.clear(context)
             JellytipAdmin.set(false)
+            com.github.damontecres.wholphin.jellytip.kids.JellytipKids.clear()
             com.github.damontecres.wholphin.jellytip.me.JellytipMe.reset()
             mostRecentServerProvider.clear()
         }
@@ -359,7 +365,10 @@ class ServerRepository
             _currentUserDto.update {
                 if (currentUser?.id == userDto.id) ServerUserConfig(userDto) else it
             }
-            if (currentUser?.id == userDto.id) JellytipAdmin.set(userDto.policy?.isAdministrator == true)
+            if (currentUser?.id == userDto.id) {
+                JellytipAdmin.set(userDto.policy?.isAdministrator == true)
+                com.github.damontecres.wholphin.jellytip.kids.JellytipKids.set(userDto.policy, newUser = false)
+            }
         }
     }
 

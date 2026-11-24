@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -58,6 +60,9 @@ fun ApplicationContent(
     viewModel: ApplicationContentViewModel = hiltViewModel(),
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    // Jellytip Kids mode: a kid's profile gets the Kids shell instead of the nav drawer (the one branch; adults are untouched)
+    val kidsShell by com.github.damontecres.wholphin.jellytip.kids.JellytipKids.activeFlow
+        .collectAsState()
     // Jellytip: the reminder nudge banner takes OK (Watch) and Back while it shows
     val reminderBanner: JellytipReminderBannerViewModel = hiltViewModel()
     // Jellytip: the kick-off takeover card (favourite teams) takes OK (watch) and Back while it shows
@@ -94,6 +99,15 @@ fun ApplicationContent(
                         DestinationContent(
                             destination = key,
                             preferences = preferences,
+                            onClearBackdrop = viewModel::clearBackdrop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else if (user != null && server != null && kidsShell) {
+                        com.github.damontecres.wholphin.jellytip.kids.KidsShell(
+                            destination = key,
+                            preferences = preferences,
+                            user = user,
+                            server = server,
                             onClearBackdrop = viewModel::clearBackdrop,
                             modifier = Modifier.fillMaxSize(),
                         )
