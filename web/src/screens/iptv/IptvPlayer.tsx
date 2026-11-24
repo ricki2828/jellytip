@@ -30,7 +30,7 @@ import type { WatchMeta } from "../../lib/signals";
 import { MatchInfoButton } from "../../components/MatchInfo";
 import { TimeBarClock, TimeBarScrubber } from "../../components/TimeBar";
 import { SkipPartButton } from "../../components/SkipPartButton";
-import { useIptvChapters } from "../../lib/useIptvChapters";
+import { useIptvChapters, useNativeChapters } from "../../lib/useIptvChapters";
 import { iptvChapterMarks } from "../../lib/skipParts";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { TrackMenu } from "../../components/TrackMenu";
@@ -1685,6 +1685,8 @@ function NativeIptvPlayer({ target, title, resume = 0, extras: extrasIn, channel
   const retries = useRef(0);
   const retryTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(retryTimer.current), []);
+  // Chapters + Skip intro / recap / credits in the native player (TV parity §5): asked here, drawn and acted on there
+  useNativeChapters(target, !!(target.vod || target.episode), (p) => NativePlayer.chapters(p));
 
   // ---- Catch me up (web/TV port): joining 10+ min late, the choice and the recap come BEFORE the native player opens (it would cover them)
   const catchStartsAt = isLive ? extras?.startsAt ?? null : null;

@@ -122,3 +122,18 @@ test("library segments retry: 404 stops, anything else backs off to 5 min", () =
   assert.equal(segmentsRetryMs(0, 1), 10_000);
   assert.equal(segmentsRetryMs(503, 20), 300_000);
 });
+
+test("native payload: chapter starts in ms without 0, skips as sent", async () => {
+  const { nativeChapters } = await import("../src/lib/skipParts.ts");
+  const c = parseIptvChapters(body)!;
+  assert.deepEqual(nativeChapters(c), { marksMs: [62_000, 2_400_000], skip: [{ kind: "intro", s: 0, e: 62 }, { kind: "credits", s: 2400, e: 2500 }], hasNext: false });
+  assert.deepEqual(nativeChapters({ chapters: [], skip: [] }, true), { marksMs: [], skip: [], hasNext: true });
+});
+
+test("chapters query: films and episodes only", async () => {
+  const { chaptersQuery } = await import("../src/lib/skipParts.ts");
+  assert.equal(chaptersQuery({ vod: "pp000001:m:42" }), "vod=pp000001%3Am%3A42");
+  assert.equal(chaptersQuery({ episode: "pp000001:e:7", series: "pp000001:s:3" }), "episode=pp000001%3Ae%3A7&series=pp000001%3As%3A3");
+  assert.equal(chaptersQuery({ episode: "pp000001:e:7" }), null);
+  assert.equal(chaptersQuery({ channel: "pp000001:1" }), null);
+});

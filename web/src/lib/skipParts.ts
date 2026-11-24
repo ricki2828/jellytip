@@ -182,3 +182,9 @@ export function chaptersQuery(t: { vod?: string; episode?: string; series?: stri
   if (t.episode && t.series) return `episode=${encodeURIComponent(t.episode)}&series=${encodeURIComponent(t.series)}`;
   return null;
 }
+
+/** The phone's native player payload (PlayerPlugin.chapters): chapter starts in ms (not 0) and the IPTV skips. */
+export function nativeChapters(c: IptvChapters, hasNext = false): { marksMs: number[]; skip: { kind: string; s: number; e: number }[]; hasNext: boolean } {
+  const marksMs = [...new Set((c.chapters ?? []).map((x) => Math.round(x.s * 1000)).filter((ms) => ms > 0))];
+  return { marksMs, skip: c.skip.map((x) => ({ kind: x.kind, s: x.s, e: x.e })), hasNext };
+}
