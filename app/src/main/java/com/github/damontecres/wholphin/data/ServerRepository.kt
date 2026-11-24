@@ -87,6 +87,7 @@ class ServerRepository
             }
             apiClient.update(baseUrl = server.url, accessToken = null)
             _current.value = null
+            com.github.damontecres.wholphin.jellytip.kids.JellytipKids.clear()
             mostRecentServerProvider.clearUser()
         }
 

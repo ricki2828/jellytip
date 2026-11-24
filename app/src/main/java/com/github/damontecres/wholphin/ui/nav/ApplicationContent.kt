@@ -67,11 +67,12 @@ fun ApplicationContent(
     val reminderBanner: JellytipReminderBannerViewModel = hiltViewModel()
     // Jellytip: the kick-off takeover card (favourite teams) takes OK (watch) and Back while it shows
     val kickoff: com.github.damontecres.wholphin.jellytip.iptv.JellytipKickoffViewModel = hiltViewModel()
-    androidx.compose.runtime.LaunchedEffect(Unit) { kickoff.kickoff.start() }
+    // Kids mode: no kick-off card, no reminder banner (sport takeovers are not for a kid's profile)
+    androidx.compose.runtime.LaunchedEffect(kidsShell) { if (!kidsShell) kickoff.kickoff.start() }
     Box(
         modifier =
             modifier.onPreviewKeyEvent {
-                reminderBanner.reminders.onKey(it.nativeKeyEvent) || kickoff.kickoff.onKey(it.nativeKeyEvent) ||
+                (!kidsShell && (reminderBanner.reminders.onKey(it.nativeKeyEvent) || kickoff.kickoff.onKey(it.nativeKeyEvent))) ||
                     com.github.damontecres.wholphin.jellytip.JellytipUndo.onKey(it.nativeKeyEvent)
             },
     ) {
@@ -95,7 +96,8 @@ fun ApplicationContent(
                 key as Destination
                 val contentKey = "${key}_${server?.id}_${user?.id}"
                 NavEntry(key, contentKey = contentKey) {
-                    if (key.fullScreen) {
+                    // Kids mode: only the players are allowed full screen; Settings, Now playing, Update... never open for a kid
+                    if (key.fullScreen && (!kidsShell || com.github.damontecres.wholphin.jellytip.kids.kidsAllowsFullScreen(key))) {
                         DestinationContent(
                             destination = key,
                             preferences = preferences,
@@ -128,8 +130,10 @@ fun ApplicationContent(
                 }
             },
         )
-        JellytipReminderBanner(reminderBanner.reminders)
-        com.github.damontecres.wholphin.jellytip.iptv.JellytipKickoffCard(kickoff.kickoff)
+        if (!kidsShell) {
+            JellytipReminderBanner(reminderBanner.reminders)
+            com.github.damontecres.wholphin.jellytip.iptv.JellytipKickoffCard(kickoff.kickoff)
+        }
         com.github.damontecres.wholphin.jellytip.JellytipUndoBar()
     }
 }

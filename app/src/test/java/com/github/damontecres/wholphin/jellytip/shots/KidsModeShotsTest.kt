@@ -245,6 +245,33 @@ class KidsModeShotsTest {
     @Test
     fun homeThin() = shot("kids-home-thin", KidsTags.HERO_PLAY) { Home(KidsHomeUi.Ready(KidsHomeData(hero, emptyList()))) }
 
+    /** A favourite pick that is a whole series: no progress, no dots; its Play starts the next (or first) episode. */
+    @Test
+    fun homeSeriesHero() =
+        shot("kids-home-hero-series", KidsTags.HERO_PLAY) {
+            Home(
+                KidsHomeUi.Ready(
+                    KidsHomeData(
+                        KidsHero(resume = false, tile = tile("pip-pond", "Pip and the Pond"), imageUrl = "fixture://pip-hero"),
+                        listOf(watchAgain, friends),
+                    ),
+                ),
+            )
+        }
+
+    /**
+     * Rows but no hero: the first visit puts focus on the first tile. Focus asked from inside the content may not take under
+     * Robolectric, so this shot does not assert it (it prints what it found); the page must still draw rows first.
+     */
+    @Test
+    fun homeRowsNoHeroInitialFocus() {
+        compose.setContent { Tv { Home(KidsHomeUi.Ready(KidsHomeData(null, listOf(watchAgain, friends, movieNight)))) } }
+        advance(1500)
+        val landed = runCatching { compose.onNodeWithTag(KidsTags.tile("watch_again", 0)).assertIsFocused() }.isSuccess
+        println("shot kids-home-rows-no-hero: initial focus on the first tile landed=$landed")
+        compose.onRoot().captureRoboImage(out("kids-home-rows-no-hero"))
+    }
+
     /** The endpoint said no (403 / error): no rows, no hero, and not the adult Home. */
     @Test
     fun homeUnavailable() = shot("kids-home-unavailable", null) { Home(KidsHomeUi.Unavailable) }

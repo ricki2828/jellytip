@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
@@ -168,6 +169,9 @@ class KidsFocusMemory(
 ) {
     var key by mutableStateOf(initial)
     val restoreKey: String = initial
+
+    /** True once any tracked target on this page has held focus (not saved: a fresh composition starts false). */
+    var landed by mutableStateOf(false)
 }
 
 @Composable
@@ -182,9 +186,18 @@ fun Modifier.kidsTrack(
 ): Modifier =
     this
         .then(if (memory.restoreKey == key) Modifier.focusRequester(restore) else Modifier)
-        .onFocusChanged { if (it.hasFocus) memory.key = key }
+        .onFocusChanged {
+            if (it.hasFocus) {
+                memory.key = key
+                memory.landed = true
+            }
+        }
 
-/** Asks [restore] for focus (page was left on it) for up to ~20 frames, else [fallback]. Call from a LaunchedEffect once content exists. */
+/**
+ * Puts focus on the page: first on [restore] (the target the page was left on) for up to ~20 frames, else on [fallback] for up to
+ * ~10. A request only counts when focus actually landed on a tracked target (the request can succeed while the target is not on
+ * screen yet), so it keeps asking until then. Does nothing if focus already landed. Call from a LaunchedEffect once content exists.
+ */
 suspend fun kidsPlaceFocus(
     memory: KidsFocusMemory,
     restore: FocusRequester,
@@ -192,13 +205,21 @@ suspend fun kidsPlaceFocus(
 ) {
     withFrameNanos { }
     withFrameNanos { }
+    if (memory.landed) return
     if (memory.restoreKey.isNotEmpty()) {
         repeat(20) {
-            if (restore.tryRequestFocus()) return
+            restore.tryRequestFocus()
             withFrameNanos { }
+            if (memory.landed) return
         }
     }
-    fallback?.tryRequestFocus()
+    if (fallback != null) {
+        repeat(10) {
+            fallback.tryRequestFocus()
+            withFrameNanos { }
+            if (memory.landed) return
+        }
+    }
 }
 
 // ---- canvas, mascot ----
@@ -244,7 +265,7 @@ fun KidsMascot(
         drawCircle(t.ink, radius = w * 0.042f, center = Offset(w * 0.645f, w * 0.55f))
         val smile = Path().apply {
             moveTo(w * 0.41f, w * 0.70f)
-            quadraticBezierTo(w * 0.50f, w * 0.78f, w * 0.59f, w * 0.70f)
+            quadraticTo(w * 0.50f, w * 0.78f, w * 0.59f, w * 0.70f)
         }
         drawPath(smile, t.ink, style = Stroke(width = w * 0.034f, cap = StrokeCap.Round))
     }
@@ -701,10 +722,12 @@ fun KidsHomeContent(
 ) {
     val t = LocalKidsTokens.current
     val heroFocus = remember { FocusRequester() }
+    val firstTileFocus = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     val data = (ui as? KidsHomeUi.Ready)?.data
+    // First visit: the hero's Play; with rows but no hero, the first tile
     LaunchedEffect(data != null) {
-        if (data != null) kidsPlaceFocus(memory, restore, if (data.hero != null) heroFocus else null)
+        if (data != null) kidsPlaceFocus(memory, restore, if (data.hero != null) heroFocus else firstTileFocus)
     }
     when {
         ui is KidsHomeUi.Loading -> Box(modifier.fillMaxSize())
@@ -745,7 +768,10 @@ fun KidsHomeContent(
                         ) {
                             itemsIndexed(row.items, key = { i, tile -> "${tile.id}#$i" }) { i, tile ->
                                 val key = "${row.id}:${tile.id}:$i"
-                                val track = Modifier.kidsTrack(memory, key, restore)
+                                val track =
+                                    Modifier
+                                        .kidsTrack(memory, key, restore)
+                                        .then(if (r == 0 && i == 0) Modifier.focusRequester(firstTileFocus) else Modifier)
                                 if (row.bubbles) {
                                     KidsBubble(tile, onClick = { onOpen(tile) }, tag = KidsTags.bubble(i), focusModifier = track)
                                 } else {
@@ -956,6 +982,8 @@ fun KidsDetailsContent(
                     details.seasons.forEachIndexed { i, s -> KidsSeasonChip(s.label, i == seasonIndex) { onSeason(i) } }
                 }
             }
+            // key(seasonIndex): each season's episode row starts at its own first episode, not at the last season's scroll
+            key(seasonIndex) {
             LazyRow(
                 state = rememberLazyListState(),
                 contentPadding = PaddingValues(horizontal = RowInset, vertical = 8.dp),
@@ -971,6 +999,7 @@ fun KidsDetailsContent(
                         modifier = Modifier.width(170.dp),
                     )
                 }
+            }
             }
         }
     }

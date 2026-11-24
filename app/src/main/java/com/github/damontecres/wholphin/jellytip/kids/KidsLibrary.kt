@@ -207,8 +207,9 @@ class KidsLibraryService
         /** The existing My list data (`/v1/me/list`), films then shows, library and IPTV, in the kids skin. */
         suspend fun myList(): List<KidsTile> =
             try {
-                val movies = myListService.list("movie").orEmpty()
-                val series = myListService.list("series").orEmpty()
+                val movies = myListService.list("movie", MY_LIST_LIMIT).orEmpty()
+                val series = myListService.list("series", MY_LIST_LIMIT).orEmpty()
+                if (movies.size >= MY_LIST_LIMIT || series.size >= MY_LIST_LIMIT) Timber.w("[kids] my list hit the %d cap", MY_LIST_LIMIT)
                 val entries = movies + series
                 val libIds = entries.filterIsInstance<JellytipMyListEntry.Library>().map { it.id }.distinct()
                 val byId =
@@ -254,6 +255,8 @@ class KidsLibraryService
                 val art = selectJellytipCardArt(images, item, 1280, 520).baseUrl
                 when (dto.type) {
                     BaseItemKind.SERIES -> seriesDetails(dto, art)
+                    // An episode opens its series' page (the page opens on the season the play button is in)
+                    BaseItemKind.EPISODE -> dto.seriesId?.takeIf { it != id }?.let { details(it) }
                     BaseItemKind.MOVIE -> {
                         val resume = (dto.userData?.playbackPositionTicks ?: 0L) / 10_000L
                         KidsDetails(
@@ -382,6 +385,7 @@ class KidsLibraryService
 
         companion object {
             const val BROWSE_LIMIT = 300
+            const val MY_LIST_LIMIT = 200
 
             /** Inside JellytipNavGate's 3 s window after the OK press (see pattern-jellytip-navigate-before-play). */
             const val PLAY_LOOKUP_MS = 1_500L

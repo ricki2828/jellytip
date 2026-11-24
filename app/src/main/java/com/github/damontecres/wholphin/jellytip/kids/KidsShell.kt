@@ -64,6 +64,16 @@ class KidsPlayer
     ) {
         private val busy = AtomicBoolean(false)
 
+        /** One play at a time: a second OK while the first is still looking up its resume point does nothing. */
+        private suspend fun guarded(block: suspend () -> Unit) {
+            if (!busy.compareAndSet(false, true)) return
+            try {
+                block()
+            } finally {
+                busy.set(false)
+            }
+        }
+
         private suspend fun go(
             destination: Destination?,
             reason: String,
@@ -76,9 +86,8 @@ class KidsPlayer
         suspend fun open(tile: KidsTile) = go(KidsOpen.destination(tile), "kids open ${tile.kind}")
 
         /** The big Play for [tile] (Home hero): the player for a film / episode, the next episode for a series. */
-        suspend fun play(tile: KidsTile) {
-            if (!busy.compareAndSet(false, true)) return
-            try {
+        suspend fun play(tile: KidsTile) =
+            guarded {
                 val destination: Destination? =
                     if (tile.source == "iptv") {
                         // An IPTV film plays; an IPTV series / episode opens its page (it works out the episode)
@@ -96,25 +105,24 @@ class KidsPlayer
                         }
                     }
                 go(destination, "kids play ${tile.kind}")
-            } finally {
-                busy.set(false)
             }
-        }
 
         /** Play a library item at a known position (details Play, with the target the page already holds). */
         suspend fun playAt(
             itemId: String,
             resumeMs: Long,
-        ) {
-            val id = parseId(itemId) ?: return
-            go(Destination.Playback(id, resumeMs), "kids play item")
-        }
+        ) =
+            guarded {
+                val id = parseId(itemId) ?: return@guarded
+                go(Destination.Playback(id, resumeMs), "kids play item")
+            }
 
         /** Play a library item from its own resume position (an episode tile). */
-        suspend fun playItem(itemId: String) {
-            val id = parseId(itemId) ?: return
-            go(Destination.Playback(id, library.resumeMs(id)), "kids play episode")
-        }
+        suspend fun playItem(itemId: String) =
+            guarded {
+                val id = parseId(itemId) ?: return@guarded
+                go(Destination.Playback(id, library.resumeMs(id)), "kids play episode")
+            }
 
         private fun parseId(s: String): UUID? = runCatching { s.toUUID() }.getOrNull()
     }
@@ -167,12 +175,15 @@ class KidsBrowseViewModel
         val shows = MutableStateFlow<List<KidsTile>?>(null)
         val movies = MutableStateFlow<List<KidsTile>?>(null)
         val myList = MutableStateFlow<List<KidsTile>?>(null)
-        private val started = HashSet<KidsSection>()
+        private val started: MutableSet<KidsSection> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
         init {
             // After a heart on a details page the list reloads (in place: the old list stays up until the new one lands)
             viewModelScope.launchIO {
-                KidsMyListEpoch.flow.drop(1).collect { myList.value = library.myList() }
+                KidsMyListEpoch.flow.drop(1).collect {
+                    // Not opened yet = nothing to refresh: the first open loads it fresh
+                    if (KidsSection.MY_LIST in started) myList.value = library.myList()
+                }
             }
         }
 
@@ -284,7 +295,8 @@ private fun KidsSectionContent(
     viewModel: KidsBrowseViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(section) { viewModel.ensure(section) }
-    // key(section): each section keeps its own scroll / focus memory (saved with the Home entry while a details page is open)
+    // key(section): a section keeps its scroll / focus memory while it is the open section and across a details page (saved with
+    // the Home entry); switching to another section and back starts that section fresh
     key(section) {
         val memory = rememberKidsFocusMemory()
         when (section) {
@@ -360,15 +372,16 @@ fun KidsShell(
             val isSearch = destination is Destination.Search || destination is Destination.JellytipAskChat || destination is Destination.JellytipAsk
             val detailsId: UUID? =
                 when {
-                    destination is Destination.MediaItem && (destination.type == BaseItemKind.MOVIE || destination.type == BaseItemKind.SERIES) -> destination.itemId
+                    // A film, a series, or an episode (which opens its series' page); people, box sets, folders and the rest are not on the list
+                    destination is Destination.MediaItem &&
+                        (destination.type == BaseItemKind.MOVIE || destination.type == BaseItemKind.SERIES || destination.type == BaseItemKind.EPISODE) -> destination.itemId
                     destination is Destination.SeriesOverview -> destination.itemId
                     else -> null
                 }
             val passthrough =
                 destination is Destination.JellytipIptvDetails ||
                     destination is Destination.JellytipHubCollection ||
-                    destination is Destination.JellytipCollection ||
-                    destination is Destination.MediaItem
+                    destination is Destination.JellytipCollection
             when {
                 detailsId != null -> KidsDetailsHost(detailsId)
                 passthrough -> DestinationContent(destination, preferences, onClearBackdrop, Modifier.fillMaxSize().padding(horizontal = 28.dp))
