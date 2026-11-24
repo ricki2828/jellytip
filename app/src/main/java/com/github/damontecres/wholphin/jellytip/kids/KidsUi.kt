@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -33,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -44,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -56,6 +60,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,11 +70,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +87,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.ui.FontAwesome
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import kotlinx.coroutines.launch
 
 // ---- test tags (set inside the composables that own them; callers never add a second tag to the same node) ----
 object KidsTags {
@@ -236,6 +245,28 @@ suspend fun kidsRecoverFocus(
             if (hasFocus()) return
         }
     }
+}
+
+/**
+ * When this node (or anything in it) takes focus, ask the scrollable parents to bring it into view with [margin] to spare above and
+ * below, so a focused row never sits against the screen edge (TV safe area: 5% = 27 dp at 540 dp). The default focus scroll only
+ * brings the node's own bounds on screen. Kids lists only: adult lists are untouched.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Modifier.kidsKeepInView(margin: Dp = 36.dp): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    val px = with(LocalDensity.current) { margin.toPx() }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    return this
+        .onSizeChanged { size = it }
+        .bringIntoViewRequester(requester)
+        .onFocusChanged {
+            if (it.hasFocus) {
+                scope.launch { requester.bringIntoView(Rect(0f, -px, size.width.toFloat(), size.height + px)) }
+            }
+        }
 }
 
 /** The focus key of a Home tile: by the tile's id, never its position (a reload may reorder the row). Pure, unit tested. */
@@ -403,10 +434,12 @@ fun KidsTileCard(
     val ring by animateColorAsState(if (focused) t.ring else t.borderColor, tween(t.focusMillis), label = "kids-tile-ring")
     val shape = RoundedCornerShape(t.tileRadius)
     Box(
-        modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        },
+        modifier
+            .kidsKeepInView()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
     ) {
         Surface(
             onClick = onClick,
@@ -459,6 +492,7 @@ fun KidsBubble(
     Box(
         modifier
             .width(t.bubble)
+            .kidsKeepInView()
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

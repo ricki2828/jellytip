@@ -23,6 +23,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.requestFocus
 import androidx.tv.material3.MaterialTheme
@@ -55,6 +56,7 @@ import com.github.damontecres.wholphin.jellytip.kids.KidsTile
 import com.github.damontecres.wholphin.jellytip.kids.rememberKidsFocusMemory
 import com.github.damontecres.wholphin.ui.theme.colors.PurpleThemeColors
 import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -165,6 +167,7 @@ class KidsModeShotsTest {
     private fun shot(
         name: String,
         focusTag: String?,
+        check: () -> Unit = {},
         content: @Composable () -> Unit,
     ) {
         compose.setContent { Tv { content() } }
@@ -174,6 +177,7 @@ class KidsModeShotsTest {
             advance(900)
             compose.onNodeWithTag(focusTag).assertIsFocused()
         }
+        check()
         compose.onRoot().captureRoboImage(out(name))
     }
 
@@ -241,10 +245,20 @@ class KidsModeShotsTest {
     fun homeHeroFocused() = shot("kids-home-hero-focused", KidsTags.HERO_PLAY) { Home(fullHome) }
 
     @Test
-    fun homeTileFocused() = shot("kids-home-tile-focused", KidsTags.tile("watch_again", 1)) { Home(fullHome) }
+    fun homeTileFocused() =
+        shot("kids-home-tile-focused", KidsTags.tile("watch_again", 1), check = { assertInSafeArea(KidsTags.tile("watch_again", 1)) }) { Home(fullHome) }
+
+    /** The focused item (art AND name) keeps clear of the screen's bottom edge: 5% TV safe area = 27 dp of 540. */
+    private fun assertInSafeArea(tag: String) {
+        val bounds = compose.onNodeWithTag(tag).getBoundsInRoot()
+        val root = compose.onRoot().getBoundsInRoot()
+        assertTrue("$tag bottom ${bounds.bottom} is inside the safe area (root ${root.height})", bounds.bottom <= root.height - 27.dp)
+        assertTrue("$tag top ${bounds.top} is on screen", bounds.top >= 0.dp)
+    }
 
     @Test
-    fun homeBubbleFocused() = shot("kids-home-bubble-focused", KidsTags.bubble(2)) { Home(fullHome) }
+    fun homeBubbleFocused() =
+        shot("kids-home-bubble-focused", KidsTags.bubble(2), check = { assertInSafeArea(KidsTags.bubble(2)) }) { Home(fullHome) }
 
     /** Thin state: nothing but the hero (every row was too thin for the server to send). */
     @Test
