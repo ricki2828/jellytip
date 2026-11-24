@@ -190,8 +190,10 @@ export function Details({ id }: { id: string }) {
             // Default: the first season with something unwatched, else the first
             // A ?season= that isn't one of this series' seasons (empty, stale) is ignored
             const asked = wanted ? s.find((x) => x.Id === wanted) : undefined;
-            if (asked) seasonPicked.current = true; // ?season= wins over the next episode's season
-            setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
+            // An IPTV-only season (iptv-season:N) is checked once the IPTV lookup answered (the effect below)
+            const askedIptv = wanted?.startsWith(IPTV_SEASON_PREFIX) ? wanted : null;
+            if (asked || askedIptv) seasonPicked.current = true; // ?season= wins over the next episode's season
+            setSeason(askedIptv ?? (asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
           }, () => alive && setSeasonsDone(true));
           episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
           // A failure is an empty list / no claim for this visit (the button falls back), never remembered
@@ -263,6 +265,12 @@ export function Details({ id }: { id: string }) {
 
   // Files only for play / download / Resume; the list below also shows placeholders and IPTV-only episodes
   const seasonEntries = useMemo(() => mergeSeasons(seasonList, iptvSeries?.seasons), [seasonList, iptvSeries]);
+  // A ?season= IPTV season this title doesn't have (stale link, no IPTV now): the default season instead
+  useEffect(() => {
+    if (!iptvDone || !season?.startsWith(IPTV_SEASON_PREFIX) || seasonEntries.some((e) => e.key === season)) return;
+    seasonPicked.current = false;
+    setSeason((seasonList.find((x) => !x.UserData?.Played) ?? seasonList[0])?.Id ?? seasonEntries[0]?.key ?? null);
+  }, [iptvDone, season, seasonEntries, seasonList]);
   const iptvOnlyNo = season?.startsWith(IPTV_SEASON_PREFIX) ? Number(season.slice(IPTV_SEASON_PREFIX.length)) : null;
   const cur = allEps && allEps.season === season ? allEps.items : null;
   const eps = useMemo(() => (cur ? presentEpisodes(cur) : null), [cur]);
@@ -289,7 +297,8 @@ export function Details({ id }: { id: string }) {
         : [],
     [seriesEps, iptvDone, iptvSeries, seasonList],
   );
-  if (splitReady && frozen.current?.id !== id) frozen.current = { id, v: seriesPrimary(split, claim?.v) ?? libraryOnlyPrimary(seriesEps ?? []) };
+  // Decided once; "nothing to play" is decided again as answers land (a button appearing relabels nothing)
+  if (splitReady && (frozen.current?.id !== id || frozen.current.v === null)) frozen.current = { id, v: seriesPrimary(split, claim?.v) ?? libraryOnlyPrimary(seriesEps ?? []) };
   const primary = frozen.current?.id === id ? frozen.current.v : null;
   const decided = frozen.current?.id === id;
   const isNextRow = (r: EpRow) =>

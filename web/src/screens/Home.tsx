@@ -143,8 +143,20 @@ function HomeHero({ focused, focusedIptv, slides, engaged, journey }: { focused:
         hold();
       }}
       onBlurCapture={(e) => {
-        // A blur to nothing (the focused button unmounted with its slide) is not leaving: the effect above moves focus back in
-        if (!e.relatedTarget) return;
+        // A blur to nothing: the focused button unmounted with its slide (the effect above moves focus back in), or a tap on a
+        // blank area / the window losing focus; a frame later, focus that isn't in the hero and wasn't unmounted lets go
+        if (!e.relatedTarget) {
+          const hero = e.currentTarget;
+          requestAnimationFrame(() => {
+            const was = focusIn.current;
+            if (was && !was.isConnected) return;
+            if (!hero.contains(document.activeElement)) {
+              focusIn.current = null;
+              setHeld(false);
+            }
+          });
+          return;
+        }
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
           focusIn.current = null;
           setHeld(false);
