@@ -99,6 +99,10 @@ export function IptvDetails({ id }: { id: string }) {
   useEffect(() => {
     if (loadedId) focusFirst(document.querySelector(".details") ?? document);
   }, [loadedId]);
+  // The error screen (and a Try again that failed again): focus on its button, never on nothing
+  useEffect(() => {
+    if (err) focusFirst(document.querySelector(".details") ?? document);
+  }, [err]);
 
   // The series button: decided once per visit, from the first answer (IPTV has no server claim to wait for). Watched
   // toggles and later answers never relabel it, move the Next pill or switch the season under him.
@@ -199,7 +203,13 @@ export function IptvDetails({ id }: { id: string }) {
     }
     go(playPath({ series: d.id, episode: e.id }, title, from));
   };
-  const playPrimary = () => primary?.ep.iptv && playEp(primary.ep.season, primary.ep.iptv);
+  // The frozen choice names the episode; its resume point is read now (a ✓ since the page opened may have changed it)
+  const playPrimary = () => {
+    const want = primary?.ep.iptv;
+    if (!primary || !want) return;
+    const now = d?.seasons?.flatMap((x) => x.episodes ?? []).find((x) => x.id === want.id) ?? want;
+    playEp(primary.ep.season, now);
+  };
   const playFilm = (from: number) => {
     const first = { id: d.id, name: d.providerName ?? d.title, lastFail: d.lastFail };
     if (manual) return go(playPath({ vod: d.id }, d.title, from));
@@ -249,11 +259,11 @@ export function IptvDetails({ id }: { id: string }) {
       next: isNext(e),
       card: (small) =>
         small ? (
-          <EpisodeStill src={still} fallback={showArt} width={150} caption={`${e.episode}`} label={`Play ${e.episode} · ${name}`} played={done} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
+          <EpisodeStill src={still} fallback={showArt} width={150} caption={`${e.episode}`} label={`Play ${e.episode} · ${name}`} played={done} showWatched={false} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
         ) : (
           // Wide: the watched toggle sits under the tile (Down reaches it; the focused, scaled tile can't cover it)
           <div className="iptv-ep-col" style={{ width: CARD_W }}>
-            <EpisodeStill src={still} fallback={showArt} width={CARD_W} caption={`${e.episode} · ${name}`} label={`Play ${e.episode} · ${name}`} played={done} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
+            <EpisodeStill src={still} fallback={showArt} width={CARD_W} caption={`${e.episode} · ${name}`} label={`Play ${e.episode} · ${name}`} played={done} showWatched={false} pct={episodePct(e)} dataEp={e.id} onClick={() => playEp(season!, e)} />
             <div className="iptv-ep-meta">
               <span>{episodeMeta(e)}</span>
               {toggle("ep-watch-under")}
