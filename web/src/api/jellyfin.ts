@@ -303,6 +303,12 @@ export async function episodesComplete(seriesId: string, seasonId: string): Prom
   return r.Items;
 }
 
+/** Every episode of a series (all seasons), with the missing/unaired placeholders when the server lists them (split-series next). */
+export async function seriesEpisodesComplete(seriesId: string): Promise<Item[]> {
+  const r = await jf<ItemsResult>(`/Shows/${seriesId}/Episodes${qs({ UserId: uid(), Fields: "LocationType,PremiereDate", EnableUserData: true })}`);
+  return r.Items;
+}
+
 export async function localTrailers(id: string): Promise<Item[]> {
   try {
     return await jf<Item[]>(`/Users/${uid()}/Items/${id}/LocalTrailers`);

@@ -5,6 +5,7 @@ import {
   getSession,
   episodes as getEpisodes,
   episodesComplete,
+  seriesEpisodesComplete,
   getItem,
   localTrailers,
   personImage,
@@ -44,7 +45,9 @@ import { SubtitleSearchDialog } from "../components/SubtitleSearchDialog";
 import { useCanManageSubtitles } from "../lib/useSubtitleAccess";
 import { canSearchSeasons, defaultSearchLanguage } from "../lib/remoteSubtitles";
 import { resultText, runSeasonSubtitles, type Progress } from "../lib/seasonSubtitles";
-import { IPTV_SEASON_PREFIX, iptvSeasonRows, mergeEpisodes, mergeSeasonBlocks, mergeSeasons, presentEpisodes } from "../lib/seasonEpisodes";
+import { IPTV_SEASON_PREFIX, iptvSeasonKey, iptvSeasonRows, mergeEpisodes, mergeSeasonBlocks, mergeSeasons, presentEpisodes, type EpRow } from "../lib/seasonEpisodes";
+import { iptvResumeAt, seriesPrimary, splitEpisodes, type SeriesNextClaim, type SplitEp } from "../lib/splitNext";
+import { seriesNextFor } from "../api/iptv";
 import { iptvSeriesFor } from "../api/seasonIptv";
 import type { VodDetail } from "../lib/iptvVod";
 import { targetPath } from "../lib/iptvPlay";
@@ -65,6 +68,9 @@ function fmtClock(ticks: number) {
 /** How long the details page waits (dark) for the companion's backdrop ranking before choosing without it. */
 const RANK_WAIT_MS = 800;
 
+/** How long the series page's primary button waits for the episodes, the IPTV lookup and the server's next */
+const SPLIT_WAIT_MS = 6000;
+
 export function Details({ id }: { id: string }) {
   const [item, setItem] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +81,10 @@ export function Details({ id }: { id: string }) {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [seasonList, setSeasonList] = useState<Item[]>([]);
   const [season, setSeason] = useState<string | null>(null);
+  // Series: every episode (all seasons, with placeholders) and the server's merged next, for the primary button (lib/splitNext)
+  const [seriesEps, setSeriesEps] = useState<Item[] | null>(null);
+  const [claim, setClaim] = useState<{ v: SeriesNextClaim | null } | null>(null);
+  const seasonPicked = useRef(false);
   const [allEps, setAllEps] = useState<{ season: string; items: Item[] } | null>(null);
   const [iptvDone, setIptvDone] = useState(false);
   const [iptvSeries, setIptvSeries] = useState<VodDetail | null>(null);
@@ -118,6 +128,9 @@ export function Details({ id }: { id: string }) {
     setMovieDone(false);
     setGetIt(false);
     setSiblings([]);
+    setSeriesEps(null);
+    setClaim(null);
+    seasonPicked.current = false;
     getItem(id)
       .then((it) => {
         if (!alive) return;
@@ -155,14 +168,34 @@ export function Details({ id }: { id: string }) {
             // Default: the first season with something unwatched, else the first
             // A ?season= that isn't one of this series' seasons (empty, stale) is ignored
             const asked = wanted ? s.find((x) => x.Id === wanted) : undefined;
+            if (asked) seasonPicked.current = true; // ?season= wins over the next episode's season
             setSeason((asked ?? s.find((x) => !x.UserData?.Played) ?? s[0])?.Id ?? null);
           });
           episodeArtFor(it.Id, { priority: "high" }).then(() => alive && bump((n) => n + 1));
-          iptvSeriesFor(it.Name, it.ProviderIds?.Tmdb).then((v) => {
+          // A failure is an empty list / no claim for this visit (the button falls back), never remembered
+          seriesEpisodesComplete(it.Id).then(
+            (e) => alive && setSeriesEps(e),
+            () => alive && setSeriesEps([]),
+          );
+          seriesNextFor(it.Id).then(
+            (c) => alive && setClaim({ v: c }),
+            () => alive && setClaim({ v: null }),
+          );
+          iptvSeriesFor(it.Name, it.ProviderIds?.Tmdb).then(
+            (v) => {
+              if (!alive) return;
+              setIptvSeries(v);
+              setIptvDone(true);
+            },
+            () => alive && setIptvDone(true),
+          );
+          // The primary button never waits past SPLIT_WAIT_MS: whatever hasn't answered by then counts as absent for this visit
+          setTimeout(() => {
             if (!alive) return;
-            setIptvSeries(v);
+            setSeriesEps((e) => e ?? []);
+            setClaim((c) => c ?? { v: null });
             setIptvDone(true);
-          });
+          }, SPLIT_WAIT_MS);
         }
         if (it.Type === "Movie") {
           iptvMovieFor(it.Name, it.ProviderIds?.Tmdb).then((v) => {
@@ -216,10 +249,36 @@ export function Details({ id }: { id: string }) {
     if (iptvOnlyNo != null) return iptvSeasonRows(blocks.find((s) => s.season === iptvOnlyNo)?.episodes ?? [], iptvSeries?.langUnknown);
     return cur ? mergeEpisodes(cur, blocks.find((s) => s.season === seasonNo)?.episodes, new Date()) : null;
   }, [cur, iptvSeries, seasonNo, iptvOnlyNo]);
+  // The primary button over the merged library + IPTV list: the server's claim when the page can place it, else the order
+  // rule (lib/splitNext). Waits for the episodes, the IPTV lookup and the claim, so its label never changes under a click.
+  const splitReady = item?.Type === "Series" && seriesEps !== null && iptvDone && claim !== null;
+  const split = useMemo<SplitEp[]>(
+    () =>
+      seriesEps && iptvDone
+        ? splitEpisodes(
+            seriesEps.map((e) => ({ id: e.Id, season: e.ParentIndexNumber ?? null, episode: e.IndexNumber ?? null, name: e.Name, played: !!e.UserData?.Played, positionTicks: e.UserData?.PlaybackPositionTicks ?? 0, virtual: e.LocationType === "Virtual" })),
+            iptvSeries?.seasons,
+            seasonList.flatMap((s) => (s.IndexNumber != null ? [s.IndexNumber] : [])),
+          )
+        : [],
+    [seriesEps, iptvDone, iptvSeries, seasonList],
+  );
+  const primary = splitReady ? seriesPrimary(split, claim?.v) : null;
+  const isNextRow = (r: EpRow) =>
+    !!primary?.next && (primary.ep.lib ? r.status === "present" && r.item?.Id === primary.ep.lib.id : !!primary.ep.iptv && r.iptv?.id === primary.ep.iptv.id);
+  // Open on the next episode's season (unless ?season= asked or a chip was picked)
+  const nextSeasonKey = primary?.next ? seasonList.find((s) => s.IndexNumber === primary.ep.season)?.Id ?? (primary.ep.lib ? null : iptvSeasonKey(primary.ep.season)) : null;
+  useEffect(() => {
+    if (nextSeasonKey && !seasonPicked.current) setSeason(nextSeasonKey);
+  }, [nextSeasonKey]);
   const admin = !!getSession()?.isAdmin;
   const tmdb = item?.ProviderIds?.Tmdb ? Number(item.ProviderIds.Tmdb) : 0;
-  const playIptv = (episodeId: string) =>
-    iptvSeries && go(`${targetPath({ series: iptvSeries.id, episode: episodeId })}&t=${encodeURIComponent(`${iptvSeries.title}`)}`);
+  const playIptv = (episodeId: string, resume = 0) =>
+    iptvSeries && go(`${targetPath({ series: iptvSeries.id, episode: episodeId })}&t=${encodeURIComponent(`${iptvSeries.title}`)}${resume ? `&resume=${resume}` : ""}`);
+  const playSlot = (e: SplitEp) => {
+    if (e.lib) go(`/play/${e.lib.id}`);
+    else if (e.iptv && iptvSeries) go(`${targetPath({ series: iptvSeries.id, episode: e.iptv.id })}&t=${encodeURIComponent(`${iptvSeries.title} · S${e.season} E${e.episode}`)}${iptvResumeAt(e.iptv) ? `&resume=${iptvResumeAt(e.iptv)}` : ""}`);
+  };
   const ph = (r: NonNullable<typeof rows>[number]) => (
     <EpisodePlaceholder key={r.key} row={r} now={new Date()} onIptv={playIptv} onRequest={admin && iptvDone && tmdb > 0 ? () => setGetIt(true) : undefined} />
   );
@@ -278,8 +337,6 @@ export function Details({ id }: { id: string }) {
 
   const ud = item.UserData;
   const resumeTicks = ud?.PlaybackPositionTicks ?? 0;
-  // Series: play the next unwatched / in-progress episode
-  const seriesNext = item.Type === "Series" ? eps?.find((e) => (e.UserData?.PlaybackPositionTicks ?? 0) > 0) ?? eps?.find((e) => !e.UserData?.Played) : null;
   const director = item.People?.filter((p) => p.Type === "Director").map((p) => p.Name).join(", ");
   const dim = [director ? `Directed by ${director}` : null, item.ProductionLocations?.[0]].filter(Boolean).join("  ·  ");
   const cast = (item.People ?? []).filter((p) => p.Type === "Actor").slice(0, 18);
@@ -365,18 +422,19 @@ export function Details({ id }: { id: string }) {
           <ScoreLine extras={ext} />
           <div className="buttons">
             {item.Type === "Series" ? (
-              iptvOnlyNo != null ? (
-                rows?.[0]?.iptv && (
-                  <button className="btn primary" data-nav data-autofocus onClick={() => playIptv(rows[0]!.iptv!.id)}>
-                    Play S{iptvOnlyNo} E{rows[0]!.index} via IPTV
-                  </button>
-                )
-              ) : (
-                seriesNext && (
-                <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${seriesNext.Id}`)}>
-                  {(seriesNext.UserData?.PlaybackPositionTicks ?? 0) > 0 ? "Resume" : "Play"} S{seriesNext.ParentIndexNumber} E{seriesNext.IndexNumber}
+              // One button element while it waits and once it's ready, so focus taken while waiting stays on it
+              (primary || !splitReady) && (
+                <button
+                  className="btn primary"
+                  data-nav
+                  data-autofocus
+                  aria-disabled={primary ? undefined : true}
+                  aria-busy={primary ? undefined : true}
+                  onClick={() => primary && playSlot(primary.ep)}
+                >
+                  {primary ? `${primary.resume ? "Resume" : "Play"} S${primary.ep.season} E${primary.ep.episode}` : "Play"}
                 </button>
-              ))
+              )
             ) : (
               <button className="btn primary" data-nav data-autofocus onClick={() => go(`/play/${item.Id}`)}>
                 {resumeTicks > 0 ? `Resume ${fmtClock(resumeTicks)}` : "Play"}
@@ -451,7 +509,7 @@ export function Details({ id }: { id: string }) {
             onAct={(w) => {
               if (w.kind === "request") setGetIt(true);
               else if (w.kind === "iptv" && w.iptvId) go(item.Type === "Series" ? vodPath(w.iptvId) : `${targetPath({ vod: w.iptvId })}&t=${encodeURIComponent(item.Name)}`);
-              else if (item.Type === "Series") seriesNext && go(`/play/${seriesNext.Id}`);
+              else if (item.Type === "Series") primary && playSlot(primary.ep);
               else go(`/play/${item.Id}`);
             }}
           />
@@ -460,7 +518,15 @@ export function Details({ id }: { id: string }) {
           <section className="row">
             <div className="chips">
               {seasonEntries.map((s) => (
-                <button key={s.key} data-nav className={`chip${s.key === season ? " on" : ""}`} onClick={() => setSeason(s.key)}>
+                <button
+                  key={s.key}
+                  data-nav
+                  className={`chip${s.key === season ? " on" : ""}`}
+                  onClick={() => {
+                    seasonPicked.current = true;
+                    setSeason(s.key);
+                  }}
+                >
                   {s.name}
                 </button>
               ))}
@@ -486,9 +552,10 @@ export function Details({ id }: { id: string }) {
               <div className="ep-list">
                 {(rows ?? []).map((r) => {
                   const e = r.item;
-                  if (r.status !== "present" || !e) return ph(r);
+                  if (r.status !== "present" || !e) return isNextRow(r) ? <div key={r.key} className="ep-slot is-next">{ph(r)}<span className="ep-next-pill">Next</span></div> : ph(r);
                   return (
-                    <div key={e.Id} className="ep-row">
+                    <div key={e.Id} className={`ep-row${isNextRow(r) ? " is-next" : ""}`}>
+                      {isNextRow(r) && <span className="ep-next-pill">Next</span>}
                       <Card item={e} width={150} caption={`${e.IndexNumber ?? ""}`} />
                       <button className="ep-text" onClick={() => go(`/item/${e.Id}`)}>
                         <span className="ep-name">
@@ -504,7 +571,17 @@ export function Details({ id }: { id: string }) {
               </div>
             ) : (
               <div className="row-scroll">
-                {(rows ?? []).map((r) => (r.status !== "present" || !r.item ? ph(r) : <Card key={r.key} item={r.item} caption={`${r.item.IndexNumber ?? ""} · ${r.item.Name}`} />))}
+                {(rows ?? []).map((r) => {
+                  const tile = r.status !== "present" || !r.item ? ph(r) : <Card key={r.key} item={r.item} caption={`${r.item.IndexNumber ?? ""} · ${r.item.Name}`} />;
+                  return isNextRow(r) ? (
+                    <div key={r.key} className="ep-slot is-next">
+                      {tile}
+                      <span className="ep-next-pill">Next</span>
+                    </div>
+                  ) : (
+                    tile
+                  );
+                })}
                 {!rows && Array.from({ length: 5 }, (_, i) => <div key={i} className="card card-skeleton" />)}
               </div>
             )}
