@@ -398,7 +398,8 @@ fun NavDrawer(
 
     val focusRequester = remember { FocusRequester() }
 
-    // If the user presses back while on the home page, open the nav drawer, another back press will quit the app
+    // If the user presses back while on the home page, open the nav drawer; Back with it open closes it again
+    // (ModalNavigationDrawer, 25-Nov: it used to quit the app)
     BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination is Destination.Home)) {
         drawerState.setValue(DrawerValue.Open)
         focusRequester.requestFocus()
@@ -418,6 +419,8 @@ fun NavDrawer(
     ModalNavigationDrawer(
         modifier = modifier,
         drawerState = drawerState,
+        // Back with the drawer open closes it (never quits the app); an expanded "More" takes Back first
+        backCloses = !moreExpanded,
         drawerContent = { drawerValue ->
             val isOpen = drawerValue.isOpen
             val spacedBy = 4.dp

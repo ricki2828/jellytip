@@ -715,6 +715,13 @@ fun HomePageContent(
         onDispose { JellytipTrailerControl.heroButtonsFocused = false }
     }
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
+    // Jellytip (25-Nov): rows whose requester is attached right now. A saved position can point at a row that is not drawn
+    // (emptied, or scrolled out of the lazy list): Down / Back from the hero buttons and entering the page then asked a
+    // requester with no node, so focus stayed trapped on the hero buttons. Those now go to the nearest drawn row.
+    val composedRows = remember { HashSet<Int>() }
+    val homeRowRequester: (Int) -> FocusRequester? = { row ->
+        homeNearestComposedRow(row, composedRows, rowFocusRequesters.size)?.let { rowFocusRequesters[it] }
+    }
     var firstFocused by remember { mutableStateOf(false) }
     val firstFocusRuns = remember { intArrayOf(0) } // effect runs that failed to land row focus; no recomposition needed
     var firstFocusGaveUp by remember { mutableStateOf(false) }
@@ -724,7 +731,7 @@ fun HomePageContent(
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     BackHandler(enabled = heroButtonsFocused) {
         val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
-        if (special == null || !special.tryRequestFocus()) rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+        if (special == null || !special.tryRequestFocus()) homeRowRequester(currentPosition.row)?.tryRequestFocus()
     }
 
     if (takeFocus) {
@@ -874,7 +881,7 @@ fun HomePageContent(
                         onEnter = {
                             val special = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
                             if (special == null || !special.tryRequestFocus()) {
-                                rowFocusRequesters.getOrNull(currentPosition.row)?.tryRequestFocus()
+                                homeRowRequester(currentPosition.row)?.tryRequestFocus()
                             }
                         }
                     }.fillMaxSize()
@@ -978,7 +985,7 @@ fun HomePageContent(
                                 .focusProperties {
                                     // Down returns to the row (or special) focus came from
                                     down = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
-                                        ?: rowFocusRequesters.getOrNull(currentPosition.row) ?: FocusRequester.Default
+                                        ?: homeRowRequester(currentPosition.row) ?: FocusRequester.Default
                                 },
                     )
                 }
@@ -1283,7 +1290,8 @@ fun HomePageContent(
                                                 rowModifier
                                                     .fillMaxWidth()
                                                     .focusGroup()
-                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                                    .focusRequester(rowFocusRequesters[rowIndex])
+                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
                                         )
                                     } else if (row.items.isNotEmpty() && iptvAppended[rowIndex].orEmpty().isNotEmpty()) {
                                         com.github.damontecres.wholphin.jellytip.watchlist.JellytipWatchlistMixedRow(
@@ -1306,7 +1314,8 @@ fun HomePageContent(
                                                 rowModifier
                                                     .fillMaxWidth()
                                                     .focusGroup()
-                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                                    .focusRequester(rowFocusRequesters[rowIndex])
+                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
                                             onPlay = { item -> currentOnClickPlay(currentPosition, item) },
                                             rowIndex = rowIndex,
                                         )
@@ -1354,7 +1363,8 @@ fun HomePageContent(
                                                 rowModifier
                                                     .fillMaxWidth()
                                                     .focusGroup()
-                                                    .focusRequester(rowFocusRequesters[rowIndex]),
+                                                    .focusRequester(rowFocusRequesters[rowIndex])
+                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
                                             horizontalPadding = viewOptions.spacing.dp,
                                             cardContent = { index, item, cardModifier, onClick, onLongClick ->
                                                 val onFocus =
@@ -1697,6 +1707,54 @@ fun HomePageViewMoreCard(
 
 /** Jellytip: hero/text block lag behind focus by this much (fast scrolling skips the tiles in between). */
 private const val HERO_DEBOUNCE_MS = 150L
+
+/**
+ * The row Down / Back from the hero (and entering Home) should focus: [row] when it is drawn, else the nearest drawn row
+ * (ties go down, the way Down points), else null. [composed] = rows whose requester is attached now.
+ */
+internal fun homeNearestComposedRow(
+    row: Int,
+    composed: Collection<Int>,
+    size: Int,
+): Int? {
+    if (row in composed && row in 0 until size) return row
+    return composed.filter { it in 0 until size }.minByOrNull { kotlin.math.abs(it - row) * 2 + (if (it < row) 1 else 0) }
+}
+
+/** Records in [set] that row [row]'s focus requester is attached (added on attach, removed on detach). */
+private class HomeComposedRowElement(
+    val row: Int,
+    val set: MutableSet<Int>,
+) : androidx.compose.ui.node.ModifierNodeElement<HomeComposedRowNode>() {
+    override fun create() = HomeComposedRowNode(row, set)
+
+    // identity of the set (its contents change as rows attach)
+    override fun equals(other: Any?) = other is HomeComposedRowElement && other.row == row && other.set === set
+
+    override fun hashCode() = 31 * row + System.identityHashCode(set)
+
+    override fun update(node: HomeComposedRowNode) {
+        if (node.isAttached && node.row != row) {
+            node.set.remove(node.row)
+            set.add(row)
+        }
+        node.row = row
+        node.set = set
+    }
+}
+
+private class HomeComposedRowNode(
+    var row: Int,
+    var set: MutableSet<Int>,
+) : Modifier.Node() {
+    override fun onAttach() {
+        set.add(row)
+    }
+
+    override fun onDetach() {
+        set.remove(row)
+    }
+}
 
 /** Room the rows under the hero need (title + the tallest special card + focus zoom + spacing); the Home layout leaves exactly this. */
 private val HOME_ROWS_MIN_HEIGHT = 238.dp

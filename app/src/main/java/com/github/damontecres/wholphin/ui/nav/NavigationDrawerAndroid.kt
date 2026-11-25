@@ -41,6 +41,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,6 +92,9 @@ fun ModalNavigationDrawer(
     drawerContent: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
     modifier: Modifier = Modifier,
     drawerState: DrawerState = rememberDrawerState(DrawerValue.Closed),
+    // Jellytip (25-Nov): Back with the drawer open closes it and returns to the page (false while the caller's own Back
+    // use comes first, e.g. NavDrawer's expanded "More")
+    backCloses: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     // Jellytip (t5n): whether the page holds focus, so an arrow move from the page can be told from initial-focus
@@ -112,6 +117,7 @@ fun ModalNavigationDrawer(
                     .align(Alignment.CenterStart),
             drawerState = drawerState,
             contentHasFocus = { contentHasFocus },
+            backCloses = backCloses,
             content = drawerContent,
         )
 
@@ -138,6 +144,7 @@ private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
     contentHasFocus: () -> Boolean = { true },
+    backCloses: Boolean = true,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     // indicates that the drawer has been set to its initial state and has grabbed focus if
@@ -156,6 +163,36 @@ private fun DrawerSheet(
     var uninvited by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
+    // Jellytip (25-Nov, Ricki on the TV): in the open drawer Right did nothing and Back quit the app. Leaving now closes
+    // the drawer first, then moves focus right once the closed rail is laid out (retried while the page settles); if
+    // the page never takes focus the drawer opens again, so focus is never left on the invisible rail.
+    var leaving by remember { mutableStateOf(false) }
+    val leaveToPage: (String) -> Unit = { why ->
+        if (!leaving) {
+            leaving = true
+            uninvited = false
+            JellytipTrace.focus("drawer: $why -> page")
+            drawerState.setValue(DrawerValue.Closed)
+            scope.launch {
+                try {
+                    repeat(LEAVE_TRIES) { n ->
+                        if (n > 0) delay(HANDBACK_RETRY_MS) else withFrameNanos { }
+                        if (focusState?.hasFocus != true) return@launch
+                        if (focusManager.moveFocus(FocusDirection.Right)) return@launch
+                    }
+                    if (focusState?.hasFocus == true) {
+                        JellytipTrace.focus("drawer: page did not take focus after $why; reopened")
+                        drawerState.setValue(DrawerValue.Open)
+                    }
+                } finally {
+                    leaving = false
+                }
+            }
+        }
+    }
+    BackHandler(enabled = backCloses && drawerState.currentValue == DrawerValue.Open) {
+        if (focusState?.hasFocus == true) leaveToPage("Back") else drawerState.setValue(DrawerValue.Closed)
+    }
     LaunchedEffect(key1 = drawerState.currentValue) {
         if (drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus == false) {
             // used to grab focus if the drawer state is set to Open on start.
@@ -218,7 +255,11 @@ private fun DrawerSheet(
                     }
                 }
             }.onPreviewKeyEvent { e ->
-                if (uninvited && drawerState.currentValue != DrawerValue.Open &&
+                if (e.key == Key.DirectionRight && drawerState.currentValue == DrawerValue.Open) {
+                    // Right anywhere in the open drawer = back to the page (both key events, acting on the down)
+                    if (e.type == KeyEventType.KeyDown) leaveToPage("Right")
+                    true
+                } else if (uninvited && drawerState.currentValue != DrawerValue.Open &&
                     e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft
                 ) {
                     uninvited = false
@@ -287,6 +328,9 @@ internal class NavigationDrawerScopeImpl(
 private const val UNINVITED_HANDBACK_MS = 350L
 private const val HANDBACK_RETRY_MS = 250L
 private const val HANDBACK_TRIES = 7
+
+/** Tries (first after one frame, then every [HANDBACK_RETRY_MS]) to move focus from the closing drawer to the page. */
+private const val LEAVE_TRIES = 6
 
 internal val CollapsedDrawerItemWidth = 64.dp
 internal val ExpandedDrawerItemWidth = 224.dp
