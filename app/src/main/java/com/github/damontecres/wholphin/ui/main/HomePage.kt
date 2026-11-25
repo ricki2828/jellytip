@@ -474,6 +474,8 @@ fun HomePageContent(
     var specialFocus by remember { mutableStateOf<JellytipSpecialFocus?>(null) }
     var savedSpecialId by rememberSaveable { mutableStateOf<String?>(null) }
     val specialRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    // Specials whose requester is attached now (a saved special can be scrolled out of the lazy list)
+    val composedSpecials = remember { HashMap<String, Int>() }
     val entries =
         remember(homeRows, specials, leadingRows, serverRows, hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels) {
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels)
@@ -718,9 +720,9 @@ fun HomePageContent(
     // Jellytip (25-Nov): rows whose requester is attached right now. A saved position can point at a row that is not drawn
     // (emptied, or scrolled out of the lazy list): Down / Back from the hero buttons and entering the page then asked a
     // requester with no node, so focus stayed trapped on the hero buttons. Those now go to the nearest drawn row.
-    val composedRows = remember { HashSet<Int>() }
+    val composedRows = remember { HashMap<Int, Int>() }
     val homeRowRequester: (Int) -> FocusRequester? = { row ->
-        homeNearestComposedRow(row, composedRows, rowFocusRequesters.size)?.let { rowFocusRequesters[it] }
+        homeNearestComposedRow(row, composedRows.keys, rowFocusRequesters.size)?.let { rowFocusRequesters[it] }
     }
     var firstFocused by remember { mutableStateOf(false) }
     val firstFocusRuns = remember { intArrayOf(0) } // effect runs that failed to land row focus; no recomposition needed
@@ -984,7 +986,7 @@ fun HomePageContent(
                                 .focusGroup()
                                 .focusProperties {
                                     // Down returns to the row (or special) focus came from
-                                    down = (specialFocus?.id ?: savedSpecialId)?.let { specialRequesters[it] }
+                                    down = (specialFocus?.id ?: savedSpecialId)?.takeIf { it in composedSpecials }?.let { specialRequesters[it] }
                                         ?: homeRowRequester(currentPosition.row) ?: FocusRequester.Default
                                 },
                     )
@@ -1068,7 +1070,8 @@ fun HomePageContent(
                                     modifier =
                                         rowModifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                 )
                             }
                             return@items
@@ -1091,7 +1094,8 @@ fun HomePageContent(
                                     rowModifier
                                         .fillMaxWidth()
                                         .focusGroup()
-                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                        .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                             )
                             return@items
                         }
@@ -1106,7 +1110,8 @@ fun HomePageContent(
                                     modifier =
                                         rowModifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                 )
                             }
                             return@items
@@ -1123,7 +1128,8 @@ fun HomePageContent(
                                     modifier =
                                         rowModifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                 )
                             }
                             return@items
@@ -1140,7 +1146,8 @@ fun HomePageContent(
                                     modifier =
                                         rowModifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                 )
                             }
                             return@items
@@ -1157,7 +1164,8 @@ fun HomePageContent(
                                     modifier =
                                         rowModifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                 )
                             }
                             return@items
@@ -1175,7 +1183,8 @@ fun HomePageContent(
                                     focusModifier =
                                         Modifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                     modifier = rowModifier,
                                 )
                             }
@@ -1195,7 +1204,8 @@ fun HomePageContent(
                                     focusModifier =
                                         Modifier
                                             .focusGroup()
-                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() }),
+                                            .focusRequester(specialRequesters.getOrPut(id) { FocusRequester() })
+                                            .then(HomeAttachedElement(id, composedSpecials)),
                                     modifier = rowModifier,
                                 )
                             }
@@ -1291,7 +1301,7 @@ fun HomePageContent(
                                                     .fillMaxWidth()
                                                     .focusGroup()
                                                     .focusRequester(rowFocusRequesters[rowIndex])
-                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
+                                                    .then(HomeAttachedElement(rowIndex, composedRows)),
                                         )
                                     } else if (row.items.isNotEmpty() && iptvAppended[rowIndex].orEmpty().isNotEmpty()) {
                                         com.github.damontecres.wholphin.jellytip.watchlist.JellytipWatchlistMixedRow(
@@ -1315,7 +1325,7 @@ fun HomePageContent(
                                                     .fillMaxWidth()
                                                     .focusGroup()
                                                     .focusRequester(rowFocusRequesters[rowIndex])
-                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
+                                                    .then(HomeAttachedElement(rowIndex, composedRows)),
                                             onPlay = { item -> currentOnClickPlay(currentPosition, item) },
                                             rowIndex = rowIndex,
                                         )
@@ -1364,7 +1374,7 @@ fun HomePageContent(
                                                     .fillMaxWidth()
                                                     .focusGroup()
                                                     .focusRequester(rowFocusRequesters[rowIndex])
-                                                    .then(HomeComposedRowElement(rowIndex, composedRows)),
+                                                    .then(HomeAttachedElement(rowIndex, composedRows)),
                                             horizontalPadding = viewOptions.spacing.dp,
                                             cardContent = { index, item, cardModifier, onClick, onLongClick ->
                                                 val onFocus =
@@ -1721,40 +1731,44 @@ internal fun homeNearestComposedRow(
     return composed.filter { it in 0 until size }.minByOrNull { kotlin.math.abs(it - row) * 2 + (if (it < row) 1 else 0) }
 }
 
-/** Records in [set] that row [row]'s focus requester is attached (added on attach, removed on detach). */
-private class HomeComposedRowElement(
-    val row: Int,
-    val set: MutableSet<Int>,
-) : androidx.compose.ui.node.ModifierNodeElement<HomeComposedRowNode>() {
-    override fun create() = HomeComposedRowNode(row, set)
+/** Counts in [counts] the attached nodes holding [key]'s focus requester (a key is "drawn" while its count is > 0). */
+private class HomeAttachedElement<K : Any>(
+    val key: K,
+    val counts: MutableMap<K, Int>,
+) : androidx.compose.ui.node.ModifierNodeElement<HomeAttachedNode<K>>() {
+    override fun create() = HomeAttachedNode(key, counts)
 
-    // identity of the set (its contents change as rows attach)
-    override fun equals(other: Any?) = other is HomeComposedRowElement && other.row == row && other.set === set
+    // identity of the map (its contents change as rows attach)
+    override fun equals(other: Any?) = other is HomeAttachedElement<*> && other.key == key && other.counts === counts
 
-    override fun hashCode() = 31 * row + System.identityHashCode(set)
+    override fun hashCode() = 31 * key.hashCode() + System.identityHashCode(counts)
 
-    override fun update(node: HomeComposedRowNode) {
-        if (node.isAttached && node.row != row) {
-            node.set.remove(node.row)
-            set.add(row)
-        }
-        node.row = row
-        node.set = set
+    override fun update(node: HomeAttachedNode<K>) {
+        if (node.isAttached) node.drop()
+        node.key = key
+        node.counts = counts
+        if (node.isAttached) node.add()
     }
 }
 
-private class HomeComposedRowNode(
-    var row: Int,
-    var set: MutableSet<Int>,
+private class HomeAttachedNode<K : Any>(
+    var key: K,
+    var counts: MutableMap<K, Int>,
 ) : Modifier.Node() {
-    override fun onAttach() {
-        set.add(row)
+    fun add() {
+        counts[key] = (counts[key] ?: 0) + 1
     }
 
-    override fun onDetach() {
-        set.remove(row)
+    fun drop() {
+        val n = (counts[key] ?: 0) - 1
+        if (n > 0) counts[key] = n else counts.remove(key)
     }
+
+    override fun onAttach() = add()
+
+    override fun onDetach() = drop()
 }
+
 
 /** Room the rows under the hero need (title + the tallest special card + focus zoom + spacing); the Home layout leaves exactly this. */
 private val HOME_ROWS_MIN_HEIGHT = 238.dp

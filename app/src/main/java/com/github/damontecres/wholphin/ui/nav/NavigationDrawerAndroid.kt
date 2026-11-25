@@ -66,6 +66,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import com.github.damontecres.wholphin.jellytip.debug.JellytipTrace
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Dp
@@ -100,6 +101,8 @@ fun ModalNavigationDrawer(
     // Jellytip (t5n): whether the page holds focus, so an arrow move from the page can be told from initial-focus
     // search (nothing focused), which must be let in
     var contentHasFocus by remember { mutableStateOf(false) }
+    // The page box: leaving the drawer falls back to focusing into it when the geometric Right search finds nothing
+    val pageRequester = remember { FocusRequester() }
     // Jellytip: the open drawer is drawn OVER the page (no push) with a light scrim on the page. Only what is drawn changes:
     // the scrim fades with the spring the page offset used; while open or fading the drawer is raised above page and scrim
     // (zIndex changes draw order only, not composition or focus order); closed, draw order is as before.
@@ -118,10 +121,11 @@ fun ModalNavigationDrawer(
             drawerState = drawerState,
             contentHasFocus = { contentHasFocus },
             backCloses = backCloses,
+            pageRequester = pageRequester,
             content = drawerContent,
         )
 
-        Box(Modifier.onFocusChanged { contentHasFocus = it.hasFocus }) {
+        Box(Modifier.focusRequester(pageRequester).onFocusChanged { contentHasFocus = it.hasFocus }) {
             content()
         }
         if (scrimAlpha > 0f) {
@@ -145,6 +149,7 @@ private fun DrawerSheet(
     drawerState: DrawerState = remember { DrawerState() },
     contentHasFocus: () -> Boolean = { true },
     backCloses: Boolean = true,
+    pageRequester: FocusRequester? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     // indicates that the drawer has been set to its initial state and has grabbed focus if
@@ -178,9 +183,18 @@ private fun DrawerSheet(
                     repeat(LEAVE_TRIES) { n ->
                         if (n > 0) delay(HANDBACK_RETRY_MS) else withFrameNanos { }
                         if (focusState?.hasFocus != true) return@launch
-                        if (focusManager.moveFocus(FocusDirection.Right)) return@launch
+                        // Opened again meanwhile (a second Back on Home opens it): stop, he is in the drawer now
+                        if (drawerState.currentValue != DrawerValue.Closed) return@launch
+                        if (focusManager.moveFocus(FocusDirection.Right)) {
+                            JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
+                            return@launch
+                        }
+                        if (pageRequester != null && pageRequester.tryRequestFocus() && focusState?.hasFocus != true) {
+                            JellytipTrace.focus("drawer: $why right search failed; focused the page box (try ${n + 1})")
+                            return@launch
+                        }
                     }
-                    if (focusState?.hasFocus == true) {
+                    if (focusState?.hasFocus == true && drawerState.currentValue == DrawerValue.Closed) {
                         JellytipTrace.focus("drawer: page did not take focus after $why; reopened")
                         drawerState.setValue(DrawerValue.Open)
                     }
