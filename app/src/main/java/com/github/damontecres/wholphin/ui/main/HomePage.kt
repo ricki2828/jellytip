@@ -1769,6 +1769,5 @@ private class HomeAttachedNode<K : Any>(
     override fun onDetach() = drop()
 }
 
-
 /** Room the rows under the hero need (title + the tallest special card + focus zoom + spacing); the Home layout leaves exactly this. */
 private val HOME_ROWS_MIN_HEIGHT = 238.dp

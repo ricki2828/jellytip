@@ -189,7 +189,9 @@ private fun DrawerSheet(
                             JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
                             return@launch
                         }
-                        if (pageRequester != null && pageRequester.tryRequestFocus() && focusState?.hasFocus != true) {
+                        // Last tries only (the rail has narrowed by then, so the Right search above had its chance)
+                        if (n >= LEAVE_TRIES - 2 && pageRequester != null && pageRequester.tryRequestFocus()) {
+                            withFrameNanos { }
                             JellytipTrace.focus("drawer: $why right search failed; focused the page box (try ${n + 1})")
                             return@launch
                         }
