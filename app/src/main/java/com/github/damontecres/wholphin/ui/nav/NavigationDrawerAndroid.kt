@@ -185,14 +185,16 @@ private fun DrawerSheet(
                         if (focusState?.hasFocus != true) return@launch
                         // Opened again meanwhile (a second Back on Home opens it): stop, he is in the drawer now
                         if (drawerState.currentValue != DrawerValue.Closed) return@launch
-                        if (focusManager.moveFocus(FocusDirection.Right)) {
-                            JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
+                        // Page box first (26-Nov, Ricki: Right took ~1.1 s, the geometric Right search never found the
+                        // page on the TV and only the page-box fallback on try 5 did). The Right search stays as the
+                        // fallback for a page whose box cannot take focus.
+                        if (pageRequester != null && pageRequester.tryRequestFocus()) {
+                            withFrameNanos { }
+                            JellytipTrace.focus("drawer: $why focused the page box (try ${n + 1})")
                             return@launch
                         }
-                        // Last tries only (the rail has narrowed by then, so the Right search above had its chance)
-                        if (n >= LEAVE_TRIES - 2 && pageRequester != null && pageRequester.tryRequestFocus()) {
-                            withFrameNanos { }
-                            JellytipTrace.focus("drawer: $why right search failed; focused the page box (try ${n + 1})")
+                        if (focusManager.moveFocus(FocusDirection.Right)) {
+                            JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
                             return@launch
                         }
                     }

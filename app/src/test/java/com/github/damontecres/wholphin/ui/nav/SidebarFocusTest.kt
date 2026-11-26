@@ -193,4 +193,27 @@ class SidebarFocusTest {
         compose.waitForIdle()
         assertBackOnPage("Back (page onEnter misses)")
     }
+
+    /** 26-Nov: the page took ~1.1 s to get focus back (page-box fallback only on the 5th try). It must land within ~2 frames of the key. */
+    @Test
+    fun rightFromOpenDrawerReachesPageQuickly() {
+        setPage(staleEnter = true)
+        openWithLeft()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(150)
+        compose.waitForIdle()
+        assertBackOnPage("Right within 150 ms")
+    }
+
+    @Test
+    fun backFromOpenDrawerReachesPageQuickly() {
+        setPage(staleEnter = true)
+        openWithLeft()
+        compose.runOnUiThread { backDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(150)
+        compose.waitForIdle()
+        assertBackOnPage("Back within 150 ms")
+    }
 }
