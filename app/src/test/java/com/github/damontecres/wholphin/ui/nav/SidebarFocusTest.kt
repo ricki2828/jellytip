@@ -62,6 +62,7 @@ class SidebarFocusTest {
     val compose = createComposeRule()
 
     private lateinit var drawerState: DrawerState
+    private var blockTiles by androidx.compose.runtime.mutableStateOf(false)
     private lateinit var backDispatcher: OnBackPressedDispatcher
 
     /** [staleEnter]: the page's onEnter redirects to a requester that is not attached (HomePage's row requester for a row that is not composed). */
@@ -94,6 +95,7 @@ class SidebarFocusTest {
                                         .size(160.dp, 90.dp)
                                         .background(Color.DarkGray)
                                         .testTag("tile$i")
+                                        .focusProperties { canFocus = !blockTiles }
                                         .focusable(),
                                 )
                             }
@@ -199,21 +201,36 @@ class SidebarFocusTest {
     fun rightFromOpenDrawerReachesPageQuickly() {
         setPage(staleEnter = true)
         openWithLeft()
+        compose.mainClock.autoAdvance = false
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(150)
-        compose.waitForIdle()
-        assertBackOnPage("Right within 150 ms")
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(100)
+        assertBackOnPage("Right within ~150 ms")
     }
 
     @Test
     fun backFromOpenDrawerReachesPageQuickly() {
         setPage(staleEnter = true)
         openWithLeft()
+        compose.mainClock.autoAdvance = false
         compose.runOnUiThread { backDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(100)
+        assertBackOnPage("Back within ~150 ms")
+    }
+
+    /** Page with nothing focusable: leaving must not strand focus on the closed rail; the drawer reopens and keeps it. */
+    @Test
+    fun rightWithNothingFocusableOnPageReopensDrawer() {
+        setPage(staleEnter = false)
+        openWithLeft()
+        // Remove the page's focusability by disposing it is not possible here, so block the tiles
+        compose.runOnUiThread { blockTiles = true }
         compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(150)
-        compose.waitForIdle()
-        assertBackOnPage("Back within 150 ms")
+        pressRightInDrawer()
+        assertEquals("drawer reopened", DrawerValue.Open, drawerState.currentValue)
+        compose.onNodeWithTag("rail-home").assertIsFocused()
     }
 }

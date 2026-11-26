@@ -188,10 +188,14 @@ private fun DrawerSheet(
                         // Page box first (26-Nov, Ricki: Right took ~1.1 s, the geometric Right search never found the
                         // page on the TV and only the page-box fallback on try 5 did). The Right search stays as the
                         // fallback for a page whose box cannot take focus.
+                        // tryRequestFocus is true even when the request is silently refused (page loading, onEnter
+                        // cancels), so confirm the page really holds focus before stopping (Opus P1)
                         if (pageRequester != null && pageRequester.tryRequestFocus()) {
                             withFrameNanos { }
-                            JellytipTrace.focus("drawer: $why focused the page box (try ${n + 1})")
-                            return@launch
+                            if (contentHasFocus()) {
+                                JellytipTrace.focus("drawer: $why focused the page box (try ${n + 1})")
+                                return@launch
+                            }
                         }
                         if (focusManager.moveFocus(FocusDirection.Right)) {
                             JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
