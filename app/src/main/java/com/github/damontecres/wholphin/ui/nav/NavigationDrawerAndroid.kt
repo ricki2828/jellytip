@@ -197,6 +197,8 @@ private fun DrawerSheet(
                                 return@launch
                             }
                         }
+                        // The page-box request above may have suspended a frame: re-check before the Right search
+                        if (drawerState.currentValue != DrawerValue.Closed || focusState?.hasFocus != true) return@launch
                         if (focusManager.moveFocus(FocusDirection.Right)) {
                             JellytipTrace.focus("drawer: $why moved right (try ${n + 1})")
                             return@launch

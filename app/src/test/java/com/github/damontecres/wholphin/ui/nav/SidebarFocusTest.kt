@@ -226,10 +226,13 @@ class SidebarFocusTest {
     fun rightWithNothingFocusableOnPageReopensDrawer() {
         setPage(staleEnter = false)
         openWithLeft()
-        // Remove the page's focusability by disposing it is not possible here, so block the tiles
+        // Make the page's tiles unfocusable
         compose.runOnUiThread { blockTiles = true }
         compose.waitForIdle()
-        pressRightInDrawer()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(2000)
+        compose.waitForIdle()
         assertEquals("drawer reopened", DrawerValue.Open, drawerState.currentValue)
         compose.onNodeWithTag("rail-home").assertIsFocused()
     }
