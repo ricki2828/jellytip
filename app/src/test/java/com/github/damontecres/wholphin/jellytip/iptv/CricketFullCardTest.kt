@@ -52,7 +52,7 @@ class CricketFullCardTest {
         assertEquals("128", cur.fow[0].runs)
         assertEquals("40.2", cur.fow[0].overs)
         val o = cur.bowling.first { it.name == "Player A8" }
-        assertEquals(listOf("10.0", "1", "37", "0", "3.7"), listOf(o.overs, o.maidens, o.runs, o.wickets, o.econ))
+        assertEquals(listOf("10.0", "1", "37", "0", "3.70"), listOf(o.overs, o.maidens, o.runs, o.wickets, o.econ))
         assertEquals(11, live.fullCard!!.innings[1].batting.size)
         assertEquals(10, live.fullCard!!.innings[1].fow.size)
     }
@@ -91,6 +91,33 @@ class CricketFullCardTest {
         val held = GameStateLogic.releasedCard(l.scorecard) { false }
         assertNotNull(held)
         assertSame(l.fullCard, GameStateLogic.releasedFullCard(l.fullCard, held))
+    }
+
+    @Test
+    fun fullTimeCardWaitsForTheSheet() {
+        // OK on the open sheet must not reach the full-time card's accept (channel switch)
+        assertTrue(GameStateLogic.fullTimeCardDue(true, false, false))
+        assertFalse(GameStateLogic.fullTimeCardDue(true, false, true))
+        assertFalse(GameStateLogic.fullTimeCardDue(true, true, false))
+        assertFalse(GameStateLogic.fullTimeCardDue(false, false, false))
+    }
+
+    @Test
+    fun selectedTabFollowsTheInningsNumber() {
+        val fc = live.fullCard!!
+        assertEquals(1, fullTabIndex(fc, 2))
+        assertEquals(0, fullTabIndex(fc, null))
+        assertEquals(0, fullTabIndex(fc, 99))
+        // a new innings arriving at the front shifts the indexes; the selection stays on innings 2
+        val grown = fc.copy(innings = listOf(fc.innings[0].copy(n = 4)) + fc.innings)
+        assertEquals(2, fullTabIndex(grown, 2))
+    }
+
+    @Test
+    fun ratesFormattedToFixedPlaces() {
+        val i = SportParse.fullCard(JSONObject("{\"innings\":[{\"n\":1,\"batting\":[{\"name\":\"A\",\"out\":\"not out\",\"sr\":50},{\"name\":\"B\",\"out\":\"b X\",\"sr\":33.333}],\"bowling\":[{\"name\":\"C\",\"econ\":4.1},{\"name\":\"D\",\"econ\":\"x\"}]}]}"))!!.innings[0]
+        assertEquals(listOf("50.0", "33.3"), i.batting.map { it.sr })
+        assertEquals(listOf("4.10", null), i.bowling.map { it.econ })
     }
 
     @Test

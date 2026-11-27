@@ -133,6 +133,12 @@ object SportParse {
             else -> null
         }
 
+    /** A decimal with a fixed number of places (strike rate 1, economy 2), whatever the server's rounding; null for a missing / non-finite value. */
+    private fun JSONObject.dp(
+        k: String,
+        places: Int,
+    ): String? = (opt(k) as? Number)?.toDouble()?.takeIf { it.isFinite() }?.let { String.format(java.util.Locale.US, "%.${places}f", it) }
+
     private fun JSONObject.t(k: String) = if (has(k) && !isNull(k)) t(opt(k)) else null
 
     private fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
@@ -191,14 +197,14 @@ object SportParse {
                     current = o.optBoolean("current", false),
                     batting =
                         o.optJSONArray("batting").objects().mapNotNull { b ->
-                            b.t("name")?.let { FullBat(it, b.t("out") ?: "", b.t("runs"), b.t("balls"), b.t("fours"), b.t("sixes"), b.t("sr"), b.optBoolean("atCrease", false)) }
+                            b.t("name")?.let { FullBat(it, b.t("out") ?: "", b.t("runs"), b.t("balls"), b.t("fours"), b.t("sixes"), b.dp("sr", 1), b.optBoolean("atCrease", false)) }
                         },
                     didNotBat = o.optJSONArray("didNotBat")?.let { a -> (0 until a.length()).mapNotNull { t(a.opt(it)) } } ?: emptyList(),
                     extras = extras,
                     fow = o.optJSONArray("fow").objects().map { f -> FullFow((f.opt("wicket") as? Number)?.toInt(), f.t("runs"), f.t("overs"), f.t("name")) },
                     bowling =
                         o.optJSONArray("bowling").objects().mapNotNull { b ->
-                            b.t("name")?.let { FullBowl(it, b.t("overs"), b.t("maidens"), b.t("runs"), b.t("wickets"), b.t("econ")) }
+                            b.t("name")?.let { FullBowl(it, b.t("overs"), b.t("maidens"), b.t("runs"), b.t("wickets"), b.dp("econ", 2)) }
                         },
                 )
             }
@@ -639,6 +645,13 @@ object GameStateLogic {
         full: FullCard?,
         card: CricketCard?,
     ): FullCard? = if (card == null) null else full
+
+    /** The full-time card may come up only when the game is final and unshown, not in a replay, and not while the full scorecard sheet owns OK. */
+    fun fullTimeCardDue(
+        finalNotShown: Boolean,
+        replay: Boolean,
+        fullCardOpen: Boolean,
+    ): Boolean = finalNotShown && !replay && !fullCardOpen
 
     /** The scorecard with only the overs the clock has released. */
     fun releasedCard(

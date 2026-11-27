@@ -323,7 +323,7 @@ fun JellytipLiveTvPlayerPage(
     var chipsOpen by remember { mutableStateOf(false) }
     // Cricket full scorecard overlay (opened by a short OK on the Stats tab; its keys: Left/Right innings, Up/Down scroll, Back/OK close)
     var fullOpen by remember { mutableStateOf(false) }
-    var fullTab by remember { mutableIntStateOf(0) }
+    var fullTabN by remember { mutableStateOf<Int?>(null) }
     val fullScroll = rememberScrollState()
     // The release of the OK / Back press that closed the sheet is swallowed too (it must not reach the player)
     val fullSwallowUp = remember { BooleanArray(1) }
@@ -676,7 +676,10 @@ fun JellytipLiveTvPlayerPage(
     // The one gated value for the full scorecard (never while a replay or a spoiler notice is up)
     val fullCardNow = liveData.takeUnless { replayShown || spoilerNotice }?.fullCard
     LaunchedEffect(fullOpen, panelOpen, fullCardNow == null) {
-        if (fullOpen && (!panelOpen || fullCardNow == null)) fullOpen = false
+        if (fullOpen && (!panelOpen || fullCardNow == null)) {
+            fullOpen = false
+            fullSwallowUp[0] = false
+        }
     }
     var liveFlash by remember(liveId) { mutableStateOf<LiveFlash?>(null) }
     val liveSeen = remember(liveId) { LiveSeen() }
@@ -927,7 +930,7 @@ fun JellytipLiveTvPlayerPage(
                     openAuto(BreakModePolicy.Reason.BREAK)
                 }
             }
-            if (kind == GameKind.FINAL && d != null && m != null && m.id !in ftShown && !replayShown) {
+            if (GameStateLogic.fullTimeCardDue(kind == GameKind.FINAL && d != null && m != null && m.id !in ftShown, replayShown, fullOpen) && d != null && m != null) {
                 ftShown += m.id
                 ftScore = d.scoreHome to d.scoreAway
                 val fx = viewModel.service.fixtures(maxAgeMs = 60_000)?.second
@@ -1169,7 +1172,7 @@ fun JellytipLiveTvPlayerPage(
                         if (c != null) {
                             pendingCloser = c
                         } else if (fullCardNow != null) {
-                            fullTab = 0
+                            fullTabN = null
                             fullOpen = true
                             fullScope.launch { fullScroll.scrollTo(0) }
                         }
@@ -1177,6 +1180,31 @@ fun JellytipLiveTvPlayerPage(
                     return@onPreviewKeyEvent true
                 }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (e.nativeKeyEvent.repeatCount == 0) fullSwallowUp[0] = false
+                if (fullOpen) {
+                    val cardNow = fullCardNow
+                    val size = cardNow?.innings?.size ?: 0
+                    when (e.key) {
+                        Key.DirectionLeft, Key.DirectionRight -> {
+                            val cur = fullTabIndex(cardNow, fullTabN)
+                            val next = stepFullTab(cur, if (e.key == Key.DirectionLeft) -1 else 1, size)
+                            if (next != cur) {
+                                fullTabN = cardNow?.innings?.getOrNull(next)?.n
+                                fullScope.launch { fullScroll.scrollTo(0) }
+                            }
+                        }
+                        Key.DirectionUp -> fullScope.launch { fullScroll.animateScrollBy(-260f) }
+                        Key.DirectionDown -> fullScope.launch { fullScroll.animateScrollBy(260f) }
+                        Key.Back, Key.Escape, Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                            if (e.nativeKeyEvent.repeatCount == 0) {
+                                fullOpen = false
+                                fullSwallowUp[0] = true
+                                focus.tryRequestFocus()
+                            }
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 val okKey = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
                 // Recovery gave up: OK tries again (Up/Down still zap, Back still leaves)
                 (playState as? IptvPlayState.Failed)?.takeIf { it.canRetry && okKey && it.target == current }?.let {
@@ -1238,28 +1266,6 @@ fun JellytipLiveTvPlayerPage(
                             trackSheetOpen = false
                             focus.tryRequestFocus()
                         }
-                        else -> return@onPreviewKeyEvent false
-                    }
-                    return@onPreviewKeyEvent true
-                }
-                if (fullOpen) {
-                    val size = fullCardNow?.innings?.size ?: 0
-                    when (e.key) {
-                        Key.DirectionLeft, Key.DirectionRight -> {
-                            val next = stepFullTab(fullTab, if (e.key == Key.DirectionLeft) -1 else 1, size)
-                            if (next != fullTab) {
-                                fullTab = next
-                                fullScope.launch { fullScroll.scrollTo(0) }
-                            }
-                        }
-                        Key.DirectionUp -> fullScope.launch { fullScroll.animateScrollBy(-260f) }
-                        Key.DirectionDown -> fullScope.launch { fullScroll.animateScrollBy(260f) }
-                        Key.Back, Key.Escape, Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
-                            if (e.nativeKeyEvent.repeatCount == 0) {
-                                fullOpen = false
-                                fullSwallowUp[0] = true
-                                focus.tryRequestFocus()
-                            }
                         else -> return@onPreviewKeyEvent false
                     }
                     return@onPreviewKeyEvent true
@@ -1555,7 +1561,7 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         if (fullOpen) {
-            fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTab, fullScroll, Modifier.align(Alignment.Center)) }
+            fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTabIndex(fc, fullTabN), fullScroll, Modifier.align(Alignment.Center)) }
         }
         if (delaySheetOpen) {
             DelaySheet(

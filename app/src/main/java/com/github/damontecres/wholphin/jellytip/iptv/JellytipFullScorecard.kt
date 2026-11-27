@@ -39,6 +39,12 @@ private const val HEAD = 13
 /** Tab label: "SA 198/2" (the short code when the server sent one). */
 internal fun fullTabLabel(i: FullInnings): String = listOfNotNull(i.abbr ?: i.title, i.score).joinToString(" ")
 
+/** The selected tab as an index: keyed by the innings number so a new innings arriving does not move the selection; none/unknown = the newest. */
+internal fun fullTabIndex(
+    card: FullCard?,
+    n: Int?,
+): Int = card?.innings?.indexOfFirst { it.n == n }?.takeIf { it >= 0 } ?: 0
+
 /** Left / Right on the tabs: stops at the ends (no wrap, so the viewer always knows where they are). */
 internal fun stepFullTab(
     tab: Int,
