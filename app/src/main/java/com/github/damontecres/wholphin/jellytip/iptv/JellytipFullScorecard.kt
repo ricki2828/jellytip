@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,7 +66,7 @@ fun FullScorecardSheet(
             card.innings.forEachIndexed { n, t ->
                 key(t.n) {
                     val on = n == tab
-                    Column {
+                    Column(Modifier.width(IntrinsicSize.Max)) {
                         Cond(fullTabLabel(t) + if (t.current) " *" else "", 17.sp, if (on) Color.White else Broadcast.Secondary, modifier = Modifier.padding(vertical = 3.dp))
                         Box(Modifier.height(3.dp).fillMaxWidth().background(if (on) Broadcast.Gold else Color.Transparent))
                     }
