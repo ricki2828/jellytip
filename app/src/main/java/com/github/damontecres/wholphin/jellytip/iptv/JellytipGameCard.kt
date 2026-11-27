@@ -85,6 +85,12 @@ fun GameStateCard(
     }
 }
 
+/** The gold "OK · <what>" hint under the Stats tab (the player page opens the sheet on a short OK). */
+@Composable
+fun FullHint(what: String) {
+    Cond("OK  ·  $what", 14.sp, Broadcast.Ink, weight = FontWeight.Bold, tracking = 0.05f, modifier = Modifier.background(Broadcast.Gold, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+}
+
 /** Cricket scorecard: innings totals, at the crease, bowling / partnership / target, the last three overs. */
 @Composable
 fun ScorecardBlocks(
@@ -119,9 +125,7 @@ fun ScorecardBlocks(
             c.rrr?.let { "Required" to it },
         )
     kv.forEach { (l, v) -> KvRow(l, v) }
-    if (fullHint) {
-        Cond("OK  ·  Full scorecard", 14.sp, Broadcast.Ink, weight = FontWeight.Bold, tracking = 0.05f, modifier = Modifier.background(Broadcast.Gold, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
-    }
+    if (fullHint) FullHint("Full scorecard")
     c.overs.takeLast(3).reversed().forEach { o ->
         if (o.balls.isEmpty()) return@forEach
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {

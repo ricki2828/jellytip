@@ -124,6 +124,56 @@ data class FullCard(
     val innings: List<FullInnings>,
 )
 
+/** One box-score table row. [total] = the team-totals row (drawn strong). */
+data class BoxRow(
+    val name: String,
+    val pos: String?,
+    val stats: List<String>,
+    val total: Boolean,
+)
+
+data class BoxSection(
+    val title: String,
+    val labels: List<String>,
+    val rows: List<BoxRow>,
+)
+
+data class BoxTeam(
+    /** home | away */
+    val side: String,
+    val name: String?,
+    val abbr: String?,
+    val sections: List<BoxSection>,
+    /** Basketball: did-not-play names. */
+    val dnp: List<String>,
+)
+
+/** NFL team-stat comparison row. */
+data class BoxCompare(
+    val label: String,
+    val home: String,
+    val away: String,
+)
+
+/** A sheet tab: [key] is stable across refreshes ("compare" / "away" / "home"); the label is what the tab shows. */
+data class BoxTab(
+    val key: String,
+    val label: String,
+)
+
+/** The /live `boxScore` (NFL / basketball): released only with the in-play snapshot, like [FullCard]. */
+data class BoxScore(
+    /** nfl | basketball */
+    val kind: String,
+    val compare: List<BoxCompare>,
+    val teams: List<BoxTeam>,
+) {
+    /** NFL: "Team stats" first (when the server sent it), then away, home. Basketball: the two teams. */
+    val tabs: List<BoxTab> =
+        (if (compare.isNotEmpty()) listOf(BoxTab("compare", "Team stats")) else emptyList()) +
+            teams.map { BoxTab(it.side, it.abbr ?: it.name ?: it.side) }
+}
+
 object SportParse {
     private fun t(v: Any?): String? =
         when (v) {
@@ -174,6 +224,37 @@ object SportParse {
                     CricketOver(o.t("over"), o.t("runs"), if (balls == null) emptyList() else (0 until balls.length()).mapNotNull { t(balls.opt(it)) }, o.optBoolean("live", false), at(o))
                 },
         )
+    }
+
+
+    fun boxScore(b: JSONObject?): BoxScore? {
+        b ?: return null
+        val kind = b.t("kind")?.takeIf { it == "nfl" || it == "basketball" } ?: return null
+        fun strs(a: JSONArray?): List<String> = if (a == null) emptyList() else (0 until a.length()).map { t(a.opt(it)) ?: "" }
+        val teams =
+            b.optJSONArray("teams").objects().mapNotNull { tm ->
+                val side = side(tm.t("team")) ?: return@mapNotNull null
+                val sections =
+                    tm.optJSONArray("sections").objects().mapNotNull { sec ->
+                        val labels = strs(sec.optJSONArray("labels"))
+                        val rows =
+                            sec.optJSONArray("rows").objects().mapNotNull { r ->
+                                val name = r.t("name") ?: return@mapNotNull null
+                                BoxRow(name, r.t("pos"), strs(r.optJSONArray("stats")), r.optBoolean("total", false))
+                            }
+                        if (rows.isEmpty() || labels.isEmpty()) null else BoxSection(sec.t("title") ?: "", labels, rows)
+                    }
+                if (sections.isEmpty()) null else BoxTeam(side, tm.t("name"), tm.t("abbr"), sections, strs(tm.optJSONArray("dnp")).filter { it.isNotEmpty() })
+            }
+        if (teams.isEmpty()) return null
+        val compare =
+            b.optJSONArray("compare").objects().mapNotNull { c ->
+                val l = c.t("label") ?: return@mapNotNull null
+                val h = c.t("home") ?: return@mapNotNull null
+                val a = c.t("away") ?: return@mapNotNull null
+                BoxCompare(l, h, a)
+            }
+        return BoxScore(kind, compare, teams)
     }
 
     fun fullCard(fc: JSONObject?): FullCard? {
@@ -645,6 +726,23 @@ object GameStateLogic {
         full: FullCard?,
         card: CricketCard?,
     ): FullCard? = if (card == null) null else full
+
+
+    /**
+     * The box score is one snapshot-level block (no per-play stamps), so it rides in the released snapshot exactly like the full scorecard
+     * and is hidden in a replay or while a spoiler notice is up.
+     */
+    fun releasedBoxScore(
+        box: BoxScore?,
+        replay: Boolean,
+        spoilerNotice: Boolean,
+    ): BoxScore? = if (replay || spoilerNotice) null else box
+
+    /** The selected box tab as an index: keyed by the tab key so a refresh does not move the selection; none/unknown = the first. */
+    fun boxTabIndex(
+        box: BoxScore?,
+        key: String?,
+    ): Int = box?.tabs?.indexOfFirst { it.key == key }?.takeIf { it >= 0 } ?: 0
 
     /** The full-time card may come up only when the game is final and unshown, not in a replay, and not while the full scorecard sheet owns OK. */
     fun fullTimeCardDue(

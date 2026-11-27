@@ -324,6 +324,8 @@ fun JellytipLiveTvPlayerPage(
     // Cricket full scorecard overlay (opened by a short OK on the Stats tab; its keys: Left/Right innings, Up/Down scroll, Back/OK close)
     var fullOpen by remember { mutableStateOf(false) }
     var fullTabN by remember { mutableStateOf<Int?>(null) }
+    // The NFL / basketball box score uses the same sheet state (fullOpen, scroll, swallow flag); its tab is keyed by "compare" / "away" / "home"
+    var boxTabKey by remember { mutableStateOf<String?>(null) }
     val fullScroll = rememberScrollState()
     // The release of the OK / Back press that closed the sheet is swallowed too (it must not reach the player)
     val fullSwallowUp = remember { BooleanArray(1) }
@@ -675,8 +677,9 @@ fun JellytipLiveTvPlayerPage(
     var liveData by remember(liveId) { mutableStateOf<MatchLive?>(null) }
     // The one gated value for the full scorecard (never while a replay or a spoiler notice is up)
     val fullCardNow = liveData.takeUnless { replayShown || spoilerNotice }?.fullCard
-    LaunchedEffect(fullOpen, panelOpen, fullCardNow == null) {
-        if (fullOpen && (!panelOpen || fullCardNow == null)) {
+    val boxNow = GameStateLogic.releasedBoxScore(liveData?.boxScore, replayShown, spoilerNotice)
+    LaunchedEffect(fullOpen, panelOpen, fullCardNow == null && boxNow == null) {
+        if (fullOpen && (!panelOpen || (fullCardNow == null && boxNow == null))) {
             fullOpen = false
             fullSwallowUp[0] = false
         }
@@ -1175,6 +1178,10 @@ fun JellytipLiveTvPlayerPage(
                             fullTabN = null
                             fullOpen = true
                             fullScope.launch { fullScroll.scrollTo(0) }
+                        } else if (boxNow != null) {
+                            boxTabKey = null
+                            fullOpen = true
+                            fullScope.launch { fullScroll.scrollTo(0) }
                         }
                     }
                     return@onPreviewKeyEvent true
@@ -1186,11 +1193,21 @@ fun JellytipLiveTvPlayerPage(
                     val size = cardNow?.innings?.size ?: 0
                     when (e.key) {
                         Key.DirectionLeft, Key.DirectionRight -> {
-                            val cur = fullTabIndex(cardNow, fullTabN)
-                            val next = stepFullTab(cur, if (e.key == Key.DirectionLeft) -1 else 1, size)
-                            if (next != cur) {
-                                fullTabN = cardNow?.innings?.getOrNull(next)?.n
-                                fullScope.launch { fullScroll.scrollTo(0) }
+                            val step = if (e.key == Key.DirectionLeft) -1 else 1
+                            if (cardNow == null && boxNow != null) {
+                                val cur = GameStateLogic.boxTabIndex(boxNow, boxTabKey)
+                                val next = stepBoxTab(cur, step, boxNow.tabs.size)
+                                if (next != cur) {
+                                    boxTabKey = boxNow.tabs.getOrNull(next)?.key
+                                    fullScope.launch { fullScroll.scrollTo(0) }
+                                }
+                            } else {
+                                val cur = fullTabIndex(cardNow, fullTabN)
+                                val next = stepFullTab(cur, step, size)
+                                if (next != cur) {
+                                    fullTabN = cardNow?.innings?.getOrNull(next)?.n
+                                    fullScope.launch { fullScroll.scrollTo(0) }
+                                }
                             }
                         }
                         Key.DirectionUp -> fullScope.launch { fullScroll.animateScrollBy(-260f) }
@@ -1562,6 +1579,7 @@ fun JellytipLiveTvPlayerPage(
         }
         if (fullOpen) {
             fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTabIndex(fc, fullTabN), fullScroll, Modifier.align(Alignment.Center)) }
+                ?: boxNow?.let { bx -> BoxScoreSheet(bx, GameStateLogic.boxTabIndex(bx, boxTabKey), fullScroll, Modifier.align(Alignment.Center)) }
         }
         if (delaySheetOpen) {
             DelaySheet(
