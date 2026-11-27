@@ -325,6 +325,8 @@ fun JellytipLiveTvPlayerPage(
     var fullOpen by remember { mutableStateOf(false) }
     var fullTab by remember { mutableIntStateOf(0) }
     val fullScroll = rememberScrollState()
+    // The release of the OK / Back press that closed the sheet is swallowed too (it must not reach the player)
+    val fullSwallowUp = remember { BooleanArray(1) }
     val fullScope = androidx.compose.runtime.rememberCoroutineScope()
     var chipCursor by remember { mutableIntStateOf(0) }
     val delaySheetAt = remember { longArrayOf(0L) }
@@ -1155,6 +1157,10 @@ fun JellytipLiveTvPlayerPage(
             .background(Color.Black)
             .focusRequester(focus)
             .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyUp && (fullOpen || fullSwallowUp[0]) && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Back || e.key == Key.Escape)) {
+                    fullSwallowUp[0] = false
+                    return@onPreviewKeyEvent true
+                }
                 // Closer game: a short OK press in the panel's Stats tab (released, not held) switches to it
                 if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) && closerArmed[0]) {
                     closerArmed[0] = false
@@ -1251,6 +1257,7 @@ fun JellytipLiveTvPlayerPage(
                         Key.Back, Key.Escape, Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
                             if (e.nativeKeyEvent.repeatCount == 0) {
                                 fullOpen = false
+                                fullSwallowUp[0] = true
                                 focus.tryRequestFocus()
                             }
                         else -> return@onPreviewKeyEvent false
