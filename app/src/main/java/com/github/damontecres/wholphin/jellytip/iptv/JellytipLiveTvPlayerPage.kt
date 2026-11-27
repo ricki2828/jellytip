@@ -671,8 +671,10 @@ fun JellytipLiveTvPlayerPage(
     val liveId = panelMatch?.id?.takeIf { !spoilerNotice }
     val panelIsOpen = panelOpen && panelMatch != null
     var liveData by remember(liveId) { mutableStateOf<MatchLive?>(null) }
-    LaunchedEffect(fullOpen, panelOpen, replayShown, liveData?.fullCard == null) {
-        if (fullOpen && (!panelOpen || replayShown || liveData?.fullCard == null)) fullOpen = false
+    // The one gated value for the full scorecard (never while a replay or a spoiler notice is up)
+    val fullCardNow = liveData.takeUnless { replayShown || spoilerNotice }?.fullCard
+    LaunchedEffect(fullOpen, panelOpen, fullCardNow == null) {
+        if (fullOpen && (!panelOpen || fullCardNow == null)) fullOpen = false
     }
     var liveFlash by remember(liveId) { mutableStateOf<LiveFlash?>(null) }
     val liveSeen = remember(liveId) { LiveSeen() }
@@ -1160,7 +1162,7 @@ fun JellytipLiveTvPlayerPage(
                     if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats") {
                         if (c != null) {
                             pendingCloser = c
-                        } else if (liveData?.fullCard != null) {
+                        } else if (fullCardNow != null) {
                             fullTab = 0
                             fullOpen = true
                             fullScope.launch { fullScroll.scrollTo(0) }
@@ -1235,7 +1237,7 @@ fun JellytipLiveTvPlayerPage(
                     return@onPreviewKeyEvent true
                 }
                 if (fullOpen) {
-                    val size = liveData?.fullCard?.innings?.size ?: 0
+                    val size = fullCardNow?.innings?.size ?: 0
                     when (e.key) {
                         Key.DirectionLeft, Key.DirectionRight -> {
                             val next = stepFullTab(fullTab, if (e.key == Key.DirectionLeft) -1 else 1, size)
@@ -1546,7 +1548,7 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         if (fullOpen) {
-            liveData?.fullCard?.let { fc -> FullScorecardSheet(fc, fullTab, fullScroll, Modifier.align(Alignment.Center)) }
+            fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTab, fullScroll, Modifier.align(Alignment.Center)) }
         }
         if (delaySheetOpen) {
             DelaySheet(

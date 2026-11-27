@@ -1048,7 +1048,7 @@ private fun StatsTab(
         val st = remember(d, m.leagueKey, allowWinProb) { GameStateLogic.of(d, m.leagueKey, m.status, allowWinProb) }
         GameStateCard(d, st, home, away, fav, allowWinProb, closer)
     }
-    d.scorecard?.let { ScorecardBlocks(it, home, away, fullHint = d.fullCard != null) }
+    d.scorecard?.let { ScorecardBlocks(it, home, away, fullHint = d.fullCard != null && closer == null) }
     // The scorecard already has the crease, bowling and rates
     d.situation?.takeUnless { d.layout == "cricket" && d.scorecard != null }?.let { ContextBlock(d.layout, it, m, d, pal) }
     d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
