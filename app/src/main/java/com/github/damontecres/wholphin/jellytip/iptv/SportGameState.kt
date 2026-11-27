@@ -74,6 +74,56 @@ data class CricketCard(
     val overs: List<CricketOver>,
 )
 
+/** One batter's line in the full scorecard (values are display strings; `out` is "c X b Y" / "not out"). */
+data class FullBat(
+    val name: String,
+    val out: String,
+    val runs: String?,
+    val balls: String?,
+    val fours: String?,
+    val sixes: String?,
+    val sr: String?,
+    val atCrease: Boolean,
+)
+
+data class FullBowl(
+    val name: String,
+    val overs: String?,
+    val maidens: String?,
+    val runs: String?,
+    val wickets: String?,
+    val econ: String?,
+)
+
+data class FullFow(
+    val wicket: Int?,
+    val runs: String?,
+    val overs: String?,
+    val name: String?,
+)
+
+data class FullInnings(
+    val n: Int,
+    val title: String,
+    val abbr: String?,
+    val score: String?,
+    val overs: String?,
+    val result: String?,
+    val target: String?,
+    val current: Boolean,
+    val batting: List<FullBat>,
+    val didNotBat: List<String>,
+    /** "10 (b 5, lb 3, w 1, nb 1)"; null = none sent. */
+    val extras: String?,
+    val fow: List<FullFow>,
+    val bowling: List<FullBowl>,
+)
+
+/** The /live `fullCard` (cricket): every innings, newest first. Released only with the summary [CricketCard]. */
+data class FullCard(
+    val innings: List<FullInnings>,
+)
+
 object SportParse {
     private fun t(v: Any?): String? =
         when (v) {
@@ -118,6 +168,41 @@ object SportParse {
                     CricketOver(o.t("over"), o.t("runs"), if (balls == null) emptyList() else (0 until balls.length()).mapNotNull { t(balls.opt(it)) }, o.optBoolean("live", false), at(o))
                 },
         )
+    }
+
+    fun fullCard(fc: JSONObject?): FullCard? {
+        val innings =
+            fc?.optJSONArray("innings").objects().mapIndexed { idx, o ->
+                val n = (o.opt("n") as? Number)?.toInt() ?: (idx + 1)
+                val score = o.t("score") ?: o.t("runs")?.let { r -> o.t("wickets")?.let { w -> "$r/$w" } ?: r }
+                val ex = o.optJSONObject("extras")
+                val parts =
+                    listOf("b" to "byes", "lb" to "legByes", "w" to "wides", "nb" to "noBalls", "pen" to "penalties")
+                        .mapNotNull { (l, k) -> ex?.t(k)?.takeIf { it != "0" }?.let { "$l $it" } }
+                val extras = ex?.t("total")?.let { tot -> if (parts.isEmpty()) tot else "$tot (${parts.joinToString(", ")})" }
+                FullInnings(
+                    n = n,
+                    title = o.t("title") ?: o.t("teamName") ?: "Innings $n",
+                    abbr = o.t("abbr"),
+                    score = score,
+                    overs = o.t("overs"),
+                    result = o.t("result"),
+                    target = o.t("target"),
+                    current = o.optBoolean("current", false),
+                    batting =
+                        o.optJSONArray("batting").objects().mapNotNull { b ->
+                            b.t("name")?.let { FullBat(it, b.t("out") ?: "", b.t("runs"), b.t("balls"), b.t("fours"), b.t("sixes"), b.t("sr"), b.optBoolean("atCrease", false)) }
+                        },
+                    didNotBat = o.optJSONArray("didNotBat")?.let { a -> (0 until a.length()).mapNotNull { t(a.opt(it)) } } ?: emptyList(),
+                    extras = extras,
+                    fow = o.optJSONArray("fow").objects().map { f -> FullFow((f.opt("wicket") as? Number)?.toInt(), f.t("runs"), f.t("overs"), f.t("name")) },
+                    bowling =
+                        o.optJSONArray("bowling").objects().mapNotNull { b ->
+                            b.t("name")?.let { FullBowl(it, b.t("overs"), b.t("maidens"), b.t("runs"), b.t("wickets"), b.t("econ")) }
+                        },
+                )
+            }
+        return if (innings.isEmpty()) null else FullCard(innings)
     }
 
     /** Wickets in hand from the situation (`wicketsInHand` / `wicketsLeft`, else 10 - `wickets`/`wicketsDown`/`wkts`). */
@@ -545,6 +630,15 @@ object GameStateLogic {
         t: List<TimelineEntry>,
         reveal: (Double?) -> Boolean,
     ): List<TimelineEntry> = t.filter { reveal(it.at) }
+
+    /**
+     * The full scorecard follows the summary scorecard's release exactly: it is one snapshot-level block (no per-ball stamps),
+     * so it is shown only while the released summary [card] is, and it rides in the same released snapshot.
+     */
+    fun releasedFullCard(
+        full: FullCard?,
+        card: CricketCard?,
+    ): FullCard? = if (card == null) null else full
 
     /** The scorecard with only the overs the clock has released. */
     fun releasedCard(

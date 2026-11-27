@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -320,6 +321,11 @@ fun JellytipLiveTvPlayerPage(
     var delayCursor by remember { mutableIntStateOf(0) }
     var delayNote by remember { mutableStateOf<String?>(null) }
     var chipsOpen by remember { mutableStateOf(false) }
+    // Cricket full scorecard overlay (opened by a short OK on the Stats tab; its keys: Left/Right innings, Up/Down scroll, Back/OK close)
+    var fullOpen by remember { mutableStateOf(false) }
+    var fullTab by remember { mutableIntStateOf(0) }
+    val fullScroll = rememberScrollState()
+    val fullScope = androidx.compose.runtime.rememberCoroutineScope()
     var chipCursor by remember { mutableIntStateOf(0) }
     val delaySheetAt = remember { longArrayOf(0L) }
     // Round 3 (wow brief): break mode 4A, the full-time card (3) and catch me up (8)
@@ -568,6 +574,10 @@ fun JellytipLiveTvPlayerPage(
         chipsOpen = false
         focus.tryRequestFocus()
     }
+    androidx.activity.compose.BackHandler(enabled = fullOpen) {
+        fullOpen = false
+        focus.tryRequestFocus()
+    }
     // Round 3 cards: Back closes the card (and stays on this channel), never the player
     androidx.activity.compose.BackHandler(enabled = ftCard != null) { ftCard = null }
     androidx.activity.compose.BackHandler(enabled = catchOpen || catchCards != null) {
@@ -661,6 +671,9 @@ fun JellytipLiveTvPlayerPage(
     val liveId = panelMatch?.id?.takeIf { !spoilerNotice }
     val panelIsOpen = panelOpen && panelMatch != null
     var liveData by remember(liveId) { mutableStateOf<MatchLive?>(null) }
+    LaunchedEffect(fullOpen, panelOpen, replayShown, liveData?.fullCard == null) {
+        if (fullOpen && (!panelOpen || replayShown || liveData?.fullCard == null)) fullOpen = false
+    }
     var liveFlash by remember(liveId) { mutableStateOf<LiveFlash?>(null) }
     val liveSeen = remember(liveId) { LiveSeen() }
     // Answers wait in [snaps] until the reveal clock releases them; alerts wait in [pendingAlerts] (web alertPolicy:
@@ -673,7 +686,7 @@ fun JellytipLiveTvPlayerPage(
     var bugClock by remember(liveId) { mutableStateOf<String?>(null) }
     var holdSecs by remember(liveId) { mutableStateOf<Int?>(null) }
     /** Something else has the remote: the panel must not open underneath it. */
-    fun overlaysUp() = delaySheetOpen || chipsOpen || trackSheetOpen || matchModal != null || preMenu || panelMenu
+    fun overlaysUp() = delaySheetOpen || chipsOpen || fullOpen || trackSheetOpen || matchModal != null || preMenu || panelMenu
     fun openAuto(r: BreakModePolicy.Reason) {
         openedBy = r
         openedAt[0] = System.currentTimeMillis()
@@ -790,7 +803,8 @@ fun JellytipLiveTvPlayerPage(
                     snaps.releasedFull(reveal)?.let { r ->
                         val tl = GameStateLogic.releasedTimeline(r.timeline, reveal)
                         val card = GameStateLogic.releasedCard(r.scorecard, reveal)
-                        val gated = if (tl.size == r.timeline.size && card === r.scorecard) r else r.copy(timeline = tl, scorecard = card)
+                        val fullCard = GameStateLogic.releasedFullCard(r.fullCard, card)
+                        val gated = if (tl.size == r.timeline.size && card === r.scorecard && fullCard === r.fullCard) r else r.copy(timeline = tl, scorecard = card, fullCard = fullCard)
                         val next = gated.reuse(liveData)
                         if (next !== liveData) liveData = next
                     }
@@ -1143,7 +1157,15 @@ fun JellytipLiveTvPlayerPage(
                 if (e.type == KeyEventType.KeyUp && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) && closerArmed[0]) {
                     closerArmed[0] = false
                     val c = closerGame
-                    if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats" && c != null) pendingCloser = c
+                    if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats") {
+                        if (c != null) {
+                            pendingCloser = c
+                        } else if (liveData?.fullCard != null) {
+                            fullTab = 0
+                            fullOpen = true
+                            fullScope.launch { fullScroll.scrollTo(0) }
+                        }
+                    }
                     return@onPreviewKeyEvent true
                 }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -1208,6 +1230,27 @@ fun JellytipLiveTvPlayerPage(
                             trackSheetOpen = false
                             focus.tryRequestFocus()
                         }
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                if (fullOpen) {
+                    val size = liveData?.fullCard?.innings?.size ?: 0
+                    when (e.key) {
+                        Key.DirectionLeft, Key.DirectionRight -> {
+                            val next = stepFullTab(fullTab, if (e.key == Key.DirectionLeft) -1 else 1, size)
+                            if (next != fullTab) {
+                                fullTab = next
+                                fullScope.launch { fullScroll.scrollTo(0) }
+                            }
+                        }
+                        Key.DirectionUp -> fullScope.launch { fullScroll.animateScrollBy(-260f) }
+                        Key.DirectionDown -> fullScope.launch { fullScroll.animateScrollBy(260f) }
+                        Key.Back, Key.Escape, Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                            if (e.nativeKeyEvent.repeatCount == 0) {
+                                fullOpen = false
+                                focus.tryRequestFocus()
+                            }
                         else -> return@onPreviewKeyEvent false
                     }
                     return@onPreviewKeyEvent true
@@ -1501,6 +1544,9 @@ fun JellytipLiveTvPlayerPage(
                         .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                         .padding(16.dp),
             )
+        }
+        if (fullOpen) {
+            liveData?.fullCard?.let { fc -> FullScorecardSheet(fc, fullTab, fullScroll, Modifier.align(Alignment.Center)) }
         }
         if (delaySheetOpen) {
             DelaySheet(

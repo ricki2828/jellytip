@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -90,6 +91,8 @@ fun ScorecardBlocks(
     c: CricketCard,
     home: String,
     away: String,
+    /** The /live body carries a full scorecard: show the "OK" hint (the player page opens it). */
+    fullHint: Boolean = false,
 ) {
     if (c.innings.isNotEmpty()) {
         SectionHead("Innings")
@@ -116,6 +119,9 @@ fun ScorecardBlocks(
             c.rrr?.let { "Required" to it },
         )
     kv.forEach { (l, v) -> KvRow(l, v) }
+    if (fullHint) {
+        Cond("OK  ·  Full scorecard", 14.sp, Broadcast.Ink, weight = FontWeight.Bold, tracking = 0.05f, modifier = Modifier.background(Broadcast.Gold, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+    }
     c.overs.takeLast(3).reversed().forEach { o ->
         if (o.balls.isEmpty()) return@forEach
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {

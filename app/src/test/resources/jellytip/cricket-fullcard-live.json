@@ -1,0 +1,690 @@
+{
+ "status": "in",
+ "layout": "cricket",
+ "clock": "Day 4",
+ "period": "3rd",
+ "score": {
+  "home": "198/2",
+  "away": "417"
+ },
+ "scorecard": {
+  "innings": [
+   {
+    "period": 3,
+    "team": "home",
+    "name": "HOM",
+    "runs": 198,
+    "wickets": 2,
+    "overs": "60.3",
+    "current": true
+   },
+   {
+    "period": 2,
+    "team": "away",
+    "name": "AWY",
+    "runs": 417,
+    "wickets": 10,
+    "overs": "135.3"
+   }
+  ],
+  "batters": [
+   {
+    "name": "Player H2",
+    "runs": 112,
+    "balls": 171,
+    "fours": 15,
+    "sixes": 0,
+    "onStrike": true
+   },
+   {
+    "name": "Player H8",
+    "runs": 21,
+    "balls": 53,
+    "fours": 2,
+    "sixes": 0,
+    "onStrike": false
+   }
+  ],
+  "bowler": {
+   "name": "Player A8",
+   "figures": "0-37",
+   "overs": "10.0",
+   "econ": 3.7
+  },
+  "partnership": {
+   "runs": 69,
+   "balls": 120
+  },
+  "lead": 68,
+  "rr": 3.28,
+  "overs": [
+   {
+    "over": 60,
+    "runs": 3,
+    "balls": [
+     "1",
+     "\u2022",
+     "2",
+     "\u2022",
+     "\u2022",
+     "\u2022"
+    ],
+    "at": 1000
+   }
+  ]
+ },
+ "fullCard": {
+  "innings": [
+   {
+    "n": 3,
+    "team": "home",
+    "teamName": "Home XI",
+    "abbr": "HOM",
+    "title": "Home XI 2nd innings",
+    "runs": 198,
+    "wickets": 2,
+    "overs": "60.3",
+    "score": "198/2",
+    "current": true,
+    "batting": [
+     {
+      "name": "Player H1",
+      "out": "b A7",
+      "runs": 54,
+      "balls": 134,
+      "fours": 5,
+      "sixes": 0,
+      "sr": 40.3
+     },
+     {
+      "name": "Player H2",
+      "out": "not out",
+      "runs": 112,
+      "balls": 171,
+      "fours": 15,
+      "sixes": 0,
+      "sr": 65.5,
+      "atCrease": true
+     },
+     {
+      "name": "Player H3",
+      "out": "c A8 b A9",
+      "runs": 1,
+      "balls": 6,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 16.7
+     },
+     {
+      "name": "Player H8",
+      "out": "not out",
+      "runs": 21,
+      "balls": 53,
+      "fours": 2,
+      "sixes": 0,
+      "sr": 39.6,
+      "atCrease": true
+     }
+    ],
+    "didNotBat": [
+     "Player H5",
+     "Player H6",
+     "Player H7",
+     "Player H9",
+     "Player H10",
+     "Player H4",
+     "Player H11"
+    ],
+    "extras": {
+     "total": 10,
+     "byes": 5,
+     "legByes": 3,
+     "wides": 1,
+     "noBalls": 1,
+     "penalties": 0
+    },
+    "fow": [
+     {
+      "wicket": 1,
+      "runs": 128,
+      "overs": "40.2",
+      "name": "Player H1"
+     },
+     {
+      "wicket": 2,
+      "runs": 129,
+      "overs": "43.1",
+      "name": "Player H3"
+     }
+    ],
+    "bowling": [
+     {
+      "name": "Player A7",
+      "overs": "17.3",
+      "maidens": 4,
+      "runs": 39,
+      "wickets": 1,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 2.22
+     },
+     {
+      "name": "Player A8",
+      "overs": "10.0",
+      "maidens": 1,
+      "runs": 37,
+      "wickets": 0,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 3.7
+     },
+     {
+      "name": "Player A9",
+      "overs": "14.0",
+      "maidens": 4,
+      "runs": 27,
+      "wickets": 1,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 1.92
+     },
+     {
+      "name": "Player A12",
+      "overs": "9.0",
+      "maidens": 0,
+      "runs": 28,
+      "wickets": 0,
+      "wides": 1,
+      "noBalls": 1,
+      "econ": 3.11
+     }
+    ]
+   },
+   {
+    "n": 2,
+    "team": "away",
+    "teamName": "Away XI",
+    "abbr": "AWY",
+    "title": "Away XI 1st innings",
+    "runs": 417,
+    "wickets": 10,
+    "overs": "135.3",
+    "score": "417",
+    "result": "all out",
+    "current": false,
+    "batting": [
+     {
+      "name": "Player A1",
+      "out": "b H10",
+      "runs": 5,
+      "balls": 12,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 41.7
+     },
+     {
+      "name": "Player A2",
+      "out": "c \u2020H5 b H8",
+      "runs": 36,
+      "balls": 83,
+      "fours": 1,
+      "sixes": 0,
+      "sr": 43.4
+     },
+     {
+      "name": "Player A3",
+      "out": "c H9 b H10",
+      "runs": 88,
+      "balls": 169,
+      "fours": 12,
+      "sixes": 0,
+      "sr": 52.1
+     },
+     {
+      "name": "Player A4",
+      "out": "c \u2020H5 b H10",
+      "runs": 85,
+      "balls": 184,
+      "fours": 7,
+      "sixes": 0,
+      "sr": 46.2
+     },
+     {
+      "name": "Player A5",
+      "out": "c H4 b H7",
+      "runs": 59,
+      "balls": 108,
+      "fours": 8,
+      "sixes": 0,
+      "sr": 54.6
+     },
+     {
+      "name": "Player A6",
+      "out": "lbw b H9",
+      "runs": 74,
+      "balls": 86,
+      "fours": 7,
+      "sixes": 0,
+      "sr": 86.0
+     },
+     {
+      "name": "Player A7",
+      "out": "b H11",
+      "runs": 12,
+      "balls": 28,
+      "fours": 1,
+      "sixes": 0,
+      "sr": 42.9
+     },
+     {
+      "name": "Player A8",
+      "out": "c H4 b H9",
+      "runs": 5,
+      "balls": 44,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 11.4
+     },
+     {
+      "name": "Player A9",
+      "out": "c H4 b H9",
+      "runs": 19,
+      "balls": 50,
+      "fours": 1,
+      "sixes": 0,
+      "sr": 38.0
+     },
+     {
+      "name": "Player A10",
+      "out": "c H9 b H11",
+      "runs": 19,
+      "balls": 39,
+      "fours": 2,
+      "sixes": 0,
+      "sr": 48.7
+     },
+     {
+      "name": "Player A11",
+      "out": "not out",
+      "runs": 3,
+      "balls": 12,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 25.0
+     }
+    ],
+    "didNotBat": [
+     "Player A12"
+    ],
+    "extras": {
+     "total": 12,
+     "byes": 7,
+     "legByes": 1,
+     "wides": 2,
+     "noBalls": 2,
+     "penalties": 0
+    },
+    "fow": [
+     {
+      "wicket": 1,
+      "runs": 16,
+      "overs": "4.3",
+      "name": "Player A1"
+     },
+     {
+      "wicket": 2,
+      "runs": 79,
+      "overs": "27.1",
+      "name": "Player A2"
+     },
+     {
+      "wicket": 3,
+      "runs": 189,
+      "overs": "60.6",
+      "name": "Player A3"
+     },
+     {
+      "wicket": 4,
+      "runs": 276,
+      "overs": "90.3",
+      "name": "Player A4"
+     },
+     {
+      "wicket": 5,
+      "runs": 286,
+      "overs": "93.5",
+      "name": "Player A5"
+     },
+     {
+      "wicket": 6,
+      "runs": 333,
+      "overs": "104.3",
+      "name": "Player A7"
+     },
+     {
+      "wicket": 7,
+      "runs": 366,
+      "overs": "115.6",
+      "name": "Player A8"
+     },
+     {
+      "wicket": 8,
+      "runs": 378,
+      "overs": "120.5",
+      "name": "Player A6"
+     },
+     {
+      "wicket": 9,
+      "runs": 413,
+      "overs": "132.5",
+      "name": "Player A10"
+     },
+     {
+      "wicket": 10,
+      "runs": 417,
+      "overs": "135.3",
+      "name": "Player A9"
+     }
+    ],
+    "bowling": [
+     {
+      "name": "Player H10",
+      "overs": "30.0",
+      "maidens": 3,
+      "runs": 87,
+      "wickets": 3,
+      "wides": 1,
+      "noBalls": 0,
+      "econ": 2.9
+     },
+     {
+      "name": "Player H8",
+      "overs": "23.0",
+      "maidens": 3,
+      "runs": 88,
+      "wickets": 1,
+      "wides": 1,
+      "noBalls": 0,
+      "econ": 3.82
+     },
+     {
+      "name": "Player H7",
+      "overs": "17.0",
+      "maidens": 2,
+      "runs": 47,
+      "wickets": 1,
+      "wides": 0,
+      "noBalls": 2,
+      "econ": 2.76
+     },
+     {
+      "name": "Player H9",
+      "overs": "32.3",
+      "maidens": 4,
+      "runs": 83,
+      "wickets": 3,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 2.55
+     },
+     {
+      "name": "Player H11",
+      "overs": "32.0",
+      "maidens": 4,
+      "runs": 97,
+      "wickets": 2,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 3.03
+     },
+     {
+      "name": "Player H3",
+      "overs": "1.0",
+      "maidens": 0,
+      "runs": 7,
+      "wickets": 0,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 7.0
+     }
+    ]
+   },
+   {
+    "n": 1,
+    "team": "home",
+    "teamName": "Home XI",
+    "abbr": "HOM",
+    "title": "Home XI 1st innings",
+    "runs": 287,
+    "wickets": 10,
+    "overs": "97.1",
+    "score": "287",
+    "result": "all out",
+    "current": false,
+    "batting": [
+     {
+      "name": "Player H1",
+      "out": "c A4 b A11",
+      "runs": 25,
+      "balls": 113,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 22.1
+     },
+     {
+      "name": "Player H2",
+      "out": "c A1 b A9",
+      "runs": 107,
+      "balls": 176,
+      "fours": 9,
+      "sixes": 0,
+      "sr": 60.8
+     },
+     {
+      "name": "Player H3",
+      "out": "c \u2020A6 b A8",
+      "runs": 91,
+      "balls": 160,
+      "fours": 12,
+      "sixes": 0,
+      "sr": 56.9
+     },
+     {
+      "name": "Player H4",
+      "out": "c A4 b A9",
+      "runs": 7,
+      "balls": 44,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 15.9
+     },
+     {
+      "name": "Player H5",
+      "out": "c A4 b A7",
+      "runs": 19,
+      "balls": 23,
+      "fours": 3,
+      "sixes": 0,
+      "sr": 82.6
+     },
+     {
+      "name": "Player H6",
+      "out": "c \u2020A6 b A11",
+      "runs": 1,
+      "balls": 5,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 20.0
+     },
+     {
+      "name": "Player H7",
+      "out": "c A4 b A8",
+      "runs": 8,
+      "balls": 26,
+      "fours": 1,
+      "sixes": 0,
+      "sr": 30.8
+     },
+     {
+      "name": "Player H8",
+      "out": "lbw b A8",
+      "runs": 0,
+      "balls": 1,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 0.0
+     },
+     {
+      "name": "Player H9",
+      "out": "c A5 b A8",
+      "runs": 20,
+      "balls": 24,
+      "fours": 1,
+      "sixes": 2,
+      "sr": 83.3
+     },
+     {
+      "name": "Player H10",
+      "out": "b A10",
+      "runs": 0,
+      "balls": 4,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 0.0
+     },
+     {
+      "name": "Player H11",
+      "out": "not out",
+      "runs": 1,
+      "balls": 8,
+      "fours": 0,
+      "sixes": 0,
+      "sr": 12.5
+     }
+    ],
+    "extras": {
+     "total": 8,
+     "byes": 0,
+     "legByes": 5,
+     "wides": 2,
+     "noBalls": 1,
+     "penalties": 0
+    },
+    "fow": [
+     {
+      "wicket": 1,
+      "runs": 98,
+      "overs": "35.2",
+      "name": "Player H1"
+     },
+     {
+      "wicket": 2,
+      "runs": 170,
+      "overs": "59.3",
+      "name": "Player H2"
+     },
+     {
+      "wicket": 3,
+      "runs": 210,
+      "overs": "75.2",
+      "name": "Player H4"
+     },
+     {
+      "wicket": 4,
+      "runs": 238,
+      "overs": "81.2",
+      "name": "Player H5"
+     },
+     {
+      "wicket": 5,
+      "runs": 239,
+      "overs": "82.3",
+      "name": "Player H6"
+     },
+     {
+      "wicket": 6,
+      "runs": 259,
+      "overs": "90.2",
+      "name": "Player H7"
+     },
+     {
+      "wicket": 7,
+      "runs": 259,
+      "overs": "90.3",
+      "name": "Player H8"
+     },
+     {
+      "wicket": 8,
+      "runs": 270,
+      "overs": "92.4",
+      "name": "Player H3"
+     },
+     {
+      "wicket": 9,
+      "runs": 272,
+      "overs": "94.2",
+      "name": "Player H10"
+     },
+     {
+      "wicket": 10,
+      "runs": 287,
+      "overs": "97.1",
+      "name": "Player H9"
+     }
+    ],
+    "bowling": [
+     {
+      "name": "Player A7",
+      "overs": "23.0",
+      "maidens": 5,
+      "runs": 70,
+      "wickets": 1,
+      "wides": 1,
+      "noBalls": 0,
+      "econ": 3.04
+     },
+     {
+      "name": "Player A11",
+      "overs": "20.0",
+      "maidens": 5,
+      "runs": 40,
+      "wickets": 2,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 2.0
+     },
+     {
+      "name": "Player A8",
+      "overs": "18.1",
+      "maidens": 2,
+      "runs": 54,
+      "wickets": 4,
+      "wides": 0,
+      "noBalls": 1,
+      "econ": 2.97
+     },
+     {
+      "name": "Player A9",
+      "overs": "19.0",
+      "maidens": 4,
+      "runs": 53,
+      "wickets": 2,
+      "wides": 1,
+      "noBalls": 0,
+      "econ": 2.78
+     },
+     {
+      "name": "Player A10",
+      "overs": "17.0",
+      "maidens": 3,
+      "runs": 65,
+      "wickets": 1,
+      "wides": 0,
+      "noBalls": 0,
+      "econ": 3.82
+     }
+    ]
+   }
+  ]
+ }
+}

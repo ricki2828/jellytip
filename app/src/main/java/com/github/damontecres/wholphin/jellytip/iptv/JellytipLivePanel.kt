@@ -330,6 +330,8 @@ data class MatchLive(
     val timeline: List<TimelineEntry> = emptyList(),
     /** Cricket wickets in hand from the situation. */
     val wicketsInHand: Int? = null,
+    /** Cricket full scorecard (every innings); null = none sent. Released with [scorecard]. */
+    val fullCard: FullCard? = null,
 )
 
 /** Unchanged parts keep the previous answer's instances, so their rows skip recomposition (strong skipping). */
@@ -345,6 +347,7 @@ fun MatchLive.reuse(prev: MatchLive?): MatchLive {
         situation = if (situation == prev.situation) prev.situation else situation,
         moments = moments.reuse(prev.moments),
         games = games.reuse(prev.games),
+        fullCard = if (fullCard == prev.fullCard) prev.fullCard else fullCard,
     )
 }
 
@@ -445,6 +448,7 @@ object LiveParse {
             moments = moments,
             hasMoments = o.has("moments"),
             scorecard = SportParse.scorecard(o.optJSONObject("scorecard")),
+            fullCard = SportParse.fullCard(o.optJSONObject("fullCard")),
             timeline = SportParse.timeline(o.optJSONArray("timeline")),
             wicketsInHand = SportParse.wicketsInHand(o.optJSONObject("situation")),
             games =
@@ -1044,7 +1048,7 @@ private fun StatsTab(
         val st = remember(d, m.leagueKey, allowWinProb) { GameStateLogic.of(d, m.leagueKey, m.status, allowWinProb) }
         GameStateCard(d, st, home, away, fav, allowWinProb, closer)
     }
-    d.scorecard?.let { ScorecardBlocks(it, home, away) }
+    d.scorecard?.let { ScorecardBlocks(it, home, away, fullHint = d.fullCard != null) }
     // The scorecard already has the crease, bowling and rates
     d.situation?.takeUnless { d.layout == "cricket" && d.scorecard != null }?.let { ContextBlock(d.layout, it, m, d, pal) }
     d.winProbHome?.let { p -> StatBar(LiveStat("Win probability", pct(p), pct(1 - p)), pal) }
