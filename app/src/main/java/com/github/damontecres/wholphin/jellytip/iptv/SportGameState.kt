@@ -374,6 +374,9 @@ object TeamAware {
     ): Boolean = favSide != null && team == favSide && (kind ?: "score") in SCORING
 }
 
+/** Which full-screen sheet the Stats tab's OK opens (the cricket scorecard or the NFL / basketball box score). */
+enum class SheetKind { NONE, CRICKET, BOX }
+
 object GameStateLogic {
     private data class Q(
         val q: Int,
@@ -737,6 +740,12 @@ object GameStateLogic {
         replay: Boolean,
         spoilerNotice: Boolean,
     ): BoxScore? = if (replay || spoilerNotice) null else box
+
+    /** The sheet to open / draw: the cricket full card wins (the two never arrive together), then the box score. */
+    fun sheetKind(
+        card: FullCard?,
+        box: BoxScore?,
+    ): SheetKind = if (card != null) SheetKind.CRICKET else if (box != null) SheetKind.BOX else SheetKind.NONE
 
     /** The selected box tab as an index: keyed by the tab key so a refresh does not move the selection; none/unknown = the first. */
     fun boxTabIndex(

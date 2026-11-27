@@ -678,8 +678,9 @@ fun JellytipLiveTvPlayerPage(
     // The one gated value for the full scorecard (never while a replay or a spoiler notice is up)
     val fullCardNow = liveData.takeUnless { replayShown || spoilerNotice }?.fullCard
     val boxNow = GameStateLogic.releasedBoxScore(liveData?.boxScore, replayShown, spoilerNotice)
-    LaunchedEffect(fullOpen, panelOpen, fullCardNow == null && boxNow == null) {
-        if (fullOpen && (!panelOpen || (fullCardNow == null && boxNow == null))) {
+    val sheetNow = GameStateLogic.sheetKind(fullCardNow, boxNow)
+    LaunchedEffect(fullOpen, panelOpen, sheetNow) {
+        if (fullOpen && (!panelOpen || sheetNow == SheetKind.NONE)) {
             fullOpen = false
             fullSwallowUp[0] = false
         }
@@ -1174,11 +1175,8 @@ fun JellytipLiveTvPlayerPage(
                     if (panelOpen && !panelMenu && !replayShown && panelTabs.getOrNull(panelTab) == "Stats") {
                         if (c != null) {
                             pendingCloser = c
-                        } else if (fullCardNow != null) {
+                        } else if (sheetNow != SheetKind.NONE) {
                             fullTabN = null
-                            fullOpen = true
-                            fullScope.launch { fullScroll.scrollTo(0) }
-                        } else if (boxNow != null) {
                             boxTabKey = null
                             fullOpen = true
                             fullScope.launch { fullScroll.scrollTo(0) }
@@ -1194,7 +1192,7 @@ fun JellytipLiveTvPlayerPage(
                     when (e.key) {
                         Key.DirectionLeft, Key.DirectionRight -> {
                             val step = if (e.key == Key.DirectionLeft) -1 else 1
-                            if (cardNow == null && boxNow != null) {
+                            if (sheetNow == SheetKind.BOX && boxNow != null) {
                                 val cur = GameStateLogic.boxTabIndex(boxNow, boxTabKey)
                                 val next = stepBoxTab(cur, step, boxNow.tabs.size)
                                 if (next != cur) {
@@ -1578,8 +1576,11 @@ fun JellytipLiveTvPlayerPage(
             )
         }
         if (fullOpen) {
-            fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTabIndex(fc, fullTabN), fullScroll, Modifier.align(Alignment.Center)) }
-                ?: boxNow?.let { bx -> BoxScoreSheet(bx, GameStateLogic.boxTabIndex(bx, boxTabKey), fullScroll, Modifier.align(Alignment.Center)) }
+            when (sheetNow) {
+                SheetKind.CRICKET -> fullCardNow?.let { fc -> FullScorecardSheet(fc, fullTabIndex(fc, fullTabN), fullScroll, Modifier.align(Alignment.Center)) }
+                SheetKind.BOX -> boxNow?.let { bx -> BoxScoreSheet(bx, GameStateLogic.boxTabIndex(bx, boxTabKey), fullScroll, Modifier.align(Alignment.Center)) }
+                SheetKind.NONE -> {}
+            }
         }
         if (delaySheetOpen) {
             DelaySheet(

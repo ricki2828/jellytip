@@ -137,4 +137,31 @@ class BoxScoreTest {
         val a = nfl
         assertSame(a.boxScore, LiveParse.live(nflRaw).reuse(a).boxScore)
     }
+
+    @Test
+    fun boxScoreDoesNotOutliveFullTime() {
+        val full = nba.copy(updatedAt = 100)
+        val inPlay = nba.copy(boxScore = null, status = "in", updatedAt = 200)
+        val post = nba.copy(boxScore = null, status = "post", updatedAt = 200)
+        val a = LiveSnapshots()
+        a.add(full, true, 100)
+        a.add(inPlay, false, 200)
+        assertSame(full.boxScore, a.releasedFull { true }!!.boxScore)
+        val b = LiveSnapshots()
+        b.add(full, true, 100)
+        b.add(post, false, 200)
+        assertNull(b.releasedFull { true }!!.boxScore)
+        // a held (not yet released) full-time answer leaves the box up
+        assertSame(full.boxScore, b.releasedFull { it != null && it < 150 }!!.boxScore)
+    }
+
+    @Test
+    fun sheetKindPicksTheBlockThatArrived() {
+        val cricket = LiveParse.live(res("cricket-fullcard-live.json")).fullCard
+        val box = nba.boxScore
+        assertEquals(SheetKind.NONE, GameStateLogic.sheetKind(null, null))
+        assertEquals(SheetKind.BOX, GameStateLogic.sheetKind(null, box))
+        assertEquals(SheetKind.CRICKET, GameStateLogic.sheetKind(cricket, null))
+        assertEquals(SheetKind.CRICKET, GameStateLogic.sheetKind(cricket, box))
+    }
 }

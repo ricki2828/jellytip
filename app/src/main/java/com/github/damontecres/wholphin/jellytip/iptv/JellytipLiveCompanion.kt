@@ -92,6 +92,8 @@ class LiveSnapshots(
             scoreHome = l.scoreHome,
             scoreAway = l.scoreAway,
             market = l.market ?: f.d.market,
+            // the box score is an in-play block: a newer released light answer at full time (post) takes it away with the game
+            boxScore = if (l.status == "post") null else f.d.boxScore,
             moments = if (l.hasMoments) l.moments else f.d.moments,
             updatedAt = l.updatedAt,
         )
