@@ -281,6 +281,8 @@ class ImageUrlService
         }
 
         companion object {
-            private const val QUALITY = 96
+            // 82 (was 96, 27-Nov perf batch): ~2-3x fewer bytes with no visible loss at TV tile/hero sizes. Prefetch and display
+            // both build their URL through this service, so they keep requesting the identical URL.
+            private const val QUALITY = 82
         }
     }

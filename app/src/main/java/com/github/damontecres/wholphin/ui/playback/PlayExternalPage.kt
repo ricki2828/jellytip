@@ -349,6 +349,7 @@ class PlayExternalViewModel
                         if (position != null && position < 0L) {
                             Timber.w("Unknown stop position for external playback")
                         }
+                        com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.bump()
                         if (position != null || result.data?.action != null) {
                             api.playStateApi.reportPlaybackStopped(
                                 PlaybackStopInfo(

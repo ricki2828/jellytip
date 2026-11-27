@@ -14,7 +14,12 @@ import org.jellyfin.sdk.model.api.ImageType
 import java.util.UUID
 import kotlin.math.roundToInt
 
-const val HERO_BACKDROP_MAX_WIDTH = 1920
+/** Hero backdrop decode box (27-Nov perf batch: 1280x720, was 1920x1080 = ~8 MB per bitmap, two live during a crossfade). Prefetch and display must both use it. */
+const val HERO_BACKDROP_MAX_WIDTH = 1280
+const val HERO_BACKDROP_MAX_HEIGHT = 720
+
+/** Details pages keep the full-width backdrop (only the Home hero drops to 720p). */
+const val DETAILS_BACKDROP_MAX_WIDTH = 1920
 
 private fun usesSeriesBackdrop(item: BaseItem) =
     item.data.seriesId != null && (item.type == BaseItemKind.EPISODE || item.type == BaseItemKind.SEASON)
@@ -119,7 +124,7 @@ object JellytipImagePick {
             service.getItemImageUrl(
                 itemId = id,
                 imageType = ImageType.BACKDROP,
-                maxWidth = HERO_BACKDROP_MAX_WIDTH,
+                maxWidth = if (details) DETAILS_BACKDROP_MAX_WIDTH else HERO_BACKDROP_MAX_WIDTH,
                 tag = tags[i],
                 imageIndex = i,
             )

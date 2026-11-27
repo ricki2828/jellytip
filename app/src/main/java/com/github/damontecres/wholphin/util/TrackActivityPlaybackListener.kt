@@ -80,6 +80,9 @@ class TrackActivityPlaybackListener(
 //        player.removeListener(this)
         task.cancel()
         TIMER.purge()
+        // Home's Continue Watching / Next Up changed, however short the playback was. Bumped now (in case the report
+        // fails) and again once the server has the stop, so a refresh started in between still sees the final state
+        com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.bump()
         val position = player.currentPosition.milliseconds
         launch("reportPlaybackStopped") {
             getState.invoke()?.let { state ->
@@ -96,6 +99,7 @@ class TrackActivityPlaybackListener(
                         liveStreamId = state.liveStreamId,
                     ),
                 )
+                com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.bump()
             }
         }
     }

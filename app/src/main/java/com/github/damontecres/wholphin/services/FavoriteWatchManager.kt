@@ -33,6 +33,7 @@ class FavoriteWatchManager
                 }
             // After the server has it: the rows' reload (the bump) must see the new state
             com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(itemId)
+            com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.bump()
             return result
         }
 
@@ -48,6 +49,7 @@ class FavoriteWatchManager
                 }
             // Jellytip server rows holding this item reload their heart (after the server has the change)
             com.github.damontecres.wholphin.jellytip.rows.JellytipRowsService.markChanged(itemId)
+            com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.bump()
             return result
         }
 

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -140,6 +141,16 @@ object JellytipHomeTokens {
     const val VIGNETTE_ALPHA = 0.78f
     const val RAIL_SCRIM_ALPHA = 0.55f
 
+    /**
+     * Home hero Ken Burns drift (graphicsLayer scale/translate only, no re-layout). ON for now: Ricki decides later whether
+     * to drop it. Flip [KEN_BURNS_ENABLED] to false to hold the still; [KEN_BURNS_MS] is the drift duration.
+     */
+    const val KEN_BURNS_ENABLED = true
+    const val KEN_BURNS_MS = 24_000
+
+    /** Cross-fade between two hero stills (was 700 ms; two full-screen bitmaps are live during it). */
+    const val HERO_CROSSFADE_MS = 300
+
     /** Rest time before a muted trailer replaces the still (home hero and details). */
     const val TRAILER_DELAY_MS = 6_000L
 
@@ -161,7 +172,7 @@ private const val SETTLE_EXTRAS_MS = 600L
 private const val QUOTE_MAX_CHARS = 120
 /** Slow zoom about the focal point; capped at 5% so the hero is never heavily enlarged. */
 const val KEN_BURNS_MAX_ZOOM = 0.05f
-private const val KEN_BURNS_MS = 24_000
+private const val KEN_BURNS_MS = JellytipHomeTokens.KEN_BURNS_MS
 
 /**
  * Rows still on the stock defaults become landscape stills with titles; anything the user customised is untouched.
@@ -267,7 +278,7 @@ fun JellytipHomeHero(
 
     // System animations off (animator scale 0): no Ken Burns drift, no hero crossfade
     val reducedMotion = remember { com.github.damontecres.wholphin.jellytip.JellytipSession.reducedMotion(appContext) }
-    val scrim by animateFloatAsState(JellytipScrim.strength(lastUrl), if (reducedMotion) snap<Float>() else tween<Float>(400), label = "jellytip-scrim")
+    val scrimState = animateFloatAsState(JellytipScrim.strength(lastUrl), if (reducedMotion) snap<Float>() else tween<Float>(400), label = "jellytip-scrim")
     Box(modifier = modifier.fillMaxSize().fillFullBleed().background(JellytipPalette.Night)) {
         // Clip: the Ken Burns zoom would otherwise bleed unfaded past the hero's bottom edge (the stray grey line)
         Box(Modifier.fillMaxWidth().fillMaxHeight(JellytipHomeTokens.HERO_HEIGHT_FRACTION).clipToBounds()) {
@@ -275,10 +286,10 @@ fun JellytipHomeHero(
             if (!JellytipHeroCarousel.matchCovers) {
                 Crossfade(
                     targetState = lastUrl,
-                    animationSpec = if (reducedMotion) snap<Float>() else tween<Float>(700),
+                    animationSpec = if (reducedMotion) snap<Float>() else tween<Float>(JellytipHomeTokens.HERO_CROSSFADE_MS),
                     modifier = Modifier.fillMaxSize(),
                     label = "jellytip-home-still",
-                ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed && !reducedMotion) }
+                ) { u -> if (u != null) HomeKenBurns(u, lastFocal, running = trailerUrl == null && resumed && !reducedMotion && JellytipHomeTokens.KEN_BURNS_ENABLED) }
             }
 
             var usedPlayer by remember { mutableStateOf(false) }
@@ -299,50 +310,58 @@ fun JellytipHomeHero(
                     drawSurface = JellytipTrailerControl.owner == null,
                 )
             }
-            // Narrow left strip keeps the nav rail legible
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .width(96.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.RAIL_SCRIM_ALPHA),
-                            1f to Color.Transparent,
-                        ),
-                    ),
-            )
-            // Soft vignette in the bottom-left corner behind the text block
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            0f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(JellytipHomeTokens.VIGNETTE_ALPHA, 0.94f, scrim)),
-                            0.55f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(0.40f, 0.80f, scrim)),
-                            1f to Color.Transparent,
-                            center = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
-                            radius = JellytipScrim.lerp(1400f, 2100f, scrim),
-                        ),
-                    ),
-            )
-            // Bottom fade into the rows
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to JellytipPalette.Night.copy(alpha = 0.30f),
-                            0.30f to Color.Transparent,
-                            0.60f to JellytipPalette.Night.copy(alpha = 0.40f),
-                            0.9f to JellytipPalette.Night,
-                        ),
-                    ),
-            )
+            // One draw node for the rail strip, the corner vignette and the bottom fade (was three full-size boxes)
+            HeroScrims(scrimState)
         }
     }
 }
 
 private const val HERO_PLAYER_IDLE_MS = 120_000L
+
+/**
+ * The hero's three gradients in one draw node: nav-rail strip, soft bottom-left vignette, bottom fade into the rows.
+ * Same stops and order as the three boxes it replaces. [scrim] is read in the draw phase, so the 400 ms scrim
+ * animation redraws this node only (no recomposition of the hero).
+ */
+@Composable
+private fun HeroScrims(scrim: androidx.compose.runtime.State<Float>) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .drawWithCache {
+                val railW = 96.dp.toPx().coerceAtMost(size.width)
+                // The gradient must span the strip itself (startX..endX), else it is cut at 96 dp while still ~half opaque
+                val rail =
+                    Brush.horizontalGradient(
+                        0f to JellytipPalette.Night.copy(alpha = JellytipHomeTokens.RAIL_SCRIM_ALPHA),
+                        1f to Color.Transparent,
+                        startX = 0f,
+                        endX = railW,
+                    )
+                val fade =
+                    Brush.verticalGradient(
+                        0f to JellytipPalette.Night.copy(alpha = 0.30f),
+                        0.30f to Color.Transparent,
+                        0.60f to JellytipPalette.Night.copy(alpha = 0.40f),
+                        0.9f to JellytipPalette.Night,
+                    )
+                onDrawBehind {
+                    val s = scrim.value
+                    drawRect(rail, size = androidx.compose.ui.geometry.Size(railW, size.height))
+                    drawRect(
+                        Brush.radialGradient(
+                            0f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(JellytipHomeTokens.VIGNETTE_ALPHA, 0.94f, s)),
+                            0.55f to JellytipPalette.Night.copy(alpha = JellytipScrim.lerp(0.40f, 0.80f, s)),
+                            1f to Color.Transparent,
+                            center = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
+                            radius = JellytipScrim.lerp(1400f, 2100f, s),
+                        ),
+                    )
+                    drawRect(fade)
+                }
+            },
+    )
+}
 
 /** Ramps [player]'s volume to [target] over [ms] (cancellable; the last value sticks). */
 private suspend fun fadeVolume(
@@ -374,8 +393,21 @@ private fun HomeKenBurns(
         if (left > 0) progress.animateTo(1f, tween(left, easing = LinearEasing))
     }
     val direction = if (abs(url.hashCode()) % 2 == 0) 1f else -1f
+    // Same size and scale as HomeImagePrefetcher.loadHero, so the display hits the prefetched bitmap in memory
+    val context = LocalContext.current
+    val request =
+        remember(url) {
+            coil3.request.ImageRequest
+                .Builder(context)
+                .data(url)
+                .size(
+                    com.github.damontecres.wholphin.jellytip.cache.HERO_BACKDROP_MAX_WIDTH,
+                    com.github.damontecres.wholphin.jellytip.cache.HERO_BACKDROP_MAX_HEIGHT,
+                ).scale(coil3.size.Scale.FILL)
+                .build()
+        }
     AsyncImage(
-        model = url,
+        model = request,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         alignment = focalAlignment(focal),

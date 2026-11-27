@@ -297,9 +297,9 @@ class HomeImagePrefetcher
                 ImageRequest
                     .Builder(context)
                     .data(url)
-                    .size(minOf(metrics.widthPixels, HERO_BACKDROP_MAX_WIDTH), minOf(metrics.heightPixels, 1080))
+                    .size(HERO_BACKDROP_MAX_WIDTH, HERO_BACKDROP_MAX_HEIGHT) // identical to the display request (HomeKenBurns)
                     .scale(Scale.FILL)
-                    // 1080p backdrops are ~8 MB decoded: only the first one earns a memory slot
+                    // 720p backdrops are ~3.7 MB decoded: only the first one earns a memory slot
                     .memoryCachePolicy(if (toMemory) CachePolicy.ENABLED else CachePolicy.READ_ONLY)
                     .build(),
             )

@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -50,8 +53,27 @@ fun <T> ItemRow(
     viewMoreCardContent: @Composable (Modifier) -> Unit = {},
     /** Jellytip: a line under the title ("Because you like …" on For you). */
     subtitle: String? = null,
+    /** Stable identity of a tile (its item id); null = index identity as before. See [ItemRowKeys]. */
+    itemKey: ((T) -> String)? = null,
 ) {
     val state = rememberLazyListState()
+    val keys = remember(items, itemKey) { itemKey?.let { k -> ItemRowKeys.build(items.map { it?.let(k) }) } }
+    // A tile inserted at the front of a row that is not focused (Continue Watching after a watch) must not leave the
+    // row scrolled one tile in: keys keep the old first tile anchored, so scroll back to the start when it was at the start
+    var rowFocused by remember { mutableStateOf(false) }
+    val firstKey = keys?.firstOrNull()
+    var lastFirstKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(firstKey) {
+        val previous = lastFirstKey
+        if (firstKey != null) lastFirstKey = firstKey
+        // Only a real change of the first tile (not first composition, not a row scrolling back into view)
+        if (firstKey != null && previous != null && previous != firstKey && !rowFocused && state.firstVisibleItemIndex <= 1) {
+            state.requestScrollToItem(0)
+        }
+    }
+    // getOrNull: a list mutated in place after the keys were built must not crash the row
+    val rowKey: ((Int, T?) -> Any)? =
+        keys?.let { k -> { index: Int, _: T? -> k.getOrNull(index) ?: "i$index" } }
     val firstFocus = remember { FocusRequester() }
     val focusRequester = remember { FocusRequester() }
     var position by rememberInt()
@@ -80,10 +102,11 @@ fun <T> ItemRow(
                     .jellytipRowBleed()
                     .fillMaxWidth()
                     .focusGroup()
+                    .onFocusChanged { rowFocused = it.hasFocus }
                     .focusRestorer(firstFocus)
                     .focusRequester(focusRequester),
         ) {
-            itemsIndexed(items) { index, item ->
+            itemsIndexed(items, key = rowKey) { index, item ->
                 val cardModifier =
                     remember(index, position) {
                         if (index == position) {

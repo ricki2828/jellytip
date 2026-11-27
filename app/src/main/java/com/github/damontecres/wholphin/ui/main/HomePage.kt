@@ -147,7 +147,7 @@ fun HomePage(
     val context = LocalContext.current
     LifecycleStartEffect(Unit) {
         viewModel.init()
-        onStopOrDispose { }
+        onStopOrDispose { viewModel.onHomeStopped() }
     }
     val state by viewModel.state.collectAsState()
     val loading = state.loadingState
@@ -176,7 +176,13 @@ fun HomePage(
             var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
 
             val playlistState by playlistViewModel.playlistState.collectAsState()
-            var position by rememberPosition()
+            // The D-pad position is read inside HomePageContent (positionState), not here: a key press must not
+            // recompose this whole function (27-Nov perf batch)
+            val positionState = rememberPosition()
+            var position by positionState
+            val positionNow = remember(positionState) { { positionState.value } }
+            // A held refresh that re-ordered the focused row: move the saved column with the item
+            LaunchedEffect(viewModel) { viewModel.positionFixes.collect { positionState.value = it } }
 
             val onFocusPosition =
                 remember {
@@ -293,7 +299,8 @@ fun HomePage(
             JellytipHomeTheme {
                 HomePageContent(
                     homeRows = homeRows,
-                    position = position,
+                    position = RowColumn(-1, -1),
+                    positionProvider = positionNow,
                     onFocusPosition = onFocusPosition,
                     onClickItem = onClickItem,
                     onLongClickItem = onLongClickItem,
@@ -353,6 +360,9 @@ fun HomePage(
     }
 }
 
+/** Row tile identity for lazy keys (ItemRowKeys adds the duplicate suffix). */
+private val baseItemTileKey: (BaseItem) -> String = { it.id.toString() }
+
 /** Column reported for a focused IPTV tile in a library row: past any library item (no hero item, no prefetch). */
 private const val IPTV_TILE_COLUMN = 100_000
 
@@ -377,6 +387,8 @@ fun HomePageContent(
     onUpdateBackdrop: (BaseItem) -> Unit,
     showLogo: Boolean,
     showViewMore: Boolean,
+    /** Jellytip: when set, read the D-pad position here (inside this composable) so the caller does not recompose per key press; [position] is then ignored. */
+    positionProvider: (() -> RowColumn)? = null,
     modifier: Modifier = Modifier,
     loadingState: LoadingState? = null,
     listState: LazyListState = rememberLazyListState(),
@@ -403,11 +415,12 @@ fun HomePageContent(
     /** Jellytip watchlist: row index -> IPTV-only titles drawn in that row after its library tiles (one tile per title). */
     iptvAppended: Map<Int, List<com.github.damontecres.wholphin.jellytip.iptv.IptvVodItem>> = emptyMap(),
 ) {
+    val pos = positionProvider?.invoke() ?: position
     var hasFocus by remember { mutableStateOf(false) }
     val rowFocusedItem =
-        remember(homeRows, position) {
-            (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(
-                position.column,
+        remember(homeRows, pos) {
+            (homeRows.getOrNull(pos.row) as? HomeRowLoadingState.Success)?.items?.getOrNull(
+                pos.column,
             )
         }
     // Jellytip specials: rows of their own between the normal rows; a focused special tile drives the hero instead
@@ -481,10 +494,10 @@ fun HomePageContent(
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels)
         }
     val focusedEntry =
-        remember(entries, specialFocus?.id, position.row) {
+        remember(entries, specialFocus?.id, pos.row) {
             val sid = specialFocus?.id
             (if (sid != null) entries.indexOfFirst { it.key == sid } else -1).takeIf { it >= 0 }
-                ?: entries.indexOfFirst { it is JellytipHomeEntry.Row && it.index == position.row }
+                ?: entries.indexOfFirst { it is JellytipHomeEntry.Row && it.index == pos.row }
         }
     val focusedItem = if (specialFocus != null) specialFocus?.item else rowFocusedItem
     val headerItem = if (specialFocus?.showHeader == false) null else focusedItem
@@ -500,7 +513,7 @@ fun HomePageContent(
         val key = currentFocusedKey
         val candidate =
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSportNow, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels)
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred live sport row: would move focused $key")
         } else {
@@ -513,7 +526,7 @@ fun HomePageContent(
         val key = currentFocusedKey
         val candidate =
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannelsNow)
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred my channels row: would move focused $key")
         } else {
@@ -526,7 +539,7 @@ fun HomePageContent(
         val key = currentFocusedKey
         val candidate =
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordingsNow, upcoming, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels)
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred recordings row: would move focused $key")
         } else {
@@ -538,7 +551,7 @@ fun HomePageContent(
         val key = currentFocusedKey
         val candidate =
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcomingNow, reminders, iptvOnlyContinue, iptvOnlyNext, myChannels)
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred upcoming sport row: would move focused $key")
         } else {
@@ -550,7 +563,7 @@ fun HomePageContent(
         val key = currentFocusedKey
         val candidate =
             jellytipHomeEntries(homeRows, specials?.specials.orEmpty(), leadingRows, serverRows?.rows.orEmpty(), hiddenRows, liveSport, recordings, upcoming, remindersNow, iptvOnlyContinue, iptvOnlyNext, myChannels)
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred reminders row: would move focused $key")
         } else {
@@ -581,7 +594,7 @@ fun HomePageContent(
                 iptvOnlyNext,
                 myChannels,
             )
-        val moves = currentHasFocus && key != null && candidate.indexOfFirst { it.key == key } != entries.indexOfFirst { it.key == key }
+        val moves = com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.focusWouldMove(currentHasFocus, key, entries.map { it.key }, candidate.map { it.key })
         if (moves) {
             JellytipTrace.layout("deferred late specials/rows: would move focused $key")
         } else {
@@ -728,7 +741,7 @@ fun HomePageContent(
     val firstFocusRuns = remember { intArrayOf(0) } // effect runs that failed to land row focus; no recomposition needed
     var firstFocusGaveUp by remember { mutableStateOf(false) }
 
-    val currentPosition by rememberUpdatedState(position)
+    val currentPosition by rememberUpdatedState(pos)
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     BackHandler(enabled = heroButtonsFocused) {
@@ -746,8 +759,8 @@ fun HomePageContent(
             }
             if (!firstFocused && !firstFocusGaveUp && homeRows.isNotEmpty()) {
                 val row =
-                    if (position.row >= 0) {
-                        position.row.coerceIn(0, rowFocusRequesters.lastIndex)
+                    if (pos.row >= 0) {
+                        pos.row.coerceIn(0, rowFocusRequesters.lastIndex)
                     } else {
                         // Waiting for the first home row to load, then focus on it
                         homeRows.indexOfFirstOrNull { it is HomeRowLoadingState.Success && it.items.isNotEmpty() }
@@ -1348,6 +1361,8 @@ fun HomePageContent(
                                         ItemRow(
                                             title = row.title.getString(),
                                             items = row.items,
+                                            // Not for a paged list (Favourites): mapping it would fetch every page
+                                            itemKey = if (row.items is com.github.damontecres.wholphin.util.ApiRequestPager<*>) null else baseItemTileKey,
                                             onClickItem =
                                                 remember(rowIndex, onClickItem) {
                                                     { index, item ->

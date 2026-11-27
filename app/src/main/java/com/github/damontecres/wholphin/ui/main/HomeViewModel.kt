@@ -118,9 +118,38 @@ class HomeViewModel
                 }
         }
 
-        fun init() {
+        // Resume gate (HomeRefreshPolicy): monotonic ms of the last finished row load and of the last ON_STOP
+        @Volatile private var lastLoadStartedAtMs = 0L
+
+        @Volatile private var loadedAtVersion = 0L
+
+        /** The saved D-pad column moved because a held refresh re-ordered the focused row; HomePage applies it. */
+        val positionFixes = kotlinx.coroutines.flow.MutableSharedFlow<RowColumn>(extraBufferCapacity = 4)
+
+        @Volatile private var stoppedAtMs = 0L
+
+        /** Home left the screen (ON_STOP): remembered so the next ON_START can tell a blink from a playback. */
+        fun onHomeStopped() {
+            stoppedAtMs = android.os.SystemClock.elapsedRealtime()
+        }
+
+        /** [force] = something changed on purpose (watched, favourite, Next Up): refresh whatever the age. */
+        fun init(force: Boolean = false) {
             viewModelScope.launchIO {
                 Timber.d("init HomeViewModel")
+                if (!com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy.shouldRefresh(
+                        loadedBefore = state.value.loadingState == LoadingState.Success,
+                        nowMs = android.os.SystemClock.elapsedRealtime(),
+                        lastLoadStartedAtMs = lastLoadStartedAtMs,
+                        stoppedAtMs = stoppedAtMs,
+                        changeVersion = com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.version,
+                        loadedAtVersion = loadedAtVersion,
+                        force = force,
+                    )
+                ) {
+                    Timber.v("Home rows are fresh, skipping refresh on resume")
+                    return@launchIO
+                }
                 serverRepository.currentUserDto?.let { userDto ->
                     if (dataLoadingJob?.isActive == false) {
                         val settings =
@@ -144,11 +173,19 @@ class HomeViewModel
             }
         }
 
+        /** A failed or cancelled load must not make the rows look fresh: the next resume re-fetches. */
+        private fun markLoadIncomplete() {
+            lastLoadStartedAtMs = 0L
+            loadedAtVersion = -1L
+        }
+
         suspend fun loadHomeRows(
             userDto: ServerUserConfig,
             settings: HomePageResolvedSettings,
         ) {
             Timber.i("Starting loadHomeRows")
+            lastLoadStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            loadedAtVersion = com.github.damontecres.wholphin.jellytip.home.HomeStaleSignal.version
             try {
                 val preferences = userPreferencesService.getCurrent()
                 val prefs = preferences.appPreferences.homePagePreferences
@@ -194,9 +231,10 @@ class HomeViewModel
 
                 // Jellytip: with server rows (rows=1) the rows this app added from the old manifest are hidden on Home,
                 // so don't spend requests on them. Today's answer is usually cached; otherwise wait briefly for it.
-                val serverRows =
-                    jellytipRows.peek(JELLYTIP_HOME_PAGE)
-                        ?: kotlinx.coroutines.withTimeoutOrNull(SERVER_ROWS_WAIT_MS) { jellytipRows.load(JELLYTIP_HOME_PAGE) }
+                // 27-Nov: no wait. A cold morning (no copy of today yet) used to hold every Jellyfin row for up to 1.5 s.
+                // Without a copy the app-added rows are fetched too (a few spare requests); HomePage loads the companion
+                // rows itself and merges them in without moving the focused row (HomeRefreshPolicy.focusWouldMove).
+                val serverRows = jellytipRows.peek(JELLYTIP_HOME_PAGE)
                 val skipRow: (HomeRowConfig) -> Boolean = { config ->
                     serverRows != null && JellytipCarouselRows.isAppRow(config, serverRows.carouselIds)
                 }
@@ -311,8 +349,10 @@ class HomeViewModel
                 Timber.d("Home page load complete")
                 homeCache.onLoaded(userDto.id, settings, _state.value.homeRows)
             } catch (ex: CancellationException) {
+                markLoadIncomplete()
                 throw ex
             } catch (ex: Exception) {
+                markLoadIncomplete()
                 Timber.e(ex, "Exception during home page loading")
                 if (state.value.loadingState == LoadingState.Success) {
                     showToast(context, "Error refreshing home: ${ex.localizedMessage}")
@@ -331,7 +371,7 @@ class HomeViewModel
         ) = viewModelScope.launch(ExceptionHandler() + WholphinDispatchers.IO) {
             favoriteWatchManager.setWatched(itemId, played)
             withContext(WholphinDispatchers.Main) {
-                init()
+                init(force = true)
             }
         }
 
@@ -341,14 +381,14 @@ class HomeViewModel
         ) = viewModelScope.launch(ExceptionHandler() + WholphinDispatchers.IO) {
             favoriteWatchManager.setFavorite(itemId, favorite)
             withContext(WholphinDispatchers.Main) {
-                init()
+                init(force = true)
             }
         }
 
         /** Focus moved: prefetch images for the rows below. */
         fun onFocusPosition(position: RowColumn) {
             homeCache.onFocus(state.value.homeRows, position.row, position.column)
-            if (position.row != focusedRow) applyDeferredRows() // focus left the row: its refresh can land now
+            if (position.row != focusedRow) applyDeferredRows(refocus = false) // focus left the row: its refresh can land now
             focusedRow = position.row
             focusedColumn = position.column
             scheduleIdleApply()
@@ -380,16 +420,28 @@ class HomeViewModel
                 viewModelScope.launch {
                     kotlinx.coroutines.delay(IDLE_APPLY_MS)
                     while (com.github.damontecres.wholphin.jellytip.home.JellytipTrailerControl.url != null) kotlinx.coroutines.delay(5_000)
-                    applyDeferredRows()
+                    applyDeferredRows(refocus = true)
                 }
         }
 
-        private fun applyDeferredRows() {
+        /** [refocus] only for the idle apply: when focus just left the row, the saved position is already the new one. */
+        private fun applyDeferredRows(refocus: Boolean) {
             if (deferredRows.isEmpty()) return
             val pending = deferredRows.toMap()
             deferredRows.clear()
             _state.update { st ->
                 st.copy(homeRows = st.homeRows.toMutableList().apply { pending.forEach { (i, r) -> if (i in indices) set(i, r) } })
+            }
+            // Focus follows the key, so the saved column must follow the item the refresh moved
+            val row = state.value.homeRows.getOrNull(focusedRow) as? HomeRowLoadingState.Success
+            val col =
+                row?.takeIf { it.items !is com.github.damontecres.wholphin.util.ApiRequestPager<*> }?.let {
+                    com.github.damontecres.wholphin.jellytip.home.HomeRefreshPolicy
+                        .refocusColumn(it.items.map { i -> i?.id }, focusedItemId, focusedColumn, refocus)
+                }
+            if (col != null) {
+                focusedColumn = col
+                positionFixes.tryEmit(RowColumn(focusedRow, col))
             }
         }
 
@@ -451,7 +503,7 @@ class HomeViewModel
                 viewModelScope.launchDefault {
                     serverRepository.currentUser?.id?.let { userId ->
                         latestNextUpService.removeFromNextUp(userId, item)
-                        init()
+                        init(force = true)
                     }
                 }
             } else {
@@ -488,4 +540,3 @@ private fun isWatchingRow(row: HomeRowConfig) =
 private const val IDLE_APPLY_MS = 60_000L
 
 private const val JELLYTIP_HOME_PAGE = "home"
-private const val SERVER_ROWS_WAIT_MS = 1_500L
