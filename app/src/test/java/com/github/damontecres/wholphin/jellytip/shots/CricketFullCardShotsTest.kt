@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.jellytip.shots
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,9 +50,9 @@ class CricketFullCardShotsTest {
     private val live = LiveParse.live(javaClass.classLoader!!.getResourceAsStream("jellytip/cricket-fullcard-live.json")!!.bufferedReader().readText())
 
     @Composable
-    private fun Backdrop(content: @Composable () -> Unit) {
+    private fun Backdrop(content: @Composable BoxScope.() -> Unit) {
         MaterialTheme(colorScheme = darkColorScheme()) {
-            Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3B4A5A), Color(0xFF1B1E24), Color(0xFF2E5A3B)))), content = { content() })
+            Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3B4A5A), Color(0xFF1B1E24), Color(0xFF2E5A3B)))), content = content)
         }
     }
 
