@@ -173,7 +173,8 @@ class JellytipIptvPlayback
 
         private var job: Job? = null
         private var renewed = false
-        private val owners = mutableSetOf<String>()
+        private val ownerPolicy = IptvOwnerPolicy()
+        private val owners: Set<String> get() = ownerPolicy.snapshot()
         private var releaseJob: Job? = null
 
         init {
@@ -829,11 +830,18 @@ class JellytipIptvPlayback
             openStartMs = startMs
             job?.cancel()
             okJob?.cancel()
+            val gen = ownerPolicy.bump()
             setState(IptvPlayState.Opening(target), reason)
             JellytipTrace.player("iptv", "open ${target.channelId} ${target.label} start=${target.start} format=$format ($reason)")
             job =
                 scope.launch {
-                    when (val r = service.playItem(target, format, remux = remux && !target.isLive, startSec = startMs / 1000)) {
+                    val res = service.playItem(target, format, remux = remux && !target.isLive, startSec = startMs / 1000)
+                    // stop() / a newer open happened while the server call was out (playItem may swallow the cancel): drop the answer
+                    if (!ownerPolicy.isCurrent(gen)) {
+                        JellytipTrace.player("iptv", "open ${target.channelId} answer dropped: superseded (gen $gen now ${ownerPolicy.generation})")
+                        return@launch
+                    }
+                    when (val r = res) {
                         is IptvPlayResult.Ok -> {
                             val profile = LiveBuffer.profileFor(context, target)
                             // Direct answers carry the provider's own absolute link (credentials inside: not traced)
@@ -972,13 +980,16 @@ class JellytipIptvPlayback
 
         /** Stop now and free the provider connection (closing the HTTP stream releases the slot). */
         fun stop(reason: String) {
+            ownerPolicy.bump()
             job?.cancel()
+            okJob?.cancel()
+            orphanJob?.cancel()
             recTimer?.cancel()
             watchJob?.cancel()
             stableJob?.cancel()
             recTarget = null
             _note.value = null
-            if (_state.value !is IptvPlayState.Idle) JellytipTrace.player("iptv", "stop ($reason)")
+            JellytipTrace.player("iptv", "stop ($reason) owners=$owners vol=$volume player=${player != null} ${describe(_state.value)}")
             stopPlayer()
             setState(IptvPlayState.Idle, reason)
         }
@@ -1026,14 +1037,23 @@ class JellytipIptvPlayback
         /** Kept so a rebuilt player (live buffer change) starts at the same volume (the guide preview is muted). */
         private var volume = 1f
 
+        /** The screens' calls are only hints: the volume follows the owners ([IptvOwnerPolicy.volume]). */
         fun setVolume(volume: Float) {
-            this.volume = volume
-            player?.volume = volume
+            applyVolume("setVolume($volume)")
+        }
+
+        private fun applyVolume(why: String) {
+            val v = ownerPolicy.volume()
+            val changed = v != volume
+            volume = v
+            player?.volume = v
+            JellytipTrace.player("iptv", "volume $v owners=$owners ($why)${if (changed) "" else " unchanged"}")
         }
 
         /** A Live TV screen is showing (guide, full screen). */
         fun attach(owner: String) {
-            owners += owner
+            ownerPolicy.attach(owner)
+            applyVolume("attach $owner")
             if (releaseJob?.isActive == true) JellytipTrace.player("iptv", "release cancelled by $owner")
             releaseJob?.cancel()
             JellytipTrace.player("iptv", "attach $owner owners=$owners ${describe(_state.value)}")
@@ -1044,21 +1064,22 @@ class JellytipIptvPlayback
          * frame or two), the stream stops and the player is released.
          */
         fun detach(owner: String) {
-            owners -= owner
+            val none = ownerPolicy.detach(owner)
             JellytipTrace.player("iptv", "detach $owner owners=$owners ${describe(_state.value)}")
-            if (owners.isNotEmpty()) return
+            applyVolume("detach $owner")
+            if (!none) return
             releaseJob?.cancel()
             releaseJob =
                 scope.launch {
                     delay(HANDOVER_MS)
-                    if (owners.isEmpty()) {
+                    if (ownerPolicy.isEmpty) {
                         stop("left Live TV")
                         player?.let {
                             it.removeListener(listener)
                             it.release()
                         }
                         player = null
-                        JellytipTrace.player("iptv", "player released")
+                        JellytipTrace.player("iptv", "player released owners=$owners")
                     }
                 }
         }
