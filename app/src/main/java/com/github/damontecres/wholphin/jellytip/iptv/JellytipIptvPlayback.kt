@@ -961,6 +961,7 @@ class JellytipIptvPlayback
             target: IptvTarget,
             recordingId: String,
         ) {
+            ownerPolicy.bump()
             job?.cancel()
             setState(IptvPlayState.Opening(target), "stop recording $recordingId")
             job =
@@ -989,7 +990,9 @@ class JellytipIptvPlayback
             stableJob?.cancel()
             recTarget = null
             _note.value = null
-            JellytipTrace.player("iptv", "stop ($reason) owners=$owners vol=$volume player=${player != null} ${describe(_state.value)}")
+            if (_state.value !is IptvPlayState.Idle) {
+    JellytipTrace.player("iptv", "stop ($reason) owners=$owners vol=$volume player=${player != null} ${describe(_state.value)}")
+            }
             stopPlayer()
             setState(IptvPlayState.Idle, reason)
         }

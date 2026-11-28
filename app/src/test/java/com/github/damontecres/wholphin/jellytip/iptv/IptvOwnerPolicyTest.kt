@@ -66,4 +66,20 @@ class IptvOwnerPolicyTest {
         assertFalse(p.isCurrent(a))
         assertTrue(p.isCurrent(b))
     }
+
+    @Test
+    fun guideLeavingStaysMuted() {
+        val p = IptvOwnerPolicy()
+        p.attach("guide")
+        p.detach("guide")
+        assertEquals(0f, p.volume(), 0f)
+    }
+
+    @Test
+    fun fullPageFromNothingGetsSound() {
+        val p = IptvOwnerPolicy()
+        assertEquals(0f, p.volume(), 0f)
+        p.attach("full#1")
+        assertEquals(1f, p.volume(), 0f)
+    }
 }

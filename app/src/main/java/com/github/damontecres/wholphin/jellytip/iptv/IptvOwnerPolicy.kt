@@ -28,7 +28,7 @@ class IptvOwnerPolicy {
 
     fun snapshot(): Set<String> = owners.toSet()
 
-    fun volume(): Float = if (owners.isNotEmpty() && owners.all { it == GUIDE }) 0f else 1f
+    fun volume(): Float = if (owners.isEmpty() || owners.all { it == GUIDE }) 0f else 1f
 
     /** New open or stop: returns the new generation. */
     fun bump(): Long = ++generation
